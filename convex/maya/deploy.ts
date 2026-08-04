@@ -42,6 +42,8 @@ import { hashToken } from "./hooks";
 import {
   buildMayaWorkspace,
   SEED_DIR,
+  STAGE_DIR,
+  stagedPath,
   WORKSPACE_DIR,
   type MayaWorkspaceInput,
 } from "../agents/packs/maya/generators";
@@ -90,7 +92,7 @@ export interface MachineConfigInput {
 }
 
 /** Where the plugin tarball lands, and where the bootstrap installs it from. */
-export const PLUGIN_TGZ_PATH = `${VOLUME_MOUNT_PATH}/${BUNDLED_MAYA_PLUGIN_TGZ_NAME}`;
+export const PLUGIN_TGZ_PATH = `${STAGE_DIR}/${BUNDLED_MAYA_PLUGIN_TGZ_NAME}`;
 
 /**
  * The boot script. Replaces the image CMD via Fly's `init.cmd`.
@@ -117,15 +119,44 @@ export function buildBootScript(): string {
   return [
     "set -e",
     `mkdir -p ${WORKSPACE_DIR} /data/cron /data/openclaw-memory`,
+
+    // ⭐ COPY FROM THE STAGE ONTO THE VOLUME — this is the whole fix.
+    //
+    // Fly writes `config.files` BEFORE mounting the volume, so anything written
+    // under /data is shadowed by the mount and Fly's chown-after-mount then
+    // fails with ENOENT, killing init. Observed live 2026-08-04: two reboots,
+    // then a stopped machine. Staging in the image and copying after the mount
+    // is what makes the files actually exist where OpenClaw looks.
+    `cp -R ${STAGE_DIR}/data/workspace/. ${WORKSPACE_DIR}/`,
+    `cp ${STAGE_DIR}/data/openclaw.json /data/openclaw.json`,
+    `cp ${STAGE_DIR}/data/cron/jobs.json /data/cron/jobs.json`,
+
+    // Copied TWICE, one second apart. v1 documents a live race where 6 of 12
+    // root .md files vanished between writing the workspace and OpenClaw's own
+    // workspace initialisation — re-copying restored them. `cp` overwrites, so
+    // this is free when the first pass held.
+    "sleep 1",
+    `cp -R ${STAGE_DIR}/data/workspace/. ${WORKSPACE_DIR}/`,
+    `echo "[boot] workspace: $(ls ${WORKSPACE_DIR} | tr '\\n' ' ')"`,
+
     // Seed-if-absent. `cp -n` would be shorter but is not portable; the
     // explicit test says what it means.
     `if [ ! -f ${WORKSPACE_DIR}/MEMORY.md ] && [ -f ${SEED_DIR}/MEMORY.md ]; then cp ${SEED_DIR}/MEMORY.md ${WORKSPACE_DIR}/MEMORY.md; fi`,
-    "chmod 600 /data/cron/jobs.json 2>/dev/null || true",
+    "chmod 700 /data/cron",
+    "chmod 600 /data/cron/jobs.json",
+
     // Survivable: an already-installed plugin re-installs fine, and a failure
     // here should surface as missing tools rather than a machine that won't
-    // boot at all.
-    `openclaw plugins install npm-pack:${PLUGIN_TGZ_PATH} --force || echo "WARN: maya-tools install failed"`,
-    "exec openclaw gateway --bind lan --port 8080",
+    // boot at all. HOME=/data is set in the image, so npm-pack's install root
+    // lands on the volume and survives a restart.
+    `openclaw plugins install npm-pack:${PLUGIN_TGZ_PATH} --force 2>&1 | tail -20 || echo "[boot] WARN maya-tools install failed — gateway starts without typed tools"`,
+
+    // `--allow-unconfigured` is REQUIRED: OpenClaw 5.x refuses to start with
+    // "Refusing to bind gateway to auto without auth". No `--port` — the image
+    // sets PORT=3000 and its healthcheck probes that; passing a different one
+    // starts a gateway the healthcheck can never reach.
+    'echo "[boot] launching gateway"',
+    "exec openclaw gateway --bind lan --allow-unconfigured",
   ].join("\n");
 }
 
@@ -166,7 +197,10 @@ export function buildMachineConfig(input: MachineConfigInput): FlyMachineConfig 
     services: [
       {
         protocol: "tcp",
-        internal_port: 8080,
+        // 3000 — the image's PORT, EXPOSE, and HEALTHCHECK all agree on it.
+        // Pointing the service somewhere else gives a machine that serves fine
+        // and reports unhealthy forever.
+        internal_port: 3000,
         ports: [{ port: 443, handlers: ["tls", "http"] }],
         // ⭐ ALWAYS-ON (§18 Sprint 2.9). Auto-stop is deferred, not abandoned.
         //
@@ -435,8 +469,13 @@ export const deployMachine = internalAction({
           // and the only symptom would have been an agent that ignored
           // everything.
           files: [
+            // Staged in the IMAGE's filesystem, never under /data — see
+            // buildBootScript. A file written under the mount point is a boot
+            // loop, not a misplaced file.
             ...Object.entries(workspace.files).map(([path, body]) => ({
-              guest_path: path.startsWith("/") ? path : `${WORKSPACE_DIR}/${path}`,
+              guest_path: stagedPath(
+                path.startsWith("/") ? path : `${WORKSPACE_DIR}/${path}`
+              ),
               raw_value: b64(body),
             })),
             // Staged, not placed. The boot script copies these only when the

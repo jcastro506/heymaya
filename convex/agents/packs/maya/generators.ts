@@ -50,11 +50,42 @@ export const WORKSPACE_DIR = "/data/workspace";
 export const OPENCLAW_CONFIG_PATH = "/data/openclaw.json";
 /** OpenClaw's cron store, per the image's layout contract. */
 export const CRON_STORE_PATH = "/data/cron/jobs.json";
+
 /**
- * Staging area for files the bootstrap copies **only if the destination is
- * absent**. Anything here is agent-owned once it exists.
+ * ⛔ NOTHING IS WRITTEN DIRECTLY TO /data BY THE MACHINE CONFIG.
+ *
+ * Fly writes `config.files` **before** it mounts the volume, so anything
+ * written under `/data` is shadowed the moment the mount happens — and Fly's
+ * own chown-after-mount pass then fails with ENOENT and kills init.
+ *
+ * Observed live 2026-08-04, twice in a row:
+ *
+ *   INFO  Writing file: /data/cron/jobs.json
+ *   INFO  Mounting /dev/vdc at /data
+ *   INFO  chowning file, /data/cron/jobs.json
+ *   ERROR ENOENT: No such file or directory
+ *         reboot: Restarting system
+ *
+ * A boot loop, not a crash — so `restart: always` faithfully restarted it into
+ * the same wall until Fly gave up and left the machine stopped.
+ *
+ * So every generated file is staged in the IMAGE's filesystem here, and the
+ * boot script copies it onto the volume after the mount is live. v1 avoided
+ * this by shipping a tarball the bootstrap extracts; same principle, without
+ * the network dependency at boot.
  */
-export const SEED_DIR = "/data/seed";
+export const STAGE_DIR = "/opt/maya";
+
+/**
+ * Files the bootstrap copies **only if the destination is absent**. Anything
+ * here is agent-owned once it exists.
+ */
+export const SEED_DIR = `${STAGE_DIR}/seed`;
+
+/** Where a generated file is staged, given where it must end up. */
+export function stagedPath(finalPath: string): string {
+  return `${STAGE_DIR}${finalPath.startsWith("/") ? finalPath : `/${finalPath}`}`;
+}
 
 export interface MayaWorkspaceInput {
   founder: {

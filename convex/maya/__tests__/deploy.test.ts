@@ -3,6 +3,7 @@ import { convexTest } from "convex-test";
 import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
+import { stagedPath } from "../../agents/packs/maya/generators";
 import {
   buildBootScript,
   buildMachineConfig,
@@ -100,6 +101,44 @@ describe("THE BOOTSTRAP ACTUALLY DOES SOMETHING", () => {
 
   it("does not silently half-run", () => {
     expect(script.startsWith("set -e")).toBe(true);
+  });
+
+  it("NOTHING IS WRITTEN UNDER THE VOLUME MOUNT BY config.files", () => {
+    // The live boot loop, 2026-08-04. Fly writes `config.files` BEFORE mounting
+    // the volume, so a file at /data/... is shadowed by the mount and Fly's own
+    // chown-after-mount then fails with ENOENT and kills init. Two reboots,
+    // then a stopped machine.
+    //
+    // Everything is staged in the image and copied across after the mount.
+    expect(PLUGIN_TGZ_PATH.startsWith("/data")).toBe(false);
+    expect(stagedPath("/data/openclaw.json").startsWith("/data")).toBe(false);
+    // And the boot script is what bridges the gap.
+    expect(script).toMatch(/cp -R \/opt\/maya\/data\/workspace\/\. \/data\/workspace\//);
+    expect(script).toContain("cp /opt/maya/data/openclaw.json /data/openclaw.json");
+  });
+
+  it("passes --allow-unconfigured, which 5.x REQUIRES", () => {
+    // Without it OpenClaw 5.x refuses to start: "Refusing to bind gateway to
+    // auto without auth."
+    expect(script).toMatch(/--allow-unconfigured/);
+    expect(script).toMatch(/--bind lan/);
+  });
+
+  it("does NOT override the port the image health-checks", () => {
+    // The image sets PORT=3000 and probes /healthz on it. Passing a different
+    // --port gives a gateway that serves fine and reports unhealthy forever.
+    expect(script).not.toMatch(/--port/);
+    expect(CONFIG.services![0].internal_port).toBe(3000);
+  });
+
+  it("copies the workspace twice, against a documented race", () => {
+    // v1 observed 6 of 12 root .md files vanishing between the write and
+    // OpenClaw's own workspace init. `cp` overwrites, so the second pass is
+    // free when the first one held.
+    const copies = script
+      .split("\n")
+      .filter((l) => l.includes("cp -R /opt/maya/data/workspace"));
+    expect(copies.length).toBe(2);
   });
 });
 
