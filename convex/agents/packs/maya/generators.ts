@@ -722,6 +722,7 @@ function renderOpenClawConfig(tz: string): string {
 
           model: { primary: MAIN_MODEL },
 
+
           /**
            * Memory search — absent entirely from the first version of this
            * pack, which meant recall was a static generated file.
@@ -818,6 +819,41 @@ function renderOpenClawConfig(tz: string): string {
             thinking: "medium",
           },
         },
+
+        /**
+         * ⭐ AGENTS LIVE IN `agents.list`, NOT AT THE ROOT.
+         *
+         * A root-level `subagents` array is what produced `<root>: Invalid
+         * input` on the live machine — the gateway refused to start and the
+         * error named nothing more specific than "root". Subagents ARE agents:
+         * they belong in the same list as `main`, each with its own workspace
+         * and model.
+         *
+         * `main` has to be declared explicitly too. Without it there is no
+         * default agent for the session to attach to.
+         */
+        list: [
+          {
+            id: "main",
+            default: true,
+            name: "Maya",
+            workspace: WORKSPACE_DIR,
+            model: MAIN_MODEL,
+            subagents: { allowAgents: ["main", "critique"] },
+          },
+          {
+            id: "critique",
+            name: "Critique",
+            workspace: WORKSPACE_DIR,
+            // ⭐ THE STRUCTURAL HALF OF "must be a different model".
+            //
+            // The skill tells the critic to refuse the verdict if it finds
+            // itself running as the writer's model — a prompt asking a model to
+            // introspect, which is the weakest enforcement available. Binding
+            // the agent to a different family makes it true by configuration.
+            model: CRITIC_MODEL,
+          },
+        ],
       },
 
       // An allow-list rather than a default-open posture: the machine should
@@ -833,6 +869,14 @@ function renderOpenClawConfig(tz: string): string {
       // below — the docs call it a poor fit for automation and workers, and a
       // subagent silently personalising its output is worse than useless.
       plugins: {
+        /**
+         * `plugins.allow` alone is a LEGACY key in 2026.5.x — the runtime warns
+         * that it "now gates bundled provider discovery by default" and asks
+         * for an explicit mode. `allowlist` keeps the strict deny-by-default
+         * behaviour we want; `compat` would quietly re-enable bundled provider
+         * discovery, which is the opposite of an allow-list.
+         */
+        bundledDiscovery: "allowlist",
         allow: ["maya-tools", "memory-core", "memory-wiki", "active-memory"],
         entries: {
           /**
@@ -884,20 +928,6 @@ function renderOpenClawConfig(tz: string): string {
         },
       },
 
-      subagents: [
-        {
-          id: "critique",
-          name: "Critique",
-          // ⭐ THE STRUCTURAL HALF OF "must be a different model".
-          //
-          // The skill says to refuse the verdict if it finds itself running as
-          // the writer's model. That's a prompt asking a model to notice
-          // something about itself, which is the weakest possible enforcement.
-          // Binding the subagent to a different family makes it true by
-          // configuration instead.
-          model: CRITIC_MODEL,
-        },
-      ],
     },
     null,
     2

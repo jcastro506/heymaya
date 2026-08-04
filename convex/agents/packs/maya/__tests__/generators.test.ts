@@ -377,9 +377,32 @@ describe("THE CRITIC RUNS ON A GENUINELY DIFFERENT MODEL", () => {
   const config = JSON.parse(
     buildMayaWorkspace(INPUT).files.get(OPENCLAW_CONFIG_PATH)!
   );
-  const critic = config.subagents.find(
-    (s: { id: string }) => s.id === "critique"
+  const critic = config.agents.list.find(
+    (a: { id: string }) => a.id === "critique"
   );
+
+  it("AGENTS LIVE IN agents.list, NOT AT THE ROOT", () => {
+    // A root-level `subagents` array produced `<root>: Invalid input` on the
+    // live machine — the gateway refused to start and named nothing more
+    // specific than "root". Subagents ARE agents: same list as `main`.
+    expect(config.subagents).toBeUndefined();
+    expect(Array.isArray(config.agents.list)).toBe(true);
+  });
+
+  it("a default `main` agent is declared", () => {
+    // Without it there is no default agent for the session to attach to.
+    const main = config.agents.list.find((a: { id: string }) => a.id === "main");
+    expect(main?.default).toBe(true);
+    expect(main?.workspace).toBe(WORKSPACE_DIR);
+  });
+
+  it("plugins.allow declares its discovery mode", () => {
+    // `plugins.allow` alone is a LEGACY key in 2026.5.x; the runtime warns it
+    // "now gates bundled provider discovery by default" and wants an explicit
+    // mode. `compat` would quietly re-enable bundled discovery — the opposite
+    // of an allow-list.
+    expect(config.plugins.bundledDiscovery).toBe("allowlist");
+  });
 
   it("binds critique to a model, structurally", () => {
     // The skill asks the model to refuse the verdict if it notices it IS the
