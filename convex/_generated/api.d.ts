@@ -165,6 +165,7 @@ import type * as integrations_hackerNews_algoliaSearch from "../integrations/hac
 import type * as integrations_hunter_actions from "../integrations/hunter/actions.js";
 import type * as integrations_hunter_client from "../integrations/hunter/client.js";
 import type * as integrations_openclaw_cliClient from "../integrations/openclaw/cliClient.js";
+import type * as integrations_openrouter_client from "../integrations/openrouter/client.js";
 import type * as integrations_photoBridgeWorker_client from "../integrations/photoBridgeWorker/client.js";
 import type * as integrations_r2_client from "../integrations/r2/client.js";
 import type * as integrations_r2_endpoints from "../integrations/r2/endpoints.js";
@@ -216,6 +217,7 @@ import type * as maya_messages from "../maya/messages.js";
 import type * as maya_pairing from "../maya/pairing.js";
 import type * as maya_planFeatures from "../maya/planFeatures.js";
 import type * as maya_preflight from "../maya/preflight.js";
+import type * as maya_productTruth from "../maya/productTruth.js";
 import type * as maya_publishDecision from "../maya/publishDecision.js";
 import type * as maya_quality from "../maya/quality.js";
 import type * as maya_scheduler from "../maya/scheduler.js";
@@ -399,6 +401,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/hunter/actions": typeof integrations_hunter_actions;
   "integrations/hunter/client": typeof integrations_hunter_client;
   "integrations/openclaw/cliClient": typeof integrations_openclaw_cliClient;
+  "integrations/openrouter/client": typeof integrations_openrouter_client;
   "integrations/photoBridgeWorker/client": typeof integrations_photoBridgeWorker_client;
   "integrations/r2/client": typeof integrations_r2_client;
   "integrations/r2/endpoints": typeof integrations_r2_endpoints;
@@ -450,6 +453,7 @@ declare const fullApi: ApiFromModules<{
   "maya/pairing": typeof maya_pairing;
   "maya/planFeatures": typeof maya_planFeatures;
   "maya/preflight": typeof maya_preflight;
+  "maya/productTruth": typeof maya_productTruth;
   "maya/publishDecision": typeof maya_publishDecision;
   "maya/quality": typeof maya_quality;
   "maya/scheduler": typeof maya_scheduler;

@@ -171,6 +171,11 @@ export const saveProduct = mutation({
         timezone: args.timezone,
         updatedAt: now,
       });
+      // Re-read on a stated change — a founder editing their URL is telling us
+      // the old read is stale.
+      await ctx.scheduler.runAfter(0, internal.maya.productTruth.readProduct, {
+        customerId: existing._id,
+      });
       return { ok: true, customerId: existing._id };
     }
 
@@ -185,6 +190,20 @@ export const saveProduct = mutation({
       productTruthJson,
       createdAt: now,
       updatedAt: now,
+    });
+
+    /**
+     * ⭐ Read the URL. Signup without this stores three fields and learns
+     * nothing (Sprint 2.95).
+     *
+     * Scheduled directly rather than queued, because a human is sitting at the
+     * screen — the job queue drains on a 5-minute cron, which is the right
+     * cadence for deferrable work and the wrong one for the first thing the
+     * product ever does. The cost is ~$0.02, one-shot, and bounded by signups,
+     * so it cannot run away in the manner the spend ceiling exists to catch.
+     */
+    await ctx.scheduler.runAfter(0, internal.maya.productTruth.readProduct, {
+      customerId,
     });
     return { ok: true, customerId };
   },
