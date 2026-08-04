@@ -108,7 +108,7 @@ export const deliverMessage = internalAction({
     const { resolveTelegramBotIdentity, sendTelegramMessage } = await import(
       "../integrations/telegram/client"
     );
-    const identity = resolveTelegramBotIdentity({});
+    const identity = resolveTelegramBotIdentity();
     if (!identity) {
       const reason = "the Telegram bot isn't configured";
       await ctx.runMutation(internal.maya.telegram.markDelivered, {
@@ -199,7 +199,7 @@ async function sendOneChatAction(chatId: string): Promise<boolean> {
     const { resolveTelegramBotIdentity, sendTelegramChatAction } = await import(
       "../integrations/telegram/client"
     );
-    const identity = resolveTelegramBotIdentity({});
+    const identity = resolveTelegramBotIdentity();
     if (!identity) return false;
     return (await sendTelegramChatAction(identity, { chatId })).ok;
   } catch {
