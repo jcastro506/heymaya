@@ -99,7 +99,7 @@ export const telegramWebhookHttp = httpAction(async (ctx, request) => {
       const { resolveTelegramBotIdentity, sendTelegramMessage } = await import(
         "../integrations/telegram/client"
       );
-      const identity = resolveTelegramBotIdentity({});
+      const identity = resolveTelegramBotIdentity();
       if (identity) {
         // The first thing she ever says. Deliberately short — the machine may
         // not be up yet, and promising more than that would be a lie.
