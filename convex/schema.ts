@@ -3445,6 +3445,15 @@ export default defineSchema({
     /** Where she texts them. Absent until Telegram pairing completes. */
     telegramChatId: v.optional(v.string()),
     /**
+     * One-shot pairing token, exchanged for a chat id when the founder taps the
+     * deep link and Telegram sends `/start pair_<token>`.
+     *
+     * Cleared the moment it's claimed — a token that stays valid after use is a
+     * token that can bind somebody else's chat to this account.
+     */
+    pairingToken: v.optional(v.string()),
+    pairingExpiresAt: v.optional(v.number()),
+    /**
      * SHA-256 of the agent's bearer token — the credential her runtime presents
      * on every tool call.
      *
@@ -3464,7 +3473,8 @@ export default defineSchema({
     .index("by_telegram_chat", ["telegramChatId"])
     .index("by_state", ["state"])
     .index("by_agent_version", ["agentVersion"])
-    .index("by_agent_token", ["agentTokenHash"]),
+    .index("by_agent_token", ["agentTokenHash"])
+    .index("by_pairing_token", ["pairingToken"]),
 
   /** One row per connected channel. */
   channels: defineTable({

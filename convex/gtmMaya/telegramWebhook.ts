@@ -84,6 +84,32 @@ export const telegramWebhookHttp = httpAction(async (ctx, request) => {
     const chatId = String(update.message.chat.id);
     const username =
       update.message.chat.username ?? update.message.from?.username;
+
+    // ── v2 pairing first (§18 Sprint 2.9) ─────────────────────────────────
+    // A v2 token simply won't match a v1 row and vice versa, so trying v2 first
+    // costs one indexed lookup and keeps the two flows from having to know
+    // about each other. Awaited rather than scheduled: the founder is staring
+    // at Telegram right now, and a pairing that confirms three seconds later
+    // reads as broken.
+    const claimed = await ctx.runMutation(internal.maya.pairing.claimPairing, {
+      token: pairingToken,
+      chatId,
+    });
+    if (claimed.paired) {
+      const { resolveTelegramBotIdentity, sendTelegramMessage } = await import(
+        "../integrations/telegram/client"
+      );
+      const identity = resolveTelegramBotIdentity({});
+      if (identity) {
+        // The first thing she ever says. Deliberately short — the machine may
+        // not be up yet, and promising more than that would be a lie.
+        await sendTelegramMessage(identity, {
+          chatId,
+          text: "Paired. I'll take it from here.",
+        });
+      }
+      return new Response("ok", { status: 200 });
+    }
     // 2026-07-15 — the claim must TALK BACK. A failed claim used to die in a
     // server log while the founder stared at a silent chat (live repro: chat
     // still bound to a torn-down agent's row → "already paired" throw →
