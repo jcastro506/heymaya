@@ -28,8 +28,23 @@ import {
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 
-/** The image the machine boots. Overridable per deploy for testing a new pin. */
-export const DEFAULT_IMAGE = "registry.fly.io/heymaya-openclaw:latest";
+/**
+ * The image the machine boots.
+ *
+ * ⚠️ `:latest` DOES NOT EXIST in this registry. The first deploy failed with
+ * `MANIFEST_UNKNOWN: unknown tag=latest` — I'd assumed the tag rather than
+ * checking what v1 actually ships.
+ *
+ * The `tag@digest` form is deliberate and load-bearing, copied from v1's hard-
+ * won comment: the digest makes it immutable (the registry app was once
+ * destroyed by a fleet sweep, taking the image with it), and Fly's Machines API
+ * *rejects* a bare `@digest` identifier — it needs the tag too.
+ *
+ * Overridable per deploy so a new OpenClaw version can be tried on one machine
+ * before it becomes the default.
+ */
+export const DEFAULT_IMAGE =
+  "registry.fly.io/heymaya-openclaw:v2026.5.26@sha256:3856db33c587c2404c71b4a662d0a20ef5027422834e48dfe5f597406e228d0f";
 
 export interface SetupState {
   signedIn: boolean;

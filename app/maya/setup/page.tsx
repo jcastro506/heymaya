@@ -13,7 +13,8 @@
  * pre-decided by whatever was expedient the day someone needed a test machine.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import QRCode from "qrcode";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { SignOutButton } from "@clerk/nextjs";
 import { api } from "@/convex/_generated/api";
@@ -27,12 +28,31 @@ export default function MayaSetupPage() {
   const state = useQuery(api.maya.setup.myState, isAuthenticated ? {} : "skip");
   const saveProduct = useMutation(api.maya.setup.saveProduct);
   const deployMine = useAction(api.maya.setup.deployMine);
+  const createPairingLink = useMutation(api.maya.pairing.createPairingLink);
 
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
-  const [busy, setBusy] = useState<null | "saving" | "deploying">(null);
+  const [busy, setBusy] = useState<null | "saving" | "deploying" | "pairing">(
+    null
+  );
   const [error, setError] = useState<string | null>(null);
   const [deployed, setDeployed] = useState<DeployResult | null>(null);
+  const [pairing, setPairing] = useState<{ deepLink: string } | null>(null);
+  const [qr, setQr] = useState<string | null>(null);
+
+  // The QR is rendered from the deep link client-side rather than fetched from
+  // a QR service — the link carries a pairing token, and handing that to a
+  // third party to draw a picture would be careless.
+  useEffect(() => {
+    if (!pairing) return setQr(null);
+    let cancelled = false;
+    QRCode.toDataURL(pairing.deepLink, { width: 220, margin: 1 })
+      .then((url) => !cancelled && setQr(url))
+      .catch(() => !cancelled && setQr(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [pairing]);
 
   if (isLoading) return <Shell>Loading…</Shell>;
   if (!isAuthenticated) {
@@ -60,6 +80,21 @@ export default function MayaSetupPage() {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
       if (!res.ok) setError(res.error ?? "couldn't save that");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function onPair() {
+    setError(null);
+    setBusy("pairing");
+    try {
+      const res = await createPairingLink({});
+      if (!res.ok || !res.deepLink) {
+        setError(res.error ?? "couldn't generate a pairing link");
+        return;
+      }
+      setPairing({ deepLink: res.deepLink });
     } finally {
       setBusy(null);
     }
@@ -122,15 +157,44 @@ export default function MayaSetupPage() {
       <Section step="2" title="Pair Telegram" done={state.telegramPaired}>
         {state.telegramPaired ? (
           <p className="text-sm text-neutral-300">Paired. She can reach you.</p>
+        ) : pairing ? (
+          <div className="flex flex-col items-start gap-3">
+            {qr && (
+              // Scan from a desktop; tap from a phone. Both open the same link.
+              <img
+                src={qr}
+                alt="Telegram pairing QR code"
+                className="rounded-md bg-white p-2"
+                width={220}
+                height={220}
+              />
+            )}
+            <a
+              href={pairing.deepLink}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-900"
+            >
+              Open in Telegram
+            </a>
+            <p className="text-xs text-neutral-600">
+              Link expires in 15 minutes. Refresh this step for a new one.
+            </p>
+          </div>
         ) : (
-          <p className="text-sm text-neutral-400">
-            Message the bot and send <code className="text-neutral-200">/start</code>.
-            {" "}
-            <span className="text-neutral-500">
+          <>
+            <button
+              onClick={onPair}
+              disabled={!hasProduct || busy !== null}
+              className="rounded-md border border-neutral-700 px-4 py-2 text-sm text-neutral-200 disabled:opacity-30"
+            >
+              {busy === "pairing" ? "Generating…" : "Get pairing link"}
+            </button>
+            <p className="mt-2 text-xs text-neutral-600">
               She can deploy without this, but she&rsquo;ll have nowhere to talk
-              to you — so a brief would be written and never delivered.
-            </span>
-          </p>
+              to you — a brief would be written and never delivered.
+            </p>
+          </>
         )}
       </Section>
 
