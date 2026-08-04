@@ -4156,6 +4156,44 @@ States per card: not connected · connecting · connected · needs attention. **
 
 **⑦ Payment** — standard, minimal, and **last**, after she's already demonstrated.
 
+#### 18.9.24 The deploy contract — stage by stage
+
+*Written 2026-08-04 after FIVE consecutive live deploy failures, every one of
+them a thing `convex/onboarding/gtm/deployMayaGtm.ts` already solved.*
+
+The v2 deploy was written from scratch and had five of v1's eleven stages. Each
+missing piece surfaced as its own failed deploy, one per cycle, with the
+operator running it each time. **This is the checklist that should have been
+copied on day one.** Order matters where noted.
+
+| # | Stage | Why it exists |
+|---|---|---|
+| 1 | Read the customer rows | The workspace is built from the database, never from arguments — a deploy that took product truth as a parameter could ship a machine that disagrees with the DB |
+| 2 | Generate the workspace | Doctrine, skills, config, cron store |
+| 3 | `createApp` | Find-or-create; an existing app is the normal redeploy case |
+| 4 | **`allocateSharedV4` + `allocateV6`** | Machines-API apps get **NO public DNS**. Without this Convex cannot reach the gateway at all, so the founder's messages can never arrive |
+| 5 | **Mint the gateway token** | OpenClaw exits 78 without it. Must be **DISTINCT** from the hook token — the runtime crash-loops when they match |
+| 6 | `setAppSecrets` | Agent token, gateway token, model key. **Never** `config.env` — a machine config is readable back through the API |
+| 7 | **`listMachines` → `destroyMachine`** | **Before** the volume. One volume attaches to one machine, so a second machine gets `volume not found`. Worse: two machines = two heartbeats = two cron sets = doubled spend and an agent that appears to do everything twice |
+| 8 | `findOrCreateVolume` | Reuse, never a second one — the volume IS the memory |
+| 9 | `createMachine` | Staged files at `/opt`, **never** under the volume mount: Fly writes `config.files` BEFORE mounting, the mount shadows them, and the chown-after-mount kills init in a boot loop |
+| 10 | **`waitForState`** | "Fly accepted the request" and "started" are ~90s apart. A timeout is **not** a failed deploy — the machine exists; what is false is calling it ready |
+| 11 | Record app, machine, credentials | And clear stale readiness — new credentials make an old "ready" a claim about a machine that no longer exists |
+
+**Deliberate differences from v1**, each earning its place:
+
+- **Deployment-scoped app names** (`maya-<deployment>-<customer>`). Staging and
+  production share one Fly org, so a bare `maya-` prefix lets one environment's
+  teardown destroy the other's customers. v1 has this hazard; we should not.
+- **Always-on** rather than v1's shape (§17.36 superseded).
+- **A missing volume is FATAL.** v1 falls back to ephemeral behind a flag; for
+  us an ephemeral machine means memory dies on every redeploy, which is the
+  whole thing Sprint 2.9 exists to prevent.
+
+**The rule this came from:** *read the implementation that works before writing
+the one that might.* It applies to infrastructure exactly as much as to vendor
+APIs, and it cost five deploy cycles to relearn.
+
 #### 18.9.25a When the machine actually deploys
 
 *Added 2026-08-04, after three failed live deploys made the omission expensive.*
