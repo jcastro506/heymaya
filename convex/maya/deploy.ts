@@ -91,6 +91,37 @@ export interface MachineConfigInput {
   timezone: string;
 }
 
+/**
+ * ⚠️ STAGING AND PRODUCTION SHARE ONE FLY ORG.
+ *
+ * Verified 2026-08-04: both Convex deployments carry `FLY_ORG_SLUG=personal`
+ * and `FLY_REGION=sjc`. So a Fly app list from staging returns PRODUCTION'S
+ * customer machines too, and any teardown matching on a bare `maya-` prefix
+ * would destroy them.
+ *
+ * That is not hypothetical — `destroyAllClawlaunchApps` matches exactly that
+ * prefix and was run twice against staging today. It only did no harm because
+ * production has no customers yet.
+ *
+ * So the deployment is part of the app NAME, not merely metadata. Metadata
+ * would need a per-app machine lookup to read; a name is visible in the same
+ * list call that could destroy it, which makes the dangerous operation the one
+ * that has to opt in.
+ */
+export function deploymentSlug(siteUrl: string | undefined): string {
+  // https://precise-canary-781.convex.site -> precisecanary781
+  const host = (siteUrl ?? "").replace(/^https?:\/\//, "").split(".")[0] ?? "";
+  const slug = host.replace(/[^a-z0-9]/gi, "").toLowerCase().slice(0, 20);
+  // Deliberately no fallback to a shared default: an unknown deployment must
+  // not silently share a namespace with a known one.
+  return slug || "unknown";
+}
+
+/** Fly app name for one customer, scoped to this Convex deployment. */
+export function flyAppName(customerId: string, siteUrl: string | undefined): string {
+  return `maya-${deploymentSlug(siteUrl)}-${customerId.toLowerCase().slice(-10)}`;
+}
+
 /** Where the plugin tarball lands, and where the bootstrap installs it from. */
 export const PLUGIN_TGZ_PATH = `${STAGE_DIR}/${BUNDLED_MAYA_PLUGIN_TGZ_NAME}`;
 
@@ -407,7 +438,10 @@ export const deployMachine = internalAction({
 
     const { FlyClient } = await import("../lib/flyClient");
     const fly = new FlyClient();
-    const appName = `maya-${args.customerId.toLowerCase().slice(-12)}`;
+    // Scoped to this Convex deployment — staging and prod share a Fly org, so
+    // an unscoped name lets one environment's teardown reach the other's
+    // machines.
+    const appName = flyAppName(args.customerId, siteUrl);
 
     try {
       await fly.createApp({ appName });
@@ -538,5 +572,50 @@ export const workspaceFor = internalAction({
       alwaysLoadedChars: bundle.alwaysLoadedChars,
       timezone: input.founder.timezone,
     };
+  },
+});
+
+/**
+ * Tear down every v2 machine belonging to THIS Convex deployment.
+ *
+ * Deliberately not "all maya apps". Staging and production share a Fly org, so
+ * a prefix match on `maya-` reaches across environments — the existing
+ * `_admin/realWorldDeployGtm:destroyAllClawlaunchApps` does exactly that, and
+ * it was run twice against staging on 2026-08-04. No harm done only because
+ * production had no customers.
+ *
+ * The scoping is by NAME rather than metadata on purpose: the name is visible
+ * in the same `listApps` call that would destroy it, so nothing has to fetch
+ * extra state to be safe. Safety that depends on a second lookup is safety that
+ * gets skipped.
+ */
+export const destroyMyDeploymentMachines = internalAction({
+  args: { confirm: v.literal("yes-destroy-this-deployments-machines") },
+  handler: async (): Promise<{
+    scope: string;
+    destroyed: string[];
+    skippedOtherDeployments: string[];
+  }> => {
+    const siteUrl = process.env.CONVEX_SITE_URL;
+    const scope = `maya-${deploymentSlug(siteUrl)}-`;
+
+    const { FlyClient } = await import("../lib/flyClient");
+    const fly = new FlyClient();
+    const all = await fly.listApps({ first: 500 });
+
+    const destroyed: string[] = [];
+    const skippedOtherDeployments: string[] = [];
+    for (const app of all) {
+      if (app.name.startsWith(scope)) {
+        await fly.destroyApp(app.name);
+        destroyed.push(app.name);
+      } else if (app.name.startsWith("maya-")) {
+        // Another deployment's machine. Recorded rather than ignored, so a
+        // teardown that quietly did nothing is distinguishable from one that
+        // found nothing.
+        skippedOtherDeployments.push(app.name);
+      }
+    }
+    return { scope, destroyed, skippedOtherDeployments };
   },
 });

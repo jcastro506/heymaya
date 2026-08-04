@@ -5,6 +5,8 @@ import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { stagedPath } from "../../agents/packs/maya/generators";
 import {
+  deploymentSlug,
+  flyAppName,
   buildBootScript,
   buildMachineConfig,
   PLUGIN_TGZ_PATH,
@@ -458,5 +460,43 @@ describe("deployMachine fails loudly and early", () => {
     const row = (await t.run((ctx) => ctx.db.get(customerId))) as Doc<"customers">;
     expect(row.flyAppName).toBe("maya-abc");
     expect(row.flyMachineId).toBe("m_123");
+  });
+});
+
+
+describe("STAGING AND PROD SHARE A FLY ORG — names must not collide", () => {
+  // Verified 2026-08-04: both Convex deployments carry FLY_ORG_SLUG=personal
+  // and FLY_REGION=sjc. A Fly app list from staging returns PRODUCTION'S
+  // machines, and a teardown matching a bare `maya-` prefix destroys them.
+  // `destroyAllClawlaunchApps` does exactly that and was run twice against
+  // staging today — harmless only because prod has no customers yet.
+  const STAGING = "https://precise-canary-781.convex.site";
+  const PROD = "https://resilient-mandrill-621.convex.site";
+
+  it("the same customer id yields DIFFERENT app names per deployment", () => {
+    const id = "m57zjvtw15hm10he2rz4epp1kx8btwj1";
+    expect(flyAppName(id, STAGING)).not.toBe(flyAppName(id, PROD));
+  });
+
+  it("the deployment is in the NAME, not just metadata", () => {
+    // Metadata would need a per-app machine lookup to read. A name is visible
+    // in the same listApps call that could destroy it — safety that needs a
+    // second lookup is safety that gets skipped.
+    expect(flyAppName("cust_abc123", STAGING)).toContain("precisecanary781");
+    expect(flyAppName("cust_abc123", PROD)).toContain("resilientmandrill");
+  });
+
+  it("an unknown deployment does NOT fall back into a shared namespace", () => {
+    // A default would put an unidentified deployment in the same namespace as a
+    // known one, which is the collision this exists to prevent.
+    expect(deploymentSlug(undefined)).toBe("unknown");
+    expect(deploymentSlug("")).toBe("unknown");
+    expect(flyAppName("c", undefined)).not.toContain("precisecanary");
+  });
+
+  it("app names stay inside Fly's constraints", () => {
+    const name = flyAppName("m57zjvtw15hm10he2rz4epp1kx8btwj1", PROD);
+    expect(name.length).toBeLessThan(64);
+    expect(name).toMatch(/^[a-z0-9-]+$/);
   });
 });
