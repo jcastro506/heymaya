@@ -20,6 +20,7 @@ import {
   buildExtractionPrompt,
   type ProductTruth,
 } from "../productTruth";
+import { buildMayaWorkspace } from "../../agents/packs/maya/generators";
 import type { Doc, Id } from "../../_generated/dataModel";
 
 const NOW = Date.UTC(2026, 7, 4, 12, 0, 0);
@@ -514,5 +515,62 @@ describe("SIGNUP ACTUALLY TRIGGERS THE READ", () => {
     await t.finishAllScheduledFunctions(vi.runAllTimers);
 
     expect(fetchedUrl).toBe("https://widgetly.dev/");
+  });
+});
+
+describe("WHAT SHE READS IS WHAT SHE GETS", () => {
+  it("THE READ ACTUALLY REACHES HER WORKSPACE", async () => {
+    // The silent mismatch this exists to prevent: the reader writes `whatItIs`,
+    // `workspaceInput` looked only for `truth`. The read succeeds, the row
+    // fills, the deploy succeeds — and APP.md renders "product truth not
+    // captured yet" forever, so she keeps refusing to make claims she now has
+    // perfectly good grounds for. Nothing anywhere reports a problem.
+    const t = convexTest(schema, modules);
+    const customerId = await seedCustomer(t, "u_workspace", {
+      name: "Widgetly",
+      url: "https://widgetly.dev",
+      whatItIs: "turns a CSV into a dashboard in one paste",
+      whatsDifferent: "no SQL and no per-seat pricing",
+      whoItsFor: "solo founders",
+      vocabulary: [],
+      competitors: [],
+      gaps: ["pricing"],
+      source: SOURCE,
+    });
+
+    const input = await t.query(internal.maya.deploy.workspaceInput, { customerId });
+    expect(input?.product.truth).toBe("turns a CSV into a dashboard in one paste");
+    expect(input?.product.differentiator).toBe("no SQL and no per-seat pricing");
+    expect(input?.product.audience).toBe("solo founders");
+    expect(input?.product.gaps).toEqual(["pricing"]);
+  });
+
+  it("and lands in APP.md, gaps included", () => {
+    const app = buildMayaWorkspace({
+      founder: { email: "sam@example.com", name: "Sam", timezone: "UTC" },
+      product: {
+        name: "Widgetly",
+        url: "https://widgetly.dev",
+        truth: "turns a CSV into a dashboard in one paste",
+        gaps: ["what makes it different"],
+      },
+      channels: [],
+    }).files.get("APP.md")!;
+
+    expect(app).toContain("turns a CSV into a dashboard in one paste");
+    expect(app).not.toContain("Product truth not captured yet");
+    // She must know what she DOESN'T know, or an unknown fact and an empty
+    // field look identical — and that difference decides whether she asks.
+    expect(app).toContain("what makes it different");
+    expect(app).toMatch(/DON'T know/i);
+  });
+
+  it("a customer with no read still gets the honest fallback", () => {
+    const app = buildMayaWorkspace({
+      founder: { email: "sam@example.com", name: "Sam", timezone: "UTC" },
+      product: { name: "Widgetly", url: "https://widgetly.dev" },
+      channels: [],
+    }).files.get("APP.md")!;
+    expect(app).toContain("Product truth not captured yet");
   });
 });
