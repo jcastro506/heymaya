@@ -534,10 +534,11 @@ describe("A REDEPLOY IS IDEMPOTENT", () => {
     // The new machine is the thing that matters; refusing to deploy because an
     // already-dead machine could not be destroyed again is a worse outcome.
     const source = readFileSync(join(__dirname, "..", "deploy.ts"), "utf8");
-    const block = source.slice(
-      source.indexOf("DESTROY ANY EXISTING MACHINE"),
-      source.indexOf("const machine = await fly.createMachine")
-    );
+    // Bounded to the destroy block itself — the volume step that follows has
+    // its own (correctly fatal) error return, and including it would make this
+    // test assert the opposite of what it means.
+    const start = source.indexOf("DESTROY ANY EXISTING MACHINE");
+    const block = source.slice(start, source.indexOf("findOrCreateVolume", start));
     // Both the inner destroy and the outer list are guarded.
     expect((block.match(/try \{/g) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(block).not.toMatch(/return \{ ok: false/);
