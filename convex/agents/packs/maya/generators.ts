@@ -213,6 +213,31 @@ export const CRITIC_MODEL = "moonshotai/kimi-k2-0905";
  */
 export const WORKER_MODEL = "openai/gpt-oss-120b";
 
+/**
+ * ⭐ NAME THE PROVIDER. A BARE SLUG SILENTLY MEANS SOMETHING ELSE.
+ *
+ * The three constants above are OpenRouter slugs — that is their identity, and
+ * it is what makes them checkable against `/api/v1/models` (all three verified
+ * present, 2026-08-04). But OpenClaw reads a model ref as `provider/model`, so
+ * shipping `openai/gpt-5.6-luna-pro` bare tells it: provider `openai`, model
+ * `gpt-5.6-luna-pro`. OpenAI has no such model, and the machine answers every
+ * message with
+ *
+ *   Unknown model: openai/gpt-5.6-luna-pro
+ *
+ * — an error that names the right string for the wrong reason, which is why it
+ * reads as "bad slug" when the slug is fine.
+ *
+ * The vendor namespace happening to be `openai` is a coincidence of naming, not
+ * a provider. Prefix, never strip: `openrouter/openai/gpt-oss-120b` is correct
+ * and `openrouter/gpt-oss-120b` is rejected.
+ *
+ * v1 learned the strip half of this live on 2026-07-12.
+ */
+export function openclawModelRef(openRouterSlug: string): string {
+  return `openrouter/${openRouterSlug}`;
+}
+
 export function buildMayaWorkspace(
   input: MayaWorkspaceInput
 ): MayaWorkspaceBundle {
@@ -745,7 +770,7 @@ function renderOpenClawConfig(tz: string): string {
             // suppressed EVERY tick.
             activeHours: { start: "07:00", end: "23:00", timezone: "local" },
 
-            model: WORKER_MODEL,
+            model: openclawModelRef(WORKER_MODEL),
           },
 
           // Typing starts the moment the model loop begins, and refreshes
@@ -757,7 +782,7 @@ function renderOpenClawConfig(tz: string): string {
           typingMode: "instant",
           typingIntervalSeconds: 5,
 
-          model: { primary: MAIN_MODEL },
+          model: { primary: openclawModelRef(MAIN_MODEL) },
 
 
           /**
@@ -875,7 +900,7 @@ function renderOpenClawConfig(tz: string): string {
             default: true,
             name: "Maya",
             workspace: WORKSPACE_DIR,
-            model: MAIN_MODEL,
+            model: openclawModelRef(MAIN_MODEL),
             subagents: { allowAgents: ["main", "critique"] },
           },
           {
@@ -888,7 +913,7 @@ function renderOpenClawConfig(tz: string): string {
             // itself running as the writer's model — a prompt asking a model to
             // introspect, which is the weakest enforcement available. Binding
             // the agent to a different family makes it true by configuration.
-            model: CRITIC_MODEL,
+            model: openclawModelRef(CRITIC_MODEL),
           },
         ],
       },
@@ -959,7 +984,7 @@ function renderOpenClawConfig(tz: string): string {
               enabled: true,
               agents: ["main"],
               allowedChatTypes: ["direct"],
-              model: WORKER_MODEL,
+              model: openclawModelRef(WORKER_MODEL),
             },
           },
         },
