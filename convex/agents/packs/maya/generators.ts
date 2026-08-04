@@ -660,6 +660,20 @@ function renderCronJobs(input: MayaWorkspaceInput): string {
 function renderOpenClawConfig(tz: string): string {
   return JSON.stringify(
     {
+      /**
+       * ⭐ THE OPENAI-COMPATIBLE ENDPOINT IS OPT-IN.
+       *
+       * Without this, `/v1/chat/completions` returns 404 and Convex has no way
+       * to reach her session at all — the founder's message arrives, gets
+       * recorded, and stops. Verified live 2026-08-04: gateway healthy, plugins
+       * loaded, heartbeat running, and every forwarded message 404ing.
+       *
+       * It is authenticated by the gateway token, so exposing it costs nothing
+       * beyond what the machine already exposes: per-tenant secret, per-tenant
+       * blast radius.
+       */
+      http: { endpoints: { chatCompletions: { enabled: true } } },
+
       agents: {
         defaults: {
           workspace: WORKSPACE_DIR,
