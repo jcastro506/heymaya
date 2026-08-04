@@ -321,6 +321,14 @@ describe("the gateway config exists at all", () => {
     buildMayaWorkspace(INPUT).files.get(OPENCLAW_CONFIG_PATH)!
   );
 
+  it("ENABLES THE ENDPOINT CONVEX TALKS TO", () => {
+    // The OpenAI-compatible endpoint is opt-in. Without it
+    // /v1/chat/completions 404s and Convex cannot reach her session at all —
+    // the founder's message arrives, is recorded, and stops. Verified live:
+    // gateway healthy, plugins loaded, heartbeat running, every message 404ing.
+    expect(config.http.endpoints.chatCompletions.enabled).toBe(true);
+  });
+
   it("is emitted — a workspace with no config is a folder, not an agent", () => {
     // The pack previously shipped NO config, so a machine would have booted on
     // defaults that contradict nearly every decision here: 30m heartbeat, the
