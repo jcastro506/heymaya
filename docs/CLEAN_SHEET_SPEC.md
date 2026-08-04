@@ -692,7 +692,7 @@ Target: **under 5 minutes, one visible draft inside two.** Never a form.
 | 4 | **"Where do you already post?"** Handles, optional. This is the voice source — ScrapeCreators pulls their posts, and voice extraction runs on real writing. No handles → she says she'll learn from how they text her, and uses the niche register meanwhile. | ~$0.08 |
 | 5 | ⭐ **The draft.** *"Here's what I'd post on TikTok tomorrow — sound like you?"* One post, their voice, their product, a real hook. | ~$0.01 |
 | 6 | **Channel recommendation** — ranked, with why, tier-capped (§6.0.4) | ~$0.01 |
-| 7 | **Connect.** OAuth. The make-or-break step. | — |
+| 7 | **Connect.** OAuth. The make-or-break step. **Say the account requirements BEFORE the OAuth redirect** (§6.0.15). | — |
 | 8 | **One batched ask:** a logo file, 2–3 screenshots of the part people should see, and optionally a few clips of them — *"that's the best-performing content there is."* Everything scrapeable is already scraped, so the ask stays small. | ~$0.01 |
 | 9 | **Telegram pairing.** Prominent — this *is* the product. | — |
 | 10 | **She goes to work.** Stage 2 research runs in the background while she's already talking to them. | ~$1.50 |
@@ -701,6 +701,41 @@ Target: **under 5 minutes, one visible draft inside two.** Never a form.
 **Step 5 is the conversion event, and it costs a penny.** A skeptical founder isn't convinced by a strategy deck; they're convinced by reading a post about their own product, in their own voice, that they'd actually publish. Everything expensive can wait until after that lands.
 
 **Exactly one question is asked that can't be researched:** *"What counts as a win — signups, calls, sales?"* That sets the KPI. Tone, competitors, audience, and format norms are all things she finds herself.
+
+### 6.0.15 Say what the account has to BE, before they connect it
+
+*Added 2026-08-04.*
+
+Some platforms accept a connection that can never post. The connection
+succeeds, the account appears in every listing, health looks fine — and the
+first evidence of a problem is a publish failing weeks later, which reads as
+our bug rather than an account setting.
+
+| Platform | Requirement | What happens if it's wrong |
+|---|---|---|
+| **Instagram** | **Business or Creator account.** Posting and insights run on the Graph API, which does not serve personal accounts | Connects cleanly, then never posts |
+| **X** | The grant must include `tweet.write` | Authenticates, lists, cannot publish |
+| **TikTok** | — | ⚠️ **No inbox at all** — no comments, no DMs, ever. Say so at connect, not when a comment goes unanswered (§ the same rule already applied to reply coverage) |
+| **YouTube** | — | Analytics lag 2–3 days; a same-day number is not available |
+
+**Where this gets said — all three, because they fail differently:**
+
+1. **Before the OAuth redirect**, in the connect card. A one-liner, plain
+   language: *"Instagram needs to be a Business or Creator account — it takes
+   about two minutes to switch in Instagram's settings."* Prevention beats
+   diagnosis.
+2. **After connect, as a verified fact.** `accounts/health` reports `canPost`
+   and `canFetchAnalytics`. Read them and show the answer rather than assuming
+   the OAuth success meant yes.
+3. **In Mission Control**, on the channel row, whenever a connection exists but
+   can't do the thing it was connected for. A connected-but-unpostable channel
+   must never render as simply "connected".
+
+**The general rule:** a limitation the customer can fix in two minutes is a
+sentence at connect time. A limitation they can't fix is stated plainly and
+early anyway — §2 already requires exactly this for TikTok comments, and this
+is that rule applied to the connect surface.
+
 
 ### 6.0.4 How the two channels are actually chosen
 
@@ -3912,6 +3947,7 @@ read-back correction actually overrides the scrape · adversarial page content
 | Skills: `write-post`, `critique`, `answer-people` · tools: `publish`, `reply`, `ask_founder` |
 | The posting switch + **the iron rule** (one function decides publish-or-hold) |
 | Preflight: token health, 280 exact count, duplicate check, rate limits |
+| **Channel rows derived from Zernio, never hand-entered** — `GET /v1/accounts` is the truth for whether a connection exists, works, and carries the write scope. A revoked grant must mark the row, not leave it reading "connected" |
 | Morning brief + evening recap, send-first |
 | ⭐ **The voice floor — anti-slop layers 3–6 (§7.5.2).** Generate 3–5 candidates and *select*, never generate-one-and-polish · hard length cap · every brief names a specific person or moment · server-enforced exact-string denylist + the structural critic on a different model |
 
@@ -4068,6 +4104,12 @@ simply the format that performs on TikTok/Reels/Shorts.
 **Tests:** the full §18.1 acceptance list, run green for 14 consecutive days.
 
 ### Sprint 11 — Surfaces · *parallelizable — can run any time from Sprint 8*
+
+⭐ **Connect cards state account requirements BEFORE the OAuth redirect, and
+Mission Control never renders a connected-but-unpostable channel as simply
+"connected"** (§6.0.15). Instagram-must-be-Business is the load-bearing case:
+it connects cleanly and then never posts.
+
 
 Design work that doesn't depend on the agent. **Run it alongside 8–10 rather than after**, because you need the landing page to acquire the users the MVP is for.
 
