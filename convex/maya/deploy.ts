@@ -69,6 +69,9 @@ export const VOLUME_SIZE_GB = 1;
 export const REQUIRED_SECRET_NAMES = [
   "MAYA_AGENT_TOKEN",
   "OPENROUTER_API_KEY",
+  // Without it the gateway exits 78: "Set OPENCLAW_GATEWAY_TOKEN ... to start
+  // with auth." Observed live 2026-08-04.
+  "OPENCLAW_GATEWAY_TOKEN",
 ] as const;
 
 /* -------------------------------------------------------------------------- */
@@ -287,12 +290,22 @@ export function generateAgentToken(): string {
 }
 
 export const storeAgentTokenHash = internalMutation({
-  args: { customerId: v.id("customers"), tokenHash: v.string() },
+  args: {
+    customerId: v.id("customers"),
+    tokenHash: v.string(),
+    gatewayToken: v.optional(v.string()),
+    machineUrl: v.optional(v.string()),
+  },
   handler: async (ctx, args): Promise<{ stored: boolean }> => {
     const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
     if (!customer) return { stored: false };
     await ctx.db.patch(args.customerId, {
       agentTokenHash: args.tokenHash,
+      ...(args.gatewayToken ? { gatewayToken: args.gatewayToken } : {}),
+      ...(args.machineUrl ? { machineUrl: args.machineUrl } : {}),
+      // A redeploy re-mints credentials, so the old readiness is stale until
+      // the new machine says otherwise.
+      machineReadyAt: undefined,
       updatedAt: Date.now(),
     });
     return { stored: true };
@@ -420,7 +433,8 @@ export const deployMachine = internalAction({
     ctx,
     args
   ): Promise<
-    { ok: true; appName: string; machineId: string } | { ok: false; error: string }
+    | { ok: true; appName: string; machineId: string; started: boolean }
+    | { ok: false; error: string }
   > => {
     const workspace = await ctx.runAction(internal.maya.deploy.workspaceFor, {
       customerId: args.customerId,
@@ -454,6 +468,31 @@ export const deployMachine = internalAction({
       }
     }
 
+    // ⭐ PUBLIC ADDRESS. Fly apps created through the Machines API get NO DNS,
+    // so without this Convex cannot reach the gateway at all — and reaching the
+    // gateway is the only way her session ever hears from the founder. v1 has
+    // this as its own deploy stage; the first v2 attempt simply omitted it.
+    //
+    // Both calls are idempotent-ish: an app that already has an address errors
+    // in a way we can safely ignore, and failing the whole deploy over a
+    // re-allocation would make redeploys one-shot.
+    try {
+      await fly.allocateSharedV4(appName);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/already|allocated|exists/i.test(message)) {
+        return { ok: false, error: `could not allocate an IPv4: ${message}` };
+      }
+    }
+    try {
+      await fly.allocateV6(appName);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/already|allocated|exists/i.test(message)) {
+        return { ok: false, error: `could not allocate an IPv6: ${message}` };
+      }
+    }
+
     try {
       await fly.findOrCreateVolume(appName, {
         name: "maya_data",
@@ -466,15 +505,33 @@ export const deployMachine = internalAction({
       // with a 401 that looks like a code bug rather than a deploy ordering
       // bug.
       const token = generateAgentToken();
+
+      // ⭐ A SECOND, DIFFERENT TOKEN. OpenClaw refuses to start the gateway
+      // without auth (`exit 78`), and it refuses to boot at all when the hook
+      // and gateway tokens are equal — v1 hit that as a live crash-loop. So
+      // this is minted separately, never derived from the first.
+      //
+      // Stored in plaintext because we PRESENT it to the machine; the agent
+      // token is hashed because the machine presents it to us. Different
+      // direction, different storage.
+      const gatewayToken = generateAgentToken();
+      const machineUrl = `https://${appName}.fly.dev`;
+
       const stored = await ctx.runMutation(
         internal.maya.deploy.storeAgentTokenHash,
-        { customerId: args.customerId, tokenHash: await hashToken(token) }
+        {
+          customerId: args.customerId,
+          tokenHash: await hashToken(token),
+          gatewayToken,
+          machineUrl,
+        }
       );
       if (!stored.stored) return { ok: false, error: "customer vanished mid-deploy" };
 
       await fly.setAppSecrets(appName, {
         MAYA_AGENT_TOKEN: token,
         OPENROUTER_API_KEY: openrouterKey,
+        OPENCLAW_GATEWAY_TOKEN: gatewayToken,
       });
 
       const config = buildMachineConfig({
@@ -536,7 +593,30 @@ export const deployMachine = internalAction({
         flyMachineId: machine.id,
       });
 
-      return { ok: true, appName, machineId: machine.id };
+      /**
+       * ⭐ WAIT FOR IT TO ACTUALLY START.
+       *
+       * Returning the moment Fly accepts the create is what made the button
+       * lie: the founder saw "deployed", paired, texted — and the machine was
+       * busy dying in a boot loop the whole time. `started` and "Fly said ok"
+       * are ~90 seconds apart, and the entire product lives in that gap.
+       *
+       * A timeout is NOT a failed deploy. The machine exists and may well come
+       * up a moment later; what is false is calling it ready. So this reports
+       * `started: false` and the pairing screen stays closed until a health
+       * check says otherwise.
+       */
+      let started = false;
+      try {
+        await fly.waitForState(appName, machine.id, "started", {
+          timeoutMs: 120_000,
+        });
+        started = true;
+      } catch {
+        started = false;
+      }
+
+      return { ok: true, appName, machineId: machine.id, started };
     } catch (error) {
       // Named, never silent. A half-deployed machine that reports success is
       // how you get a founder texting a thing that isn't there.

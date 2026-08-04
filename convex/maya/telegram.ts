@@ -267,13 +267,33 @@ export const handleInbound = internalAction({
     );
     if (!recorded.recorded) return recorded;
 
-    // No wake job. The machine is always on (§18 Sprint 2.9), so there is
-    // nothing to boot — OpenClaw's own Telegram-inbound path picks the message
-    // up on its persistent session.
-    //
-    // A `wake_agent` job used to be enqueued here to start an auto-stopped
-    // machine. It had no handler, so it dead-lettered on every single inbound
-    // message while the queue reported perfectly normal failures.
+    /**
+     * ⭐ FORWARD IT. This is the line whose absence made her deaf.
+     *
+     * Her OpenClaw is not connected to Telegram and cannot be — one bot token,
+     * one listener, and Convex is it. So a recorded message reaches nobody
+     * unless Convex carries it across to her session.
+     *
+     * For a day this function stopped here, under a comment asserting that
+     * "OpenClaw's own Telegram-inbound path picks it up." It doesn't. The
+     * founder's "Hello" sat in a row and she never heard it.
+     */
+    const customerId = await ctx.runQuery(
+      internal.maya.telegram.customerByChatId,
+      { chatId: args.chatId }
+    );
+    if (!customerId) return { recorded: true, reason: "no customer to forward to" };
+
+    const routed = await ctx.runAction(
+      internal.maya.handoff.routeInboundToMachine,
+      { customerId, text: args.text }
+    );
+    if (!routed.delivered) {
+      // Named, never silent. An undelivered message is the one failure this
+      // product cannot have — from the founder's side it is indistinguishable
+      // from being ignored.
+      return { recorded: true, reason: routed.reason };
+    }
     return { recorded: true };
   },
 });
