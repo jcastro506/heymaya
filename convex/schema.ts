@@ -3453,6 +3453,22 @@ export default defineSchema({
      */
     pairingToken: v.optional(v.string()),
     pairingExpiresAt: v.optional(v.number()),
+
+    /**
+     * The gateway credential — stored in PLAINTEXT, deliberately, and the
+     * asymmetry with `agentTokenHash` is the point.
+     *
+     * `agentTokenHash` is what the MACHINE presents to us, so we only ever need
+     * to verify it and a hash is strictly better. This one we present TO the
+     * machine, so we need the value itself. It also cannot equal the agent
+     * token: OpenClaw refuses to boot when the hook and gateway tokens match
+     * (v1 hit that as a live crash-loop).
+     */
+    gatewayToken: v.optional(v.string()),
+    /** `https://<app>.fly.dev` — where Convex reaches her session. */
+    machineUrl: v.optional(v.string()),
+    /** Set once the gateway has reported healthy at least once. */
+    machineReadyAt: v.optional(v.number()),
     /**
      * SHA-256 of the agent's bearer token — the credential her runtime presents
      * on every tool call.
