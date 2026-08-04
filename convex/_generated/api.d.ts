@@ -194,6 +194,7 @@ import type * as integrations_unipile_client from "../integrations/unipile/clien
 import type * as integrations_videoSynthWorker_client from "../integrations/videoSynthWorker/client.js";
 import type * as integrations_zernio_client from "../integrations/zernio/client.js";
 import type * as integrations_zernio_endpoints from "../integrations/zernio/endpoints.js";
+import type * as integrations_zernio_publish from "../integrations/zernio/publish.js";
 import type * as integrations_zernio_types from "../integrations/zernio/types.js";
 import type * as lib_encryption from "../lib/encryption.js";
 import type * as lib_flyClient from "../lib/flyClient.js";
@@ -218,6 +219,7 @@ import type * as maya_pairing from "../maya/pairing.js";
 import type * as maya_planFeatures from "../maya/planFeatures.js";
 import type * as maya_preflight from "../maya/preflight.js";
 import type * as maya_productTruth from "../maya/productTruth.js";
+import type * as maya_publish from "../maya/publish.js";
 import type * as maya_publishDecision from "../maya/publishDecision.js";
 import type * as maya_quality from "../maya/quality.js";
 import type * as maya_scheduler from "../maya/scheduler.js";
@@ -430,6 +432,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/videoSynthWorker/client": typeof integrations_videoSynthWorker_client;
   "integrations/zernio/client": typeof integrations_zernio_client;
   "integrations/zernio/endpoints": typeof integrations_zernio_endpoints;
+  "integrations/zernio/publish": typeof integrations_zernio_publish;
   "integrations/zernio/types": typeof integrations_zernio_types;
   "lib/encryption": typeof lib_encryption;
   "lib/flyClient": typeof lib_flyClient;
@@ -454,6 +457,7 @@ declare const fullApi: ApiFromModules<{
   "maya/planFeatures": typeof maya_planFeatures;
   "maya/preflight": typeof maya_preflight;
   "maya/productTruth": typeof maya_productTruth;
+  "maya/publish": typeof maya_publish;
   "maya/publishDecision": typeof maya_publishDecision;
   "maya/quality": typeof maya_quality;
   "maya/scheduler": typeof maya_scheduler;
