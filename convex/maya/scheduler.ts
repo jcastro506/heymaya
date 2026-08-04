@@ -156,7 +156,12 @@ export const HANDLED_KINDS = new Set<string>([
 /** Route a claimed job to its handler. */
 async function runHandler(
   ctx: { runAction: (ref: never, args: never) => Promise<unknown> },
-  job: { kind: string; payloadJson?: string }
+  job: {
+    kind: string;
+    payloadJson?: string;
+    customerId?: Id<"customers">;
+    idempotencyKey: string;
+  }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (job.kind === "deliver_message") {
     let messageId: string | undefined;
@@ -184,20 +189,41 @@ async function runHandler(
       : { ok: false, error: result.reason ?? "delivery failed" };
   }
   if (job.kind === "publish_placement") {
-    // The decision was already made by the iron rule (§9.1) before this was
-    // enqueued. What's missing is the vendor call: Zernio's four WRITE wrappers
-    // aren't built, because building them needs a real connected account to
-    // test against and there isn't one yet.
-    //
-    // So this fails with a reason a human can act on, rather than dead-lettering
-    // as an unknown kind. The distinction matters: "not built yet" is a state
-    // someone can resolve; "unrouted job kind" reads as a bug and sends whoever
-    // finds it looking in the wrong place.
-    return {
-      ok: false,
-      error:
-        "publishing isn't wired yet — the Zernio write path needs a connected account (Sprint 1, operator-blocked)",
+    // The decision was made by the iron rule (§9.1) BEFORE this was enqueued.
+    // Nothing here re-decides it — a second opinion at this point would be
+    // exactly the silent hold that rule exists to eliminate.
+    const payload = JSON.parse(job.payloadJson ?? "{}") as {
+      draftId?: Id<"drafts">;
+      snapshotText?: string;
     };
+    if (!payload.snapshotText) {
+      return { ok: false, error: "publish job carried no text" };
+    }
+    // Every publish belongs to somebody. A job without one can't resolve a
+    // channel or a connection, so it says so rather than failing further in.
+    if (!job.customerId) {
+      return { ok: false, error: "publish job has no customer" };
+    }
+    const customerId = job.customerId;
+    const result = (await (
+      ctx as unknown as {
+        runAction: (
+          ref: typeof internal.maya.publish.publishPlacement,
+          args: {
+            customerId: Id<"customers">;
+            snapshotText: string;
+            idempotencyKey: string;
+            draftId?: Id<"drafts">;
+          }
+        ) => Promise<{ ok: boolean; error?: string }>;
+      }
+    ).runAction(internal.maya.publish.publishPlacement, {
+      customerId,
+      snapshotText: payload.snapshotText,
+      idempotencyKey: job.idempotencyKey,
+      draftId: payload.draftId,
+    })) as { ok: boolean; error?: string };
+    return result.ok ? { ok: true } : { ok: false, error: result.error ?? "publish failed" };
   }
 
   return { ok: false, error: `unrouted job kind "${job.kind}"` };
