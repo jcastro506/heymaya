@@ -544,3 +544,49 @@ describe("A REDEPLOY IS IDEMPOTENT", () => {
     expect(block).not.toMatch(/return \{ ok: false/);
   });
 });
+
+describe("BULK TEARDOWN CANNOT REACH PRODUCTION", () => {
+  // Two different destroys, and only one is safe in production:
+  //
+  //   • destroy-before-create inside a DEPLOY replaces one customer's machine
+  //     with a newer one. The volume — her memory — survives. That is how a
+  //     config change or image upgrade ships, and it is correct in prod.
+  //
+  //   • BULK teardown sweeps every machine in a deployment. That is a testing
+  //     convenience, and a testing convenience that can reach paying customers
+  //     is a loaded gun. In production a machine dies only when its owner
+  //     deletes their account, per customer, on their own instruction.
+  const source = readFileSync(join(__dirname, "..", "deploy.ts"), "utf8");
+
+  it("refuses unless explicitly opted in", () => {
+    expect(source).toMatch(/ALLOW_BULK_TEARDOWN !== "true"/);
+    const guard = source.slice(source.indexOf("ALLOW_BULK_TEARDOWN"));
+    // Refuses by RETURNING, not by throwing — a thrown sweep looks like a bug
+    // to whoever ran it, and this is a deliberate answer.
+    expect(guard).toMatch(/refused:/);
+  });
+
+  it("the guard is fail-CLOSED, not a deployment-name check", () => {
+    // A name check is a guess about which deployment is which, and this must be
+    // wrong only in the safe direction — including on deployments nobody has
+    // thought about yet.
+    const guard = source.slice(
+      source.indexOf("FAIL CLOSED"),
+      source.indexOf("const siteUrl = process.env.CONVEX_SITE_URL")
+    );
+    expect(guard).not.toMatch(/resilient-mandrill|precise-canary|=== "prod"/);
+  });
+
+  it("points the operator at account deletion for a single customer", () => {
+    expect(source).toMatch(/use account deletion/i);
+  });
+
+  it("the DEPLOY's destroy-before-create is NOT gated by it", () => {
+    // Replacing one machine on redeploy must keep working in production —
+    // that is how a new config or image ships at all.
+    const destroyAt = source.indexOf("destroyMachine(appName, stale.id");
+    const guardAt = source.indexOf("ALLOW_BULK_TEARDOWN");
+    expect(destroyAt).toBeGreaterThan(-1);
+    expect(destroyAt).toBeLessThan(guardAt);
+  });
+});
