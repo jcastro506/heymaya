@@ -3676,6 +3676,8 @@ production.
 | **Wire `memorySearch`** — embeddings + sqlite vector store on the volume, matching v1. Currently absent entirely; recall today is a static generated file. |
 | **Enable dreaming.** |
 | **Shrink `convex/maya/scheduler.ts`** to message delivery and the publish path only. Delete the watchers layer, `wake_agent`, and every Convex cron that duplicates an OpenClaw one. |
+| ⭐ **Port v1's deploy stages, don't re-derive them.** Three live deploys failed on things `deployMayaGtm.ts` already solved: the image tag (`:latest` doesn't exist — it pins `tag@digest`), `config.files` written under the volume mount (Fly writes them BEFORE mounting; the mount shadows them and the chown-after-mount kills init), and agents declared at the config root instead of `agents.list`. v1 has ELEVEN deploy stages; the first v2 attempt had five. **Missing: `allocate-ips`** (machines-API apps get no public DNS, so Convex cannot reach the gateway at all), **`wait-for-state`**, and **the gateway token** (`OPENCLAW_GATEWAY_TOKEN`, which must be DISTINCT from the hook token or the runtime crash-loops). |
+| ⭐ **Deploy timing + health gating** per §18.9.25a — deploy at ①, pair only when healthy, hold-and-replay inbound. |
 | ⭐ **A way to actually deploy one.** `deployMachine` is an `internalAction` — CLI-only by definition, so no operator can start a v2 machine. Needs a public action wrapper and a minimal trigger. **This is harness plumbing, NOT Sprint 11.** Sprint 11 owns the *designed* six-screen onboarding (§18.9.25) and depends on the perception layer; this owns "a machine can be started at all", which Sprint 3's exit criterion silently assumes. Scope: sign in → product URL → pair Telegram → deploy. No streaming read, no connect cards, no payment. |
 | ⭐ **Use the gateway persistent-session path, not `/hooks/agent`** — that entry point is hardcoded isolated+forceNew, which is what made v1's amnesia structural (five DMs = five fresh sessions). Verify, don't assume. |
 
@@ -4153,6 +4155,50 @@ Four cards — TikTok, Instagram, YouTube, X. Each: logo, **one-line role** (*"r
 States per card: not connected · connecting · connected · needs attention. **Instagram surfaces the Business/Creator requirement inline** the moment it's detected, not at first post.
 
 **⑦ Payment** — standard, minimal, and **last**, after she's already demonstrated.
+
+#### 18.9.25a When the machine actually deploys
+
+*Added 2026-08-04, after three failed live deploys made the omission expensive.*
+
+The six screens above never said when the Fly machine gets created. Two rules,
+and they are the difference between a founder meeting a working agent and
+texting a corpse.
+
+**The deploy fires at ①, the moment the URL is submitted.** Signup folds into
+that screen, so an account exists; the workspace needs nothing else. It runs in
+the background and the founder never watches it.
+
+> **The read IS the wait.**
+
+Screen ② takes ~20 seconds of genuinely useful streaming, and the boot takes
+~60–90. Add the correction, and the pairing tap, and the machine is up before
+anyone needs it. **No progress bar** — a progress bar is an apology for making
+someone wait, and the read is the one part of onboarding that sells the product.
+
+**② Pairing is gated on HEALTH, not on the deploy call returning.**
+
+"Deployed" must mean *she can answer*, never *Fly accepted the request*. Those
+are ~90 seconds apart, and the gap is where the product dies:
+
+- The QR binds the chat id. From that instant the founder is in Telegram with an
+  open thread and **nothing on the web can stop them typing.**
+- If she isn't up, they get silence — from the employee whose entire pitch is
+  that she answers.
+
+So screen ③ shows the QR only once the gateway reports healthy. Before that it
+says so plainly. **An honest "one moment" beats a QR that leads nowhere.**
+
+**And a backlog behind it, as a safety net.** Pairing-last means the window
+should never open — but a machine can die after pairing, or restart on a
+redeploy. Inbound messages are held and replayed in order once she is healthy
+again, so "her machine restarted and your message vanished" cannot happen. This
+is `messages` rows we already write; what was missing is a delivered-to-machine
+marker and a drain.
+
+**Her first message must be grounded.** She has just read their site — the
+opener names the product and what is actually different about it. A generic
+"hi" wastes every second of screen ②, and it is the one message where the whole
+pitch is either proved or lost.
 
 ---
 
