@@ -128,11 +128,18 @@ describe("THE BOOTSTRAP ACTUALLY DOES SOMETHING", () => {
     expect(script).toMatch(/--bind lan/);
   });
 
-  it("does NOT override the port the image health-checks", () => {
-    // The image sets PORT=3000 and probes /healthz on it. Passing a different
-    // --port gives a gateway that serves fine and reports unhealthy forever.
+  it("routes to the port the GATEWAY actually binds, not the image's PORT", () => {
+    // Verified live by probing the machine: 3000 and 8080 refuse, 18789
+    // answers 200. The image's PORT=3000/EXPOSE/HEALTHCHECK describe its
+    // default CMD (`--port 3000`); our boot script omits `--port`, so OpenClaw
+    // binds its own default instead.
+    //
+    // I overrode v1's 18789 with 3000 after reading the Dockerfile — reasoning
+    // from the image rather than from what the process does. Fly then routed
+    // :443 at a dead port and every health probe returned 503 while the gateway
+    // sat there healthy.
     expect(script).not.toMatch(/--port/);
-    expect(CONFIG.services![0].internal_port).toBe(3000);
+    expect(CONFIG.services![0].internal_port).toBe(18789);
   });
 
   it("copies the workspace twice, against a documented race", () => {

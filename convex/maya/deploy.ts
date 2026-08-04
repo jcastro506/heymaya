@@ -231,10 +231,23 @@ export function buildMachineConfig(input: MachineConfigInput): FlyMachineConfig 
     services: [
       {
         protocol: "tcp",
-        // 3000 — the image's PORT, EXPOSE, and HEALTHCHECK all agree on it.
-        // Pointing the service somewhere else gives a machine that serves fine
-        // and reports unhealthy forever.
-        internal_port: 3000,
+        /**
+         * ⭐ 18789 — OpenClaw's OWN default gateway port. Verified live by
+         * probing the machine: 3000 and 8080 refuse, 18789 answers 200.
+         *
+         * The image sets `PORT=3000`, EXPOSEs 3000, and health-checks 3000 —
+         * all of which is a red herring, because those describe the image's
+         * default CMD (`--port 3000`). Our boot script deliberately omits
+         * `--port` (v1 does too), so the gateway binds its own default instead
+         * and the image's own healthcheck can never pass.
+         *
+         * v1 has `internal_port: 18789` and I overrode it with 3000 after
+         * reading the Dockerfile — reasoning from the image instead of from
+         * what the process actually does. Fly then routed :443 to a port
+         * nothing listened on, and every health probe returned 503 while the
+         * gateway sat there perfectly healthy on another port.
+         */
+        internal_port: 18789,
         ports: [{ port: 443, handlers: ["tls", "http"] }],
         // ⭐ ALWAYS-ON (§18 Sprint 2.9). Auto-stop is deferred, not abandoned.
         //
