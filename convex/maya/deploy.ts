@@ -544,6 +544,38 @@ export const deployMachine = internalAction({
         publicEnv: { CONVEX_SITE_URL: siteUrl },
       });
 
+      /**
+       * ⭐ DESTROY ANY EXISTING MACHINE FIRST. The deploy has to be idempotent.
+       *
+       * Two reasons, and the second is worse than the first:
+       *
+       * 1. **The volume.** One volume attaches to one machine. A redeploy that
+       *    creates a second machine gets `volume not found` from Fly — meaning
+       *    no FREE volume by that name, because the old machine still holds it.
+       *    Observed live 2026-08-04 on the first redeploy.
+       *
+       * 2. **Two machines = two heartbeats = two cron sets.** v1 documents this
+       *    as a direct cause of its re-doing loop: doubled foundation passes,
+       *    doubled spend, and an agent apparently doing everything twice. The
+       *    volume error is loud; this one is silent and expensive.
+       *
+       * Best-effort and never fatal: a teardown failure must not block a fresh
+       * deploy, since the new machine is the thing that actually matters. The
+       * VOLUME survives — that is the whole point, and it is what carries her
+       * memory across the redeploy.
+       */
+      try {
+        for (const stale of await fly.listMachines(appName)) {
+          try {
+            await fly.destroyMachine(appName, stale.id, { force: true });
+          } catch {
+            // Named in the deploy result rather than thrown — see above.
+          }
+        }
+      } catch {
+        // listMachines failing is not a reason to refuse to deploy.
+      }
+
       const machine = await fly.createMachine({
         appName,
         name: appName,
