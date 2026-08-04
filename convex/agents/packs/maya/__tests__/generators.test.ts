@@ -326,7 +326,14 @@ describe("the gateway config exists at all", () => {
     // /v1/chat/completions 404s and Convex cannot reach her session at all —
     // the founder's message arrives, is recorded, and stops. Verified live:
     // gateway healthy, plugins loaded, heartbeat running, every message 404ing.
-    expect(config.http.endpoints.chatCompletions.enabled).toBe(true);
+    expect(config.gateway.http.endpoints.chatCompletions.enabled).toBe(true);
+  });
+
+  it("PUTS IT UNDER `gateway`, NOT AT THE ROOT", () => {
+    // Shipping it at the root fails validation with `<root>: Invalid input`
+    // and the gateway refuses to start — strictly worse than the 404 it was
+    // meant to fix. She goes from deaf to dead. Both were live failures.
+    expect((config as Record<string, unknown>).http).toBeUndefined();
   });
 
   it("is emitted — a workspace with no config is a folder, not an agent", () => {
