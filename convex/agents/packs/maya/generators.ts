@@ -661,18 +661,41 @@ function renderOpenClawConfig(tz: string): string {
   return JSON.stringify(
     {
       /**
-       * ⭐ THE OPENAI-COMPATIBLE ENDPOINT IS OPT-IN.
+       * ⭐ THE OPENAI-COMPATIBLE ENDPOINT IS OPT-IN — AND IT LIVES UNDER
+       * `gateway`, NOT AT THE ROOT.
        *
-       * Without this, `/v1/chat/completions` returns 404 and Convex has no way
-       * to reach her session at all — the founder's message arrives, gets
-       * recorded, and stops. Verified live 2026-08-04: gateway healthy, plugins
-       * loaded, heartbeat running, and every forwarded message 404ing.
+       * Two separate live failures taught this one line:
        *
-       * It is authenticated by the gateway token, so exposing it costs nothing
+       *   1. Without the endpoint at all, `/v1/chat/completions` 404s and
+       *      Convex cannot reach her session — the founder's message arrives,
+       *      is recorded, and stops. Gateway healthy, plugins loaded, heartbeat
+       *      running, every message 404ing.
+       *   2. With it at the config root, the whole config fails validation with
+       *      `<root>: Invalid input` and the gateway refuses to start. Strictly
+       *      worse than the 404 — she goes from deaf to dead.
+       *
+       * This endpoint is the ONLY path to a durable session: `/hooks/agent` is
+       * hardcoded isolated+forceNew in the OpenClaw runtime, which is precisely
+       * what made v1 amnesiac — five DMs, five conversations, no memory of any.
+       *
+       * Authenticated by the gateway bearer token, so exposing it costs nothing
        * beyond what the machine already exposes: per-tenant secret, per-tenant
        * blast radius.
        */
-      http: { endpoints: { chatCompletions: { enabled: true } } },
+      gateway: {
+        mode: "local",
+        http: { endpoints: { chatCompletions: { enabled: true } } },
+      },
+
+      /**
+       * Don't advertise on the LAN.
+       *
+       * The gateway binds `--bind lan` so Fly's proxy can reach it, and mDNS
+       * would then broadcast a discoverable agent endpoint to whatever shares
+       * that network. Each machine is one customer's, holding one customer's
+       * memory — there is nobody it should be announcing itself to.
+       */
+      discovery: { mdns: { mode: "off" } },
 
       agents: {
         defaults: {
