@@ -99,6 +99,16 @@ export interface MayaWorkspaceInput {
     /** What it actually does, in the founder's words. Grounding for every claim. */
     truth?: string;
     differentiator?: string;
+    /** Who it's for. Empty when the read never established it. */
+    audience?: string;
+    /**
+     * ⭐ What we could NOT establish about this product.
+     *
+     * Carried into the workspace deliberately. An empty field and an unknown
+     * fact look identical to her otherwise, and the difference decides whether
+     * she asks or assumes — which is the whole grounding invariant.
+     */
+    gaps?: string[];
   };
   /** Connected channels and their switch positions. Only these ship norms. */
   channels: Array<{
@@ -486,6 +496,19 @@ function renderApp(input: MayaWorkspaceInput): string {
 ${input.product.truth ?? "_Product truth not captured yet. Until it is, I ask rather than assume — every claim has to trace back to something here._"}
 
 ${input.product.differentiator ? `**What makes it different:** ${input.product.differentiator}` : ""}
+
+${input.product.audience ? `**Who it's for:** ${input.product.audience}` : ""}
+
+${
+    input.product.gaps && input.product.gaps.length > 0
+      ? `## What I DON'T know yet
+
+${input.product.gaps.map((gap) => `- ${gap}`).join("\n")}
+
+These are open questions, not blanks to fill in. I ask about them; I never
+guess at them and I never write around them.`
+      : ""
+  }
 
 **This file is the grounding for every claim I make.** If something isn't here
 or in the founder's own words, I don't say it.

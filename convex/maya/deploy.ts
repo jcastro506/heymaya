@@ -362,14 +362,40 @@ export const workspaceInput = internalQuery({
         name: typeof product.founderName === "string" ? product.founderName : undefined,
         timezone: customer.timezone,
       },
+      /**
+       * ⭐ FIELD NAMES MUST MATCH `ProductTruth` (Sprint 2.95).
+       *
+       * The reader writes `whatItIs` / `whatsDifferent` / `whoItsFor`; this
+       * query used to look only for `truth` / `differentiator`. A mismatch here
+       * is silent in the worst way: the read succeeds, the row fills, the
+       * deploy succeeds — and APP.md renders "product truth not captured yet"
+       * forever, so she keeps refusing to make claims she now has grounds for.
+       *
+       * Legacy names are still read as a fallback for rows written before the
+       * reader existed.
+       */
       product: {
         name: typeof product.name === "string" ? product.name : "the product",
         url: typeof product.url === "string" ? product.url : "",
-        truth: typeof product.truth === "string" ? product.truth : undefined,
+        truth:
+          typeof product.whatItIs === "string" && product.whatItIs
+            ? product.whatItIs
+            : typeof product.truth === "string"
+              ? product.truth
+              : undefined,
         differentiator:
-          typeof product.differentiator === "string"
-            ? product.differentiator
+          typeof product.whatsDifferent === "string" && product.whatsDifferent
+            ? product.whatsDifferent
+            : typeof product.differentiator === "string"
+              ? product.differentiator
+              : undefined,
+        audience:
+          typeof product.whoItsFor === "string" && product.whoItsFor
+            ? product.whoItsFor
             : undefined,
+        gaps: Array.isArray(product.gaps)
+          ? product.gaps.filter((g): g is string => typeof g === "string")
+          : undefined,
       },
       channels: live.map((c) => ({
         channel: c.channel,
