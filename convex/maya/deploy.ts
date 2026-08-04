@@ -707,7 +707,33 @@ export const destroyMyDeploymentMachines = internalAction({
     scope: string;
     destroyed: string[];
     skippedOtherDeployments: string[];
+    refused?: string;
   }> => {
+    /**
+     * ⛔ FAIL CLOSED. Bulk teardown is a TESTING tool and must be impossible in
+     * production.
+     *
+     * The only legitimate way a customer's machine dies in production is that
+     * customer deleting their account — which goes through `accountDeletion`,
+     * per-customer, on their own instruction. A fleet sweep is a developer
+     * convenience, and a developer convenience that can reach paying customers
+     * is a loaded gun.
+     *
+     * An explicit opt-in env var rather than a deployment-name check: a name
+     * check is a guess about which deployment is which, and this must be wrong
+     * only in the safe direction. Absent → refuse, on every deployment,
+     * including new ones nobody has thought about yet.
+     */
+    if (process.env.ALLOW_BULK_TEARDOWN !== "true") {
+      return {
+        scope: "refused",
+        destroyed: [],
+        skippedOtherDeployments: [],
+        refused:
+          "bulk teardown is disabled here — set ALLOW_BULK_TEARDOWN=true on a testing deployment, never on production. To remove ONE customer, use account deletion.",
+      };
+    }
+
     const siteUrl = process.env.CONVEX_SITE_URL;
     const scope = `maya-${deploymentSlug(siteUrl)}-`;
 
