@@ -1108,6 +1108,47 @@ If it reads as AI, nothing else in this document matters. So this gets built as 
 
 > **Would a real person with this account actually type this and hit post?**
 
+### 7.5.3 The same problem in video — and the spec's own blind spot
+
+*Added 2026-08-04. §7.5.2 above is **entirely about text.** Three of our four
+channels are video-first. Nothing in this document addressed video reading as
+AI until this section, which means the "only moat" covered one channel.*
+
+**Video has its own tells, and they are not the text ones:**
+
+| Class | Tells |
+|---|---|
+| **Visual** | AI avatars — the single most instantly-recognisable one · stock footage · generic gradient motion backgrounds · perfectly even cut rhythm · no camera shake, ever |
+| **Audio** | synthetic voiceover with flawless prosody · no room tone · music that never ducks · zero mouth noise or breath |
+| **Structural** | a hook that explains rather than shows · every shot the same length · a tidy summary outro · nothing left unresolved |
+| **Register** | **too produced.** Real short-form is handheld, badly lit, jump-cut mid-word, and starts before the speaker is ready |
+
+⚠️ **This contradicts a live decision.** §7.6.6 pins *one avatar + one voice +
+one music bed per customer, forever* — chosen purely as a cost optimisation.
+That combination is an AI talking head with synthetic narration, which is the
+most reliably AI-flagged artifact on TikTok. **The cost tiering treats avatars
+as cheap; it never priced them as an authenticity risk.**
+
+**The ordering that follows from it:**
+
+1. **Founder footage beats everything**, and it's why §6.0.1 step 8 asks for
+   clips — *"that's the best-performing content there is."* `lipsyncs_v2` with
+   `brollUrl` puts real footage inside the structure.
+2. **Real product screen recordings** next. An actual UI doing an actual thing
+   is unfakeable and we already collect it (§6.4).
+3. **Avatar last, and disclosed in the plan**, never a silent default. §7.6.5a
+   already flags a v1 bug where no avatar picked *quietly* became a single-scene
+   video — that same silence is what makes this dangerous.
+
+**The format library is the other half of the answer** (§5.3): shapes proven to
+work in this niche, with the evidence attached. Borrowing a *shape* that earned
+its numbers and filling it with real product and real voice is the opposite of
+generating something plausible. **Copy the structure, never the content.**
+
+**The final gate, the video version:**
+
+> **Would this stop a thumb, or does it look like it came from a tool?**
+
 ### 7.5.3 "Make me this one" — the recreate flow
 
 Creatify's `ads_clone` takes a **product link + any video URL** and rebuilds that video's format around the product. That maps to a first-class Telegram interaction worth designing deliberately:
@@ -3834,6 +3875,36 @@ from ~$29–41 → **~$33–54**, gross margin at $149 from ~72–80% → **~64�
 line material — and only with a mechanism that keeps the loop intact, since the
 naive version silently kills a heartbeat rather than disabling it.
 
+### Sprint 2.95 — Product truth · *the prerequisite Sprint 3 can't skip*
+
+**Why this is its own sprint and not a Sprint 4 task.** Sprint 3 asks her to
+post daily, in public, under the founder's real identity. Today `saveProduct`
+stores three fields — name, URL, timezone — and nothing reads the URL. Asked
+live on 2026-08-04 what she knew about the product, she answered *"Very little,
+honestly"* and correctly refused to make claims about it.
+
+That answer is the grounding invariant working exactly as designed, and it is
+also a hard blocker: **§7 forbids her inventing product facts, so with no
+product truth she has nothing publishable to say.** Sprint 3 would test whether
+she can invent a product rather than whether she can publish reliably.
+
+This is §6.0.1 steps 2–3 and costs ~$0.03 per signup. The deep version
+(`learn-business`, the buyer map, tracked accounts) stays in Sprint 4.
+
+| Task |
+|---|
+| Fetch the product URL — **login-wall detection at onboarding** (§6), not at first render |
+| Extract product truth: what it is · who it's for · what's actually different · vocabulary |
+| **Read it back and let them correct it** — free text, and the correction becomes a directive (§10). Never a form field |
+| Store as the grounding source every draft cites; re-read on a stated change |
+
+**Exit:** she answers "what do you know about my product" with something the
+founder confirms is right — and still refuses to state what she wasn't told.
+**Tests:** grounding holds (no fact in a draft that isn't in product truth or a
+cited source) · a login-walled URL is *reported*, never guessed around · the
+read-back correction actually overrides the scrape · adversarial page content
+(a site that instructs the reader) is treated as data, never instruction.
+
 ### Sprint 3 — X: post + reply · **the gamble**
 
 | Task |
@@ -3842,11 +3913,27 @@ naive version silently kills a heartbeat rather than disabling it.
 | The posting switch + **the iron rule** (one function decides publish-or-hold) |
 | Preflight: token health, 280 exact count, duplicate check, rate limits |
 | Morning brief + evening recap, send-first |
+| ⭐ **The voice floor — anti-slop layers 3–6 (§7.5.2).** Generate 3–5 candidates and *select*, never generate-one-and-polish · hard length cap · every brief names a specific person or moment · server-enforced exact-string denylist + the structural critic on a different model |
+
+**The voice floor is not deferrable to Sprint 4.** This sprint posts publicly,
+under a real name, for seven consecutive days. §7.5.2 opens with *"if it reads
+as AI, nothing else in this document matters"* — running the gamble without a
+floor spends the founder's actual reputation to prove a publishing pipeline
+works. Layers 3–6 are constraints on *how* `write-post` is called and cost
+almost nothing; layers 1–2 need a collected corpus and stay in Sprint 4.
 
 **Exit:** **a placement a day for 7 straight days, verified.** Nothing past this ships until it holds.
-**Tests:** iron-rule test (no code path can hold a publish on *just go* except platform rejection or the floor) · snapshot-publish (approved text is the text shown) · double-publish prevention · one-open-item invariant.
+**Tests:** iron-rule test (no code path can hold a publish on *just go* except platform rejection or the floor) · snapshot-publish (approved text is the text shown) · double-publish prevention · one-open-item invariant · **candidate-selection is real** (the chosen draft is one of N generated, not a rewrite of the first) · denylist is enforced server-side, not advised in a prompt.
 
-### Sprint 4 — Brand
+### Sprint 4 — Brand and voice · *this is the anti-slop sprint*
+
+It already owns the exit criterion — *a stranger can't tell it isn't the
+founder writing* — but until now it carried no task that builds the system
+§7.5.2 calls **the only moat.** Five task rows, none of them the six layers.
+That gap is why the work kept feeling unscheduled: it was.
+
+Sprint 3 ships the cheap floor (layers 3–6). **This sprint builds the half that
+needs real collected text**, which is the half that actually works.
 
 | Task |
 |---|
@@ -3854,10 +3941,12 @@ naive version silently kills a heartbeat rather than disabling it.
 | **The buyer map** (§5.0.0) — audience-overlap discovery via `tiktok/user/followers`+`following`, audience validation, community discovery, **ranked complaint list** |
 | Brand kit extraction · media library + vision tagging · staleness |
 | **Run the scrape-reliability spike (§6.4.6)** — 20 URLs, classify quality |
-| Voice from edits wired into write + critique |
+| ⭐ **Layer 1 — the voice corpus.** We already pull thousands of real human sentences from this exact niche every week and use them **only for ideas**. Index them as few-shot voice examples, retrieved per-draft by channel and register. *Ten real examples beat any amount of "be casual and authentic."* |
+| ⭐ **Layer 2 — negative examples from this founder.** Carry the last N `{what I wrote → what they changed it to}` pairs into every Write and Critique call. Highest-signal data in the system, and it costs nothing because the edits already happen |
+| ⭐ **Tell research, grounded in real posts** — derive the denylist and the structural critic's targets from *measured* differences between human and model text in this niche, not from a hand-written list. The §7.5.2 table is a starting hypothesis, not the finding |
 
 **Exit:** a stranger can't tell it isn't the founder writing.
-**Tests:** voice-profile regression on held-out real posts · asset-classifier accuracy · never-fabricated-UI assertion.
+**Tests:** voice-profile regression on held-out real posts · asset-classifier accuracy · never-fabricated-UI assertion · **few-shot bleed** (§18 failure 1 — example content must never surface as a claimed fact about *this* product; this shipped once already) · the critic still vetoes when the writer model changes.
 
 ### Sprint 5 — Perception live
 
@@ -3893,6 +3982,7 @@ naive version silently kills a heartbeat rather than disabling it.
 | TikTok publish incl. rendered-preview consent |
 | ⭐ **Wrap Custom Templates — the primary video engine, currently NOT BUILT** (§7.6.5a) |
 | **Surface the silent v1 fallback** — no avatar picked must not quietly become a single-scene video (§7.6.5a) |
+| ⭐ **The video authenticity floor (§7.5.3)** — asset ordering enforced in code: founder footage → real screen recordings → avatar last and never a silent default. An avatar in a plan is *stated*, so the founder can veto it |
 
 #### 7.6.5a The Custom Templates gap — a COGS blocker, not a nice-to-have
 
@@ -3960,6 +4050,7 @@ simply the format that performs on TikTok/Reels/Shorts.
 | The **brief** schema + the **eight-check gate** |
 | **Global render queue**: fair-share, deadline priority, adaptive concurrency, pool circuit breaker |
 | `make-video` · weekly video plan ask |
+| ⭐ **Video anti-slop as a system (§7.5.3)** — the eight-check gate carries authenticity checks, not just completeness: is there real footage · is the cut rhythm varied · is the hook shown rather than explained. **Copy the structure, never the content** — `ads_clone` recreates a proven *shape* with this founder's product, and a clone that reproduces someone else's claims is a defect, not a feature |
 
 **Exit:** weekly plan → one yes → renders queued, posted, ledger-stamped.
 **Tests:** all eight checks run before the founder is asked · fair-share under load · 429 backoff · webhook idempotency · re-host on `done`.
