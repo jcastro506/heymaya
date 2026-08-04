@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { convexTest } from "convex-test";
 import schema from "../../schema";
 import { internal } from "../../_generated/api";
@@ -498,5 +500,46 @@ describe("STAGING AND PROD SHARE A FLY ORG — names must not collide", () => {
     const name = flyAppName("m57zjvtw15hm10he2rz4epp1kx8btwj1", PROD);
     expect(name.length).toBeLessThan(64);
     expect(name).toMatch(/^[a-z0-9-]+$/);
+  });
+});
+
+describe("A REDEPLOY IS IDEMPOTENT", () => {
+  it("destroys existing machines before creating the new one", () => {
+    // Two reasons, and the second is worse:
+    //
+    // 1. The volume. One volume attaches to one machine, so a second machine
+    //    gets `volume not found` from Fly — meaning no FREE volume by that
+    //    name. Hit live on the first redeploy, 2026-08-04.
+    // 2. Two machines = two heartbeats = two cron sets. v1 documents this as a
+    //    direct cause of its re-doing loop: doubled foundation passes, doubled
+    //    spend, an agent apparently doing everything twice. The volume error is
+    //    loud; this one is silent and expensive.
+    const source = readFileSync(join(__dirname, "..", "deploy.ts"), "utf8");
+    const destroyAt = source.indexOf("destroyMachine(appName, stale.id");
+    const createAt = source.indexOf("await fly.createMachine({");
+    expect(destroyAt).toBeGreaterThan(-1);
+    expect(createAt).toBeGreaterThan(-1);
+    expect(destroyAt).toBeLessThan(createAt);
+  });
+
+  it("does NOT destroy the volume — that's what carries her memory across", () => {
+    // The volume surviving a redeploy IS Sprint 2's exit criterion: "she
+    // answers from rows, across a redeploy".
+    const source = readFileSync(join(__dirname, "..", "deploy.ts"), "utf8");
+    expect(source).not.toMatch(/destroyVolume|deleteVolume/);
+    expect(source).toMatch(/findOrCreateVolume/);
+  });
+
+  it("a teardown failure does not block the fresh deploy", () => {
+    // The new machine is the thing that matters; refusing to deploy because an
+    // already-dead machine could not be destroyed again is a worse outcome.
+    const source = readFileSync(join(__dirname, "..", "deploy.ts"), "utf8");
+    const block = source.slice(
+      source.indexOf("DESTROY ANY EXISTING MACHINE"),
+      source.indexOf("const machine = await fly.createMachine")
+    );
+    // Both the inner destroy and the outer list are guarded.
+    expect((block.match(/try \{/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    expect(block).not.toMatch(/return \{ ok: false/);
   });
 });
