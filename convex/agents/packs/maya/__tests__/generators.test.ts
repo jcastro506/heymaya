@@ -433,13 +433,16 @@ describe("THE CRITIC RUNS ON A GENUINELY DIFFERENT MODEL", () => {
     // "is the same underlying model as luna, served with reasoning.mode: pro".
     // A luna critic judging a luna-pro writer grades its own register and
     // catches nothing, which is exactly what the rule exists to prevent.
-    const family = (m: string) => m.split("/")[1]?.replace(/-pro$/, "");
+    // Refs are `openrouter/<vendor>/<model>` — the provider prefix is what
+    // OpenClaw resolves the model through, so vendor and family sit one
+    // segment further in than the bare OpenRouter slug.
+    const family = (m: string) => m.split("/")[2]?.replace(/-pro$/, "");
     expect(family(critic.model)).not.toBe(
       family(config.agents.defaults.model.primary)
     );
     // Different vendor entirely, which is the strongest available signal.
-    expect(critic.model.split("/")[0]).not.toBe(
-      config.agents.defaults.model.primary.split("/")[0]
+    expect(critic.model.split("/")[1]).not.toBe(
+      config.agents.defaults.model.primary.split("/")[1]
     );
   });
 });

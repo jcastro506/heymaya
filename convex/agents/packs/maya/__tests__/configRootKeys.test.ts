@@ -83,6 +83,54 @@ describe("EVERY ROOT KEY IS ONE OPENCLAW ACCEPTS", () => {
     expect(config.discovery.mdns.mode).toBe("off");
   });
 
+  it("EVERY MODEL REF NAMES ITS PROVIDER", () => {
+    // A bare OpenRouter slug is not a no-op — OpenClaw reads `provider/model`,
+    // so `openai/gpt-5.6-luna-pro` resolves to provider `openai`, which has no
+    // such model. The machine boots healthy and answers every single message
+    // with `Unknown model`. Found live 2026-08-04.
+    const config = JSON.parse(
+      buildMayaWorkspace({
+        founder: { email: "sam@example.com", name: "Sam", timezone: "UTC" },
+        product: {
+          name: "Widgetly",
+          url: "https://widgetly.dev",
+          truth: "turns a CSV into a dashboard in one paste",
+        },
+        channels: [{ channel: "x", postingMode: "just_go" }],
+      }).files.get(OPENCLAW_CONFIG_PATH)!
+    );
+
+    const refs: string[] = [];
+    const walk = (node: unknown): void => {
+      if (Array.isArray(node)) return node.forEach(walk);
+      if (!node || typeof node !== "object") return;
+      const entries = Object.entries(node);
+      // A `model` sitting next to an explicit `provider` is already
+      // unambiguous, and is not necessarily an OpenRouter slug — memorySearch
+      // embeds through `provider: "gemini"` with a bare `gemini-embedding-001`.
+      const namesItsProviderAlready = entries.some(
+        ([key, value]) => key === "provider" && typeof value === "string"
+      );
+      for (const [key, value] of entries) {
+        if (
+          (key === "model" || key === "primary") &&
+          typeof value === "string" &&
+          !namesItsProviderAlready
+        ) {
+          refs.push(value);
+        }
+        walk(value);
+      }
+    };
+    walk(config);
+
+    // The walk must actually find them — a guard over an empty list passes.
+    expect(refs.length).toBeGreaterThanOrEqual(4);
+    for (const ref of refs) {
+      expect(ref, `${ref} names no provider`).toMatch(/^openrouter\//);
+    }
+  });
+
   it("the guard actually fires — a bogus root key is caught", () => {
     // Mutation check. A test that can't fail isn't a guard, and this one is
     // only worth its maintenance cost if it catches the thing it claims to.
