@@ -356,3 +356,23 @@ describe("THE PLACEMENT IS THE PROOF", () => {
     expect(rows).toEqual([]);
   });
 });
+
+describe("MODEL REFS: DIRECT API vs OPENCLAW", () => {
+  it("⭐ NO `openrouter/` PREFIX ON A DIRECT API CALL", async () => {
+    // Two surfaces, opposite rules, two words apart:
+    //   OpenClaw config     → openrouter/<vendor>/<model>   (provider prefix)
+    //   OpenRouter REST API → <vendor>/<model>              (bare slug)
+    // Getting it backwards names a model that doesn't exist. Both directions
+    // of this bug shipped on 2026-08-04.
+    const { SAFETY_CRITIC_MODEL } = await import("../outbound");
+    const { PRODUCT_READ_MODEL } = await import("../productTruth");
+    const { RELEVANCE_MODEL } = await import("../learnBusiness");
+    for (const ref of [SAFETY_CRITIC_MODEL, PRODUCT_READ_MODEL, RELEVANCE_MODEL]) {
+      expect(ref, `${ref} is for the REST API, not OpenClaw`).not.toMatch(
+        /^openrouter\//
+      );
+      // Still a real vendor slug, not a bare model name.
+      expect(ref).toMatch(/^[a-z0-9-]+\/[a-zA-Z0-9.\-_]+$/);
+    }
+  });
+});

@@ -35,6 +35,18 @@ export interface OpenRouterRequest {
   messages: OpenRouterMessage[];
   /** Low for extraction. Variance is a feature when writing, a bug when reading. */
   temperature?: number;
+  /**
+   * ⚠️ **REASONING TOKENS COUNT AGAINST THIS.**
+   *
+   * `qwen/qwen3.7-flash` spent **188 reasoning tokens** answering a 21-token
+   * prompt that needed 10 tokens of output. On a real prompt it will spend
+   * far more — and when the budget runs out mid-reasoning the API returns
+   * `finish_reason: "stop"` with **empty content**, not an error.
+   *
+   * That reads as "the model had nothing to say", which for a gate that fails
+   * closed means blocking everything, and for one that fails open means
+   * approving everything. Budget for reasoning + answer, never just the answer.
+   */
   maxTokens?: number;
   apiKey: string;
 }
@@ -68,7 +80,7 @@ export async function callOpenRouter(
         model: request.model,
         messages: request.messages,
         temperature: request.temperature ?? 0.2,
-        max_tokens: request.maxTokens ?? 1_200,
+        max_tokens: request.maxTokens ?? 4_000,
       }),
       signal: controller.signal,
     });

@@ -51,6 +51,23 @@ export const NormalizedPostSchema = z.object({
   postId: z.string(),
   url: z.string().nullable(),
   caption: z.string().nullable(),
+  /**
+   * Who posted it. **Optional and added late** (Sprint 4) — a search result
+   * without an author is a post nobody can be tracked from, and building a
+   * watchlist is the entire point of a keyword sweep.
+   *
+   * Optional rather than required so existing callers and fixtures are
+   * unaffected; a platform that doesn't expose it leaves it undefined rather
+   * than inventing one.
+   */
+  authorHandle: z.string().nullable().optional(),
+  /**
+   * ⚠️ **UNITS ARE THE VENDOR'S, NOT NORMALIZED.** TikTok returns `create_time`
+   * in SECONDS. Callers doing date arithmetic must promote to milliseconds —
+   * see `toMillis` in `convex/maya/learnBusiness.ts`. Comparing this directly
+   * to `Date.now()` makes every TikTok post look ~50 years old, which reads as
+   * an empty niche rather than a bug.
+   */
   postedAt: z.number().nullable(),
   metrics: z.object({
     likeCount: z.number().nullable(),

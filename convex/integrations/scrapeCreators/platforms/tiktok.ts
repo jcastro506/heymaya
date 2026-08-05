@@ -112,6 +112,22 @@ const TikTokVideoSchema = z
       .optional(),
     createTime: NumberLike.optional(),
     create_time: NumberLike.optional(),
+    /**
+     * The poster. `unique_id` is the @handle and is stable; `nickname` is the
+     * display name and changes, so only the handle is surfaced.
+     *
+     * Undeclared until Sprint 4, which meant search results normalized without
+     * an author — and a search result nobody can be tracked from defeats the
+     * point of a keyword sweep.
+     */
+    author: z
+      .object({
+        unique_id: z.string().optional(),
+        uniqueId: z.string().optional(),
+      })
+      .partial()
+      .passthrough()
+      .optional(),
     stats: TikTokVideoStatsSchema.optional(),
     statsV2: TikTokVideoStatsSchema.optional(),
     statistics: TikTokVideoStatsSchema.optional(),
@@ -384,6 +400,8 @@ function normalizeTikTokPosts(raw: unknown): NormalizedPost[] {
         str(v.shareInfo?.shareUrl) ??
         str(v.shareInfo?.share_url),
       caption: str(v.desc ?? v.title),
+      // `unique_id` is the @handle; `nickname` is the display name and changes.
+      authorHandle: str(v.author?.unique_id) ?? str(v.author?.uniqueId),
       postedAt: firstNum(v.createTime, v.create_time),
       metrics: {
         likeCount: firstNum(stats?.diggCount, stats?.digg_count),
