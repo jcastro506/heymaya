@@ -329,3 +329,166 @@ export const bankFromComplaints = internalAction({
     });
   },
 });
+
+/**
+ * Turn the morning's observations into ideas.
+ *
+ * ## Why this needs judgment, when complaints didn't
+ *
+ * A complaint is already an angle — *"nobody explains what it actually costs"*
+ * is the thing to say. An observation is somebody else's post, and most of them
+ * are not worth answering. *"Day one, 16 years old, 31 followers"* is a moment
+ * this founder can speak to; a competitor's feature announcement is not.
+ *
+ * So one batched call over the top observations, asking the only question that
+ * matters: **is there something this founder could say here that would be worth
+ * reading?** Not "summarise this" — the observation is already the summary.
+ *
+ * ## Why it's the daily filler
+ *
+ * Complaint mining runs against comment sections and yields a handful at a
+ * time. Observations arrive every morning. Without this the bank drains to
+ * empty between mining runs and the 11:00 placement reports a quiet day
+ * forever — which is honest, and wrong.
+ */
+export const IDEA_MODEL = "openai/gpt-5.6-luna-pro";
+
+const ANGLE_SYSTEM = `You read posts from one niche and decide which ones a specific founder could add something to.
+
+Return STRICT JSON, no prose:
+{ "angles": [ { "sourceUrl": string, "angle": string, "why": string } ] }
+
+- "angle": ⭐ NAME THE SPECIFIC THING. Point at the person, the number, the moment in THIS post. Not a lesson drawn from it.
+
+  BAD:  "You don't need a full marketing team to start, but you do need a repeatable system."
+  GOOD: "Someone posted day one at 16 years old with 31 followers. That's where everything starts."
+
+  BAD:  "Organic social works best as a consistent feedback channel."
+  GOOD: "A dev said their vacation moved to fall because the game ate the summer."
+
+  The bad ones are advice about a topic. The good ones point at a human being.
+  If the angle would still make sense with a different source post, it is too
+  abstract and you have thrown away the only thing that made it worth saying.
+
+- "why": one clause on why it's worth their breath.
+- "sourceUrl": copy it exactly from the input, so the angle keeps its receipt.
+
+Only return posts worth answering. Most aren't, and returning fewer is the correct answer — an empty array is fine.
+
+Skip: competitor announcements (nothing to add), pure self-promotion, anything where the honest response is "congrats", and anything this founder has no standing to comment on.
+
+Keep: a real problem someone is having · a question nobody answered well · a moment this founder has lived through · a widely-held belief they'd disagree with.
+
+Every kept angle must survive one check: **could a reader tell which post this came from?** If not, you generalised, and generalising is how a feed turns into "5 productivity tips".`;
+
+export function buildAnglePrompt(
+  product: { whatItIs?: string; whoItsFor?: string },
+  observations: Array<{ text: string; sourceUrl: string }>
+): string {
+  return [
+    `THE FOUNDER'S PRODUCT: ${product.whatItIs ?? "unknown"}`,
+    `THEIR BUYERS: ${product.whoItsFor ?? "unknown"}`,
+    "",
+    "POSTS FROM THE NICHE:",
+    ...observations.map((o) => `- [${o.sourceUrl}] ${o.text.replace(/\s+/g, " ").slice(0, 200)}`),
+    "",
+    "Which of these could this founder add something to? Strict JSON only.",
+  ].join("\n");
+}
+
+export function parseAngles(
+  content: string
+): Array<{ sourceUrl: string; angle: string; why: string }> {
+  let text = content.trim();
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced) text = fenced[1].trim();
+  const first = text.indexOf("{");
+  const last = text.lastIndexOf("}");
+  if (first < 0 || last <= first) return [];
+  try {
+    const parsed = JSON.parse(text.slice(first, last + 1)) as {
+      angles?: Array<{ sourceUrl?: unknown; angle?: unknown; why?: unknown }>;
+    };
+    return (parsed.angles ?? [])
+      .filter(
+        (a): a is { sourceUrl: string; angle: string; why: string } =>
+          typeof a.sourceUrl === "string" && typeof a.angle === "string"
+      )
+      .map((a) => ({
+        sourceUrl: a.sourceUrl,
+        angle: a.angle,
+        why: typeof a.why === "string" ? a.why : "",
+      }));
+  } catch {
+    return [];
+  }
+}
+
+/** How many observations to consider per run. Enough to choose from, not a firehose. */
+export const OBSERVATIONS_CONSIDERED = 20;
+
+export const bankFromObservations = internalAction({
+  args: { customerId: v.id("customers"), now: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ banked: number; duplicates: number; rejected: number; considered: number }> => {
+    const now = args.now ?? Date.now();
+    const observations = await ctx.runQuery(
+      internal.maya.scroll.recentObservations,
+      { customerId: args.customerId, limit: OBSERVATIONS_CONSIDERED }
+    );
+    if (observations.length === 0) {
+      return { banked: 0, duplicates: 0, rejected: 0, considered: 0 };
+    }
+
+    const truth = await ctx.runQuery(internal.maya.productTruth.forCustomer, {
+      customerId: args.customerId,
+    });
+
+    const { callOpenRouter } = await import("../integrations/openrouter/client");
+    const completion = await callOpenRouter({
+      apiKey: process.env.OPENROUTER_API_KEY ?? "",
+      model: IDEA_MODEL,
+      temperature: 0.3,
+      maxTokens: 3_000,
+      messages: [
+        { role: "system", content: ANGLE_SYSTEM },
+        {
+          role: "user",
+          content: buildAnglePrompt(truth ?? {}, observations.map((o) => ({
+            text: o.text,
+            sourceUrl: o.sourceUrl,
+          }))),
+        },
+      ],
+    });
+    if (!completion.ok) {
+      return { banked: 0, duplicates: 0, rejected: 0, considered: observations.length };
+    }
+
+    const byUrl = new Map(observations.map((o) => [o.sourceUrl, o]));
+    const scored: ScoredIdea[] = [];
+    for (const a of parseAngles(completion.content)) {
+      const observed = byUrl.get(a.sourceUrl);
+      // An angle whose URL matches nothing we collected is the model inventing
+      // a source. Dropped — an unverifiable idea looks identical to a real one
+      // everywhere downstream.
+      if (!observed) continue;
+      const evidence: Evidence = {
+        quote: observed.text,
+        sourceUrls: [observed.sourceUrl],
+        observedAt: observed.postedAt ?? observed.capturedAt,
+      };
+      const { score, why } = scoreIdea({ source: "observation", evidence }, now);
+      scored.push({ angle: a.angle, source: "observation", evidence, score, why });
+    }
+
+    const result = await ctx.runMutation(internal.maya.ideas.bankIdeas, {
+      customerId: args.customerId,
+      ideasJson: JSON.stringify(scored),
+      now,
+    });
+    return { ...result, considered: observations.length };
+  },
+});
