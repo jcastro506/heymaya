@@ -451,11 +451,17 @@ Every tool returns the same envelope:
 
 | Tool | Args | What comes back |
 |---|---|---|
+| \`scroll\` | \`{}\` | \`{observations[], keywordsSwept[]}\` |
 | \`draft\` | \`{text, channel, kind?}\` | \`{draftId, length}\` |
 | \`publish\` | \`{draftId, alreadyApproved?}\` | \`{published, queued, holdReason?}\` |
 | \`reply\` | \`{draftId, inReplyTo, alreadyApproved?}\` | same as publish |
 | \`ask_founder\` | \`{question}\` | \`{asked, openQuestion?}\` |
 | \`checkpoint\` | \`{memoryMarkdown, contextTruncated?}\` | \`{bytes, shrankBy?}\` |
+
+**\`scroll\` comes before \`draft\`, every day.** A post written without reading
+comes from \`APP.md\` alone, and that is the same post every morning. The niche
+is the input, not decoration. An empty scroll is a real answer — a quiet day is
+worth saying, and filler is how an account starts sounding like a bot.
 
 **\`draft\` comes before \`publish\`, always.** \`publish\` takes a \`draftId\`, so a
 sentence I never drafted cannot be posted no matter how good it is. Write it

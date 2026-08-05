@@ -23,6 +23,7 @@ import {
   askFounderHttp,
   checkpointHttp,
   draftHttp,
+  scrollHttp,
 } from "./maya/hooks";
 import {
   approvalDecisionHttp,
@@ -1018,6 +1019,7 @@ http.route({
 // accepts a customerId — and every response is the {ok, data, next, why}
 // envelope, including auth failures. See convex/maya/hooks.ts.
 // ---------------------------------------------------------------------------
+http.route({ path: "/maya/scroll", method: "POST", handler: scrollHttp });
 http.route({ path: "/maya/draft", method: "POST", handler: draftHttp });
 http.route({ path: "/maya/publish", method: "POST", handler: publishHttp });
 http.route({ path: "/maya/reply", method: "POST", handler: replyHttp });

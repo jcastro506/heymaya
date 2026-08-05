@@ -532,6 +532,7 @@ describe("the doctrine stays coherent with the server", () => {
       "draft",
       "publish",
       "reply",
+      "scroll",
     ]);
   });
 

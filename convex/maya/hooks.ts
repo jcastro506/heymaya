@@ -214,6 +214,54 @@ function str(body: Record<string, unknown>, key: string): string | undefined {
  * silent, so the agent kept trying and the founder saw nothing happen for days.
  */
 /**
+ * `scroll` — read what's moving in the niche.
+ *
+ * The 07:00 cron says "scroll", and without this she can only say she can't.
+ * §13.5.2: the sweep is not enrichment, it is the input — a post written from
+ * product truth alone is the same post every day.
+ *
+ * Returns ranked observations and nothing else. Deciding which one is worth a
+ * post is hers, with product truth in hand (§5.2: no LLM in collection).
+ */
+export const scrollHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if ("error" in auth) return auth.error;
+
+  const result = await ctx.runAction(internal.maya.scroll.scrollNiche, {
+    customerId: auth.customer._id,
+  });
+
+  if (!result.ok) {
+    return respond({
+      ok: false,
+      data: { observations: [] },
+      why: result.error ?? "couldn't read the niche",
+      next: "tell the founder you don't know what to watch yet, and ask what their buyers care about",
+    });
+  }
+
+  const observations = result.observations ?? [];
+  if (observations.length === 0) {
+    return respond({
+      ok: true,
+      data: { observations: [], keywordsSwept: result.keywordsSwept ?? [] },
+      why: "the niche is quiet today — nothing moving worth posting about",
+      next: "a quiet day is a real finding. Say so rather than posting filler",
+    });
+  }
+
+  return respond({
+    ok: true,
+    data: {
+      observations,
+      keywordsSwept: result.keywordsSwept ?? [],
+    },
+    why: `${observations.length} things moving in the niche, hottest first`,
+    next: "pick the ONE worth answering, then draft to that specific person or moment — not to the topic",
+  });
+});
+
+/**
  * `draft` — write a post down so it can be published.
  *
  * The missing link. `publish` takes a draftId and nothing created drafts, so

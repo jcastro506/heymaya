@@ -13,6 +13,7 @@
   },
   "contracts": {
     "tools": [
+      "scroll",
       "draft",
       "publish",
       "reply",
