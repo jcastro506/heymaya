@@ -4001,7 +4001,7 @@ new until Sprint 3's gate holds.
 | **2 Spine** | 🟡 ~85% | data model · job queue · planFeatures · message log · agentVersion routing · **the watchers layer (Convex crons)** · Telegram transport · spend ceiling · the archive (§16.8) | persistent session + volume · runtime shape — **both need a live machine** |
 | **2.5 Luna** | ✅ shipped | main brain + judges on gpt-5.6-luna | the week-long watch hasn't run |
 | **2.9 Harness correction** | 🟢 **code complete** | always-on · heartbeat + cron store · memorySearch + temporal decay + MMR · dreaming · memory-wiki · active-memory · `MEMORY.md` seed-not-clobber · the boot script that actually installs the plugin · `scheduler.ts` shrunk to delivery + publish · anti-drift + handler-coverage tests · daily memory checkpoint | **only the exit criteria** — every one needs a deployed machine |
-| **3 X — the gamble** | 🟡 ~60% | **the iron rule** · preflight (token, 280, duplicate) · **the tool surface** (`publish`/`reply`/`ask_founder`, tenant-safe by shape) · **the three skills + CONVENTIONS** · **the `maya-tools` plugin** | ⚠️ **brief + recap were counted as done and are not** — they were Convex crons feeding a `wake_agent` job with no handler · rate limits · **the 7-day exit** |
+| **3 X — the gamble** | 🟡 ~65% | ⭐ **`cadence.ts` — the streak instrument the exit criterion needs** · **the iron rule** · preflight (token, 280, duplicate) · **the tool surface** (`publish`/`reply`/`ask_founder`, tenant-safe by shape) · **the three skills + CONVENTIONS** · **the `maya-tools` plugin** | ⚠️ **brief + recap were counted as done and are not** — they were Convex crons feeding a `wake_agent` job with no handler · rate limits · **the 7-day exit** |
 | **4 Brand** | 🟡 ~45% | buyer map · voice-from-edits · asset classifier · **the §6.4.6 spike, run** | learn-business/voice/brand · brand kit · media library |
 | **5 Perception live** | 🔴 ~10% | complaint→content · quality gates | the six sweeps · Screen model · idea bank · plan-day |
 | **6 Memory + liveness** | 🟡 ~65% | directive ledger · three commands · **liveness contract + sweep + fleet correlation** | directive compiler → server gates · balance circuit breakers |
@@ -4016,11 +4016,21 @@ new until Sprint 3's gate holds.
 All three converge on the **OpenClaw pack for `convex/maya`** — workspace
 bundle, tools, wake protocol.
 
-**Status: the tools half is built** (`convex/maya/hooks.ts` + the `maya-tools`
-plugin + the three skills). **Nothing about it is verified live** — no machine
-has ever loaded the plugin. What remains structurally is the **workspace bundle
-and the wake protocol**; what remains to *prove any of it* is a deployed
-machine, which is operator-blocked.
+**Status (updated 2026-08-05): the machine runs and the chain is closed.** A
+deployed machine loads the plugin, answers from rows, and delivers through
+Convex to Telegram.
+
+⭐ **Sprint 2's exit criterion is MET.** Asked *"what have you posted so far?"*
+in a fresh turn immediately after a **machine recreate**, she answered with two
+live X URLs quoted verbatim — from `placements`, not from a context window.
+That is the criterion word for word: *you can text her and she answers from
+rows, across a redeploy.*
+
+**Sprint 3's is not, and now there is something that can tell us.** `cadence.ts`
+derives the consecutive-day run from `placements` in the **founder's** timezone.
+At the time of writing: **2 of 7**, one post day, one reply day. Before it, the
+gate the whole plan hangs on had no instrument — it was going to be evaluated by
+counting rows in a table by eye.
 
 **⚠️ Sprint 1's exit criterion is unreachable as written.** It requires "every
 one of the six sweeps runs against real APIs", and the six sweeps are Sprint 5
