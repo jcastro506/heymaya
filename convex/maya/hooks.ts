@@ -213,6 +213,72 @@ function str(body: Record<string, unknown>, key: string): string | undefined {
  * reason rather than retry. That framing matters: the old system's holds were
  * silent, so the agent kept trying and the founder saw nothing happen for days.
  */
+/**
+ * `draft` — write a post down so it can be published.
+ *
+ * The missing link. `publish` takes a draftId and nothing created drafts, so
+ * she could compose a perfect sentence and had nowhere to put it. Live on
+ * 2026-08-04, asked to post a specific line, she answered: *"I can't post it
+ * because this exact text doesn't have a draft record."* She was right.
+ *
+ * Preflight runs here so an over-length post is caught while writing, when the
+ * fix is free — not after the founder has approved text we then have to
+ * silently change or go back and re-ask about.
+ */
+export const draftHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if ("error" in auth) return auth.error;
+  const parsed = await readJson(request);
+  if ("error" in parsed) return parsed.error;
+
+  const text = str(parsed.body, "text");
+  const channel = str(parsed.body, "channel");
+  if (!text) {
+    return respond(
+      { ok: false, why: "no text was given", next: "write the post, then save it as a draft" },
+      400
+    );
+  }
+  if (!channel) {
+    return respond(
+      { ok: false, why: "no channel was given", next: "say which channel this is for" },
+      400
+    );
+  }
+
+  const kindRaw = str(parsed.body, "kind");
+  const kind =
+    kindRaw === "reply" || kindRaw === "cold_reply" ? kindRaw : ("post" as const);
+
+  const result = await ctx.runMutation(internal.maya.drafts.create, {
+    customerId: auth.customer._id,
+    channel,
+    text,
+    kind,
+  });
+
+  if (!result.ok) {
+    // A preflight failure is an ANSWER, not an error — it says what to fix and
+    // she can fix it immediately.
+    return respond({
+      ok: false,
+      data: { saved: false, problem: result.failure },
+      why: result.message,
+      next:
+        result.failure === "over_length"
+          ? "tighten it and save it again"
+          : "fix that, then save it again",
+    });
+  }
+
+  return respond({
+    ok: true,
+    data: { draftId: result.draftId, length: result.weightedLength },
+    why: "saved — it's ready to publish",
+    next: "publish it with this draftId, or show it to the founder first if the switch says so",
+  });
+});
+
 export const publishHttp = httpAction(async (ctx, request) => {
   const auth = await authenticate(ctx, request);
   if ("error" in auth) return auth.error;

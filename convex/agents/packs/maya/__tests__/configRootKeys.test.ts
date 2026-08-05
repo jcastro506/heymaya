@@ -138,3 +138,35 @@ describe("EVERY ROOT KEY IS ONE OPENCLAW ACCEPTS", () => {
     expect(ACCEPTED_ROOT_KEYS.has("gateway")).toBe(true);
   });
 });
+
+describe("THE CRITIC CANNOT ACT ON ITS OWN VERDICT", () => {
+  const config = JSON.parse(
+    buildMayaWorkspace({
+      founder: { email: "sam@example.com", name: "Sam", timezone: "UTC" },
+      product: { name: "Widgetly", url: "https://widgetly.dev" },
+      channels: [],
+    }).files.get(OPENCLAW_CONFIG_PATH)!
+  );
+  const critic = config.agents.list.find(
+    (a: { id: string }) => a.id === "critique"
+  );
+
+  it("⭐ IT HAS NO PLUGIN TOOLS — it cannot publish what it just approved", () => {
+    // And it doesn't work with them: inheriting the default tool surface,
+    // kimi-k2 rejects the payload with a 400 and the critic never runs at all.
+    // A gate that crashes is a gate that fails OPEN — every draft passes
+    // review because review died. Observed live 2026-08-04.
+    expect(critic.tools.deny).toContain("group:plugins");
+    expect(critic.tools.profile).toBe("readonly");
+  });
+
+  it("it cannot spawn its way around the restriction", () => {
+    expect(critic.subagents.allowAgents).toEqual([]);
+  });
+
+  it("and it still runs on a different family than the writer", () => {
+    expect(critic.model.split("/")[1]).not.toBe(
+      config.agents.defaults.model.primary.split("/")[1]
+    );
+  });
+});

@@ -72,6 +72,21 @@ export const REQUIRED_SECRET_NAMES = [
   // Without it the gateway exits 78: "Set OPENCLAW_GATEWAY_TOKEN ... to start
   // with auth." Observed live 2026-08-04.
   "OPENCLAW_GATEWAY_TOKEN",
+  /**
+   * ⭐ SEMANTIC MEMORY DOESN'T WORK WITHOUT THIS.
+   *
+   * `memorySearch` embeds through `provider: "gemini"`, so a machine without a
+   * Google key logs
+   *
+   *   [memory] sync failed (search-bootstrap): No API key found for provider
+   *   "google"
+   *
+   * once at boot and then behaves like an agent that simply doesn't remember
+   * much — no error surfaces at recall time, the search just returns nothing.
+   * It was set in Convex the whole time and the deploy never carried it across.
+   * Observed live 2026-08-04, the same shape as the Telegram identity bug.
+   */
+  "GEMINI_API_KEY",
 ] as const;
 
 /* -------------------------------------------------------------------------- */
@@ -603,6 +618,9 @@ export const deployMachine = internalAction({
         MAYA_AGENT_TOKEN: token,
         OPENROUTER_API_KEY: openrouterKey,
         OPENCLAW_GATEWAY_TOKEN: gatewayToken,
+        // Empty is tolerated — the gateway still boots and everything except
+        // semantic recall works. A missing key must not block a deploy.
+        GEMINI_API_KEY: process.env.GEMINI_API_KEY ?? "",
       });
 
       const config = buildMachineConfig({

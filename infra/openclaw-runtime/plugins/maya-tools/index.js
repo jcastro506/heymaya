@@ -141,6 +141,29 @@ export default defineToolPlugin({
     "Typed tools for the convex/maya agent. Every call is schema-validated and runs server-side against Convex /maya/*. No tool accepts a customerId — tenancy is resolved from the bearer token alone.",
   tools: (tool) => [
     tool({
+      name: "draft",
+      label: "Draft",
+      description:
+        "Write a post down. THE ONLY WAY TEXT BECOMES POSTABLE — publish takes a draftId, so a sentence that was never drafted cannot be posted no matter how good it is. Returns {ok, data, next, why}; data.draftId is what publish needs. ok:false is an ANSWER you can act on immediately, not an error: data.problem names what's wrong (over_length · empty · channel_missing · token_expired · duplicate) and `why` says it in the founder's language. Fix it and save again. Save the text EXACTLY as it should appear — this is what the founder sees and what gets published, character for character.",
+      parameters: Type.Object({
+        text: Type.String({
+          description:
+            "The post, exactly as it should appear. No surrounding quotes, no commentary, no explanation of the post.",
+        }),
+        channel: Type.String({
+          description: "Which channel this is for: x, instagram, tiktok, or youtube.",
+        }),
+        kind: Type.Optional(
+          Type.String({
+            description:
+              "post (default), reply, or cold_reply. A reply answers someone; a cold_reply starts a conversation with a stranger.",
+          })
+        ),
+      }),
+      execute: async (p, _cfg, ctx) => call("draft", p, ctx.signal),
+    }),
+
+    tool({
       name: "publish",
       label: "Publish",
       description:

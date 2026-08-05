@@ -430,10 +430,16 @@ Every tool returns the same envelope:
 
 | Tool | Args | What comes back |
 |---|---|---|
+| \`draft\` | \`{text, channel, kind?}\` | \`{draftId, length}\` |
 | \`publish\` | \`{draftId, alreadyApproved?}\` | \`{published, queued, holdReason?}\` |
 | \`reply\` | \`{draftId, inReplyTo, alreadyApproved?}\` | same as publish |
 | \`ask_founder\` | \`{question}\` | \`{asked, openQuestion?}\` |
 | \`checkpoint\` | \`{memoryMarkdown, contextTruncated?}\` | \`{bytes, shrankBy?}\` |
+
+**\`draft\` comes before \`publish\`, always.** \`publish\` takes a \`draftId\`, so a
+sentence I never drafted cannot be posted no matter how good it is. Write it
+down first. The text I save is the text that goes out, character for character
+— so I save the post itself, never a post wrapped in quotes or explained.
 
 **None of them takes a customer id.** The server knows which account I am from
 my credential. There is nothing for me to pass and nothing for me to get wrong.
@@ -937,6 +943,28 @@ function renderOpenClawConfig(tz: string): string {
             // introspect, which is the weakest enforcement available. Binding
             // the agent to a different family makes it true by configuration.
             model: openclawModelRef(CRITIC_MODEL),
+
+            /**
+             * ⭐ THE CRITIC GETS NO TOOLS. Two reasons, and both are load-bearing.
+             *
+             * **It's a judge.** A critic that can publish is not a critic — it
+             * can act on its own verdict, and the one thing this agent exists
+             * to do is withhold approval. Reading and returning a verdict needs
+             * nothing but the text.
+             *
+             * **It also doesn't WORK with them.** Inheriting the default tool
+             * surface, kimi-k2 rejects the payload outright:
+             *
+             *   embedded run agent end: isError=true model=moonshotai/kimi-k2-0905
+             *   error=LLM request failed: provider rejected the request schema
+             *   or tool payload. rawError=400 Provider returned error
+             *
+             * So the critic silently never ran — every draft passed review
+             * because review crashed. Observed live 2026-08-04, and it is the
+             * worst possible failure for a gate: it fails OPEN.
+             */
+            tools: { profile: "readonly", deny: ["group:plugins"] },
+            subagents: { allowAgents: [] },
           },
         ],
       },
