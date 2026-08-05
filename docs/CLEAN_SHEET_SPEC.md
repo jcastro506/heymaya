@@ -4305,6 +4305,51 @@ run, not just printed.
 catch obviously synthetic text, it is measuring nothing and will quietly bless
 whatever we ship.
 
+### Sprint 4.75 — The asset ask · *designed since §6.4, never scheduled*
+
+**§6.4.2 specifies the ask and no sprint builds it.** Searching §18 for
+*asset · logo · screenshot · footage · upload* returns test names and video-ladder
+rows — nothing that gets a single file from a founder. Meanwhile §6.4.6b measured
+that **half of target-type sites publish no product screenshot at all**, which
+makes this ask load-bearing for ~50% of customers rather than an occasional
+fallback.
+
+#### The rule that shapes it
+
+> **Ask for one 30–60 second screen recording. Never "send me five screenshots."**
+
+A lighter ask *and* a richer input, because one recording yields three things:
+**frames** (tagged screenshots for slides, carousels and Creatify `image_urls`),
+**b-roll** (real footage for `lipsyncs_v2` scenes and template video slots), and
+**showable moments** (walkthrough analysis that seeds the idea bank).
+
+| Task |
+|---|
+| **`request_assets` tool** — she asks, once, in Telegram, when the classifier says the library is thin. Spends a proactive message (§13.5.3) |
+| **Inbound file handling** — a video or image arriving in Telegram lands in R2 and `mediaAssets`, no dashboard trip |
+| **Frame extraction** — Gemini returns timestamps of the best moments; a worker cuts them with ffmpeg. *The model picks, the binary cuts.* ffmpeg can't run in a Convex action — reuse the `videoSynthWorker` pattern |
+| **Vision tagging on ingest** (~$0.0005/image) — a caption plus what it shows: "the export screen", "empty state", "before", "after". **Without tags `search_my_media` returns junk**, and the difference between a grounded post and a random screenshot is entirely whether she could find the right one |
+| **Staleness** — every asset carries a capture date; a `product_truth` change flags assets as possibly stale; the public site is re-captured monthly |
+| **The Mission Control half** — the ONE place a founder can see what she has and drop in more. Not a media manager: a list, a drop zone, and what's missing |
+
+#### Who gets asked, and when
+
+**Only the customers who need it, and only once.** The asset classifier already
+identifies who has no real product imagery, so everyone else is never bothered.
+The ramp (§6.0.1) places it at day 5–7 — *after* she has shown she can post,
+never in onboarding where it competes with the OAuth step that decides
+activation.
+
+**⛔ Never a demo login.** Credential custody is out of scope permanently (§5.5),
+and a recording gets us more anyway.
+
+**Exit:** a founder who sends one screen recording gets tagged frames, usable
+b-roll, and at least one idea in the bank from it — without touching a dashboard.
+**Tests:** a video arriving in Telegram is stored and tagged · tags are specific
+enough that `search_my_media` returns the right screen for a named brief · a
+customer WITH good scraped imagery is never asked · the ask spends exactly one
+proactive message and is never repeated.
+
 ### Sprint 5 — Perception live
 
 | Task |
