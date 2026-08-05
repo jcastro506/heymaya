@@ -279,6 +279,43 @@ one is.** That turns "should we connect Instagram and YouTube?" from a
 preference into a prerequisite — their entire column is a guess until then, and
 §2.15.05 already warns that guessing is how this matrix went wrong.
 
+#### 2.15.15 ⭐ MEASURED AGAIN, all four channels connected
+
+The operator connected TikTok, Instagram and YouTube. Re-probed, read-only,
+per channel — and the results do not match the doc matrix above:
+
+| | `inbox/comments` | `analytics` |
+|---|---|---|
+| **YouTube** | ✅ queried, **2 rows** | ✅ 1 post |
+| **Instagram** | ✅ queried, 0 rows | 0 |
+| **TikTok** | no `meta` at all — consistent with having no comment API | 0 |
+| **X** | ❌ **`accountsQueried: 0`** | 0, despite 3 published |
+
+⭐ **`/inbox/comments` does not return comments.** It returns the WORK QUEUE —
+posts of ours that may have comments — which is what §2.15.2 calls *"list
+commented posts"*. The two YouTube rows were **our own videos**:
+
+```
+{ id: "GtO7pd2o5BM", content: "Sensocore release 2",
+  accountUsername: "joshuacastro7418", commentCount: 0 }
+```
+
+`content` is the video title; `accountUsername` is ours. The inbox was
+recording these as inbound, so **she would have replied to the founder's own
+posts** — the same "answering yourself" failure the X path already guards
+against, arriving through the other vendor. Rows with `commentCount === 0` are
+now skipped, and this endpoint contributes the queue and never the content.
+
+**Getting the actual comment text needs a per-platform call.** `igListComments`
+is wrapped; the YouTube and X equivalents are not. Until they are, **X inbound
+comes entirely from twitterapi.io mentions** — which is fortunate rather than
+designed, since Zernio's X comment path returns `accountsQueried: 0`.
+
+⚠️ `analytics` now reports a real `lastSync`, where an hour earlier it was
+`null` — so the earlier "broken" reading was partly *never synced*. YouTube
+returns a post; X still returns nothing for three live placements. Re-check
+before concluding anything permanent about it.
+
 #### 2.15.2 Zernio capability we're not using
 
 The docs expose considerably more than the client wraps:
