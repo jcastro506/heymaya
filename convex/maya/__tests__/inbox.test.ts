@@ -117,6 +117,51 @@ describe("⭐ HONEST ABOUT WHAT IT COULDN'T READ", () => {
     }
   });
 
+  it("⭐ ZERO ACCOUNTS QUERIED IS NOT AN EMPTY INBOX", async () => {
+    /**
+     * Live 2026-08-05: `/inbox/comments` returned `accountsQueried: 0` against
+     * one healthy connected X account, while `/inbox/conversations` returned
+     * `1` on the same pass. The sync reported "0 new" — which reads as "nobody
+     * replied" when the truth was "I didn't look at anything".
+     *
+     * For a product whose job is *answer everyone*, those must never produce
+     * the same output.
+     */
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t);
+    const realFetch = globalThis.fetch;
+    const prevKey = process.env.ZERNIO_API_KEY;
+    process.env.ZERNIO_API_KEY = "test-key";
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/inbox/comments")) {
+        return new Response(
+          JSON.stringify({
+            data: [],
+            pagination: { hasMore: false, nextCursor: null },
+            meta: { accountsQueried: 0, accountsFailed: 0, failedAccounts: [] },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      return new Response("{}", {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    try {
+      const result = await t.action(internal.maya.inbox.sync, { customerId, now: NOW });
+      // It must NOT look like a clean, empty inbox.
+      expect(result.unreadableAccounts).toContain("comments on your posts");
+      expect(result.detail).toMatch(/couldn't read/i);
+    } finally {
+      globalThis.fetch = realFetch;
+      if (prevKey === undefined) delete process.env.ZERNIO_API_KEY;
+      else process.env.ZERNIO_API_KEY = prevKey;
+    }
+  });
+
   it("the page cap is real and bounded", () => {
     // "Answer everyone" against an unbounded inbox is how a sync becomes a
     // runaway bill — but a silent stop at page 10 reports all-clear while

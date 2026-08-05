@@ -2045,6 +2045,19 @@ export interface InboxPage<T> {
   items: T[];
   nextCursor: string | null;
   hasMore: boolean;
+  /**
+   * ⭐ How many accounts the API actually looked at.
+   *
+   * VERIFIED LIVE 2026-08-05: `/inbox/comments` returned
+   * `accountsQueried: 0` with one healthy connected account, while
+   * `/inbox/conversations` returned `accountsQueried: 1` on the same call.
+   *
+   * Zero is **not** an empty inbox. It is "I didn't look" — and the two are
+   * indistinguishable from `data: []` alone, which is exactly how a product
+   * whose job is "answer everyone" ends up answering nobody and reporting
+   * success.
+   */
+  accountsQueried: number | null;
   /** Accounts the API could not read. NEVER silently dropped. */
   failedAccounts: Array<{
     accountId?: string;
@@ -2107,6 +2120,7 @@ export async function listInboxComments(
     nextCursor: parsed.data.pagination?.nextCursor ?? null,
     hasMore: parsed.data.pagination?.hasMore ?? false,
     failedAccounts: parsed.data.meta?.failedAccounts ?? [],
+    accountsQueried: parsed.data.meta?.accountsQueried ?? null,
   };
 }
 
@@ -2160,6 +2174,7 @@ export async function listConversations(
     nextCursor: parsed.data.pagination?.nextCursor ?? null,
     hasMore: parsed.data.pagination?.hasMore ?? false,
     failedAccounts: parsed.data.meta?.failedAccounts ?? [],
+    accountsQueried: parsed.data.meta?.accountsQueried ?? null,
   };
 }
 
