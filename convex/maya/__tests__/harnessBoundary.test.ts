@@ -43,12 +43,19 @@ const INPUT: MayaWorkspaceInput = {
  *   outlive the machine.
  * - **liveness** — a system cannot be the watchdog for itself. An agent that
  *   has stopped waking up cannot notice that it has stopped waking up.
+ * - **metrics refresh** — pure collection, no judgment, which §2.3 puts in
+ *   deterministic code by definition. It earns its place the same way the
+ *   other two do: the machine AUTO-STOPS, so on her clock the numbers would
+ *   only exist when she happened to be awake — and the evening recap, which
+ *   reports them, is exactly when she has just woken up. "The database is the
+ *   truth" cannot depend on the participant being running.
  *
  * Anything else on a Convex schedule is the drift returning. Adding to this
  * list should feel like a decision, which is why it's a literal and not a
  * pattern.
  */
 const CONVEX_MAY_SCHEDULE = [
+  "maya-refresh-metrics",
   "maya-drain-jobs",
   "maya-liveness-sweep",
 ] as const;

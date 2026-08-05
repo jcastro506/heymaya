@@ -4598,6 +4598,54 @@ must stay majority real messages — a guard that mangles her metrics is worse
 than the leak it prevents (§13.55.2) · control-voids-the-run · every internal
 name is a proper noun, never a common word.
 
+### Sprint 5.5 — ⭐ Zernio, every channel, decided rather than inventoried
+
+*Added 2026-08-05. §2.15 already audits what Zernio can do per platform, §2.15.2
+lists what we aren't using, and §17.35.2 works out the COGS. **What's missing is
+a decision and a proof.** Three things force this sprint:*
+
+**1. The matrix is doc-only for three of four channels.** §2.15.05 says so
+outright. Every row for TikTok, Instagram and YouTube came from
+`docs.zernio.com`, and this repo's own history is a list of docs that were
+wrong: `create_time` in seconds, `nextCursor` nested in `pagination`, a
+`payload` field that is actually `raw`.
+
+**2. One smoke check guards all of it.** The vendor registry contains exactly
+one Zernio entry — `accounts-health`, a reachability ping. Publishing,
+analytics, inbox, DMs and comment replies have no coverage on any channel.
+
+**3. ⭐ Analytics is already known-broken on the one channel we use.** Checked
+live 2026-08-05, `/api/v1/analytics` returned `lastSync: null` and an empty
+`posts[]` while `overview.totalPosts` claimed 9 — and `?platform=twitter`, the
+account's own platform string, returned **zero** where no filter returned nine.
+Post metrics now come from twitterapi.io instead. **That is one channel. The
+other three have not been looked at, and the same failure there would be
+invisible** — an empty metrics field reads exactly like a post nobody saw.
+
+| Task |
+|---|
+| ⭐ **A capability × channel grid, live**: post · read own comments · reply to comment · DM · analytics · best-time, across TikTok / Instagram / YouTube / X. Each cell is `verified` with a date, `broken` with the observed payload, or `n/a` with the platform reason (TikTok comment reply is `n/a` — the API does not exist) |
+| Fold every cell into the vendor smoke suite at the right tier: **shape** daily, **round-trip** weekly and before any deploy touching Zernio (§17.36) |
+| ⭐ **Turn §2.15.2 into a decision, not a wish-list.** For each unused capability: adopt now / adopt later / never, with the COGS line and the reason. `frequency vs engagement` and `content performance decay` look like the two that pay for themselves — they answer *"should we post more or less"* with data instead of a guess |
+| **Replace the doc-derived caption limits with measured ones** — a rejected post because a limit moved is a lost day, and the founder sees a silent gap |
+| **`validatePost` as a real preflight** (§11): it exists, it is a dry run, and it is free. Catching a rejection before it happens is strictly better than a named failure afterwards |
+| **Decide the webhook question.** §2 calls `createWebhook` "what makes the watchers-not-polling architecture possible", and the inbox currently polls 3×/day. Event-driven is cheaper AND faster; the cost is an endpoint to secure |
+
+**COGS is the constraint, and it is the point.** Every "yes" here is a recurring
+per-customer cost forever. The grid exists so each adoption is priced before it
+is wired, not discovered in a bill — and per §2.10 anything adopted becomes a
+**budget**, never a boolean.
+
+**Exit:** the capability grid is **fully populated from live calls**, every
+`verified` cell has a smoke check behind it, and every row of §2.15.2 says
+adopt-now / adopt-later / never with a number next to it.
+
+**Tests:** ⭐ **a `n/a` cell must state a platform reason** — "we didn't try" and
+"the API does not exist" are opposite findings and only one is acceptable ·
+strict-parse drift on every wrapped response (`.passthrough()` hides exactly the
+change we need to see) · **a skip is not a pass**, the rule the smoke suite was
+built on.
+
 ### Sprint 6.5 — ⭐ The long conversation
 
 *Added 2026-08-05. Sprint 6 tests memory in three-turn slices. This tests it at

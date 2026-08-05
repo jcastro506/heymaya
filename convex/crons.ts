@@ -126,6 +126,28 @@ crons.interval(
 // every expression. What remains below is only what must survive the machine
 // being unreachable.
 
+/**
+ * ⭐ Reads back how her posts did.
+ *
+ * `dailyReport` has read `metricsJson` since Sprint 2 and NOTHING EVER WROTE
+ * IT — so the evening recap's "what came back" was permanently empty, and every
+ * morning's idea pick was blind.
+ *
+ * Convex rather than her machine, deliberately: this is collection, and §2.3
+ * puts collection in deterministic code. It also has to keep running while she
+ * is asleep, which is most of the day under auto-stop.
+ *
+ * Hourly is not for freshness — a tweet's numbers barely move hour to hour —
+ * it is so the evening recap always has something recent to report without
+ * having to fetch anything itself.
+ */
+crons.interval(
+  "maya-refresh-metrics",
+  { hours: 1 },
+  internal.maya.metrics.refreshAll,
+  {}
+);
+
 // Drains the durable job queue, reaping abandoned work first so a job whose
 // worker died is back in the queue before anything new is claimed.
 crons.interval(
