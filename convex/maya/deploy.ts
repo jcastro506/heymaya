@@ -194,6 +194,25 @@ export function buildBootScript(): string {
     "chmod 700 /data/cron",
     "chmod 600 /data/cron/jobs.json",
 
+    /**
+     * ⭐ THE CRITIC STARTS FRESH EVERY BOOT. TWO REASONS.
+     *
+     * **Config changes don't reach an existing session.** An agent's session
+     * pins the model it was created with, and that state lives on the VOLUME,
+     * which survives redeploys. Verified live 2026-08-05: `openclaw.json` on
+     * disk said `openrouter/qwen/qwen3.7-flash` while the running critic was
+     * still calling `moonshotai/kimi-k2-0905` — and still failing the way the
+     * old config failed. Two model changes and a tool-profile fix had all
+     * silently not applied.
+     *
+     * **A critic should be stateless anyway.** Each verdict is independent;
+     * remembering the last draft it vetoed is not context, it's contamination.
+     *
+     * ⛔ ONLY `critique`. `main`'s session is the durable one — clearing it is
+     * exactly the amnesia this whole architecture exists to prevent.
+     */
+    "rm -rf /data/agents/critique/sessions",
+
     // Survivable: an already-installed plugin re-installs fine, and a failure
     // here should surface as missing tools rather than a machine that won't
     // boot at all. HOME=/data is set in the image, so npm-pack's install root

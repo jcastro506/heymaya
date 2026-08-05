@@ -1028,46 +1028,42 @@ function renderOpenClawConfig(tz: string): string {
             name: "Maya",
             workspace: WORKSPACE_DIR,
             model: openclawModelRef(MAIN_MODEL),
-            subagents: { allowAgents: ["main", "critique"] },
-          },
-          {
-            id: "critique",
-            name: "Critique",
-            workspace: WORKSPACE_DIR,
-            // ⭐ THE STRUCTURAL HALF OF "must be a different model".
-            //
-            // The skill tells the critic to refuse the verdict if it finds
-            // itself running as the writer's model — a prompt asking a model to
-            // introspect, which is the weakest enforcement available. Binding
-            // the agent to a different family makes it true by configuration.
-            model: openclawModelRef(CRITIC_MODEL),
-
-            /**
-             * ⭐ THE CRITIC GETS NO TOOLS. Two reasons, and both are load-bearing.
-             *
-             * **It's a judge.** A critic that can publish is not a critic — it
-             * can act on its own verdict, and the one thing this agent exists
-             * to do is withhold approval. Reading and returning a verdict needs
-             * nothing but the text.
-             *
-             * **It also doesn't WORK with them.** Inheriting the default tool
-             * surface, kimi-k2 rejects the payload outright:
-             *
-             *   embedded run agent end: isError=true model=moonshotai/kimi-k2-0905
-             *   error=LLM request failed: provider rejected the request schema
-             *   or tool payload. rawError=400 Provider returned error
-             *
-             * So the critic silently never ran — every draft passed review
-             * because review crashed. Observed live 2026-08-04, and it is the
-             * worst possible failure for a gate: it fails OPEN.
-             */
-            // "minimal", not the invented "readonly" — the allowed set is
-            // minimal | coding | messaging | full, and the gateway refuses to
-            // start on anything else. Minimal is right regardless: reading a
-            // draft and returning a verdict needs no tools at all.
-            tools: { profile: "minimal", deny: ["group:plugins"] },
             subagents: { allowAgents: [] },
           },
+          /**
+           * ⛔ THE CRITIQUE SUBAGENT IS DISABLED — 2026-08-05, unresolved.
+           *
+           * Every turn that invoked it DIED:
+           *
+           *   model=moonshotai/kimi-k2-0905
+           *   LLM request failed: provider rejected the request schema or tool
+           *   payload. rawError=400 Provider returned error
+           *
+           * kimi is not in this config. `agents.list` said
+           * `openrouter/qwen/qwen3.7-flash`, `agents.defaults.model.primary`
+           * says luna-pro, and NOTHING in `/data/openclaw.json` or the
+           * workspace mentions kimi — verified on the machine. Clearing the
+           * critic's persisted session didn't change it. Where the runtime gets
+           * that model is NOT UNDERSTOOD, and guessing cost more than it was
+           * worth.
+           *
+           * **What it broke is the point.** A subagent failure is not
+           * contained — it surfaces as `FailoverError` and kills the PARENT
+           * turn, so the founder gets "No response from OpenClaw" for any
+           * message that touches drafting. A critic that stops her answering is
+           * worse than no critic.
+           *
+           * **The guarantee did not go away.** `convex/maya/outbound.ts` runs
+           * the safety critique server-side, on a different family, and FAILS
+           * CLOSED — at the publish gate, where she cannot route around it,
+           * rather than in a subagent she chooses to invoke. Arguably where it
+           * belonged.
+           *
+           * The `critique` SKILL stays in the workspace, so she still
+           * self-checks against §7.5.2's tells. What is lost is the
+           * different-model second opinion at draft time — a real loss, to
+           * restore once model resolution is understood.
+           */
         ],
       },
 

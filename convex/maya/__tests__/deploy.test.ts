@@ -597,3 +597,23 @@ describe("BULK TEARDOWN CANNOT REACH PRODUCTION", () => {
     expect(destroyAt).toBeLessThan(guardAt);
   });
 });
+
+
+describe("THE CRITIC STARTS FRESH, MAIN NEVER DOES", () => {
+  const script = buildBootScript();
+
+  it("⭐ clears the critic's session so config changes actually apply", () => {
+    // An agent session pins the model it was created with, on the VOLUME,
+    // which survives redeploys. Live 2026-08-05: openclaw.json said qwen while
+    // the running critic still called kimi — two model changes and a tool-
+    // profile fix had all silently not applied.
+    expect(script).toContain("rm -rf /data/agents/critique/sessions");
+  });
+
+  it("⛔ AND NEVER TOUCHES MAIN'S", () => {
+    // main's session is the durable one. Clearing it is precisely the amnesia
+    // this architecture exists to prevent — five DMs, five conversations.
+    expect(script).not.toMatch(/rm -rf \/data\/agents\/main/);
+    expect(script).not.toMatch(/rm -rf \/data\/agents(\s|$)/);
+  });
+});
