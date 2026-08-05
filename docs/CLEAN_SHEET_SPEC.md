@@ -1078,7 +1078,7 @@ Cheapest rung that carries the angle. Always.
 |---|---|---|
 | Text | Write model | free |
 | Real screenshot | media library | free |
-| **Photo set / carousel / designed slide** | **`generate_slide_image` — Nano Banana 2 (`google/gemini-3.1-flash-image-preview`) via OpenRouter, framing a real screenshot** | **~$0.03** ⚠️ verify against live OpenRouter billing |
+| **Photo set / carousel / designed slide** | **`generate_slide_image` — Nano Banana 2 (`google/gemini-3.1-flash-image-preview`) via OpenRouter, framing a real screenshot** | **~$0.03** ⚠️ **still unverified — see §7.6.11a** |
 | Screen recording of the product | scripted capture or founder | free |
 | **Founder-filmed, auto-edited** | Creatify `ai_editing` | ~$0.50 |
 | Product demo video | Creatify `product_to_videos` | ~$0.79 |
@@ -1417,6 +1417,40 @@ Templates accept **six variable types**: `avatar` · `image` · `video` · `audi
 2. **But there are no colour or font variables** — only the six above. So a template can't be re-themed per customer. **1,000 customers with 1,000 palettes would need 1,000 hand-built templates.** That's not viable.
 
 > **This settles the carousel-coherence question (§7.5.1).** Custom Templates give consistency *across renders of one template* — not *per-customer brand theming*. Our own layout system (fixed frame + brand kit) is the only path that themes per customer. Build it; use Custom Templates for video structure where per-customer theming matters less.
+
+#### 7.6.11a Verified model prices — re-check on every routing change
+
+*Verified against `/api/v1/models` 2026-08-04. **Comments rot; this table has a
+date on it for that reason.***
+
+| model | in / 1M | out / 1M | seat |
+|---|---|---|---|
+| `openai/gpt-5.6-luna-pro` | $0.10 | $0.60 | main brain |
+| `openai/gpt-oss-120b` | $0.04 | $0.17 | workers, heartbeat |
+| `qwen/qwen3.7-flash` | **$0.03** | **$0.13** | critic |
+| `google/gemini-3.1-flash-lite` | $0.25 | $1.50 | — |
+| `google/gemini-3.1-flash-image` | $0.50 | $3.00 | **the slide path** |
+| `google/gemini-3.6-flash` | $1.50 | $7.50 | ⛔ |
+| `moonshotai/kimi-k2-0905` | $0.60 | $2.50 | ⛔ 6× the main brain |
+
+**Two things this table overturns.** "Flash means cheap" is no longer true —
+`gemini-3.6-flash` is the most expensive model here after `gemini-3.1-pro`. And
+the main brain is now **cheaper than several models we'd have called budget
+tier from memory**, so the tiering has to be re-derived from prices rather than
+recalled.
+
+⚠️ **OPEN: the ~$0.03/slide figure above is still unverified.** It predates
+this table and the underlying model is $0.50/$3.00 per 1M. An image call's
+token accounting is not the same as a text call's, so the per-slide cost cannot
+be derived from the table — **it needs one real render measured against live
+OpenRouter billing.** Until then the carousel COGS line is an estimate, and
+§7's claim that the Nano Banana path is *"cheaper than Creatify"* rests on it.
+
+**The general rule:** *different family* and *cheap* are independent axes. Pick
+the cheapest model that is a different family — not the first different family
+that comes to mind. That mistake put the critic on kimi at 20× qwen's price
+purely because kimi was the diversity answer.
+
 
 #### 7.6.4 Where founder footage goes now that AI Editing is deprecated
 
