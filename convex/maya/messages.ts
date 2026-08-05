@@ -23,6 +23,7 @@ import { internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { checkPlainLanguage } from "./plainLanguage";
 
 const SURFACE = v.union(
   v.literal("telegram"),
@@ -98,11 +99,35 @@ export const send = internalMutation({
       .first();
     if (existing) return { messageId: existing._id, sent: false };
 
+    /**
+     * ⭐ THE LAST THING BETWEEN HER MACHINERY AND THEIR CHAT.
+     *
+     * Every outbound message funnels through this function, which makes it the
+     * only place a guard can be complete. It catches the class the prompt
+     * structurally cannot — strings she never wrote, interpolated in by code:
+     * an exception, a vendor's name, a bucket error, an id.
+     *
+     * That is not hypothetical. `ingestFromTelegram` returned `error.message`
+     * and `telegramFiles` put it straight into a body, so an R2 failure would
+     * have reached a founder as "The specified bucket does not exist". Fixed
+     * at the source; this is the backstop for the next one.
+     *
+     * Redacted, never dropped (§2.5) — and the LOG keeps the original, so an
+     * operator can find the source instead of guessing from a sanitized
+     * sentence.
+     */
+    const plain = checkPlainLanguage(args.body);
+    if (!plain.ok) {
+      console.error(
+        `[messages] redacted ${plain.redacted.join(", ")} from ${args.dedupeKey}: ${args.body}`
+      );
+    }
+
     const messageId = await ctx.db.insert("messages", {
       customerId: args.customerId,
       direction: "out",
       surface: args.surface,
-      body: args.body,
+      body: plain.clean,
       dedupeKey: args.dedupeKey,
       proactive: args.proactive,
       turnId: args.turnId,
