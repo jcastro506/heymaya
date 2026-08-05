@@ -231,3 +231,60 @@ export async function publishText(
     deduped: false,
   };
 }
+
+
+/**
+ * Ask Zernio whether this would be accepted, without sending it.
+ *
+ * `POST /api/v1/tools/validate/post`. VERIFIED LIVE 2026-08-05 across all four
+ * channels — text alone is valid on X and rejected everywhere else, with the
+ * reason naming media.
+ *
+ * Errors are translated, not relayed: *"Tiktok posts require media content
+ * (images or videos)"* is a vendor sentence with a lowercase-T platform name
+ * in it. What reaches a founder should sound like her.
+ */
+export async function validatePost(input: {
+  client: ZernioClient;
+  channel: string;
+  text: string;
+}): Promise<{ ok: boolean; reason?: string }> {
+  const platform = ZERNIO_PLATFORM_SLUG[input.channel];
+  if (!platform) {
+    return { ok: false, reason: `I can't post to ${input.channel}` };
+  }
+  try {
+    const raw = await input.client.request<unknown>(
+      "/api/v1/tools/validate/post",
+      {
+        method: "POST",
+        body: {
+          content: input.text,
+          platforms: [{ platform }],
+        },
+      }
+    );
+    const body = raw as {
+      valid?: boolean;
+      errors?: Array<{ error?: string }>;
+    };
+    if (body.valid === true) return { ok: true };
+
+    const first = body.errors?.[0]?.error ?? "";
+    // The one case we know we cause, said in her words.
+    if (/require.*(media|video|image)/i.test(first)) {
+      return {
+        ok: false,
+        reason: `I can't post to ${input.channel} without a video or an image, and I don't have one yet`,
+      };
+    }
+    return { ok: false, reason: `${input.channel} wouldn't accept that post` };
+  } catch {
+    /**
+     * A preflight that cannot run must NOT block a publish. It is an early
+     * warning, not a gate — the safety critic below is the gate. Failing
+     * closed here would let a vendor blip stop every post.
+     */
+    return { ok: true };
+  }
+}

@@ -164,6 +164,42 @@ export const publishPlacement = internalAction({
     if (!apiKey) return { ok: false, error: "Zernio isn't configured" };
 
     /**
+     * ⭐ PREFLIGHT — ask the platform before spending the attempt.
+     *
+     * §2 has called for this since the rewrite: *"`validatePost` (dry-run
+     * preflight, §11)"*. It exists, it is free, and it had no caller here.
+     *
+     * It matters most for a gap we cannot otherwise state plainly. Our publish
+     * path is **text-only** — `publishText` sends `content` and `platforms[]`
+     * and no `mediaItems` at all — while the dry run reports, per channel:
+     *
+     *   x           text alone is valid
+     *   instagram   "Instagram posts require media content"
+     *   tiktok      "Tiktok posts require media content"
+     *   youtube     "YouTube posts require video content"
+     *
+     * So three of four channels cannot be published to at all until the media
+     * pipeline lands (§18 Sprint 7). Without this call that arrives as a
+     * vendor rejection after the attempt; with it, it is a named hold the
+     * founder can act on, before anything is spent.
+     */
+    const { ZernioClient } = await import("../integrations/zernio/client");
+    const { publishText, validatePost } = await import(
+      "../integrations/zernio/publish"
+    );
+
+    {
+      const preflight = await validatePost({
+        client: new ZernioClient({ apiKey }),
+        channel: context.channel,
+        text: args.snapshotText,
+      });
+      if (!preflight.ok) {
+        return { ok: false, error: `held: ${preflight.reason}` };
+      }
+    }
+
+    /**
      * ⭐ THE SAFETY CHECK, IMMEDIATELY BEFORE THE IRREVERSIBLE ACT.
      *
      * `convex/maya/outbound.ts` had **zero callers** — every export in it,
@@ -221,9 +257,6 @@ export const publishPlacement = internalAction({
         "it didn't pass the safety check";
       return { ok: false, error: `held: ${why}` };
     }
-
-    const { ZernioClient } = await import("../integrations/zernio/client");
-    const { publishText } = await import("../integrations/zernio/publish");
 
     const outcome = await publishText({
       client: new ZernioClient({ apiKey }),
