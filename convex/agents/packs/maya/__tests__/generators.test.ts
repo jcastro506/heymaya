@@ -529,6 +529,7 @@ describe("the doctrine stays coherent with the server", () => {
     expect(documented.sort()).toEqual([
       "ask_founder",
       "checkpoint",
+      "draft",
       "publish",
       "reply",
     ]);
