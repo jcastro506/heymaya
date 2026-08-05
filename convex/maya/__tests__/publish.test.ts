@@ -64,7 +64,7 @@ interface Call {
  */
 function stubZernio(
   response: unknown,
-  init: { status?: number; criticSafe?: boolean } = {}
+  init: { status?: number; criticSafe?: boolean; preflightValid?: boolean } = {}
 ): Call[] {
   const calls: Call[] = [];
   // `callOpenRouter` returns early without a key and never reaches fetch, so
@@ -77,6 +77,27 @@ function stubZernio(
       headers: (opts?.headers ?? {}) as Record<string, string>,
       body: opts?.body ? JSON.parse(opts.body as string) : undefined,
     });
+
+    /**
+     * The preflight — `POST /tools/validate/post`, which runs BEFORE the
+     * critic and before the post. Answered here so each test fails for the
+     * reason it is about, not because a post-created body looked invalid.
+     */
+    if (url.includes("/tools/validate/post")) {
+      return new Response(
+        JSON.stringify(
+          init.preflightValid === false
+            ? {
+                valid: false,
+                errors: [
+                  { platform: "instagram", error: "Instagram posts require media content (images or videos)" },
+                ],
+              }
+            : { valid: true, message: "No validation issues found." }
+        ),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }
 
     // The safety critic — an OpenRouter chat completion, not a Zernio call.
     if (url.includes("openrouter")) {
@@ -117,7 +138,9 @@ function stubZernio(
  * it proves the gate is genuinely on the path rather than beside it.
  */
 function zernioCalls(calls: Call[]): Call[] {
-  return calls.filter((c) => !c.url.includes("openrouter"));
+  return calls.filter(
+    (c) => !c.url.includes("openrouter") && !c.url.includes("/tools/validate/")
+  );
 }
 
 function client(): ZernioClient {
@@ -518,6 +541,40 @@ describe("⭐ COLD REPLY — commenting on someone else's post", () => {
     expect(zernioCalls(calls)).toHaveLength(1);
     const rows = await t.run((ctx) => ctx.db.query("placements").collect());
     expect(rows).toHaveLength(1);
+  });
+
+  it("⭐ A CHANNEL THAT NEEDS MEDIA IS HELD IN OUR WORDS, BEFORE ANYTHING IS SPENT", async () => {
+    /**
+     * Our publish path is TEXT-ONLY — `publishText` sends `content` and
+     * `platforms[]` and no `mediaItems` at all. The live dry run says, per
+     * channel: X accepts text alone; Instagram, TikTok and YouTube all reject
+     * it and name media.
+     *
+     * So three of four channels cannot be published to until the media
+     * pipeline lands (§18 Sprint 7). Without the preflight that arrives as a
+     * vendor rejection AFTER the attempt; with it, it is a named hold — and in
+     * her words, not "Tiktok posts require media content".
+     */
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "needsmedia");
+    vi.stubEnv("ZERNIO_API_KEY", "test-key");
+    const calls = stubZernio(created("https://x.com/a/status/9"), {
+      preflightValid: false,
+    });
+
+    const result = await t.action(internal.maya.publish.publishPlacement, {
+      customerId,
+      snapshotText: "a text-only post for a channel that needs a picture",
+      idempotencyKey: "idem_media",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/without a video or an image/i);
+    // Vendor phrasing never reaches the founder.
+    expect(result.error).not.toMatch(/Tiktok posts require/i);
+    // And nothing was spent: no publish call, no placement.
+    expect(zernioCalls(calls)).toHaveLength(0);
+    expect(await t.run((ctx) => ctx.db.query("placements").collect())).toHaveLength(0);
   });
 
   it("⭐ BUT 'as an AI' STILL BLOCKS — that one IS catastrophic", async () => {
