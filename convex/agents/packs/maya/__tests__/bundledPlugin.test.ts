@@ -99,6 +99,31 @@ describe("THE SHIPPED BYTES MATCH THE SOURCE", () => {
     }
   });
 
+  it("⭐ THE MANIFEST AND index.js REGISTER THE SAME TOOLS", () => {
+    /**
+     * Sibling-file coherence, and it has already bitten once.
+     *
+     * `sync-maya-plugin.ts` reads the tool list from `contracts.tools` in the
+     * manifest, NOT from the code. So adding `tool({ name: "inbox" })` to
+     * index.js and forgetting the manifest packs a tarball that *contains* the
+     * tool while every consumer — cold discovery, the workspace prose, this
+     * bundle's export — believes it does not exist.
+     *
+     * It fails the quietest possible way: the plugin loads, the tool works if
+     * called, and nothing ever tells her it's there.
+     */
+    const source = readFileSync(join(PLUGIN_DIR, "index.js"), "utf8");
+    const registered = [...source.matchAll(/tool\(\{\s*name:\s*"([a-z_]+)"/g)].map(
+      (m) => m[1]
+    );
+    const manifest = JSON.parse(
+      readFileSync(join(PLUGIN_DIR, "openclaw.plugin.json"), "utf8")
+    ) as { contracts: { tools: string[] } };
+
+    expect(registered.length).toBeGreaterThan(0);
+    expect([...registered].sort()).toEqual([...manifest.contracts.tools].sort());
+  });
+
   it("the packed manifest declares the same tools as the bundle's export", () => {
     const manifest = JSON.parse(
       readFileSync(join(PLUGIN_DIR, "openclaw.plugin.json"), "utf8")
@@ -114,11 +139,15 @@ describe("the install contract", () => {
   it("ships exactly the tools this build supports", () => {
     // `checkpoint` joined in Sprint 2.9 — it mirrors MEMORY.md off the machine,
     // which is the one artifact on the volume that isn't reproducible.
+    // `inbox` joined in Sprint 5 — `reply` had refused without an `inReplyTo`
+    // since Sprint 3 and nothing could produce one, so half the product
+    // ("answers everyone who replies") had no input at all.
     expect([...BUNDLED_MAYA_PLUGIN_TOOLS].sort()).toEqual([
       "ask_founder",
       "checkpoint",
       "draft",
       "history",
+      "inbox",
       "publish",
       "remember",
       "reply",

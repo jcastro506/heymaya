@@ -20,11 +20,7 @@
  */
 
 import { v } from "convex/values";
-import {
-  internalAction,
-  internalMutation,
-  internalQuery,
-} from "../_generated/server";
+import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 
@@ -33,7 +29,7 @@ export const publishContext = internalQuery({
   args: { customerId: v.id("customers"), draftId: v.optional(v.id("drafts")) },
   handler: async (
     ctx,
-    args,
+    args
   ): Promise<
     | {
         ok: true;
@@ -54,8 +50,7 @@ export const publishContext = internalQuery({
       .collect()) as Doc<"channels">[];
     const row = channel.find((c) => c.channel === channelKey);
 
-    if (!row)
-      return { ok: false, reason: `no ${channelKey} channel connected` };
+    if (!row) return { ok: false, reason: `no ${channelKey} channel connected` };
     if (row.status !== "connected") {
       return {
         ok: false,
@@ -66,17 +61,10 @@ export const publishContext = internalQuery({
     }
     if (!row.zernioAccountId) {
       // Connected with no account id is a broken row, not a transient fault.
-      return {
-        ok: false,
-        reason: `the ${channelKey} connection has no account id`,
-      };
+      return { ok: false, reason: `the ${channelKey} connection has no account id` };
     }
 
-    return {
-      ok: true,
-      channel: channelKey,
-      zernioAccountId: row.zernioAccountId,
-    };
+    return { ok: true, channel: channelKey, zernioAccountId: row.zernioAccountId };
   },
 });
 
@@ -98,7 +86,7 @@ export const recordPlacement = internalMutation({
     publishedAt: v.optional(v.number()),
     /** A reply is a different KIND of placement, and the archive cares. */
     kind: v.optional(
-      v.union(v.literal("post"), v.literal("reply"), v.literal("cold_reply")),
+      v.union(v.literal("post"), v.literal("reply"), v.literal("cold_reply"))
     ),
   },
   handler: async (ctx, args): Promise<{ placementId: Id<"placements"> }> => {
@@ -106,9 +94,7 @@ export const recordPlacement = internalMutation({
     // that already went out.
     const existing = (await ctx.db
       .query("placements")
-      .withIndex("by_idempotency_key", (q) =>
-        q.eq("idempotencyKey", args.idempotencyKey),
-      )
+      .withIndex("by_idempotency_key", (q) => q.eq("idempotencyKey", args.idempotencyKey))
       .first()) as Doc<"placements"> | null;
     if (existing) return { placementId: existing._id };
 
@@ -142,18 +128,11 @@ export const publishPlacement = internalAction({
     draftId: v.optional(v.id("drafts")),
     /** Present for a reply or a cold reply. Dropping it posts into the void. */
     inReplyTo: v.optional(v.string()),
-    /** Set when this reply answers someone from the inbox — see below. */
-    inboxItemId: v.optional(v.id("inboxItems")),
   },
   handler: async (
     ctx,
-    args,
-  ): Promise<{
-    ok: boolean;
-    error?: string;
-    url?: string;
-    deduped?: boolean;
-  }> => {
+    args
+  ): Promise<{ ok: boolean; error?: string; url?: string; deduped?: boolean }> => {
     const context = await ctx.runQuery(internal.maya.publish.publishContext, {
       customerId: args.customerId,
       draftId: args.draftId,
@@ -177,43 +156,19 @@ export const publishPlacement = internalAction({
 
     if (!outcome.ok) return { ok: false, error: outcome.reason };
 
-    const { placementId } = await ctx.runMutation(
-      internal.maya.publish.recordPlacement,
-      {
-        customerId: args.customerId,
-        channel: context.channel,
-        // ⭐ The text we publish is the text that was approved. Re-generating or
-        // re-formatting here would break the snapshot guarantee — the founder
-        // said yes to a specific string.
-        snapshotText: args.snapshotText,
-        idempotencyKey: args.idempotencyKey,
-        url: outcome.url ?? undefined,
-        draftId: args.draftId,
-        kind: args.inReplyTo ? "reply" : "post",
-      },
-    );
-
-    /**
-     * ⭐ Close the inbox item — AFTER the placement exists, never before.
-     *
-     * Marking it answered at enqueue time would lose the person entirely if
-     * the publish then failed: the item reads "answered", nothing is live, and
-     * nobody ever finds out. Ordered this way the worst case is an item that
-     * stays open and gets answered twice, which is recoverable; the other way
-     * round is silent abandonment, which is not.
-     */
-    if (args.inboxItemId) {
-      await ctx.runMutation(internal.maya.inbox.resolve, {
-        itemId: args.inboxItemId,
-        status: "answered",
-        placementId,
-      });
-    }
-
-    return {
-      ok: true,
+    await ctx.runMutation(internal.maya.publish.recordPlacement, {
+      customerId: args.customerId,
+      channel: context.channel,
+      // ⭐ The text we publish is the text that was approved. Re-generating or
+      // re-formatting here would break the snapshot guarantee — the founder
+      // said yes to a specific string.
+      snapshotText: args.snapshotText,
+      idempotencyKey: args.idempotencyKey,
       url: outcome.url ?? undefined,
-      deduped: outcome.deduped,
-    };
+      draftId: args.draftId,
+      kind: args.inReplyTo ? "reply" : "post",
+    });
+
+    return { ok: true, url: outcome.url ?? undefined, deduped: outcome.deduped };
   },
 });

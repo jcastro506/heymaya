@@ -196,6 +196,7 @@ async function runHandler(
       draftId?: Id<"drafts">;
       snapshotText?: string;
       inReplyTo?: string;
+      inboxItemId?: Id<"inboxItems">;
     };
     if (!payload.snapshotText) {
       return { ok: false, error: "publish job carried no text" };
@@ -216,6 +217,7 @@ async function runHandler(
             idempotencyKey: string;
             draftId?: Id<"drafts">;
             inReplyTo?: string;
+            inboxItemId?: Id<"inboxItems">;
           }
         ) => Promise<{ ok: boolean; error?: string }>;
       }
@@ -226,6 +228,13 @@ async function runHandler(
       draftId: payload.draftId,
       // Without this a cold reply posts as a standalone tweet.
       inReplyTo: payload.inReplyTo,
+      /**
+       * ⚠️ The SAME trap `inReplyTo` fell into: the enqueuer put it in the
+       * payload and this handler dropped it, so a reply posted into the void.
+       * Dropped here, the inbox item stays open forever and she answers the
+       * same person on every sync.
+       */
+      inboxItemId: payload.inboxItemId,
     })) as { ok: boolean; error?: string };
     return result.ok ? { ok: true } : { ok: false, error: result.error ?? "publish failed" };
   }
