@@ -198,19 +198,40 @@ export const ALWAYS_LOADED_TARGET_CHARS = 60_000;
 export const MAIN_MODEL = "openai/gpt-5.6-luna-pro";
 
 /**
- * The critic — and it must be a **different family**, not a different mode.
+ * The critic — a **different family**, at judge-tier price.
  *
- * The obvious pick is `openai/gpt-5.6-luna`, and it is wrong. The spec is
+ * ## Different family is the hard requirement
+ *
+ * The obvious pick is `openai/gpt-5.6-luna`, and it is wrong: the spec is
  * explicit that `luna-pro` *"is the same underlying model as `luna`, served
- * with `reasoning.mode: pro`"* — so a luna critic judging a luna-pro writer is
- * the model grading its own register, which is precisely the failure the
- * different-model rule exists to prevent. It would read as satisfied and catch
- * nothing.
+ * with `reasoning.mode: pro`"*. A luna critic judging a luna-pro writer grades
+ * its own register and catches nothing — it reads as satisfied and vetoes
+ * nothing. qwen is Alibaba's, which is as different as families get.
  *
- * kimi-k2 is a genuinely different family, was the previous main brain, and
- * matches §470's "mid, strong instruction-following" requirement for Critique.
+ * ## Why not kimi, which this was
+ *
+ * Verified against `/api/v1/models` on 2026-08-04:
+ *
+ * | model | in / 1M | out / 1M |
+ * |---|---|---|
+ * | `moonshotai/kimi-k2-0905` | **$0.60** | **$2.50** |
+ * | `qwen/qwen3.7-flash` | $0.03 | $0.13 |
+ *
+ * **20× the input and 19× the output for a judgment call.** kimi was chosen
+ * for family-diversity with no price check at all, which violates this repo's
+ * own tier rule — *voice models for voice, flash models for judges*. Both are
+ * equally "not OpenAI"; only one is priced like a main brain.
+ *
+ * At one post a day this is $0.29/mo against $0.01/mo per customer, so the
+ * saving is small in absolute terms. It is a 20× multiplier on a call that
+ * runs on **every artifact**, which is the kind of thing that stops being
+ * small once the artifact count grows.
+ *
+ * ⚠️ Unvalidated on real drafts. Before the seven-day run, check that it still
+ * vetoes what kimi vetoed — a cheaper critic that passes everything is not a
+ * saving, it is the fail-open gate this file already fixed once.
  */
-export const CRITIC_MODEL = "moonshotai/kimi-k2-0905";
+export const CRITIC_MODEL = "qwen/qwen3.7-flash";
 
 /**
  * Workers and heartbeat ticks. Cheap on purpose.
