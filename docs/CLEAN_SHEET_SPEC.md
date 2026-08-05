@@ -996,6 +996,56 @@ Estimated reliability, **unmeasured**:
 
 **The spike decides the build:** ≥80% usable → ship with **no headless browser** and let her ask the remainder. ~50% → build capture before launch.
 
+#### 6.4.6b The follow-up ran too — 2026-08-05, and it kills the hypothesis
+
+§6.4.6a's caveat 1 said *"the cheapest next move is almost certainly scrape more
+pages per site, not add a headless browser."* **Tested. It is wrong, and the
+reason matters more than the number.**
+
+Ten of the same sites, homepage vs homepage + `/features` + `/pricing` +
+`/product`, same classifier:
+
+| | homepage | + subpages |
+|---|---|---|
+| **≥1 real product screenshot** | 50% | **50% — no change at all** |
+| ≥3 real product screenshots | 0% | **40%** |
+
+**Two findings, opposite directions.**
+
+**Scraping more pages does not find a first screenshot.** Not one site crossed
+from zero to some. linear.app, tldraw, supabase, neon.tech and clerk.com
+returned illustrations, logos and people across *every* page — 12 illustrations
+and zero screenshots for neon, 8 and zero for clerk.
+
+**But it quadruples depth where screenshots exist.** posthog went 1 → 13,
+resend 2 → 5, cal 1 → 3. So subpages are worth scraping; they are just not the
+fix for the 50%.
+
+**⛔ Therefore a headless browser does not fix this either.** The images aren't
+hidden behind JavaScript — **they are not published.** A browser would render
+the same illustrations. Half of well-funded, design-forward dev-tool companies
+simply do not put product UI on their marketing site, and no scraper reaches a
+screenshot that doesn't exist.
+
+**What that leaves, and it's already designed.** The 50% is not a technical
+failure to engineer around; it is the **ask cohort** from §6.4.2. The classifier
+already identifies exactly who they are, so only those founders are ever asked
+and everyone else is never bothered. §6.0.1 step 8 already asks for
+*"2–3 screenshots of the part people should see"* — this measurement says that
+ask is load-bearing for **half** of customers rather than an occasional
+fallback, and should be written that way.
+
+**Recommendation, revised:** ship with **no headless browser**, scrape
+subpages, and treat the ask as a primary path rather than a degraded one.
+
+⚠️ **A methodology note, because it nearly cost the finding.** The first run of
+this follow-up used a hand-rolled extractor that did not decode HTML entities,
+so `/_next/image?url=…&amp;w=…` fetched as a **400** and 42 images were scored
+as failures. Production's `extractCandidateImages` decodes correctly and was
+never affected — but the throwaway script produced numbers that looked like
+evidence about *websites* and were evidence about *my regex*. Re-run with
+decoding, the ≥3 figure moved 20% → 40%. **Measure with the code that ships.**
+
 #### 6.4.6a ⭐ THE SPIKE HAS BEEN RUN — 2026-07-31, n=20
 
 **Measured, not estimated.** 20 marketing homepages of exactly the target type
@@ -4142,7 +4192,7 @@ needs real collected text**, which is the half that actually works.
 | `learn-business` (incl. tracked-account list), `learn-voice`, `learn-brand` |
 | **The buyer map** (§5.0.0) — audience-overlap discovery via `tiktok/user/followers`+`following`, audience validation, community discovery, **ranked complaint list** |
 | Brand kit extraction · media library + vision tagging · staleness |
-| **Run the scrape-reliability spike (§6.4.6)** — 20 URLs, classify quality |
+| ~~Run the scrape-reliability spike~~ — **DONE** (§6.4.6a, §6.4.6b). No headless browser; scrape subpages; the ask is a primary path for ~half of customers |
 | ⭐ **Layer 1 — the voice corpus.** We already pull thousands of real human sentences from this exact niche every week and use them **only for ideas**. Index them as few-shot voice examples, retrieved per-draft by channel and register. *Ten real examples beat any amount of "be casual and authentic."* |
 | ⭐ **Layer 2 — negative examples from this founder.** Carry the last N `{what I wrote → what they changed it to}` pairs into every Write and Critique call. Highest-signal data in the system, and it costs nothing because the edits already happen |
 | ⭐ **Tell research, grounded in real posts** — derive the denylist and the structural critic's targets from *measured* differences between human and model text in this niche, not from a hand-written list. The §7.5.2 table is a starting hypothesis, not the finding |
