@@ -2251,6 +2251,60 @@ for; the shape above does not change when they do.
 - Every step is budgeted **before** she starts, not checked at publish time —
   §7.5.7. Failing after a founder says yes is the worst possible sequence.
 
+## 13.55 ⭐ How she talks to the founder — the surface with no eval on it
+
+*Added 2026-08-05. Six anti-slop layers, a pairwise cringe eval, a voice corpus,
+an edit-pair loop — **all of it points at what she posts.** None of it looks at
+what she says in Telegram, which is the surface the founder experiences every
+single day and the entire basis of "an employee, not a tool."*
+
+### 13.55.1 Two different failures
+
+| | What it is | Caught by |
+|---|---|---|
+| **Machine leakage** | strings she never wrote — an exception, a vendor, an id, a status code, interpolated in by code | `plainLanguage.ts`, deterministically |
+| **Sounding like software** | strings she *did* write, that read like a system report | ⛔ **nothing** |
+
+The first is a code bug and has a code fix. A guard is complete there **because
+every outbound message funnels through one mutation**, and it redacts rather
+than drops — the messages most likely to trip it are error reports, which are
+exactly the ones the founder most needs.
+
+The second is a judgment call, and the standing rule is right that a regex must
+not arbitrate it: *"non-catastrophic drift is logged, never dropped."* But
+"logged, never dropped" still requires **someone to look**, and nothing looks.
+
+### 13.55.2 ⭐ The over-blocking failure is the worse one
+
+Shipping the guard demonstrated this immediately. The first draft matched a bare
+`[45]\d{2}` as a status code — and she sends metrics constantly:
+
+> *"Your post got 512 views"* → *"Your post got  views"*
+
+A leak embarrasses us. **A mangled message breaks the one thing the product
+is.** So every pattern in that module is narrow enough that a word a founder
+might plausibly type themselves is not in it — no "post", "account", "video",
+"link", "API", "job", "queue" — and the test file is majority false-positive
+cases, seeded from messages she actually sent.
+
+The rule that came out of it: *a number is only machine-shaped when a machine
+word is next to it.* `returned a 502` and `returned 500 views` are the same
+shape, and only the noun afterwards tells them apart.
+
+### 13.55.3 The bar, in her own words
+
+`SOUL.md` now carries a **"How I talk to the founder"** block, because the
+prompt is primary and it previously said nothing about this surface at all —
+every voice rule in it was about posts.
+
+- a colleague texting them, not a system reporting to them
+- funny when something's actually funny; never a joke stapled onto bad news
+- never a vendor, a table, a queue, a job, an error string, an id
+- **not "the ingest failed" — "I couldn't save it on my end"**
+- no narrating her own process; the result, in a sentence
+- ⭐ *"if they forwarded this message to a friend, would it read like a person,
+  or like software?"*
+
 ## 13.6 The long conversation — the boundary every memory test we have avoids
 
 *Added 2026-08-05, after the operator asked whether OpenClaw handles "the
@@ -4504,6 +4558,35 @@ an agent says when it cannot look.
 
 **Exit:** a directive survives a redeploy **and a deliberate model swap**.
 **Tests:** ⭐ **model-swap directive test** — swap the main model, assert every directive still enforced · liveness breach escalation · zero-day honesty.
+
+### Sprint 4.6 — ⭐ The chat eval: does she sound like a person to the founder?
+
+*Added 2026-08-05. Sprint 4.5 built the cringe eval for **posts**. This is the
+same instrument turned on the surface the founder actually lives in (§13.55).*
+
+**Why it isn't just "extend 4.5":** the pairwise trick doesn't transfer. There
+is no corpus of "real founder Telegram messages" to pair hers against — the
+comparison class for a post is *other posts in the niche*, and for a chat
+message it's *how a competent colleague texts*, which nobody publishes.
+
+| Task |
+|---|
+| ⭐ **A rubric judge over a real thread**, scoring each outbound message on: reads like a person · no process narration · no internal nouns · bad news stated plainly · length appropriate to what was asked |
+| ⭐ **A synthetic control, same as the cringe eval** — plant deliberately robotic messages ("Task completed successfully. 3 items processed.") in the sample. **A judge that doesn't flag them voids the run**, because a judge that passes everything is a rubber stamp |
+| Run it over `messages` rows from a live thread, not fabricated ones — the whole point is what she actually sends |
+| Report to the operator as a **trend**, not a gate: this is drift detection, and per the standing rule non-catastrophic drift is logged and never dropped |
+| Feed confirmed misses back as SOUL edits, the same loop edit-pairs already use for posts |
+| **`plainLanguage` coverage audit** — every founder-facing string built with a `${}` is a leak candidate; grep them and confirm each is either a plain constant or passes the guard |
+
+**Exit:** ⭐ **the operator reads 20 consecutive real messages and can't point at
+one that sounds like software.** That's a human judgment on purpose — it's the
+same bar as Sprint 4's *"a stranger can't tell it isn't the founder writing"*,
+and no metric substitutes for it.
+
+**Tests:** the guard's **false-positive suite is the load-bearing half** and
+must stay majority real messages — a guard that mangles her metrics is worse
+than the leak it prevents (§13.55.2) · control-voids-the-run · every internal
+name is a proper noun, never a common word.
 
 ### Sprint 6.5 — ⭐ The long conversation
 

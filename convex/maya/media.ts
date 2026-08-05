@@ -235,7 +235,13 @@ export const ingestFromTelegram = internalAction({
     if (!identity) return { ok: false, error: "the Telegram bot isn't configured" };
 
     const file = await fetchTelegramFile(identity, args.fileId);
-    if (!file.ok) return { ok: false, error: file.reason };
+    if (!file.ok) {
+      // Same rule as the upload catch below: `reason` is Telegram's own words
+      // ("download failed (403)", a raw fetch error), which tell the founder
+      // nothing they can act on.
+      console.error(`[media] telegram fetch failed for ${args.customerId}: ${file.reason}`);
+      return { ok: false, error: "Telegram wouldn't hand it over" };
+    }
     if (file.bytes.byteLength > TELEGRAM_MAX_BYTES) {
       return {
         ok: false,
@@ -262,10 +268,21 @@ export const ingestFromTelegram = internalAction({
       });
       key = put.storageKey;
     } catch (error) {
-      return {
-        ok: false,
-        error: error instanceof Error ? error.message : "couldn't store the file",
-      };
+      /**
+       * ⚠️ The exception is LOGGED, never returned.
+       *
+       * This string ends up in a Telegram message, and an R2 SDK failure reads
+       * like *"The specified bucket does not exist"* or a signature mismatch —
+       * a founder cannot act on either, and both leak the stack. What reaches
+       * them says what happened and what to do; what reaches the log says
+       * what actually broke.
+       */
+      console.error(
+        `[media] uploadAsset failed for ${args.customerId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      return { ok: false, error: "I couldn't save it on my end" };
     }
 
     /**
