@@ -21,6 +21,7 @@ import {
   interleave,
   normalizeInstagramReels,
   normalizeYouTubeVideos,
+  normalizeXSearch,
   type Observation,
 } from "../scroll";
 import { rawResult } from "../../integrations/scrapeCreators/deps";
@@ -290,13 +291,15 @@ describe("⭐ THE CHANNELS DON'T REPORT THE SAME THINGS", () => {
     expect(shape).not.toHaveProperty("payload");
   });
 
-  it("⭐ X IS NOT SCROLLABLE HERE", () => {
-    // Its search lives behind twitterapi.io, not ScrapeCreators. Listing it
-    // would spend a search on an endpoint that doesn't exist.
-    expect(SCROLLABLE_CHANNELS).not.toContain("x");
+  it("⭐ X IS SCROLLABLE — and was wrongly left out", () => {
+    // An earlier pass excluded X believing its search wasn't wrapped.
+    // `twitterApiIoSearch` has wrapped `advanced_search` all along; its only
+    // callers were in frozen v1. Since X is the launch channel and often the
+    // ONLY connected one, that omission mattered more than any of the rest.
     expect([...SCROLLABLE_CHANNELS].sort()).toEqual([
       "instagram",
       "tiktok",
+      "x",
       "youtube",
     ]);
   });
@@ -389,6 +392,70 @@ describe("⭐ REAL VENDOR PAYLOADS", () => {
       ],
       "founder",
       NOW_LIVE
+    );
+    expect(out).toHaveLength(0);
+  });
+
+  it("⭐ X: the shape the WRAPPER returns, not the raw tweet", () => {
+    /**
+     * The bug this pins. `twitterApiIoSearch` normalises tweets into a
+     * `ResearchRawItem` before returning them — `excerpt` not `text`, `author`
+     * a plain string, `createdAtMs` already in milliseconds, metrics under
+     * `engagement`. Written against the RAW tweet shape it returned zero every
+     * time, which reads exactly like "X was quiet today".
+     *
+     * Second shape-assumption in this file after `payload`/`raw`. Both failed
+     * silently; both were found by RUNNING it, not reading it.
+     */
+    const out = normalizeXSearch(
+      [
+        {
+          platform: "twitter",
+          externalId: "2084994652990742563",
+          url: "https://x.com/shivamexi/status/2084994652990742563",
+          title: null,
+          excerpt: "I'd lean the same way. High-quality realistic beats a logo",
+          author: "shivamexi",
+          createdAtMs: Date.UTC(2026, 7, 5, 13, 27, 17),
+          engagement: {
+            likes: 1,
+            comments: 1,
+            shares: 0,
+            views: 8,
+            upvotes: null,
+            downvotes: null,
+          },
+        },
+      ],
+      "founder",
+      Date.parse("2026-08-06T00:00:00.000Z")
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].channel).toBe("x");
+    expect(out[0].authorHandle).toBe("shivamexi");
+    expect(out[0].text).toMatch(/lean the same way/);
+    // Already milliseconds — X is the one channel needing no date parsing.
+    expect(out[0].postedAt).toBe(Date.UTC(2026, 7, 5, 13, 27, 17));
+    // Replies ARE the comments on X, weighed 3× by velocity.
+    expect(out[0].metrics).toEqual({ likes: 1, comments: 1, views: 8 });
+    expect(out[0].velocity).toBeGreaterThan(0);
+  });
+
+  it("⭐ THE RAW TWEET SHAPE YIELDS NOTHING — which is the point", () => {
+    // If the wrapper ever stops normalising, this must fail loudly here rather
+    // than silently reporting a quiet channel every morning.
+    const out = normalizeXSearch(
+      [
+        {
+          id: "1",
+          text: "hello",
+          createdAt: "Wed Aug 05 13:27:17 +0000 2026",
+          likeCount: 5,
+          author: { userName: "someone" },
+        },
+      ],
+      "k",
+      Date.parse("2026-08-06T00:00:00.000Z")
     );
     expect(out).toHaveLength(0);
   });
