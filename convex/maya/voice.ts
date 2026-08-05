@@ -208,18 +208,95 @@ export function buildFewShot(
 /**
  * Voice excerpts from the founder's own messages (§6.1, source 2).
  *
- * Free, already stored, and growing. Filters to substantive inbound messages:
- * "ok", "yes", "post it" are approvals, not writing samples, and a corpus full
- * of them teaches her to write like a switch.
+ * Free, already stored, and growing.
+ *
+ * ## Superseded `corpusFromMessages`
+ *
+ * That took the most recent N by content-word count. This adds two things it
+ * lacked, and both are load-bearing:
+ *
+ * **An explicit instruction filter.** *"post it"*, *"yes"*, *"go ahead"* are
+ * how they operate the product; a corpus of those teaches her to write like a
+ * remote control. Matched in FULL rather than by substring, so *"yes but make
+ * it way shorter, the last one read like a press release"* still counts —
+ * those are the most useful samples there are.
+ *
+ * **Spread across days.** §7.5.2: *variance is where humanity hides.* Twelve
+ * samples from one afternoon capture one mood, and a corpus that is all one
+ * register teaches exactly the flatness the anti-slop system exists to
+ * prevent. Recency-sorting produces precisely that.
  */
-export function corpusFromMessages(
-  messages: ReadonlyArray<{ direction: string; body: string; ts: number }>,
-  limit = 20
+
+/** Below this it's an instruction or an acknowledgement, not writing. */
+export const MIN_SAMPLE_CHARS = 40;
+/** Above this they're pasting something, usually not their own prose. */
+export const MAX_SAMPLE_CHARS = 600;
+/** What SOUL.md carries. Ten real sentences is the spec's own number. */
+export const MAX_EXCERPTS = 12;
+
+const PURE_INSTRUCTIONS = new Set([
+  "post it", "post", "yes", "no", "yep", "nope", "go", "go ahead", "do it",
+  "skip", "skip it", "ok", "okay", "sure", "sounds good", "approved",
+  "approve", "reject", "stop", "pause", "resume", "thanks", "thank you",
+  "perfect", "nice", "great", "cool", "hold off", "not yet", "later",
+]);
+
+export function isVoiceSample(text: string): boolean {
+  const t = text.trim();
+  if (t.length < MIN_SAMPLE_CHARS || t.length > MAX_SAMPLE_CHARS) return false;
+
+  const normalized = t.toLowerCase().replace(/[.!?,]+$/, "");
+  if (PURE_INSTRUCTIONS.has(normalized)) return false;
+
+  // A pasted URL with a few words around it is a reference, not a sentence —
+  // and without stripping it, its length alone would qualify.
+  const withoutLinks = t.replace(/https?:\/\/\S+/g, "").trim();
+  if (withoutLinks.length < MIN_SAMPLE_CHARS) return false;
+  if (withoutLinks.split(/\s+/).length < 8) return false;
+
+  return true;
+}
+
+/**
+ * ⭐ `direction` IS FILTERED HERE, NOT BY THE CALLER.
+ *
+ * The corpus is what THEY write. Feeding her own output back would make her
+ * converge on herself — the same failure as a critic running on the writer's
+ * model, one layer up. Leaving that to the caller means one forgetful call site
+ * silently poisons the voice profile, so the guarantee lives with the logic.
+ */
+export function selectExcerpts(
+  messages: ReadonlyArray<{ body: string; ts: number; direction: string }>,
+  limit = MAX_EXCERPTS
 ): string[] {
-  return messages
+  const samples = messages
     .filter((m) => m.direction === "in")
-    .filter((m) => contentWords(m.body).length >= 5)
-    .sort((a, b) => b.ts - a.ts)
-    .slice(0, limit)
-    .map((m) => m.body);
+    .filter((m) => isVoiceSample(m.body));
+  if (samples.length <= limit) return samples.map((m) => m.body.trim());
+
+  const byDay = new Map<string, Array<{ body: string; ts: number }>>();
+  for (const m of samples) {
+    const day = new Date(m.ts).toISOString().slice(0, 10);
+    const bucket = byDay.get(day) ?? [];
+    bucket.push(m);
+    byDay.set(day, bucket);
+  }
+
+  // Round-robin across days, newest day first.
+  const days = [...byDay.keys()].sort().reverse();
+  const picked: string[] = [];
+  let depth = 0;
+  while (picked.length < limit) {
+    let added = false;
+    for (const day of days) {
+      const bucket = byDay.get(day)!;
+      if (depth >= bucket.length) continue;
+      picked.push(bucket[depth].body.trim());
+      added = true;
+      if (picked.length >= limit) break;
+    }
+    if (!added) break;
+    depth += 1;
+  }
+  return picked;
 }

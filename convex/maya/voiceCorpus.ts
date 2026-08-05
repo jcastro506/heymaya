@@ -25,92 +25,21 @@
  *
  * ## Why no model
  *
- * Selection here is length, shape and punctuation — cheap, deterministic, and
- * re-runnable. A model would cost money to reproduce a rule that fits in
- * twenty lines, and §5.2's "no LLM in collection" applies to voice as much as
- * to posts.
+ * Selection is length, shape and punctuation — cheap, deterministic, and
+ * re-runnable. A model would cost money to reproduce a rule that fits in twenty
+ * lines, and §5.2's "no LLM in collection" applies to voice as much as to posts.
+ *
+ * ## Where the logic lives
+ *
+ * `voice.ts` — it already owned voice reasoning, including a `corpusFromMessages`
+ * this initially duplicated before superseding it. This file is only the Convex
+ * wiring: read the table, call the pure function, write the row.
  */
 
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
-import type { Doc, Id } from "../_generated/dataModel";
-
-/** Below this it's an instruction or an acknowledgement, not writing. */
-export const MIN_SAMPLE_CHARS = 40;
-/** Above this they're pasting something, usually not their own prose. */
-export const MAX_SAMPLE_CHARS = 600;
-/** What SOUL.md carries. Ten real sentences is the spec's own number. */
-export const MAX_EXCERPTS = 12;
-
-/**
- * Short commands, in full. Matched exactly rather than by substring, so
- * *"yes — and make it shorter than the last one"* still counts as writing.
- */
-const PURE_INSTRUCTIONS = new Set([
-  "post it", "post", "yes", "no", "yep", "nope", "go", "go ahead", "do it",
-  "skip", "skip it", "ok", "okay", "sure", "sounds good", "approved",
-  "approve", "reject", "stop", "pause", "resume", "thanks", "thank you",
-  "perfect", "nice", "great", "cool", "hold off", "not yet", "later",
-]);
-
-export function isVoiceSample(text: string): boolean {
-  const t = text.trim();
-  if (t.length < MIN_SAMPLE_CHARS || t.length > MAX_SAMPLE_CHARS) return false;
-
-  const normalized = t.toLowerCase().replace(/[.!?,]+$/, "");
-  if (PURE_INSTRUCTIONS.has(normalized)) return false;
-
-  // A pasted URL or a bare handle is a reference, not a sentence.
-  const withoutLinks = t.replace(/https?:\/\/\S+/g, "").trim();
-  if (withoutLinks.length < MIN_SAMPLE_CHARS) return false;
-
-  // Needs at least a few words — a long single token is an id or a paste.
-  if (withoutLinks.split(/\s+/).length < 8) return false;
-
-  return true;
-}
-
-/**
- * Prefer variety over recency.
- *
- * Twelve samples from one afternoon capture one mood. §7.5.2's point is that
- * **variance is where humanity hides**, so a corpus that's all one register
- * teaches exactly the flatness it exists to prevent — spreading across days
- * costs nothing and captures how they actually vary.
- */
-export function selectExcerpts(
-  messages: Array<{ body: string; ts: number }>,
-  limit = MAX_EXCERPTS
-): string[] {
-  const samples = messages.filter((m) => isVoiceSample(m.body));
-  if (samples.length <= limit) return samples.map((m) => m.body.trim());
-
-  const byDay = new Map<string, Array<{ body: string; ts: number }>>();
-  for (const m of samples) {
-    const day = new Date(m.ts).toISOString().slice(0, 10);
-    const bucket = byDay.get(day) ?? [];
-    bucket.push(m);
-    byDay.set(day, bucket);
-  }
-
-  // Round-robin across days, newest day first, until we have enough.
-  const days = [...byDay.keys()].sort().reverse();
-  const picked: string[] = [];
-  let depth = 0;
-  while (picked.length < limit) {
-    let addedThisPass = false;
-    for (const day of days) {
-      const bucket = byDay.get(day)!;
-      if (depth >= bucket.length) continue;
-      picked.push(bucket[depth].body.trim());
-      addedThisPass = true;
-      if (picked.length >= limit) break;
-    }
-    if (!addedThisPass) break;
-    depth += 1;
-  }
-  return picked;
-}
+import { selectExcerpts, buildFewShot, type FewShotExample } from "./voice";
+import type { Doc } from "../_generated/dataModel";
 
 /* -------------------------------------------------------------------------- */
 
@@ -132,10 +61,12 @@ export const refreshVoiceCorpus = internalMutation({
       .order("desc")
       .take(args.limit ?? 300)) as Doc<"messages">[];
 
-    const fromFounder = inbound.filter((m) => m.direction === "in");
+    // `selectExcerpts` filters direction itself — deliberately, so no call
+    // site can forget and feed her own writing back as theirs.
     const excerpts = selectExcerpts(
-      fromFounder.map((m) => ({ body: m.body, ts: m.ts }))
+      inbound.map((m) => ({ body: m.body, ts: m.ts, direction: m.direction }))
     );
+    const fromFounder = inbound.filter((m) => m.direction === "in");
 
     const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
     if (!customer) return { excerpts: 0, scanned: fromFounder.length };
@@ -180,5 +111,55 @@ export const voiceExcerptsFor = internalQuery({
     } catch {
       return [];
     }
+  },
+});
+
+
+/* -------------------------------------------------------------------------- */
+/* Layer 2 — what they changed                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The last N `{what I wrote → what they changed it to}` pairs.
+ *
+ * §7.5.2 layer 2, and it calls this **the highest-signal training data in the
+ * system** — because unlike a writing sample, an edit says what was *wrong*.
+ * "Too long" and "not that word" and "we don't claim that" are all in the diff.
+ *
+ * It also costs nothing: the edits already happened, and `drafts.decide` has
+ * been storing them since yesterday. `SOUL.md` has said *"when they edit
+ * something I wrote, that diff is the strongest signal I get"* the entire time,
+ * with no diffs behind it.
+ */
+export const editPairsFor = internalQuery({
+  args: { customerId: v.id("customers"), limit: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<FewShotExample[]> => {
+    const drafts = (await ctx.db
+      .query("drafts")
+      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+      .collect()) as Doc<"drafts">[];
+
+    const edits: Array<{ before: string; after: string; decidedAt: number }> = [];
+    for (const draft of drafts) {
+      if (draft.outcome !== "edited" || !draft.editDiff) continue;
+      try {
+        const diff = JSON.parse(draft.editDiff) as {
+          before?: unknown;
+          after?: unknown;
+        };
+        if (typeof diff.before !== "string" || typeof diff.after !== "string") {
+          continue;
+        }
+        edits.push({
+          before: diff.before,
+          after: diff.after,
+          decidedAt: draft.decidedAt ?? draft.proposedAt,
+        });
+      } catch {
+        continue;
+      }
+    }
+
+    return buildFewShot(edits, args.limit ?? 10);
   },
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildFewShot,
-  corpusFromMessages,
+  selectExcerpts,
   diffSignals,
   foldEdits,
   NEVER_SAYS_THRESHOLD,
@@ -208,7 +208,7 @@ describe("buildFewShot", () => {
   });
 });
 
-describe("corpusFromMessages — source 2, free and nobody uses it", () => {
+describe("selectExcerpts — source 2, free and nobody uses it", () => {
   const msg = (body: string, direction = "in", ts = NOW) => ({
     body,
     direction,
@@ -216,36 +216,26 @@ describe("corpusFromMessages — source 2, free and nobody uses it", () => {
   });
 
   it("collects the founder's own writing", () => {
-    const corpus = corpusFromMessages([
-      msg("the migration runner keeps timing out on big tables, worth a post"),
-    ]);
-    expect(corpus).toHaveLength(1);
+    expect(
+      selectExcerpts([
+        msg("the migration runner keeps timing out on big tables, worth a post"),
+      ])
+    ).toHaveLength(1);
   });
 
-  it("ignores her own outbound messages — that's her voice, not theirs", () => {
-    const corpus = corpusFromMessages([
-      msg("something she wrote that is nice and long enough", "out"),
-    ]);
-    expect(corpus).toEqual([]);
+  it("⭐ IGNORES HER OWN OUTBOUND — that's her voice, not theirs", () => {
+    // Filtered inside the function rather than by the caller, so one
+    // forgetful call site can't quietly make her converge on herself.
+    expect(
+      selectExcerpts([
+        msg("something she wrote that is nice and long enough to pass every length check", "out"),
+      ])
+    ).toEqual([]);
   });
 
   it("drops approvals — 'post it' is a switch, not a writing sample", () => {
-    // A corpus full of these teaches her to write like a button.
-    const corpus = corpusFromMessages([
-      msg("ok"),
-      msg("yes"),
-      msg("post it"),
-      msg("sure go ahead"),
-    ]);
-    expect(corpus).toEqual([]);
-  });
-
-  it("newest first, and capped", () => {
-    const messages = Array.from({ length: 30 }, (_, i) =>
-      msg(`message number ${i} with enough real content words here`, "in", NOW + i)
-    );
-    const corpus = corpusFromMessages(messages, 5);
-    expect(corpus).toHaveLength(5);
-    expect(corpus[0]).toContain("number 29");
+    expect(
+      selectExcerpts([msg("ok"), msg("yes"), msg("post it"), msg("sure go ahead")])
+    ).toEqual([]);
   });
 });

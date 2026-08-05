@@ -119,6 +119,13 @@ export interface MayaWorkspaceInput {
   }>;
   /** Learned from the founder's real posts and their edits to drafts. */
   voiceExcerpts?: string[];
+  /**
+   * ⭐ `{what I wrote → what they changed it to}`.
+   *
+   * §7.5.2 calls these the highest-signal training data in the system, because
+   * unlike a writing sample an edit says what was WRONG.
+   */
+  editPairs?: Array<{ before: string; after: string }>;
   /** Current strategy and today's posture. */
   posture?: string;
 }
@@ -508,6 +515,20 @@ substance dominate and it's content that could be any product in the category.
 
 ${excerpts}
 
+${
+    input.editPairs?.length
+      ? `## What they changed about my drafts
+
+${input.editPairs
+  .map((p) => `**I wrote:** ${p.before}\n**They made it:** ${p.after}`)
+  .join("\n\n")}
+
+**This is the strongest signal I get.** A writing sample shows me their register;
+an edit shows me what I got WRONG. When these disagree with anything above,
+these win.
+`
+      : ""
+  }
 Ten real sentences beat any amount of "be casual and authentic." When they edit
 something I wrote, that diff is the strongest signal I get — what they changed is
 what I learn from.
