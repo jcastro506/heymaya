@@ -248,6 +248,26 @@ export default defineToolPlugin({
     }),
 
     tool({
+      name: "update",
+      label: "Update",
+      description:
+        "Tell the founder something without being asked — the morning brief, the evening recap, a placement that went live, something that broke. THE ONLY WAY TO SPEAK FIRST; ask_founder is for QUESTIONS and is capped separately. Budgeted at a few a day: ok:false with data.limit means you have used them up, and that is a real answer — hold it until tomorrow, do NOT retry, and do NOT work around it by phrasing it as a question. Deduped per kind per day, so a cron that fires twice sends one brief. Say what happened, in their language, with links where there are links. A recap with no placements says so plainly rather than padding.",
+      parameters: Type.Object({
+        body: Type.String({
+          description:
+            "The message, exactly as they should read it. Plain language, no internal terms, no status-report voice.",
+        }),
+        kind: Type.Optional(
+          Type.String({
+            description:
+              "brief · recap · alert · update (default). Used for the daily dedupe key, so the same kind twice in one day sends once.",
+          })
+        ),
+      }),
+      execute: async (p, _cfg, ctx) => call("update", p, ctx.signal),
+    }),
+
+    tool({
       name: "ask_founder",
       label: "Ask Founder",
       description:

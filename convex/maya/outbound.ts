@@ -50,13 +50,27 @@ import { callOpenRouter } from "../integrations/openrouter/client";
  *   OpenClaw config      →  openrouter/moonshotai/kimi-k2-0905
  *   OpenRouter REST API  →  moonshotai/kimi-k2-0905
  *
- * kimi rather than the cheaper qwen deliberately: qwen is a *reasoning* model
- * whose thinking is billed and budgeted as completion, and this gate FAILS
- * CLOSED. A budget miscalculation there blocks every post rather than
- * degrading. At roughly one critique a day that predictability is worth $0.29
- * a month.
+ * ## Why gemini-flash-lite and not the two obvious alternatives
+ *
+ * Verified against `/api/v1/models` 2026-08-05:
+ *
+ * | model | in / 1M | out / 1M | verdict |
+ * |---|---|---|---|
+ * | `google/gemini-3.1-flash-lite` | $0.25 | $1.50 | ✅ |
+ * | `moonshotai/kimi-k2-0905` | $0.60 | $2.50 | was this — 2.4× the price |
+ * | `qwen/qwen3.7-flash` | $0.03 | $0.13 | cheapest, but a REASONING model |
+ * | any `openai/*` | — | — | ⛔ the writer's own family |
+ *
+ * qwen is 8× cheaper and still wrong here. Its thinking is billed and budgeted
+ * as completion, and **this gate fails closed** — a token-budget miscalculation
+ * blocks every post rather than degrading. That exact failure was caught before
+ * it ran, with `maxTokens: 300` against 188 reasoning tokens on a 21-token
+ * prompt. At roughly one critique a day, predictability beats $0.02 a month.
+ *
+ * A cheap OpenAI model would be cheaper still and is disqualified outright: it
+ * is the writer's family, which defeats the only rule this critic has.
  */
-export const SAFETY_CRITIC_MODEL = "moonshotai/kimi-k2-0905";
+export const SAFETY_CRITIC_MODEL = "google/gemini-3.1-flash-lite";
 
 /* -------------------------------------------------------------------------- */
 /* Catastrophic — these block                                                  */

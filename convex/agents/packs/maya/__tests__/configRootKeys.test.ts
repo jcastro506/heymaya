@@ -172,8 +172,13 @@ describe("THE CRITIQUE SUBAGENT IS GONE, AND THAT'S RECORDED", () => {
     // The critique moved to convex/maya/outbound.ts: different family, fails
     // CLOSED, and at the publish gate where she cannot route around it. The
     // subagent was a critic she chose to invoke; this one she cannot skip.
-    expect(SAFETY_CRITIC_MODEL).toMatch(/^moonshotai\//);
+    // Different family is the only rule the critic has: a model cannot see the
+    // tells that are its own defaults. An openai/* critic judging luna-pro
+    // approves its own register, which is no critic at all.
     expect(SAFETY_CRITIC_MODEL).not.toMatch(/^openai\//);
+    expect(SAFETY_CRITIC_MODEL).toMatch(/^(google|moonshotai|qwen|anthropic)\//);
+    // And a direct REST call, so no OpenClaw provider prefix.
+    expect(SAFETY_CRITIC_MODEL).not.toMatch(/^openrouter\//);
   });
 
   it("EVERY TOOL PROFILE IS STILL ONE OPENCLAW ACCEPTS", () => {
@@ -238,6 +243,26 @@ describe("SHE HAS A DAY, NOT JUST A REPORTING SCHEDULE", () => {
     expect(hour(at("0011_daily_placement"))).toBeGreaterThan(
       hour(at("0010_morning_brief"))
     );
+  });
+
+  it("⭐ EVERY DAILY JOB TARGETS `isolated`, NEVER `main`", () => {
+    // A `main` job enqueues a system event and defers to the heartbeat — it
+    // does not run an agent turn. Live 2026-08-05: 12 hours of a daily loop
+    // where every main-targeted job reported `skipped` and only the one
+    // isolated job ever ran.
+    for (const job of cron.jobs) {
+      expect(job.sessionTarget, `${job.id} would be skipped`).toBe("isolated");
+    }
+  });
+
+  it("the runner never tries to deliver — she does, via `update`", () => {
+    // Default is `announce -> last`, which on this machine resolves to "no
+    // route, will fail-closed" — her OpenClaw has no Telegram and can't have
+    // one. A second delivery path that can only fail makes "the brief didn't
+    // arrive" ambiguous between two mechanisms.
+    for (const job of cron.jobs) {
+      expect(job.delivery?.mode, `${job.id}`).toBe("none");
+    }
   });
 
   it("every job runs in the FOUNDER'S timezone", () => {
