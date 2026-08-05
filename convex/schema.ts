@@ -3574,6 +3574,47 @@ export default defineSchema({
     .index("by_customer_and_kind", ["customerId", "kind"]),
 
   /** The idea bank — angles with evidence behind them (§7.4). */
+  /**
+   * What she saw while scrolling (§5.2).
+   *
+   * > *"Watchers write structured rows, not prose. No LLM in collection."*
+   *
+   * Without this every scroll is amnesia: she can notice a complaint on Monday
+   * and have no way to know it's the third time this week. Frequency across
+   * days is the difference between "someone said this" and "this keeps coming
+   * up", and only one of those is worth posting about.
+   *
+   * Cheap, bounded and **idempotent** — re-running a sweep costs nothing and
+   * duplicates nothing, which is what makes a daily cron safe to retry.
+   */
+  observations: defineTable({
+    customerId: v.id("customers"),
+    channel: v.string(),
+    /** The dedupe key. One row per post per customer, forever. */
+    sourceUrl: v.string(),
+    authorHandle: v.optional(v.string()),
+    kind: v.union(
+      v.literal("post"),
+      v.literal("comment"),
+      v.literal("trend"),
+      v.literal("metric")
+    ),
+    text: v.string(),
+    /** Vendor time, normalised to ms on the way in. */
+    postedAt: v.optional(v.number()),
+    capturedAt: v.number(),
+    metricsJson: v.optional(v.string()),
+    /** engagement ÷ age at capture — what made it worth noticing THEN. */
+    velocity: v.number(),
+    /** Which watched term surfaced it. */
+    keyword: v.optional(v.string()),
+    /** Set by the screening pass, when there is one. */
+    screenedJson: v.optional(v.string()),
+  })
+    .index("by_customer_and_captured", ["customerId", "capturedAt"])
+    // Idempotency: the daily sweep re-reads the same climbing post for days.
+    .index("by_customer_and_source", ["customerId", "sourceUrl"]),
+
   ideas: defineTable({
     customerId: v.id("customers"),
     angle: v.string(),
