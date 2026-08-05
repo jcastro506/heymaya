@@ -369,11 +369,35 @@ export const historyHttp = httpAction(async (ctx, request) => {
   }
 
   const live = posted.filter((p) => p.linkStatus === "live").length;
+
+  /**
+   * ⭐ The streak rides along, because the daily cadence IS the job (§18
+   * Sprint 3) and she cannot see it from a list of placements — counting
+   * consecutive days in the founder's timezone is not something to do by
+   * eye in a context window.
+   *
+   * It also tells her something no list does: whether TODAY is still open.
+   * That is the difference between noticing at 4pm and finding out tomorrow.
+   */
+  const run = await ctx.runQuery(internal.maya.cadence.cadence, {
+    customerId: auth.customer._id,
+  });
+
   return respond({
     ok: true,
-    data: { placements: posted, days },
-    why: `${posted.length} placements in the last ${days} days, ${live} with a live link`,
-    next: "quote the URLs when they ask what went out — never answer from memory, and never say you haven't posted without checking here first",
+    data: {
+      placements: posted,
+      days,
+      cadence: {
+        streak: run.streak,
+        longestStreak: run.longestStreak,
+        todayDone: run.todayDone,
+      },
+    },
+    why: `${posted.length} placements in the last ${days} days, ${live} with a live link — ${run.detail}`,
+    next: run.todayDone
+      ? "quote the URLs when they ask what went out — never answer from memory, and never say you haven't posted without checking here first"
+      : "nothing has gone live today yet. Quote URLs from here rather than memory, and if the day is nearly over, say so rather than letting the run break quietly",
   });
 });
 
