@@ -327,6 +327,34 @@ export const sync = internalAction({
         }
 
         for (const comment of page.items) {
+          /**
+           * ⭐ THESE ARE OUR OWN POSTS, NOT COMMENTS.
+           *
+           * Discovered by reading a live response on 2026-08-05 rather than
+           * the endpoint's name. `/inbox/comments` returns the WORK QUEUE —
+           * posts of ours that may have comments — exactly as §2.15.2
+           * describes it: *"list commented posts — which of our posts have
+           * unanswered comments"*. A YouTube row came back as:
+           *
+           *   { id: "GtO7pd2o5BM", content: "Sensocore release 2",
+           *     accountUsername: "joshuacastro7418", commentCount: 0 }
+           *
+           * `content` is the VIDEO TITLE. `accountUsername` is OURS. Recording
+           * it as something to answer would have had her replying to the
+           * founder's own posts — the same "answering yourself" failure the X
+           * path guards against, arriving through the other vendor.
+           *
+           * `commentCount === 0` means nobody has said anything, so there is
+           * nothing to answer and the row is skipped. A row WITH comments is a
+           * real signal, but it still isn't the comment text — fetching that
+           * needs a per-platform call (`igListComments` and its siblings) that
+           * isn't wrapped yet. Until it is, this endpoint contributes the
+           * queue and never the content. See §2.15.1.
+           */
+          const commentCount =
+            typeof comment.commentCount === "number" ? comment.commentCount : 0;
+          if (commentCount === 0) continue;
+
           const text = (comment.content ?? "").trim();
           // An empty comment is a like or a sticker with no words in it.
           // There is nothing to answer, and recording it would pad the inbox

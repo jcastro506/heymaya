@@ -162,6 +162,60 @@ describe("⭐ HONEST ABOUT WHAT IT COULDN'T READ", () => {
     }
   });
 
+  it("⭐ HER OWN POSTS ARE NEVER RECORDED AS INBOUND", async () => {
+    /**
+     * `/inbox/comments` returns the WORK QUEUE — posts of ours that may have
+     * comments — not comments. Read off a live response 2026-08-05, where a
+     * YouTube row came back as `{ content: "Sensocore release 2",
+     * accountUsername: "joshuacastro7418", commentCount: 0 }`: the video
+     * TITLE, on OUR account.
+     *
+     * Recorded as inbound, she would have replied to the founder's own posts.
+     */
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t);
+    const realFetch = globalThis.fetch;
+    const prevKey = process.env.ZERNIO_API_KEY;
+    process.env.ZERNIO_API_KEY = "test-key";
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input).includes("/inbox/comments")) {
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: "GtO7pd2o5BM",
+                platform: "youtube",
+                accountUsername: "joshuacastro7418",
+                content: "Sensocore release 2",
+                permalink: "https://www.youtube.com/watch?v=GtO7pd2o5BM",
+                createdTime: "2026-05-23T21:03:19.000Z",
+                commentCount: 0,
+                likeCount: 1,
+              },
+            ],
+            pagination: { hasMore: false, nextCursor: null },
+            meta: { accountsQueried: 1, accountsFailed: 0, failedAccounts: [] },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      return new Response("{}", {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    try {
+      await t.action(internal.maya.inbox.sync, { customerId, now: NOW });
+      const open = await t.query(internal.maya.inbox.open, { customerId });
+      expect(open).toHaveLength(0);
+    } finally {
+      globalThis.fetch = realFetch;
+      if (prevKey === undefined) delete process.env.ZERNIO_API_KEY;
+      else process.env.ZERNIO_API_KEY = prevKey;
+    }
+  });
+
   it("the page cap is real and bounded", () => {
     // "Answer everyone" against an unbounded inbox is how a sync becomes a
     // runaway bill — but a silent stop at page 10 reports all-clear while
