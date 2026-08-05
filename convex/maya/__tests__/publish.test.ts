@@ -51,23 +51,73 @@ interface Call {
   body: unknown;
 }
 
+/**
+ * ⭐ Stubs BOTH vendors the publish path touches, routed by host.
+ *
+ * The safety critic sits immediately before the Zernio call, so a stub that
+ * only answers Zernio hands the critic a Zernio-shaped body, it fails to parse
+ * a verdict, and — correctly — holds the post. Every publish test then fails
+ * for a reason that has nothing to do with what it is testing.
+ *
+ * Routing by host keeps that honest rather than papering over it: a future
+ * change that adds another vendor to this path will fail here loudly.
+ */
 function stubZernio(
   response: unknown,
-  init: { status?: number } = {}
+  init: { status?: number; criticSafe?: boolean } = {}
 ): Call[] {
   const calls: Call[] = [];
+  // `callOpenRouter` returns early without a key and never reaches fetch, so
+  // the critic must have one for the stub above to be reachable at all.
+  vi.stubEnv("OPENROUTER_API_KEY", "test-key");
   globalThis.fetch = (async (input: RequestInfo | URL, opts?: RequestInit) => {
+    const url = String(input);
     calls.push({
-      url: String(input),
+      url,
       headers: (opts?.headers ?? {}) as Record<string, string>,
       body: opts?.body ? JSON.parse(opts.body as string) : undefined,
     });
+
+    // The safety critic — an OpenRouter chat completion, not a Zernio call.
+    if (url.includes("openrouter")) {
+      const safe = init.criticSafe !== false;
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify(
+                  safe
+                    ? { safe: true }
+                    : { safe: false, category: "impersonation", why: "names a real person" }
+                ),
+              },
+              finish_reason: "stop",
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }
+
     return new Response(JSON.stringify(response), {
       status: init.status ?? 200,
       headers: { "content-type": "application/json" },
     });
   }) as typeof fetch;
   return calls;
+}
+
+/**
+ * The Zernio calls only.
+ *
+ * ⭐ `zernioCalls(calls)[0]` is now the SAFETY CRITIC, not the post — the check runs
+ * immediately before the vendor call, so anything indexing position 0 is
+ * asserting on the critique. That two tests broke this way is the useful part:
+ * it proves the gate is genuinely on the path rather than beside it.
+ */
+function zernioCalls(calls: Call[]): Call[] {
+  return calls.filter((c) => !c.url.includes("openrouter"));
 }
 
 function client(): ZernioClient {
@@ -137,7 +187,7 @@ describe("IDEMPOTENCY — THE HEADER V1 NEVER SENT", () => {
   it("⭐ sends x-request-id, which is what makes a queue retry safe", async () => {
     const calls = stubZernio(created("https://twitter.com/a/status/1"));
     await publishText({ ...BASE, client: client() });
-    expect(calls[0].headers["x-request-id"]).toBe("idem_abc123");
+    expect(zernioCalls(calls)[0].headers["x-request-id"]).toBe("idem_abc123");
   });
 
   it("A 409 IS A SUCCESS — the text already went out", async () => {
@@ -170,14 +220,14 @@ describe("THE WIRE CONTRACT", () => {
     expect(ZERNIO_PLATFORM_SLUG.x).toBe("twitter");
     const calls = stubZernio(created("https://twitter.com/a/status/1"));
     await publishText({ ...BASE, client: client() });
-    const body = calls[0].body as { platforms: Array<{ platform: string }> };
+    const body = zernioCalls(calls)[0].body as { platforms: Array<{ platform: string }> };
     expect(body.platforms[0].platform).toBe("twitter");
   });
 
   it("publishes now rather than scheduling", async () => {
     const calls = stubZernio(created("https://twitter.com/a/status/1"));
     await publishText({ ...BASE, client: client() });
-    expect((calls[0].body as { publishNow: boolean }).publishNow).toBe(true);
+    expect((zernioCalls(calls)[0].body as { publishNow: boolean }).publishNow).toBe(true);
   });
 
   it("refuses empty text without calling the vendor", async () => {
@@ -293,7 +343,7 @@ describe("THE PLACEMENT IS THE PROOF", () => {
       idempotencyKey: "idem_snap",
     });
 
-    expect((calls[0].body as { content: string }).content).toBe(approved);
+    expect((zernioCalls(calls)[0].body as { content: string }).content).toBe(approved);
     const rows = (await t.run((ctx) =>
       ctx.db.query("placements").collect()
     )) as Doc<"placements">[];
@@ -386,7 +436,7 @@ describe("⭐ COLD REPLY — commenting on someone else's post", () => {
     // only. Marked live-proven in the spec.
     const calls = stubZernio(created("https://twitter.com/a/status/2"));
     await publishText({ ...BASE, client: client(), inReplyTo: "1991719382071013376" });
-    const body = calls[0].body as {
+    const body = zernioCalls(calls)[0].body as {
       platforms: Array<{ platformSpecificData?: { replyToTweetId?: string } }>;
     };
     expect(body.platforms[0].platformSpecificData?.replyToTweetId).toBe(
@@ -411,7 +461,7 @@ describe("⭐ COLD REPLY — commenting on someone else's post", () => {
   it("a plain post carries no platformSpecificData at all", async () => {
     const calls = stubZernio(created("https://twitter.com/a/status/1"));
     await publishText({ ...BASE, client: client() });
-    const body = calls[0].body as {
+    const body = zernioCalls(calls)[0].body as {
       platforms: Array<{ platformSpecificData?: unknown }>;
     };
     expect(body.platforms[0].platformSpecificData).toBeUndefined();
@@ -425,7 +475,9 @@ describe("⭐ COLD REPLY — commenting on someone else's post", () => {
 
     await t.action(internal.maya.publish.publishPlacement, {
       customerId,
-      snapshotText: "we hit this exact thing — here's what worked",
+      // No em-dash: it is a deterministic blocker on public posts. See the
+      // punctuation test below, which pins that behaviour deliberately.
+      snapshotText: "we hit this exact thing, here's what worked",
       idempotencyKey: "idem_cold",
       inReplyTo: "1991719382071013376",
     });
@@ -434,5 +486,40 @@ describe("⭐ COLD REPLY — commenting on someone else's post", () => {
       ctx.db.query("placements").collect()
     )) as Doc<"placements">[];
     expect(rows[0].kind).toBe("reply");
+  });
+
+  /**
+   * ⭐ An em-dash HOLDS a public post. Pinned because it is surprising.
+   *
+   * `aiPunctuationTells` is a *deterministic blocker*, not drift — so a post
+   * carrying one never reaches the vendor, whatever the safety critic says.
+   * The em-dash is the most recognisable AI tell there is, so blocking it is
+   * defensible; what makes it worth a test is the consequence during a
+   * seven-day run, where a held post looks the same as a quiet day.
+   *
+   * Note the asymmetry with DMs: `sanitizeOutboundText` REPAIRS punctuation
+   * rather than bouncing the message, and its comment says so — "the private
+   * DM path". Public posts get no such repair, because rewriting after
+   * approval would break the snapshot guarantee the test above asserts. If
+   * this is ever relaxed, the repair belongs at DRAFT time, not here.
+   */
+  it("⭐ AN EM-DASH HOLDS A PUBLIC POST, BEFORE THE CRITIC IS EVEN ASKED", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "emdash");
+    vi.stubEnv("ZERNIO_API_KEY", "test-key");
+    const calls = stubZernio(created("https://twitter.com/a/status/3"));
+
+    const result = await t.action(internal.maya.publish.publishPlacement, {
+      customerId,
+      snapshotText: "we hit this exact thing — here's what worked",
+      idempotencyKey: "idem_emdash",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/held/i);
+    // Nothing reached Zernio, and no placement was recorded.
+    expect(zernioCalls(calls)).toHaveLength(0);
+    const rows = await t.run((ctx) => ctx.db.query("placements").collect());
+    expect(rows).toHaveLength(0);
   });
 });
