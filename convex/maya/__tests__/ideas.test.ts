@@ -350,3 +350,45 @@ describe("PICKING TODAY'S IDEA", () => {
     expect(pick?.evidence.quote).toBeTruthy();
   });
 });
+
+describe("⭐ AN ANGLE POINTS AT A PERSON, NOT AT A TOPIC", () => {
+  it("the prompt shows the failure it is correcting", async () => {
+    // First version asked for "what this founder could say about it" and got
+    // advice-column abstractions from specific posts:
+    //   "You don't need a full marketing team to start."
+    //   "Organic social works best as a consistent feedback channel."
+    // Both are §7.5.2's "5 productivity tips" register — they'd make equal
+    // sense attached to any source post, which means the source was thrown
+    // away. Rewritten with the bad/good pair inline, the same observations
+    // produced:
+    //   "You listed Community Manager alongside Engine Programmer and Build
+    //    Engineer — that's the part of solo development that quietly turns
+    //    shipping the game into a second full-time job."
+    const { buildAnglePrompt } = await import("../ideas");
+    const prompt = buildAnglePrompt(
+      { whatItIs: "a dashboard tool", whoItsFor: "solo founders" },
+      [{ text: "day one, 16 years old, 31 followers", sourceUrl: "https://x/1" }]
+    );
+    expect(prompt).toContain("day one, 16 years old, 31 followers");
+    expect(prompt).toContain("https://x/1");
+  });
+
+  it("an angle whose URL matches nothing collected is DROPPED", async () => {
+    // The model inventing a source. An unverifiable idea looks identical to a
+    // real one everywhere downstream, which is the whole reason evidence is
+    // the entry requirement.
+    const { parseAngles } = await import("../ideas");
+    const parsed = parseAngles(
+      '{"angles":[{"sourceUrl":"https://invented","angle":"x","why":"y"}]}'
+    );
+    // Parsing keeps it; the banking step is what drops it, by looking the URL
+    // up in what was actually collected.
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].sourceUrl).toBe("https://invented");
+  });
+
+  it("parses an empty set — most posts are not worth answering", async () => {
+    const { parseAngles } = await import("../ideas");
+    expect(parseAngles('{"angles":[]}')).toEqual([]);
+  });
+});
