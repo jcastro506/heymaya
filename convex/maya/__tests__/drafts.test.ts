@@ -328,3 +328,25 @@ describe("⭐ A POST TRACES TO AN IDEA, A REPLY DOES NOT", () => {
     expect(res.ok).toBe(true);
   });
 });
+
+describe("⭐ MOST POSTS DO NOT MENTION THE PRODUCT", () => {
+  it("the write-post skill says so, with the failure that taught it", async () => {
+    // Live, and it was hers: a genuine observation about someone building a
+    // virtual coworking space, with "Widgetly keeps the dashboard part to one
+    // paste" stapled underneath. The first half is a real point; the footer
+    // turns the whole thing into an ad. A pitch bolted onto an observation
+    // loses both halves.
+    const { BUNDLED_MAYA_SKILLS } = await import(
+      "../../agents/packs/maya/bundledSkills"
+    );
+    const writePost = BUNDLED_MAYA_SKILLS.find((s) => s.slug === "write-post");
+    expect(writePost).toBeDefined();
+    // Whitespace-normalised: this is prose that reflows, and a test that breaks
+    // on a line wrap is a test that gets deleted rather than fixed.
+    const body = writePost!.body.replace(/\s+/g, " ");
+    expect(body).toMatch(/Most posts do not mention the product/i);
+    // The actionable half — a rule with no test attached is a preference.
+    expect(body).toMatch(/could be deleted and the post would still be good/i);
+    expect(body).toMatch(/an ad, not an observation/i);
+  });
+});

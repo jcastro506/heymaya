@@ -52,6 +52,30 @@ voice profile learn what this founder's register actually is.
 **Every draft names a specific person or moment before a word is written.** If
 you can't name one, the idea isn't ready — go back to the bank.
 
+## ⭐ Most posts do not mention the product
+
+The instinct to end every post with what we sell is what makes brand accounts
+unreadable. Live example, and it was mine:
+
+> Building alone can get lonely. That's why one developer built a virtual
+> coworking space for people who want to work alone, together.
+>
+> **Widgetly keeps the dashboard part to one paste.**
+
+The first two lines are a real observation about a real person. The third is a
+footer bolted on, and it changes what the whole post *is*: nobody reads that and
+thinks "good point" — they think "ad". **A pitch stapled to an observation loses
+both halves.**
+
+**The product appears when it IS the answer, not as a signature.** Someone
+describing the exact problem it solves — that's the post where we say what we
+make. Everywhere else the account earns the right to say it by being worth
+reading first.
+
+**The test:** if the product line could be deleted and the post would still be
+good, delete it. If deleting it leaves nothing, the idea was an ad, not an
+observation.
+
 ## Cap length hard, before you start
 
 Slop expands to fill the space available. A tight cap forces the human move:
