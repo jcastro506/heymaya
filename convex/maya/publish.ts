@@ -84,6 +84,10 @@ export const recordPlacement = internalMutation({
     url: v.optional(v.string()),
     draftId: v.optional(v.id("drafts")),
     publishedAt: v.optional(v.number()),
+    /** A reply is a different KIND of placement, and the archive cares. */
+    kind: v.optional(
+      v.union(v.literal("post"), v.literal("reply"), v.literal("cold_reply"))
+    ),
   },
   handler: async (ctx, args): Promise<{ placementId: Id<"placements"> }> => {
     // The queue retries; a retry must not mint a second placement for a post
@@ -96,7 +100,7 @@ export const recordPlacement = internalMutation({
 
     const placementId = await ctx.db.insert("placements", {
       customerId: args.customerId,
-      kind: "post",
+      kind: args.kind ?? "post",
       channel: args.channel,
       url: args.url,
       linkStatus: args.url ? "live" : "unknown",
@@ -122,6 +126,8 @@ export const publishPlacement = internalAction({
     snapshotText: v.string(),
     idempotencyKey: v.string(),
     draftId: v.optional(v.id("drafts")),
+    /** Present for a reply or a cold reply. Dropping it posts into the void. */
+    inReplyTo: v.optional(v.string()),
   },
   handler: async (
     ctx,
@@ -144,6 +150,7 @@ export const publishPlacement = internalAction({
       accountId: context.zernioAccountId,
       channel: context.channel,
       text: args.snapshotText,
+      inReplyTo: args.inReplyTo,
       idempotencyKey: args.idempotencyKey,
     });
 
@@ -159,6 +166,7 @@ export const publishPlacement = internalAction({
       idempotencyKey: args.idempotencyKey,
       url: outcome.url ?? undefined,
       draftId: args.draftId,
+      kind: args.inReplyTo ? "reply" : "post",
     });
 
     return { ok: true, url: outcome.url ?? undefined, deduped: outcome.deduped };
