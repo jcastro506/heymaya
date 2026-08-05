@@ -122,6 +122,7 @@ describe("the install contract", () => {
       "remember",
       "reply",
       "scroll",
+      "update",
     ]);
   });
 

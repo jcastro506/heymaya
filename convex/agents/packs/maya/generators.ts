@@ -465,8 +465,14 @@ Every tool returns the same envelope:
 | \`publish\` | \`{draftId, alreadyApproved?}\` | \`{published, queued, holdReason?}\` |
 | \`reply\` | \`{draftId, inReplyTo, alreadyApproved?}\` | same as publish |
 | \`remember\` | \`{verbatim, kind, meaning?}\` | \`{directiveId, productUpdated}\` |
+| \`update\` | \`{body, kind?}\` | \`{sent, sentToday}\` |
 | \`ask_founder\` | \`{question}\` | \`{asked, openQuestion?}\` |
 | \`checkpoint\` | \`{memoryMarkdown, contextTruncated?}\` | \`{bytes, shrankBy?}\` |
+
+**\`update\` is how I speak first** — the brief, the recap, a placement that went
+live. \`ask_founder\` is for questions and is capped separately. A few a day, and
+running out is a real answer: I hold it, I don't retry, and I don't smuggle it
+out as a question instead.
 
 **\`remember\` the moment they give me a rule.** *"Don't post before 9."* *"We
 pivoted to agencies."* A rule I only hold in my head lasts until the context
@@ -782,8 +788,44 @@ function renderCronJobs(input: MayaWorkspaceInput): string {
         createdAtMs: 0,
         updatedAtMs: 0,
         schedule: { kind: "cron", expr: j.expr, tz },
-        sessionTarget: "main",
+        /**
+         * ⭐ `isolated`, NOT `main`. EVERY MAIN-TARGETED CRON WAS SKIPPED.
+         *
+         * Verified live 2026-08-05 — 12 hours of a "daily loop" that never ran
+         * once:
+         *
+         *   morning_brief   <1m ago   skipped   main
+         *   scroll          15m ago   skipped   main
+         *   checkpoint      45m ago   skipped   main
+         *   dreaming         4h ago   ok        isolated   <- the only one
+         *
+         * OpenClaw's docs say why: a `main` job *"enqueues a system event into
+         * a cron-owned run lane"* and defers to the heartbeat — it does not run
+         * an agent turn. Their own table assigns `main` to "reminders, system
+         * events" and **`isolated` to "reports, background chores"**, which is
+         * what every one of these is.
+         *
+         * **Isolated does not cost her memory.** Memory lives in `MEMORY.md`,
+         * the memory store and the rows — not in a session. That separation is
+         * the entire §2.9 architecture, and this is the first thing to actually
+         * depend on it.
+         */
+        sessionTarget: "isolated",
         wakeMode: "now",
+        /**
+         * ⭐ THE RUNNER DELIVERS NOTHING. She does, through the `update` tool.
+         *
+         * Left unset, cron defaults to `announce -> last`, which resolves to
+         * "no route, will fail-closed" on this machine — because her OpenClaw
+         * has no Telegram connection and cannot have one (§3.2: one bot token,
+         * one listener, and Convex is it).
+         *
+         * A fallback that fail-closes is a second delivery path that can only
+         * ever fail, and it would make "the brief didn't arrive" ambiguous
+         * between two mechanisms. Convex stays the single writer of the message
+         * log; `update` is the only way she speaks.
+         */
+        delivery: { mode: "none" },
         payload: {
           kind: "agentTurn",
           timeoutSeconds: 600,

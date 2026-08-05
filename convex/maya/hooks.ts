@@ -214,6 +214,81 @@ function str(body: Record<string, unknown>, key: string): string | undefined {
  * silent, so the agent kept trying and the founder saw nothing happen for days.
  */
 /**
+ * `update` — tell the founder something, unprompted.
+ *
+ * The morning brief and the evening recap both need this and **there was no
+ * tool for it.** Her only outbound path was `ask_founder`, which sends a
+ * QUESTION and is capped by the one-open-question invariant — so a cron telling
+ * her to brief the founder had nowhere to put the brief.
+ *
+ * Sixth instance this week of finished machinery with no caller:
+ * `messages.send` and `proactiveSentToday` have both existed since Sprint 2.
+ *
+ * ## Budgeted, because unprompted messages are the churn risk
+ *
+ * §13.5.3 is explicit that `proactiveMessagesPerDay` is **not** a tier lever —
+ * above ~4 she is interrupting rather than reporting, and a premium tier that
+ * messages more is a worse product. The refusal is a real answer with a reason,
+ * not an error: she should say what she'd have said tomorrow, not retry.
+ */
+export const updateHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if ("error" in auth) return auth.error;
+  const parsed = await readJson(request);
+  if ("error" in parsed) return parsed.error;
+
+  const body = str(parsed.body, "body");
+  const kind = str(parsed.body, "kind") ?? "update";
+  if (!body) {
+    return respond(
+      { ok: false, why: "there's nothing written to send", next: "write the update first" },
+      400
+    );
+  }
+
+  const budgets = await ctx.runQuery(internal.maya.planFeatures.planFeatures, {
+    customerId: auth.customer._id,
+  });
+  const sentToday = await ctx.runQuery(
+    internal.maya.messages.proactiveSentToday,
+    { customerId: auth.customer._id }
+  );
+
+  if (sentToday >= budgets.proactiveMessagesPerDay) {
+    return respond({
+      ok: false,
+      data: { sent: false, sentToday, limit: budgets.proactiveMessagesPerDay },
+      why: `you've already sent them ${sentToday} unprompted messages today — that's the limit`,
+      next: "hold it until tomorrow. Do NOT retry, and don't work around it by asking a question instead",
+    });
+  }
+
+  // Deduped per kind per day, so a cron that fires twice sends one brief.
+  const today = new Date().toISOString().slice(0, 10);
+  const result = await ctx.runMutation(internal.maya.messages.send, {
+    customerId: auth.customer._id,
+    surface: "telegram",
+    body,
+    proactive: true,
+    dedupeKey: `${kind}:${today}`,
+  });
+
+  return result.sent
+    ? respond({
+        ok: true,
+        data: { sent: true, sentToday: sentToday + 1 },
+        why: "sent — it's on its way to them",
+        next: "carry on; you don't need to confirm it landed",
+      })
+    : respond({
+        ok: false,
+        data: { sent: false, duplicate: true },
+        why: `you already sent them a ${kind} today`,
+        next: "don't send it twice — they'll read the first one",
+      });
+});
+
+/**
  * `remember` — write down a rule the founder just gave.
  *
  * §10's premise is that founders give instructions in passing, forever — *"don't

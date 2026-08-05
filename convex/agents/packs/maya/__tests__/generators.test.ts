@@ -498,6 +498,7 @@ describe("the doctrine stays coherent with the server", () => {
       "remember",
       "reply",
       "scroll",
+      "update",
     ]);
   });
 
