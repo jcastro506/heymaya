@@ -39,7 +39,8 @@
  */
 
 import { v } from "convex/values";
-import { internalQuery } from "../_generated/server";
+import { internalQuery, internalAction } from "../_generated/server";
+import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 

@@ -163,6 +163,65 @@ export const publishPlacement = internalAction({
     const apiKey = process.env.ZERNIO_API_KEY;
     if (!apiKey) return { ok: false, error: "Zernio isn't configured" };
 
+    /**
+     * ⭐ THE SAFETY CHECK, IMMEDIATELY BEFORE THE IRREVERSIBLE ACT.
+     *
+     * `convex/maya/outbound.ts` had **zero callers** — every export in it,
+     * including `critiqueSafety` and `checkPublicPost`. The note that removed
+     * the critique SUBAGENT said the guarantee had moved server-side and
+     * *"FAILS CLOSED — at the publish gate."* It never got wired.
+     *
+     * Nothing unsafe shipped, for an accidental reason: her workspace still
+     * described `critique` as a subagent with veto power, so the 11:00 job
+     * drafted a post every day, couldn't reach a critic that no longer
+     * existed, and held. Live, in her words:
+     *
+     *   "It did run at 11am... but did not post because the required
+     *    independent critique model wasn't available. It didn't bypass that
+     *    check."
+     *
+     * Two bugs cancelling out. Fixing the prompt alone would have published
+     * unchecked posts on day one.
+     *
+     * ## Why HERE and not at the tool
+     *
+     * `decidePublish` is a query and cannot make a model call, so the check
+     * has to live in an action. Of the two candidates, this one is the only
+     * unbypassable one: a hold at the tool leaves an enqueued job that still
+     * posts, whereas nothing reaches the vendor except through this line. §2.9
+     * wants exactly one function deciding publish-or-hold; this is where the
+     * publish actually happens.
+     *
+     * Fail-closed is deliberate and it has teeth: no OpenRouter key, or a
+     * vendor outage, means nothing posts. That is the correct trade — but it
+     * is also why the failure below is NAMED and reaches the founder, rather
+     * than the silence that hid this for a day.
+     */
+    const check = (await ctx.runAction(internal.maya.outbound.checkPublicPost, {
+      text: args.snapshotText,
+    })) as {
+      ok: boolean;
+      findings: Array<{ label?: string; detail?: string }>;
+      drift: Array<{ label?: string; detail?: string }>;
+    };
+
+    // Drift is LOGGED, never blocking — the standing rule is that
+    // non-catastrophic drift never drops a post.
+    if (check.drift.length > 0) {
+      console.warn(
+        `[publish] drift on ${args.draftId ?? "draft"}: ${check.drift
+          .map((d) => d.label ?? d.detail ?? "?")
+          .join(", ")}`
+      );
+    }
+
+    if (!check.ok) {
+      const why =
+        check.findings.map((f) => f.detail ?? f.label).filter(Boolean)[0] ??
+        "it didn't pass the safety check";
+      return { ok: false, error: `held: ${why}` };
+    }
+
     const { ZernioClient } = await import("../integrations/zernio/client");
     const { publishText } = await import("../integrations/zernio/publish");
 

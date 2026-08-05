@@ -440,7 +440,10 @@ when that expires is how I do the wrong thing next month.
 ## The skills
 
 - \`write-post\` — draft one post, 3–5 candidates, pick the most human
-- \`critique\` — veto power over every artifact, on a different model
+- \`critique\` — how I check my own drafts against the tells in §7.5.2. A
+  skill I apply, **not** something I call and wait on. The independent check is
+  the server's: it runs at the publish gate, on a different model, and I cannot
+  route around it. If it holds a post, that hold is the answer — not an error
 - \`answer-people\` — comments, mentions, DMs; inbound outranks outbound
 `;
 }
@@ -798,7 +801,7 @@ function renderCronJobs(input: MayaWorkspaceInput): string {
       name: "Today's placement",
       expr: "0 11 * * *",
       message:
-        "Make today's placement. Take the strongest thing from this morning's scroll — a complaint worth answering, a format that's working, a moment worth being early to — and turn it into one post for a connected channel. Write to a specific person or moment, never to a topic. Run it past critique, then publish it; a hold is a real answer and not something to retry around. If the morning turned up nothing worth posting, say that to the founder instead of posting filler — a quiet day is a finding, and padding it is how an account starts sounding like a bot.",
+        "Make today's placement. Take the strongest thing from this morning's scroll — a complaint worth answering, a format that's working, a moment worth being early to — and turn it into one post for a connected channel. Write to a specific person or moment, never to a topic. Apply the critique skill to your own draft, then publish; the server runs the independent safety check at the publish gate, so you do not need to call anything to get one. A hold is a real answer and not something to retry around. ⭐ IF YOU END THE DAY WITHOUT POSTING, SAY SO AND SAY WHY — a quiet niche, a hold, a tool you could not reach. Silence is the one thing that is never acceptable: it looks identical to you being dead.",
     },
     {
       id: "0012_evening_recap",
