@@ -1,0 +1,192 @@
+/**
+ * The other half of the product.
+ *
+ * "Posts it, **and answers everyone who replies**." The `reply` tool has
+ * refused without an `inReplyTo` since Sprint 3, telling her to *"find it and
+ * call again"* — and until this module there was nothing to find it with.
+ *
+ * What these tests mostly guard is the way an inbox quietly stops being one:
+ * re-answering people, losing them when a publish fails, or reporting "all
+ * clear" over a page it never read.
+ */
+
+import { describe, expect, it } from "vitest";
+import { convexTest } from "convex-test";
+import schema from "../../schema";
+import { internal } from "../../_generated/api";
+import { modules } from "../../../tests/_modules";
+import { MAX_PAGES, LOOKBACK_MS } from "../inbox";
+import type { Id } from "../../_generated/dataModel";
+
+const NOW = Date.UTC(2026, 7, 5, 14, 0, 0);
+const HOUR = 3_600_000;
+
+describe("⭐ NOBODY GETS ANSWERED TWICE", () => {
+  it("the same comment seen again is not new", async () => {
+    // The sweep runs 3×/day and re-fetches the same window every time.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t);
+    const first = await add(t, customerId, "c_1");
+    const second = await add(t, customerId, "c_1");
+    expect(first.isNew).toBe(true);
+    expect(second.isNew).toBe(false);
+    expect(second.itemId).toBe(first.itemId);
+  });
+
+  it("⭐ RE-SEEING AN ANSWERED COMMENT DOES NOT REOPEN IT", async () => {
+    // The one that would be invisible until it wasn't: if a sync resurrected
+    // everything it re-fetched, she would answer the same person every eight
+    // hours, forever, and each reply would look correct in isolation.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t);
+    const { itemId } = await add(t, customerId, "c_1");
+    await t.mutation(internal.maya.inbox.resolve, {
+      itemId,
+      status: "answered",
+      now: NOW,
+    });
+    await add(t, customerId, "c_1");
+    const open = await t.query(internal.maya.inbox.open, { customerId });
+    expect(open).toHaveLength(0);
+  });
+
+  it("a skip needs a reason — silence and a decision must not look alike", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t);
+    const { itemId } = await add(t, customerId, "c_1");
+    const bad = await t.mutation(internal.maya.inbox.resolve, {
+      itemId,
+      status: "skipped",
+    });
+    expect(bad.ok).toBe(false);
+    expect(bad.why).toMatch(/reason/);
+
+    const good = await t.mutation(internal.maya.inbox.resolve, {
+      itemId,
+      status: "skipped",
+      skipReason: "spam",
+    });
+    expect(good.ok).toBe(true);
+  });
+});
+
+describe("⭐ OLDEST FIRST", () => {
+  it("whoever has waited longest comes first", async () => {
+    // Newest-first quietly abandons the tail every time volume rises — and
+    // the person who has waited two days is the one most likely to give up.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t);
+    await add(t, customerId, "new", { postedAt: NOW - HOUR });
+    await add(t, customerId, "old", { postedAt: NOW - 48 * HOUR });
+    await add(t, customerId, "mid", { postedAt: NOW - 12 * HOUR });
+    const open = await t.query(internal.maya.inbox.open, { customerId });
+    expect(open.map((i) => i.externalId)).toEqual(["old", "mid", "new"]);
+  });
+
+  it("answered items leave the queue", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t);
+    const a = await add(t, customerId, "a");
+    await add(t, customerId, "b");
+    await t.mutation(internal.maya.inbox.resolve, {
+      itemId: a.itemId,
+      status: "answered",
+    });
+    const open = await t.query(internal.maya.inbox.open, { customerId });
+    expect(open.map((i) => i.externalId)).toEqual(["b"]);
+  });
+});
+
+describe("⭐ HONEST ABOUT WHAT IT COULDN'T READ", () => {
+  it("no key is a named failure, not an empty inbox", async () => {
+    // An empty result and "I couldn't look" are the same shape and opposite
+    // meanings. Reporting the first when the second is true is how she tells
+    // a founder nobody replied while people are waiting.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t);
+    const prev = process.env.ZERNIO_API_KEY;
+    delete process.env.ZERNIO_API_KEY;
+    try {
+      const r = await t.action(internal.maya.inbox.sync, { customerId, now: NOW });
+      expect(r.ok).toBe(false);
+      expect(r.detail).toMatch(/aren't connected/);
+      // And it says it in plain language — no vendor name.
+      expect(r.detail).not.toMatch(/zernio/i);
+    } finally {
+      if (prev !== undefined) process.env.ZERNIO_API_KEY = prev;
+    }
+  });
+
+  it("the page cap is real and bounded", () => {
+    // "Answer everyone" against an unbounded inbox is how a sync becomes a
+    // runaway bill — but a silent stop at page 10 reports all-clear while
+    // page 11 has someone asking to buy, so `truncated` carries it out.
+    expect(MAX_PAGES).toBeGreaterThan(1);
+    expect(MAX_PAGES).toBeLessThanOrEqual(20);
+  });
+
+  it("the cold-start lookback is a week", () => {
+    expect(LOOKBACK_MS).toBe(7 * 86_400_000);
+  });
+});
+
+describe("⭐ CROSS-TENANT", () => {
+  it("the same platform comment id in two tenants is two items", async () => {
+    // Platform ids are the platform's, not ours. Deduping globally would let
+    // one founder's inbox suppress another's.
+    const t = convexTest(schema, modules);
+    const a = await seed(t, "a");
+    const b = await seed(t, "b");
+    const ra = await add(t, a, "shared_id");
+    const rb = await add(t, b, "shared_id");
+    expect(rb.isNew).toBe(true);
+    expect(rb.itemId).not.toBe(ra.itemId);
+
+    const openA = await t.query(internal.maya.inbox.open, { customerId: a });
+    expect(openA).toHaveLength(1);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+
+async function add(
+  t: ReturnType<typeof convexTest>,
+  customerId: Id<"customers">,
+  externalId: string,
+  over: { postedAt?: number } = {}
+) {
+  return await t.mutation(internal.maya.inbox.record, {
+    customerId,
+    externalId,
+    channel: "x",
+    text: "does this work with Stripe?",
+    postedAt: over.postedAt ?? NOW - HOUR,
+    now: NOW,
+  });
+}
+
+async function seed(
+  t: ReturnType<typeof convexTest>,
+  tag = "inbox"
+): Promise<Id<"customers">> {
+  return await t.run(async (ctx) => {
+    const accountId = await ctx.db.insert("creators", {
+      clerkUserId: `u_${tag}`,
+      email: `${tag}@example.com`,
+      channelPreference: "telegram",
+      timezone: "UTC",
+      status: "active",
+      plan: "manager",
+      createdAt: NOW,
+    });
+    return await ctx.db.insert("customers", {
+      accountId,
+      agentVersion: "v2",
+      plan: "mvp",
+      state: "active",
+      timezone: "UTC",
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+  });
+}

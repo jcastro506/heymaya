@@ -859,6 +859,13 @@ export const replyHttp = httpAction(async (ctx, request) => {
 
   const draftId = str(parsed.body, "draftId");
   const inReplyTo = str(parsed.body, "inReplyTo");
+  /**
+   * Optional, and the whole point when present: it closes the inbox item so
+   * the same person is never answered twice. §13.4 puts "whether I already
+   * replied to someone" in the rows column precisely because a model tracking
+   * it in context eventually gets it wrong.
+   */
+  const inboxItemId = str(parsed.body, "inboxItemId");
   if (!draftId) {
     return respond(
       { ok: false, why: "no draftId was given", next: "write the reply first, then send it" },
@@ -911,6 +918,7 @@ export const replyHttp = httpAction(async (ctx, request) => {
       draftId,
       snapshotText: decision.snapshotText,
       inReplyTo,
+      inboxItemId,
     }),
   });
 
@@ -919,6 +927,85 @@ export const replyHttp = httpAction(async (ctx, request) => {
     data: { published: false, queued: true, jobId },
     why: "cleared to reply — it's queued",
     next: "move on to the next one; don't wait on this",
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* inbox                                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ `inbox` — who is talking to her, and hasn't been answered.
+ *
+ * The missing half. `reply` has refused without an `inReplyTo` since Sprint 3,
+ * telling her to *"find it and call again"* — and nothing could find it. This
+ * is the finder.
+ *
+ * It syncs first, then returns what's open, so one call is the whole job. A
+ * separate "refresh" step would eventually be skipped and she'd answer from a
+ * stale list.
+ */
+export const inboxHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if ("error" in auth) return auth.error;
+
+  const sync = await ctx.runAction(internal.maya.inbox.sync, {
+    customerId: auth.customer._id,
+  });
+
+  const items = await ctx.runQuery(internal.maya.inbox.open, {
+    customerId: auth.customer._id,
+    limit: 20,
+  });
+
+  const waiting = items.map((item) => ({
+    inboxItemId: item._id,
+    // The id `reply` needs. Named to match so the chain is obvious.
+    inReplyTo: item.externalId,
+    channel: item.channel,
+    text: item.text,
+    permalink: item.permalink ?? null,
+    postedAt: item.postedAt,
+    waitingHours: Math.round((Date.now() - item.postedAt) / 3_600_000),
+  }));
+
+  /**
+   * ⚠️ Partial failure is reported, never swallowed. Zernio returns
+   * `meta.failedAccounts`, and a live call once returned
+   * `accountsQueried: 2, accountsFailed: 1` — reading half the inbox and
+   * saying "all clear" is exactly what this product exists not to do.
+   */
+  const caveats: string[] = [];
+  if (sync.unreadableAccounts.length > 0) {
+    caveats.push(
+      `couldn't read ${sync.unreadableAccounts.join(", ")} — say so rather than implying you've seen everything`
+    );
+  }
+  if (sync.truncated) {
+    caveats.push("there are more than this page — answer these, then call again");
+  }
+
+  if (waiting.length === 0) {
+    return respond({
+      ok: true,
+      data: { waiting: [], synced: sync.ok },
+      why: sync.ok
+        ? "nobody is waiting on a reply"
+        : sync.detail,
+      next: caveats.length
+        ? caveats.join(" · ")
+        : "nothing to answer — don't invent something to respond to",
+    });
+  }
+
+  return respond({
+    ok: true,
+    data: { waiting, synced: sync.ok },
+    why: `${waiting.length} waiting${sync.added > 0 ? `, ${sync.added} new` : ""}`,
+    next: [
+      "answer the oldest first — they have waited longest. Write the reply with `draft`, then `reply` with BOTH inReplyTo and inboxItemId so it gets marked answered",
+      ...caveats,
+    ].join(" · "),
   });
 });
 

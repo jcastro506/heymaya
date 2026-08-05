@@ -1,7 +1,7 @@
 {
   "id": "maya-tools",
   "name": "Maya Tools",
-  "description": "Typed tools for the convex/maya agent. Every call is schema-validated and runs server-side against Convex /maya/*. No tool accepts a customerId \u2014 tenancy is resolved from the bearer token alone.",
+  "description": "Typed tools for the convex/maya agent. Every call is schema-validated and runs server-side against Convex /maya/*. No tool accepts a customerId — tenancy is resolved from the bearer token alone.",
   "version": "0.1.0",
   "activation": {
     "onStartup": true
@@ -20,7 +20,6 @@
       "remember",
       "update",
       "history",
-      "inbox",
       "request_assets",
       "ask_founder",
       "checkpoint"

@@ -289,15 +289,6 @@ export default defineToolPlugin({
     }),
 
     tool({
-      name: "inbox",
-      label: "Inbox",
-      description:
-        "Who has replied to your posts and is still waiting on you. THIS IS HOW YOU FIND SOMEONE TO REPLY TO — `reply` refuses without an `inReplyTo`, and this is the only thing that produces one. Half the job is answering people; a post nobody follows up on is a broadcast. It syncs and returns in one call, oldest first, because whoever asked two days ago is the one about to give up. Pass BOTH `inReplyTo` and `inboxItemId` back to `reply` so the same person is never answered twice. If it says some accounts couldn't be read, say so rather than implying you have seen everything. An empty inbox is a real answer — never invent something to respond to. NOTE: TikTok exposes no comment API at all, so nothing from TikTok will ever appear here and you must not claim to be watching TikTok replies.",
-      parameters: Type.Object({}),
-      execute: async (p, _cfg, ctx) => call("inbox", p, ctx.signal),
-    }),
-
-    tool({
       name: "request_assets",
       label: "Request assets",
       description:
