@@ -3832,6 +3832,17 @@ export default defineSchema({
       v.literal("answered"),
       v.literal("skipped")
     ),
+    /**
+     * ⭐ What it takes to actually REPLY to this.
+     *
+     * Only X replies through the publish path (`platformSpecificData
+     * .replyToTweetId`). Instagram and YouTube go through
+     * `replyToComment`, which needs the PARENT POST's id and the Zernio
+     * account id — neither of which is derivable from a comment id. Without
+     * these stored at ingest, a comment is readable and unanswerable.
+     */
+    parentPostId: v.optional(v.string()),
+    zernioAccountId: v.optional(v.string()),
     answeredWithPlacementId: v.optional(v.id("placements")),
     skipReason: v.optional(v.string()),
     resolvedAt: v.optional(v.number()),

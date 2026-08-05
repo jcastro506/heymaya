@@ -316,6 +316,58 @@ designed, since Zernio's X comment path returns `accountsQueried: 0`.
 returns a post; X still returns nothing for three live placements. Re-check
 before concluding anything permanent about it.
 
+#### 2.15.17 ⭐ X analytics and inbox are OFF — and should stay off
+
+Both "breakages" in §2.15.15 have the same, non-bug cause. Every account row
+carries `xCapabilities`, and on the **twitter** row it reads:
+
+```json
+{ "analytics": false, "inbox": false }
+```
+
+That is why `/analytics` returns nothing for three live X placements and
+`/inbox/comments` reports `accountsQueried: 0`. Zernio is not broken; **X reads
+are switched off**, because X is the one channel Zernio bills **pass-through**
+rather than including — roughly **$0.005 per read**.
+
+⭐ **The decision, with the number:** leave them off.
+
+| | per read |
+|---|---|
+| Zernio X pass-through | **$0.005** |
+| twitterapi.io (`$0.15`/1,000) | **$0.00015** |
+
+**Thirty-three times cheaper**, for the same fact, from the vendor §2 already
+designates for X reads — *"read via twitterapi.io, write via Zernio."* We were
+already doing this by accident: post metrics come from
+`/twitter/tweets?tweet_ids=` (batched, so a whole fleet refresh is cents), and
+inbound comes from `getMentions`.
+
+So this is the first row of §2.15.2 to get an answer: **never**, on cost, with
+a working alternative already shipped. Turning them on would buy nothing and
+cost 33× per read forever.
+
+⚠️ It does mean **X is the one channel whose inbound does not flow through the
+Zernio path at all**. If the twitterapi.io mentions call ever breaks, X inbound
+goes silent with nothing behind it — worth a liveness check that is specifically
+about X, not about the inbox in general.
+
+#### 2.15.18 Instagram is a Business account — checked, not assumed
+
+The operator flagged it might be personal. It is not. The granted scopes are:
+
+```
+instagram_business_basic · instagram_business_content_publish
+instagram_business_manage_insights · instagram_business_manage_messages
+```
+
+Meta issues `instagram_business_content_publish` **only** to Business/Creator
+accounts — a personal account cannot complete that OAuth at all. Token valid to
+2026-10-04, `platformStatus: active`, `needsReconnection: false`.
+
+**No action needed**, and worth recording so nobody re-litigates it: the
+permission list is the evidence, not the account settings screen.
+
 #### 2.15.2 Zernio capability we're not using
 
 The docs expose considerably more than the client wraps:

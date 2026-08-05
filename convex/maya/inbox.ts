@@ -79,6 +79,8 @@ export const record = internalMutation({
     text: v.string(),
     permalink: v.optional(v.string()),
     postedAt: v.number(),
+    parentPostId: v.optional(v.string()),
+    zernioAccountId: v.optional(v.string()),
     now: v.optional(v.number()),
   },
   handler: async (
@@ -108,6 +110,8 @@ export const record = internalMutation({
       text: args.text,
       permalink: args.permalink,
       postedAt: args.postedAt,
+      parentPostId: args.parentPostId,
+      zernioAccountId: args.zernioAccountId,
       firstSeenAt: now,
       status: "open",
     });
@@ -429,6 +433,9 @@ export const sync = internalAction({
               text,
               permalink: comment.permalink ?? undefined,
               postedAt: Number.isFinite(postedAt) ? postedAt : now,
+              // Needed to REPLY — a comment id alone can't address one.
+              parentPostId: postId,
+              zernioAccountId: accountId,
               now,
             });
             if (result.isNew) added += 1;
@@ -515,4 +522,100 @@ export const sync = internalAction({
       detail: parts.join(" — "),
     };
   },
+});
+
+/**
+ * ⭐ Reply to an inbox item on a channel that isn't X.
+ *
+ * The publish path threads `platformSpecificData.replyToTweetId`, which is
+ * X-only. Sending it with an Instagram or YouTube post does not reply — it
+ * publishes something, somewhere, wrong. `replyToComment` is the right call
+ * for those, and it had no caller in `convex/maya` at all.
+ *
+ * It POSTs to the same `/api/v1/inbox/comments/{postId}` path whose GET was
+ * verified live on 2026-08-05, which is the best evidence available short of
+ * spending a real comment on a real account.
+ *
+ * ⚠️ **Not live-verified.** Proving it means posting a public comment from the
+ * founder's account, which is smoke tier 3 and an operator decision. Until
+ * then this is wired and unproven, and says so rather than being presented as
+ * working.
+ */
+export const replyOnChannel = internalAction({
+  args: {
+    customerId: v.id("customers"),
+    itemId: v.id("inboxItems"),
+    message: v.string(),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: boolean; detail: string }> => {
+    const item = await ctx.runQuery(internal.maya.inbox.byId, {
+      itemId: args.itemId,
+    });
+    if (!item || item.customerId !== args.customerId) {
+      return { ok: false, detail: "I can't find that one" };
+    }
+    if (item.status !== "open") {
+      // Idempotent by state: a retry after a timeout must not comment twice.
+      return { ok: false, detail: "that one is already handled" };
+    }
+    if (item.channel === "x") {
+      return {
+        ok: false,
+        detail: "X replies go through the publish path, not this one",
+      };
+    }
+    if (!item.parentPostId || !item.zernioAccountId) {
+      /**
+       * Named, not silent. An item ingested before these were stored can be
+       * read and not answered, and the founder needs to hear that rather than
+       * watch a question sit there.
+       */
+      return {
+        ok: false,
+        detail: "I can see that comment but I can't reply to it — I'm missing what I need to address it",
+      };
+    }
+
+    const apiKey = process.env.ZERNIO_API_KEY;
+    if (!apiKey) return { ok: false, detail: "the accounts aren't connected yet" };
+
+    const { ZernioClient } = await import("../integrations/zernio/client");
+    const { replyToComment } = await import("../integrations/zernio/endpoints");
+
+    try {
+      const result = await replyToComment(new ZernioClient({ apiKey }), {
+        postId: item.parentPostId,
+        accountId: item.zernioAccountId,
+        message: args.message,
+        commentId: item.externalId.includes(":")
+          ? item.externalId.split(":").slice(1).join(":")
+          : item.externalId,
+      });
+      if (!result.success) {
+        return { ok: false, detail: "the reply didn't go through" };
+      }
+    } catch (error) {
+      console.error(
+        `[inbox] reply failed for ${args.itemId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      return { ok: false, detail: "the reply didn't go through" };
+    }
+
+    await ctx.runMutation(internal.maya.inbox.resolve, {
+      itemId: args.itemId,
+      status: "answered",
+    });
+    return { ok: true, detail: "replied" };
+  },
+});
+
+export const byId = internalQuery({
+  args: { itemId: v.id("inboxItems") },
+  handler: async (ctx, args): Promise<Doc<"inboxItems"> | null> =>
+    (await ctx.db.get(args.itemId)) as Doc<"inboxItems"> | null,
 });
