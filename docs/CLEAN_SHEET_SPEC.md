@@ -2124,6 +2124,62 @@ A server cron independent of every worker checks an hourly contract: expected pl
 
 ---
 
+## 13.4 Memory vs rows — and the test that catches the difference
+
+*Added 2026-08-05 after she got this wrong in production.*
+
+Asked *"what have you posted to X so far? give me the links"*, she answered:
+
+> *"I haven't successfully posted anything to X yet, so there are no live X
+> links to give you."*
+
+**She had posted twice.** Both live, both in `placements`, both openable by the
+founder in a browser. She was confidently wrong about her own work.
+
+That is not a memory failure. It is a **category error** — she tried to answer a
+question about *facts* from a context window, because nothing let her read the
+rows. `archive.ts` had `timeline`, `search` and `provenance` since Sprint 2 with
+no tool exposing any of them.
+
+### 13.4.1 The line
+
+> **If the founder could check it, it's a row. If only she would know it, it's
+> memory.**
+
+| Convex rows — the truth | OpenClaw memory — the participant |
+|---|---|
+| what was posted, when, at what URL | what the founder is like to work with |
+| what a post got | why she chose that angle over another |
+| every rule they ever gave (`directives`) | how their taste has shifted |
+| what's in the idea bank, and its evidence | what she has already tried and dropped |
+| every draft and its edit diff | the texture of a running conversation |
+
+**OpenClaw's memory is genuinely good at its half** — `memorySearch` with
+temporal decay and MMR, dreaming promoting what mattered into `MEMORY.md`,
+`memory-wiki` for niche knowledge. None of that is in question. The mistake is
+pointing it at the other half.
+
+**§2 already said this** — *"the database is the truth; the model is a
+participant"* — and it was violated anyway, because a principle without a tool
+behind it is a wish. `history` is the tool.
+
+### 13.4.2 The test, because "she remembers" is not observable
+
+Both halves need testing and they fail differently:
+
+| | Test | Fails as |
+|---|---|---|
+| **Facts** | She did something. Ask about it in a *later, separate* turn. She must quote the URL, not describe it vaguely. | confident and wrong |
+| **Context** | Tell her something on Monday. Ask on Wednesday, after a redeploy. | vague and apologetic |
+| **Continuity** | Correct her once. Check the correction still holds a week later. | silently reverted |
+
+**The fact test must be run in a NEW turn**, not the one where she did the
+thing — a model that just posted has it in context and will pass a test that
+proves nothing. Same reason the redeploy matters for the context test.
+
+⚠️ **A vague answer is a fail, not a pass.** *"I've posted a few things about
+the product"* is what an agent says when it cannot look. The bar is the URL.
+
 ## 13.5 Her day — the loop, end to end
 
 *Added 2026-08-04. Every piece below already existed somewhere — the daily
@@ -4363,6 +4419,13 @@ proactive message and is never repeated.
 **Tests:** engagement÷age ranking · observed-content-is-data (prompt-injection) · sweep idempotency.
 
 ### Sprint 6 — Memory + liveness
+
+⭐ **The memory tests are the exit criterion, not a task** (§13.4.2). Three
+kinds, run separately because they fail differently: **facts** (she quotes the
+URL of something she did, asked in a later turn), **context** (Monday's fact
+recalled Wednesday, across a redeploy), **continuity** (a correction still holds
+a week later). A vague answer is a fail — *"I've posted a few things"* is what
+an agent says when it cannot look.
 
 | Task |
 |---|

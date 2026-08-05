@@ -494,6 +494,7 @@ describe("the doctrine stays coherent with the server", () => {
       "ask_founder",
       "checkpoint",
       "draft",
+      "history",
       "publish",
       "remember",
       "reply",

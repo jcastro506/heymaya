@@ -188,6 +188,11 @@ async function readJson(
   }
 }
 
+function num(body: Record<string, unknown>, key: string): number | undefined {
+  const value = body[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
 function str(body: Record<string, unknown>, key: string): string | undefined {
   const value = body[key];
   return typeof value === "string" && value.trim().length > 0
@@ -213,6 +218,76 @@ function str(body: Record<string, unknown>, key: string): string | undefined {
  * reason rather than retry. That framing matters: the old system's holds were
  * silent, so the agent kept trying and the founder saw nothing happen for days.
  */
+/**
+ * `history` — what she has actually done.
+ *
+ * ## The failure this closes
+ *
+ * Asked *"what have you posted to X so far? give me the links"*, she answered:
+ *
+ * > *"I haven't successfully posted anything to X yet, so there are no live X
+ * > links to give you."*
+ *
+ * **She had posted twice.** Both live, both in `placements`, both openable by
+ * the founder. She was confidently wrong about her own work because nothing
+ * let her look — `archive.ts` has had `timeline`, `search` and `provenance`
+ * since Sprint 2 with no tool exposing any of them.
+ *
+ * That is worse than forgetting. A founder who can see the tweets is being
+ * told they don't exist, and every later claim she makes inherits that doubt.
+ *
+ * v1 hit this exact wall — its notes call an unread-own-work tool "the root
+ * enabler of repetition." Reproduced here, one product later.
+ *
+ * ## Why a row read, not memory
+ *
+ * Placements are FACTS, and §2 is explicit: the database is the truth, the
+ * model is a participant. Asking her to remember what she posted is asking a
+ * context window to be a database — which is the architecture this product was
+ * rebuilt to stop relying on.
+ */
+export const historyHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if ("error" in auth) return auth.error;
+  const parsed = await readJson(request);
+  if ("error" in parsed) return parsed.error;
+
+  const days = Math.min(Math.max(num(parsed.body, "days") ?? 14, 1), 90);
+  const since = Date.now() - days * 86_400_000;
+
+  const placements = await ctx.runQuery(internal.maya.archive.timeline, {
+    customerId: auth.customer._id,
+    since,
+    limit: 50,
+  });
+
+  const posted = placements.map((p) => ({
+    url: p.url ?? null,
+    linkStatus: p.linkStatus,
+    channel: p.channel,
+    kind: p.kind,
+    text: p.snapshotText,
+    publishedAt: p.publishedAt,
+  }));
+
+  if (posted.length === 0) {
+    return respond({
+      ok: true,
+      data: { placements: [], days },
+      why: `nothing has gone live in the last ${days} days`,
+      next: "say exactly that — a zero is a real answer and pretending otherwise is worse",
+    });
+  }
+
+  const live = posted.filter((p) => p.linkStatus === "live").length;
+  return respond({
+    ok: true,
+    data: { placements: posted, days },
+    why: `${posted.length} placements in the last ${days} days, ${live} with a live link`,
+    next: "quote the URLs when they ask what went out — never answer from memory, and never say you haven't posted without checking here first",
+  });
+});
+
 /**
  * `update` — tell the founder something, unprompted.
  *

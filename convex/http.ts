@@ -26,6 +26,7 @@ import {
   scrollHttp,
   rememberHttp,
   updateHttp,
+  historyHttp,
 } from "./maya/hooks";
 import {
   approvalDecisionHttp,
@@ -1024,6 +1025,7 @@ http.route({
 http.route({ path: "/maya/scroll", method: "POST", handler: scrollHttp });
 http.route({ path: "/maya/remember", method: "POST", handler: rememberHttp });
 http.route({ path: "/maya/update", method: "POST", handler: updateHttp });
+http.route({ path: "/maya/history", method: "POST", handler: historyHttp });
 http.route({ path: "/maya/draft", method: "POST", handler: draftHttp });
 http.route({ path: "/maya/publish", method: "POST", handler: publishHttp });
 http.route({ path: "/maya/reply", method: "POST", handler: replyHttp });
