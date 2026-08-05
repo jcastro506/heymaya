@@ -45,8 +45,47 @@ export interface Observation {
   keyword: string;
 }
 
-/** How many keywords to sweep per morning. Each is one credit. */
+/** How many keywords to sweep per morning, per channel. Each is one credit. */
 export const KEYWORDS_PER_SCROLL = 4;
+
+/**
+ * ⭐ Hard ceiling on searches in one scroll.
+ *
+ * keywords × channels multiplies, and this runs every morning for every
+ * customer forever. The cap is what keeps a third connected channel from
+ * silently tripling the daily bill.
+ */
+export const MAX_SEARCHES_PER_SCROLL = 9;
+
+/**
+ * ⭐ Channels she reads, and what each will actually tell us.
+ *
+ * VERIFIED LIVE 2026-08-05 by calling each endpoint and reading the payload —
+ * not from docs, which is how the `create_time`-in-seconds bug got in.
+ *
+ * | | date | likes | comments | views |
+ * |---|---|---|---|---|
+ * | TikTok `search/keyword` | unix seconds | ✅ | ✅ | ✅ |
+ * | Instagram `reels/search` | **ISO string** | ✅ | ✅ | ✅ |
+ * | YouTube `search` → videos | **ISO string** | ❌ | ❌ | ✅ |
+ * | YouTube `search` → shorts | ⛔ **none** | ❌ | ❌ | ✅ |
+ *
+ * Two consequences that shape everything below:
+ *
+ * **1. Velocity cannot be compared across channels.** `velocity()` scores
+ * likes + 3×comments, on purpose — views are inflated and mean something
+ * different on every platform. YouTube search returns neither, so every
+ * YouTube row would score exactly 0 and rank last forever. Sweeping it into
+ * one global list means paying for results that can never surface. So each
+ * channel is ranked **within itself** and the lists are interleaved.
+ *
+ * **2. YouTube shorts are excluded from the daily scroll.** The response
+ * carries more of them than videos (25 vs 18), and they have no date at all —
+ * so they cannot answer "what's moving *today*", which is the only question
+ * this sweep asks. Including them ranked by raw view count would be inventing
+ * a recency signal that isn't in the data. §2.7: grounded or silent.
+ */
+export const SCROLLABLE_CHANNELS = ["tiktok", "instagram", "youtube"] as const;
 /** What she actually reads. More than this is a firehose, not a scroll. */
 export const OBSERVATIONS_RETURNED = 20;
 /** Older than this isn't news, whatever its engagement. */
@@ -69,6 +108,7 @@ export const scrollNiche = internalAction({
     error?: string;
     observations?: Observation[];
     keywordsSwept?: string[];
+    channelsSwept?: string[];
   }> => {
     const targets = await ctx.runQuery(internal.maya.learnBusiness.targetsFor, {
       customerId: args.customerId,
@@ -86,57 +126,101 @@ export const scrollNiche = internalAction({
       "../integrations/scrapeCreators/platforms/tiktok"
     );
 
-    const observations: Observation[] = [];
-    const swept: string[] = [];
+    /**
+     * ⭐ Read where she publishes.
+     *
+     * A founder who only ships to X and TikTok gains nothing from us buying
+     * Instagram credits every morning. Connected channels, intersected with the
+     * ones that actually have a keyword search — X isn't here because its
+     * search lives behind twitterapi.io, not ScrapeCreators.
+     *
+     * Falls back to TikTok when nothing is connected yet, because a scroll that
+     * returns nothing on day one looks identical to a broken scroll.
+     */
+    const connected = await ctx.runQuery(internal.maya.channels.forCustomer, {
+      customerId: args.customerId,
+    });
+    const live = new Set(
+      connected.filter((c) => c.status === "connected").map((c) => c.channel)
+    );
+    const channels: string[] = SCROLLABLE_CHANNELS.filter((c) => live.has(c));
+    if (channels.length === 0) channels.push("tiktok");
 
-    for (const keyword of targets.keywords.slice(0, KEYWORDS_PER_SCROLL)) {
-      try {
-        const result = await tiktok.searchKeyword(keyword, {
-          // This is a *daily* read. A month-old post is not what's moving now.
-          datePosted: "this_month",
-          sortBy: "relevance",
-        });
-        swept.push(keyword);
-        for (const post of result.posts) {
-          const ms = toMillis(post.postedAt);
-          if (!ms || now - ms > NEWS_WINDOW_MS) continue;
-          observations.push({
-            channel: "tiktok",
-            sourceUrl:
-              post.url ??
-              (post.authorHandle
-                ? `https://www.tiktok.com/@${post.authorHandle}/video/${post.postId}`
-                : ""),
-            authorHandle: post.authorHandle ?? null,
-            text: post.caption ?? "",
-            postedAt: ms,
-            metrics: {
-              likes: post.metrics.likeCount ?? 0,
-              comments: post.metrics.commentCount ?? 0,
-              views: post.metrics.viewCount ?? 0,
-            },
-            velocity: velocity(post.metrics, post.postedAt, now),
-            keyword,
-          });
+    const keywords = targets.keywords.slice(0, KEYWORDS_PER_SCROLL);
+    const byChannel = new Map<string, Observation[]>();
+    const swept: string[] = [];
+    let searches = 0;
+
+    /**
+     * Keyword-major, so the cap costs depth rather than a whole channel. Going
+     * channel-major would spend every search on TikTok and leave Instagram
+     * unread — a silent single-channel scroll that still reports success.
+     */
+    outer: for (const keyword of keywords) {
+      for (const channel of channels) {
+        if (searches >= MAX_SEARCHES_PER_SCROLL) break outer;
+        searches += 1;
+        try {
+          let found: Observation[] = [];
+          if (channel === "tiktok") {
+            const result = await tiktok.searchKeyword(keyword, {
+              // This is a *daily* read. A month-old post is not what's moving now.
+              datePosted: "this_month",
+              sortBy: "relevance",
+            });
+            for (const post of result.posts) {
+              const ms = toMillis(post.postedAt);
+              if (!ms || now - ms > NEWS_WINDOW_MS) continue;
+              const metrics = {
+                likes: post.metrics.likeCount ?? 0,
+                comments: post.metrics.commentCount ?? 0,
+                views: post.metrics.viewCount ?? 0,
+              };
+              found.push({
+                channel: "tiktok",
+                sourceUrl:
+                  post.url ??
+                  (post.authorHandle
+                    ? `https://www.tiktok.com/@${post.authorHandle}/video/${post.postId}`
+                    : ""),
+                authorHandle: post.authorHandle ?? null,
+                text: post.caption ?? "",
+                postedAt: ms,
+                metrics,
+                velocity: channelVelocity("tiktok", metrics, ms, now),
+                keyword,
+              });
+            }
+          } else if (channel === "instagram") {
+            found = await readInstagram(keyword, now);
+          } else if (channel === "youtube") {
+            found = await readYouTube(keyword, now);
+          }
+
+          if (!swept.includes(keyword)) swept.push(keyword);
+          const existing = byChannel.get(channel) ?? [];
+          byChannel.set(channel, [...existing, ...found]);
+        } catch {
+          // A dead search loses one keyword on one channel, never the morning.
+          continue;
         }
-      } catch {
-        // A dead search loses one keyword, never the morning.
-        continue;
       }
     }
 
+    const observations = [...byChannel.values()].flat();
     if (observations.length === 0) {
       return {
         ok: true,
         observations: [],
         keywordsSwept: swept,
+        channelsSwept: channels,
         error: "nothing new in the niche today",
       };
     }
 
-    const ranked = observations
-      .sort((a, b) => b.velocity - a.velocity)
-      .slice(0, OBSERVATIONS_RETURNED);
+    // Interleaved, NOT globally sorted — the channels don't report the same
+    // metrics, so their velocities aren't on one scale. See `channelVelocity`.
+    const ranked = interleave([...byChannel.values()], OBSERVATIONS_RETURNED);
 
     // Written down before they're returned, so a scroll she never acts on
     // still counts toward "this keeps coming up".
@@ -146,10 +230,211 @@ export const scrollNiche = internalAction({
       now,
     });
 
-    return { ok: true, keywordsSwept: swept, observations: ranked };
+    return { ok: true, keywordsSwept: swept, channelsSwept: channels, observations: ranked };
   },
 });
 
+
+
+/* -------------------------------------------------------------------------- */
+/* Per-channel readers                                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ Rank WITHIN a channel, never across.
+ *
+ * `velocity()` scores likes + 3×comments and ignores views, which is right —
+ * views are inflated and mean something different on every platform. But
+ * YouTube search returns no likes and no comments at all, so a YouTube row
+ * scored that way is always exactly 0.
+ *
+ * Rather than pretend the numbers are comparable, each channel gets the best
+ * signal it actually reports, and the lists are merged by interleaving instead
+ * of by sorting. A number that ranks correctly inside its own channel and
+ * nonsensically outside it is still useful — as long as nothing sorts across.
+ */
+function channelVelocity(
+  channel: string,
+  metrics: { likes: number; comments: number; views: number },
+  postedAt: number | null,
+  now: number
+): number {
+  if (postedAt === null) return 0;
+  const ageHours = Math.max(1, (now - postedAt) / 3_600_000);
+  if (channel === "youtube") {
+    // Views ÷ age. On a different scale to the others by an order of
+    // magnitude, which is exactly why nothing sorts across channels.
+    return metrics.views / ageHours;
+  }
+  return (metrics.likes + metrics.comments * 3) / ageHours;
+}
+
+/**
+ * Instagram Reels matching a keyword.
+ *
+ * ⚠️ `taken_at` is an **ISO 8601 string** — TikTok's `create_time` is unix
+ * seconds. Feeding one to the other's parser is precisely the bug that made
+ * every TikTok post look fifty years old and rejected every keyword.
+ *
+ * ⚠️ Two view counts come back: `video_view_count` and `video_play_count`, and
+ * on a live sample they differed 5×  (1,191 vs 5,850). Plays is the larger and
+ * the one Instagram surfaces as "views" today, so plays is what's recorded —
+ * but nothing ranks on it, so the ambiguity can't move a decision.
+ */
+async function readInstagram(
+  keyword: string,
+  now: number
+): Promise<Observation[]> {
+  const { instagram } = await import(
+    "../integrations/scrapeCreators/platforms/instagram"
+  );
+  /**
+   * ⚠️ The envelope field is `raw`, not `payload`.
+   *
+   * Guessed wrong on the first pass, and the failure mode is the dangerous
+   * kind: `undefined?.reels ?? []` yields an empty list, so the sweep would
+   * have reported "nothing new in the niche today" every single morning,
+   * forever, and looked exactly like a quiet niche.
+   */
+  const result = (await instagram.reelsSearch(keyword)) as unknown as {
+    raw?: { reels?: unknown[] };
+  };
+  return normalizeInstagramReels(
+    (result.raw?.reels ?? []) as Array<Record<string, unknown>>,
+    keyword,
+    now
+  );
+}
+
+/**
+ * Pure, so the mapping is testable against a REAL captured payload without a
+ * network — the same reason `channels.ts` splits its interpretation out. Every
+ * field name below was read off a live response, and a vendor rename has to
+ * fail in a test rather than as a silently empty morning.
+ */
+export function normalizeInstagramReels(
+  reels: Array<Record<string, unknown>>,
+  keyword: string,
+  now: number
+): Observation[] {
+  const out: Observation[] = [];
+  for (const reel of reels) {
+    const takenAt = typeof reel.taken_at === "string" ? Date.parse(reel.taken_at) : NaN;
+    const postedAt = Number.isFinite(takenAt) ? takenAt : null;
+    if (postedAt === null || now - postedAt > NEWS_WINDOW_MS) continue;
+
+    const owner = (reel.owner ?? {}) as { username?: string };
+    const metrics = {
+      likes: num(reel.like_count),
+      comments: num(reel.comment_count),
+      views: num(reel.video_play_count) || num(reel.video_view_count),
+    };
+    out.push({
+      channel: "instagram",
+      sourceUrl:
+        typeof reel.url === "string"
+          ? reel.url
+          : `https://www.instagram.com/reel/${String(reel.shortcode ?? "")}/`,
+      authorHandle: owner.username ?? null,
+      text: typeof reel.caption === "string" ? reel.caption : "",
+      postedAt,
+      metrics,
+      velocity: channelVelocity("instagram", metrics, postedAt, now),
+      keyword,
+    });
+  }
+  return out;
+}
+
+/**
+ * YouTube videos matching a keyword.
+ *
+ * ⛔ **`shorts` is deliberately not read**, even though the live response
+ * carried more shorts (25) than videos (18). A short comes back with a title,
+ * a url and a view count and **no date whatsoever** — so it cannot answer
+ * "what's moving today", which is the only question this sweep asks. Ranking
+ * them by raw views would invent a recency signal that isn't in the payload.
+ */
+async function readYouTube(
+  keyword: string,
+  now: number
+): Promise<Observation[]> {
+  const { youtube } = await import(
+    "../integrations/scrapeCreators/platforms/youtube"
+  );
+  // `raw`, not `payload` — see the note in `readInstagram`.
+  const result = (await youtube.search(keyword)) as unknown as {
+    raw?: { videos?: unknown[] };
+  };
+  return normalizeYouTubeVideos(
+    (result.raw?.videos ?? []) as Array<Record<string, unknown>>,
+    keyword,
+    now
+  );
+}
+
+/** Pure — see `normalizeInstagramReels`. */
+export function normalizeYouTubeVideos(
+  videos: Array<Record<string, unknown>>,
+  keyword: string,
+  now: number
+): Observation[] {
+  const out: Observation[] = [];
+  for (const video of videos) {
+    const published =
+      typeof video.publishedTime === "string" ? Date.parse(video.publishedTime) : NaN;
+    const postedAt = Number.isFinite(published) ? published : null;
+    if (postedAt === null || now - postedAt > NEWS_WINDOW_MS) continue;
+
+    const channelInfo = (video.channel ?? {}) as { handle?: string };
+    // No likes, no comments — the endpoint simply doesn't return them. Zeroes
+    // here are honest absences, not measured values.
+    const metrics = { likes: 0, comments: 0, views: num(video.viewCountInt) };
+    out.push({
+      channel: "youtube",
+      sourceUrl:
+        typeof video.url === "string"
+          ? video.url
+          : `https://www.youtube.com/watch?v=${String(video.id ?? "")}`,
+      authorHandle: channelInfo.handle ?? null,
+      // The title IS the text on YouTube — there is no caption in search.
+      text: typeof video.title === "string" ? video.title : "",
+      postedAt,
+      metrics,
+      velocity: channelVelocity("youtube", metrics, postedAt, now),
+      keyword,
+    });
+  }
+  return out;
+}
+
+function num(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+/**
+ * ⭐ Merge per-channel lists round-robin.
+ *
+ * Not `.sort()` — see `channelVelocity`. Interleaving guarantees every channel
+ * she reads is represented in what she actually sees, which a global sort
+ * cannot: one platform's number scale would take every slot.
+ */
+export function interleave(lists: Observation[][], limit: number): Observation[] {
+  const ranked = lists.map((list) => [...list].sort((a, b) => b.velocity - a.velocity));
+  const out: Observation[] = [];
+  for (let i = 0; out.length < limit; i += 1) {
+    let tookAny = false;
+    for (const list of ranked) {
+      if (i < list.length) {
+        out.push(list[i]);
+        tookAny = true;
+        if (out.length >= limit) break;
+      }
+    }
+    if (!tookAny) break;
+  }
+  return out;
+}
 
 /* -------------------------------------------------------------------------- */
 /* Remembering what she saw                                                    */
