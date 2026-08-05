@@ -1022,7 +1022,11 @@ function renderOpenClawConfig(tz: string): string {
              * because review crashed. Observed live 2026-08-04, and it is the
              * worst possible failure for a gate: it fails OPEN.
              */
-            tools: { profile: "readonly", deny: ["group:plugins"] },
+            // "minimal", not the invented "readonly" — the allowed set is
+            // minimal | coding | messaging | full, and the gateway refuses to
+            // start on anything else. Minimal is right regardless: reading a
+            // draft and returning a verdict needs no tools at all.
+            tools: { profile: "minimal", deny: ["group:plugins"] },
             subagents: { allowAgents: [] },
           },
         ],

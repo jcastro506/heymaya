@@ -161,7 +161,22 @@ describe("THE CRITIC CANNOT ACT ON ITS OWN VERDICT", () => {
     // A gate that crashes is a gate that fails OPEN — every draft passes
     // review because review died. Observed live 2026-08-04.
     expect(critic.tools.deny).toContain("group:plugins");
-    expect(critic.tools.profile).toBe("readonly");
+    expect(critic.tools.profile).toBe("minimal");
+  });
+
+  it("⭐ EVERY TOOL PROFILE IS ONE OPENCLAW ACCEPTS", () => {
+    // An invented profile doesn't degrade — the gateway REFUSES TO START.
+    // Shipped "readonly" on 2026-08-05; the allowed set is exactly these four.
+    const ALLOWED = ["minimal", "coding", "messaging", "full"];
+    for (const agent of config.agents.list as Array<{
+      id: string;
+      tools?: { profile?: string };
+    }>) {
+      if (!agent.tools?.profile) continue;
+      expect(ALLOWED, `${agent.id} has an invalid tools profile`).toContain(
+        agent.tools.profile
+      );
+    }
   });
 
   it("it cannot spawn its way around the restriction", () => {
