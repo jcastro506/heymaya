@@ -31,6 +31,7 @@
 import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
+import { deliverNow } from "./scheduler";
 import type { Doc, Id } from "../_generated/dataModel";
 
 /**
@@ -189,6 +190,10 @@ export const routeInboundToMachine = internalAction({
         body: reply,
         dedupeKey: `reply:${args.messageId ?? Date.now()}`,
       });
+      // The founder asked a question and is watching the chat — this is the
+      // single most latency-sensitive message the system sends. Without it the
+      // reply waits for a 5-minute cron.
+      await deliverNow(ctx);
       await ctx.runMutation(internal.maya.handoff.markReady, {
         customerId: args.customerId,
       });

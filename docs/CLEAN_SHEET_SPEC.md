@@ -2251,6 +2251,74 @@ for; the shape above does not change when they do.
 - Every step is budgeted **before** she starts, not checked at publish time —
   §7.5.7. Failing after a founder says yes is the worst possible sequence.
 
+## 13.6 The long conversation — the boundary every memory test we have avoids
+
+*Added 2026-08-05, after the operator asked whether OpenClaw handles "the
+proactive nature, the context, the memory, all of it." It handles some of it,
+and the seams are where the failures live.*
+
+### 13.6.1 Who actually owns what
+
+| | Owner | Verified? |
+|---|---|---|
+| Continuity **inside** one conversation | OpenClaw — the persistent session | ✅ live 2026-08-04, survives a machine recreate |
+| Long-term recall — `memory_search`, dreaming → `MEMORY.md` | OpenClaw | ⚠️ configured, never exercised past a day |
+| **Proactive Telegram messages** | **Us** — `messages.send` + `deliver_message` | ✅ every proactive path |
+| Facts — what posted, when, at what URL | **Convex rows**, via `history` | ✅ §13.4 |
+
+Proactive delivery is **not** OpenClaw's, on purpose. Its own pipe is set to
+`delivery: { mode: "none" }`, because a second delivery path can only diverge
+from the first, and because the three things we promise about proactive
+messages — **at most one ask a day, a daily budget, and a retry that survives a
+502** — are server guarantees. A prompt cannot be held to a rate limit.
+
+### 13.6.2 ⭐ The boundary
+
+Every memory test in §13.4.2 is **three or four turns long**. A real founder
+conversation is forty. Somewhere in between, the session's context window fills
+and OpenClaw **compacts** it — and what survives compaction is only what was
+written down: `MEMORY.md`, a daily note, or a Convex row.
+
+> **A build that forgets everything at message 40 passes every test we have.**
+
+That is the gap. Not "does she remember the last thing" — that's verified. It's
+**does the thing from message 6 survive to message 40**, and does she know the
+difference between remembering it and guessing.
+
+### 13.6.3 The probe types
+
+A conversation test that only asks *"what did I say earlier"* proves the
+cheapest thing. The probes that fail differently:
+
+| Probe | Looks like | Fails as |
+|---|---|---|
+| **Backward** | "What did I say about the pricing page?" — asked 30 turns later | vague, or confabulated |
+| **Forward** | "I'll tell you the launch date later." …20 turns… "It's the 14th." …10 more… "So when are we launching?" | never bound it at all |
+| **Contradiction** | Say X at turn 5, the opposite at turn 25, then ask | takes the stale one, or averages them |
+| **Correction holds** | Correct her once; check at turn 40 | silently reverts |
+| **Cross-seam** | "You said you'd hold off posting — did you?" (memory **and** rows) | answers half |
+| ⭐ **Unanswerable** | Ask about something never discussed | **invents it** — the only fatal one |
+
+⚠️ **The unanswerable probe is the control**, and it works the same way as
+`SYNTHETIC_CONTROL` in the cringe eval: a run where she confabulates an answer
+is **void**, not merely scored down. Recall that can't say *"you never told me"*
+isn't recall — it's fluent guessing that happens to be right sometimes.
+
+### 13.6.4 Grading, without asserting on prose
+
+CLAUDE.md forbids substring-matching generated text, and it's right to: the
+probes above would become a false-alarm generator. Every probe therefore needs
+a **checkable anchor** decided when the probe is written:
+
+- a **value** she must reproduce exactly — a date, a price, a URL, a handle
+- a **row id** she must cite — a directive, a placement
+- an **explicit refusal** — the unanswerable probe passes only on "you never
+  told me", never on a plausible answer
+
+Anything without an anchor is not a probe, it's a vibe. And per §18.0 this runs
+**on a live deploy over a real Telegram thread**, not in a harness — the
+compaction boundary only exists on the machine.
+
 ## 14. Data, results, and the diagnostic ladder
 
 This is where every product in this category hand-waves. "AI learns what works for you" is almost always noise-fitting. Here is the honest version.
@@ -4436,6 +4504,38 @@ an agent says when it cannot look.
 
 **Exit:** a directive survives a redeploy **and a deliberate model swap**.
 **Tests:** ⭐ **model-swap directive test** — swap the main model, assert every directive still enforced · liveness breach escalation · zero-day honesty.
+
+### Sprint 6.5 — ⭐ The long conversation
+
+*Added 2026-08-05. Sprint 6 tests memory in three-turn slices. This tests it at
+the length a founder actually talks, which is the length where it breaks.*
+
+**Why it's separate from Sprint 6:** the failure has nothing to do with the
+directive ledger or liveness. It's the **compaction boundary** (§13.6.2) — a
+long thread fills the session window, OpenClaw compacts, and only what got
+written to `MEMORY.md`, a daily note or a row survives. Every existing memory
+test is short enough to never reach it, so **a build that forgets everything at
+message 40 passes all of them.**
+
+| Task |
+|---|
+| A scripted **40+ turn** Telegram thread against a live deploy, with the six probe types of §13.6.3 seeded at known turns |
+| Each probe carries a **checkable anchor** — an exact value, a row id, or a required refusal (§13.6.4). No anchor, no probe |
+| ⭐ **The unanswerable probe is a control, not a score** — confabulating voids the run, the way `SYNTHETIC_CONTROL` voids a cringe eval |
+| Capture `openclaw doctor` **before and after** the thread, so we know whether compaction actually fired — a run that never crossed the boundary tested nothing and must say so |
+| Forward-reference binding: a fact promised at turn 5 and supplied at turn 25 must hold at turn 35 |
+| Cross-seam probe: one question needing **both** memory and `history` in a single answer |
+| Re-run the whole thread **after a redeploy** — session survival is already verified, survival *with a full window* is not |
+
+**Exit:** every anchored probe answered exactly, zero confabulations, **and
+`doctor` showing the thread crossed a compaction.** A clean run that never
+compacted is **not a pass** — it's an untested build with a green light, which
+is the exact shape of every failure in this product's history.
+
+**Tests:** the probe set is data, not code — it lives in `docs/` and is replayed
+by hand or by harness, and the graded transcript is the artifact. What *is*
+unit-tested: the anchor extractor (an answer missing its anchor must fail even
+when it reads well) and the void-on-confabulation rule.
 
 ### Sprint 7 — TikTok + the media pipeline
 

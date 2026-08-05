@@ -216,6 +216,13 @@ export const ingestFromTelegram = internalAction({
     customerId: v.id("customers"),
     fileId: v.string(),
     caption: v.optional(v.string()),
+    /**
+     * Set when the *message shape* knows better than the mime type does. A
+     * `video_note` is `video/mp4` exactly like a screen recording is, and
+     * filing that round selfie bubble as a recording would permanently
+     * suppress the ask (§6.4.2). See `telegramFiles.extractFile`.
+     */
+    kindHint: v.optional(v.string()),
   },
   handler: async (
     ctx,
@@ -275,7 +282,8 @@ export const ingestFromTelegram = internalAction({
      */
     const publicUrl: string | undefined = undefined;
 
-    const kind = kindFor(file.contentType, args.caption);
+    const kind = (args.kindHint as Doc<"mediaAssets">["kind"] | undefined)
+      ?? kindFor(file.contentType, args.caption);
     const { assetId } = await ctx.runMutation(internal.maya.media.record, {
       customerId: args.customerId,
       kind,
