@@ -599,14 +599,38 @@ This is the single most differentiated capability in the product. It's also boun
 
 **The good news: the working pattern already exists.** `analyzeWalkthroughWithGemini` fetches the URL, takes `arrayBuffer()`, base64-encodes it, and sends it as `inlineData` — against **`gemini-2.5-flash`**, exactly the cheap tier this job wants. The pipeline is built; it's just pointed at founder-uploaded R2 files.
 
-**The gap is getting a direct media URL for someone else's video.** Two paths, in order of preference:
+**The gap is getting a direct media URL for someone else's video.** ✅ **SOLVED
+AND VERIFIED END TO END, 2026-08-04.** Path 1 works; **yt-dlp is not needed and
+neither is a Fly worker.**
 
-| Path | How | Verdict |
-|---|---|---|
-| **1. Direct CDN URL from ScrapeCreators** | The aweme/post payload carries playable CDN links (`play_url` / `download_addr`); surface them through `NormalizedPost` and `fetch()` them in a Convex action | **Try first.** No new infrastructure. |
-| **2. yt-dlp** | Download via the library | **Fallback only** — it's a binary, so it cannot run in a Convex action. It needs a Fly worker (the `videoSynthWorker` / `photoBridgeWorker` pattern already exists). |
+**The spike, run against live APIs:**
 
-**Four practical constraints to build around:**
+| Step | Result |
+|---|---|
+| `GET /v1/tiktok/search/keyword?query=solo founder saas` | real niche results, 1 credit |
+| `aweme_info.video.download_addr.url_list[0]` | present |
+| **Plain `curl`, no referer, no cookies, no headers** | **`status=200 bytes=6863027 type=video/mp4`** |
+| base64 of a 90s video | 8.7 MB — **under the ~20 MB `inlineData` ceiling** |
+| `gemini-2.5-flash` with `inlineData` | *"The hook in the first 3 seconds is the speaker revealing her success as a solo founder… This video employs a 'talking head' format… supplementary images and text appear as overlays."* |
+
+That last row is the whole Format Watcher working: hook identification plus
+structural read, from a competitor's video, for a fraction of a cent.
+
+**What this kills.** The fallback below assumed a Fly worker, because yt-dlp is
+a binary and cannot run in a Convex action. **A plain `fetch()` in a Convex
+action is sufficient**, so that worker never has to exist.
+
+| Path | Status |
+|---|---|
+| **1. Direct CDN URL from ScrapeCreators** (`download_addr`) | ✅ **verified — use this** |
+| 2. yt-dlp on a Fly worker | ❌ **not needed.** Revisit only if TikTok starts requiring headers, which it does not today |
+
+⚠️ **The one thing to keep watching:** the URL carries an expiry segment. It
+fetched clean minutes after being issued, but these are known to rot — so
+**fetch promptly and cache the bytes to R2**, never store the CDN link and
+re-fetch it later.
+
+**Four practical constraints to build around:****Four practical constraints to build around:**
 
 - **CDN URLs expire fast** and often need a referer header. Fetch promptly, cache the bytes to R2, analyze from there.
 - **`inlineData` has a request-size ceiling (~20MB).** A 60s video can exceed it. Above the limit, use the Gemini **Files API** (upload, then reference) instead of inlining.
@@ -4063,10 +4087,47 @@ floor spends the founder's actual reputation to prove a publishing pipeline
 works. Layers 3–6 are constraints on *how* `write-post` is called and cost
 almost nothing; layers 1–2 need a collected corpus and stay in Sprint 4.
 
-**Exit:** **a placement a day for 7 straight days, verified.** Nothing past this ships until it holds.
+#### 18.3.1 The gate moved — decided 2026-08-04, after the mechanism was proven
+
+**This sprint's exit is no longer a blocker on Sprint 4.** The seven-day run
+still happens; it happens *later*, with an agent that has something to say.
+
+**What changed.** The gate was written when we did not know whether publishing
+worked at all. On 2026-08-04 it was proven live, end to end: a real placement at
+a real URL, read back from the vendor with the text matching character for
+character, plus the iron rule, both idempotency layers, and named failures on
+every path. **The capability question is answered.**
+
+**What the seven days would add is durability, not capability** — token expiry,
+cron drift, memory decay, a silent hold appearing on day four. Real risks, and
+worth testing. But testing them against an agent that posts the same sentence
+seven times tests the cron scheduler, not the product.
+
+**The finding that forced it.** Asked for three tweets, she returned one
+sentence reworded three times. Not a writing failure — she had one product fact
+and no material. And the fix is not in this sprint: §5.0 puts the targets in
+`learn-business`, so **sweeping before the buyer map exists means scrolling
+*general* X rather than this founder's niche** — which is the opposite of the
+product.
+
+So the order is **4 → 5 → then the run**, and the run means something.
+
+**The risk, stated rather than buried:** deferring the durability test is not
+free. It is smaller than when the gate was written — silent holds, double
+publishes and token failures now have tests and named failure paths rather than
+hope — but it is not zero, and it is being taken deliberately.
+
+**Exit:** **a placement a day for 7 straight days, verified** — run once she has
+material, not as a gate on building it.
 **Tests:** iron-rule test (no code path can hold a publish on *just go* except platform rejection or the floor) · snapshot-publish (approved text is the text shown) · double-publish prevention · one-open-item invariant · **candidate-selection is real** (the chosen draft is one of N generated, not a rewrite of the first) · denylist is enforced server-side, not advised in a prompt.
 
-### Sprint 4 — Brand and voice · *this is the anti-slop sprint*
+### Sprint 4 — Brand and voice · *this is the anti-slop sprint* · **NEXT**
+
+⭐ **This sprint also builds the targets everything downstream reads.** §5.0 is
+explicit that sweeps get their targets from `learn-business` — tracked accounts,
+the buyer's own words for the problem, hashtags derived from what those keywords
+actually surface. **Perception before the buyer map watches the wrong things**,
+which is why this runs ahead of Sprint 5 rather than beside it.
 
 It already owns the exit criterion — *a stranger can't tell it isn't the
 founder writing* — but until now it carried no task that builds the system
