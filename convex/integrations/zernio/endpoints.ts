@@ -2124,6 +2124,65 @@ export async function listInboxComments(
   };
 }
 
+/**
+ * ⭐ The ACTUAL comments on one of our posts.
+ *
+ * `GET /api/v1/inbox/comments/{postId}?platform&accountId`.
+ * **VERIFIED LIVE 2026-08-05**, and it took finding — the obvious candidates
+ * (`/comments`, `/posts/{id}/comments`, `/comments?postId=`) all return an
+ * HTML page with **HTTP 200**, which is the worst possible 404.
+ *
+ * ⚠️ `igListComments` above wraps `/api/v1/comments`, which is one of those
+ * HTML-200 paths. It has never worked and nothing called it.
+ *
+ * ## Two calls, not one
+ *
+ * `listInboxComments` is the WORK QUEUE — our posts, each with a
+ * `commentCount`. It does not contain a single comment. This is the second
+ * half: given a post id from that queue, the comments people actually left.
+ *
+ * Reading the queue as if it were comments is how a founder's own video title
+ * ends up in the inbox as something to reply to.
+ */
+export async function listPostComments(
+  client: ZernioClient,
+  args: { postId: string; platform: string; accountId: string; limit?: number }
+): Promise<{ comments: Array<Record<string, unknown>>; hasMore: boolean }> {
+  const raw = await client.request<unknown>(
+    `/api/v1/inbox/comments/${encodeURIComponent(args.postId)}`,
+    {
+      method: "GET",
+      query: {
+        platform: args.platform,
+        accountId: args.accountId,
+        limit: args.limit,
+      },
+    }
+  );
+  const parsed = PostCommentsResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ZernioApiError(
+      200,
+      "/api/v1/inbox/comments/{postId}",
+      `Unexpected post-comments payload: ${parsed.error.message}`
+    );
+  }
+  return {
+    comments: parsed.data.comments,
+    hasMore: parsed.data.pagination?.hasMore ?? false,
+  };
+}
+
+/** VERIFIED LIVE: `{status, comments[], pagination:{hasMore}, meta{...}}`. */
+const PostCommentsResponseSchema = z
+  .object({
+    status: z.string().optional(),
+    comments: z.array(z.record(z.string(), z.unknown())).default([]),
+    pagination: z.object({ hasMore: z.boolean().optional() }).passthrough().optional(),
+    meta: z.record(z.string(), z.unknown()).optional(),
+  })
+  .passthrough();
+
 const ConversationsResponseSchema = z
   .object({
     data: z.array(z.record(z.string(), z.unknown())).default([]),
