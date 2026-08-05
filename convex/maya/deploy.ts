@@ -734,6 +734,18 @@ export const workspaceFor = internalAction({
     /** Carried out so the machine's TZ and the cron expressions agree. */
     timezone: string;
   } | null> => {
+    /**
+     * ⭐ Rebuild the voice corpus first, so the machine ships with how they
+     * actually write rather than the "no writing samples yet" fallback.
+     *
+     * Free — it re-reads the message log, which already exists. §6 calls this
+     * source 2 and notes that nobody uses it; SOUL.md has rendered
+     * `voiceExcerpts` since Sprint 2 with nothing ever filling it.
+     */
+    await ctx.runMutation(internal.maya.voiceCorpus.refreshVoiceCorpus, {
+      customerId: args.customerId,
+    });
+
     const input = await ctx.runQuery(internal.maya.deploy.workspaceInput, {
       customerId: args.customerId,
     });
