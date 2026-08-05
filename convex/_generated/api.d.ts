@@ -208,6 +208,7 @@ import type * as maya_buyerMap from "../maya/buyerMap.js";
 import type * as maya_channels from "../maya/channels.js";
 import type * as maya_checkpoint from "../maya/checkpoint.js";
 import type * as maya_complaints from "../maya/complaints.js";
+import type * as maya_cringeEval from "../maya/cringeEval.js";
 import type * as maya_dailyReport from "../maya/dailyReport.js";
 import type * as maya_deploy from "../maya/deploy.js";
 import type * as maya_directives from "../maya/directives.js";
@@ -453,6 +454,7 @@ declare const fullApi: ApiFromModules<{
   "maya/channels": typeof maya_channels;
   "maya/checkpoint": typeof maya_checkpoint;
   "maya/complaints": typeof maya_complaints;
+  "maya/cringeEval": typeof maya_cringeEval;
   "maya/dailyReport": typeof maya_dailyReport;
   "maya/deploy": typeof maya_deploy;
   "maya/directives": typeof maya_directives;
