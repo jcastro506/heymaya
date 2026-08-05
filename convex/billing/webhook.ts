@@ -283,10 +283,14 @@ export const handleSubscriptionDeleted = internalMutation({
 /* -------------------------------------------------------------------------- */
 
 /**
- * Stripe fires this 3 days before the trial ends. We log to `mayaActionLog`
- * with entryId="billing.trial-ending" so the Sprint 7 nudge wiring can
- * surface a Maya-side message ("trial ends Friday — keep your card to stay
- * on Pro, otherwise I downgrade to Starter").
+ * Stripe fires this 3 days before the trial ends. We log to `gtmAuditEvents`
+ * with eventType="billing.trial-ending" so the nudge wiring can surface a
+ * Maya-side message ("trial ends Friday — keep your card to stay on Pro,
+ * otherwise I downgrade to Starter").
+ *
+ * This is the second write for the event: the webhook route has already put a
+ * durable row in `stripeWebhookEvents`. That one is the delivery receipt; this
+ * one is the account-scoped timeline Maya reads.
  *
  * No DB patch on the creator here — Stripe is going to fire
  * `customer.subscription.updated` (and eventually `.deleted`) when the trial
@@ -307,12 +311,14 @@ export const handleTrialWillEnd = internalMutation({
     if (!creator) {
       return { logged: false };
     }
-    await ctx.db.insert("mayaActionLog", {
-      creatorId: creator._id,
-      entryId: "billing.trial-ending",
-      outcome: "ran",
-      detail: `stripeCustomerId=${args.stripeCustomerId}`,
-      ts: Date.now(),
+    await ctx.db.insert("gtmAuditEvents", {
+      accountId: creator._id,
+      actor: "system",
+      eventType: "billing.trial-ending",
+      severity: "info",
+      message: "Stripe says the trial ends in 3 days.",
+      metadata: { stripeCustomerId: args.stripeCustomerId },
+      createdAt: Date.now(),
     });
     return { logged: true };
   },
@@ -513,12 +519,14 @@ export const handleTrialWillEndPublic = mutation({
       args.stripeCustomerId
     );
     if (!creator) return { logged: false };
-    await ctx.db.insert("mayaActionLog", {
-      creatorId: creator._id,
-      entryId: "billing.trial-ending",
-      outcome: "ran",
-      detail: `stripeCustomerId=${args.stripeCustomerId}`,
-      ts: Date.now(),
+    await ctx.db.insert("gtmAuditEvents", {
+      accountId: creator._id,
+      actor: "system",
+      eventType: "billing.trial-ending",
+      severity: "info",
+      message: "Stripe says the trial ends in 3 days.",
+      metadata: { stripeCustomerId: args.stripeCustomerId },
+      createdAt: Date.now(),
     });
     return { logged: true };
   },

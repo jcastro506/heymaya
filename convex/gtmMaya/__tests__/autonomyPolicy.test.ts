@@ -27,25 +27,28 @@ describe("autonomyGranted", () => {
     expect(autonomyGranted("bogus", NOW - 365 * DAY, 50, NOW)).toBe(false);
   });
 
-  describe("confirm_first_week ramp", () => {
+  describe("confirm_first_week is ask-gated (2026-07-20): the ramp NEVER grants silently", () => {
+    // The milestone triggers Maya's OFFER (shouldOfferGraduation); only the
+    // founder's explicit yes — set_posting_mode('autonomous') — grants. A
+    // silent flip meant posts appearing the founder never approved.
     it("not granted before threshold + before the window", () => {
       expect(autonomyGranted("confirm_first_week", NOW - 2 * DAY, 1, NOW)).toBe(
         false
       );
     });
-    it("granted once 3 posts confirmed (even within the week)", () => {
+    it("NOT granted at 3 confirmed posts — that's the moment to ASK", () => {
       expect(autonomyGranted("confirm_first_week", NOW - 1 * DAY, 3, NOW)).toBe(
-        true
+        false
       );
     });
-    it("granted once the week elapses (even with 0 confirms)", () => {
+    it("NOT granted when the week elapses — time alone never flips the mode", () => {
       expect(
         autonomyGranted("confirm_first_week", NOW - (RAMP_DAYS + 1) * DAY, 0, NOW)
-      ).toBe(true);
+      ).toBe(false);
     });
-    it("exactly 7 days elapsed → granted (>= boundary)", () => {
+    it("the milestone still fires the offer signal at exactly 7 days", () => {
       expect(
-        autonomyGranted("confirm_first_week", NOW - RAMP_DAYS * DAY, 0, NOW)
+        shouldOfferGraduation("confirm_first_week", NOW - RAMP_DAYS * DAY, 0, NOW)
       ).toBe(true);
     });
   });

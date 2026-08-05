@@ -31,7 +31,7 @@
  *      gtmHookCallbacks "log_message" kind (schema.ts), the CALLBACK_KIND
  *      validator (inboundCallback.ts), and the maya-gtm-tools log_message
  *      typed tool must all stay in lockstep.
- *   5. TODO grep — no unjustified TODOs.
+ *   5. TODO grep: every marker carries a sprint tag or a stated reason.
  */
 
 import { v } from "convex/values";
@@ -91,10 +91,15 @@ const MODEL_PRICE_PER_MTOK: ReadonlyArray<{
   in: number;
   out: number;
 }> = [
-  { match: "kimi-k2", in: 0.6, out: 2.5 }, // main brain
+  // Live-verified 2026-07-23 (/api/v1/models — re-verify before edits, do
+  // not trust these numbers later).
+  { match: "qwen3-235b", in: 0.09, out: 0.55 }, // main brain (2026-07-23 →)
+  { match: "kimi-k2", in: 0.6, out: 2.5 }, // prior main (env-revert path)
+  { match: "gpt-oss-120b", in: 0.037, out: 0.17 }, // volume workers
+  { match: "gpt-oss-20b", in: 0.03, out: 0.13 },
   { match: "gemini-3.1-flash-lite", in: 0.25, out: 1.5 }, // extraction
   { match: "gemini-3.1-flash", in: 0.5, out: 3.0 },
-  { match: "gemini-3-flash", in: 0.5, out: 3.0 }, // workers
+  { match: "gemini-3-flash", in: 0.5, out: 3.0 }, // judges
 ];
 // Conservative fallback for an unrecognized model: priced at/above our known
 // models so an unknown slug counts GENEROUSLY toward the spend cap — the
@@ -298,6 +303,44 @@ interface LogTurnTelemetryPayload {
   thinkingBudget?: number;
 }
 
+/** Light normalization for cross-writer duplicate detection: models retype
+ *  founder messages with straightened quotes/collapsed whitespace. Content is
+ *  otherwise untouched — this is transcript hygiene, not content policing. */
+function normalizeForDup(s: string): string {
+  return s
+    .replace(/[‘’‛]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Is there a recent role:"user" row whose normalized body matches? Used by
+ * log_message to skip the model's re-typed copy of a founder message the
+ * Telegram router already persisted verbatim.
+ */
+export const findRecentUserDuplicate = internalQuery({
+  args: {
+    accountId: v.id("creators"),
+    body: v.string(),
+    windowMs: v.number(),
+  },
+  handler: async (ctx, args): Promise<Id<"mayaMessages"> | null> => {
+    const cutoff = Date.now() - args.windowMs;
+    const recent = await ctx.db
+      .query("mayaMessages")
+      .withIndex("by_account_and_ts", (q) =>
+        q.eq("accountId", args.accountId).gte("ts", cutoff)
+      )
+      .collect();
+    const wanted = normalizeForDup(args.body);
+    const hit = recent.find(
+      (m) => m.role === "user" && normalizeForDup(m.body) === wanted
+    );
+    return hit?._id ?? null;
+  },
+});
+
 /**
  * POST /lc_gtm/log_message — inbound user-turn capture.
  *
@@ -343,6 +386,27 @@ export const logMessageHttp = httpAction(async (ctx, request) => {
       status: 200,
       headers: { "content-type": "application/json" },
     });
+  }
+
+  // Cross-writer dedupe: the Telegram router (routeInboundToMachine) already
+  // persisted this founder message VERBATIM before delivering the turn. The
+  // model then re-types it here — often normalizing curly quotes/whitespace —
+  // producing near-identical double rows 4-5s apart (live 07-25: "That's" +
+  // "That's" pairs). If a recent user row matches after light normalization,
+  // skip the insert; the router's verbatim copy is the record of truth.
+  const dup = await ctx.runQuery(
+    internal.gtmMaya.openclaw.conversationCapture.findRecentUserDuplicate,
+    {
+      accountId: auth.accountId,
+      body: body.body.slice(0, MAX_BODY_CHARS),
+      windowMs: 90_000,
+    }
+  );
+  if (dup) {
+    return new Response(
+      JSON.stringify({ ok: true, deduped: true, messageId: dup }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
   }
 
   const messageId = await ctx.runMutation(

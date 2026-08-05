@@ -57,13 +57,10 @@ export async function POST(req: NextRequest) {
     // `accountType: "gtm-agent"` — startGtmOnboarding then creates the agent row
     // when the user reaches /onboarding/gtm. (Was "service-business", the now-
     // dead trades product — a fresh signup was landing in the wrong product.)
-    // When the creator product is re-enabled the flag yields a bare row (the
-    // account-type picker sets it). createFromClerkPublic only ever SETS a
-    // missing accountType, never overwrites a live one.
-    const accountType =
-      process.env.NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT === "true"
-        ? undefined
-        : ("gtm-agent" as const);
+    // Sprint 0 deleted the creator product, so this is no longer flag-gated —
+    // there is one product. createFromClerkPublic only ever SETS a missing
+    // accountType, never overwrites a live one.
+    const accountType = "gtm-agent" as const;
     await convex.mutation(api.creators.createFromClerkPublic, {
       secret: bridgeSecret(),
       clerkUserId: data.id,

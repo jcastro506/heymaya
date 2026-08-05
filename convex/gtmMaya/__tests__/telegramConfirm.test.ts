@@ -18,6 +18,21 @@ import schema from "../../schema";
 import { modules } from "../../../tests/_modules";
 import type { Id } from "../../_generated/dataModel";
 
+/**
+ * Fake timers so convex-test's scheduler never fires. These tests assert that
+ * work was SCHEDULED (they query `_scheduled_functions`), never that it ran —
+ * so letting a real timer fire it after teardown only produced
+ * "Write outside of transaction" as an UNHANDLED rejection, which vitest
+ * counts as a suite error and exits 1 even with every test green.
+ */
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+afterEach(() => {
+  vi.clearAllTimers();
+  vi.useRealTimers();
+});
+
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -60,14 +75,15 @@ async function setupAgent(
 async function makeNeedsConfirmEvent(
   t: ReturnType<typeof convexTest>,
   agentId: Id<"gtmAgents">,
-  accountId: Id<"creators">
+  accountId: Id<"creators">,
+  channel = "reddit"
 ): Promise<Id<"gtmCalendarEvents">> {
   return await t.run(async (ctx) => {
     const now = Date.now();
     return await ctx.db.insert("gtmCalendarEvents", {
       accountId,
       agentId,
-      title: "Reddit reply",
+      title: `${channel} reply`,
       draftText: "a genuinely helpful reply",
       startsAtMs: now,
       endsAtMs: now + 3_600_000,
@@ -75,7 +91,7 @@ async function makeNeedsConfirmEvent(
       status: "needs_confirm",
       createdBy: "maya",
       autoPostJson: JSON.stringify({
-        channel: "reddit",
+        channel,
         zernioAccountId: "acct_rd",
         mode: "manual_confirm",
       }),
@@ -109,7 +125,11 @@ describe("S6 confirm-to-post — publish override", () => {
       }
     )) as { action: string };
     expect(r.action).toBe("needs_confirm");
-    expect(fetchMock).not.toHaveBeenCalled();
+    // The content preflight may call Zernio's validate endpoint; the POSTS
+    // endpoint (an actual publish) must never be hit.
+    expect(
+      fetchMock.mock.calls.filter((c: unknown[]) => String(c[0]).endsWith("/api/v1/posts"))
+    ).toHaveLength(0);
   });
 
   it("Hacker News can NEVER be routed to the publish path (research-only, no API)", async () => {
@@ -148,7 +168,11 @@ describe("S6 confirm-to-post — publish override", () => {
     // Confirm is consent, not a blank cheque — the plan cap (canAutoPost:false)
     // still holds.
     expect(r.action).toBe("needs_confirm");
-    expect(fetchMock).not.toHaveBeenCalled();
+    // The content preflight may call Zernio's validate endpoint; the POSTS
+    // endpoint (an actual publish) must never be hit.
+    expect(
+      fetchMock.mock.calls.filter((c: unknown[]) => String(c[0]).endsWith("/api/v1/posts"))
+    ).toHaveLength(0);
   });
 
   it("founder confirm + plan allows → gets PAST the gate and attempts Zernio (proves the override)", async () => {
@@ -232,6 +256,110 @@ describe("S6 confirm-to-post — Telegram callback", () => {
       callbackQueryId: "cb3",
       messageId: 3,
     });
+    const status = await t.run(async (ctx) => (await ctx.db.get(eventId))?.status);
+    expect(status).toBe("cancelled"); // unchanged, never published
+  });
+});
+
+describe("conversational confirm — the founder's 'post it' in chat", () => {
+  beforeEach(() => {
+    vi.stubEnv("ZERNIO_API_KEY", "test-key");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("'post it' publishes the pending event — same path as the tap", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupAgent(t, "c_say", { activePlan: true });
+    const eventId = await makeNeedsConfirmEvent(t, a.agentId, a.accountId);
+    // Zernio success: the platforms[] echo shape with a real platformPostId.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse(200, {
+          _id: "zp_1",
+          platforms: [
+            { platform: "reddit", status: "published", platformPostId: "rd_abc" },
+          ],
+        })
+      )
+    );
+    const r = (await t.action(
+      internal.gtmMaya.telegramConfirm.confirmEventConversational,
+      { eventId, agentId: a.agentId, decision: "post" }
+    )) as { ok: boolean; outcome?: string };
+    expect(r.ok).toBe(true);
+    expect(r.outcome).toBe("published");
+    const status = await t.run(async (ctx) => (await ctx.db.get(eventId))?.status);
+    expect(status).toBe("published");
+  });
+
+  it("cross-tenant: agent B's 'post it' can't publish agent A's event", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupAgent(t, "c_sa", { activePlan: true });
+    const b = await setupAgent(t, "c_sb", { activePlan: true });
+    const eventId = await makeNeedsConfirmEvent(t, a.agentId, a.accountId);
+    const fetchMock = vi.fn(async () => jsonResponse(200, {}));
+    vi.stubGlobal("fetch", fetchMock);
+    const r = (await t.action(
+      internal.gtmMaya.telegramConfirm.confirmEventConversational,
+      { eventId, agentId: b.agentId, decision: "post" }
+    )) as { ok: boolean };
+    expect(r.ok).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+    const status = await t.run(async (ctx) => (await ctx.db.get(eventId))?.status);
+    expect(status).toBe("needs_confirm"); // untouched
+  });
+
+  it("TikTok is refused — the preview card is the legal consent", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupAgent(t, "c_tt", { activePlan: true });
+    const eventId = await makeNeedsConfirmEvent(t, a.agentId, a.accountId, "tiktok");
+    const fetchMock = vi.fn(async () => jsonResponse(200, {}));
+    vi.stubGlobal("fetch", fetchMock);
+    const r = (await t.action(
+      internal.gtmMaya.telegramConfirm.confirmEventConversational,
+      { eventId, agentId: a.agentId, decision: "post" }
+    )) as { ok: boolean; reason?: string };
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain("send_confirm_card");
+    expect(fetchMock).not.toHaveBeenCalled();
+    const status = await t.run(async (ctx) => (await ctx.db.get(eventId))?.status);
+    expect(status).toBe("needs_confirm"); // still pending, card path still open
+  });
+
+  it("'skip that' cancels the event", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupAgent(t, "c_ss", { activePlan: true });
+    const eventId = await makeNeedsConfirmEvent(t, a.agentId, a.accountId);
+    const r = (await t.action(
+      internal.gtmMaya.telegramConfirm.confirmEventConversational,
+      { eventId, agentId: a.agentId, decision: "skip" }
+    )) as { ok: boolean; outcome?: string };
+    expect(r.ok).toBe(true);
+    expect(r.outcome).toBe("cancelled");
+    const status = await t.run(async (ctx) => (await ctx.db.get(eventId))?.status);
+    expect(status).toBe("cancelled");
+  });
+
+  it("idempotent: a second 'post it' after it's handled is a no-op", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupAgent(t, "c_si", { activePlan: true });
+    const eventId = await makeNeedsConfirmEvent(t, a.agentId, a.accountId);
+    await t.run(async (ctx) => {
+      await ctx.db.patch(eventId, { status: "cancelled" });
+    });
+    const fetchMock = vi.fn(async () => jsonResponse(200, {}));
+    vi.stubGlobal("fetch", fetchMock);
+    const r = (await t.action(
+      internal.gtmMaya.telegramConfirm.confirmEventConversational,
+      { eventId, agentId: a.agentId, decision: "post" }
+    )) as { ok: boolean; reason?: string };
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain("already");
+    expect(fetchMock).not.toHaveBeenCalled();
     const status = await t.run(async (ctx) => (await ctx.db.get(eventId))?.status);
     expect(status).toBe("cancelled"); // unchanged, never published
   });

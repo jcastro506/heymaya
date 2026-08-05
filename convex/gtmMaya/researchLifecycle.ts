@@ -1,11 +1,13 @@
 import { v } from "convex/values";
 import {
+  internalMutation,
   internalQuery,
   mutation,
   query,
   type MutationCtx,
 } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
+import { internal } from "../_generated/api";
 import { assertGtmSpendAllowed } from "./betaGuards";
 import { priceUsd } from "./providerPricing";
 
@@ -449,21 +451,63 @@ const AUTONOMOUS_POSTING = v.union(
  * here). Auth-scoped + fail-closed. The publish gate enforces this inside the
  * ban-safety floor + plan ceiling, so this is a preference, never a bypass.
  */
+async function patchPostingMode(
+  ctx: MutationCtx,
+  agent: Doc<"gtmAgents">,
+  mode: "confirm_each" | "confirm_first_week" | "autonomous"
+): Promise<void> {
+  const now = Date.now();
+  await ctx.db.patch(agent._id, {
+    autonomousPosting: mode,
+    // Entering confirm_first_week ALWAYS restarts the ramp (clock + counter).
+    // autonomousSince is stamped at agent creation and confirmedPostCount only
+    // ever grows, so without the reset a founder revoking autonomy after day 7
+    // (or 3 confirms) got a silent no-op: isRampGraduated stayed true and Maya
+    // kept auto-posting against their explicit ask.
+    ...(mode === "confirm_first_week"
+      ? { autonomousSince: now, confirmedPostCount: 0, autonomyAskAt: undefined }
+      : {}),
+    updatedAt: now,
+  });
+  // "Just post from now on" is the strongest posting consent there is — count
+  // it as plan approval so lifecycleState reaches 'active' and the scheduled
+  // cadence (brief/pulse/recap) runs. Without this, a founder who granted
+  // autonomy but never said the magic plan-approval words left every cron
+  // silently NO_REPLYing on plan_ready (live 07-21/07-22: two days of dead
+  // pulses on a fully-consenting founder).
+  if (mode === "autonomous") {
+    await ctx.scheduler.runAfter(
+      0,
+      internal.gtmMaya.managerStore.markStrategyApprovedByPostingConsent,
+      { agentId: agent._id }
+    );
+  }
+}
+
 export const setMyPostingMode = mutation({
   args: { mode: AUTONOMOUS_POSTING },
   handler: async (ctx, args): Promise<{ ok: boolean }> => {
     const { agent } = await requireMyGtmAgent(ctx);
-    const now = Date.now();
-    await ctx.db.patch(agent._id, {
-      autonomousPosting: args.mode,
-      // Starting/restarting the ramp: stamp the clock if entering
-      // confirm_first_week without one already running.
-      ...(args.mode === "confirm_first_week" && agent.autonomousSince == null
-        ? { autonomousSince: now }
-        : {}),
-      updatedAt: now,
-    });
+    await patchPostingMode(ctx, agent, args.mode);
     return { ok: true };
+  },
+});
+
+/**
+ * W2.5 — the conversational path: the founder tells MAYA "you can just post
+ * from now on" / "check with me first again" and she flips it via the
+ * set_posting_mode tool (hook-token authed at the route; agentId is the
+ * caller's own). Same preference the Account control writes — never a bypass:
+ * the ban-safety floor (Reddit/TikTok always confirm) and plan ceiling still
+ * gate every publish.
+ */
+export const setPostingModeByAgent = internalMutation({
+  args: { agentId: v.id("gtmAgents"), mode: AUTONOMOUS_POSTING },
+  handler: async (ctx, args): Promise<{ ok: boolean; mode: string }> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) return { ok: false, mode: args.mode };
+    await patchPostingMode(ctx, agent, args.mode);
+    return { ok: true, mode: args.mode };
   },
 });
 

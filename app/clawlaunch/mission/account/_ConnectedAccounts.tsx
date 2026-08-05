@@ -14,12 +14,30 @@ import { useState } from "react";
 import { useAction, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
+/**
+ * The four channels the product ships (spec §2, line 24).
+ *
+ * Reddit and LinkedIn were deliberately dropped and must not be offered here:
+ *
+ *   - **Reddit** — out on **ban risk and volatility**, NOT capability.
+ *     Replying there does work (live-proven 2026-07-25), and that's precisely
+ *     the trap: it works right up until an account is gone. Reddit has been
+ *     tightening on API and AI-assisted posting, and a banned account is
+ *     unrecoverable damage done under the founder's own name.
+ *   - **LinkedIn** — wrong modality. It was the only non-vertical-video
+ *     channel, and dropping it turns one 9:16 asset into three placements
+ *     (TikTok + Reels + Shorts) instead of two plus a bespoke one.
+ *
+ * A channel offered here is a channel a founder can connect, and a connected
+ * channel is one Maya will eventually post to. So this list is a product
+ * boundary, not a menu — `connectedChannelsMatchSpec.test.ts` pins it.
+ */
 const OFFERED: ReadonlyArray<{ key: string; label: string; auto: boolean }> = [
   { key: "x", label: "X", auto: true },
-  { key: "linkedin", label: "LinkedIn", auto: true },
   { key: "instagram", label: "Instagram", auto: true },
   { key: "youtube", label: "YouTube", auto: true },
-  { key: "reddit", label: "Reddit", auto: false },
+  // TikTok's rendered-preview confirmation is a PLATFORM consent requirement,
+  // not our caution — hence one-tap rather than auto (§9.1).
   { key: "tiktok", label: "TikTok", auto: false },
 ];
 

@@ -304,7 +304,7 @@ function categoryForTool(name) {
   if (/^(research_|search_|scrape_|competitor_ads$|bio_funnel$|check_already_engaged$)/.test(name))
     return "research";
   if (
-    /^(post_to_channel$|publish_draft$|record_published$|reply_to_comment$|send_media_to_user$|send_confirm_card$|approve_calendar$|approval_decision$)/.test(
+    /^(post_to_channel$|publish_draft$|record_published$|reply_to_comment$|send_media_to_user$|send_confirm_card$|confirm_event$|approve_calendar$|approval_decision$)/.test(
       name
     )
   )
@@ -316,7 +316,7 @@ function categoryForTool(name) {
   )
     return "draft";
   if (
-    /^(save_foundation_|set_north_star$|set_strategy_approval$|save_plan_doc$|save_voice_profile$|save_style_exemplars$|set_channel_warmth$|save_competitor_move$|save_niche_pulse_signal$|save_learning$|save_diagnosis$|save_experiment$|set_channel_warmth$)/.test(
+    /^(save_foundation_|set_north_star$|set_strategy_approval$|set_posting_mode$|save_plan_doc$|save_voice_profile$|save_style_exemplars$|set_channel_warmth$|save_competitor_move$|save_niche_pulse_signal$|save_learning$|save_diagnosis$|save_experiment$|set_channel_warmth$)/.test(
       name
     )
   )
@@ -2245,6 +2245,29 @@ export default defineToolPlugin({
       }),
       execute: async (p, _cfg, ctx) =>
         postLc("send_confirm_card", p, ctx.signal),
+    }),
+    tool({
+      name: "confirm_event",
+      label: "Confirm Event (conversational)",
+      description:
+        "The founder approved (or declined) a pending post IN THE CHAT — 'post it', 'yes send it', 'skip that one' — instead of tapping the card. Their words ARE the approval: this runs the exact same server path as the '✅ Post it' tap (atomic claim, then publish under their name). REQUIRED: eventId (the pending gtmCalendarEvents row awaiting their OK), decision ('post' | 'skip'). Returns { ok, outcome } — 'published' / 'cancelled' — or { ok:false, reason } if it was already handled (relay that plainly: 'already posted that one'). EXCEPTION: TikTok is refused here — it legally requires the preview card, so use send_confirm_card for TikTok. NEVER tell the founder a post is stuck in an internal state; either post it, send the card, or hand them a paste-ready draft.",
+      parameters: Type.Object({
+        eventId: Type.String(),
+        decision: Enum(["post", "skip"]),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("confirm_event", p, ctx.signal),
+    }),
+    tool({
+      name: "set_posting_mode",
+      label: "Set Posting Mode",
+      description:
+        "The founder changed how much rope I get on the auto channels (X/LinkedIn/IG/YouTube) IN THE CHAT — call this ONLY on their explicit words, never my own initiative. 'Just post from now on' / 'stop asking me' → 'autonomous'. 'Check with me first' / 'ask before posting' → 'confirm_each'. 'Let's do the ramp again' → 'confirm_first_week'. REQUIRED: mode. Returns { ok, mode }. Reddit/TikTok stay one-tap-confirm regardless (ban-safety floor — never claim otherwise). Confirm the change back plainly ('Got it — I'll post X and LinkedIn myself from here; Reddit and TikTok still get your tap.'). I may OFFER graduation after a few posts land well, but the founder's yes is what triggers this call.",
+      parameters: Type.Object({
+        mode: Enum(["confirm_each", "confirm_first_week", "autonomous"]),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("set_posting_mode", p, ctx.signal),
     }),
     ];
   },

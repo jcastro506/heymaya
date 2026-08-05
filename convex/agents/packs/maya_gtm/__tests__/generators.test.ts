@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   buildMayaGtmWorkspace,
-  localCronToUtc,
   mayaGtmSkillSlugs,
   type MayaGtmWorkspaceInput,
 } from "../generators";
@@ -599,10 +598,11 @@ describe("Maya GTM workspace pack", () => {
       const job = jobs.jobs.find((j) => j.id === r.id);
       expect(job, `recurring cron ${r.id} must ship in jobs.json`).toBeTruthy();
       expect(job?.schedule?.kind).toBe("cron");
-      // OpenClaw fires cron exprs in UTC + ignores tz, so the shipped expr is the
-      // operator-local expr converted to UTC (DST-correct for the deploy instant);
-      // the tz field is preserved too. Compare against the same converter.
-      expect(job?.schedule?.expr).toBe(localCronToUtc(r.expr, INPUT.timezone, Date.now()));
+      // Cron tz contract (2026-07-20): the runtime evaluates the expr IN
+      // schedule.tz (croner; verified in dist resolveCronTimezone), so the
+      // shipped expr is the operator-LOCAL hour VERBATIM. Any deploy-time
+      // UTC rewrite would double-convert and fire hours late.
+      expect(job?.schedule?.expr).toBe(r.expr);
       expect(job?.schedule?.tz).toBe(INPUT.timezone);
       // Each guards on the durable lifecycle before doing work.
       expect(job?.payload.message).toContain("get_agent_lifecycle");
@@ -926,32 +926,38 @@ describe("Maya GTM workspace pack — PLAN.md plan awareness", () => {
     });
   });
 
-  // Timezone — OpenClaw fires crons in UTC + ignores tz, so we rewrite local→UTC.
-  describe("localCronToUtc (cron timezone conversion)", () => {
-    const t = Date.UTC(2026, 0, 15); // mid-Jan, a stable instant (no-DST tz used below)
-
-    it("no-ops on the hourly pulse (wildcard hour is timezone-invariant)", () => {
-      expect(localCronToUtc("0 * * * *", "America/New_York", t)).toBe("0 * * * *");
-      expect(localCronToUtc("0 * * * *", "Asia/Tokyo", t)).toBe("0 * * * *");
-    });
-
-    it("converts a fixed local hour to UTC for a no-DST tz (Asia/Tokyo, UTC+9)", () => {
-      // 1pm Tokyo = 04:00 UTC.
-      expect(localCronToUtc("0 13 * * *", "Asia/Tokyo", t)).toBe("0 4 * * *");
-      // 7am Tokyo = 22:00 UTC the previous day (daily — no day field to shift).
-      expect(localCronToUtc("0 7 * * *", "Asia/Tokyo", t)).toBe("0 22 * * *");
-    });
-
-    it("no-ops when tz is missing or UTC", () => {
-      expect(localCronToUtc("0 7 * * *", undefined, t)).toBe("0 7 * * *");
-      expect(localCronToUtc("0 7 * * *", "UTC", t)).toBe("0 7 * * *");
-    });
-
-    it("shifts day-of-week on a midnight-crossing weekly cron", () => {
-      // Sun 11pm Tokyo (23:00) = 14:00 UTC Sun (no cross) — stays Sun(0).
-      expect(localCronToUtc("0 23 * * 0", "Asia/Tokyo", t)).toBe("0 14 * * 0");
-      // Sun 7am Tokyo = 22:00 UTC Sat → dow shifts 0→6.
-      expect(localCronToUtc("0 7 * * 0", "Asia/Tokyo", t)).toBe("0 22 * * 6");
-    });
+  // Cron tz contract — local exprs + tz, NEVER a deploy-time UTC rewrite.
+  // Regression for the live 2026-07-20 bug: the old localCronToUtc pre-convert
+  // + a tz-honoring runtime fired every fixed-hour cron 4h late (US-East),
+  // rendered invalid dom=0 monthlies for UTC+7..+14, and drifted 30min in
+  // half-hour timezones. Any tz on earth must now ship identical local exprs.
+  describe("cron exprs ship operator-local for every timezone", () => {
+    const EXPECTED: Record<string, string> = {
+      "0010_morning_brief": "0 7 * * *",
+      "0011_midday_pulse": "0 13 * * *",
+      "0012_evening_recap": "0 20 * * *",
+      "0013_weekly_review": "0 19 * * 0",
+      "0014_monthly_reset": "0 6 1 * *",
+    };
+    for (const tz of [
+      "America/New_York",
+      "America/Los_Angeles",
+      "Asia/Tokyo", // UTC+9 — the old converter shifted days here
+      "Asia/Kolkata", // UTC+5:30 — the old converter drifted 30min here
+      "Asia/Kathmandu", // UTC+5:45
+      "Australia/Sydney", // UTC+10/11 — the old converter emitted dom=0 here
+    ]) {
+      it(`ships verbatim local exprs + tz for ${tz}`, () => {
+        const ws = buildMayaGtmWorkspace({ ...INPUT, timezone: tz });
+        const jobs = JSON.parse(ws.files.get("jobs.json") ?? "{}") as {
+          jobs: Array<{ id: string; schedule?: { expr?: string; tz?: string } }>;
+        };
+        for (const [id, expr] of Object.entries(EXPECTED)) {
+          const job = jobs.jobs.find((j) => j.id === id);
+          expect(job?.schedule?.expr, `${id} in ${tz}`).toBe(expr);
+          expect(job?.schedule?.tz).toBe(tz);
+        }
+      });
+    }
   });
 });

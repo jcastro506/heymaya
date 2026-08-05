@@ -1032,7 +1032,9 @@ const MultiPostResponseSchema = z
         z
           .object({
             platform: z.string(),
-            accountId: z.string().optional(),
+            // Live create responses expand accountId into a full account doc;
+            // accept anything so a shape change can never fail the parse.
+            accountId: z.unknown().optional(),
             status: z.string().optional(),
             platformPostId: z.string().nullable().optional(),
             errorMessage: z.string().optional(),
@@ -1042,6 +1044,46 @@ const MultiPostResponseSchema = z
       .optional(),
     _id: z.string().optional(),
     results: z.array(z.unknown()).optional(),
+    // LIVE-VERIFIED 2026-07-22 (curl against POST /api/v1/posts): the create
+    // response is a WRAPPER — { post: {...echo with platforms[]...}, message,
+    // error, platformResults: [{platform, status, error}] }. Six days of live
+    // publish failures ("Tweet text is too long (586)... limit is 280",
+    // "Reddit POST_GUIDANCE_VALIDATION_FAILED") were reported by Zernio in
+    // BOTH platformResults[].error and post.platforms[].errorMessage — and
+    // dropped, because this schema only knew the unwrapped shapes and the
+    // all-optional parse "succeeded" as empty → "no postId returned".
+    post: z
+      .object({
+        _id: z.string().optional(),
+        platforms: z
+          .array(
+            z
+              .object({
+                platform: z.string(),
+                status: z.string().optional(),
+                platformPostId: z.string().nullable().optional(),
+                errorMessage: z.string().optional(),
+              })
+              .passthrough()
+          )
+          .optional(),
+      })
+      .passthrough()
+      .optional(),
+    platformResults: z
+      .array(
+        z
+          .object({
+            platform: z.string(),
+            status: z.string().optional(),
+            error: z.string().optional(),
+            platformPostId: z.string().nullable().optional(),
+          })
+          .passthrough()
+      )
+      .optional(),
+    message: z.string().optional(),
+    error: z.string().optional(),
   })
   .passthrough();
 
@@ -1211,8 +1253,60 @@ export async function multiPlatformPost(
       `Unexpected multi-post payload: ${parsed.error.message}`
     );
   }
-  // Prefer the real `platforms[]` echo shape; fall back to the pre-S1
-  // `perPlatform[]` fixture shape. [shape-unverified-live].
+  // LIVE shape first (verified 2026-07-22): `{ post: {...}, platformResults }`
+  // wrapper. platformResults carries the authoritative status + error string;
+  // post.platforms carries platformPostId on success. The _id fallback applies
+  // ONLY to non-failed rows — a failed publish must never masquerade as
+  // published under the post-doc id.
+  if (parsed.data.post || (parsed.data.platformResults?.length ?? 0) > 0) {
+    const doc = parsed.data.post;
+    const results = parsed.data.platformResults ?? [];
+    const echoRows = doc?.platforms ?? [];
+    const rows = results.length > 0 ? results : echoRows;
+    const perPlatform = rows.map((row) => {
+      const platform = fromWireSlug(row.platform);
+      if (!platform) {
+        throw new ZernioApiError(
+          200,
+          "multiPlatformPost",
+          `Zernio returned an unknown platform: ${row.platform}`
+        );
+      }
+      const echo = echoRows.find((e) => e.platform === row.platform);
+      let state: MultiPlatformPostResult["perPlatform"][number]["state"];
+      switch (row.status) {
+        case "scheduled":
+        case "pending":
+          state = "scheduled";
+          break;
+        case "failed":
+        case "error":
+          state = "failed";
+          break;
+        default:
+          state = "published";
+      }
+      const platformPostId =
+        ("platformPostId" in row ? row.platformPostId : undefined) ??
+        echo?.platformPostId ??
+        null;
+      const error =
+        ("error" in row && typeof row.error === "string" ? row.error : undefined) ??
+        echo?.errorMessage ??
+        (state === "failed" ? parsed.data.error : undefined);
+      return {
+        platform,
+        // Never let the post-doc _id stand in for a FAILED publish.
+        postId:
+          state === "failed" ? null : platformPostId ?? doc?._id ?? null,
+        state,
+        error,
+      };
+    });
+    if (perPlatform.length > 0) return { perPlatform };
+  }
+  // Unwrapped `platforms[]` echo shape; falls back to the pre-S1
+  // `perPlatform[]` fixture shape below.
   if (parsed.data.platforms && parsed.data.platforms.length > 0) {
     const perPlatform = parsed.data.platforms.map((row) => {
       const platform = fromWireSlug(row.platform);
@@ -1511,7 +1605,7 @@ const AccountsListResponseSchema = z
 /**
  * List connected accounts under a profile.
  * `GET /api/v1/accounts?profileId&platform&includeOverLimit&page&limit`.
- * [shape-unverified-live] — `accounts[]` rows passed through verbatim.
+ * VERIFIED LIVE 2026-08-01: GET /api/v1/accounts → {accounts, hasAnalyticsAccess} — `accounts[]` rows passed through verbatim.
  */
 export async function listAccounts(
   client: ZernioClient,
@@ -1564,7 +1658,7 @@ const AccountHealthResponseSchema = z
 /**
  * Health summary for connected accounts.
  * `GET /api/v1/accounts/health?profileId&platform&status`.
- * [shape-unverified-live].
+ * VERIFIED LIVE 2026-08-01: GET /api/v1/accounts/health → accountId (NOT id) + summary.
  */
 export async function getAccountsHealth(
   client: ZernioClient,
@@ -1587,6 +1681,80 @@ export async function getAccountsHealth(
     );
   }
   return { summary: parsed.data.summary, accounts: parsed.data.accounts };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Validation — POST /api/v1/tools/validate/post (spec §6268)                  */
+/* -------------------------------------------------------------------------- */
+
+const ValidatePostResponseSchema = z
+  .object({
+    valid: z.boolean().optional(),
+    message: z.string().optional(),
+    errors: z
+      .array(
+        z
+          .object({ platform: z.string().optional(), error: z.string().optional() })
+          .passthrough()
+      )
+      .optional(),
+    warnings: z
+      .array(
+        z
+          .object({ platform: z.string().optional(), warning: z.string().optional() })
+          .passthrough()
+      )
+      .optional(),
+  })
+  .passthrough();
+
+/**
+ * Dry-run Zernio's FULL post-validation pipeline without publishing: per-
+ * platform character limits (X weighted counting: URLs=23, emoji=2), missing
+ * media for IG/TikTok/YouTube, hashtag limits, thread formats. Content-only —
+ * no accounts touched, no usage tracked. Run this BEFORE creating a confirm
+ * event so an unpostable draft is rejected with the platform's real reason
+ * instead of dying at publish time (the 07-16 → 07-22 failure mode).
+ */
+export async function validatePost(
+  client: ZernioClient,
+  args: {
+    content?: string;
+    platform: ZernioPostPlatform;
+    platformSpecificData?: ChannelPlatformData;
+    mediaItems?: MediaItem[];
+  }
+): Promise<{ valid: boolean; errors: string[]; warnings: string[] }> {
+  const raw = await client.request<unknown>("/api/v1/tools/validate/post", {
+    method: "POST",
+    body: {
+      content: args.content,
+      platforms: [
+        {
+          platform: zernioWireSlug(args.platform),
+          ...(args.platformSpecificData
+            ? { platformSpecificData: args.platformSpecificData }
+            : {}),
+        },
+      ],
+      mediaItems: args.mediaItems,
+    },
+  });
+  const parsed = ValidatePostResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ZernioApiError(
+      200,
+      "validatePost",
+      `Unexpected validate-post payload: ${parsed.error.message}`
+    );
+  }
+  const errors = (parsed.data.errors ?? [])
+    .map((e) => (e.error ? `${e.platform ?? args.platform}: ${e.error}` : null))
+    .filter((e): e is string => e !== null);
+  const warnings = (parsed.data.warnings ?? [])
+    .map((w) => (w.warning ? `${w.platform ?? args.platform}: ${w.warning}` : null))
+    .filter((w): w is string => w !== null);
+  return { valid: parsed.data.valid !== false && errors.length === 0, errors, warnings };
 }
 
 /**
@@ -1830,17 +1998,73 @@ export async function getFollowerStats(
 /* Inbox — comments + conversations                                            */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The real envelope both inbox endpoints return. VERIFIED LIVE 2026-08-01.
+ *
+ * Two things our previous schema got wrong, and both were silent:
+ *
+ * 1. **`nextCursor` is nested inside `pagination`**, not at the root. Reading
+ *    it at the root always yielded `undefined`, so paging never advanced and
+ *    we only ever saw the FIRST page of the inbox. For a product whose core
+ *    job is "answer everyone", that's the difference between answering
+ *    everyone and answering whoever happens to be on page one.
+ * 2. **`meta` reports PARTIAL FAILURE** — `accountsQueried`, `accountsFailed`,
+ *    and a `failedAccounts` list. The live call returned
+ *    `accountsQueried: 2, accountsFailed: 1`: the API told us it couldn't read
+ *    one of the connected accounts, and we discarded that and returned success.
+ *    Silently reading half the inbox and reporting "all clear" is exactly the
+ *    failure class this product exists to eliminate.
+ */
+const InboxPaginationSchema = z
+  .object({
+    hasMore: z.boolean().optional(),
+    nextCursor: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+const InboxMetaSchema = z
+  .object({
+    accountsQueried: z.number().optional(),
+    accountsFailed: z.number().optional(),
+    failedAccounts: z
+      .array(
+        z
+          .object({
+            accountId: z.string().optional(),
+            accountUsername: z.string().optional(),
+            platform: z.string().optional(),
+          })
+          .passthrough()
+      )
+      .optional(),
+  })
+  .passthrough();
+
+/** What a caller needs to page correctly AND to know what it didn't see. */
+export interface InboxPage<T> {
+  items: T[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  /** Accounts the API could not read. NEVER silently dropped. */
+  failedAccounts: Array<{
+    accountId?: string;
+    accountUsername?: string;
+    platform?: string;
+  }>;
+}
+
 const InboxCommentsResponseSchema = z
   .object({
     data: z.array(z.record(z.string(), z.unknown())).default([]),
-    nextCursor: z.string().nullable().optional(),
+    pagination: InboxPaginationSchema.optional(),
+    meta: InboxMetaSchema.optional(),
   })
   .passthrough();
 
 /**
  * List inbound comments across connected accounts.
  * `GET /api/v1/inbox/comments?profileId&platform&minComments&since&sortBy&
- * sortOrder&limit&cursor&accountId`. [shape-unverified-live].
+ * sortOrder&limit&cursor&accountId`. VERIFIED LIVE 2026-08-01: GET /api/v1/inbox/comments → {data, pagination, meta}.
  */
 export async function listInboxComments(
   client: ZernioClient,
@@ -1855,7 +2079,7 @@ export async function listInboxComments(
     cursor?: string;
     accountId?: string;
   } = {}
-): Promise<InboxComment[]> {
+): Promise<InboxPage<InboxComment>> {
   const raw = await client.request<unknown>("/api/v1/inbox/comments", {
     method: "GET",
     query: {
@@ -1878,20 +2102,26 @@ export async function listInboxComments(
       `Unexpected inbox-comments payload: ${parsed.error.message}`
     );
   }
-  return parsed.data.data.map((row) => row as unknown as InboxComment);
+  return {
+    items: parsed.data.data.map((row) => row as unknown as InboxComment),
+    nextCursor: parsed.data.pagination?.nextCursor ?? null,
+    hasMore: parsed.data.pagination?.hasMore ?? false,
+    failedAccounts: parsed.data.meta?.failedAccounts ?? [],
+  };
 }
 
 const ConversationsResponseSchema = z
   .object({
     data: z.array(z.record(z.string(), z.unknown())).default([]),
-    nextCursor: z.string().nullable().optional(),
+    pagination: InboxPaginationSchema.optional(),
+    meta: InboxMetaSchema.optional(),
   })
   .passthrough();
 
 /**
  * List inbound DM conversations across connected accounts.
  * `GET /api/v1/inbox/conversations?profileId&platform&status&sortOrder&limit&
- * cursor&accountId`. [shape-unverified-live].
+ * cursor&accountId`. VERIFIED LIVE 2026-08-01: GET /api/v1/inbox/conversations → {data, pagination, meta}.
  */
 export async function listConversations(
   client: ZernioClient,
@@ -1904,7 +2134,7 @@ export async function listConversations(
     cursor?: string;
     accountId?: string;
   } = {}
-): Promise<Conversation[]> {
+): Promise<InboxPage<Conversation>> {
   const raw = await client.request<unknown>("/api/v1/inbox/conversations", {
     method: "GET",
     query: {
@@ -1925,7 +2155,12 @@ export async function listConversations(
       `Unexpected conversations payload: ${parsed.error.message}`
     );
   }
-  return parsed.data.data.map((row) => row as unknown as Conversation);
+  return {
+    items: parsed.data.data.map((row) => row as unknown as Conversation),
+    nextCursor: parsed.data.pagination?.nextCursor ?? null,
+    hasMore: parsed.data.pagination?.hasMore ?? false,
+    failedAccounts: parsed.data.meta?.failedAccounts ?? [],
+  };
 }
 
 const InboxActionResponseSchema = z
@@ -1934,6 +2169,11 @@ const InboxActionResponseSchema = z
     id: z.string().optional(),
     messageId: z.string().optional(),
     commentId: z.string().optional(),
+    // Spec shape (verified 1.0.4): { success, data: { commentId, isReply } }.
+    data: z
+      .object({ commentId: z.string().optional() })
+      .passthrough()
+      .optional(),
     error: z.string().optional(),
   })
   .passthrough();
@@ -1951,6 +2191,9 @@ export async function replyToComment(
     accountId: string;
     message: string;
     commentId?: string;
+    /** Required by Reddit when replying to third-party threads (docs:
+     *  "Subreddit parameters are required when replying to comments"). */
+    subreddit?: string;
   }
 ): Promise<{ success: boolean; id?: string; raw: unknown }> {
   if (!args.postId) {
@@ -1970,6 +2213,7 @@ export async function replyToComment(
         accountId: args.accountId,
         message: args.message,
         commentId: args.commentId,
+        subreddit: args.subreddit,
       },
     }
   );
@@ -1990,7 +2234,7 @@ export async function replyToComment(
   }
   return {
     success: parsed.data.success ?? !parsed.data.error,
-    id: parsed.data.id ?? parsed.data.commentId,
+    id: parsed.data.id ?? parsed.data.commentId ?? parsed.data.data?.commentId,
     raw,
   };
 }
@@ -2135,7 +2379,7 @@ const WebhookCreateResponseSchema = z
  * List registered webhook subscriptions.
  * `GET /api/v1/webhooks/settings`. Used to make webhook registration
  * idempotent (find-by-url before create). The response envelope varies
- * (`{ webhooks: [...] }` vs a bare array) so we accept both. [shape-unverified-live].
+ * (`{ webhooks: [...] }` vs a bare array) so we accept both. VERIFIED LIVE 2026-08-01: GET /api/v1/webhooks/settings → {webhooks}.
  */
 export async function listWebhooks(
   client: ZernioClient

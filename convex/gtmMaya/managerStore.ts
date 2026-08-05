@@ -364,6 +364,47 @@ export const setStrategyApproval = internalMutation({
   },
 });
 
+/**
+ * Posting consent IS plan approval. A founder who confirms a post ("post it",
+ * a card tap) or grants autonomy has obviously green-lit the strategy — but
+ * the formal strategyApprovalState never got set unless they said magic words,
+ * leaving lifecycleState stuck at plan_ready and EVERY scheduled touchpoint
+ * (brief/pulse/recap) silently NO_REPLYing forever (live 07-21: the midday
+ * pulse read everything, said "plan_ready → NO_REPLY", and quit — two days of
+ * dead crons). Tolerant no-op when there's no job/app; idempotent.
+ */
+export const markStrategyApprovedByPostingConsent = internalMutation({
+  args: { agentId: v.id("gtmAgents") },
+  handler: async (ctx, args): Promise<void> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) return;
+    if (agent.appId) {
+      const latest = await ctx.db
+        .query("gtmResearchJobs")
+        .withIndex("by_app", (q) => q.eq("appId", agent.appId!))
+        .collect()
+        .then((jobs) => jobs.sort((a, b) => b.createdAt - a.createdAt)[0]);
+      if (
+        latest &&
+        latest.accountId === agent.accountId &&
+        latest.strategyApprovalState !== "approved"
+      ) {
+        await ctx.db.patch(latest._id, {
+          strategyApprovalState: "approved",
+          updatedAt: Date.now(),
+        });
+      }
+    }
+    // ALWAYS try activation — deploys without a research-job row rely on
+    // tryActivateAgent's consent fallback (autonomous mode / confirmed post).
+    await ctx.scheduler.runAfter(
+      0,
+      internal.gtmMaya.agentLifecycle.tryActivateAgent,
+      { agentId: args.agentId }
+    );
+  },
+});
+
 // ───────────────────── Foundation: competitive map ─────────────────────
 
 const COMPETITOR_KIND = v.union(

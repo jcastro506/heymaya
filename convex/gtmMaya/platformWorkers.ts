@@ -27,8 +27,9 @@ import {
 // TwitterAPI.io has a real working /twitter/tweet/advanced_search at
 // $0.15/1k tweets with a sign-up trial credit. The wrapper soft-fails
 // when TWITTERAPI_IO_KEY is unset so the orchestrator still runs in
-// environments without the key. Apify wrapper preserved as a fallback
-// option in convex/integrations/apify/twitterScraper.ts.
+// environments without the key. The Apify wrapper that used to sit behind
+// this as a fallback was deleted in Sprint 0 — it never worked (no
+// residential proxies on the free tier) and had no call sites.
 import { twitterApiIoSearch } from "../integrations/twitterApiIo/twitterSearch";
 // Sprint 2.0 — Gemini grounded search replaces the broken ScrapeCreators
 // Google worker. Algolia HN search runs alongside it inside the same

@@ -131,7 +131,10 @@ describe("Sprint 1 acceptance — plan-tier × action matrix (coach / manager)",
 // ────────────────────────────────────────────────────────────────────────
 
 describe("Sprint 1 acceptance — cross-tenant isolation smoke", () => {
-  it("scrapeCreatorsCache rows are isolated by creatorId at the schema level", async () => {
+  it("gtmConnectionHealth rows are isolated by accountId at the schema level", async () => {
+    // Two tenants can connect the SAME provider. The compound index must keep
+    // their rows apart — a leak here would show one tenant another's
+    // connection state (and, upstream of that, their tokens).
     const t = convexTest(schema, modules);
     const a = await t.run((ctx) =>
       ctx.db.insert("creators", {
@@ -157,45 +160,47 @@ describe("Sprint 1 acceptance — cross-tenant isolation smoke", () => {
     );
 
     await t.run((ctx) =>
-      ctx.db.insert("scrapeCreatorsCache", {
-        cacheKey: "sc:tiktok:profile:shared_handle",
-        creatorId: a,
-        payload: { who: "a" },
-        fetchedAt: 0,
-        ttlSec: 3600,
+      ctx.db.insert("gtmConnectionHealth", {
+        accountId: a,
+        provider: "x",
+        status: "connected",
+        lastCheckedAt: 0,
+        updatedAt: 0,
       })
     );
     await t.run((ctx) =>
-      ctx.db.insert("scrapeCreatorsCache", {
-        cacheKey: "sc:tiktok:profile:shared_handle",
-        creatorId: b,
-        payload: { who: "b" },
-        fetchedAt: 0,
-        ttlSec: 3600,
+      ctx.db.insert("gtmConnectionHealth", {
+        accountId: b,
+        provider: "x",
+        status: "reconnect_required",
+        failureReason: "token expired",
+        lastCheckedAt: 0,
+        updatedAt: 0,
       })
     );
 
     const aRows = await t.run((ctx) =>
       ctx.db
-        .query("scrapeCreatorsCache")
-        .withIndex("by_creator_and_key", (q) =>
-          q.eq("creatorId", a).eq("cacheKey", "sc:tiktok:profile:shared_handle")
+        .query("gtmConnectionHealth")
+        .withIndex("by_account_and_provider", (q) =>
+          q.eq("accountId", a).eq("provider", "x")
         )
         .collect()
     );
     expect(aRows).toHaveLength(1);
-    expect((aRows[0].payload as { who: string }).who).toBe("a");
+    expect(aRows[0].status).toBe("connected");
 
     const bRows = await t.run((ctx) =>
       ctx.db
-        .query("scrapeCreatorsCache")
-        .withIndex("by_creator_and_key", (q) =>
-          q.eq("creatorId", b).eq("cacheKey", "sc:tiktok:profile:shared_handle")
+        .query("gtmConnectionHealth")
+        .withIndex("by_account_and_provider", (q) =>
+          q.eq("accountId", b).eq("provider", "x")
         )
         .collect()
     );
     expect(bRows).toHaveLength(1);
-    expect((bRows[0].payload as { who: string }).who).toBe("b");
+    expect(bRows[0].status).toBe("reconnect_required");
+    expect(bRows[0].failureReason).toBe("token expired");
   });
 
   it("aiCallLog rows are filterable per creator without leaking", async () => {
@@ -360,9 +365,22 @@ describe("Sprint 1 acceptance — TODO grep", () => {
         const trimmed = line.trim();
         const hasMarker = /\bTODO\b|\bFIXME\b|eslint-disable/.test(trimmed);
         if (!hasMarker) return;
+        // A justification may sit on the marker line itself, or on the comment
+        // line(s) directly above it — the convention already used across the
+        // repo, where the reason is too long to share a line with the rule name.
+        const precedingJustification = (): boolean => {
+          for (let back = 1; back <= 3 && idx - back >= 0; back += 1) {
+            const prev = lines[idx - back].trim();
+            if (prev === "") break;
+            if (/^(\/\/|\*|\{\/\*)/.test(prev) === false) break;
+            if (/\b(justified|justification|reason)\b\s*:/i.test(prev)) return true;
+          }
+          return false;
+        };
         const justified =
           /\bTODO\([sS]\d+\)/.test(trimmed) ||
-          /(TODO|FIXME|eslint-disable)[^:]*:\s*\S/.test(trimmed);
+          /(TODO|FIXME|eslint-disable)[^:]*:\s*\S/.test(trimmed) ||
+          precedingJustification();
         if (!justified) {
           violations.push(`${file.replace(REPO_ROOT, "")}:${idx + 1}  ${trimmed}`);
         }

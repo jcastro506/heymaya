@@ -461,6 +461,13 @@ export const persistGtmCalendarEventDraft = internalMutation({
       if (existing) {
         // Refresh the turn-key payload in place (a re-run may have a better
         // draft) but never create a second event for this identity.
+        // Re-arm failed/cancelled rows when the caller supplies a status: a
+        // retry after a transient publish failure must be confirmable again.
+        // 'published' stays terminal — never resurrect a live post into a
+        // second confirm (double-post = the ban signal).
+        const rearm =
+          args.status !== undefined &&
+          (existing.status === "failed" || existing.status === "cancelled");
         await ctx.db.patch(existing._id, {
           title: args.title,
           description: args.description,
@@ -468,6 +475,7 @@ export const persistGtmCalendarEventDraft = internalMutation({
           draftText: args.draftText ?? existing.draftText,
           sourceNote: args.sourceNote ?? existing.sourceNote,
           autoPostJson: args.autoPostJson ?? existing.autoPostJson,
+          ...(rearm ? { status: args.status } : {}),
           updatedAt: now,
         });
         return existing._id;

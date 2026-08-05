@@ -133,12 +133,49 @@ export const zernioPostHttp = httpAction(async (ctx, request) => {
           mode: "manual_confirm",
           targetExternalId: body.targetExternalId,
           targetCommentId: body.targetCommentId,
+          // Carried through to the confirm-path publish: without these the
+          // founder-approved post ships link-less (LI/IG/YT first-comment) and
+          // never stamps the dedup ledger (draftId).
+          draftId: body.draftId,
+          firstComment,
         }),
         dedupeKey,
       }
     );
+    // The dedupe upsert may have returned an EXISTING row — report its real
+    // state, never a stale "needs_confirm" for something already posted.
+    const evAfter = await ctx.runQuery(
+      internal.gtmMaya.telegramConfirm.getConfirmEvent,
+      { eventId }
+    );
+    if (evAfter && evAfter.status !== "needs_confirm") {
+      return new Response(
+        JSON.stringify({
+          outcome: evAfter.status,
+          eventId,
+          reasons: [
+            evAfter.status === "published"
+              ? "already posted to this target — do not post again"
+              : `an event for this target is currently '${evAfter.status}'`,
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }
     return new Response(
-      JSON.stringify({ ...result, outcome: "needs_confirm", eventId }),
+      JSON.stringify({
+        ...result,
+        outcome: "needs_confirm",
+        eventId,
+        // Model-proof next step, carried IN the response (live 07-26: a model
+        // with the correct prompt still read needs_confirm as "cannot post"
+        // and told the founder Reddit has no API). The founder's consent is
+        // the only missing ingredient — say exactly how to supply it.
+        next:
+          body.channel === "tiktok"
+            ? `needs the founder's preview tap: send_confirm_card({ eventId: "${eventId}", mediaAssetIds }) — TikTok is card-only (legal preview)`
+            : `this is NOT a failure — the post is queued and needs the founder's OK. If they already approved in words ("post it"/"yes"), call confirm_event({ eventId: "${eventId}", decision: "post" }) NOW and it publishes. Otherwise ask them in chat, then confirm_event on their yes. Never tell them it can't be posted.`,
+      }),
       { status: 200, headers: { "content-type": "application/json" } }
     );
   }

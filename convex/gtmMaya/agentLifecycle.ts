@@ -29,6 +29,7 @@
  */
 
 import { internalMutation, internalQuery } from "../_generated/server";
+import { shouldOfferGraduation } from "./autonomyPolicy";
 import { v } from "convex/values";
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
@@ -131,6 +132,19 @@ export interface AgentLifecycle {
   hasCachedPlan: boolean;
   /** How many times Convex has attempted to push the cached plan. */
   planDeliveryAttempts: number;
+  // ─── Posting autonomy (ask-gated ramp, 2026-07-20) ────────────────────────
+  /** The founder's current posting preference (confirm_each / confirm_first_week
+   *  / autonomous). Only 'autonomous' auto-posts the auto channels. */
+  autonomyMode: "confirm_each" | "confirm_first_week" | "autonomous";
+  /** Founder taps/says-yes that landed a publish (the ramp milestone counter). */
+  confirmedPostCount: number;
+  /** The ramp milestone is met (3 confirms OR 7 days) AND Maya hasn't asked
+   *  yet: time to OFFER autonomy ("want me to stop checking every time?") —
+   *  ONCE — then mark_lifecycle({ marker: "autonomy_ask" }). The founder's yes
+   *  → set_posting_mode('autonomous'). NEVER flip the mode uninvited. */
+  autonomyReadyToAsk: boolean;
+  /** Unix-ms Maya asked (null = not yet). Guards against re-asking. */
+  autonomyAskAt: number | null;
 }
 
 /** The explicit lifecycle state machine — the single source of truth for "where
@@ -322,8 +336,35 @@ export async function computeAgentLifecycle(
     planDeliveryAttempts,
     foundationStep,
     leaseAcquireCount,
+    autonomyMode: agent.autonomousPosting ?? "confirm_first_week",
+    confirmedPostCount: agent.confirmedPostCount ?? 0,
+    autonomyReadyToAsk:
+      agent.autonomyAskAt == null &&
+      shouldOfferGraduation(
+        agent.autonomousPosting ?? "confirm_first_week",
+        agent.autonomousSince,
+        agent.confirmedPostCount,
+        now
+      ),
+    autonomyAskAt: agent.autonomyAskAt ?? null,
   };
 }
+
+/** Maya asked the founder about going autonomous. Idempotent — only the first
+ *  ask stamps, so a retried turn can never nag. patchPostingMode clears the
+ *  stamp when the founder re-enters confirm_first_week (a fresh ramp = a fresh
+ *  ask later). */
+export const markAutonomyAsk = internalMutation({
+  args: { agentId: v.id("gtmAgents") },
+  handler: async (ctx, args): Promise<{ askedAt: number }> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) throw new Error("agent not found");
+    if (agent.autonomyAskAt != null) return { askedAt: agent.autonomyAskAt };
+    const now = Date.now();
+    await ctx.db.patch(args.agentId, { autonomyAskAt: now, updatedAt: now });
+    return { askedAt: now };
+  },
+});
 
 /** Read the durable lifecycle for an agent. The boot + heartbeat call this
  *  FIRST instead of reading MEMORY.md markers. */
@@ -721,6 +762,17 @@ export const tryActivateAgent = internalMutation({
         .collect();
       const latest = jobs.sort((a, b) => b.createdAt - a.createdAt)[0] ?? null;
       approved = latest?.strategyApprovalState === "approved";
+    }
+    if (!approved) {
+      // Explicit posting consent stands in for the formal flag. Some deploy
+      // paths (admin dogfood) never create a gtmResearchJobs row, so the
+      // approval had NOWHERE to live and the agent could never activate —
+      // every cron NO_REPLYed on plan_ready forever (live 07-21/07-22). A
+      // founder who granted autonomy or landed a confirmed post has approved
+      // the plan in the only way that matters.
+      approved =
+        agent.autonomousPosting === "autonomous" ||
+        (agent.confirmedPostCount ?? 0) > 0;
     }
     if (!approved) {
       return { activated: false, reason: "not_approved" };

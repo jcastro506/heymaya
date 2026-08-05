@@ -17,32 +17,16 @@ const instrumentSerif = Instrument_Serif({
 });
 
 /**
- * Default site metadata. Per-page metadata (e.g. `app/page.tsx`,
- * `app/creators/page.tsx`) overrides this for the routes that have their
- * own. The default is flag-aware so unconfigured routes (sign-in, sign-up,
- * any future page that inherits) reflect whichever product is publicly
- * exposed — see `NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT` in `middleware.ts`.
+ * Default site metadata. Per-page metadata (e.g. `app/page.tsx`) overrides
+ * this. Sprint 0 collapsed a flag-aware ternary here: one branch described
+ * the deleted creator product, the other the deleted trades product.
  */
-const CREATOR_PRODUCT_ENABLED =
-  process.env.NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT === "true";
-
-export const metadata: Metadata = CREATOR_PRODUCT_ENABLED
-  ? {
-      title: "HeyMaya — Your AI creator manager. Hire her in 4 minutes.",
-      description:
-        "Maya plans your week, watches your performance, triages your brand emails, and tells you what to post next — every day, in your messages.",
-    }
-  : {
-      // The LIVE product (GTM / organic growth) — matches app/page.tsx's
-      // landing metadata so inherited routes (sign-in, sign-up, mission)
-      // present the same product. The previous fallback here was the
-      // abandoned service-business copy ("GBP posts, review requests"),
-      // which prod served on every route without its own metadata. No "AI"
-      // in marketing copy, per the standing voice rule.
-      title: "HeyMaya, the marketing hire for builders Cursor unlocked.",
-      description:
-        "Maya finds the people already looking for what you built, posts from your accounts without getting them banned, and shows you which post got the signup.",
-    };
+export const metadata: Metadata = {
+  // No "AI" in marketing copy, per the standing voice rule.
+  title: "HeyMaya, the marketing hire for builders Cursor unlocked.",
+  description:
+    "Maya finds the people already looking for what you built, posts from your accounts without getting them banned, and shows you which post got the signup.",
+};
 
 /**
  * Mobile-first viewport. `viewportFit: "cover"` lets us paint behind the

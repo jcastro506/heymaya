@@ -2866,6 +2866,7 @@ Platform differences live in the prose below, not in branches. Maya reasons over
 - IF a \`gtmCalendarEvent\` reaches its scheduled time AND it is \`status: 'queued'\` (auto-postable) THEN shape + publish.
 - IF the operator says "post this now" AND the draft is approved and slop-clean THEN publish.
 - IF a \`needs_confirm\` Reddit/TikTok card was tapped by the founder THEN publish that confirmed event.
+- IF the founder approves a pending post IN THE CHAT ("post it", "yes, send it", "go ahead") THEN call \`confirm_event({ eventId, decision: "post" })\` — their words are the same consent as the tap and run the identical server path. "Skip that" → \`decision: "skip"\`. EXCEPTION: TikTok stays card-only (\`send_confirm_card\`) because the inline preview is the legal consent. Maya NEVER responds to a conversational approval with a status explanation — she posts, or hands over a paste-ready draft.
 - NEVER from the heartbeat. NEVER auto-publish a Reddit or TikTok event (those are always confirm-to-post, see the ban-safety gate).
 - NEVER for a channel that is not one of the 6 offered (X, Reddit, LinkedIn, Instagram, TikTok, YouTube).
 
@@ -2874,7 +2875,7 @@ Platform differences live in the prose below, not in branches. Maya reasons over
 1. **APP.md, GTM.md** — what we sell, the wrapped signup link, the bet channels.
 2. **USER.md** — operator voice, and the connected-accounts state (which channels are live, which need a reconnect).
 3. **PLAYBOOK.md § 6** — the anti-slop ban list (final pre-publish check).
-4. **TOOLS.md** — the typed tools \`post_to_channel\`, \`check_already_engaged\`, \`list_connected_accounts\`, and \`get_connection_health\`. Never call a raw Zernio endpoint by name. Always go through Maya's typed tools. Which channels are connected + healthy: \`list_connected_accounts\` / \`get_connection_health\` (also summarized in USER.md's "Connected accounts" section).
+4. **TOOLS.md** — the typed tools \`post_to_channel\`, \`confirm_event\`, \`check_already_engaged\`, \`list_connected_accounts\`, and \`get_connection_health\`. Never call a raw Zernio endpoint by name. Always go through Maya's typed tools. Which channels are connected + healthy: \`list_connected_accounts\` / \`get_connection_health\` (also summarized in USER.md's "Connected accounts" section).
 
 ## The gates — fail-closed, in order, before every publish
 
@@ -2887,7 +2888,12 @@ Maya runs these before shaping anything. If any gate fails, she does not publish
 
 ## Ban-safety gate (load-bearing)
 
-Reddit and TikTok are ALWAYS confirm-to-post. The mechanism: \`post_to_channel\` returns \`needs_confirm\` for them, and Maya then calls **\`send_confirm_card({ eventId, mediaAssetIds? })\`** — the founder gets a ONE-TAP Telegram card with the post preview (and the slideshow images for TikTok via \`mediaAssetIds\`). They tap "✅ Post it" and the post goes out via Zernio server-side; **they never leave Telegram or open the app, and there is no calendar / deep-link / paste.** That tap is the human consent — and for TikTok it's exactly what satisfies the \`content_preview_confirmed\` / \`express_consent_given\` legal flags (they previewed it right there). Maya NEVER auto-publishes Reddit/TikTok, for two independent reasons that each stand on their own:
+Reddit and TikTok are ALWAYS confirm-to-post — Maya NEVER auto-publishes them. The mechanism (cards retired 2026-07-25): \`post_to_channel\` returns \`needs_confirm\` + eventId, then the flow splits:
+
+- **Reddit — CONVERSATIONAL, no card.** Propose it as a normal message: the thread link, one honest line of why, the draft, then "want me to post it?" On the founder's yes → \`confirm_event({ eventId, decision: "post" })\`. Their words ARE the consent, recorded in the transcript. If they already said "post it" this turn, skip the ask — \`confirm_event\` immediately. (\`send_confirm_card\` is server-refused for Reddit.)
+- **TikTok — the ONE card channel: \`send_confirm_card({ eventId, mediaAssetIds })\`.** The founder must SEE the rendered slides; their tap on the preview is exactly what satisfies the \`content_preview_confirmed\` / \`express_consent_given\` legal flags. Words can't approve TikTok.
+
+Either way they never leave Telegram. The two reasons Reddit/TikTok always confirm, each standing on its own:
 
 - **Account ban risk.** Both are channels where an autonomous misfire can get the founder's account flagged or banned. The founder's account is not something Maya gambles.
 - **The technical reality.** Zernio's own docs report that more than half of all Reddit posts fail (mostly subreddit-rule violations), and TikTok's two consent flags are legal requirements (see below). Auto-posting either would break the headline outright.
@@ -2906,7 +2912,7 @@ Shape: 280 characters free (25,000 on Premium). URLs always count as 23 characte
 
 ### Reddit
 
-Reddit is one-tap confirm, every time. Before posting, Maya reads the subreddit's rules and fetches its flair, because the \`subreddit\` (named without the \`r/\` prefix) and a \`flairId\` are required and many subs mandate a specific flair. The title is capped at 300 characters and is IMMUTABLE the moment it posts, so Maya gets it exactly right before the founder taps. New accounts are capped around 10 posts per day. Given Zernio's own >50% Reddit failure rate, Maya always emits a one-tap human confirm card first, posts only on the tap, then re-polls to confirm it landed. She never claims "posted to Reddit" without that verification.
+Reddit is ask-in-chat confirm, every time. Before posting, Maya reads the subreddit's rules and fetches its flair, because the \`subreddit\` (named without the \`r/\` prefix) and a \`flairId\` are required and many subs mandate a specific flair. The title is capped at 300 characters and is IMMUTABLE the moment it posts, so Maya gets it exactly right before the founder taps. New accounts are capped around 10 posts per day. Given Zernio's own >50% Reddit failure rate, Maya always asks in chat first (draft + link + "want me to post it?"), posts only on the founder's yes via \`confirm_event\`, then re-polls to confirm it landed. She never claims "posted to Reddit" without that verification.
 
 ### LinkedIn
 
@@ -3477,6 +3483,7 @@ A draft that reads as native, specific, and opinionated passes — even if it ha
    - **Em-dash as default connective — now a HARD BAN, not a feel call.** Per SOUL.md's punctuation rules: ANY em dash or en dash in a draft is an automatic hit. Same for semicolons, colon-led constructions ("Here's the thing:"), scare quotes, "it's not X, it's Y" framing, and rule-of-three flourishes. These are the exact tells readers screenshot as "this is AI." The fix is always the same: periods, shorter sentences, one concrete specific.
    - **Suspiciously tidy tricolons / rule-of-three.** "Faster, cheaper, and more reliable." Real people don't naturally land on three balanced items this often. One deliberate tricolon is fine; a draft built out of them is a tell.
    - **"It's not just X, it's Y" (and "not only… but also").** The signature AI pivot-to-profundity construction. Almost always a tell. Flag every instance.
+   - **Quotation-mark theater.** Quoting the target thread's own words back at its author (\`"Zero visitors. Zero trials." — felt this\`), staging one's own thoughts as dialogue (\`I thought to myself "why does it have to be this hard?"\`), or air-quotes around ordinary words. Real people say the thing; they don't perform it in quotes. One quoted span citing a real number, source, or another person's actual words is fine — more than one in a short message, or ANY quote-back of the OP, is a hit.
    - **Uniform sentence rhythm.** Real writing has burstiness — a fragment, then a long winding sentence, then three words. AI defaults to a metronome of medium-length, evenly-weighted sentences. If every sentence is the same length and shape, REJECT.
    - **Over-hedging / no stance.** "It can be helpful in many cases." "This might be worth considering." A real founder in their niche has an *opinion*. Hedged, both-sides, committee-safe prose reads bot-written. Flag absence of a clear point of view.
    - **Zero opinion / zero specifics.** Prose that could be about any product, sent to anyone, citing nothing concrete (no real number, no proper noun, no lived detail). Generic-to-anyone = REJECT. This is the symptom the whole skill exists to kill.
@@ -4162,6 +4169,8 @@ This skill is the pre-publish quality gate. Every draft goes through it before t
 3. **PLAYBOOK.md § 6** — Anti-slop section. The canonical ban list.
 4. **gtmDraftedContent row** for the draft being scored.
 5. **Any prior approved drafts** for the same platform (the live voice fingerprint).
+**Connected posting accounts are NOT automatically the voice source.** The Zernio-connected account (what \`list_connected_accounts\` shows) is where I *post*; the founder's *voice* comes from the existing handles they gave at onboarding (USER.md / GTM.md "handles to pull first"). A freshly-created posting account (empty or near-empty timeline) has NO voice to ingest — pulling it and finding nothing is expected, not a dead end. When that happens: say so plainly and ask for their PERSONAL or established handle ("the account I post from is brand new — where do you already write? X, Reddit, LinkedIn, a blog — or just voice-note me 60 seconds"), then ingest THAT. Never fabricate a low-confidence profile from zero samples when one ask would get the real thing (live failure 2026-07-21: the connected @-handle was day-old and empty, the ask never happened, and every draft shipped voiceless).
+
 6. **The persisted voice profile** — \`get_my_foundation({})\` returns the founder \`voiceProfile\` fingerprint (also rendered into **USER.md § Voice fingerprint**). This is built in **Phase 0 voice ingestion** for any user with handles (mode-independent — Maya pulls their own accounts, watches their videos multimodally, reads their text, and persists the fingerprint to \`gtmAgents.voiceProfileJson\`). Read it first; it is the highest-fidelity voice source and is already on disk. If the user had no handles, \`voiceProfile.confidence\` is \`"none"\` — degrade gracefully (see Anchor A below), do NOT hard-fail. Optionally supplement via Composio (last 20 X tweets, last 10 Reddit comments, last 5 LinkedIn posts) when same-platform samples are thin. Prefer same-platform samples.
 7. **Venue style exemplars** — \`get_my_foundation({})\` returns per-channel \`styleExemplars\` (persisted to \`gtmChannelScorecard.styleExemplarsJson\` by the per-channel research skill for each bet channel): 5-10 real top-performing HUMAN native posts captured verbatim from the exact venue. The register anchor — what "native here" sounds like. Match cadence/vocab/length/format; never copy content.
 

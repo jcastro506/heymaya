@@ -1339,7 +1339,13 @@ export const getAgentLifecycleHttp = httpAction(async (ctx, request) => {
     internal.gtmMaya.agentLifecycle.getAgentLifecycle,
     { agentId: auth.agentId }
   );
-  return new Response(JSON.stringify({ lifecycle }), {
+  // Pending founder-confirm events ride along so a fresh session can bind a
+  // chat "post it" to a real eventId (confirm_event) instead of guessing.
+  const pendingConfirms = await ctx.runQuery(
+    internal.gtmMaya.telegramConfirm.listPendingConfirms,
+    { agentId: auth.agentId }
+  );
+  return new Response(JSON.stringify({ lifecycle, pendingConfirms }), {
     status: 200,
     headers: { "content-type": "application/json" },
   });
@@ -1425,6 +1431,18 @@ export const markLifecycleHttp = httpAction(async (ctx, request) => {
         headers: { "content-type": "application/json" },
       });
     }
+    case "autonomy_ask": {
+      // Maya offered autonomy ("want me to stop checking every time?").
+      // Idempotent; the founder's yes → set_posting_mode, never this marker.
+      const r = await ctx.runMutation(
+        internal.gtmMaya.agentLifecycle.markAutonomyAsk,
+        { agentId: auth.agentId }
+      );
+      return new Response(JSON.stringify({ ok: true, ...r }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
     case "morning_brief": {
       await ctx.runMutation(
         internal.gtmMaya.agentLifecycle.markMorningBrief,
@@ -1448,6 +1466,42 @@ export const markLifecycleHttp = httpAction(async (ctx, request) => {
     default:
       return new Response(`unknown marker '${marker}'`, { status: 400 });
   }
+});
+
+// ───────────────────── Posting mode (W2.5 conversational) ─────────────────────
+
+/**
+ * The founder tells Maya "you can just post from now on" / "go back to checking
+ * with me" IN THE CHAT and she flips the trust level herself — no dashboard
+ * trip. Same field the Account settings control writes (`setMyPostingMode`);
+ * the ban-safety floor (Reddit/TikTok always confirm) and plan ceiling still
+ * gate every publish, so this is a preference, never a bypass.
+ */
+export const setPostingModeHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let mode: string | undefined;
+  try {
+    const body = (await request.json()) as { mode?: string };
+    mode = body?.mode;
+  } catch {
+    return new Response("invalid JSON body", { status: 400 });
+  }
+  if (mode !== "confirm_each" && mode !== "confirm_first_week" && mode !== "autonomous") {
+    return new Response(
+      "mode must be 'confirm_each' | 'confirm_first_week' | 'autonomous'",
+      { status: 400 }
+    );
+  }
+  const r = await ctx.runMutation(
+    internal.gtmMaya.researchLifecycle.setPostingModeByAgent,
+    { agentId: auth.agentId, mode }
+  );
+  return new Response(JSON.stringify(r), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
 });
 
 // ───────────────────── Cost ledger (Sprint 2.25) ─────────────────────
@@ -1637,12 +1691,50 @@ export const recordPublishedHttp = httpAction(async (ctx, request) => {
   }
 
   try {
+    // The agent hands us whichever id she has: a gtmDraftedContent id (the
+    // publisher flow) OR a gtmCalendarEvents id (a one-tap item the founder
+    // posted by hand). Branch instead of throwing "draft not found" at her.
+    const target = await ctx.runQuery(
+      internal.gtmMaya.recordPublished.resolveManualPublishTarget,
+      { rawId: body.draftId }
+    );
+    if (target.kind === "event") {
+      const res = await ctx.runMutation(
+        internal.gtmMaya.recordPublished.markEventPublishedManual,
+        {
+          agentId: auth.agentId,
+          accountId: auth.accountId,
+          eventId: target.eventId,
+          providerPostId: body.providerPostId,
+          permalink: body.permalink,
+          postedAtMs: body.postedAtMs,
+        }
+      );
+      return new Response(
+        JSON.stringify(
+          res.ok
+            ? { ok: true, eventId: target.eventId, note: res.reason ?? "event marked published" }
+            : { ok: false, reason: res.reason }
+        ),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }
+    if (target.kind === "unknown") {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          reason:
+            "unknown id — pass the draftId from save_draft or the eventId from post_to_channel/propose_calendar (get_agent_lifecycle lists pendingConfirms), never an external post id",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }
     const result = await ctx.runMutation(
       internal.gtmMaya.recordPublished.recordDraftPublished,
       {
         agentId: auth.agentId,
         accountId: auth.accountId,
-        draftId: body.draftId as Id<"gtmDraftedContent">,
+        draftId: target.draftId,
         providerPostId: body.providerPostId,
         platform: body.platform,
         permalink: body.permalink,
@@ -1650,8 +1742,8 @@ export const recordPublishedHttp = httpAction(async (ctx, request) => {
       }
     );
     return new Response(
-      `ok (draft ${result.draftId} published; polls scheduled)`,
-      { status: 200 }
+      JSON.stringify({ ok: true, draftId: result.draftId, note: "polls scheduled" }),
+      { status: 200, headers: { "content-type": "application/json" } }
     );
   } catch (err) {
     console.error(

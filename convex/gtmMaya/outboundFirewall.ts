@@ -419,6 +419,7 @@ Do NOT use regex, counts, or fixed thresholds. Judge by feel. Look for, and reas
 - Em-dash as default connective: AI glues clauses with em-dashes where a person would use a period or two sentences. The rhythmic "X — Y — Z" cadence reads machine-made.
 - Suspiciously tidy tricolons / rule-of-three ("faster, cheaper, more reliable"). One is fine; a draft built of them is a tell.
 - "It's not just X, it's Y" and "not only… but also" — the signature AI pivot-to-profundity. Flag every instance.
+- Quotation-mark theater: quoting the target thread's own words back at its author ("Zero visitors. Zero trials." — felt this), staging one's own thoughts as dialogue (I thought to myself "why does it have to be this hard?"), or scare quotes around ordinary words. Real people say the thing; they don't perform it in quotes. Citing a real number, source, or another person's actual words once is fine — more than one quoted span in a short message is a tell.
 - Uniform sentence rhythm — a metronome of medium, evenly-weighted sentences with no burstiness.
 - Over-hedging / no stance ("it can be helpful in many cases", "this might be worth considering"). A real founder has an opinion.
 - Zero opinion / zero specifics — prose that could be about any product, sent to anyone, citing nothing concrete.

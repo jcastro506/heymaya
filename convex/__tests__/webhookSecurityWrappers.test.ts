@@ -90,23 +90,7 @@ describe("webhookSecret — assertWebhookSecret gate", () => {
 
   it("ADVERSARIAL: rejects empty / missing / wrong secret across every wrapper", async () => {
     const t = convexTest(schema, modules);
-    const args = {
-      eventId: "evt_test_1",
-      eventType: "gmail.message.received",
-      composioAccountId: "comp_test",
-      status: "processed" as const,
-      rawPayload: {},
-    };
     for (const bad of ["", "wrong", `${TEST_SECRET}x`, TEST_SECRET.slice(0, -1)]) {
-      await expect(
-        t.mutation(api.dealTriage.recordWebhookEventPublic, {
-          ...args,
-          secret: bad,
-        })
-      ).rejects.toThrow(/unauthorized/i);
-    }
-    // Same gate on the billing wrapper.
-    for (const bad of ["", "wrong"]) {
       await expect(
         t.mutation(api.billing.webhook.recordWebhookEventPublic, {
           secret: bad,
@@ -141,113 +125,6 @@ describe("webhookSecret — assertWebhookSecret gate", () => {
         email: "x@test.com",
       })
     ).rejects.toThrow(/unauthorized/i);
-  });
-});
-
-/* -------------------------------------------------------------------------- */
-/* dealTriage wrappers                                                         */
-/* -------------------------------------------------------------------------- */
-
-describe("dealTriage.recordWebhookEventPublic", () => {
-  beforeEach(() => {
-    _setWebhookSecretForTests(TEST_SECRET);
-  });
-  afterEach(() => {
-    _setWebhookSecretForTests(null);
-  });
-
-  it("succeeds with the correct secret and inserts a gmailWebhookEvents row", async () => {
-    const t = convexTest(schema, modules);
-    const res = await t.mutation(api.dealTriage.recordWebhookEventPublic, {
-      secret: TEST_SECRET,
-      eventId: "evt_ok_1",
-      eventType: "gmail.message.received",
-      composioAccountId: "comp_x",
-      status: "processed",
-      rawPayload: { foo: "bar" },
-    });
-    expect(res.alreadySeen).toBe(false);
-    expect(res.rowId).toBeDefined();
-
-    const row = await t.run((ctx) => ctx.db.get(res.rowId));
-    expect(row?.eventId).toBe("evt_ok_1");
-    expect(row?.status).toBe("processed");
-  });
-
-  it("replay defense: second call with the same eventId returns alreadySeen=true", async () => {
-    const t = convexTest(schema, modules);
-    await t.mutation(api.dealTriage.recordWebhookEventPublic, {
-      secret: TEST_SECRET,
-      eventId: "evt_replay",
-      eventType: "gmail.message.received",
-      composioAccountId: "comp_x",
-      status: "processed",
-      rawPayload: {},
-    });
-    const second = await t.mutation(api.dealTriage.recordWebhookEventPublic, {
-      secret: TEST_SECRET,
-      eventId: "evt_replay",
-      eventType: "gmail.message.received",
-      composioAccountId: "comp_x",
-      status: "processed",
-      rawPayload: {},
-    });
-    expect(second.alreadySeen).toBe(true);
-  });
-});
-
-describe("dealTriage.findCreatorByComposioAccountPublic", () => {
-  beforeEach(() => {
-    _setWebhookSecretForTests(TEST_SECRET);
-  });
-  afterEach(() => {
-    _setWebhookSecretForTests(null);
-  });
-
-  it("returns the resolved creator only when the secret is valid", async () => {
-    const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
-    await insertConnectedAccount(t, {
-      creatorId: a,
-      composioAccountIdHash: "h_a_1",
-    });
-
-    // Bad secret → throws.
-    await expect(
-      t.query(api.dealTriage.findCreatorByComposioAccountPublic, {
-        secret: "nope",
-        composioAccountIdHash: "h_a_1",
-      })
-    ).rejects.toThrow(/unauthorized/i);
-
-    // Good secret → resolves.
-    const ok = await t.query(api.dealTriage.findCreatorByComposioAccountPublic, {
-      secret: TEST_SECRET,
-      composioAccountIdHash: "h_a_1",
-    });
-    expect(ok?.creatorId).toBe(a);
-    expect(ok?.plan).toBe("manager");
-  });
-
-  it("CROSS-TENANT: A's hash never resolves to B's creators row", async () => {
-    const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
-    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
-    await insertConnectedAccount(t, {
-      creatorId: a,
-      composioAccountIdHash: "h_a_2",
-    });
-    await insertConnectedAccount(t, {
-      creatorId: b,
-      composioAccountIdHash: "h_b_2",
-    });
-
-    const aRes = await t.query(api.dealTriage.findCreatorByComposioAccountPublic, {
-      secret: TEST_SECRET,
-      composioAccountIdHash: "h_a_2",
-    });
-    expect(aRes?.creatorId).toBe(a);
-    expect(aRes?.creatorId).not.toBe(b);
   });
 });
 
@@ -358,7 +235,7 @@ describe("billing.webhook public wrappers", () => {
     expect(row?.stripeCustomerId).toBe("cus_a");
   });
 
-  it("handleTrialWillEndPublic: logs to mayaActionLog under entryId='billing.trial-ending'", async () => {
+  it("handleTrialWillEndPublic: logs to gtmAuditEvents under eventType='billing.trial-ending'", async () => {
     const t = convexTest(schema, modules);
     const a = await insertCreator(t, {
       suffix: "a",
@@ -372,11 +249,11 @@ describe("billing.webhook public wrappers", () => {
     expect(res.logged).toBe(true);
     const log = await t.run((ctx) =>
       ctx.db
-        .query("mayaActionLog")
-        .withIndex("by_creator", (q) => q.eq("creatorId", a))
+        .query("gtmAuditEvents")
+        .withIndex("by_account", (q) => q.eq("accountId", a))
         .collect()
     );
-    expect(log.some((r) => r.entryId === "billing.trial-ending")).toBe(true);
+    expect(log.some((r) => r.eventType === "billing.trial-ending")).toBe(true);
   });
 });
 

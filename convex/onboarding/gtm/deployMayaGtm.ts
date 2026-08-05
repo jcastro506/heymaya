@@ -348,7 +348,66 @@ const MODEL_ROUTING = {
   // and AVOID Groq. The bulletproof version is an OpenRouter dashboard action:
   // Provider Preferences → prefer/only "Novita" (or ignore Groq + AtlasCloud) —
   // then routing is fast AND tool-safe regardless of slug. Env-overridable.
-  mainMaya: process.env.MAYA_GTM_MODEL ?? "moonshotai/kimi-k2-0905",
+  // 2026-07-23 — COGS: main brain kimi-k2 → qwen3-235b-a22b-2507.
+  // VERIFIED live OpenRouter pricing (2026-07-23, /api/v1/models via the Fly
+  // machine — always re-verify, never trust this comment):
+  //   kimi-k2-0905:            $0.60 in / $2.50 out per M, 262K ctx
+  //   qwen3-235b-a22b-2507:    $0.09 in / $0.55 out per M, 262K ctx  ← 6.7x/4.5x cheaper
+  //   minimax-m2:              $0.30 in / $1.20 out per M (fallback candidate)
+  // The main agent's cost is INPUT-dominated: 24 heartbeats/day each re-read
+  // the ~30K-token workspace + every cron turn + chat. On the 2.5-day agent-2
+  // ledger (~$2.30/day steady state) the main model was ~half the burn; this
+  // swap cuts main-side spend ~6x (→ roughly $1.3-1.5/day all-in) and the
+  // one-time onboarding fan-out from ~$3.30 to ~$1.50-2. Secondary rationale:
+  // kimi-k2 caused two live incidents (90s tool-call timeouts eating approval
+  // turns 07-14; 400-loop on crons 07-06). Same 262K ctx; flagship-class
+  // 235B-A22B instruct with solid tool-calling; every downstream safety net
+  // (slop critic on Flash, server-side gates, publish preflights) unchanged.
+  // If voice/judgment regresses: MAYA_GTM_MODEL=moonshotai/kimi-k2-0905
+  // reverts per-deploy with zero code.
+  // 2026-07-26 — REVERTED to kimi-k2. qwen3-235b failed live twice in 24h:
+  // (1) copied the hello few-shot's fictional product as the founder's pitch;
+  // (2) with "already said post it → confirm_event NOW" verbatim in TOOLS.md
+  // and a valid eventId in hand, never called confirm_event, told the founder
+  // "Reddit has no API for direct posting" (false — live publish 07-24), and
+  // leaked needs_confirm. Cheap-model literalism/confabulation on the
+  // validation-critical path outweighs the ~$1/day saving. Re-test cheaper
+  // brains (minimax-m2 $0.30/$1.20 next candidate) AFTER the loop is proven
+  // stable; workers stay gpt-oss-120b (mechanical work, no incidents).
+  //
+  // 2026-07-31 — main brain kimi-k2 → openai/gpt-5.6-luna-pro. Operator
+  // decision, taken with the qwen history above in full view.
+  // VERIFIED live OpenRouter pricing (/api/v1/models, 2026-07-31 — always
+  // re-verify, never trust this comment):
+  //   kimi-k2-0905:        $0.60 in / $2.50 out per M,  262K ctx
+  //   gpt-5.6-luna:        $0.10 in / $0.60 out per M, 1.05M ctx
+  //   gpt-5.6-luna-pro:    $0.10 in / $0.60 out per M, 1.05M ctx  ← chosen
+  // `luna-pro` is the SAME underlying model as `luna`, served with
+  // `reasoning.mode: pro` for higher quality on complex tasks, at an identical
+  // per-token price. For the main brain that trade is free on paper and
+  // strictly better on judgment — which is the axis that broke last time.
+  //
+  // ⚠️ The listed price is per token, and pro mode SPENDS MORE TOKENS
+  // (reasoning is generated, then billed as output). Do not read the 6x input
+  // / 4.2x output headline as a guaranteed 6x bill. Watch the cost ledger for
+  // a week before believing any number; the honest claim today is "much
+  // cheaper per token, real saving unmeasured".
+  //
+  // Why this differs from the failed qwen3-235b swap: that was a cheap
+  // open-weight model whose failures were literalism and confabulation on the
+  // validation-critical path. This is a frontier-family model in its reasoning
+  // mode. Same bet shape, materially different horse — but the failure modes to
+  // watch are IDENTICAL and are written down in spec §18 Sprint 2.5:
+  //   (1) copying a few-shot's fictional product as the founder's real pitch
+  //   (2) refusing to call confirm_event with a valid eventId in hand, and
+  //       confabulating a reason ("Reddit has no API for direct posting")
+  // If either recurs: MAYA_GTM_MODEL=moonshotai/kimi-k2-0905:exacto reverts
+  // per-deploy with zero code change.
+  //
+  // No ":exacto" / ":nitro" suffix here: those exist to dodge Groq's tool-call
+  // validator on open-weight models. Luna is OpenAI-served, so provider
+  // routing isn't the same hazard.
+  mainMaya: process.env.MAYA_GTM_MODEL ?? "openai/gpt-5.6-luna-pro",
   // Sprint 2.18 #42 — workers DOWNGRADED from gemini-3.5-flash to
   // gemini-3-flash-preview. Per OpenRouter pricing (verified 2026-05-28):
   //   gemini-3.5-flash:  $1.50 in / $9 out per M
@@ -1978,8 +2037,9 @@ export function buildGtmMachineConfig(input: {
    *  updates still take effect even with the volume mounted. */
   memoryVolumeName?: string;
   /** Operator's IANA timezone → machine `TZ` env. Belt-and-suspenders for cron
-   *  scheduling: the cron exprs are already rewritten to UTC (localCronToUtc), but
-   *  if a future OpenClaw runtime honors the system TZ this makes it local too. */
+   *  scheduling: jobs.json ships operator-LOCAL exprs + `schedule.tz` (the
+   *  runtime evaluates them in that tz); this covers any job missing a tz —
+   *  the runtime falls back to the machine timezone. */
   timezone?: string;
 }): FlyMachineConfig {
   return {
@@ -1990,7 +2050,7 @@ export function buildGtmMachineConfig(input: {
     env: {
       OPENCLAW_STATE_DIR: "/data",
       OPENCLAW_CONFIG_PATH: "/data/openclaw.json",
-      // Belt-and-suspenders for cron tz (the exprs are already UTC-rewritten):
+      // Belt-and-suspenders for cron tz (exprs ship operator-LOCAL + schedule.tz):
       // if the runtime/cron lib honors the system TZ, this fires crons local too.
       ...(input.timezone ? { TZ: input.timezone } : {}),
       // 2026-05-30 — force IPv4-first DNS so outbound to api.telegram.org is

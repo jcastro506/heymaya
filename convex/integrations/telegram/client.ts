@@ -89,6 +89,44 @@ export interface TelegramInboundMessage {
   };
   text?: string;
   entities?: Array<{ type: string; offset: number; length: number }>;
+
+  /**
+   * ── Attachments ────────────────────────────────────────────────────────
+   *
+   * ⚠️ On a media message `text` is ALWAYS undefined — the founder's words
+   * arrive in `caption`. That single fact is why file uploads were silently
+   * dropped: the switchboard forked on `message.text`, so a photo fell off the
+   * end of the handler and the founder got no reply at all.
+   */
+  caption?: string;
+  /**
+   * Set on every item of an album. Telegram sends N SEPARATE updates for N
+   * files sent together, so this is the only thing tying them into one act.
+   */
+  media_group_id?: string;
+  /** Ascending by size — the LAST entry is the largest. Telegram recompresses
+   *  these to JPEG; a screenshot sent as a *document* keeps its pixels. */
+  photo?: TelegramPhotoSize[];
+  document?: TelegramFileMeta & { file_name?: string; mime_type?: string };
+  video?: TelegramFileMeta & { mime_type?: string; duration?: number };
+  /** ⚠️ The round selfie bubble — NOT a screen recording. See `extractFile`. */
+  video_note?: TelegramFileMeta & { duration?: number };
+  /** A GIF. ⚠️ Also carries `document`, so it must be matched FIRST. */
+  animation?: TelegramFileMeta & { mime_type?: string };
+}
+
+export interface TelegramFileMeta {
+  file_id: string;
+  /** Stable per file across chats and re-sends — the right idempotency key. */
+  file_unique_id: string;
+  /** Present before any download, which is how an oversize file is refused
+   *  without spending the fetch. Optional: Telegram omits it sometimes. */
+  file_size?: number;
+}
+
+export interface TelegramPhotoSize extends TelegramFileMeta {
+  width: number;
+  height: number;
 }
 
 /**
@@ -200,9 +238,148 @@ export async function sendTelegramMessage(
 }
 
 /**
+ * Show the typing indicator (§17.36.2).
+ *
+ * ## Why one small call is load-bearing
+ *
+ * The runtime architecture is *"Convex is the always-warm front door, Fly is
+ * the cold-startable brain"* — a machine that auto-stops when idle and wakes on
+ * demand. That is a **10× cost difference** at 200 customers ($100–400/mo
+ * against $1,400–3,000), and it is only viable because a webhook can wake the
+ * machine on the ~6–15 occasions a day she actually thinks.
+ *
+ * Its cost is latency: an OpenClaw boot with a workspace is plausibly 10–30s.
+ * For a webhook-driven comment reply, irrelevant. **For a founder texting her,
+ * it reads as broken** — and a founder who thinks she's broken is a churn
+ * event, not a patient user.
+ *
+ * This call is what covers that gap. The webhook hits Convex, Convex shows
+ * typing *immediately*, then wakes the machine. The founder sees the most
+ * ordinary thing in a messenger and the cold start disappears behind it.
+ *
+ * So the honest framing: without this, the auto-stop architecture doesn't work
+ * as designed and the fallback is always-on at ten times the price. It is
+ * thirty lines holding up the largest cost line in the model.
+ *
+ * ## Fire-and-forget, deliberately
+ *
+ * Never awaited on the critical path and never retried. The indicator is a
+ * courtesy — if it fails, the founder waits a beat longer, which is strictly
+ * better than delaying the actual wake to retry a cosmetic call.
+ *
+ * Telegram clears it after ~5s or when a message arrives, so a slow boot needs
+ * it re-sent rather than sent once.
+ */
+export async function sendTelegramChatAction(
+  identity: TelegramBotIdentity,
+  args: { chatId: string; action?: "typing" | "upload_photo" | "upload_video" },
+  fetchImpl: typeof fetch = fetch
+): Promise<TelegramApiResult<true>> {
+  try {
+    const res = await fetchImpl(apiUrl(identity.token, "sendChatAction"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: args.chatId,
+        action: args.action ?? "typing",
+      }),
+    });
+    if (!res.ok) {
+      return {
+        ok: false,
+        description: `HTTP ${res.status} ${res.statusText}`,
+        errorCode: res.status,
+      };
+    }
+    return (await res.json()) as TelegramApiResult<true>;
+  } catch (error) {
+    // Swallowed to a result rather than thrown: a network blip on a cosmetic
+    // call must never take down the wake path it exists to decorate.
+    return {
+      ok: false,
+      description: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
  * Set the bot's webhook URL. Idempotent. Called once per bot per
  * environment when the operator runs `npm run telegram:set-webhook`.
  */
+/**
+ * Resolve an uploaded file to bytes.
+ *
+ * Telegram hands a webhook a `file_id`, never the file. Two calls: `getFile`
+ * returns a `file_path`, and the download lives at a DIFFERENT host —
+ * `api.telegram.org/file/bot<token>/<path>` — which is the part that catches
+ * people, because it looks like the same base URL and isn't.
+ *
+ * ⚠️ The path is short-lived (Telegram documents ~1 hour) and the URL embeds
+ * the bot token. **Fetch immediately, store the bytes, never persist this URL**
+ * — a stored one leaks the token and rots within the hour.
+ *
+ * ⚠️ Bot API downloads cap at **20MB**. A founder's 60-second screen recording
+ * can exceed that, which is a real limit to report rather than a rare edge.
+ */
+export async function fetchTelegramFile(
+  identity: TelegramBotIdentity,
+  fileId: string
+): Promise<
+  | { ok: true; bytes: Uint8Array; contentType: string; filePath: string }
+  | { ok: false; reason: string }
+> {
+  try {
+    const meta = await fetch(apiUrl(identity.token, "getFile"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ file_id: fileId }),
+    });
+    const metaJson = (await meta.json()) as {
+      ok?: boolean;
+      description?: string;
+      result?: { file_path?: string; file_size?: number };
+    };
+    if (!metaJson.ok || !metaJson.result?.file_path) {
+      return {
+        ok: false,
+        reason: metaJson.description ?? "Telegram wouldn't give me that file",
+      };
+    }
+
+    const filePath = metaJson.result.file_path;
+    const download = await fetch(
+      `${TELEGRAM_API_BASE}/file/bot${identity.token}/${filePath}`
+    );
+    if (!download.ok) {
+      return { ok: false, reason: `download failed (${download.status})` };
+    }
+
+    const buffer = new Uint8Array(await download.arrayBuffer());
+    return {
+      ok: true,
+      bytes: buffer,
+      contentType:
+        download.headers.get("content-type") ?? guessContentType(filePath),
+      filePath,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/** Telegram omits content-type on some downloads; the extension is all we get. */
+function guessContentType(filePath: string): string {
+  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+  if (ext === "mp4" || ext === "mov") return "video/mp4";
+  if (ext === "png") return "image/png";
+  if (ext === "webp") return "image/webp";
+  if (ext === "gif") return "image/gif";
+  return "image/jpeg";
+}
+
 export async function setTelegramWebhook(
   identity: TelegramBotIdentity,
   args: {

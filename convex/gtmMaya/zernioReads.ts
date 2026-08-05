@@ -97,6 +97,25 @@ function addonError(err: unknown, addon: "analytics" | "inbox"):
 
 // ───────────────────── internalActions (the Zernio calls) ─────────────────────
 
+/**
+ * Cross-tenant guard. Zernio runs on a SHARED workspace key: omitting
+ * profileId from a read makes the query workspace-wide, returning every
+ * tenant's accounts. A null zernioProfileId (fresh agent, connect flow not
+ * run) must therefore fail closed, never fall through unscoped.
+ */
+function requireZernioProfile(agentCtx: {
+  zernioProfileId?: string | null;
+}): { ok: false; message: string } | null {
+  if (!agentCtx.zernioProfileId) {
+    return {
+      ok: false,
+      message:
+        "no accounts connected yet for this workspace — run get_connect_links and have the founder connect a channel first",
+    };
+  }
+  return null;
+}
+
 export const fetchConnectionHealth = internalAction({
   args: { agentId: v.id("gtmAgents") },
   handler: async (ctx, args): Promise<unknown> => {
@@ -105,6 +124,8 @@ export const fetchConnectionHealth = internalAction({
       { agentId: args.agentId }
     );
     if (!agentCtx) return { ok: false, message: "agent not found" };
+    const unscoped = requireZernioProfile(agentCtx);
+    if (unscoped) return unscoped;
     try {
       const health = await getAccountsHealth(zernioClient(), {
         profileId: agentCtx.zernioProfileId ?? undefined,
@@ -132,6 +153,8 @@ export const fetchAccountAnalytics = internalAction({
       { agentId: args.agentId }
     );
     if (!agentCtx) return { ok: false, message: "agent not found" };
+    const unscoped = requireZernioProfile(agentCtx);
+    if (unscoped) return unscoped;
     try {
       const analytics = await getPostAnalytics(zernioClient(), {
         profileId: agentCtx.zernioProfileId ?? undefined,
@@ -164,6 +187,8 @@ export const fetchPostTimeline = internalAction({
       { agentId: args.agentId }
     );
     if (!agentCtx) return { ok: false, message: "agent not found" };
+    const unscoped = requireZernioProfile(agentCtx);
+    if (unscoped) return unscoped;
     try {
       const timeline = await getPostTimeline(zernioClient(), {
         postId: args.postId,
@@ -191,6 +216,8 @@ export const fetchBestTime = internalAction({
       { agentId: args.agentId }
     );
     if (!agentCtx) return { ok: false, message: "agent not found" };
+    const unscoped = requireZernioProfile(agentCtx);
+    if (unscoped) return unscoped;
     try {
       const bestTime = await getBestTime(zernioClient(), {
         platform: args.platform,
@@ -260,6 +287,8 @@ export const fetchInbox = internalAction({
       { agentId: args.agentId }
     );
     if (!agentCtx) return { ok: false, message: "agent not found" };
+    const unscoped = requireZernioProfile(agentCtx);
+    if (unscoped) return unscoped;
     try {
       const comments = await listInboxComments(zernioClient(), {
         profileId: agentCtx.zernioProfileId ?? undefined,

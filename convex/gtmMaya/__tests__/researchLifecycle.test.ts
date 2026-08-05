@@ -1,8 +1,23 @@
 import { convexTest } from "convex-test";
-import { describe, expect, it } from "vitest";
-import { api } from "../../_generated/api";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { api, internal } from "../../_generated/api";
 import schema from "../../schema";
 import { modules } from "../../../tests/_modules";
+
+/**
+ * Fake timers so convex-test's scheduler never fires. These tests assert that
+ * work was SCHEDULED (they query `_scheduled_functions`), never that it ran —
+ * so letting a real timer fire it after teardown only produced
+ * "Write outside of transaction" as an UNHANDLED rejection, which vitest
+ * counts as a suite error and exits 1 even with every test green.
+ */
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+afterEach(() => {
+  vi.clearAllTimers();
+  vi.useRealTimers();
+});
 
 function authedGtm(t: ReturnType<typeof convexTest>, subject: string) {
   return t.withIdentity({
@@ -249,5 +264,70 @@ describe("GTM Maya research lifecycle", () => {
         cacheStatus: "called",
       })
     ).rejects.toThrow("Research job does not belong to this account");
+  });
+});
+
+describe("W2.5 posting mode — conversational grant (set_posting_mode)", () => {
+  it("agent path flips the mode — 'just post from now on' → autonomous", async () => {
+    const t = convexTest(schema, modules);
+    const user = authedGtm(t, "u_pm_auto");
+    const started = await user.mutation(
+      api.gtmMaya.researchLifecycle.startGtmOnboarding,
+      { channelPreference: "telegram", timezone: "America/New_York" }
+    );
+    const r = await t.mutation(
+      internal.gtmMaya.researchLifecycle.setPostingModeByAgent,
+      { agentId: started.agentId, mode: "autonomous" }
+    );
+    expect(r.ok).toBe(true);
+    const agent = await t.run((ctx) => ctx.db.get(started.agentId));
+    expect(agent?.autonomousPosting).toBe("autonomous");
+  });
+
+  it("entering confirm_first_week ALWAYS restarts the ramp (clock + counter)", async () => {
+    const t = convexTest(schema, modules);
+    const user = authedGtm(t, "u_pm_ramp");
+    const started = await user.mutation(
+      api.gtmMaya.researchLifecycle.startGtmOnboarding,
+      { channelPreference: "telegram", timezone: "America/New_York" }
+    );
+    // Simulate a graduated agent: old clock, 3 confirmed posts.
+    const staleSince = Date.now() - 10 * 24 * 60 * 60 * 1000;
+    await t.run(async (ctx) => {
+      await ctx.db.patch(started.agentId, {
+        autonomousSince: staleSince,
+        confirmedPostCount: 3,
+      });
+    });
+    // The founder revokes autonomy ("check with me for a week"): the ramp MUST
+    // restart, or isRampGraduated stays true and the revoke is a silent no-op
+    // (Maya keeps auto-posting against their explicit ask).
+    await t.mutation(internal.gtmMaya.researchLifecycle.setPostingModeByAgent, {
+      agentId: started.agentId,
+      mode: "confirm_first_week",
+    });
+    const after = await t.run((ctx) => ctx.db.get(started.agentId));
+    expect(after?.autonomousSince).toBeTypeOf("number");
+    expect(after?.autonomousSince).toBeGreaterThan(staleSince);
+    expect(after?.confirmedPostCount).toBe(0);
+  });
+
+  it("agent path and web path (setMyPostingMode) write the same preference", async () => {
+    const t = convexTest(schema, modules);
+    const user = authedGtm(t, "u_pm_web");
+    const started = await user.mutation(
+      api.gtmMaya.researchLifecycle.startGtmOnboarding,
+      { channelPreference: "telegram", timezone: "America/New_York" }
+    );
+    // Grant in chat, revoke from the dashboard — the field is one and the same.
+    await t.mutation(internal.gtmMaya.researchLifecycle.setPostingModeByAgent, {
+      agentId: started.agentId,
+      mode: "autonomous",
+    });
+    await user.mutation(api.gtmMaya.researchLifecycle.setMyPostingMode, {
+      mode: "confirm_each",
+    });
+    const agent = await t.run((ctx) => ctx.db.get(started.agentId));
+    expect(agent?.autonomousPosting).toBe("confirm_each");
   });
 });

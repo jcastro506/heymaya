@@ -101,4 +101,77 @@ crons.interval(
   internal.gtmMaya.accountLifecycle.sweepCanceledRetention
 );
 
+// ─── convex/maya — the watchers layer (§3.1) ──────────────────────────────
+//
+// Convex owns the CLOCK; OpenClaw owns the judgment. §3.1 traces every
+// catastrophic failure in this product's record to a harness failure —
+// orphaned sessions, a heartbeat re-spawning an 18-worker fleet, and crons
+// firing FOUR HOURS LATE — all from putting orchestration inside a
+// long-running LLM process. Two more reasons the clock can't go back there:
+// OpenClaw crons are per-agent, so shared niche sweeps would cost N times for
+// one answer; and a system cannot be the watchdog for itself.
+//
+// These fire for `agentVersion: "v2"` customers only. v1 keeps running on the
+// frozen gtmMaya agent — migration is per-customer, not a flag day.
+
+// ⛔ The morning brief and evening recap USED to be Convex crons here, at
+// 07:00 and 19:00 UTC. They are OpenClaw cron jobs now (§18 Sprint 2.9).
+//
+// Two things were wrong with them beyond the duplication: they fired in UTC, so
+// a "morning" brief landed at 23:00 for a Los Angeles founder — the same
+// double-timezone bug v1 shipped — and they routed through a `wake_agent` job
+// that had no handler, so the brief never actually reached anyone.
+//
+// The cadence lives in /data/cron/jobs.json with the founder's timezone on
+// every expression. What remains below is only what must survive the machine
+// being unreachable.
+
+// Drains the durable job queue, reaping abandoned work first so a job whose
+// worker died is back in the queue before anything new is claimed.
+crons.interval(
+  "maya-drain-jobs",
+  { minutes: 5 },
+  internal.maya.scheduler.drainJobs,
+  {}
+);
+
+// The liveness contract (§12), independent of every worker above.
+crons.interval(
+  "maya-liveness-sweep",
+  { hours: 1 },
+  internal.maya.scheduler.livenessSweep,
+  {}
+);
+
+// Vendor smoke suite (§18.0.5). 200 OK is not enough — the Zernio publish
+// failures returned 200s for six days because a lenient `.passthrough()` schema
+// parsed a changed response shape "successfully" into nothing. These runs parse
+// STRICTLY so a contract change is an incident the same day, not a mystery the
+// next week. Results land in `vendorHealth`; a red tier 2 blocks any deploy
+// touching that vendor. See convex/vendorSmoke/.
+//
+// Tier 1 — reachability. Free, so it runs hourly: auth valid, base URL
+// answering, credit balance readable.
+crons.interval(
+  "vendor-smoke-tier1-reachability",
+  { hours: 1 },
+  internal.vendorSmoke.runner.runTier1
+);
+
+// Tier 2 — shape. Reads only, cents a day. This is the tier that would have
+// caught the six-day incident.
+crons.daily(
+  "vendor-smoke-tier2-shape",
+  { hourUTC: 8, minuteUTC: 20 },
+  internal.vendorSmoke.runner.runTier2
+);
+
+// Tier 3 — round-trip. Real money (a post lands, a render completes), so it's
+// weekly, off-peak, and additionally run before any deploy touching a vendor.
+crons.weekly(
+  "vendor-smoke-tier3-roundtrip",
+  { dayOfWeek: "sunday", hourUTC: 9, minuteUTC: 40 },
+  internal.vendorSmoke.runner.runTier3
+);
+
 export default crons;

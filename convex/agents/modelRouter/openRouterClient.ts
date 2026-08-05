@@ -2,7 +2,7 @@
  * Thin OpenRouter HTTP client for Maya.
  *
  * v0 scope:
- * - Single model: Gemini 3 Flash (configurable via OPENROUTER_DEFAULT_MODEL)
+ * - Single model: GPT-5.6 Luna (configurable via OPENROUTER_DEFAULT_MODEL)
  * - Non-streaming only (streaming added in Sprint 4 with chat UI)
  * - Reasoning/thinking budget via OpenRouter's unified `reasoning` param
  * - Retry: 2 attempts on 5xx with exponential backoff; no retry on 4xx

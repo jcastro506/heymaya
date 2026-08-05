@@ -31,6 +31,8 @@ import {
   makeZernioContext,
   multiPlatformPost,
   getPostAnalytics,
+  replyToComment,
+  validatePost,
 } from "../integrations/zernio/endpoints";
 import type {
   ZernioPostPlatform,
@@ -72,6 +74,13 @@ function parseAutoPost(json: string | undefined | null): AutoPostJson | null {
   }
 }
 
+/** X's hard post limit. URLs count as 23 chars (t.co wrapping) regardless of
+ *  actual length — mirror that so the preflight matches X's own math. */
+export const X_CHAR_LIMIT = 280;
+export function xEffectiveLength(text: string): number {
+  return text.replace(/https?:\/\/\S+/g, "x".repeat(23)).length;
+}
+
 function zernioClient(): ZernioClient {
   const apiKey = process.env.ZERNIO_API_KEY;
   if (!apiKey) throw new Error("ZERNIO_API_KEY is not configured");
@@ -79,6 +88,26 @@ function zernioClient(): ZernioClient {
 }
 
 /** Per-agent context the publish gates need. */
+/**
+ * Resolve the subreddit for a Reddit reply from the saved target thread.
+ * Zernio's inbox comment API requires the subreddit when replying to
+ * third-party Reddit threads; the agent rarely passes it explicitly, but the
+ * thread row (saved at discovery time) knows it.
+ */
+export const getThreadSubreddit = internalQuery({
+  args: { agentId: v.id("gtmAgents"), externalId: v.string() },
+  handler: async (ctx, args): Promise<string | null> => {
+    const rows = await ctx.db
+      .query("gtmTargetThreads")
+      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+      .collect();
+    const hit = rows.find(
+      (t) => t.externalId === args.externalId && t.platform === "reddit"
+    );
+    return hit?.subredditOrCommunity ?? null;
+  },
+});
+
 export const getAgentPublishContext = internalQuery({
   args: { agentId: v.id("gtmAgents") },
   handler: async (
@@ -118,6 +147,16 @@ export const incrementConfirmedPostCount = internalMutation({
     await ctx.db.patch(args.agentId, {
       confirmedPostCount: (agent.confirmedPostCount ?? 0) + 1,
     });
+    // A founder-confirmed publish that LANDED is posting consent — count it
+    // as plan approval too, so lifecycleState can reach 'active' and the
+    // scheduled cadence (brief/pulse/recap) actually runs. Without this, a
+    // founder who approves posts but never says the magic plan-approval words
+    // leaves every cron silently NO_REPLYing on plan_ready forever.
+    await ctx.scheduler.runAfter(
+      0,
+      internal.gtmMaya.managerStore.markStrategyApprovedByPostingConsent,
+      { agentId: args.agentId }
+    );
   },
 });
 
@@ -160,6 +199,9 @@ export const publishContentDirect = internalAction({
     // LinkedIn's ~40-50% link-in-post reach penalty. The caller decides which
     // channels get this; here we just attach it as platformSpecificData.
     firstComment: v.optional(v.string()),
+    // Reddit replies: the target thread's subreddit (required by Zernio's
+    // third-party comment API). Auto-resolved from gtmTargetThreads when absent.
+    subreddit: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<PublishDirectResult> => {
     const content = args.content.trim();
@@ -178,6 +220,55 @@ export const publishContentDirect = internalAction({
             "Mine it for buyer language; prep a Show HN for the founder to post manually, never here.",
         ],
       };
+    }
+
+    // X hard character limit, checked BEFORE any gate or confirm event exists.
+    // Six days of live publish attempts (2026-07-16 → 07-22) failed on exactly
+    // this — every drafted X reply was 400-600 chars — and the Zernio error was
+    // swallowed, so the agent flailed at ghosts. Fail fast, with the numbers,
+    // so the agent's next move is obvious: shorten and retry.
+    if (channel === "x") {
+      const effective = xEffectiveLength(content);
+      if (effective > X_CHAR_LIMIT) {
+        return {
+          action: "failed",
+          reasons: [
+            `x_char_limit: this draft is ${effective} chars (URLs count as 23); ` +
+              `X caps free-account posts at ${X_CHAR_LIMIT} (Premium accounts get 25k, but draft to ${X_CHAR_LIMIT} unless the founder says they pay for Premium). ` +
+              `Rewrite it under ${X_CHAR_LIMIT} chars and post again — do not split it into a thread unless the founder asked for one.`,
+          ],
+        };
+      }
+    }
+
+    // Zernio-native preflight — dry-runs their FULL validation pipeline
+    // (per-platform char limits, media-required rules for IG/TikTok/YT,
+    // hashtag caps, thread formats) with the platform's REAL error strings,
+    // BEFORE any gate or confirm event exists. Advisory on API failure (the
+    // real publish surfaces errors now); skipped for Reddit replies (inbox
+    // comments API — post validation doesn't apply) and for media posts (the
+    // content-only dry-run can't see the slides and would wrongly demand
+    // media; those validate for real at publish).
+    if (
+      !(channel === "reddit" && args.targetExternalId) &&
+      !(args.mediaAssetIds && args.mediaAssetIds.length > 0)
+    ) {
+      try {
+        const check = await validatePost(zernioClient(), {
+          content,
+          platform: channel as ZernioPostPlatform,
+        });
+        if (!check.valid) {
+          return {
+            action: "failed",
+            reasons: check.errors.length > 0
+              ? check.errors
+              : ["Zernio preflight rejected this draft (no detail returned)"],
+          };
+        }
+      } catch {
+        // Preflight unavailable — proceed; the publish itself reports truth.
+      }
     }
 
     const agentCtx = await ctx.runQuery(
@@ -269,23 +360,74 @@ export const publishContentDirect = internalAction({
         }
         if (urls.length > 0) mediaItems = urls;
       }
-      const firstComment = args.firstComment?.trim();
-      const platformData: Partial<Record<ZernioPostPlatform, ChannelPlatformData>> | undefined =
-        firstComment && firstComment.length > 0
-          ? { [channel as ZernioPostPlatform]: { firstComment } }
-          : undefined;
-      const result = await multiPlatformPost(
-        zctx,
-        [{ platform: channel as ZernioPostPlatform, accountId: args.zernioAccountId }],
-        { text: content, mediaItems, scheduleAt, timezone: args.timezone, platformData }
-      );
-      const row = result.perPlatform[0];
-      const zernioPostId = row?.postId ?? null;
-      if (!zernioPostId || row?.state === "failed") {
-        return { action: "failed", reasons: [row?.error ?? "no postId returned"] };
+      // ── Replies thread as REAL replies (live-verified 2026-07-22) ─────────
+      // A "reply" pushed through POST /api/v1/posts publishes as a TOP-LEVEL
+      // post: on Reddit that means submitting the reply text as a new
+      // subreddit post (rejected by post-guidance rules — every live Reddit
+      // attempt failed this way), and on X a standalone tweet aimed at nobody.
+      // Reddit replies go through the inbox comments API (third-party posts
+      // supported per Zernio spec §222); X replies thread via replyToTweetId.
+      let zernioPostId: string | null = null;
+      let scheduledForIso: string | undefined;
+      if (channel === "reddit" && args.targetExternalId) {
+        // Zernio requires the subreddit on third-party reply calls; resolve it
+        // from the saved target-thread row when the caller didn't pass one.
+        const subreddit =
+          args.subreddit ??
+          (await ctx.runQuery(internal.gtmMaya.publishEngine.getThreadSubreddit, {
+            agentId: args.agentId,
+            externalId: args.targetExternalId,
+          })) ??
+          undefined;
+        const reply = await replyToComment(zernioClient(), {
+          postId: args.targetExternalId,
+          accountId: args.zernioAccountId,
+          message: content,
+          commentId: args.targetCommentId,
+          subreddit,
+        });
+        if (!reply.success) {
+          return {
+            action: "failed",
+            reasons: [
+              "reddit reply was not accepted (Zernio inbox API returned success:false) — the thread may be locked/deleted; pick another thread or hand the founder a paste-ready comment",
+            ],
+          };
+        }
+        zernioPostId = reply.id ?? `comment:${args.targetExternalId}`;
+      } else {
+        const firstComment = args.firstComment?.trim();
+        const psd: ChannelPlatformData = {
+          ...(firstComment && firstComment.length > 0 ? { firstComment } : {}),
+          ...(channel === "x" && args.targetExternalId
+            ? { replyToTweetId: args.targetExternalId }
+            : {}),
+        };
+        const platformData:
+          | Partial<Record<ZernioPostPlatform, ChannelPlatformData>>
+          | undefined =
+          Object.keys(psd).length > 0
+            ? { [channel as ZernioPostPlatform]: psd }
+            : undefined;
+        const result = await multiPlatformPost(
+          zctx,
+          [{ platform: channel as ZernioPostPlatform, accountId: args.zernioAccountId }],
+          { text: content, mediaItems, scheduleAt, timezone: args.timezone, platformData }
+        );
+        const row = result.perPlatform[0];
+        zernioPostId = row?.postId ?? null;
+        if (!zernioPostId || row?.state === "failed") {
+          return { action: "failed", reasons: [row?.error ?? "no postId returned"] };
+        }
+        scheduledForIso = scheduleAt ? new Date(scheduleAt).toISOString() : undefined;
       }
-      // Stamp the dedup ledger on reply publishes.
-      if (args.targetExternalId && args.draftId) {
+      if (!zernioPostId) {
+        return { action: "failed", reasons: ["no postId returned"] };
+      }
+      // Stamp the dedup ledger on EVERY reply publish — draftId or not. An
+      // unstamped founder-confirmed reply makes checkAlreadyEngaged blind and
+      // invites a second reply to the same thread (the ban signal).
+      if (args.targetExternalId) {
         await ctx.runMutation(internal.gtmMaya.engagementLedger.recordEngagement, {
           accountId: agentCtx.accountId,
           agentId: args.agentId,
@@ -309,7 +451,7 @@ export const publishContentDirect = internalAction({
         action: "auto",
         reasons: [],
         zernioPostId,
-        scheduledForIso: scheduleAt ? new Date(scheduleAt).toISOString() : undefined,
+        scheduledForIso,
       };
     } catch (err) {
       return { action: "failed", reasons: [(err as Error).message] };

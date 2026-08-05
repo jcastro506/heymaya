@@ -32,7 +32,7 @@
  *   4. Sibling-file — the /lc_gtm/log_trace route (http.ts), the gtmAgentTrace
  *      table (schema.ts), and the maya-gtm-tools withTrace() wrapper must stay
  *      in lockstep on tool/category/status shape.
- *   5. TODO grep — no unjustified TODOs.
+ *   5. TODO grep: every marker carries a sprint tag or a stated reason.
  */
 
 import { v } from "convex/values";
