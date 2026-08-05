@@ -489,21 +489,20 @@ describe("⭐ COLD REPLY — commenting on someone else's post", () => {
   });
 
   /**
-   * ⭐ An em-dash HOLDS a public post. Pinned because it is surprising.
+   * ⭐ An em-dash POSTS. It is drift, not a blocker.
    *
-   * `aiPunctuationTells` is a *deterministic blocker*, not drift — so a post
-   * carrying one never reaches the vendor, whatever the safety critic says.
-   * The em-dash is the most recognisable AI tell there is, so blocking it is
-   * defensible; what makes it worth a test is the consequence during a
-   * seven-day run, where a held post looks the same as a quiet day.
+   * It blocked until 2026-08-05, along with a hyphen-as-dash and — the one
+   * that made it obvious — **a colon**, so *"here's the thing: it works"*
+   * never went out. Between the three, most well-written posts were held, and
+   * a held post is indistinguishable from a quiet day.
    *
-   * Note the asymmetry with DMs: `sanitizeOutboundText` REPAIRS punctuation
-   * rather than bouncing the message, and its comment says so — "the private
-   * DM path". Public posts get no such repair, because rewriting after
-   * approval would break the snapshot guarantee the test above asserts. If
-   * this is ever relaxed, the repair belongs at DRAFT time, not here.
+   * The operator's call, and it restores the standing rule: *non-catastrophic
+   * drift is logged, never dropped.* The tells are still real; they are now
+   * `SOUL.md`'s job, which is where outbound discipline belongs. The denylist
+   * keeps only what a prompt structurally cannot catch — internal terms and
+   * "as an AI", both of which are fatal on a founder's real account.
    */
-  it("⭐ AN EM-DASH HOLDS A PUBLIC POST, BEFORE THE CRITIC IS EVEN ASKED", async () => {
+  it("⭐ AN EM-DASH POSTS — punctuation is drift, not a blocker", async () => {
     const t = convexTest(schema, modules);
     const customerId = await seed(t, "emdash");
     vi.stubEnv("ZERNIO_API_KEY", "test-key");
@@ -515,11 +514,28 @@ describe("⭐ COLD REPLY — commenting on someone else's post", () => {
       idempotencyKey: "idem_emdash",
     });
 
-    expect(result.ok).toBe(false);
-    expect(result.error).toMatch(/held/i);
-    // Nothing reached Zernio, and no placement was recorded.
-    expect(zernioCalls(calls)).toHaveLength(0);
+    expect(result.ok).toBe(true);
+    expect(zernioCalls(calls)).toHaveLength(1);
     const rows = await t.run((ctx) => ctx.db.query("placements").collect());
-    expect(rows).toHaveLength(0);
+    expect(rows).toHaveLength(1);
+  });
+
+  it("⭐ BUT 'as an AI' STILL BLOCKS — that one IS catastrophic", async () => {
+    // The line the denylist still holds: our plumbing or a model unmasking
+    // itself, under the founder's real name.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "aiblock");
+    vi.stubEnv("ZERNIO_API_KEY", "test-key");
+    const calls = stubZernio(created("https://twitter.com/a/status/4"));
+
+    const result = await t.action(internal.maya.publish.publishPlacement, {
+      customerId,
+      snapshotText: "As an AI, I think this tool is great for founders",
+      idempotencyKey: "idem_ai",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(zernioCalls(calls)).toHaveLength(0);
+    expect(await t.run((ctx) => ctx.db.query("placements").collect())).toHaveLength(0);
   });
 });
