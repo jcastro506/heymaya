@@ -310,6 +310,22 @@ export const sync = internalAction({
           );
         }
 
+        /**
+         * ⭐ ZERO ACCOUNTS QUERIED IS NOT AN EMPTY INBOX.
+         *
+         * Live 2026-08-05: `/inbox/comments` returned `accountsQueried: 0`
+         * against one healthy connected X account, while
+         * `/inbox/conversations` returned `1` on the same pass. So this sync
+         * reported "0 new" — which read as "nobody replied" when the truth
+         * was "I didn't look at anything".
+         *
+         * For a product whose job is *answer everyone*, those two must never
+         * be the same output.
+         */
+        if (page.accountsQueried === 0) {
+          unreadable.add("comments on your posts");
+        }
+
         for (const comment of page.items) {
           const text = (comment.content ?? "").trim();
           // An empty comment is a like or a sticker with no words in it.

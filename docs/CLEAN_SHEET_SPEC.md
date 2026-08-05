@@ -239,6 +239,46 @@ That's honest, still valuable, and it turns a hard ceiling into a visible servic
 | **YouTube** | Full loop + **permanent searchable content** |
 | **X** | Full loop + **cold reply** + real links |
 
+#### 2.15.1 ⭐ MEASURED, 2026-08-05 — the first live probe of the grid
+
+`convex/maya/zernioCapability.ts` calls Zernio and builds the grid. First run:
+
+| | count |
+|---|---|
+| `verified` | **0** |
+| `declared_only` | 6 — all X, all Zernio's own claim |
+| `unconnected` | 14 — TikTok, Instagram, YouTube |
+| `impossible` | 4 — with a platform reason each |
+
+**Nothing about Zernio is proven on any channel.** What the probe did find:
+
+- ⚠️ **`/inbox/comments` returned `accountsQueried: 0`** against one healthy
+  connected account, while `/inbox/conversations` returned `1` on the same
+  pass. Zero is not an empty inbox — it is *"I didn't look"*, and the two were
+  indistinguishable from `data: []`. **This made the inbox report "0 new" while
+  reading nothing at all.** Now surfaced as unreadable.
+- ⚠️ **`/analytics` is broken for our account**: `lastSync: null`, empty
+  `posts[]` while the overview claimed 9 published, and **zero results when
+  filtered by `platform=twitter`** — that account's own platform string. Post
+  metrics come from twitterapi.io instead.
+- ⚠️ **`/best-time?platform=twitter` returns HTTP 200 with an HTML page.** Not a
+  404 — a 200. A `.passthrough()` schema is exactly what fails to notice that.
+- ⚠️ **Two connections for the same handle**, one healthy and one
+  `needsReconnect` with `issues: ["Account inactive"]`. Only healthy accounts
+  define a channel's capability, or a stale duplicate answers for it.
+- **`tokenExpiresAt` is returned on `/api/v1/accounts` and nothing reads it.**
+  The live X token expired under two hours after this was written.
+
+⭐ **Declared is not verified.** That account declared
+`canFetchAnalytics: true` while analytics returned nothing usable. The grid
+keeps the two apart on purpose.
+
+⭐ **And `unconnected` is the finding that decides the roadmap.** Three of four
+channels have no account attached, so **nothing about them can be checked until
+one is.** That turns "should we connect Instagram and YouTube?" from a
+preference into a prerequisite — their entire column is a guess until then, and
+§2.15.05 already warns that guessing is how this matrix went wrong.
+
 #### 2.15.2 Zernio capability we're not using
 
 The docs expose considerably more than the client wraps:
