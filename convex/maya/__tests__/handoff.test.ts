@@ -303,3 +303,4 @@ describe("readiness is measured, not assumed", () => {
     expect(row.machineReadyAt).toBeUndefined();
   });
 });
+

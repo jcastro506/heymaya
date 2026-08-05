@@ -120,6 +120,29 @@ export const send = internalMutation({
         customerId: args.customerId,
         payloadJson: JSON.stringify({ messageId }),
       });
+
+      /**
+       * ⭐ Delivery latency is the CALLER's call, not this function's.
+       *
+       * `drainJobs` had exactly one caller — a **5-minute** interval cron — so
+       * every message written here sat in the queue an average of two and a
+       * half minutes. Including her replies: `handoff` routes those through
+       * here too, so a founder could ask a question, watch the typing
+       * indicator stop, and get the answer four minutes later.
+       *
+       * Measured on staging 2026-08-05: two messages created 22s apart were
+       * delivered 316ms apart — one sweep — and the gap to the previous sweep
+       * was exactly 1,200,000ms. Cron-only, confirmed.
+       *
+       * The cron was never *meant* to be the delivery path. The comment above
+       * it says what it's for: work that must survive *"the machine being
+       * unreachable."* It stays exactly that — a backstop.
+       *
+       * So anything with a human waiting calls `deliverNow()` (scheduler.ts)
+       * straight after this, which drains inline and returns once the message
+       * is actually out. Batch work — a brief, a recap — just lets the cron
+       * pick it up, because five minutes there is invisible.
+       */
     }
 
     return { messageId, sent: true };

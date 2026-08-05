@@ -376,3 +376,68 @@ describe("proactiveSentToday — the counter behind proactiveMessagesPerDay", ()
     ).toBe(0);
   });
 });
+
+/**
+ * ⭐ Delivery must not wait for the cron.
+ *
+ * `drainJobs` had one caller — a 5-minute interval — so every message sat an
+ * average of 2.5 minutes before going out. Her REPLIES route through here too,
+ * which meant a founder could ask a question, watch the typing indicator stop,
+ * and get the answer four minutes later. From their side that is not an
+ * employee; it's a broken bot.
+ *
+ * The fix deliberately does NOT live in `send`: latency is the caller's call.
+ * Actions with a human waiting call `deliverNow()`; batch work lets the cron
+ * take it, because five minutes on a morning brief is invisible.
+ */
+describe("⭐ THE QUEUE IS DURABLE, NOT SLOW", () => {
+  it("sending enqueues delivery rather than doing it inline", async () => {
+    // Inline would mean a transient Telegram 502 silently loses the message.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "queued");
+    await t.mutation(internal.maya.messages.send, {
+      customerId,
+      surface: "telegram",
+      body: "anything",
+      dedupeKey: "queue-1",
+    });
+    const jobs = await t.run(async (ctx) => await ctx.db.query("jobs").collect());
+    const deliver = jobs.filter((j) => j.kind === "deliver_message");
+    expect(deliver).toHaveLength(1);
+    expect(deliver[0].status).toBe("queued");
+  });
+
+  it("⭐ SEND ITSELF SCHEDULES NOTHING — the caller decides the urgency", async () => {
+    // If `send` nudged the drain for every message, a fleet-wide brief sweep
+    // would fire one action per customer to save time nobody is measuring.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "nonudge");
+    await t.mutation(internal.maya.messages.send, {
+      customerId,
+      surface: "telegram",
+      body: "your morning brief",
+      dedupeKey: "brief-no-nudge",
+    });
+    const scheduled = await t.run(async (ctx) =>
+      (await ctx.db.system.query("_scheduled_functions").collect()).filter((f) =>
+        f.name.includes("drainJobs")
+      )
+    );
+    expect(scheduled).toHaveLength(0);
+  });
+
+  it("a deduped re-send enqueues nothing new", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "dedupejob");
+    for (let i = 0; i < 2; i += 1) {
+      await t.mutation(internal.maya.messages.send, {
+        customerId,
+        surface: "telegram",
+        body: "anything",
+        dedupeKey: "queue-2",
+      });
+    }
+    const jobs = await t.run(async (ctx) => await ctx.db.query("jobs").collect());
+    expect(jobs.filter((j) => j.kind === "deliver_message")).toHaveLength(1);
+  });
+});

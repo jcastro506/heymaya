@@ -239,6 +239,24 @@ async function runHandler(
  * Bounded per run so one sweep can't spin forever, and the reaper runs first
  * so a job abandoned by a dead worker is back in the queue before we claim.
  */
+/**
+ * Deliver what's queued, right now, from inside an action that just wrote it.
+ *
+ * For anything a founder is actively waiting on. Errors are swallowed on
+ * purpose: the 5-minute cron is still the backstop, so a transient failure here
+ * costs latency rather than the message. Never call this for batch work — the
+ * cron exists precisely so a brief doesn't need it.
+ */
+export async function deliverNow(ctx: {
+  runAction: (ref: any, args: any) => Promise<any>;
+}): Promise<void> {
+  try {
+    await ctx.runAction(internal.maya.scheduler.drainJobs, {});
+  } catch {
+    // The cron will pick it up.
+  }
+}
+
 export const drainJobs = internalAction({
   // `now` is a TEST SEAM, and it exists because its absence was a time bomb:
   // the spend window is derived from the real clock, so a test seeding spend at

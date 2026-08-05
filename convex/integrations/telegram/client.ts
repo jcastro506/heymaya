@@ -89,6 +89,44 @@ export interface TelegramInboundMessage {
   };
   text?: string;
   entities?: Array<{ type: string; offset: number; length: number }>;
+
+  /**
+   * ── Attachments ────────────────────────────────────────────────────────
+   *
+   * ⚠️ On a media message `text` is ALWAYS undefined — the founder's words
+   * arrive in `caption`. That single fact is why file uploads were silently
+   * dropped: the switchboard forked on `message.text`, so a photo fell off the
+   * end of the handler and the founder got no reply at all.
+   */
+  caption?: string;
+  /**
+   * Set on every item of an album. Telegram sends N SEPARATE updates for N
+   * files sent together, so this is the only thing tying them into one act.
+   */
+  media_group_id?: string;
+  /** Ascending by size — the LAST entry is the largest. Telegram recompresses
+   *  these to JPEG; a screenshot sent as a *document* keeps its pixels. */
+  photo?: TelegramPhotoSize[];
+  document?: TelegramFileMeta & { file_name?: string; mime_type?: string };
+  video?: TelegramFileMeta & { mime_type?: string; duration?: number };
+  /** ⚠️ The round selfie bubble — NOT a screen recording. See `extractFile`. */
+  video_note?: TelegramFileMeta & { duration?: number };
+  /** A GIF. ⚠️ Also carries `document`, so it must be matched FIRST. */
+  animation?: TelegramFileMeta & { mime_type?: string };
+}
+
+export interface TelegramFileMeta {
+  file_id: string;
+  /** Stable per file across chats and re-sends — the right idempotency key. */
+  file_unique_id: string;
+  /** Present before any download, which is how an oversize file is refused
+   *  without spending the fetch. Optional: Telegram omits it sometimes. */
+  file_size?: number;
+}
+
+export interface TelegramPhotoSize extends TelegramFileMeta {
+  width: number;
+  height: number;
 }
 
 /**

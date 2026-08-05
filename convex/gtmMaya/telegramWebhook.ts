@@ -6,6 +6,7 @@ import {
   parseStartCommand,
   type TelegramInboundUpdate,
 } from "../integrations/telegram/client";
+import { extractFile, ALBUM_SETTLE_MS } from "../maya/telegramFiles";
 
 /**
  * Sprint 15 — Telegram bot webhook.
@@ -121,6 +122,80 @@ export const telegramWebhookHttp = httpAction(async (ctx, request) => {
       { token: pairingToken, chatId, username }
     );
     return new Response("ok", { status: 200 });
+  }
+
+  /**
+   * ⭐ FILES, BEFORE THE TEXT FORK.
+   *
+   * On a media message `text` is ALWAYS undefined — the founder's words live in
+   * `caption`. So the text fork below can never see an upload, and until this
+   * block existed a founder who answered her ask for a screen recording got
+   * **silence**. Sprint 4.75 built the ask and the library and left no way in.
+   *
+   * Ingest is deterministic and does NOT wake the machine: dropping four
+   * screenshots shouldn't cost a 10–30s boot and a turn of tokens to be told
+   * "got them". A caption is the exception — see below.
+   */
+  if (update.message && !startPayload) {
+    const extracted = extractFile(update.message);
+    if (extracted) {
+      const chatId = String(update.message.chat.id);
+      const v2Customer = await ctx.runQuery(
+        internal.maya.telegram.customerByChatId,
+        { chatId }
+      );
+      // v1 is frozen and has no library, so its founders fall through
+      // untouched — same per-customer migration as the text path.
+      if (v2Customer) {
+        const caption = update.message.caption;
+        /**
+         * One ack per ACT, not per file. An album arrives as N updates sharing
+         * `media_group_id`; without it, five screenshots earn five receipts.
+         * A lone file keys on `file_unique_id`, which also makes a Telegram
+         * retry of the same update idempotent.
+         */
+        const ackKey = update.message.media_group_id ?? extracted.fileUniqueId;
+
+        await ctx.scheduler.runAfter(
+          0,
+          internal.maya.telegramFiles.ingestInboundFile,
+          {
+            customerId: v2Customer,
+            chatId,
+            fileId: extracted.fileId,
+            fileUniqueId: extracted.fileUniqueId,
+            kindHint: extracted.kindHint,
+            sizeBytes: extracted.sizeBytes,
+            caption,
+            ackKey,
+          }
+        );
+
+        if (caption) {
+          /**
+           * They typed words with the upload, so they're talking to her, not
+           * filing something. Worth a wake — and her reply IS the receipt, so
+           * `acknowledgeUpload` is skipped to avoid answering twice.
+           */
+          await ctx.runAction(internal.maya.telegram.showTyping, { chatId });
+          await ctx.scheduler.runAfter(0, internal.maya.telegram.holdTyping, {
+            chatId,
+          });
+          await ctx.scheduler.runAfter(
+            ALBUM_SETTLE_MS,
+            internal.maya.telegram.handleInbound,
+            { chatId, text: caption }
+          );
+        } else {
+          await ctx.scheduler.runAfter(
+            ALBUM_SETTLE_MS,
+            internal.maya.telegramFiles.acknowledgeUpload,
+            { customerId: v2Customer, ackKey, since: Date.now() }
+          );
+        }
+        return new Response("ok", { status: 200 });
+      }
+    }
   }
 
   // SWITCHBOARD: a normal text message (NOT a /start command) → forward to the
