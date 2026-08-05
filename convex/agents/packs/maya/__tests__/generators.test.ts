@@ -388,62 +388,26 @@ describe("the gateway config exists at all", () => {
   });
 });
 
-describe("THE CRITIC RUNS ON A GENUINELY DIFFERENT MODEL", () => {
-  const config = JSON.parse(
-    buildMayaWorkspace(INPUT).files.get(OPENCLAW_CONFIG_PATH)!
-  );
-  const critic = config.agents.list.find(
-    (a: { id: string }) => a.id === "critique"
-  );
-
-  it("AGENTS LIVE IN agents.list, NOT AT THE ROOT", () => {
-    // A root-level `subagents` array produced `<root>: Invalid input` on the
-    // live machine — the gateway refused to start and named nothing more
-    // specific than "root". Subagents ARE agents: same list as `main`.
-    expect(config.subagents).toBeUndefined();
-    expect(Array.isArray(config.agents.list)).toBe(true);
+describe("THE DIFFERENT-MODEL RULE MOVED SERVER-SIDE", () => {
+  // The critique SUBAGENT is gone (2026-08-05) — it resolved to a model that
+  // appears nowhere in the config and 400'd on every call, killing the parent
+  // turn. The rule it enforced did not go away; it moved to
+  // `convex/maya/outbound.ts`, at the publish gate, where she cannot route
+  // around it.
+  it("the workspace still ships the critique SKILL", () => {
+    // She self-checks against §7.5.2's tells before drafting even without a
+    // second agent. Prose is weaker than a different model — that's the loss,
+    // and it's stated rather than hidden.
+    const bundle = buildMayaWorkspace(INPUT);
+    const skills = [...bundle.files.keys()].filter((k) => k.startsWith("skills/"));
+    expect(skills.some((s) => s.includes("critique"))).toBe(true);
   });
 
-  it("a default `main` agent is declared", () => {
-    // Without it there is no default agent for the session to attach to.
-    const main = config.agents.list.find((a: { id: string }) => a.id === "main");
-    expect(main?.default).toBe(true);
-    expect(main?.workspace).toBe(WORKSPACE_DIR);
-  });
-
-  it("plugins.allow declares its discovery mode", () => {
-    // `plugins.allow` alone is a LEGACY key in 2026.5.x; the runtime warns it
-    // "now gates bundled provider discovery by default" and wants an explicit
-    // mode. `compat` would quietly re-enable bundled discovery — the opposite
-    // of an allow-list.
-    expect(config.plugins.bundledDiscovery).toBe("allowlist");
-  });
-
-  it("binds critique to a model, structurally", () => {
-    // The skill asks the model to refuse the verdict if it notices it IS the
-    // writer's model — a prompt asking a model to introspect, which is the
-    // weakest enforcement available. Configuration makes it true instead.
-    expect(critic?.model).toBeTruthy();
-    expect(critic.model).not.toBe(config.agents.defaults.model.primary);
-  });
-
-  it("is not merely a different REASONING MODE of the same model", () => {
-    // The trap: `openai/gpt-5.6-luna` looks like a different model from
-    // `openai/gpt-5.6-luna-pro` and isn't — the spec is explicit that luna-pro
-    // "is the same underlying model as luna, served with reasoning.mode: pro".
-    // A luna critic judging a luna-pro writer grades its own register and
-    // catches nothing, which is exactly what the rule exists to prevent.
-    // Refs are `openrouter/<vendor>/<model>` — the provider prefix is what
-    // OpenClaw resolves the model through, so vendor and family sit one
-    // segment further in than the bare OpenRouter slug.
-    const family = (m: string) => m.split("/")[2]?.replace(/-pro$/, "");
-    expect(family(critic.model)).not.toBe(
-      family(config.agents.defaults.model.primary)
+  it("and the main model is unchanged by the removal", () => {
+    const config = JSON.parse(
+      buildMayaWorkspace(INPUT).files.get(OPENCLAW_CONFIG_PATH)!
     );
-    // Different vendor entirely, which is the strongest available signal.
-    expect(critic.model.split("/")[1]).not.toBe(
-      config.agents.defaults.model.primary.split("/")[1]
-    );
+    expect(config.agents.defaults.model.primary).toMatch(/luna-pro/);
   });
 });
 

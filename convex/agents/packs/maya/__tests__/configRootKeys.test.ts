@@ -34,6 +34,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { SAFETY_CRITIC_MODEL } from "../../../../maya/outbound";
 import {
   buildMayaWorkspace,
   OPENCLAW_CONFIG_PATH,
@@ -143,7 +144,7 @@ describe("EVERY ROOT KEY IS ONE OPENCLAW ACCEPTS", () => {
   });
 });
 
-describe("THE CRITIC CANNOT ACT ON ITS OWN VERDICT", () => {
+describe("THE CRITIQUE SUBAGENT IS GONE, AND THAT'S RECORDED", () => {
   const config = JSON.parse(
     buildMayaWorkspace({
       founder: { email: "sam@example.com", name: "Sam", timezone: "UTC" },
@@ -151,22 +152,32 @@ describe("THE CRITIC CANNOT ACT ON ITS OWN VERDICT", () => {
       channels: [],
     }).files.get(OPENCLAW_CONFIG_PATH)!
   );
-  const critic = config.agents.list.find(
-    (a: { id: string }) => a.id === "critique"
-  );
 
-  it("⭐ IT HAS NO PLUGIN TOOLS — it cannot publish what it just approved", () => {
-    // And it doesn't work with them: inheriting the default tool surface,
-    // kimi-k2 rejects the payload with a 400 and the critic never runs at all.
-    // A gate that crashes is a gate that fails OPEN — every draft passes
-    // review because review died. Observed live 2026-08-04.
-    expect(critic.tools.deny).toContain("group:plugins");
-    expect(critic.tools.profile).toBe("minimal");
+  it("⛔ no critique agent — it killed every turn that invoked it", () => {
+    // It resolved to moonshotai/kimi-k2-0905, which appears NOWHERE in the
+    // config, and 400'd on every call. A subagent failure is not contained:
+    // it surfaces as FailoverError and kills the PARENT turn, so the founder
+    // got "No response from OpenClaw" for anything touching drafting.
+    const ids = (config.agents.list as Array<{ id: string }>).map((a) => a.id);
+    expect(ids).not.toContain("critique");
   });
 
-  it("⭐ EVERY TOOL PROFILE IS ONE OPENCLAW ACCEPTS", () => {
-    // An invented profile doesn't degrade — the gateway REFUSES TO START.
-    // Shipped "readonly" on 2026-08-05; the allowed set is exactly these four.
+  it("and main cannot delegate to an agent that isn't there", () => {
+    const main = (config.agents.list as Array<{ id: string; subagents?: { allowAgents?: string[] } }>)
+      .find((a) => a.id === "main");
+    expect(main?.subagents?.allowAgents ?? []).toEqual([]);
+  });
+
+  it("⭐ BUT THE SAFETY GUARANTEE STILL EXISTS, SERVER-SIDE", () => {
+    // The critique moved to convex/maya/outbound.ts: different family, fails
+    // CLOSED, and at the publish gate where she cannot route around it. The
+    // subagent was a critic she chose to invoke; this one she cannot skip.
+    expect(SAFETY_CRITIC_MODEL).toMatch(/^moonshotai\//);
+    expect(SAFETY_CRITIC_MODEL).not.toMatch(/^openai\//);
+  });
+
+  it("EVERY TOOL PROFILE IS STILL ONE OPENCLAW ACCEPTS", () => {
+    // An invented profile doesn't degrade — the gateway refuses to start.
     const ALLOWED = ["minimal", "coding", "messaging", "full"];
     for (const agent of config.agents.list as Array<{
       id: string;
@@ -177,16 +188,6 @@ describe("THE CRITIC CANNOT ACT ON ITS OWN VERDICT", () => {
         agent.tools.profile
       );
     }
-  });
-
-  it("it cannot spawn its way around the restriction", () => {
-    expect(critic.subagents.allowAgents).toEqual([]);
-  });
-
-  it("and it still runs on a different family than the writer", () => {
-    expect(critic.model.split("/")[1]).not.toBe(
-      config.agents.defaults.model.primary.split("/")[1]
-    );
   });
 });
 
