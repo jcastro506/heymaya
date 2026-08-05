@@ -279,3 +279,52 @@ describe("A STALE DRAFT IS NOT OFFERED", () => {
     expect(others).toEqual([]);
   });
 });
+
+describe("⭐ A POST TRACES TO AN IDEA, A REPLY DOES NOT", () => {
+  it("a post carries its ideaId through to the draft", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "withidea");
+    const ideaId = await t.run(async (ctx) =>
+      ctx.db.insert("ideas", {
+        customerId,
+        angle: "nobody explains what it actually costs",
+        evidenceJson: JSON.stringify({
+          quote: "nobody explains what it actually costs",
+          sourceUrls: ["https://tiktok.com/@a/video/1"],
+        }),
+        status: "bank",
+        sourceKind: "complaint",
+        createdAt: NOW,
+        updatedAt: NOW,
+      })
+    );
+
+    const res = await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "we don't hide pricing. it's on the page, it's one number.",
+      ideaId,
+      now: NOW,
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+
+    const draft = (await t.run((ctx) => ctx.db.get(res.draftId))) as Doc<"drafts">;
+    expect(draft.ideaId).toBe(ideaId);
+  });
+
+  it("a REPLY needs no idea — the thing being replied to is the evidence", async () => {
+    // Requiring a banked idea here would stop her answering people, and §1 says
+    // inbound outranks outbound.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "replynoidea");
+    const res = await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "that's the exact thing we fixed last month — happy to show you",
+      kind: "reply",
+      now: NOW,
+    });
+    expect(res.ok).toBe(true);
+  });
+});
