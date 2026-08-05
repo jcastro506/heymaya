@@ -141,6 +141,15 @@ export default defineToolPlugin({
     "Typed tools for the convex/maya agent. Every call is schema-validated and runs server-side against Convex /maya/*. No tool accepts a customerId — tenancy is resolved from the bearer token alone.",
   tools: (tool) => [
     tool({
+      name: "scroll",
+      label: "Scroll",
+      description:
+        "Read what's actually moving in the niche right now. RUN THIS BEFORE WRITING ANYTHING — a post written without it comes from product truth alone, which is the same post every day. Takes no arguments; the niche is already known from the founder's account. Returns observations ranked by VELOCITY (engagement over age), so the top of the list is what's climbing, not what's already big. ok:true with an empty list is a real answer: the niche is quiet, and saying so beats posting filler. Pick ONE observation worth answering and draft to that specific person or moment — never to the topic.",
+      parameters: Type.Object({}),
+      execute: async (p, _cfg, ctx) => call("scroll", p, ctx.signal),
+    }),
+
+    tool({
       name: "draft",
       label: "Draft",
       description:

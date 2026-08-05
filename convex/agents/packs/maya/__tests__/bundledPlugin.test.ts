@@ -120,6 +120,7 @@ describe("the install contract", () => {
       "draft",
       "publish",
       "reply",
+      "scroll",
     ]);
   });
 
