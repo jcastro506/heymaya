@@ -79,6 +79,16 @@ export interface ProductTruth {
   competitors: string[];
   /** ⭐ What we could not establish. The honest half of the record. */
   gaps: string[];
+  /**
+   * ⭐ What the founder told us directly, in their words, newest last.
+   *
+   * Kept as raw text rather than merged into the fields above, for two
+   * reasons. Merging needs a model call, and a model rewriting the founder's
+   * correction is exactly how a correction gets softened back toward the thing
+   * being corrected. And a scrape can go stale while their words cannot — so
+   * these OUTRANK everything read from the page, and render above it.
+   */
+  founderSays?: string[];
   source: {
     url: string;
     fetchedAt: number;
@@ -567,5 +577,47 @@ export const correct = mutation({
       updatedAt: Date.now(),
     });
     return { ok: true };
+  },
+});
+
+
+/**
+ * Record what the founder told us, and let it outrank the page.
+ *
+ * Returns whether anything changed, so the tool can say so honestly rather than
+ * claiming an update it didn't make.
+ */
+export const applyCorrection = internalMutation({
+  args: { customerId: v.id("customers"), correction: v.string() },
+  handler: async (ctx, args): Promise<boolean> => {
+    const text = args.correction.trim();
+    if (!text) return false;
+
+    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    if (!customer) return false;
+
+    let truth: Partial<ProductTruth> = {};
+    try {
+      truth = customer.productTruthJson
+        ? (JSON.parse(customer.productTruthJson) as Partial<ProductTruth>)
+        : {};
+    } catch {
+      truth = {};
+    }
+
+    const said = truth.founderSays ?? [];
+    // Saying the same thing twice is emphasis, not a second fact.
+    if (said.some((s) => s.trim().toLowerCase() === text.toLowerCase())) {
+      return false;
+    }
+
+    await ctx.db.patch(args.customerId, {
+      productTruthJson: JSON.stringify({
+        ...truth,
+        founderSays: [...said, text].slice(-10),
+      }),
+      updatedAt: Date.now(),
+    });
+    return true;
   },
 });

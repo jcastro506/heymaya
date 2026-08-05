@@ -61,6 +61,7 @@ describe("the manifest and the code agree", () => {
       "checkpoint",
       "draft",
       "publish",
+      "remember",
       "reply",
       "scroll",
     ]);
@@ -94,7 +95,7 @@ describe("NO TOOL CAN NAME A TENANT", () => {
     // isn't — re-opening the exact class of bug the server surface was shaped
     // to eliminate, at the one layer that isn't guarded by it.
     const schemas = index.match(/parameters:\s*Type\.Object\(\{[\s\S]*?\n\s*\}\)/g) ?? [];
-    expect(schemas.length).toBe(6);
+    expect(schemas.length).toBe(7);
     for (const schema of schemas) {
       expect(schema).not.toMatch(/customerId|accountId|tenantId|customer_id/i);
     }
@@ -124,7 +125,7 @@ describe("NO TOOL CAN NAME A TENANT", () => {
     // adds nothing of its own. If this ever built a body by hand, the schema
     // test would stop being sufficient.
     expect(index).toMatch(/body: JSON\.stringify\(payload \?\? \{\}\)/);
-    for (const tool of ["scroll", "draft", "publish", "reply", "ask_founder", "checkpoint"]) {
+    for (const tool of ["scroll", "draft", "publish", "reply", "remember", "ask_founder", "checkpoint"]) {
       expect(index).toContain(`call("${tool}", p, ctx.signal)`);
     }
   });

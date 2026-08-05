@@ -109,6 +109,8 @@ export interface MayaWorkspaceInput {
      * she asks or assumes — which is the whole grounding invariant.
      */
     gaps?: string[];
+    /** What the founder said directly. Outranks the scrape, always. */
+    founderSays?: string[];
   };
   /** Connected channels and their switch positions. Only these ship norms. */
   channels: Array<{
@@ -455,8 +457,14 @@ Every tool returns the same envelope:
 | \`draft\` | \`{text, channel, kind?}\` | \`{draftId, length}\` |
 | \`publish\` | \`{draftId, alreadyApproved?}\` | \`{published, queued, holdReason?}\` |
 | \`reply\` | \`{draftId, inReplyTo, alreadyApproved?}\` | same as publish |
+| \`remember\` | \`{verbatim, kind, meaning?}\` | \`{directiveId, productUpdated}\` |
 | \`ask_founder\` | \`{question}\` | \`{asked, openQuestion?}\` |
 | \`checkpoint\` | \`{memoryMarkdown, contextTruncated?}\` | \`{bytes, shrankBy?}\` |
+
+**\`remember\` the moment they give me a rule.** *"Don't post before 9."* *"We
+pivoted to agencies."* A rule I only hold in my head lasts until the context
+rolls, and then I break it and they have to say it twice. Their exact words,
+never my summary — being able to quote them back in October is the point.
 
 **\`scroll\` comes before \`draft\`, every day.** A post written without reading
 comes from \`APP.md\` alone, and that is the same post every morning. The niche
@@ -526,6 +534,16 @@ function renderApp(input: MayaWorkspaceInput): string {
 
 **${input.product.name}** — ${input.product.url}
 
+${
+    input.product.founderSays?.length
+      ? `## What the founder told me directly
+
+${input.product.founderSays.map((f) => `> ${f}`).join("\n\n")}
+
+**These outrank anything below.** A page goes stale; what they told me doesn't.
+`
+      : ""
+  }
 ${input.product.truth ?? "_Product truth not captured yet. Until it is, I ask rather than assume — every claim has to trace back to something here._"}
 
 ${input.product.differentiator ? `**What makes it different:** ${input.product.differentiator}` : ""}

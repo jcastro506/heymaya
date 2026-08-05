@@ -411,6 +411,10 @@ export const workspaceInput = internalQuery({
         gaps: Array.isArray(product.gaps)
           ? product.gaps.filter((g): g is string => typeof g === "string")
           : undefined,
+        // Outranks everything scraped — a page goes stale, their words don't.
+        founderSays: Array.isArray(product.founderSays)
+          ? product.founderSays.filter((f): f is string => typeof f === "string")
+          : undefined,
       },
       channels: live.map((c) => ({
         channel: c.channel,

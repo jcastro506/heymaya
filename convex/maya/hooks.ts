@@ -214,6 +214,87 @@ function str(body: Record<string, unknown>, key: string): string | undefined {
  * silent, so the agent kept trying and the founder saw nothing happen for days.
  */
 /**
+ * `remember` — write down a rule the founder just gave.
+ *
+ * §10's premise is that founders give instructions in passing, forever — *"don't
+ * post before 9"*, *"stop saying game-changer"*, *"we pivoted to agencies"* — and
+ * that a model absorbs them only until the context rolls. So rules live in rows.
+ *
+ * The ledger has existed since Sprint 2 and **nothing could write to it**: no
+ * tool, no hook. Every rule the founder gave lasted exactly as long as the
+ * conversation, which is the failure §10 was written to prevent.
+ *
+ * `verbatim` is what they actually typed, never a paraphrase, because the payoff
+ * is being able to say *"you told me on July 3: 'stop posting on linkedin its
+ * dead'"* — and a paraphrase is a summary of a rule while the quote is proof you
+ * were listening.
+ *
+ * ⭐ A `product_truth` rule also **updates the product record**, because
+ * otherwise the founder corrects a fact, she agrees, and every draft keeps
+ * citing the old one. That was live on 2026-08-04: her product truth came from
+ * a landing page describing a product that no longer exists, and there was no
+ * way for anyone to tell her.
+ */
+export const rememberHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if ("error" in auth) return auth.error;
+  const parsed = await readJson(request);
+  if ("error" in parsed) return parsed.error;
+
+  const verbatim = str(parsed.body, "verbatim");
+  const kind = str(parsed.body, "kind");
+  if (!verbatim) {
+    return respond(
+      {
+        ok: false,
+        why: "nothing to remember — I need their exact words",
+        next: "pass what they actually typed, not your summary of it",
+      },
+      400
+    );
+  }
+  if (!kind || !(DIRECTIVE_KINDS as readonly string[]).includes(kind)) {
+    return respond(
+      {
+        ok: false,
+        data: { allowed: DIRECTIVE_KINDS },
+        why: `"${kind ?? "(none)"}" isn't a kind of rule I can file`,
+        next: "pick the closest kind from data.allowed — use `other` if nothing fits",
+      },
+      400
+    );
+  }
+
+  const result = await ctx.runMutation(internal.maya.directives.append, {
+    customerId: auth.customer._id,
+    kind: kind as (typeof DIRECTIVE_KINDS)[number],
+    verbatim,
+    interpretationJson: str(parsed.body, "meaning")
+      ? JSON.stringify({ meaning: str(parsed.body, "meaning") })
+      : undefined,
+  });
+
+  // A corrected fact has to reach the grounding record, or she agrees with the
+  // founder and keeps citing the old version anyway.
+  let productUpdated = false;
+  if ((CLAIM_CHANGING_KINDS as readonly string[]).includes(kind)) {
+    productUpdated = await ctx.runMutation(
+      internal.maya.productTruth.applyCorrection,
+      { customerId: auth.customer._id, correction: verbatim }
+    );
+  }
+
+  return respond({
+    ok: true,
+    data: { directiveId: result.directiveId, productUpdated },
+    why: "filed — I'll hold you to this one",
+    next: productUpdated
+      ? "the product record is updated too; say back what you now understand so they can catch it if it's wrong"
+      : "carry on — say it back in your own words so they know you got it",
+  });
+});
+
+/**
  * `scroll` — read what's moving in the niche.
  *
  * The 07:00 cron says "scroll", and without this she can only say she can't.
@@ -326,6 +407,40 @@ export const draftHttp = httpAction(async (ctx, request) => {
     next: "publish it with this draftId, or show it to the founder first if the switch says so",
   });
 });
+
+/**
+ * The kinds a rule can be. Mirrors the schema union exactly — a tool sending a
+ * kind the schema rejects would throw inside the mutation, where the founder
+ * never sees it.
+ */
+/**
+ * ⭐ THE KINDS THAT CHANGE WHAT SHE MAY CLAIM.
+ *
+ * Not just `product_truth`. Told *"we don't do Reddit anymore, HeyMaya runs
+ * TikTok, Instagram, YouTube and X only"*, she filed it as `channel_toggle` —
+ * which is a **better** classification than `product_truth`, and left the
+ * grounding record still saying she posts on Reddit.
+ *
+ * The design was brittle for assuming one kind. The actual rule is about
+ * consequence, not label: if a rule changes what is TRUE about the product, it
+ * belongs in `APP.md` regardless of which drawer it was filed in.
+ *
+ * Deliberately excludes the operational kinds. *"Don't post before 9"* is a
+ * real rule and says nothing about what the product is.
+ */
+export const CLAIM_CHANGING_KINDS = [
+  "product_truth",
+  "icp_correction",
+  "approved_claim",
+  "channel_toggle",
+] as const;
+
+export const DIRECTIVE_KINDS = [
+  "posting_mode", "channel_toggle", "cadence", "timing_window", "topic",
+  "phrase_ban", "voice", "entity_rule", "approved_claim", "product_truth",
+  "icp_correction", "notification_pref", "pause", "escalation",
+  "standing_task", "campaign", "other",
+] as const;
 
 export const publishHttp = httpAction(async (ctx, request) => {
   const auth = await authenticate(ctx, request);

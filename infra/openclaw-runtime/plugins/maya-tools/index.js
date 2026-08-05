@@ -226,6 +226,28 @@ export default defineToolPlugin({
     }),
 
     tool({
+      name: "remember",
+      label: "Remember",
+      description:
+        "File a rule the founder just gave you, so it outlives this conversation. USE IT THE MOMENT THEY SAY ONE — 'don't post before 9', 'stop saying game-changer', 'we pivoted to agencies', 'my buyers are agencies not solo devs'. A rule you only hold in context lasts until the context rolls, and then you break it. Pass their EXACT words as `verbatim`, never your summary: the payoff is being able to quote them back months later, and a paraphrase is not proof you were listening. kind `product_truth` also updates what you're allowed to claim about the product, so use it when they correct a FACT rather than give an instruction. Returns {directiveId, productUpdated}. Say it back in your own words afterwards so they can catch you if you filed it wrong.",
+      parameters: Type.Object({
+        verbatim: Type.String({
+          description: "Exactly what they typed. Not cleaned up, not summarized.",
+        }),
+        kind: Type.String({
+          description:
+            "posting_mode · channel_toggle · cadence · timing_window · topic · phrase_ban · voice · entity_rule · approved_claim · product_truth · icp_correction · notification_pref · pause · escalation · standing_task · campaign · other",
+        }),
+        meaning: Type.Optional(
+          Type.String({
+            description: "Your reading of what it means in practice. Optional; the verbatim is what matters.",
+          })
+        ),
+      }),
+      execute: async (p, _cfg, ctx) => call("remember", p, ctx.signal),
+    }),
+
+    tool({
       name: "ask_founder",
       label: "Ask Founder",
       description:

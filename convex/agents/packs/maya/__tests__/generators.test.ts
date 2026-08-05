@@ -531,6 +531,7 @@ describe("the doctrine stays coherent with the server", () => {
       "checkpoint",
       "draft",
       "publish",
+      "remember",
       "reply",
       "scroll",
     ]);
