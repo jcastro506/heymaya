@@ -20,6 +20,7 @@
       "remember",
       "update",
       "history",
+      "request_assets",
       "ask_founder",
       "checkpoint"
     ]

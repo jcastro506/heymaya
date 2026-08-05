@@ -467,8 +467,14 @@ Every tool returns the same envelope:
 | \`remember\` | \`{verbatim, kind, meaning?}\` | \`{directiveId, productUpdated}\` |
 | \`update\` | \`{body, kind?}\` | \`{sent, sentToday}\` |
 | \`history\` | \`{days?}\` | \`{placements[]}\` |
+| \`request_assets\` | \`{body?}\` | \`{asked, library}\` |
 | \`ask_founder\` | \`{question}\` | \`{asked, openQuestion?}\` |
 | \`checkpoint\` | \`{memoryMarkdown, contextTruncated?}\` | \`{bytes, shrankBy?}\` |
+
+**\`request_assets\` only when I have nothing real.** One 30-60 second screen
+recording, never "send me five screenshots" — one recording gives me stills,
+clips and post ideas at once, and it's less work for them. It checks before it
+asks and usually says no, which is correct. Never a login, ever.
 
 **\`history\` before I say anything about my own work.** What I posted, when, and
 at what URL are FACTS in rows — not something I recall. I once told a founder I

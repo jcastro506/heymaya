@@ -268,6 +268,80 @@ export async function sendTelegramChatAction(
  * Set the bot's webhook URL. Idempotent. Called once per bot per
  * environment when the operator runs `npm run telegram:set-webhook`.
  */
+/**
+ * Resolve an uploaded file to bytes.
+ *
+ * Telegram hands a webhook a `file_id`, never the file. Two calls: `getFile`
+ * returns a `file_path`, and the download lives at a DIFFERENT host —
+ * `api.telegram.org/file/bot<token>/<path>` — which is the part that catches
+ * people, because it looks like the same base URL and isn't.
+ *
+ * ⚠️ The path is short-lived (Telegram documents ~1 hour) and the URL embeds
+ * the bot token. **Fetch immediately, store the bytes, never persist this URL**
+ * — a stored one leaks the token and rots within the hour.
+ *
+ * ⚠️ Bot API downloads cap at **20MB**. A founder's 60-second screen recording
+ * can exceed that, which is a real limit to report rather than a rare edge.
+ */
+export async function fetchTelegramFile(
+  identity: TelegramBotIdentity,
+  fileId: string
+): Promise<
+  | { ok: true; bytes: Uint8Array; contentType: string; filePath: string }
+  | { ok: false; reason: string }
+> {
+  try {
+    const meta = await fetch(apiUrl(identity.token, "getFile"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ file_id: fileId }),
+    });
+    const metaJson = (await meta.json()) as {
+      ok?: boolean;
+      description?: string;
+      result?: { file_path?: string; file_size?: number };
+    };
+    if (!metaJson.ok || !metaJson.result?.file_path) {
+      return {
+        ok: false,
+        reason: metaJson.description ?? "Telegram wouldn't give me that file",
+      };
+    }
+
+    const filePath = metaJson.result.file_path;
+    const download = await fetch(
+      `${TELEGRAM_API_BASE}/file/bot${identity.token}/${filePath}`
+    );
+    if (!download.ok) {
+      return { ok: false, reason: `download failed (${download.status})` };
+    }
+
+    const buffer = new Uint8Array(await download.arrayBuffer());
+    return {
+      ok: true,
+      bytes: buffer,
+      contentType:
+        download.headers.get("content-type") ?? guessContentType(filePath),
+      filePath,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/** Telegram omits content-type on some downloads; the extension is all we get. */
+function guessContentType(filePath: string): string {
+  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+  if (ext === "mp4" || ext === "mov") return "video/mp4";
+  if (ext === "png") return "image/png";
+  if (ext === "webp") return "image/webp";
+  if (ext === "gif") return "image/gif";
+  return "image/jpeg";
+}
+
 export async function setTelegramWebhook(
   identity: TelegramBotIdentity,
   args: {

@@ -289,6 +289,22 @@ export default defineToolPlugin({
     }),
 
     tool({
+      name: "request_assets",
+      label: "Request assets",
+      description:
+        "Ask the founder for ONE 30-60 second screen recording of them using the product. Only call this when you genuinely have nothing real to work with — it checks first and returns ok:false if the library is fine, which is the common case. Half of products publish no usable screenshot anywhere, and for those founders this recording is the only real product imagery that will ever exist: it gives stills, clips, and post ideas from a single file. Never ask for five screenshots instead; it's more work for them and less for you. Never ask for a login. It spends one of your few unprompted messages and is capped to once a day, so if it comes back ok:false, believe it and move on with what you have.",
+      parameters: Type.Object({
+        body: Type.Optional(
+          Type.String({
+            description:
+              "Your own wording for the ask, in their language. Omit for the default. Say WHY you need it and how little work it is.",
+          })
+        ),
+      }),
+      execute: async (p, _cfg, ctx) => call("request_assets", p, ctx.signal),
+    }),
+
+    tool({
       name: "ask_founder",
       label: "Ask Founder",
       description:

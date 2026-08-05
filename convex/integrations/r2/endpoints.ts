@@ -67,7 +67,13 @@ export interface UploadAssetInputs {
   /** Operator-claimed mime; we validate by sniffing. */
   mimeType: string;
   /** Provenance — folded into x-amz-meta for forensics. */
-  sourceChannel: "imessage" | "whatsapp" | "sms" | "web" | "crm-import";
+  sourceChannel:
+    | "telegram"
+    | "imessage"
+    | "whatsapp"
+    | "sms"
+    | "web"
+    | "crm-import";
   receivedAt: number;
 }
 

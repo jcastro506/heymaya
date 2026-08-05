@@ -3587,6 +3587,59 @@ export default defineSchema({
    * Cheap, bounded and **idempotent** — re-running a sweep costs nothing and
    * duplicates nothing, which is what makes a daily cron safe to retry.
    */
+  /**
+   * The media library (§6.4.3) — what she has to make things out of.
+   *
+   * Pruned with the dead products and never rebuilt, while §6.4 kept describing
+   * it. Half of target-type sites publish **no product screenshot at all**
+   * (§6.4.6b, measured), so for roughly half of customers this table is the
+   * only place real product imagery will ever come from.
+   *
+   * > *"Without tags `search_my_media` returns junk, and the difference between
+   * > a grounded post and a random screenshot is entirely in whether she could
+   * > find the right one. Tagging is what makes the library usable rather than
+   * > merely full."*
+   */
+  mediaAssets: defineTable({
+    customerId: v.id("customers"),
+    kind: v.union(
+      v.literal("screenshot"),
+      v.literal("screen_recording"),
+      v.literal("image"),
+      v.literal("slide"),
+      v.literal("video"),
+      v.literal("logo")
+    ),
+    /** Where it came from, because a founder-sent asset outranks a scrape. */
+    source: v.union(
+      v.literal("telegram"),
+      v.literal("onboarding"),
+      v.literal("scrape"),
+      v.literal("generated")
+    ),
+    /** R2 key. The bytes are ours; the vendor URL was borrowed. */
+    storageKey: v.string(),
+    /**
+     * ⚠️ PUBLICLY REACHABLE, or Creatify cannot use it — their servers FETCH
+     * the URLs we pass (§6.4.4). A signed URL needs a TTL comfortably longer
+     * than a render, which runs ~5 minutes.
+     */
+    publicUrl: v.optional(v.string()),
+    contentType: v.string(),
+    bytes: v.optional(v.number()),
+    /** What it SHOWS, from a vision call. "the export screen", "empty state". */
+    caption: v.optional(v.string()),
+    tagsJson: v.optional(v.string()),
+    /** `product_screenshot` is the only one that counts as real product imagery. */
+    classifiedAs: v.optional(v.string()),
+    /** Products change. A launch post must not draw on pre-launch imagery. */
+    capturedAt: v.number(),
+    staleAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_customer", ["customerId"])
+    .index("by_customer_and_kind", ["customerId", "kind"]),
+
   observations: defineTable({
     customerId: v.id("customers"),
     channel: v.string(),

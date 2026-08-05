@@ -188,6 +188,13 @@ async function readJson(
   }
 }
 
+/** Narrow a readJson result to its body, or an empty object on failure. */
+function parsed_body(
+  parsed: { body: Record<string, unknown> } | { error: Response }
+): Record<string, unknown> {
+  return "body" in parsed ? parsed.body : {};
+}
+
 function num(body: Record<string, unknown>, key: string): number | undefined {
   const value = body[key];
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
@@ -218,6 +225,88 @@ function str(body: Record<string, unknown>, key: string): string | undefined {
  * reason rather than retry. That framing matters: the old system's holds were
  * silent, so the agent kept trying and the founder saw nothing happen for days.
  */
+/**
+ * `request_assets` — ask for the one thing only the founder can give.
+ *
+ * §6.4.6b measured that **half** of target-type sites publish no product
+ * screenshot at all, and a headless browser doesn't fix that — the images
+ * aren't hidden, they don't exist. So for roughly half of customers this ask
+ * is the only route to real product imagery, and everything visual downstream
+ * waits on it.
+ *
+ * ## One recording, not five screenshots
+ *
+ * §6.4.2. Lighter for them, richer for us: one 30–60s screen recording yields
+ * frames, b-roll, AND showable moments that seed the idea bank. "Send me five
+ * screenshots" asks for more work and returns less.
+ *
+ * ## Guarded three ways, because attention is the scarce thing
+ *
+ * It fires only when the library is **degraded** (zero real product imagery —
+ * not merely thin, which is a worse video and still a real post), it spends a
+ * proactive message, and it is deduped for the day. A founder pestered for
+ * assets they already sent stops reading the messages that matter.
+ */
+export const requestAssetsHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if ("error" in auth) return auth.error;
+
+  const health = await ctx.runQuery(internal.maya.media.libraryHealth, {
+    customerId: auth.customer._id,
+  });
+
+  if (!health.shouldAsk) {
+    return respond({
+      ok: false,
+      data: { asked: false, library: health },
+      why: `no need — ${health.detail}`,
+      next: "don't ask. Use what's already there and get on with the post",
+    });
+  }
+
+  const budgets = await ctx.runQuery(internal.maya.planFeatures.planFeatures, {
+    customerId: auth.customer._id,
+  });
+  const sentToday = await ctx.runQuery(
+    internal.maya.messages.proactiveSentToday,
+    { customerId: auth.customer._id }
+  );
+  if (sentToday >= budgets.proactiveMessagesPerDay) {
+    return respond({
+      ok: false,
+      data: { asked: false },
+      why: "you've used today's unprompted messages, and this isn't urgent enough to be the exception",
+      next: "ask tomorrow. Do NOT retry today",
+    });
+  }
+
+  const body = str(parsed_body(await readJson(request)), "body");
+  const result = await ctx.runMutation(internal.maya.messages.send, {
+    customerId: auth.customer._id,
+    surface: "telegram",
+    body:
+      body ??
+      "Quick ask, and it's the only one I'll make: could you send me a 30–60 second screen recording of you using it? Just talk through what you'd show someone. I can pull stills, clips and post ideas out of one recording — it saves you sending screenshots one at a time, and right now I've got nothing real of the product to work with.",
+    proactive: true,
+    // One ask per customer per day, ever — see the guard above.
+    dedupeKey: `asset-ask:${new Date().toISOString().slice(0, 10)}`,
+  });
+
+  return result.sent
+    ? respond({
+        ok: true,
+        data: { asked: true, library: health },
+        why: "asked — one recording, and it's on its way to them",
+        next: "carry on with what you can make meanwhile. Don't ask again",
+      })
+    : respond({
+        ok: false,
+        data: { asked: false, duplicate: true },
+        why: "you already asked today",
+        next: "wait for the recording rather than asking twice",
+      });
+});
+
 /**
  * `history` — what she has actually done.
  *
