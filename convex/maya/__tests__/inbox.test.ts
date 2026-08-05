@@ -349,6 +349,105 @@ describe("⭐ X MENTIONS", () => {
   });
 });
 
+describe("⭐ REPLYING OFF X", () => {
+  it("⭐ AN X ITEM IS REFUSED HERE — it goes through publish", async () => {
+    // The publish path threads `platformSpecificData.replyToTweetId`, which is
+    // X-only. Two routes, and sending one down the other publishes something,
+    // somewhere, wrong.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t);
+    const { itemId } = await add(t, customerId, "x:1");
+    const r = await t.action(internal.maya.inbox.replyOnChannel, {
+      customerId,
+      itemId,
+      message: "hi",
+    });
+    expect(r.ok).toBe(false);
+    expect(r.detail).toMatch(/publish path/);
+  });
+
+  it("⭐ READABLE BUT UNANSWERABLE IS SAID OUT LOUD", async () => {
+    // An item ingested before parentPostId/zernioAccountId were stored can be
+    // read and not answered. Silence there leaves a founder watching a
+    // question sit unanswered with no idea why.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t);
+    const itemId = await t.run(async (ctx) =>
+      ctx.db.insert("inboxItems", {
+        customerId,
+        externalId: "youtube:c1",
+        channel: "youtube",
+        text: "does this work with Stripe?",
+        postedAt: NOW - HOUR,
+        firstSeenAt: NOW,
+        status: "open",
+      })
+    );
+    const r = await t.action(internal.maya.inbox.replyOnChannel, {
+      customerId,
+      itemId,
+      message: "yes",
+    });
+    expect(r.ok).toBe(false);
+    expect(r.detail).toMatch(/can't reply/i);
+    // And it stays open, so it is not silently lost.
+    expect(await t.query(internal.maya.inbox.open, { customerId })).toHaveLength(1);
+  });
+
+  it("an already-answered item is not answered twice", async () => {
+    // Idempotent by state: a retry after a timeout must not comment twice on
+    // a stranger's post.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t);
+    const itemId = await t.run(async (ctx) =>
+      ctx.db.insert("inboxItems", {
+        customerId,
+        externalId: "youtube:c2",
+        channel: "youtube",
+        text: "hi",
+        postedAt: NOW - HOUR,
+        firstSeenAt: NOW,
+        status: "answered",
+        parentPostId: "vid_1",
+        zernioAccountId: "acct_1",
+      })
+    );
+    const r = await t.action(internal.maya.inbox.replyOnChannel, {
+      customerId,
+      itemId,
+      message: "hi",
+    });
+    expect(r.ok).toBe(false);
+    expect(r.detail).toMatch(/already handled/);
+  });
+
+  it("⭐ ANOTHER TENANT'S ITEM NEVER RESOLVES", async () => {
+    const t = convexTest(schema, modules);
+    const a = await seed(t, "ra");
+    const b = await seed(t, "rb");
+    const itemId = await t.run(async (ctx) =>
+      ctx.db.insert("inboxItems", {
+        customerId: a,
+        externalId: "youtube:c3",
+        channel: "youtube",
+        text: "hi",
+        postedAt: NOW - HOUR,
+        firstSeenAt: NOW,
+        status: "open",
+        parentPostId: "vid_1",
+        zernioAccountId: "acct_1",
+      })
+    );
+    const r = await t.action(internal.maya.inbox.replyOnChannel, {
+      customerId: b,
+      itemId,
+      message: "hi",
+    });
+    expect(r.ok).toBe(false);
+    expect(r.detail).toMatch(/can't find/i);
+  });
+});
+
 describe("⭐ CROSS-TENANT", () => {
   it("the same platform comment id in two tenants is two items", async () => {
     // Platform ids are the platform's, not ours. Deduping globally would let
