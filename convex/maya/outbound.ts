@@ -38,8 +38,25 @@ import { callOpenRouter } from "../integrations/openrouter/client";
  *
  * `luna` judging `luna-pro` grades its own register and catches nothing — they
  * are the same underlying model at different reasoning modes.
+ *
+ * ⚠️ **NO `openrouter/` PREFIX HERE.** That prefix is *OpenClaw's* way of
+ * naming a provider; this calls OpenRouter's API **directly**, where the model
+ * is the bare vendor slug. Shipping `openrouter/moonshotai/kimi-k2-0905` to
+ * `/v1/chat/completions` names a model that does not exist.
+ *
+ * The exact mirror of the bug fixed this morning, where OpenClaw's config was
+ * missing the prefix it *does* require. Same two words, opposite direction:
+ *
+ *   OpenClaw config      →  openrouter/moonshotai/kimi-k2-0905
+ *   OpenRouter REST API  →  moonshotai/kimi-k2-0905
+ *
+ * kimi rather than the cheaper qwen deliberately: qwen is a *reasoning* model
+ * whose thinking is billed and budgeted as completion, and this gate FAILS
+ * CLOSED. A budget miscalculation there blocks every post rather than
+ * degrading. At roughly one critique a day that predictability is worth $0.29
+ * a month.
  */
-export const SAFETY_CRITIC_MODEL = "openrouter/moonshotai/kimi-k2-0905";
+export const SAFETY_CRITIC_MODEL = "moonshotai/kimi-k2-0905";
 
 /* -------------------------------------------------------------------------- */
 /* Catastrophic — these block                                                  */
@@ -310,7 +327,17 @@ export const critiqueSafety = internalAction({
       apiKey,
       model: SAFETY_CRITIC_MODEL,
       temperature: 0,
-      maxTokens: 300,
+      /**
+       * Not 300. The critic is a reasoning model, and reasoning tokens are
+       * billed and budgeted as completion — 300 would have been consumed
+       * before it wrote a verdict, returning empty content with
+       * `finish_reason: "stop"`.
+       *
+       * This gate FAILS CLOSED, so an empty completion means every post is
+       * held. A too-small budget here doesn't degrade the critic, it stops
+       * the product.
+       */
+      maxTokens: 3_000,
       messages: [
         { role: "system", content: SAFETY_SYSTEM },
         { role: "user", content: `POST:\n${args.text}` },
