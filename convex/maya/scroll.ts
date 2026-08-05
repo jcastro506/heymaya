@@ -26,9 +26,10 @@
  */
 
 import { v } from "convex/values";
-import { internalAction } from "../_generated/server";
+import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { velocity, toMillis } from "./learnBusiness";
+import type { Doc } from "../_generated/dataModel";
 
 /** One thing she saw. Deliberately close to §5.2's observation shape. */
 export interface Observation {
@@ -133,12 +134,117 @@ export const scrollNiche = internalAction({
       };
     }
 
-    return {
-      ok: true,
-      keywordsSwept: swept,
-      observations: observations
-        .sort((a, b) => b.velocity - a.velocity)
-        .slice(0, OBSERVATIONS_RETURNED),
-    };
+    const ranked = observations
+      .sort((a, b) => b.velocity - a.velocity)
+      .slice(0, OBSERVATIONS_RETURNED);
+
+    // Written down before they're returned, so a scroll she never acts on
+    // still counts toward "this keeps coming up".
+    await ctx.runMutation(internal.maya.scroll.recordObservations, {
+      customerId: args.customerId,
+      observationsJson: JSON.stringify(ranked),
+      now,
+    });
+
+    return { ok: true, keywordsSwept: swept, observations: ranked };
+  },
+});
+
+
+/* -------------------------------------------------------------------------- */
+/* Remembering what she saw                                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Write observations down, once each.
+ *
+ * ## Why idempotent matters more than it sounds
+ *
+ * A climbing post shows up in the sweep for several days running — that's what
+ * climbing means. Without dedupe, a week of scrolling turns one post into seven
+ * rows, and any "how often does this come up?" question answers itself wrongly.
+ *
+ * Keyed on `sourceUrl` because it's the one identifier the vendor can't
+ * renumber. Velocity is **not** updated on a re-sight: the row records what
+ * made it worth noticing *then*, and overwriting that loses the history that
+ * makes the second sighting interesting.
+ *
+ * ## Measured, not assumed
+ *
+ * Two consecutive scrolls of the same keywords produced **16 new rows out of
+ * 20** — TikTok's keyword search rotates its results rather than returning a
+ * stable ranking. So dedupe catches genuine repeats but far fewer than the
+ * daily-cron intuition suggests, and rows accumulate at roughly a full scroll
+ * per run.
+ *
+ * ⚠️ **The consequence is about meaning, not storage.** "This keeps coming up"
+ * cannot be measured by counting URL repeats when the search itself shuffles.
+ * Topic frequency has to come from CONTENT similarity — which is what the
+ * complaint clustering in `complaints.ts` does, and why it reads comment text
+ * rather than counting posts.
+ */
+export const recordObservations = internalMutation({
+  args: {
+    customerId: v.id("customers"),
+    observationsJson: v.string(),
+    now: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ written: number; alreadyKnown: number }> => {
+    const incoming = JSON.parse(args.observationsJson) as Observation[];
+    const now = args.now ?? Date.now();
+    let written = 0;
+    let alreadyKnown = 0;
+
+    for (const o of incoming) {
+      if (!o.sourceUrl) continue;
+      const existing = (await ctx.db
+        .query("observations")
+        .withIndex("by_customer_and_source", (q) =>
+          q.eq("customerId", args.customerId).eq("sourceUrl", o.sourceUrl)
+        )
+        .first()) as Doc<"observations"> | null;
+      if (existing) {
+        alreadyKnown += 1;
+        continue;
+      }
+      await ctx.db.insert("observations", {
+        customerId: args.customerId,
+        channel: o.channel,
+        sourceUrl: o.sourceUrl,
+        authorHandle: o.authorHandle ?? undefined,
+        kind: "post",
+        text: o.text,
+        postedAt: o.postedAt ?? undefined,
+        capturedAt: now,
+        metricsJson: JSON.stringify(o.metrics),
+        velocity: o.velocity,
+        keyword: o.keyword,
+      });
+      written += 1;
+    }
+
+    return { written, alreadyKnown };
+  },
+});
+
+/** What she's seen lately — the raw material for "this keeps coming up". */
+export const recentObservations = internalQuery({
+  args: {
+    customerId: v.id("customers"),
+    since: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<Doc<"observations">[]> => {
+    const rows = (await ctx.db
+      .query("observations")
+      .withIndex("by_customer_and_captured", (q) =>
+        q.eq("customerId", args.customerId)
+      )
+      .order("desc")
+      .take(args.limit ?? 100)) as Doc<"observations">[];
+    return args.since ? rows.filter((r) => r.capturedAt >= args.since!) : rows;
   },
 });
