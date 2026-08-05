@@ -53,7 +53,7 @@ A real social media manager's day, in order. This is the functional spec.
 | 3 | **Make the thing** — write it, shoot it, design it | daily | ✅ via §6–7 |
 | 4 | **Post it** — at a good hour, formatted for the platform | 1–2 per channel/day | ✅ all four |
 | 5 | **Answer everyone** — every comment, reply, mention, DM | continuously | ✅ IG · YT · X — ⚠️ **TikTok is read-only, digest instead (§2.15.1)** |
-| 6 | **Join conversations** — reply on other people's posts | continuously | ⚠️ **X + YouTube only** |
+| 6 | **Join conversations** — reply on other people's posts | continuously | ⛔ **NOT POSSIBLE BY API — see §5.6** |
 | 7 | **Watch what worked** — read the numbers, adapt | daily + weekly | ✅ |
 | 8 | **Report to the boss** | daily + weekly | ✅ |
 
@@ -657,6 +657,59 @@ Instagram:  reels/trending → audio/reels(audioId)
 Chase sounds on the way up, not at peak. `song` trajectory plus `songVideos` recency is exactly that signal, and IG's `audio/reels` gives the same read on the Reels side.
 
 **Cross-channel bonus:** a sound trending on TikTok usually reaches Reels days later. Detecting it on TikTok and using it on Instagram before it peaks there is a real, mechanical edge — and both endpoints are one credit.
+
+### 5.6 ⛔ COLD REPLY IS DEAD — measured 2026-08-05
+
+**X changed its API policy in February 2026 and the whole rung went with it.**
+Attempting a reply to a stranger's tweet returns, verbatim from the platform:
+
+> *"X (Twitter) cannot reply to this post. **Since February 2026, X only allows
+> API replies when the original author has @mentioned or quoted you.**
+> Self-replies (threads) are not affected."*
+
+Tested the same hour on the same account: a **self-reply threaded correctly**
+(`isReply: true`, `inReplyToId` set, confirmed via twitterapi.io), and a reply
+to an unrelated on-niche tweet was **rejected at the platform**, not by us.
+
+**§18's table said "X cold reply ✅ live-proven."** It was — in v1, before this
+policy existed. A capability claim with no date on it is a liability.
+
+#### What remains possible, per channel
+
+| Channel | Cold reply to a stranger | What still works |
+|---|---|---|
+| **X** | ⛔ policy-blocked | threads · replying to anyone who @mentions or quotes us · answering comments on our own posts |
+| **TikTok** | ⛔ no comment API at all | publish only |
+| **Instagram** | ⛔ own-comments only | answering comments on our posts · DMs |
+| **YouTube** | ⚠️ `commentThreads.insert` — **untested, assume nothing** | answering comments on our videos |
+
+**So the rung is not "degraded", it is gone by API on every channel we sell.**
+
+#### 5.6.1 The handoff — the only cold engagement that exists now
+
+She finds the post; **the founder makes the comment.** She sends one Telegram
+message carrying the link, the comment *written and ready to paste*, and why it
+matters — and says plainly that she can't post it herself.
+
+**This is not a task list, and the difference is the whole product.** A good
+human social manager does exactly this: *"this thread is blowing up about the
+exact problem you solve, here's what I'd say."* That's a colleague who knows
+what they can't do. Four rules keep it on the right side of the line:
+
+1. **Never on a channel where she can act.** Asking the founder to do something
+   she could do herself is the fastest way to look useless.
+2. **It spends a proactive message** (§13.5.3). That budget is the rate limiter,
+   and it should be — three of these a day is a nag, one a week is a gift.
+3. **Complete or not sent.** Link, the exact words, and the reason, in one
+   message. If they have to think or write, it's a task. If they can paste in
+   ten seconds, it's a gift.
+4. **A high bar, stated in the message.** Not "you could engage here" —
+   *"this person is describing the exact thing your product removes."*
+   If she can't say why in one sentence, it isn't worth their attention.
+
+**Measure whether they ever paste it.** If the founder ignores these, they are
+interruptions wearing a helpful costume, and the honest response is to stop
+sending them rather than to send more.
 
 ### 5.5 What she never does
 
@@ -4906,7 +4959,7 @@ The question this table answers: *for each piece of data the design depends on, 
 | Post to TikTok / IG / X | Zernio `multiPlatformPost`, `igCreatePost`, `igCreateReel` | ✅ |
 | TikTok rendered-preview consent | Built (card flow, `content_preview_confirmed`) | ✅ |
 | **YouTube Shorts upload** | Zernio — video upload is heavier than text | **⚠️ verify** |
-| X cold reply | Zernio `platformSpecificData.replyToTweetId` | ✅ live-proven |
+| X cold reply | Zernio `platformSpecificData.replyToTweetId` | ⛔ **DEAD — see §5.6** |
 | **YouTube cold comment** | `commentThreads.insert` — needs Google OAuth + YouTube Data API. Only prose references exist in our tree, no client. | **🔴 GAP** |
 
 ### A.6 Prove
