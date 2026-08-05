@@ -463,6 +463,22 @@ export const scrollHttp = httpAction(async (ctx, request) => {
   });
 
   /**
+   * ⭐ THE SCROLL FILLS THE BANK. Not a separate job she has to remember.
+   *
+   * `bankFromObservations` shipped with nothing calling it, which is the ninth
+   * time this week a finished module has had no producer. Attaching it here
+   * means the daily read and the daily restock are one action: she cannot
+   * scroll without banking, and the bank cannot silently drain while the
+   * scroll keeps working.
+   *
+   * Runs before the read below, so today's angles are available to today's
+   * draft rather than tomorrow's.
+   */
+  await ctx.runAction(internal.maya.ideas.bankFromObservations, {
+    customerId: auth.customer._id,
+  });
+
+  /**
    * ⭐ The bank rides along with the scroll.
    *
    * She needs an idea to draft a post, and a tool she has to remember to call
