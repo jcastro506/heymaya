@@ -19,7 +19,7 @@ import {
   selectExcerpts,
   MIN_SAMPLE_CHARS,
   MAX_EXCERPTS,
-} from "../voiceCorpus";
+} from "../voice";
 import { buildMayaWorkspace } from "../../agents/packs/maya/generators";
 import type { Id } from "../../_generated/dataModel";
 
@@ -76,9 +76,10 @@ describe("VARIANCE IS WHERE HUMANITY HIDES", () => {
       ...Array.from({ length: 20 }, (_, i) => ({
         body: `${REAL_WRITING} monday number ${i}`,
         ts: NOW,
+        direction: "in",
       })),
-      { body: `${REAL_WRITING} on tuesday`, ts: NOW + DAY },
-      { body: `${REAL_WRITING} on wednesday`, ts: NOW + 2 * DAY },
+      { body: `${REAL_WRITING} on tuesday`, ts: NOW + DAY, direction: "in" },
+      { body: `${REAL_WRITING} on wednesday`, ts: NOW + 2 * DAY, direction: "in" },
     ];
 
     const picked = selectExcerpts(messages, 5);
@@ -89,7 +90,7 @@ describe("VARIANCE IS WHERE HUMANITY HIDES", () => {
   });
 
   it("takes everything when there's little", () => {
-    const messages = [{ body: REAL_WRITING, ts: NOW }];
+    const messages = [{ body: REAL_WRITING, ts: NOW, direction: "in" }];
     expect(selectExcerpts(messages)).toEqual([REAL_WRITING]);
   });
 
@@ -97,6 +98,7 @@ describe("VARIANCE IS WHERE HUMANITY HIDES", () => {
     const messages = Array.from({ length: 100 }, (_, i) => ({
       body: `${REAL_WRITING} number ${i}`,
       ts: NOW + i * DAY,
+      direction: "in",
     }));
     expect(selectExcerpts(messages).length).toBeLessThanOrEqual(MAX_EXCERPTS);
   });
@@ -215,5 +217,101 @@ describe("AND IT REACHES SOUL.MD", () => {
       channels: [],
     }).files.get("SOUL.md")!;
     expect(soul).toContain("No writing samples yet");
+  });
+});
+
+describe("LAYER 2 — WHAT THEY CHANGED", () => {
+  async function seedEdited(t: ReturnType<typeof convexTest>) {
+    const customerId = await seed(t);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("channels", {
+        customerId,
+        channel: "x",
+        postingMode: "just_go",
+        status: "connected",
+        zernioAccountId: "acct_1",
+        createdAt: NOW,
+        updatedAt: NOW,
+      });
+    });
+    const created = await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "Widgetly is a game changer for modern data teams everywhere.",
+      now: NOW,
+    });
+    if (!created.ok) throw new Error("setup failed");
+    await t.mutation(internal.maya.drafts.decide, {
+      draftId: created.draftId,
+      outcome: "edited",
+      editedText: "csv in, dashboard out",
+      now: NOW + 1000,
+    });
+    return customerId;
+  }
+
+  it("⭐ an edit becomes a few-shot pair", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seedEdited(t);
+
+    const pairs = await t.query(internal.maya.voiceCorpus.editPairsFor, {
+      customerId,
+    });
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0].before).toMatch(/game changer/);
+    expect(pairs[0].after).toBe("csv in, dashboard out");
+  });
+
+  it("an APPROVED draft is not an edit", async () => {
+    // Nothing changed, so there's nothing to learn. Including it would teach
+    // her that her own output is the target.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("channels", {
+        customerId,
+        channel: "x",
+        postingMode: "just_go",
+        status: "connected",
+        zernioAccountId: "acct_1",
+        createdAt: NOW,
+        updatedAt: NOW,
+      });
+    });
+    const created = await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "csv in, dashboard out, that's the product",
+      now: NOW,
+    });
+    if (!created.ok) throw new Error("setup failed");
+    await t.mutation(internal.maya.drafts.decide, {
+      draftId: created.draftId,
+      outcome: "approved",
+      now: NOW + 1,
+    });
+
+    const pairs = await t.query(internal.maya.voiceCorpus.editPairsFor, {
+      customerId,
+    });
+    expect(pairs).toEqual([]);
+  });
+
+  it("⭐ AND IT REACHES SOUL.MD, OUTRANKING THE SAMPLES", () => {
+    // SOUL.md has claimed "when they edit something I wrote, that diff is the
+    // strongest signal I get" since Sprint 2, with no diffs behind it.
+    const soul = buildMayaWorkspace({
+      founder: { email: "sam@example.com", name: "Sam", timezone: "UTC" },
+      product: { name: "Widgetly", url: "https://widgetly.dev" },
+      channels: [],
+      voiceExcerpts: [REAL_WRITING],
+      editPairs: [
+        { before: "Widgetly is a game changer", after: "csv in, dashboard out" },
+      ],
+    }).files.get("SOUL.md")!;
+
+    expect(soul).toContain("Widgetly is a game changer");
+    expect(soul).toContain("csv in, dashboard out");
+    expect(soul).toMatch(/strongest signal/i);
   });
 });
