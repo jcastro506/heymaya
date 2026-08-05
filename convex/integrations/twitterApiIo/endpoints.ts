@@ -122,6 +122,37 @@ export async function getMentions(
   return toPage(body, "tweets", statusDetail);
 }
 
+/**
+ * ⭐ Tweets by id — how a placement learns how it did.
+ *
+ * BATCHED, and that is the point: `tweet_ids` takes a comma-separated list, so
+ * refreshing thirty placements is one request rather than thirty. At
+ * ~$0.15/1,000 tweets a daily refresh of a whole fleet is cents.
+ *
+ * VERIFIED LIVE 2026-08-05 against two real placements, which returned
+ * `{likeCount, replyCount, retweetCount, quoteCount, viewCount, bookmarkCount}`
+ * — everything the evening recap has been promising and never had.
+ *
+ * ⚠️ `tweet_ids` is **snake_case**, which contradicts the header above — every
+ * other query on this vendor is camelCase (`userName`, `tweetId`). Verified by
+ * live call, not assumed; `tweetIds` returns an empty list rather than an
+ * error, which is the silent shape.
+ *
+ * Used instead of Zernio's `/analytics`, which was also checked live and is
+ * not usable for this: `lastSync: null`, an empty `posts[]` despite an
+ * overview claiming 9 published, and `platform=twitter` — the account's OWN
+ * platform string — returning zero. §2's rule already said which vendor to
+ * ask: read via twitterapi.io, write via Zernio.
+ */
+export async function getTweetsByIds(
+  tweetIds: string[]
+): Promise<XPage<Record<string, unknown>>> {
+  const { body, statusDetail } = await request("/twitter/tweets", {
+    tweet_ids: tweetIds.join(","),
+  });
+  return toPage(body, "tweets", statusDetail);
+}
+
 /** Replies to one tweet — the other half. */
 export async function getTweetReplies(
   tweetId: string,
