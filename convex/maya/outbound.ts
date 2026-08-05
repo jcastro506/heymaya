@@ -268,20 +268,50 @@ export function aiPunctuationTells(text: string): OutboundFinding[] {
   return found;
 }
 
-/** Everything that blocks a public post, before the critic runs. */
+/**
+ * Everything that blocks a public post, before the critic runs.
+ *
+ * ⭐ Two lists, and only two, because the bar is **catastrophic**:
+ *
+ * - `INTERNAL_TERMS` — "snapshotText" or "iron rule" in a public post is our
+ *   plumbing on the founder's account.
+ * - `AI_SELF_REFERENCES` — "as an AI" under their real name is the single
+ *   worst thing this product could publish.
+ *
+ * ⚠️ `aiPunctuationTells` used to be here and is NOT any more. It is drift now.
+ * See the note on `driftSignals`.
+ */
 export function deterministicBlockers(text: string): OutboundFinding[] {
   return [
     ...findMatches(text, INTERNAL_TERMS, "internal_term"),
     ...findMatches(text, AI_SELF_REFERENCES, "ai_reference"),
-    ...aiPunctuationTells(text),
   ];
 }
 
-/** Everything worth counting and nothing worth dropping a message over. */
+/**
+ * Everything worth counting and nothing worth dropping a message over.
+ *
+ * ⭐ **Punctuation moved here from the blocking list**, 2026-08-05, on the
+ * operator's call and in line with the standing rule: *non-catastrophic drift
+ * is logged, never dropped.*
+ *
+ * It was blocking on an em-dash, a hyphen-as-dash, **or a colon** — so
+ * *"Here's the thing: it works"* never posted. Between the three, most
+ * well-written posts were held, and a held post is indistinguishable from a
+ * quiet day. That is the same mistake this file already carries a scar for one
+ * list down: the jargon terms *"lived in the blocking list in v1 and
+ * blackholed a delivered plan. Annoying is not catastrophic."*
+ *
+ * The tells are still real and she still avoids them — in `SOUL.md`, where the
+ * standing rule says outbound discipline belongs. **The prompt is primary; the
+ * denylist is for what a prompt structurally cannot catch.** An em-dash is not
+ * that.
+ */
 export function driftSignals(text: string): OutboundFinding[] {
   return [
     ...findMatches(text, JARGON_DRIFT_TERMS, "jargon_drift"),
     ...findMatches(text, SLOP_PHRASES, "slop_phrase"),
+    ...aiPunctuationTells(text),
   ];
 }
 
