@@ -11,6 +11,8 @@
 
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { convexTest } from "convex-test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
@@ -374,5 +376,63 @@ describe("MODEL REFS: DIRECT API vs OPENCLAW", () => {
       // Still a real vendor slug, not a bare model name.
       expect(ref).toMatch(/^[a-z0-9-]+\/[a-zA-Z0-9.\-_]+$/);
     }
+  });
+});
+
+describe("⭐ COLD REPLY — commenting on someone else's post", () => {
+  it("sends replyToTweetId, so the reply has a parent", async () => {
+    // §5's "join conversations" rung. X is the ONLY channel we sell where this
+    // is possible at all: TikTok has no comment API, Instagram is own-comments
+    // only. Marked live-proven in the spec.
+    const calls = stubZernio(created("https://twitter.com/a/status/2"));
+    await publishText({ ...BASE, client: client(), inReplyTo: "1991719382071013376" });
+    const body = calls[0].body as {
+      platforms: Array<{ platformSpecificData?: { replyToTweetId?: string } }>;
+    };
+    expect(body.platforms[0].platformSpecificData?.replyToTweetId).toBe(
+      "1991719382071013376"
+    );
+  });
+
+  it("⭐ WITHOUT IT, A REPLY POSTS INTO THE VOID", () => {
+    // The failure this guards is worse than an error because it SUCCEEDS:
+    // "@someone — that's exactly the problem we fixed" goes out as a
+    // standalone tweet with no parent, and reads as nonsense to everyone.
+    // Threading was broken from the tool all the way to the vendor call: the
+    // hook put inReplyTo in the job payload and the handler dropped it.
+    const source = readFileSync(
+      join(__dirname, "..", "..", "integrations", "zernio", "publish.ts"),
+      "utf8"
+    );
+    expect(source).toMatch(/replyToTweetId/);
+    expect(source).toMatch(/standalone tweet/i);
+  });
+
+  it("a plain post carries no platformSpecificData at all", async () => {
+    const calls = stubZernio(created("https://twitter.com/a/status/1"));
+    await publishText({ ...BASE, client: client() });
+    const body = calls[0].body as {
+      platforms: Array<{ platformSpecificData?: unknown }>;
+    };
+    expect(body.platforms[0].platformSpecificData).toBeUndefined();
+  });
+
+  it("a reply is recorded as a REPLY placement, not a post", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "coldreply");
+    vi.stubEnv("ZERNIO_API_KEY", "test-key");
+    stubZernio(created("https://twitter.com/a/status/2"));
+
+    await t.action(internal.maya.publish.publishPlacement, {
+      customerId,
+      snapshotText: "we hit this exact thing — here's what worked",
+      idempotencyKey: "idem_cold",
+      inReplyTo: "1991719382071013376",
+    });
+
+    const rows = (await t.run((ctx) =>
+      ctx.db.query("placements").collect()
+    )) as Doc<"placements">[];
+    expect(rows[0].kind).toBe("reply");
   });
 });

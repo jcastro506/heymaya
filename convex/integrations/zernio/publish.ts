@@ -99,6 +99,18 @@ export interface PublishTextInput {
   channel: string;
   text: string;
   /**
+   * ⭐ The post this replies to — a COLD REPLY when it's someone else's.
+   *
+   * §5's "join conversations" rung, and the spec marks it **live-proven** on X
+   * via `platformSpecificData.replyToTweetId`. Omitting it does not make the
+   * reply fail; it makes it post as a **standalone tweet**, so
+   * *"@someone — that's exactly the problem we fixed"* floats with no parent
+   * and reads as nonsense to everyone who sees it.
+   *
+   * Worse than an error, because it succeeds.
+   */
+  inReplyTo?: string;
+  /**
    * ⭐ The idempotency key, sent as `x-request-id`.
    *
    * Every placement carries one (schema invariant 4). Sending it is what makes
@@ -140,6 +152,14 @@ export async function publishText(
           {
             platform,
             accountId: input.accountId,
+            ...(input.inReplyTo
+              ? {
+                  // X only. The slug map gates this: no other channel we sell
+                  // can reply to a stranger's post at all (TikTok has no
+                  // comment API, Instagram is own-comments only).
+                  platformSpecificData: { replyToTweetId: input.inReplyTo },
+                }
+              : {}),
           },
         ],
       },

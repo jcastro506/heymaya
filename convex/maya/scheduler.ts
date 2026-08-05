@@ -195,6 +195,7 @@ async function runHandler(
     const payload = JSON.parse(job.payloadJson ?? "{}") as {
       draftId?: Id<"drafts">;
       snapshotText?: string;
+      inReplyTo?: string;
     };
     if (!payload.snapshotText) {
       return { ok: false, error: "publish job carried no text" };
@@ -214,6 +215,7 @@ async function runHandler(
             snapshotText: string;
             idempotencyKey: string;
             draftId?: Id<"drafts">;
+            inReplyTo?: string;
           }
         ) => Promise<{ ok: boolean; error?: string }>;
       }
@@ -222,6 +224,8 @@ async function runHandler(
       snapshotText: payload.snapshotText,
       idempotencyKey: job.idempotencyKey,
       draftId: payload.draftId,
+      // Without this a cold reply posts as a standalone tweet.
+      inReplyTo: payload.inReplyTo,
     })) as { ok: boolean; error?: string };
     return result.ok ? { ok: true } : { ok: false, error: result.error ?? "publish failed" };
   }
