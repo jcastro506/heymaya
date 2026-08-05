@@ -158,6 +158,84 @@ export const resolve = internalMutation({
   },
 });
 
+
+/**
+ * ⭐ X mentions — the channel Zernio's inbox can't fully carry, read directly.
+ *
+ * All five twitterapi.io wrappers had zero callers. Two of them say what they
+ * are for in their own doc comments — *"half of 'answer everyone' on X"* and
+ * *"the other half"* — and X is both the launch channel (§18 Sprint 3, "the
+ * gamble") and, today, the only one connected.
+ *
+ * Shape VERIFIED LIVE 2026-08-05 against a busy account, because the account
+ * under test has no mentions yet and an empty array teaches nothing:
+ *
+ *   { id, text, createdAt, author: { userName }, url, isReply, ... }
+ *
+ * ⚠️ `createdAt` is Twitter's legacy format — `"Wed Aug 05 19:56:13 +0000
+ * 2026"`, not ISO. `Date.parse` handles it exactly (checked against a
+ * hand-built UTC timestamp), but it is not interchangeable with Instagram's
+ * ISO strings or TikTok's unix seconds, and assuming otherwise is the bug that
+ * once made every post fifty years old.
+ *
+ * ⭐ Unlike Zernio's comment shape, this one carries the AUTHOR — which is the
+ * only reason her own tweets can be filtered out. A mentions feed includes
+ * replies she wrote in the same thread, and answering herself is the most
+ * visible way to look broken.
+ */
+async function readXMentions(
+  handle: string,
+  since: number,
+  now: number
+): Promise<
+  Array<{
+    externalId: string;
+    text: string;
+    permalink?: string;
+    postedAt: number;
+    authorHandle?: string;
+  }>
+> {
+  const { getMentions } = await import("../integrations/twitterApiIo/endpoints");
+  const page = await getMentions(handle);
+  const out: Array<{
+    externalId: string;
+    text: string;
+    permalink?: string;
+    postedAt: number;
+    authorHandle?: string;
+  }> = [];
+
+  const ours = handle.toLowerCase().replace(/^@/, "");
+  for (const raw of page.items) {
+    const tweet = raw as {
+      id?: string;
+      text?: string;
+      createdAt?: string;
+      url?: string;
+      author?: { userName?: string };
+    };
+    if (!tweet.id || !tweet.text) continue;
+
+    const author = tweet.author?.userName?.toLowerCase();
+    // Never answer yourself. A mentions feed includes her own replies in the
+    // thread, and X is the one channel that tells us who wrote it.
+    if (author && author === ours) continue;
+
+    const postedAt = tweet.createdAt ? Date.parse(tweet.createdAt) : NaN;
+    if (!Number.isFinite(postedAt) || postedAt < since) continue;
+
+    out.push({
+      externalId: `x:${tweet.id}`,
+      text: tweet.text,
+      permalink: tweet.url,
+      postedAt,
+      authorHandle: tweet.author?.userName,
+    });
+  }
+  return out;
+}
+
 export interface SyncResult {
   ok: boolean;
   fetched: number;
@@ -276,6 +354,49 @@ export const sync = internalAction({
         truncated: false,
         detail: "I couldn't read the replies just now",
       };
+    }
+
+    /**
+     * ⭐ Then X, directly.
+     *
+     * Additive, not a replacement: Zernio's inbox covers comments on connected
+     * accounts, and this covers mentions — someone talking ABOUT the product
+     * without commenting on a post is invisible to the first and obvious to
+     * the second. Deduped on `x:<id>`, so overlap costs nothing.
+     *
+     * Isolated in its own try: a twitterapi.io outage must not discard the
+     * Zernio items already recorded above.
+     */
+    try {
+      const channels = await ctx.runQuery(internal.maya.channels.forCustomer, {
+        customerId: args.customerId,
+      });
+      const x = channels.find(
+        (c) => c.channel === "x" && c.status === "connected" && c.handle
+      );
+      if (x?.handle && process.env.TWITTERAPI_IO_KEY) {
+        for (const mention of await readXMentions(x.handle, since, now)) {
+          fetched += 1;
+          const result = await ctx.runMutation(internal.maya.inbox.record, {
+            customerId: args.customerId,
+            externalId: mention.externalId,
+            channel: "x",
+            authorHandle: mention.authorHandle,
+            text: mention.text,
+            permalink: mention.permalink,
+            postedAt: mention.postedAt,
+            now,
+          });
+          if (result.isNew) added += 1;
+        }
+      }
+    } catch (error) {
+      console.error(
+        `[inbox] X mentions failed for ${args.customerId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      unreadable.add("X mentions");
     }
 
     const truncated = Boolean(cursor);

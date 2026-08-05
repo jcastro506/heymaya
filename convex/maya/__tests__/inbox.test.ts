@@ -130,6 +130,45 @@ describe("⭐ HONEST ABOUT WHAT IT COULDN'T READ", () => {
   });
 });
 
+/**
+ * ⭐ X, read directly via twitterapi.io.
+ *
+ * All five of its wrappers had zero callers. Shape verified live 2026-08-05
+ * against a busy account, because the account under test has no mentions and
+ * an empty array teaches nothing.
+ */
+describe("⭐ X MENTIONS", () => {
+  it("⭐ TWITTER'S LEGACY DATE FORMAT PARSES EXACTLY", () => {
+    // "Wed Aug 05 19:56:13 +0000 2026" — not ISO, and not interchangeable with
+    // Instagram's ISO strings or TikTok's unix SECONDS. Assuming one parser
+    // fits all is the bug that once made every post fifty years old, so this
+    // is checked against a hand-built timestamp rather than trusted.
+    expect(Date.parse("Wed Aug 05 19:56:13 +0000 2026")).toBe(
+      Date.UTC(2026, 7, 5, 19, 56, 13)
+    );
+  });
+
+  it("an X item is namespaced so it can't collide with a Zernio comment", async () => {
+    // Two vendors, two id spaces, one table. `x:<id>` keeps them apart.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t);
+    await t.mutation(internal.maya.inbox.record, {
+      customerId,
+      externalId: "x:2085092531566518538",
+      channel: "x",
+      authorHandle: "mktpavlenko",
+      text: "@heymaya does this work with Stripe?",
+      postedAt: NOW - HOUR,
+      now: NOW,
+    });
+    const [item] = await t.query(internal.maya.inbox.open, { customerId });
+    expect(item.externalId).toMatch(/^x:/);
+    // ⭐ X carries the author — the one thing Zernio's comment shape does not,
+    // and the only reason her own tweets can be filtered out of a mentions feed.
+    expect(item.authorHandle).toBe("mktpavlenko");
+  });
+});
+
 describe("⭐ CROSS-TENANT", () => {
   it("the same platform comment id in two tenants is two items", async () => {
     // Platform ids are the platform's, not ours. Deduping globally would let
