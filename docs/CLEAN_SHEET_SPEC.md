@@ -1970,6 +1970,77 @@ A server cron independent of every worker checks an hourly contract: expected pl
 
 ---
 
+## 13.5 Her day — the loop, end to end
+
+*Added 2026-08-04. Every piece below already existed somewhere — the daily
+sweeps in §5, the budgets in `planFeatures`, the rungs in §14, the crons in the
+workspace. **Nothing assembled them into a day.** The proof was in her cron
+store, which scheduled a morning brief, an evening recap, a checkpoint and a
+weekly review — and no sweep, and no post. She could report on a day she never
+had.*
+
+**The whole product in one sentence:** she does what a good social manager does
+— scrolls the niche in the morning, notices what's actually moving *today*, and
+turns one of those things into something for the business she works for.
+
+### 13.5.1 The day
+
+| When | What | Budget it spends |
+|---|---|---|
+| **06:30** | **Checkpoint.** Mirror `MEMORY.md` off the machine. Housekeeping — the founder hears nothing. | — |
+| **07:00** | **Scroll.** Topic sweep + trend sweep (§5.2): what's moving in this niche in the last 24h, ranked by traction ÷ age. Read-only, unauthenticated, **cents** — and zero ban risk. | perception, not a post budget |
+| **07:15** | **Morning brief.** What she's planning and *why*, grounded in what she just read. Names the actual thing she saw, never "I'll post about the product today." | 1 of `proactiveMessagesPerDay` |
+| **through the day** | **Answer people first.** Inbound outranks outbound, always — a founder whose replies go unanswered has a worse account than one who posts less. | `coldRepliesPerDay` |
+| **midday** | **Make the placement.** One idea from the morning's sweep → `write-post` → `critique` → `draft` → `publish`. The iron rule decides publish-or-hold; on `just_go` nothing holds it but the safety floor or the platform. | `postsPerDayPerChannel` |
+| **20:00** | **Evening recap.** What went live, with links, and what came back. **Placements only — a draft is not a result.** | 1 of `proactiveMessagesPerDay` |
+| **overnight** | **Dream.** Consolidate the day into memory; promote what mattered into `MEMORY.md`. | — |
+| **Sunday 19:00** | **Weekly review.** Which rung is working (§14.2). One thing to change, not five. | 1 of `proactiveMessagesPerDay` |
+
+### 13.5.2 The rule that makes it *her* day and not a scheduler's
+
+**She reads before she writes, every day, and the brief names what she read.**
+
+A post generated from product truth alone is the same post every day — verified
+live 2026-08-04, when three requested tweets came back as one sentence
+reworded three times. That was not a writing failure; she had one fact and no
+material. **The sweep is not enrichment, it is the input.** A day whose sweep
+returned nothing is a day she says so, not a day she posts filler.
+
+This is also the whole difference between this product and a scheduler. A
+scheduler posts what you gave it. She posts what she found.
+
+### 13.5.3 Tiers set the volume, never the shape
+
+Every founder gets the same *day*. Tiers change how much of it happens, through
+budgets that already exist:
+
+| Budget | What raising it buys |
+|---|---|
+| `postsPerDayPerChannel` | more placements |
+| `maxChannels` | the same day, on more surfaces |
+| `coldRepliesPerDay` | more conversations started |
+| `videosPerMonth` | how far up the creative ladder she can go before degrading |
+| `proactiveMessagesPerDay` | ⚠️ **not a tier lever.** Above ~4 she is interrupting, not reporting. A "premium" tier that messages more is a worse product. |
+
+**Sweeps are not tier-gated.** They cost cents and they are the input to
+everything — a cheaper tier that skips reading produces the same-post-every-day
+failure above, which is not a smaller product, it's a broken one.
+
+**One tier exists today (`MVP_BUDGETS`), deliberately.** `planFeatures.ts`:
+*"Tier gating is a bug factory and you don't yet know what people pay more
+for."* The numbers become per-tier when there is evidence about what people pay
+for; the shape above does not change when they do.
+
+### 13.5.4 What has to be true for this day to run
+
+- The sweep must be a **cron on her machine**, not a Convex job — OpenClaw owns
+  her life, Convex owns the facts (§2.9).
+- The morning brief must run **after** the sweep, or it reports on nothing.
+- A placement must come from **an idea with evidence**. No evidence, no post,
+  and she says which it was.
+- Every step is budgeted **before** she starts, not checked at publish time —
+  §7.5.7. Failing after a founder says yes is the worst possible sequence.
+
 ## 14. Data, results, and the diagnostic ladder
 
 This is where every product in this category hand-waves. "AI learns what works for you" is almost always noise-fitting. Here is the honest version.

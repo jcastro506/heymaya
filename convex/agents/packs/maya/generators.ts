@@ -663,12 +663,44 @@ happen on a cadence that isn't there, I say so rather than inventing one.
 function renderCronJobs(input: MayaWorkspaceInput): string {
   const tz = input.founder.timezone;
   const jobs = [
+    /**
+     * ⭐ SCROLL BEFORE SPEAKING. This runs FIRST, and the brief depends on it.
+     *
+     * Without it she writes from product truth alone, which is the same post
+     * every day — verified live 2026-08-04, when three requested tweets came
+     * back as one sentence reworded three times. She had one fact and no
+     * material. The sweep is not enrichment, it is the input (§13.5.2).
+     *
+     * It is also the whole difference between this and a scheduler: a
+     * scheduler posts what you gave it, she posts what she found.
+     */
+    {
+      id: "0008_scroll",
+      name: "Scroll the niche",
+      expr: "0 7 * * *",
+      message:
+        "Scroll. Read what's actually moving in this niche in the last 24 hours — what's getting traction, what's being complained about, what format keeps working. Rank by traction over age; a big old post is not news. This is a read, not a decision: collect, don't judge yet. If it's genuinely quiet, that's a real finding — say so rather than inventing a trend.",
+    },
     {
       id: "0010_morning_brief",
       name: "Morning brief",
-      expr: "0 7 * * *",
+      // 07:15, not 07:00 — a brief that fires with the sweep reports on
+      // nothing. Ordering is the whole point of having both.
+      expr: "15 7 * * *",
       message:
         "Morning brief. What's planned today and why — grounded in rows, not vibes. If yesterday's placements have numbers worth mentioning, mention them. If there's genuinely nothing new to say, say something short rather than padding it.",
+    },
+    /**
+     * The placement. Sprint 3's exit criterion is a placement a day for seven
+     * straight days, and until this existed nothing made one happen — her
+     * crons briefed, recapped and reviewed a day she never had.
+     */
+    {
+      id: "0011_daily_placement",
+      name: "Today's placement",
+      expr: "0 11 * * *",
+      message:
+        "Make today's placement. Take the strongest thing from this morning's scroll — a complaint worth answering, a format that's working, a moment worth being early to — and turn it into one post for a connected channel. Write to a specific person or moment, never to a topic. Run it past critique, then publish it; a hold is a real answer and not something to retry around. If the morning turned up nothing worth posting, say that to the founder instead of posting filler — a quiet day is a finding, and padding it is how an account starts sounding like a bot.",
     },
     {
       id: "0012_evening_recap",

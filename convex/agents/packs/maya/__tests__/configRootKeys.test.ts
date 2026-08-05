@@ -34,7 +34,11 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { buildMayaWorkspace, OPENCLAW_CONFIG_PATH } from "../generators";
+import {
+  buildMayaWorkspace,
+  OPENCLAW_CONFIG_PATH,
+  CRON_STORE_PATH,
+} from "../generators";
 
 /** The 42 keys `OpenClawConfig` declares. Nothing else validates. */
 const ACCEPTED_ROOT_KEYS = new Set([
@@ -168,5 +172,63 @@ describe("THE CRITIC CANNOT ACT ON ITS OWN VERDICT", () => {
     expect(critic.model.split("/")[1]).not.toBe(
       config.agents.defaults.model.primary.split("/")[1]
     );
+  });
+});
+
+describe("SHE HAS A DAY, NOT JUST A REPORTING SCHEDULE", () => {
+  const cron = JSON.parse(
+    buildMayaWorkspace({
+      founder: { email: "sam@example.com", name: "Sam", timezone: "America/Los_Angeles" },
+      product: { name: "Widgetly", url: "https://widgetly.dev" },
+      channels: [{ channel: "x", postingMode: "just_go" }],
+    }).files.get(CRON_STORE_PATH)!
+  );
+  const ids: string[] = cron.jobs.map((j: { id: string }) => j.id);
+  const at = (id: string) =>
+    (
+      cron.jobs.find((j: { id: string }) => j.id === id) as {
+        schedule: { expr: string };
+      }
+    ).schedule.expr;
+
+  it("⭐ SOMETHING ACTUALLY MAKES A PLACEMENT", () => {
+    // Sprint 3's exit is a placement a day for seven days. Before this, her
+    // crons briefed, recapped and reviewed a day that never happened — nothing
+    // scheduled produced a post.
+    expect(ids).toContain("0011_daily_placement");
+  });
+
+  it("⭐ SHE READS BEFORE SHE WRITES", () => {
+    // Without the sweep she writes from product truth alone, which is the same
+    // post every day. Verified live: three requested tweets came back as one
+    // sentence reworded three times.
+    expect(ids).toContain("0008_scroll");
+  });
+
+  it("THE BRIEF RUNS AFTER THE SWEEP, or it reports on nothing", () => {
+    // Ordering is the entire reason for having both. Same-minute scheduling
+    // would make the brief describe a scroll that hadn't returned.
+    const minutes = (expr: string) => {
+      const [m, h] = expr.split(" ");
+      return Number(h) * 60 + Number(m);
+    };
+    expect(minutes(at("0010_morning_brief"))).toBeGreaterThan(
+      minutes(at("0008_scroll"))
+    );
+  });
+
+  it("and the placement comes after the brief", () => {
+    const hour = (expr: string) => Number(expr.split(" ")[1]);
+    expect(hour(at("0011_daily_placement"))).toBeGreaterThan(
+      hour(at("0010_morning_brief"))
+    );
+  });
+
+  it("every job runs in the FOUNDER'S timezone", () => {
+    // A 07:00 UTC brief is a 23:00 brief in Los Angeles — the double-timezone
+    // bug v1 shipped, which made everything four hours late.
+    for (const job of cron.jobs) {
+      expect(job.schedule.tz).toBe("America/Los_Angeles");
+    }
   });
 });
