@@ -60,6 +60,16 @@ export const LOOKBACK_MS = 7 * 86_400_000;
  */
 export const MAX_PAGES = 10;
 
+/**
+ * Posts whose comments we open in one sync.
+ *
+ * The work queue can be long, and each entry with comments costs a second
+ * request. Capped so a busy account degrades into "more still waiting" rather
+ * than a surprise bill — and the caller is told, because a silent stop reads
+ * as "all clear".
+ */
+export const MAX_POSTS_PER_SYNC = 15;
+
 export const record = internalMutation({
   args: {
     customerId: v.id("customers"),
@@ -285,13 +295,15 @@ export const sync = internalAction({
     }
 
     const { ZernioClient } = await import("../integrations/zernio/client");
-    const { listInboxComments } = await import(
+    const { listInboxComments, listPostComments } = await import(
       "../integrations/zernio/endpoints"
     );
     const client = new ZernioClient({ apiKey });
 
     let cursor: string | null = null;
     let pages = 0;
+    let postsFetched = 0;
+    let truncatedPosts = false;
     let fetched = 0;
     let added = 0;
     const unreadable = new Set<string>();
@@ -355,28 +367,72 @@ export const sync = internalAction({
             typeof comment.commentCount === "number" ? comment.commentCount : 0;
           if (commentCount === 0) continue;
 
-          const text = (comment.content ?? "").trim();
-          // An empty comment is a like or a sticker with no words in it.
-          // There is nothing to answer, and recording it would pad the inbox
-          // with items she can only ever skip.
-          if (!text) continue;
+          /**
+           * ⭐ SECOND CALL — the queue row is a POST, the comments are behind
+           * `/inbox/comments/{postId}`.
+           *
+           * Only made for posts that actually have comments, so a quiet
+           * account costs exactly one request rather than one per post. Capped,
+           * because "answer everyone" against a viral post is otherwise an
+           * unbounded fan-out.
+           */
+          if (postsFetched >= MAX_POSTS_PER_SYNC) {
+            truncatedPosts = true;
+            continue;
+          }
+          postsFetched += 1;
 
-          fetched += 1;
-          const postedAt = comment.createdTime
-            ? Date.parse(comment.createdTime)
-            : now;
-          const result = await ctx.runMutation(internal.maya.inbox.record, {
-            customerId: args.customerId,
-            externalId: comment.id,
-            channel: comment.platform ?? "unknown",
-            text,
-            permalink: comment.permalink ?? undefined,
-            // Guard the parse: an unparseable date became NaN, which sorts
-            // unpredictably and would scramble the oldest-first ordering.
-            postedAt: Number.isFinite(postedAt) ? postedAt : now,
-            now,
+          const postId = comment.id;
+          const accountId = (comment as { accountId?: string }).accountId;
+          if (!postId || !accountId) continue;
+
+          const { comments } = await listPostComments(client, {
+            postId,
+            platform: comment.platform ?? "unknown",
+            accountId,
           });
-          if (result.isNew) added += 1;
+
+          for (const raw of comments) {
+            const c = raw as Record<string, unknown>;
+            const text = String(c.content ?? c.text ?? "").trim();
+            const externalId = typeof c.id === "string" ? c.id : null;
+            if (!text || !externalId) continue;
+
+            /**
+             * ⚠️ Never our own. The queue row carries `accountUsername` — us —
+             * and a reply we left on our own post comes back in this list like
+             * anyone else's.
+             */
+            const author = String(
+              (c.from as { username?: string } | undefined)?.username ??
+                c.username ??
+                c.authorUsername ??
+                ""
+            );
+            if (
+              author &&
+              comment.accountUsername &&
+              author.toLowerCase() === comment.accountUsername.toLowerCase()
+            ) {
+              continue;
+            }
+
+            fetched += 1;
+            const postedAt = c.createdTime
+              ? Date.parse(String(c.createdTime))
+              : now;
+            const result = await ctx.runMutation(internal.maya.inbox.record, {
+              customerId: args.customerId,
+              externalId: `${comment.platform ?? "z"}:${externalId}`,
+              channel: comment.platform ?? "unknown",
+              authorHandle: author || undefined,
+              text,
+              permalink: comment.permalink ?? undefined,
+              postedAt: Number.isFinite(postedAt) ? postedAt : now,
+              now,
+            });
+            if (result.isNew) added += 1;
+          }
         }
 
         cursor = page.hasMore ? page.nextCursor : null;
@@ -443,7 +499,7 @@ export const sync = internalAction({
       unreadable.add("X mentions");
     }
 
-    const truncated = Boolean(cursor);
+    const truncated = Boolean(cursor) || truncatedPosts;
     const parts = [`${added} new`];
     if (unreadable.size > 0) {
       parts.push(`couldn't read ${[...unreadable].join(", ")}`);

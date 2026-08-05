@@ -216,6 +216,87 @@ describe("⭐ HONEST ABOUT WHAT IT COULDN'T READ", () => {
     }
   });
 
+  it("⭐ A REAL COMMENT ON OUR POST IS RECORDED — via the SECOND call", async () => {
+    /**
+     * The two-call flow, verified live 2026-08-05:
+     *
+     *   /inbox/comments?platform=X            → the work queue (posts)
+     *   /inbox/comments/{postId}?platform&... → the comments people left
+     *
+     * The obvious single-call paths (`/comments`, `/posts/{id}/comments`) all
+     * return an HTML page with **HTTP 200** — the worst possible 404, and what
+     * `igListComments` has always pointed at.
+     */
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t);
+    const realFetch = globalThis.fetch;
+    const prevKey = process.env.ZERNIO_API_KEY;
+    process.env.ZERNIO_API_KEY = "test-key";
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      const json = (o: unknown) =>
+        new Response(JSON.stringify(o), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+
+      if (/\/inbox\/comments\/[^?]+/.test(url)) {
+        return json({
+          status: "success",
+          comments: [
+            {
+              id: "cmt_1",
+              content: "does this work with Stripe?",
+              createdTime: "2026-08-05T10:00:00.000Z",
+              from: { username: "a_real_person" },
+            },
+            // Our own reply in the same thread — must NOT come back as inbound.
+            {
+              id: "cmt_2",
+              content: "thanks for asking!",
+              createdTime: "2026-08-05T11:00:00.000Z",
+              from: { username: "joshuacastro7418" },
+            },
+          ],
+          pagination: { hasMore: false },
+        });
+      }
+      if (url.includes("/inbox/comments")) {
+        return json({
+          data: [
+            {
+              id: "vid_1",
+              platform: "youtube",
+              accountId: "acct_1",
+              accountUsername: "joshuacastro7418",
+              content: "Sensocore release 2",
+              permalink: "https://www.youtube.com/watch?v=vid_1",
+              createdTime: "2026-08-04T21:03:19.000Z",
+              commentCount: 2,
+            },
+          ],
+          pagination: { hasMore: false, nextCursor: null },
+          meta: { accountsQueried: 1, accountsFailed: 0, failedAccounts: [] },
+        });
+      }
+      return json({});
+    }) as typeof fetch;
+
+    try {
+      await t.action(internal.maya.inbox.sync, { customerId, now: NOW });
+      const open = await t.query(internal.maya.inbox.open, { customerId });
+      // Exactly one: the stranger's question. Not the video title, not our own reply.
+      expect(open).toHaveLength(1);
+      expect(open[0].text).toMatch(/Stripe/);
+      expect(open[0].authorHandle).toBe("a_real_person");
+      expect(open[0].text).not.toMatch(/Sensocore/);
+    } finally {
+      globalThis.fetch = realFetch;
+      if (prevKey === undefined) delete process.env.ZERNIO_API_KEY;
+      else process.env.ZERNIO_API_KEY = prevKey;
+    }
+  });
+
   it("the page cap is real and bounded", () => {
     // "Answer everyone" against an unbounded inbox is how a sync becomes a
     // runaway bill — but a silent stop at page 10 reports all-clear while
