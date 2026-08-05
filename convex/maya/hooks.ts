@@ -387,6 +387,21 @@ export const scrollHttp = httpAction(async (ctx, request) => {
     customerId: auth.customer._id,
   });
 
+  /**
+   * ⭐ The bank rides along with the scroll.
+   *
+   * She needs an idea to draft a post, and a tool she has to remember to call
+   * is a tool she forgets. Attaching it here puts the idea in front of her at
+   * the exact moment she is deciding what to say — and costs nothing, because
+   * she was already making this call.
+   */
+  const idea = await ctx.runQuery(internal.maya.ideas.nextIdea, {
+    customerId: auth.customer._id,
+  });
+  const bank = await ctx.runQuery(internal.maya.ideas.bankDepth, {
+    customerId: auth.customer._id,
+  });
+
   if (!result.ok) {
     return respond({
       ok: false,
@@ -411,9 +426,15 @@ export const scrollHttp = httpAction(async (ctx, request) => {
     data: {
       observations,
       keywordsSwept: result.keywordsSwept ?? [],
+      todaysIdea: idea,
+      bankDepth: bank.depth,
     },
-    why: `${observations.length} things moving in the niche, hottest first`,
-    next: "pick the ONE worth answering, then draft to that specific person or moment — not to the topic",
+    why: idea
+      ? `${observations.length} things moving, and the strongest banked idea is "${idea.angle}"`
+      : `${observations.length} things moving, but the idea bank is empty`,
+    next: idea
+      ? "draft against data.todaysIdea.ideaId — its evidence is what you cite, and its quote is what a real person actually said"
+      : "no banked idea means nothing has earned a post yet. Say that to the founder rather than inventing one",
   });
 });
 
@@ -453,12 +474,43 @@ export const draftHttp = httpAction(async (ctx, request) => {
   const kindRaw = str(parsed.body, "kind");
   const kind =
     kindRaw === "reply" || kindRaw === "cold_reply" ? kindRaw : ("post" as const);
+  const ideaId = str(parsed.body, "ideaId");
+
+  /**
+   * ⭐ A POST MUST TRACE TO AN IDEA. A REPLY MUST NOT.
+   *
+   * The blank page, closed structurally. Measured 2026-08-05: asked for ten
+   * varied posts with nothing banked she wrote one idea ten times, and the
+   * prose was fine — good writing, one thought. Nothing stopped her, because
+   * nothing asked where the idea came from.
+   *
+   * Replies are exempt on purpose. A reply is driven by what someone ELSE just
+   * said, which is better evidence than anything in the bank — requiring a
+   * banked idea there would stop her answering people, and §1 says inbound
+   * outranks outbound.
+   */
+  if (kind === "post" && !ideaId) {
+    const idea = await ctx.runQuery(internal.maya.ideas.nextIdea, {
+      customerId: auth.customer._id,
+    });
+    return respond({
+      ok: false,
+      data: { saved: false, problem: "no_idea", suggested: idea },
+      why: idea
+        ? `every post has to come from something someone actually said — the strongest one banked is "${idea.angle}"`
+        : "the idea bank is empty, so there's nothing that's earned a post today",
+      next: idea
+        ? "draft it again with that ideaId, and write to the person who said it"
+        : "tell the founder it's a quiet day. A day with nothing worth saying is a real finding, and filler is how an account starts sounding like a bot",
+    });
+  }
 
   const result = await ctx.runMutation(internal.maya.drafts.create, {
     customerId: auth.customer._id,
     channel,
     text,
     kind,
+    ideaId: ideaId ? (ideaId as Id<"ideas">) : undefined,
   });
 
   if (!result.ok) {

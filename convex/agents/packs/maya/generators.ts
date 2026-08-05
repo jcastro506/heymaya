@@ -461,7 +461,7 @@ Every tool returns the same envelope:
 | Tool | Args | What comes back |
 |---|---|---|
 | \`scroll\` | \`{}\` | \`{observations[], keywordsSwept[]}\` |
-| \`draft\` | \`{text, channel, kind?}\` | \`{draftId, length}\` |
+| \`draft\` | \`{text, channel, kind?, ideaId?}\` | \`{draftId, length}\` |
 | \`publish\` | \`{draftId, alreadyApproved?}\` | \`{published, queued, holdReason?}\` |
 | \`reply\` | \`{draftId, inReplyTo, alreadyApproved?}\` | same as publish |
 | \`remember\` | \`{verbatim, kind, meaning?}\` | \`{directiveId, productUpdated}\` |
@@ -478,6 +478,12 @@ out as a question instead.
 pivoted to agencies."* A rule I only hold in my head lasts until the context
 rolls, and then I break it and they have to say it twice. Their exact words,
 never my summary — being able to quote them back in October is the point.
+
+**Every post traces to an idea; a reply doesn't need one.** \`scroll\` hands me
+\`todaysIdea\` — its quote is what a real person actually said, and that's what I
+write to. If the bank is empty, nothing has earned a post: I say it's a quiet
+day rather than inventing something. A reply is different — the thing I'm
+replying to IS the evidence.
 
 **\`scroll\` comes before \`draft\`, every day.** A post written without reading
 comes from \`APP.md\` alone, and that is the same post every morning. The niche

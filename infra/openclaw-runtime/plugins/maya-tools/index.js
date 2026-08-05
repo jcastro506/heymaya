@@ -153,7 +153,7 @@ export default defineToolPlugin({
       name: "draft",
       label: "Draft",
       description:
-        "Write a post down. THE ONLY WAY TEXT BECOMES POSTABLE — publish takes a draftId, so a sentence that was never drafted cannot be posted no matter how good it is. Returns {ok, data, next, why}; data.draftId is what publish needs. ok:false is an ANSWER you can act on immediately, not an error: data.problem names what's wrong (over_length · empty · channel_missing · token_expired · duplicate) and `why` says it in the founder's language. Fix it and save again. Save the text EXACTLY as it should appear — this is what the founder sees and what gets published, character for character.",
+        "Write a post down. THE ONLY WAY TEXT BECOMES POSTABLE. A POST NEEDS AN ideaId — publish takes a draftId, so a sentence that was never drafted cannot be posted no matter how good it is. Returns {ok, data, next, why}; data.draftId is what publish needs. ok:false is an ANSWER you can act on immediately, not an error: data.problem names what's wrong (over_length · empty · channel_missing · token_expired · duplicate) and `why` says it in the founder's language. Fix it and save again. Save the text EXACTLY as it should appear — this is what the founder sees and what gets published, character for character.",
       parameters: Type.Object({
         text: Type.String({
           description:
@@ -166,6 +166,12 @@ export default defineToolPlugin({
           Type.String({
             description:
               "post (default), reply, or cold_reply. A reply answers someone; a cold_reply starts a conversation with a stranger.",
+          })
+        ),
+        ideaId: Type.Optional(
+          Type.String({
+            description:
+              "REQUIRED for a post, and ignored for a reply. Comes from scroll's data.todaysIdea.ideaId. Every post has to trace to something a real person actually said — without one you get ok:false and the idea you should have used. A reply needs no ideaId because the thing being replied to IS the evidence.",
           })
         ),
       }),
