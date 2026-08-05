@@ -118,6 +118,7 @@ describe("the install contract", () => {
       "ask_founder",
       "checkpoint",
       "draft",
+      "history",
       "publish",
       "remember",
       "reply",

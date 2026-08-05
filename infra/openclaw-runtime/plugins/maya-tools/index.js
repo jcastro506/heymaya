@@ -274,6 +274,21 @@ export default defineToolPlugin({
     }),
 
     tool({
+      name: "history",
+      label: "History",
+      description:
+        "What you have ACTUALLY posted, with URLs. CHECK THIS BEFORE ANSWERING ANY QUESTION ABOUT YOUR OWN WORK — 'what did you post', 'how did that do', 'did you publish it', 'have you done anything yet'. Placements are facts in rows, not something to recall: you once told a founder you hadn't posted anything to X when two of your posts were live and they could see both. That is worse than forgetting, because they can check. An empty result is a real answer — say the zero plainly rather than softening it. Takes an optional `days` (default 14).",
+      parameters: Type.Object({
+        days: Type.Optional(
+          Type.Number({
+            description: "How far back to look. Default 14, max 90.",
+          })
+        ),
+      }),
+      execute: async (p, _cfg, ctx) => call("history", p, ctx.signal),
+    }),
+
+    tool({
       name: "ask_founder",
       label: "Ask Founder",
       description:
