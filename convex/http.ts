@@ -24,6 +24,7 @@ import {
   checkpointHttp,
   draftHttp,
   scrollHttp,
+  rememberHttp,
 } from "./maya/hooks";
 import {
   approvalDecisionHttp,
@@ -1020,6 +1021,7 @@ http.route({
 // envelope, including auth failures. See convex/maya/hooks.ts.
 // ---------------------------------------------------------------------------
 http.route({ path: "/maya/scroll", method: "POST", handler: scrollHttp });
+http.route({ path: "/maya/remember", method: "POST", handler: rememberHttp });
 http.route({ path: "/maya/draft", method: "POST", handler: draftHttp });
 http.route({ path: "/maya/publish", method: "POST", handler: publishHttp });
 http.route({ path: "/maya/reply", method: "POST", handler: replyHttp });

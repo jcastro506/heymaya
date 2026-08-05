@@ -574,3 +574,96 @@ describe("WHAT SHE READS IS WHAT SHE GETS", () => {
     expect(app).toContain("Product truth not captured yet");
   });
 });
+
+describe("WHAT THE FOUNDER SAYS OUTRANKS THE PAGE", () => {
+  it("⭐ a correction is recorded in their own words", async () => {
+    // Not merged into the scraped fields, deliberately. Merging needs a model
+    // call, and a model rewriting a correction is exactly how a correction
+    // gets softened back toward the thing being corrected.
+    const t = convexTest(schema, modules);
+    const customerId = await seedCustomer(t, "u_says", {
+      name: "HeyMaya",
+      url: "https://hey-maya.ai",
+      whatItIs: "posts on reddit and x",
+    });
+
+    const changed = await t.mutation(internal.maya.productTruth.applyCorrection, {
+      customerId,
+      correction: "we don't do reddit anymore, it's tiktok instagram youtube and x",
+    });
+    expect(changed).toBe(true);
+
+    const stored = await t.run(async (ctx) => {
+      const row = (await ctx.db.get(customerId)) as Doc<"customers">;
+      return JSON.parse(row.productTruthJson!) as ProductTruth;
+    });
+    expect(stored.founderSays).toEqual([
+      "we don't do reddit anymore, it's tiktok instagram youtube and x",
+    ]);
+    // The scrape is kept — it's still evidence of what the page says.
+    expect(stored.whatItIs).toBe("posts on reddit and x");
+  });
+
+  it("saying the same thing twice is emphasis, not a second fact", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seedCustomer(t, "u_dupe", { name: "X", url: "https://x.dev" });
+    await t.mutation(internal.maya.productTruth.applyCorrection, {
+      customerId,
+      correction: "we pivoted to agencies",
+    });
+    const second = await t.mutation(internal.maya.productTruth.applyCorrection, {
+      customerId,
+      correction: "  We Pivoted To Agencies  ",
+    });
+    expect(second).toBe(false);
+  });
+
+  it("⭐ AND IT REACHES APP.MD, ABOVE THE SCRAPE", () => {
+    // The whole point. A correction she agrees with but never cites is the
+    // same as no correction — and this exact gap was live on 2026-08-04, when
+    // her product truth came from a page describing a deleted product.
+    const app = buildMayaWorkspace({
+      founder: { email: "sam@example.com", name: "Sam", timezone: "UTC" },
+      product: {
+        name: "HeyMaya",
+        url: "https://hey-maya.ai",
+        truth: "posts on reddit and x",
+        founderSays: ["we don't do reddit anymore — tiktok, instagram, youtube, x"],
+      },
+      channels: [],
+    }).files.get("APP.md")!;
+
+    expect(app).toContain("we don't do reddit anymore");
+    expect(app).toMatch(/outrank/i);
+    // Above the scraped line, so it's read first.
+    expect(app.indexOf("we don't do reddit anymore")).toBeLessThan(
+      app.indexOf("posts on reddit and x")
+    );
+  });
+});
+
+describe("A CORRECTION REACHES THE RECORD WHATEVER DRAWER IT'S FILED IN", () => {
+  it("⭐ claim-changing kinds are about CONSEQUENCE, not label", async () => {
+    // Told "we don't do Reddit anymore, HeyMaya runs TikTok/IG/YouTube/X only",
+    // she filed `channel_toggle` — a BETTER classification than `product_truth`
+    // — and the grounding record kept saying she posts on Reddit.
+    //
+    // The rule is: if it changes what's TRUE about the product, it belongs in
+    // APP.md regardless of which drawer it went in.
+    const { CLAIM_CHANGING_KINDS } = await import("../hooks");
+    expect(CLAIM_CHANGING_KINDS).toContain("product_truth");
+    expect(CLAIM_CHANGING_KINDS).toContain("channel_toggle");
+    expect(CLAIM_CHANGING_KINDS).toContain("icp_correction");
+    expect(CLAIM_CHANGING_KINDS).toContain("approved_claim");
+  });
+
+  it("but NOT the operational ones", async () => {
+    // "Don't post before 9" is a real rule and says nothing about what the
+    // product is. Putting it in the grounding file would be noise where
+    // precision matters most.
+    const { CLAIM_CHANGING_KINDS } = await import("../hooks");
+    for (const operational of ["timing_window", "cadence", "pause", "notification_pref"]) {
+      expect(CLAIM_CHANGING_KINDS).not.toContain(operational);
+    }
+  });
+});

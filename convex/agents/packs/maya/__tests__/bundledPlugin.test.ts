@@ -119,6 +119,7 @@ describe("the install contract", () => {
       "checkpoint",
       "draft",
       "publish",
+      "remember",
       "reply",
       "scroll",
     ]);
