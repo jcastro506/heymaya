@@ -1347,6 +1347,33 @@ brief = {
 }
 ```
 
+#### 7.5.4a What we trust Creatify with, and what we never do
+
+*Operator, 2026-08-05: "Creatify is a whole business built on creating social
+media posts. They know what they're doing. We really don't."* Correct, and the
+line is **form versus substance** — the same split §6.1.1 already draws.
+
+| Trust them completely | Never hand over |
+|---|---|
+| `visual_style` (~52) — confessional, fit check, unboxing, walkthrough, cinematic, podcast, street interview | the **words** |
+| pacing, cut rhythm, template design | the **claims** |
+| carousel layout and slide design | which shape (that comes from the format card) |
+| aspect, length, model version | the hook and the CTA |
+
+**The `override_script` rule is not a judgment about their skill.** Their writer
+has never seen this founder's vocabulary, their `neverSays` list, or a single
+edit they have made — and no amount of Creatify's expertise closes an
+information gap. Cost is identical either way, so there is nothing to weigh.
+
+⚠️ **CARouSELS: the earlier "use Gemini, it's 13× cheaper" call was optimizing
+too early.** `iab_images` is $0.40/image against Nano Banana's ~$0.03 — but
+**our layout system does not exist and theirs does**, and the $0.03 is still
+unverified against a real invoice. At ~43 image posts a month that is ~$16
+against a ~$27 COGS: real, and not worth building a design system to avoid
+before we know theirs is worse. **Ship Creatify's carousel first, compare
+output side by side, then choose.** §7 already notes the layout system is ours
+either way, which is what makes this reversible.
+
 #### 7.5.5 Who writes the script — always HYBRID, never AUTO
 
 `link_to_videos` accepts either. Omit `override_script` and **Creatify writes it** from the link plus a `script_style` (48 options). Pass it and Maya's words are used.
@@ -4253,6 +4280,31 @@ needs real collected text**, which is the half that actually works.
 **Exit:** a stranger can't tell it isn't the founder writing.
 **Tests:** voice-profile regression on held-out real posts · asset-classifier accuracy · never-fabricated-UI assertion · **few-shot bleed** (§18 failure 1 — example content must never surface as a claimed fact about *this* product; this shipped once already) · the critic still vetoes when the writer model changes.
 
+### Sprint 4.5 — The cringe eval · *the missing half of Sprint 4*
+
+Sprint 4's exit is *"a stranger can't tell it isn't the founder writing."*
+**There is no test for it.** Six anti-slop layers are built and nothing measures
+whether they work, so "does she sound human" is a vibe — and vibes drift
+silently across prompt edits and model swaps.
+
+| Task |
+|---|
+| **The blind set** — 10 real niche posts from `observations` (already collected) + 10 of hers, attribution stripped, shuffled |
+| **Machine judge** on a different family: sort them. Reliable sorting = we ship something identifiably synthetic |
+| ⭐ **Founder judge** — the operator sorts the same 20. **This is ground truth**, because it is their voice being imitated and no model outranks them on it |
+| Run as a **regression**: fires on every prompt change, every model swap, every voice-corpus change |
+| Record the score over time — a number that moves is the only honest answer to "is she getting better" |
+
+**Exit:** a judge on a different model sorts hers from real ones **no better than
+chance**, and the founder agrees.
+**Tests:** the eval is reproducible on a fixed seed set · a deliberately bad
+sample (marketing copy) IS caught, so the eval can fail · scores are stored per
+run, not just printed.
+
+⚠️ **The trap this exists to avoid:** an eval that always passes. If it cannot
+catch obviously synthetic text, it is measuring nothing and will quietly bless
+whatever we ship.
+
 ### Sprint 5 — Perception live
 
 | Task |
@@ -4286,6 +4338,8 @@ needs real collected text**, which is the half that actually works.
 | `watch-formats` (transcripts + multimodal) · `ride-sounds` |
 | TikTok publish incl. rendered-preview consent |
 | ⭐ **Wrap Custom Templates — the primary video engine, currently NOT BUILT** (§7.6.5a) |
+| ⭐ **Format card → brief.** The chain that turns watching into making: a card carries `reusableAs` ("the shape, described so it can be applied to a different product"), and the brief carries `formatCardId`. Without it she picks a template because it looks fun rather than because three top posts in this niche were that shape |
+| **Creatify carousel vs Nano Banana, decided by output** — build the `iab_images` path, render the same brief both ways, compare (§7.5.4a). Ours is $0.03 and unverified; theirs is $0.40 and exists |
 | **Surface the silent v1 fallback** — no avatar picked must not quietly become a single-scene video (§7.6.5a) |
 | ⭐ **The video authenticity floor (§7.5.3)** — asset ordering enforced in code: founder footage → real screen recordings → avatar last and never a silent default. An avatar in a plan is *stated*, so the founder can veto it |
 
@@ -4352,6 +4406,7 @@ simply the format that performs on TikTok/Reels/Shorts.
 | Task |
 |---|
 | Creatify: **always `link_with_params`** · Custom Templates (build ~5 masters) · `ads_clone` recreate flow |
+| ⭐ **The ad clone is a TEMPLATE, not a rerun.** $7.20 at 15s — 14× an avatar video, affordable once a month. Clone one proven ad, then produce 3 avatar videos **in that same shape** ($8.74 for four different videos, against $7.25 for the same video posted four times). Reposting an identical asset is also dampened by TikTok and IG, so the fourth post reaches fewer people than the first |
 | The **brief** schema + the **eight-check gate** |
 | **Global render queue**: fair-share, deadline priority, adaptive concurrency, pool circuit breaker |
 | `make-video` · weekly video plan ask |
