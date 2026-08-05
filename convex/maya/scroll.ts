@@ -69,6 +69,13 @@ export const MAX_SEARCHES_PER_SCROLL = 9;
  * | Instagram `reels/search` | **ISO string** | ✅ | ✅ | ✅ |
  * | YouTube `search` → videos | **ISO string** | ❌ | ❌ | ✅ |
  * | YouTube `search` → shorts | ⛔ **none** | ❌ | ❌ | ✅ |
+ * | X `advanced_search` | legacy string | ✅ | ✅ (replies) | ✅ |
+ *
+ * ⭐ **X is the richest of the four**, not the poorest. An earlier version of
+ * this file excluded it on the belief that its search wasn't wrapped —
+ * `twitterApiIoSearch` has wrapped `advanced_search` all along, and its only
+ * callers were in frozen v1. Since X is the launch channel and often the only
+ * connected one, that omission mattered more than any of the rest.
  *
  * Two consequences that shape everything below:
  *
@@ -85,7 +92,7 @@ export const MAX_SEARCHES_PER_SCROLL = 9;
  * this sweep asks. Including them ranked by raw view count would be inventing
  * a recency signal that isn't in the data. §2.7: grounded or silent.
  */
-export const SCROLLABLE_CHANNELS = ["tiktok", "instagram", "youtube"] as const;
+export const SCROLLABLE_CHANNELS = ["tiktok", "instagram", "youtube", "x"] as const;
 /** What she actually reads. More than this is a firehose, not a scroll. */
 export const OBSERVATIONS_RETURNED = 20;
 /** Older than this isn't news, whatever its engagement. */
@@ -130,9 +137,12 @@ export const scrollNiche = internalAction({
      * ⭐ Read where she publishes.
      *
      * A founder who only ships to X and TikTok gains nothing from us buying
-     * Instagram credits every morning. Connected channels, intersected with the
-     * ones that actually have a keyword search — X isn't here because its
-     * search lives behind twitterapi.io, not ScrapeCreators.
+     * Instagram credits every morning. So: connected channels only.
+     *
+     * This gate is a COST choice, not a technical one — every read here is
+     * public and unauthenticated, so any channel could be swept whether or not
+     * the founder has connected it. If reading a channel she doesn't publish to
+     * ever proves worth the credits, this is the line to change.
      *
      * Falls back to TikTok when nothing is connected yet, because a scroll that
      * returns nothing on day one looks identical to a broken scroll.
@@ -195,6 +205,8 @@ export const scrollNiche = internalAction({
             found = await readInstagram(keyword, now);
           } else if (channel === "youtube") {
             found = await readYouTube(keyword, now);
+          } else if (channel === "x") {
+            found = await readX(keyword, now);
           }
 
           if (!swept.includes(keyword)) swept.push(keyword);
@@ -402,6 +414,92 @@ export function normalizeYouTubeVideos(
       postedAt,
       metrics,
       velocity: channelVelocity("youtube", metrics, postedAt, now),
+      keyword,
+    });
+  }
+  return out;
+}
+
+
+/**
+ * X posts matching a keyword, via twitterapi.io.
+ *
+ * ⭐ The division of labour on X, stated in §2 and worth restating here:
+ * **read via twitterapi.io, write via Zernio. Never conflate them.** This is a
+ * read — unauthenticated, never touching the founder's account, so it carries
+ * zero ban risk and costs ~$0.15 per 1,000 tweets.
+ *
+ * Shape VERIFIED LIVE 2026-08-05. It returns likeCount AND replyCount, which
+ * makes X the one non-TikTok channel whose velocity is directly comparable —
+ * `channelVelocity` gives it the standard likes + 3×comments treatment.
+ *
+ * ⚠️ `createdAt` is Twitter's legacy format, a fourth date format across four
+ * channels: `"Wed Aug 05 13:27:17 +0000 2026"`.
+ */
+async function readX(keyword: string, now: number): Promise<Observation[]> {
+  const { twitterApiIoSearch } = await import(
+    "../integrations/twitterApiIo/twitterSearch"
+  );
+  const result = await twitterApiIoSearch(keyword, { queryType: "Latest" });
+  return normalizeXSearch(
+    (result.items ?? []) as unknown as Array<Record<string, unknown>>,
+    keyword,
+    now
+  );
+}
+
+/**
+ * ⭐ Pure — and written against the shape the wrapper ACTUALLY returns.
+ *
+ * `twitterApiIoSearch` does not hand back raw tweets. It normalises them into
+ * a `ResearchRawItem` first:
+ *
+ *   { externalId, url, excerpt, author: string|null, createdAtMs: number|null,
+ *     engagement: { likes, comments, shares, views } }
+ *
+ * I wrote this against the raw tweet shape — `text`, `createdAt`,
+ * `likeCount`, `author.userName` — none of which survive that normalisation.
+ * It returned zero every time, which is indistinguishable from "X was quiet",
+ * and it is the SECOND shape-assumption in this file after the `payload`/`raw`
+ * mix-up. Both failed silently and both were found by running it, not reading
+ * it.
+ *
+ * One upside of the wrapper doing the work: `createdAtMs` is already
+ * milliseconds, so X is the one channel here that needs no date parsing at all.
+ */
+export function normalizeXSearch(
+  items: Array<Record<string, unknown>>,
+  keyword: string,
+  now: number
+): Observation[] {
+  const out: Observation[] = [];
+  for (const item of items) {
+    const text = typeof item.excerpt === "string" ? item.excerpt : "";
+    const url = typeof item.url === "string" ? item.url : "";
+    if (!text || !url) continue;
+
+    const postedAt =
+      typeof item.createdAtMs === "number" && Number.isFinite(item.createdAtMs)
+        ? item.createdAtMs
+        : null;
+    if (postedAt === null || now - postedAt > NEWS_WINDOW_MS) continue;
+
+    const engagement = (item.engagement ?? {}) as Record<string, unknown>;
+    const metrics = {
+      likes: num(engagement.likes),
+      // Replies ARE the comments on X — the thing velocity weighs 3×.
+      comments: num(engagement.comments),
+      views: num(engagement.views),
+    };
+    out.push({
+      channel: "x",
+      sourceUrl: url,
+      // Already a handle string here, not an object.
+      authorHandle: typeof item.author === "string" ? item.author : null,
+      text,
+      postedAt,
+      metrics,
+      velocity: channelVelocity("x", metrics, postedAt, now),
       keyword,
     });
   }
