@@ -1552,7 +1552,45 @@ look?"*, not *"is this scene right?"*. It also still burns credits per preview.
 ⚠️ It is wired only into `convex/gtmMaya/` — the frozen v1. `convex/maya/` has
 no video path at all until Sprint 9.
 
-##### What we can do instead, for free
+##### ⭐ CORRECTION — the Link IS the screenshot-approval step
+
+*Operator, 2026-08-06: "when I use Creatify, it first creates screenshots and
+then it shows them to me… it says 'here's what I'm making,' and I okay them.
+Have you checked?" He was right; the first answer below was written from our
+own wrapper's comments rather than from Creatify. Checked against the published
+OpenAPI on 2026-08-06.*
+
+**The Studio step he describes is the `Link` object, and it is fully
+API-addressable.** It is not the preview endpoint at all:
+
+| Studio | API |
+|---|---|
+| paste a URL | `POST /api/links/` — scrapes and returns **`image_urls`**, `logo_url`, `title`, `description`, `ai_summary`, `ai_industry`, `ai_target_audiences` |
+| *"here's what I'm making"* | **those `image_urls` ARE the screenshots.** They come back on the create response — no extra call needed |
+| you okay / edit them | `PUT /api/links/{id}/` — we already wrap this as `updateLink` |
+| or supply your own | `POST /api/links/link_with_params/` — takes `image_urls`, `video_urls`, `logo_url`, `title`, `description`, `reviews` |
+| it makes the video | `POST /api/link_to_videos/` against that link id |
+
+**All three write wrappers already exist** in `convex/integrations/creatify/`.
+What is missing is only the pause — the moment where we show the founder and
+wait. ⚠️ There is no `GET /api/links/{id}/` wrapper, but none is needed for the
+approval flow: the create response already carries the images.
+
+⭐ **And §7.6.2's existing rule makes this stronger, not redundant.** Because we
+*always* use `link_with_params` and never let Creatify scrape, the founder is
+approving **our** picks from the media library (§7.5.31) — not Creatify's guess
+at their site. The approval step and the grounding rule are the same mechanism
+seen from two ends.
+
+⚠️ **What `preview_list_async` is NOT.** Confirmed against the OpenAPI: each
+preview carries `media_job`, `visual_style` ("FullScreenTemplate"), `url` (an
+embeddable *player* page), `aspect_ratio`. **No image, thumbnail, scene, frame
+or storyboard field anywhere**, and `video_thumbnail` stays `null` until the
+final render. It answers *"which look?"*, not *"is this scene right?"*.
+
+##### The same idea on the avatar path, for free
+
+
 
 `lipsync_v2` is a **composer, not a generator**: we supply the scenes. Every
 b-roll scene's `background.url` is a file *we* chose from the media library
@@ -5275,7 +5313,7 @@ simply the format that performs on TikTok/Reels/Shorts.
 |---|
 | Creatify: **always `link_with_params`** · Custom Templates (build ~5 masters) · `ads_clone` recreate flow |
 | ⭐ **The ad clone is a TEMPLATE, not a rerun.** $7.20 at 15s — 14× an avatar video, affordable once a month. Clone one proven ad, then produce 3 avatar videos **in that same shape** ($8.74 for four different videos, against $7.25 for the same video posted four times). Reposting an identical asset is also dampened by TikTok and IG, so the fourth post reaches fewer people than the first |
-| ⭐ **The storyboard check (§7.5.36)** — before any render, send the founder the exact stills: the real media-library asset per b-roll scene, the persona `preview_image_9_16` per avatar scene, each with its line. **Zero credits.** A wrong screenshot caught here costs nothing; caught after the render it costs the render |
+| ⭐ **The storyboard check (§7.5.36)** — before any render, send the founder the exact stills and wait. On the URL path that is the **Link**: the `image_urls` we supplied via `link_with_params`, shown for a yes. On the avatar path it is the media-library asset per b-roll scene plus the persona `preview_image_9_16`, each with its line. **Zero credits either way.** A wrong screenshot caught here costs nothing; caught after the render it costs the render |
 | The **brief** schema + the **eight-check gate** |
 | **Global render queue**: fair-share, deadline priority, adaptive concurrency, pool circuit breaker |
 | `make-video` · weekly video plan ask |
