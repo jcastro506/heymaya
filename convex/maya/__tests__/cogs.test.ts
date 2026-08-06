@@ -18,7 +18,7 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import type { Id } from "../../_generated/dataModel";
-import { MIN_DAYS_TO_PROJECT, project } from "../cogs";
+import { MIN_DAYS_TO_PROJECT, formatUsd, project } from "../cogs";
 import { ALWAYS_ALLOWED_KINDS, allowsKind } from "../spendCeiling";
 
 /** 2026-08-15 12:00 UTC — mid-month, so projections have room both ways. */
@@ -104,6 +104,21 @@ describe("projection — honest about what it can't know yet", () => {
     const wrong = project({ monthToDateUsd: 10, daysObserved: 28, daysInMonth: 30 });
     expect(theirs.projectedMonthUsd).toBeCloseTo(75, 5);
     expect(wrong.projectedMonthUsd!).toBeLessThan(15);
+  });
+
+  it("sub-cent totals stay legible instead of rounding to nothing", () => {
+    // The first live reading was $0.00006925 and rendered as "$0.00 over 3
+    // days — on track for about $0.00", which is indistinguishable from a
+    // ledger that isn't recording at all.
+    expect(formatUsd(0.00006925)).toBe("$0.000069");
+    // A 100x difference must not collapse to the same string.
+    expect(formatUsd(0.007)).not.toBe(formatUsd(0.00007));
+    // And normal amounts still read like money.
+    expect(formatUsd(25.920356)).toBe("$25.92");
+    expect(formatUsd(0)).toBe("$0.00");
+
+    const p = project({ monthToDateUsd: 0.00006925, daysObserved: 3, daysInMonth: 31 });
+    expect(p.detail).not.toMatch(/\$0\.00 over/);
   });
 
   it("says the money in dollars a person reads, not floats", () => {
