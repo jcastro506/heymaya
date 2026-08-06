@@ -740,6 +740,46 @@ export const draftHttp = httpAction(async (ctx, request) => {
   const ideaId = str(parsed.body, "ideaId");
 
   /**
+   * ⭐ THE PRE-SPEND GATE (§7.5.7), CHECK 3 — before the founder sees anything.
+   *
+   * `checkPostBudget` has existed since Sprint 2 with **no caller**, so the
+   * daily cap the plan tiers promise — `postsPerDayPerChannel: 2` on mvp — was
+   * never enforced anywhere. She could post fifty times, which is a platform
+   * ban risk and a broken promise in the same act.
+   *
+   * ⚠️ It belongs HERE, not at publish. `publishDecision`'s header is explicit
+   * that budgets are deliberately excluded from the iron rule: *"they belong to
+   * the pre-spend gate, which runs before the founder ever sees the idea,
+   * precisely so an approved idea can never fail on budget. Failing after a
+   * yes is the worst possible sequence."*
+   *
+   * Drafting is that moment. Refusing here costs her one tool call; refusing
+   * after approval costs the founder's trust.
+   *
+   * Replies are exempt — §1, inbound outranks outbound, and a daily post cap
+   * that silences answers turns a rate limit into rudeness.
+   */
+  if (kind === "post") {
+    const budget = await ctx.runQuery(internal.maya.planFeatures.checkPostBudget, {
+      customerId: auth.customer._id,
+      channel,
+    });
+    /**
+     * `hard_block` is the exhaustion verdict for this metric — §2.10's
+     * budgets-not-booleans rule means the answer is a rung, not a boolean, and
+     * the daily post cap is the one metric where the rung IS "stop".
+     */
+    if (budget.verdict === "hard_block") {
+      return respond({
+        ok: false,
+        data: { used: budget.used, limit: budget.limit },
+        why: `that's ${budget.used} of ${budget.limit} posts on ${channel} today`,
+        next: "don't draft another for this channel today — say what's already gone out, and if they want more, that's a plan change rather than something to push through",
+      });
+    }
+  }
+
+  /**
    * ⭐ A POST MUST TRACE TO AN IDEA. A REPLY MUST NOT.
    *
    * The blank page, closed structurally. Measured 2026-08-05: asked for ten
