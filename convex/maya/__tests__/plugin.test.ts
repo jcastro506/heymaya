@@ -67,6 +67,7 @@ describe("the manifest and the code agree", () => {
       "remember",
       "reply",
       "request_assets",
+      "rules",
       "scroll",
       "update",
       "weekly_read",
@@ -152,7 +153,7 @@ describe("NO TOOL CAN NAME A TENANT", () => {
     // adds nothing of its own. If this ever built a body by hand, the schema
     // test would stop being sufficient.
     expect(index).toMatch(/body: JSON\.stringify\(payload \?\? \{\}\)/);
-    for (const tool of ["scroll", "draft", "publish", "reply", "remember", "update", "history", "inbox", "weekly_read", "request_assets", "ask_founder", "checkpoint"]) {
+    for (const tool of ["scroll", "draft", "publish", "reply", "remember", "rules", "update", "history", "inbox", "weekly_read", "request_assets", "ask_founder", "checkpoint"]) {
       expect(index).toContain(`call("${tool}", p, ctx.signal)`);
     }
   });

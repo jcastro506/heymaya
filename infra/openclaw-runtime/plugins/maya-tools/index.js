@@ -298,6 +298,25 @@ export default defineToolPlugin({
     }),
 
     tool({
+      name: "rules",
+      label: "House rules",
+      description:
+        "The house rules a founder has given you, in their own words. THREE THINGS: `action:\"list\"` (default) reads them back — do this whenever they ask what rules they have, and quote their sentences with dates, because seeing their own words listed is the proof you remembered. `action:\"forget\"` with a `directiveId` retires one — it stays in the history and stops applying; never guess which one they mean, list first. `action:\"why\"` with an optional `kind` answers \"why did you do that\" FROM THE RECORD. ⚠️ If `why` comes back empty, say you have no record of being told that — do NOT reconstruct a reason. A plausible story you invented is worse than admitting you don't know, because they cannot correct it. These rules are also enforced server-side at publish, so a post that breaks one is held whether or not you remember it.",
+      parameters: Type.Object({
+        action: Type.Optional(
+          Type.String({ description: '"list" (default), "forget", or "why".' })
+        ),
+        directiveId: Type.Optional(
+          Type.String({ description: "Required for forget. Get it from list." })
+        ),
+        kind: Type.Optional(
+          Type.String({ description: "Optional filter for why." })
+        ),
+      }),
+      execute: async (p, _cfg, ctx) => call("rules", p, ctx.signal),
+    }),
+
+    tool({
       name: "weekly_read",
       label: "Weekly read",
       description:

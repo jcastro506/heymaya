@@ -213,6 +213,44 @@ export const publishPlacement = internalAction({
     }
 
     /**
+     * ⭐ THE HOUSE RULES, ENFORCED BY THE SERVER.
+     *
+     * §18 Sprint 6's exit criterion is *"a directive survives a redeploy AND a
+     * deliberate model swap."* A rule that lives in her prompt survives
+     * neither — swap the model and every instruction in the workspace becomes
+     * a suggestion to a stranger. §2.4: anything promised to the user is
+     * enforced by the server.
+     *
+     * The ledger was WRITE-ONLY until now: `append` had a caller, and
+     * `activeRules`, `effectiveRule`, `history` and `forget` had none. Three
+     * real directives sat active on staging while nothing read them.
+     *
+     * Fails OPEN, unlike the safety critic below, and the asymmetry is
+     * deliberate: a missed house rule costs an apology; a missed safety
+     * violation costs the account.
+     */
+    {
+      const house = await ctx.runAction(
+        internal.maya.directiveGate.checkDirectives,
+        { customerId: args.customerId, text: args.snapshotText }
+      );
+      if (!house.ok) {
+        /**
+         * ⭐ The hold quotes THEIR OWN SENTENCE back.
+         *
+         * A founder who is told "held: house rule" has learned nothing and
+         * cannot argue. A founder who is told "you told me: we do NOT use
+         * Reddit" can either agree or correct the rule — and correcting it is
+         * a `remember` away.
+         */
+        return {
+          ok: false,
+          error: `held — you told me: "${house.rule}"${house.why ? ` (${house.why})` : ""}`,
+        };
+      }
+    }
+
+    /**
      * ⭐ THE SAFETY CHECK, IMMEDIATELY BEFORE THE IRREVERSIBLE ACT.
      *
      * `convex/maya/outbound.ts` had **zero callers** — every export in it,
