@@ -61,7 +61,7 @@ export function dayKeyInZone(ts: number, timezone: string): string {
 }
 
 /** Step back one calendar day from a YYYY-MM-DD key. */
-function previousDay(dayKey: string): string {
+export function previousDay(dayKey: string): string {
   const [y, m, d] = dayKey.split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
   dt.setUTCDate(dt.getUTCDate() - 1);

@@ -349,8 +349,31 @@ describe("sendEveningRecap through Convex", () => {
 });
 
 describe("dayKey", () => {
-  it("is the UTC date, so a re-run at 23:59 and 00:01 are different days", () => {
-    expect(dayKey(Date.UTC(2026, 6, 31, 23, 59))).toBe("2026-07-31");
-    expect(dayKey(Date.UTC(2026, 7, 1, 0, 1))).toBe("2026-08-01");
+  it("separates a re-run at 23:59 from one at 00:01", () => {
+    expect(dayKey(Date.UTC(2026, 6, 31, 23, 59), "UTC")).toBe("2026-07-31");
+    expect(dayKey(Date.UTC(2026, 7, 1, 0, 1), "UTC")).toBe("2026-08-01");
+  });
+
+  /**
+   * ⭐ The regression. This asserted the UTC date until 2026-08-06, and the
+   * assertion was the bug: the 20:00 evening recap in `America/New_York` IS
+   * 00:00 UTC the next day, so every recap was filed under TOMORROW's key.
+   * `recapSentToday` then looked for a key only yesterday's recap had written,
+   * found it, and concluded the recap had gone out — permanently, so
+   * `recap_missed` could never fire.
+   */
+  it("files the 20:00 recap under the founder's day, not tomorrow's", () => {
+    // 2026-08-05 20:00 in New York === 2026-08-06 00:00 UTC.
+    const eveningRecap = Date.UTC(2026, 7, 6, 0, 0);
+    expect(dayKey(eveningRecap, "America/New_York")).toBe("2026-08-05");
+    // The old behaviour, kept visible so the difference is unmistakable.
+    expect(dayKey(eveningRecap, "UTC")).toBe("2026-08-06");
+  });
+
+  it("holds for a timezone ahead of UTC as well as behind", () => {
+    // 09:00 in Tokyo on the 6th is 00:00 UTC on the 6th — same day here, but
+    // 23:00 UTC on the 5th is already the 6th in Tokyo.
+    expect(dayKey(Date.UTC(2026, 7, 5, 23, 0), "Asia/Tokyo")).toBe("2026-08-06");
+    expect(dayKey(Date.UTC(2026, 7, 5, 23, 0), "UTC")).toBe("2026-08-05");
   });
 });

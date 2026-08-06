@@ -32,10 +32,24 @@ import { internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { namesSomethingConcrete } from "./quality";
+import { dayKeyInZone } from "./cadence";
 
-/** UTC day key — the dedupe scope for both messages. */
-export function dayKey(now: number): string {
-  return new Date(now).toISOString().slice(0, 10);
+/**
+ * ⭐ The founder's day key — the dedupe scope for both messages.
+ *
+ * ⚠️ This was UTC until 2026-08-06, and it broke the evening recap silently.
+ * The recap fires at 20:00 local; in `America/New_York` that is **00:00 UTC
+ * the next day**, so every recap was filed under TOMORROW's key. The liveness
+ * check then looked for `recap:<today UTC>` — a key only yesterday's recap had
+ * ever written — found it, and concluded the recap had gone out. Permanently.
+ * `recap_missed` could never fire.
+ *
+ * The trap is documented in {@link dayKeyInZone}; this file simply hadn't been
+ * brought along. A day boundary has to mean the same thing everywhere or the
+ * watchdogs quietly agree with each other about the wrong day.
+ */
+export function dayKey(now: number, timezone: string): string {
+  return dayKeyInZone(now, timezone);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -177,13 +191,34 @@ export const todaysPlacements = internalQuery({
   args: { customerId: v.id("customers"), now: v.optional(v.number()) },
   handler: async (ctx, args): Promise<Doc<"placements">[]> => {
     const now = args.now ?? Date.now();
-    const since = Math.floor(now / 86_400_000) * 86_400_000;
-    return (await ctx.db
+    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    const timezone = customer?.timezone ?? "UTC";
+    const today = dayKey(now, timezone);
+
+    /**
+     * ⚠️ This filtered on `publishedAt >= floor(now / 86_400_000) * 86_400_000`
+     * — UTC midnight. The recap fires at 20:00 local, which in
+     * `America/New_York` IS 00:00 UTC, so `since` equalled `now` almost
+     * exactly and the window was a few milliseconds wide. A recap built from
+     * this query would have reported "Nothing went out today" on a day with
+     * four live posts.
+     *
+     * Comparing day KEYS rather than doing millisecond arithmetic is what
+     * cadence.ts does, and it is correct across DST too — the offset is
+     * resolved per timestamp instead of assumed constant.
+     */
+    const window = (await ctx.db
       .query("placements")
       .withIndex("by_customer_and_publishedAt", (q) =>
-        q.eq("customerId", args.customerId).gte("publishedAt", since)
+        q
+          .eq("customerId", args.customerId)
+          // Two days back covers every timezone offset; the key filter below
+          // is what actually decides membership.
+          .gte("publishedAt", now - 2 * 86_400_000)
       )
       .collect()) as Doc<"placements">[];
+
+    return window.filter((p) => dayKeyInZone(p.publishedAt, timezone) === today);
   },
 });
 
@@ -214,6 +249,8 @@ export const runMorningRun = internalMutation({
   }> => {
     const now = args.now ?? Date.now();
     const order: string[] = [];
+    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    const today = dayKey(now, customer?.timezone ?? "UTC");
 
     const open = await ctx.db
       .query("messages")
@@ -233,7 +270,7 @@ export const runMorningRun = internalMutation({
       customerId: args.customerId,
       surface: "telegram",
       body: brief.text,
-      dedupeKey: `brief:${dayKey(now)}`,
+      dedupeKey: `brief:${today}`,
       proactive: true,
       ts: now,
     });
@@ -244,7 +281,7 @@ export const runMorningRun = internalMutation({
     for (const [i, post] of args.plannedPosts.entries()) {
       const res = await ctx.runMutation(internal.maya.jobs.enqueue, {
         kind: "produce_post",
-        idempotencyKey: `produce:${args.customerId}:${dayKey(now)}:${i}`,
+        idempotencyKey: `produce:${args.customerId}:${today}:${i}`,
         customerId: args.customerId,
         payloadJson: JSON.stringify(post),
       });
@@ -273,13 +310,33 @@ export const sendEveningRecap = internalMutation({
     args
   ): Promise<{ sent: boolean; messageId: Id<"messages"> | null; count: number }> => {
     const now = args.now ?? Date.now();
-    const since = Math.floor(now / 86_400_000) * 86_400_000;
-    const placements = (await ctx.db
-      .query("placements")
-      .withIndex("by_customer_and_publishedAt", (q) =>
-        q.eq("customerId", args.customerId).gte("publishedAt", since)
-      )
-      .collect()) as Doc<"placements">[];
+    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    const timezone = customer?.timezone ?? "UTC";
+    const today = dayKey(now, timezone);
+
+    /**
+     * ⚠️ This read `publishedAt >= floor(now / 86_400_000) * 86_400_000` — and
+     * this is the site where that hurt most. The recap fires at **20:00
+     * local**, which for `America/New_York` is 00:00 UTC exactly, so `since`
+     * equalled `now` to within milliseconds: a window a few ms wide.
+     *
+     * The recap would have said *"Nothing went out today."* on a day with four
+     * live posts, and been believed — it is the receipt, and §2.7 says the
+     * founder's trust in every future number depends on it never lying.
+     *
+     * It has not bitten yet only because the live agent composes her own recap
+     * rather than calling this. That is luck, not design.
+     */
+    const placements = (
+      (await ctx.db
+        .query("placements")
+        .withIndex("by_customer_and_publishedAt", (q) =>
+          q
+            .eq("customerId", args.customerId)
+            .gte("publishedAt", now - 2 * 86_400_000)
+        )
+        .collect()) as Doc<"placements">[]
+    ).filter((p) => dayKeyInZone(p.publishedAt, timezone) === today);
 
     const recap = composeRecap({
       placements: placements.map((p) => ({
@@ -295,7 +352,7 @@ export const sendEveningRecap = internalMutation({
       customerId: args.customerId,
       surface: "telegram",
       body: recap.text,
-      dedupeKey: `recap:${dayKey(now)}`,
+      dedupeKey: `recap:${today}`,
       proactive: true,
       ts: now,
     });

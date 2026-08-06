@@ -244,7 +244,7 @@ describe("the hook is tenant-safe like every other", () => {
 describe("liveness notices a machine that stops checking in", () => {
   const base: LivenessInput = {
     now: NOW,
-    hourUtc: 20,
+    hourLocal: 20,
     briefSentToday: true,
     recapSentToday: true,
     placementsToday: 1,
