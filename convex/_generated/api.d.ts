@@ -244,6 +244,7 @@ import type * as maya_telegramFiles from "../maya/telegramFiles.js";
 import type * as maya_trends from "../maya/trends.js";
 import type * as maya_voice from "../maya/voice.js";
 import type * as maya_voiceCorpus from "../maya/voiceCorpus.js";
+import type * as maya_widerWorld from "../maya/widerWorld.js";
 import type * as maya_zernioCapability from "../maya/zernioCapability.js";
 import type * as migrations_coachManagerPlanRename from "../migrations/coachManagerPlanRename.js";
 import type * as onboarding_gtm_deployMayaGtm from "../onboarding/gtm/deployMayaGtm.js";
@@ -500,6 +501,7 @@ declare const fullApi: ApiFromModules<{
   "maya/trends": typeof maya_trends;
   "maya/voice": typeof maya_voice;
   "maya/voiceCorpus": typeof maya_voiceCorpus;
+  "maya/widerWorld": typeof maya_widerWorld;
   "maya/zernioCapability": typeof maya_zernioCapability;
   "migrations/coachManagerPlanRename": typeof migrations_coachManagerPlanRename;
   "onboarding/gtm/deployMayaGtm": typeof onboarding_gtm_deployMayaGtm;
