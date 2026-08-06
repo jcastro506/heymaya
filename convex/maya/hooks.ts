@@ -679,6 +679,27 @@ export const scrollHttp = httpAction(async (ctx, request) => {
   });
 
   /**
+   * ⭐ MINE THE COMMENTS. This is the moat, and it never ran.
+   *
+   * CLAUDE.md states the whole pitch in one line: *"she watches what's
+   * actually working in the niche, MINES WHAT BUYERS ARE COMPLAINING ABOUT,
+   * and then writes."*
+   *
+   * `mineComplaints` had **no caller**. `complaintsFor` is read by
+   * `bankFromComplaints`, so complaints are consumed — they were simply never
+   * produced except by hand. And a complaint is the strongest evidence in the
+   * bank: `SOURCE_WEIGHT.complaint` is 1.0, the ceiling, because someone typed
+   * it about a real problem.
+   *
+   * Folded into the morning scroll rather than given a cron, because §5.2's
+   * sweep 4 IS part of "read the niche" — and a separate job is one more thing
+   * that can quietly stop running.
+   */
+  const complaints = await ctx.runAction(internal.maya.complaints.mineComplaints, {
+    customerId: auth.customer._id,
+  });
+
+  /**
    * ⭐ The competition rides along, because it is the same question.
    *
    * "What's happening out there today" covers both what the niche is posting
@@ -756,6 +777,7 @@ export const scrollHttp = httpAction(async (ctx, request) => {
       keywordsSwept: result.keywordsSwept ?? [],
       todaysIdea: idea,
       bankDepth: bank.depth,
+      complaintsFound: complaints.complaints?.length ?? 0,
       /**
        * Accounts she watches that just pulled far above their own usual. The
        * multiple is against THEIR baseline, so it means something for a small
