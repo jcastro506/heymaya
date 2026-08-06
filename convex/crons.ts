@@ -127,6 +127,24 @@ crons.interval(
 // being unreachable.
 
 /**
+ * ⭐ Notices when a founder connects a channel.
+ *
+ * `syncChannels` had no caller, and it showed live: three channels were
+ * connected and nothing updated — the scroll swept one, and a publish to
+ * Instagram would have been refused as "not connected". It took a hand-run.
+ *
+ * Convex, not her machine: a founder connecting an account at 2am must be
+ * noticed whether or not she happens to be awake, and this is collection with
+ * no judgment in it (§2.3).
+ */
+crons.interval(
+  "maya-sync-channels",
+  { hours: 1 },
+  internal.maya.channels.syncAllChannels,
+  {}
+);
+
+/**
  * ⭐ Reads back how her posts did.
  *
  * `dailyReport` has read `metricsJson` since Sprint 2 and NOTHING EVER WROTE

@@ -254,3 +254,78 @@ export const setPostingMode = internalMutation({
     return { ok: true };
   },
 });
+
+/* -------------------------------------------------------------------------- */
+/* Noticing a new connection                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ Sync every active customer's channels, and SAY SO when one is new.
+ *
+ * `syncChannels` has existed since Sprint 2 with **no caller**. The consequence
+ * showed up live on 2026-08-05: the operator connected TikTok, Instagram and
+ * YouTube, and nothing noticed — the `channels` table still held one row, the
+ * scroll swept one channel, and a publish to Instagram would have been refused
+ * with *"no instagram channel connected"*. It took a hand-run to fix.
+ *
+ * A founder who connects an account and hears nothing has no way to tell
+ * whether it worked. §18.9.3's empty-state rule is about exactly this moment:
+ * the point of maximum doubt is when they have done something and see no
+ * response.
+ *
+ * ⚠️ The message fires ONLY for a channel that is newly connected. Announcing
+ * the same three channels every hour is how a founder learns to ignore her.
+ */
+export const syncAllChannels = internalAction({
+  args: { now: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ customers: number; announced: number }> => {
+    const customerIds = await ctx.runQuery(
+      internal.maya.scheduler.activeV2Customers,
+      {}
+    );
+    let announced = 0;
+
+    for (const customerId of customerIds) {
+      const before = await ctx.runQuery(internal.maya.channels.forCustomer, {
+        customerId,
+      });
+      const known = new Set<string>(
+        before.filter((c) => c.status === "connected").map((c) => c.channel)
+      );
+
+      const result = await ctx.runAction(internal.maya.channels.syncChannels, {
+        customerId,
+      });
+      if (!result.ok) continue;
+
+      const fresh: string[] = result.channels
+        .filter((c) => c.connected && !known.has(c.channel))
+        .map((c) => c.channel);
+      if (fresh.length === 0) continue;
+
+      /**
+       * The wording §17.35 already wrote: *"Instagram and YouTube are open now
+       * — I'll start there tomorrow."* Not "channel sync complete".
+       */
+      const list =
+        fresh.length === 1
+          ? fresh[0]
+          : `${fresh.slice(0, -1).join(", ")} and ${fresh[fresh.length - 1]}`;
+      await ctx.runMutation(internal.maya.messages.send, {
+        customerId,
+        surface: "telegram",
+        body: `${list} ${fresh.length === 1 ? "is" : "are"} connected now — I'll start including ${fresh.length === 1 ? "it" : "them"} tomorrow.`,
+        // Keyed to the channels, so a re-sync never says it twice.
+        dedupeKey: `channel-live:${fresh.sort().join(",")}`,
+        proactive: true,
+        ts: args.now,
+      });
+      announced += 1;
+    }
+
+    return { customers: customerIds.length, announced };
+  },
+});
