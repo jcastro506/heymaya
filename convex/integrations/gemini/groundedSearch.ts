@@ -169,7 +169,24 @@ export async function geminiGroundedSearch(
   }
 
   const model = options.model ?? DEFAULT_MODEL;
-  const maxOutputTokens = options.maxOutputTokens ?? 1024;
+  /**
+   * ⭐ 4000, NOT 1024.
+   *
+   * VERIFIED LIVE 2026-08-05. At 1024 the same query returns
+   * `finishReason: MAX_TOKENS` and **zero `groundingChunks`** — the citations
+   * are emitted AFTER the prose, so a truncated response keeps the confident
+   * summary and loses every source. At 4000 the identical query returns
+   * `STOP` and 7 chunks from indiehackers.com and reddit.com.
+   *
+   * The failure is silent and inverted: a too-small budget does not shorten
+   * the answer, it strips the grounding while leaving text that reads fine.
+   * For a product whose rule is *grounded or silent*, that is the worst
+   * possible output — a confident paragraph about nothing.
+   *
+   * Exactly the shape of the safety critic's `maxTokens: 300`, which spent its
+   * whole budget on reasoning tokens and returned an empty verdict.
+   */
+  const maxOutputTokens = options.maxOutputTokens ?? 4_000;
   const url = `${GEMINI_BASE}/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const body = {
     contents: [

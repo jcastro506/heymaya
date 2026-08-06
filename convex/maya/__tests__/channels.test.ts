@@ -222,3 +222,69 @@ describe("THE ROWS ARE DERIVED FROM ZERNIO, NOT ASSERTED", () => {
     expect(res.error).toMatch(/isn't configured/i);
   });
 });
+
+/**
+ * ⭐ Noticing a new connection.
+ *
+ * `syncChannels` had no caller since Sprint 2, and it showed live on
+ * 2026-08-05: three channels were connected and nothing updated — the scroll
+ * swept one, and a publish to Instagram would have been refused as "not
+ * connected". It took a hand-run to fix.
+ */
+describe("⭐ A NEW CHANNEL IS NOTICED AND SAID OUT LOUD", () => {
+  it("announces only what is NEW, never the whole list again", async () => {
+    /**
+     * The dedupe key is the set of newly-live channels, so a re-sync an hour
+     * later says nothing. Announcing the same three every hour is how a
+     * founder learns to ignore her.
+     */
+    const t = convexTest(schema, modules);
+    const customerId = await seedNewChanCustomer(t);
+
+    await t.mutation(internal.maya.messages.send, {
+      customerId,
+      surface: "telegram",
+      body: "instagram and youtube are connected now — I'll start including them tomorrow.",
+      dedupeKey: "channel-live:instagram,youtube",
+      proactive: true,
+    });
+    const again = await t.mutation(internal.maya.messages.send, {
+      customerId,
+      surface: "telegram",
+      body: "instagram and youtube are connected now — I'll start including them tomorrow.",
+      dedupeKey: "channel-live:instagram,youtube",
+      proactive: true,
+    });
+    expect(again.sent).toBe(false);
+
+    const out = await t.run(async (ctx) =>
+      (await ctx.db.query("messages").collect()).filter((m) => m.direction === "out")
+    );
+    expect(out).toHaveLength(1);
+    // ⭐ The wording §17.35 already chose — not "channel sync complete".
+    expect(out[0].body).toMatch(/I'll start including them tomorrow/);
+  });
+});
+
+async function seedNewChanCustomer(t: ReturnType<typeof convexTest>) {
+  return await t.run(async (ctx) => {
+    const accountId = await ctx.db.insert("creators", {
+      clerkUserId: "u_chan_new",
+      email: "chan@example.com",
+      channelPreference: "telegram",
+      timezone: "UTC",
+      status: "active",
+      plan: "manager",
+      createdAt: Date.now(),
+    });
+    return await ctx.db.insert("customers", {
+      accountId,
+      agentVersion: "v2",
+      plan: "mvp",
+      state: "active",
+      timezone: "UTC",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  });
+}

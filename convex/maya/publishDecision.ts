@@ -39,7 +39,8 @@
  */
 
 import { v } from "convex/values";
-import { internalQuery } from "../_generated/server";
+import { internalQuery, internalAction } from "../_generated/server";
+import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 
@@ -86,6 +87,18 @@ export type PublishDecision =
       reason: HoldReason;
       /** Plain language — this reaches the founder. */
       detail: string;
+      /**
+       * ⭐ The draft text, carried on a HOLD as well as an approval.
+       *
+       * `show_me_first` means show them the post, and until 2026-08-06 the
+       * hold branch carried no text at all — so the only thing the tool could
+       * hand back was a description. Live, that produced *"I drafted a
+       * 237-character X post, but I'm not publishing it"*: a founder told
+       * about a post he was never shown, and therefore could not approve.
+       *
+       * Optional because a hold for a missing draft has nothing to show.
+       */
+      snapshotText?: string;
     };
 
 /**
@@ -183,6 +196,8 @@ export function decide(input: {
       publish: false,
       reason: "show_me_first",
       detail: "showing you this one first — say the word and it goes",
+      // ⭐ The post itself. "Showing you this one" is not showing it.
+      snapshotText: draft?.snapshotText,
     };
   }
 

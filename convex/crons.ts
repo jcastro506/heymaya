@@ -126,6 +126,62 @@ crons.interval(
 // every expression. What remains below is only what must survive the machine
 // being unreachable.
 
+/**
+ * ⭐ Re-learns a niche whose map has gone stale (§5.0.0).
+ *
+ * Daily check, monthly effect: `isStale` only fires past
+ * `BUYER_MAP_MAX_AGE_MS`, so this is twelve searches a month per customer, not
+ * a day. Cheap, and the alternative is a niche learned in July still driving
+ * every keyword in December — silently, because stale keywords do not fail,
+ * they return the wrong posts and everything downstream reports success.
+ */
+crons.interval(
+  "maya-relearn-stale",
+  { hours: 24 },
+  internal.maya.learnBusiness.relearnIfStale,
+  {}
+);
+
+/**
+ * ⭐ Notices when a founder connects a channel.
+ *
+ * `syncChannels` had no caller, and it showed live: three channels were
+ * connected and nothing updated — the scroll swept one, and a publish to
+ * Instagram would have been refused as "not connected". It took a hand-run.
+ *
+ * Convex, not her machine: a founder connecting an account at 2am must be
+ * noticed whether or not she happens to be awake, and this is collection with
+ * no judgment in it (§2.3).
+ */
+crons.interval(
+  "maya-sync-channels",
+  { hours: 1 },
+  internal.maya.channels.syncAllChannels,
+  {}
+);
+
+/**
+ * ⭐ Reads back how her posts did.
+ *
+ * `dailyReport` has read `metricsJson` since Sprint 2 and NOTHING EVER WROTE
+ * IT — so the evening recap's "what came back" was permanently empty, and every
+ * morning's idea pick was blind.
+ *
+ * Convex rather than her machine, deliberately: this is collection, and §2.3
+ * puts collection in deterministic code. It also has to keep running while she
+ * is asleep, which is most of the day under auto-stop.
+ *
+ * Hourly is not for freshness — a tweet's numbers barely move hour to hour —
+ * it is so the evening recap always has something recent to report without
+ * having to fetch anything itself.
+ */
+crons.interval(
+  "maya-refresh-metrics",
+  { hours: 1 },
+  internal.maya.metrics.refreshAll,
+  {}
+);
+
 // Drains the durable job queue, reaping abandoned work first so a job whose
 // worker died is back in the queue before anything new is claimed.
 crons.interval(

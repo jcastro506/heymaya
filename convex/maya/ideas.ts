@@ -25,6 +25,7 @@ import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { toMillis } from "./learnBusiness";
+import { diagnoseFrom } from "./ladder";
 import { similarity } from "./quality";
 import type { Doc, Id } from "../_generated/dataModel";
 
@@ -101,9 +102,46 @@ const SOURCE_WEIGHT: Record<IdeaSource, number> = {
   performance: 0.8,
 };
 
+/**
+ * ⭐ What the diagnostic rung changes about which idea to pick.
+ *
+ * §14.2.2: she diagnosed on Sunday and Monday was unchanged. This is the wire
+ * between them — and it is deliberately NOT "the posts that did well used this
+ * hook, so use that hook".
+ *
+ * §14.3 rules that out explicitly: at 30–90 posts a month, own data cannot
+ * answer format-level questions, and *"any system claiming to optimize hooks
+ * off 40 data points is fitting noise and will produce confident nonsense."*
+ *
+ * So own data is used ONLY for the coarse thing it can actually answer —
+ * **which kind of problem we have** — and that selects which EVIDENCE to trust
+ * more, straight out of §14.2's own table:
+ *
+ * | rung | what it means | so prefer |
+ * |---|---|---|
+ * | **L1** | nobody saw it — a FORMAT problem | `observation` / `format_card`: things that demonstrably travelled in this niche |
+ * | **L2** | they saw it and scrolled — a TOPIC problem | `complaint` / `own_comment`: a real person saying what they actually care about |
+ *
+ * The nudge is small on purpose (±25%). Evidence quality still dominates: a
+ * one-off observation must never outrank a thing thirteen people complained
+ * about because a weekly verdict tilted the table.
+ */
+const RUNG_PREFERENCE: Record<string, Partial<Record<IdeaSource, number>>> = {
+  // Format problem — favour what already travelled here.
+  L1: { observation: 1.25, format_card: 1.25, complaint: 0.9 },
+  // Topic problem — favour what someone actually said.
+  L2: { complaint: 1.25, own_comment: 1.25, observation: 0.9 },
+};
+
 export function scoreIdea(
   idea: { source: IdeaSource; evidence: Evidence },
-  now: number
+  now: number,
+  /**
+   * The current rung, when we have one. Absent — or `unknown`/`L0` — changes
+   * nothing: `L0` is our own failure to post and says nothing about which
+   * idea to choose next.
+   */
+  rung?: string
 ): { score: number; why: string } {
   // No evidence is not a low score, it is not an idea.
   if (!idea.evidence.quote?.trim() || idea.evidence.sourceUrls.length === 0) {
@@ -113,15 +151,29 @@ export function scoreIdea(
   const source = SOURCE_WEIGHT[idea.source] ?? 0.5;
   const freq = frequencyWeight(idea.evidence.frequency);
   const recency = recencyDecay(idea.evidence.observedAt, now);
-  const score = source * freq * recency;
+  const tilt: number =
+    (rung ? RUNG_PREFERENCE[rung]?.[idea.source] : undefined) ?? 1;
+  const score = source * freq * recency * tilt;
 
   const weakest = Math.min(source, freq, recency);
-  const why =
+  const base =
     weakest === recency
       ? "losing value with age"
       : weakest === freq
         ? "only one person said it"
         : `${idea.source} is weaker signal than a complaint`;
+
+  /**
+   * The tilt is NAMED when it moves anything. A ranking that quietly changed
+   * because of last week's numbers is the kind of thing nobody can argue with
+   * later — and she has to be able to say why she picked this one.
+   */
+  const why =
+    tilt > 1
+      ? `${base} — but last week said ${rung === "L1" ? "nobody saw us, so what travels here matters more" : "they scrolled past, so what people actually say matters more"}`
+      : tilt < 1
+        ? `${base}, and last week pointed at ${rung === "L1" ? "reach" : "relevance"} instead`
+        : base;
 
   return { score, why };
 }
@@ -237,6 +289,22 @@ export const nextIdea = internalQuery({
       .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
       .collect()) as Doc<"ideas">[];
 
+    /**
+     * ⭐ §14.2.2 — this is where last week reaches this week.
+     *
+     * The rung says what KIND of problem we have, and that selects which
+     * evidence to trust more. It does NOT say which hook to use: §14.3 is
+     * explicit that own data cannot answer format questions at this volume.
+     *
+     * Read from the same pure function the weekly verdict uses, so the report
+     * and the decision can never disagree.
+     */
+    const placements = (await ctx.db
+      .query("placements")
+      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+      .collect()) as Doc<"placements">[];
+    const { rung } = diagnoseFrom(placements, now, 7);
+
     const live = rows
       .filter((r) => r.status === "bank")
       .map((r) => {
@@ -250,7 +318,8 @@ export const nextIdea = internalQuery({
         }
         const { score } = scoreIdea(
           { source: (r.sourceKind as IdeaSource) ?? "observation", evidence },
-          now
+          now,
+          rung
         );
         return { r, evidence, score };
       })
@@ -484,11 +553,42 @@ export const bankFromObservations = internalAction({
       scored.push({ angle: a.angle, source: "observation", evidence, score, why });
     }
 
+    /**
+     * ⭐ Drop the angles that are about nothing.
+     *
+     * `assessInsight` has had an anti-generic gate since Sprint 5 and NO
+     * PRODUCTION CALLER — the seventeenth thing this week that was built,
+     * tested, and never invoked. This is the moment it was for: an angle like
+     * *"drive engagement with authentic content"* survives every other check
+     * here, because it has a real source URL attached and scores fine.
+     *
+     * Judged, not matched. The wordlist this replaced counted "engagement" as
+     * padding in both *"drive engagement"* and *"3 engagements on that post"*.
+     *
+     * Fails OPEN — an unreachable judge banks everything rather than nothing.
+     * A quality nudge that silently empties the bank is worse than one that
+     * occasionally lets a dull idea through.
+     */
+    const kept: ScoredIdea[] = [];
+    let filler = 0;
+    for (const idea of scored) {
+      const verdict = await ctx.runAction(internal.maya.quality.judgeFiller, {
+        text: idea.angle,
+      });
+      if (verdict.filler) {
+        filler += 1;
+        continue;
+      }
+      kept.push(idea);
+    }
+
     const result = await ctx.runMutation(internal.maya.ideas.bankIdeas, {
       customerId: args.customerId,
-      ideasJson: JSON.stringify(scored),
+      ideasJson: JSON.stringify(kept),
       now,
     });
-    return { ...result, considered: observations.length };
+    return { ...result, considered: observations.length,
+      // Named, so a bank that rejected everything is visible rather than empty.
+      rejected: result.rejected + filler };
   },
 });

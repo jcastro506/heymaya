@@ -196,6 +196,8 @@ async function runHandler(
       draftId?: Id<"drafts">;
       snapshotText?: string;
       inReplyTo?: string;
+      inboxItemId?: Id<"inboxItems">;
+      mediaUrlsJson?: string;
     };
     if (!payload.snapshotText) {
       return { ok: false, error: "publish job carried no text" };
@@ -216,6 +218,8 @@ async function runHandler(
             idempotencyKey: string;
             draftId?: Id<"drafts">;
             inReplyTo?: string;
+            inboxItemId?: Id<"inboxItems">;
+            mediaUrlsJson?: string;
           }
         ) => Promise<{ ok: boolean; error?: string }>;
       }
@@ -226,6 +230,21 @@ async function runHandler(
       draftId: payload.draftId,
       // Without this a cold reply posts as a standalone tweet.
       inReplyTo: payload.inReplyTo,
+      /**
+       * ⚠️ The SAME trap `inReplyTo` fell into: the enqueuer put it in the
+       * payload and this handler dropped it, so a reply posted into the void.
+       * Dropped here, the inbox item stays open forever and she answers the
+       * same person on every sync.
+       */
+      inboxItemId: payload.inboxItemId,
+      /**
+       * ⚠️ THIRD time down this exact path. `inReplyTo` was enqueued and
+       * dropped here, so replies posted into the void. `inboxItemId` was
+       * enqueued and dropped here, so answered items stayed open. Media
+       * dropped here means Instagram and TikTok silently fall back to a
+       * text-only post the platform then rejects.
+       */
+      mediaUrlsJson: payload.mediaUrlsJson,
     })) as { ok: boolean; error?: string };
     return result.ok ? { ok: true } : { ok: false, error: result.error ?? "publish failed" };
   }
@@ -385,12 +404,33 @@ export const livenessSweep = internalAction({
   handler: async (
     ctx,
     args
-  ): Promise<{ checked: number; breached: number; fleetIncident: boolean }> => {
+  ): Promise<{
+    checked: number;
+    breached: number;
+    fleetIncident: boolean;
+    vendorAlerts: string[];
+  }> => {
     const now = args.now ?? Date.now();
     const customerIds = await ctx.runQuery(
       internal.maya.scheduler.activeV2Customers,
       {}
     );
+
+    /**
+     * ⭐ The fleet balances, read before the per-customer pass.
+     *
+     * `CREDIT_RESERVES` and `checkBalance` shipped in Sprint 6 with nothing
+     * fetching an actual number, so the reserve logic could never fire. A
+     * vendor at zero is not one customer degraded — it is every customer's
+     * sweeps failing in the same minute, which is why this belongs in the
+     * watchdog rather than in anyone's daily loop.
+     */
+    const balances = await ctx.runAction(internal.maya.liveness.readBalances, {});
+    for (const b of balances) {
+      if (b.verdict !== "ok") {
+        console.error(`[liveness] VENDOR ${b.verdict.toUpperCase()}: ${b.detail}`);
+      }
+    }
 
     const perCustomer: Array<{
       customerId: (typeof customerIds)[number];
@@ -450,6 +490,8 @@ export const livenessSweep = internalAction({
       checked: customerIds.length,
       breached,
       fleetIncident: fleet.correlated,
+      // Surfaced, not just logged — an alert nobody can query is a log line.
+      vendorAlerts: balances.filter((b) => b.verdict !== "ok").map((b) => b.detail),
     };
   },
 });

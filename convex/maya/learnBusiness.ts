@@ -138,6 +138,71 @@ export function looksGeneric(term: string): boolean {
 }
 
 /**
+ * ⭐ Think like the person doing the searching.
+ *
+ * `deriveKeywords` below EXTRACTS from the page. That is string handling where
+ * judgment belongs, and the output proves it — HeyMaya's own read produced
+ * `draft reply`, `native posting`, `conversion`: the words the marketing page
+ * uses about itself. **No human marketer would ever type those into TikTok
+ * search.** Handed the same brief — *"solo devs who built an app and can't get
+ * users"* — a person searches `indie hackers`, `building in public`,
+ * `shipped my app`, `no users`.
+ *
+ * So the proposing half is a model call now, per the standing rule that
+ * judgment belongs to the model and not to a wordlist.
+ *
+ * ⚠️ **The validating half does NOT move.** The two gates below stay exactly
+ * as they are, because they test against reality rather than reasoning about
+ * it — and reality is where this goes wrong in ways nobody predicts. They are
+ * what caught `threads` returning sewing, `engagement` returning wedding
+ * photos, and `reddit` returning family stories. A better proposer makes those
+ * gates cheaper; it does not make them optional.
+ */
+export const KEYWORD_MODEL = "openai/gpt-5.6-luna-pro";
+
+const KEYWORD_SYSTEM = `You are a social media manager who has just been hired by this business. Before you post anything, you want to find where this market actually talks — so you are about to type search terms into TikTok, Instagram, YouTube and X.
+
+Return STRICT JSON, no prose:
+{ "keywords": string[] }
+
+What you are looking for, in order:
+1. **What the buyer calls their problem** — in their words, not the product's. Someone who needs this searches for the pain, not the solution.
+2. **What this audience calls ITSELF.** Communities have names. People who build software alone call themselves indie hackers; they do not call themselves "solo developers or indie founders".
+3. **The moment of need** — what someone posts about right before they'd want this.
+
+Hard rules:
+- **Never the product's own marketing words.** If the term appears on their homepage describing themselves, it is the wrong term.
+- **Never a bare category noun** — "dashboard", "automation", "saas", "ai", "analytics". These return millions of unrelated posts. Qualified is fine: "csv dashboard".
+- Between 6 and 12 terms. Two to four words each. Things a person would actually type.
+- No hashtags, no punctuation, lowercase.
+
+You will be wrong sometimes and that is expected — every term is searched and checked before it is used. Propose the ones worth checking.`;
+
+export function parseKeywordProposal(raw: string): string[] | null {
+  const fenced = raw.replace(/```json|```/g, "").trim();
+  try {
+    const parsed = JSON.parse(fenced) as { keywords?: unknown };
+    if (!Array.isArray(parsed.keywords)) return null;
+    const out = parsed.keywords
+      .filter((k): k is string => typeof k === "string")
+      .map((k) => k.trim().toLowerCase().replace(/^#/, ""))
+      .filter((k) => k.length > 2)
+      /**
+       * The generic check survives as a FLOOR, not a decision. It encodes a
+       * measured fact — a bare category noun returns millions of unrelated
+       * posts — and costs nothing. The model is told the same thing; this
+       * catches the times it agrees and then does it anyway.
+       */
+      .filter((k) => !looksGeneric(k));
+    const seen = new Set<string>();
+    const deduped = out.filter((k) => (seen.has(k) ? false : (seen.add(k), true)));
+    return deduped.length > 0 ? deduped.slice(0, 12) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Propose search terms from the product read.
  *
  * Deliberately generous: this stage is cheap and the *next* stage is the one
@@ -566,7 +631,53 @@ export const learnBusiness = internalAction({
       return { ok: false, error: "no product truth yet — read the product first" };
     }
 
-    const candidates = deriveKeywords(truth);
+    /**
+     * ⭐ Ask, then fall back to extracting.
+     *
+     * The model gets the whole picture — including what the founder has told
+     * us directly, which outranks anything scraped — and proposes what a
+     * person would actually search. `deriveKeywords` remains as the fallback
+     * for a dead key or a bad response: worse terms beat no terms, and the
+     * gates below judge either the same way.
+     */
+    let candidates: string[] = [];
+    if (process.env.OPENROUTER_API_KEY) {
+      try {
+        const { callOpenRouter } = await import("../integrations/openrouter/client");
+        const completion = await callOpenRouter({
+          apiKey: process.env.OPENROUTER_API_KEY,
+          model: KEYWORD_MODEL,
+          temperature: 0.4,
+          maxTokens: 800,
+          messages: [
+            { role: "system", content: KEYWORD_SYSTEM },
+            {
+              role: "user",
+              content: [
+                `PRODUCT: ${truth.name ?? "(unnamed)"}`,
+                `WHAT IT IS: ${truth.whatItIs ?? "(unknown)"}`,
+                `WHO IT'S FOR: ${truth.whoItsFor ?? "(unknown)"}`,
+                `WHAT'S DIFFERENT: ${truth.whatsDifferent ?? "(unknown)"}`,
+                // Named as theirs, so the model can see these are the words to
+                // avoid rather than the words to use.
+                `THE PRODUCT'S OWN MARKETING WORDS (do not reuse these): ${(truth.vocabulary ?? []).join(", ") || "(none)"}`,
+                truth.founderSays?.length
+                  ? `THE FOUNDER TOLD US DIRECTLY (outranks everything above): ${truth.founderSays.join(" | ")}`
+                  : "",
+              ]
+                .filter(Boolean)
+                .join("\n"),
+            },
+          ],
+        });
+        if (completion.ok) {
+          candidates = parseKeywordProposal(completion.content) ?? [];
+        }
+      } catch (error) {
+        console.error(`[learn-business] keyword proposal failed: ${String(error)}`);
+      }
+    }
+    if (candidates.length === 0) candidates = deriveKeywords(truth);
     if (candidates.length === 0) {
       return {
         ok: false,
@@ -695,5 +806,62 @@ export const learnBusiness = internalAction({
     });
 
     return { ok: true, targets };
+  },
+});
+
+
+/* -------------------------------------------------------------------------- */
+/* Staleness                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ Re-learn the niche when the map goes stale.
+ *
+ * §5.0.0: the buyer map is *"refreshed monthly, because a stale buyer map
+ * silently poisons the idea bank, the format library, and the benchmarks all
+ * at once."*
+ *
+ * `buyerMap.ts` has an `isStale` and a `BUYER_MAP_MAX_AGE_MS` written for
+ * exactly this. **The entire module was unimported** — twenty-seventh find —
+ * so nothing has ever checked, and a niche learned in July would still be
+ * driving every keyword, every sweep and every idea in December.
+ *
+ * ⚠️ The word "silently" in that sentence is the whole problem. Stale keywords
+ * do not fail; they return posts. They return the WRONG posts, and everything
+ * downstream reports success.
+ */
+export const relearnIfStale = internalAction({
+  args: { now: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ checked: number; relearned: number }> => {
+    const now = args.now ?? Date.now();
+    const customerIds = await ctx.runQuery(
+      internal.maya.scheduler.activeV2Customers,
+      {}
+    );
+    const { isStale } = await import("./buyerMap");
+
+    let relearned = 0;
+    for (const customerId of customerIds) {
+      const targets = await ctx.runQuery(internal.maya.learnBusiness.targetsFor, {
+        customerId,
+      });
+      /**
+       * No map at all is NOT stale — it is unlearned, and onboarding owns
+       * that. Re-running the full learn for a customer who has never had one
+       * would spend twelve searches on someone who may not even be set up.
+       */
+      if (!targets) continue;
+      if (!isStale(targets.learnedAt, now)) continue;
+
+      await ctx.runAction(internal.maya.learnBusiness.learnBusiness, {
+        customerId,
+      });
+      relearned += 1;
+    }
+
+    return { checked: customerIds.length, relearned };
   },
 });

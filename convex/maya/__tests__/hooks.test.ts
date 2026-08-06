@@ -512,3 +512,298 @@ describe("a throttled machine still publishes what was already approved", () => 
     expect(allowsKind("throttled", "some_future_expensive_thing")).toBe(false);
   });
 });
+
+
+/**
+ * ⭐ The pre-spend gate (§7.5.7), check 3.
+ *
+ * `checkPostBudget` existed since Sprint 2 with no caller, so the daily cap
+ * the plan tiers promise — `postsPerDayPerChannel: 2` on mvp — was enforced
+ * nowhere. She could post fifty times: a platform ban risk and a broken
+ * promise in one act.
+ */
+describe("⭐ THE DAILY POST CAP IS CHECKED BEFORE DRAFTING, NOT AFTER APPROVAL", () => {
+  it("⭐ REFUSES A DRAFT ONCE THE CHANNEL'S DAY IS SPENT", async () => {
+    const t = convexTest(schema, modules);
+    const { customerId, token } = await seed(t, "budgetcap");
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 5; i += 1) {
+        await ctx.db.insert("placements", {
+          customerId,
+          kind: "post",
+          channel: "x",
+          url: `https://x.com/a/status/${i}`,
+          linkStatus: "live",
+          publishedAt: Date.now(),
+          snapshotText: "already out",
+          idempotencyKey: `cap-${i}`,
+        });
+      }
+    });
+
+    const res = await envelope(
+      await post(t, "/maya/draft", token, {
+        text: "one more for today",
+        channel: "x",
+      })
+    );
+    expect(res.ok).toBe(false);
+    expect(res.why).toMatch(/posts on x today/);
+    // And it tells her what to do instead of leaving her to retry.
+    expect(res.next).toMatch(/plan change/);
+  });
+
+  it("⭐ A REPLY IS NEVER CAPPED — inbound outranks outbound", async () => {
+    /**
+     * §1. A daily post cap that silences answers turns a rate limit into
+     * rudeness — the founder's customers are still asking questions.
+     */
+    const t = convexTest(schema, modules);
+    const { customerId, token } = await seed(t, "budgetreply");
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 5; i += 1) {
+        await ctx.db.insert("placements", {
+          customerId,
+          kind: "post",
+          channel: "x",
+          url: `https://x.com/a/status/r${i}`,
+          linkStatus: "live",
+          publishedAt: Date.now(),
+          snapshotText: "already out",
+          idempotencyKey: `capr-${i}`,
+        });
+      }
+    });
+
+    const res = await envelope(
+      await post(t, "/maya/draft", token, {
+        text: "answering someone who asked about pricing",
+        channel: "x",
+        kind: "reply",
+      })
+    );
+    // Not blocked by the cap. (It may still fail for another reason, but never
+    // with the budget message.)
+    expect(res.why ?? "").not.toMatch(/posts on x today/);
+  });
+});
+
+
+/**
+ * ⭐ The voice-from-edits loop, dead at step one until now.
+ *
+ * SOUL.md: "A writing sample shows me their register; an edit shows me what I
+ * got WRONG. When these disagree with anything above, these win."
+ *
+ * `drafts.decide` existed since Sprint 4 to store exactly that, with no
+ * caller — so `foldEdits` and `diffSignals` had no input and the `editPairs`
+ * block in her workspace rendered empty from the day it was written.
+ */
+describe("⭐ A FOUNDER'S EDIT IS CAPTURED, NOT JUST OBEYED", () => {
+  it("⭐ THE DIFF IS STORED, AND THE EDITED TEXT BECOMES THE DRAFT", async () => {
+    const t = convexTest(schema, modules);
+    const { customerId, token } = await seed(t, "editcap", {
+      postingMode: "just_go",
+    });
+    const draftId = await t.run(async (ctx) =>
+      ctx.db.insert("drafts", {
+        customerId,
+        channel: "x",
+        kind: "post",
+        snapshotText: "we deployed a new dashboard today",
+        outcome: "pending",
+        proposedAt: Date.now(),
+        expiresAt: Date.now() + 86_400_000,
+      })
+    );
+
+    await post(t, "/maya/publish", token, {
+      draftId,
+      alreadyApproved: true,
+      editedText: "shipped a new dashboard today",
+    });
+
+    const row = await t.run(async (ctx) => ctx.db.get(draftId));
+    const draft = row as { outcome: string; editDiff?: string; snapshotText: string };
+    expect(draft.outcome).toBe("edited");
+    // ⭐ Publishing reads snapshotText, so the ORIGINAL staying here would post
+    // the version they rejected.
+    expect(draft.snapshotText).toBe("shipped a new dashboard today");
+
+    const diff = JSON.parse(draft.editDiff!) as { before: string; after: string };
+    expect(diff.before).toMatch(/deployed/);
+    expect(diff.after).toMatch(/shipped/);
+  });
+
+  it("no edit means no diff — approving unchanged is not an edit", async () => {
+    // Recording every approval as an edit would teach her voice from her own
+    // writing, which is exactly the feedback loop that makes an agent drift.
+    const t = convexTest(schema, modules);
+    const { customerId, token } = await seed(t, "noedit", {
+      postingMode: "just_go",
+    });
+    const draftId = await t.run(async (ctx) =>
+      ctx.db.insert("drafts", {
+        customerId,
+        channel: "x",
+        kind: "post",
+        snapshotText: "left exactly as written",
+        outcome: "pending",
+        proposedAt: Date.now(),
+        expiresAt: Date.now() + 86_400_000,
+      })
+    );
+
+    await post(t, "/maya/publish", token, { draftId, alreadyApproved: true });
+
+    const draft = (await t.run(async (ctx) => ctx.db.get(draftId))) as {
+      editDiff?: string;
+    };
+    expect(draft.editDiff).toBeUndefined();
+  });
+});
+
+
+/**
+ * ⭐ Two archive modes that had no caller since Sprint 2.
+ *
+ * `history` answered "what went out recently". It could not answer "have I
+ * said this before" — the question that stops an account sounding like a loop
+ * — or "why did you post that", which §16.8.4's provenance chain exists for.
+ */
+describe("⭐ SHE CAN SEARCH HER OWN ARCHIVE", () => {
+  it("⭐ A REPEATED ANGLE COMES BACK WITH A WARNING, NOT A LIST", async () => {
+    const t = convexTest(schema, modules);
+    const { customerId, token } = await seed(t, "archsearch");
+    await t.run(async (ctx) => {
+      await ctx.db.insert("placements", {
+        customerId,
+        kind: "post",
+        channel: "x",
+        url: "https://x.com/a/status/900",
+        linkStatus: "live",
+        publishedAt: Date.now() - 120 * 86_400_000,
+        snapshotText: "the rollback problem nobody warns you about at 3am",
+        idempotencyKey: "arch-1",
+      });
+    });
+
+    const res = await envelope(
+      await post(t, "/maya/history", token, { query: "rollback" })
+    );
+    expect(res.ok).toBe(true);
+    // Four months old — outside any timeline she'd otherwise look at.
+    expect((res.data as { matches: unknown[] }).matches).toHaveLength(1);
+    expect(res.next).toMatch(/covered this before/);
+  });
+
+  it("nothing matching means the angle is new, and says so", async () => {
+    const t = convexTest(schema, modules);
+    const { token } = await seed(t, "archempty");
+    const res = await envelope(
+      await post(t, "/maya/history", token, { query: "something never posted" })
+    );
+    expect(res.next).toMatch(/this angle is new/);
+  });
+
+  it("⭐ AN UNTRACEABLE POST IS SAID, NOT RECONSTRUCTED", async () => {
+    /**
+     * §10.2. A plausible story they cannot correct is worse than admitting the
+     * chain doesn't reach — and the `next` says exactly that rather than
+     * leaving her to improvise.
+     */
+    const t = convexTest(schema, modules);
+    const { customerId, token } = await seed(t, "archprov");
+    const orphan = await t.run(async (ctx) =>
+      ctx.db.insert("placements", {
+        customerId,
+        kind: "post",
+        channel: "x",
+        url: "https://x.com/a/status/901",
+        linkStatus: "live",
+        publishedAt: Date.now(),
+        snapshotText: "no draft, no idea, no chain",
+        idempotencyKey: "arch-2",
+      })
+    );
+    const res = await envelope(
+      await post(t, "/maya/history", token, { placementId: orphan })
+    );
+    expect(res.next).toMatch(/Do NOT reconstruct a reason/);
+  });
+});
+
+
+/**
+ * ⭐ `show_me_first` means SHOW THEM THE POST.
+ *
+ * Measured live 2026-08-05. The 11:00 job drafted, hit the hold, and sent:
+ *
+ *   "I found a strong moment from a solo-founder TikTok and drafted a
+ *    237-character X post, but I'm not publishing it..."
+ *
+ * She described the draft in the third person and never showed it. The founder
+ * cannot approve what he cannot read, so the approval loop broke at the last
+ * inch — and nothing was technically wrong, which is why it survived a day.
+ */
+describe("⭐ A HELD POST CARRIES ITS OWN TEXT", () => {
+  it("⭐ THE DRAFT COMES BACK ON THE HOLD, NOT JUST A DESCRIPTION", async () => {
+    const t = convexTest(schema, modules);
+    const { customerId, token } = await seed(t, "showme", {
+      postingMode: "show_me_first",
+    });
+    const draftId = await t.run(async (ctx) =>
+      ctx.db.insert("drafts", {
+        customerId,
+        channel: "x",
+        kind: "post",
+        snapshotText: "the exact words the founder has to be able to read",
+        outcome: "pending",
+        proposedAt: Date.now(),
+        expiresAt: Date.now() + 86_400_000,
+      })
+    );
+
+    const res = await envelope(
+      await post(t, "/maya/publish", token, { draftId })
+    );
+    expect(res.ok).toBe(false);
+    expect((res.data as { holdReason: string }).holdReason).toBe("show_me_first");
+    // The post itself, verbatim.
+    expect((res.data as { draftText?: string }).draftText).toBe(
+      "the exact words the founder has to be able to read"
+    );
+    // And the instruction that stops her paraphrasing it.
+    expect(res.next).toMatch(/SHOW THEM THE POST/);
+    expect(res.next).toMatch(/VERBATIM/);
+  });
+
+  it("a hold for any OTHER reason does not carry the text", async () => {
+    /**
+     * Only the approval hold needs it. A post held by the safety floor or a
+     * dead channel is not something the founder is being asked to read and
+     * approve — sending the text there invites "just post it anyway".
+     */
+    const t = convexTest(schema, modules);
+    const { customerId, token } = await seed(t, "holdother", {
+      channelStatus: "error",
+    });
+    const draftId = await t.run(async (ctx) =>
+      ctx.db.insert("drafts", {
+        customerId,
+        channel: "x",
+        kind: "post",
+        snapshotText: "should not be shown for approval",
+        outcome: "pending",
+        proposedAt: Date.now(),
+        expiresAt: Date.now() + 86_400_000,
+      })
+    );
+
+    const res = await envelope(
+      await post(t, "/maya/publish", token, { draftId })
+    );
+    expect(res.ok).toBe(false);
+    expect((res.data as { draftText?: string }).draftText).toBeUndefined();
+  });
+});

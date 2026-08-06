@@ -193,7 +193,14 @@ export default defineToolPlugin({
               "True only when the founder approved THIS draft. Their words in chat count exactly as much as a tap.",
           })
         ),
-      }),
+      
+        editedText: Type.Optional(
+          Type.String({
+            description:
+              "The founder's OWN rewrite, if they changed anything before saying yes. Pass it verbatim — do not tidy it. This is the strongest signal you ever get about how they write: a sample shows their register, an edit shows what you got wrong. It is stored and folded into your voice, and the edited text is what gets posted.",
+          })
+        ),
+}),
       execute: async (p, _cfg, ctx) => call("publish", p, ctx.signal),
     }),
 
@@ -284,8 +291,58 @@ export default defineToolPlugin({
             description: "How far back to look. Default 14, max 90.",
           })
         ),
-      }),
+      
+        query: Type.Optional(
+          Type.String({
+            description:
+              "Search everything you have EVER posted for this angle, instead of listing recent ones. Use it before drafting anything you suspect you have said before — you are told not to repeat yourself and this is the only way to check. A 14-day timeline cannot tell you whether you made this exact point in March.",
+          })
+        ),
+        placementId: Type.Optional(
+          Type.String({
+            description:
+              "Trace one post back to the idea and the evidence it came from. Use it when asked WHY you posted something. The answer is the chain — never reconstruct a reason, because a plausible story they cannot correct is worse than saying you cannot trace it.",
+          })
+        ),
+}),
       execute: async (p, _cfg, ctx) => call("history", p, ctx.signal),
+    }),
+
+    tool({
+      name: "inbox",
+      label: "Inbox",
+      description:
+        "Who has replied to your posts and is still waiting on you. THIS IS HOW YOU FIND SOMEONE TO REPLY TO — `reply` refuses without an `inReplyTo`, and this is the only thing that produces one. Half the job is answering people; a post nobody follows up on is a broadcast. It syncs and returns in one call, oldest first, because whoever asked two days ago is the one about to give up. Pass BOTH `inReplyTo` and `inboxItemId` back to `reply` so the same person is never answered twice. If it says some accounts couldn't be read, say so rather than implying you have seen everything. An empty inbox is a real answer — never invent something to respond to. NOTE: TikTok exposes no comment API at all, so nothing from TikTok will ever appear here and you must not claim to be watching TikTok replies.",
+      parameters: Type.Object({}),
+      execute: async (p, _cfg, ctx) => call("inbox", p, ctx.signal),
+    }),
+
+    tool({
+      name: "rules",
+      label: "House rules",
+      description:
+        "The house rules a founder has given you, in their own words. THREE THINGS: `action:\"list\"` (default) reads them back — do this whenever they ask what rules they have, and quote their sentences with dates, because seeing their own words listed is the proof you remembered. `action:\"forget\"` with a `directiveId` retires one — it stays in the history and stops applying; never guess which one they mean, list first. `action:\"why\"` with an optional `kind` answers \"why did you do that\" FROM THE RECORD. ⚠️ If `why` comes back empty, say you have no record of being told that — do NOT reconstruct a reason. A plausible story you invented is worse than admitting you don't know, because they cannot correct it. These rules are also enforced server-side at publish, so a post that breaks one is held whether or not you remember it.",
+      parameters: Type.Object({
+        action: Type.Optional(
+          Type.String({ description: '"list" (default), "forget", or "why".' })
+        ),
+        directiveId: Type.Optional(
+          Type.String({ description: "Required for forget. Get it from list." })
+        ),
+        kind: Type.Optional(
+          Type.String({ description: "Optional filter for why." })
+        ),
+      }),
+      execute: async (p, _cfg, ctx) => call("rules", p, ctx.signal),
+    }),
+
+    tool({
+      name: "weekly_read",
+      label: "Weekly read",
+      description:
+        "The slower questions, once a week: what SHAPES are working right now (including outside this niche, where the topic is useless but the structure travels), and what actually happened to these people this week with sources you can cite. Use the world findings for WHAT to talk about and the shapes for HOW. Cite a source when you mention what people are saying — an uncited claim is a guess wearing a finding's clothes. `unciteable` counts questions that came back without a source; if it is high, say the week was hard to read rather than reporting thin findings as solid. A quiet week is a real answer.",
+      parameters: Type.Object({}),
+      execute: async (p, _cfg, ctx) => call("weekly_read", p, ctx.signal),
     }),
 
     tool({

@@ -392,3 +392,75 @@ describe("⭐ AN ANGLE POINTS AT A PERSON, NOT AT A TOPIC", () => {
     expect(parseAngles('{"angles":[]}')).toEqual([]);
   });
 });
+
+
+/**
+ * ⭐ §14.2.2 — last week reaching this week.
+ *
+ * The gap this closes: she diagnosed on Sunday and Monday's idea selection was
+ * made exactly as if she hadn't. That is the difference between a manager who
+ * reports and one who manages.
+ */
+describe("⭐ THE RUNG CHANGES WHICH EVIDENCE TO TRUST", () => {
+  const now = Date.UTC(2026, 7, 5);
+  const ev = {
+    quote: "why do you have 6000 drafts?",
+    sourceUrls: ["https://x.com/a/status/1"],
+    frequency: 3,
+    observedAt: now - 86_400_000,
+  };
+
+  it("⭐ L1 (nobody saw it) favours what TRAVELLED in the niche", () => {
+    // A format problem. Observations and format cards are things that
+    // demonstrably got distribution here.
+    const flat = scoreIdea({ source: "observation", evidence: ev }, now).score;
+    const tilted = scoreIdea({ source: "observation", evidence: ev }, now, "L1").score;
+    expect(tilted).toBeGreaterThan(flat);
+  });
+
+  it("⭐ L2 (they scrolled) favours what someone actually SAID", () => {
+    // A topic problem. A complaint is a real person naming what they care about.
+    const flat = scoreIdea({ source: "complaint", evidence: ev }, now).score;
+    const tilted = scoreIdea({ source: "complaint", evidence: ev }, now, "L2").score;
+    expect(tilted).toBeGreaterThan(flat);
+  });
+
+  it("⭐ EVIDENCE STILL DOMINATES — a tilt cannot outrank a real complaint", () => {
+    /**
+     * The guardrail that matters. §14.3: own data cannot answer format
+     * questions at this volume, so a weekly verdict must NEVER let a one-off
+     * observation beat a thing several people complained about. The nudge is
+     * ±25%; the evidence gap is larger than that by construction.
+     */
+    const oneOff = {
+      quote: "someone posted a thing",
+      sourceUrls: ["https://x.com/a/status/2"],
+      frequency: 1,
+      observedAt: now - 86_400_000,
+    };
+    const observationAtL1 = scoreIdea({ source: "observation", evidence: oneOff }, now, "L1").score;
+    const complaintAtL1 = scoreIdea({ source: "complaint", evidence: ev }, now, "L1").score;
+    expect(complaintAtL1).toBeGreaterThan(observationAtL1);
+  });
+
+  it("⭐ L0 AND unknown CHANGE NOTHING", () => {
+    // L0 is our own failure to post. It says nothing about which idea is good,
+    // and letting it reshuffle the bank would be inventing a content lesson
+    // from a week we simply didn't work.
+    const flat = scoreIdea({ source: "observation", evidence: ev }, now).score;
+    expect(scoreIdea({ source: "observation", evidence: ev }, now, "L0").score).toBe(flat);
+    expect(scoreIdea({ source: "observation", evidence: ev }, now, "unknown").score).toBe(flat);
+    expect(scoreIdea({ source: "observation", evidence: ev }, now, "healthy").score).toBe(flat);
+  });
+
+  it("⭐ AND IT SAYS SO — a ranking that changed silently is unarguable", () => {
+    const { why } = scoreIdea({ source: "observation", evidence: ev }, now, "L1");
+    expect(why).toMatch(/last week/);
+    expect(why).toMatch(/nobody saw us/);
+  });
+
+  it("no evidence is still not an idea, whatever the rung", () => {
+    const empty = { quote: "", sourceUrls: [] };
+    expect(scoreIdea({ source: "observation", evidence: empty }, now, "L1").score).toBe(0);
+  });
+});

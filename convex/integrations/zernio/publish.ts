@@ -117,6 +117,11 @@ export interface PublishTextInput {
    * the job queue's retry safe.
    */
   idempotencyKey: string;
+  /**
+   * Images or video for the post. Absent for a text-only X post; REQUIRED for
+   * Instagram, TikTok and YouTube — see the note on `publishText`.
+   */
+  mediaItems?: Array<{ type: "image" | "video"; url: string; altText?: string }>;
 }
 
 /**
@@ -124,6 +129,17 @@ export interface PublishTextInput {
  *
  * Never throws — the caller is a job handler, where an uncaught throw becomes a
  * retry of work that may already have posted.
+ */
+/**
+ * ⭐ Media, which three of four channels cannot post without.
+ *
+ * Verified live 2026-08-05 via `validatePost`: X accepts text alone;
+ * Instagram, TikTok and YouTube all reject it and name media. Instagram and
+ * TikTok accept an image; YouTube requires video specifically.
+ *
+ * Zernio FETCHES these URLs from its own servers, so they must be publicly
+ * reachable for long enough to be pulled — which is why a library asset needs
+ * a SIGNED url with a real TTL rather than the private storage path.
  */
 export async function publishText(
   input: PublishTextInput
@@ -148,6 +164,9 @@ export async function publishText(
       body: {
         content: input.text,
         publishNow: true,
+        ...(input.mediaItems && input.mediaItems.length > 0
+          ? { mediaItems: input.mediaItems }
+          : {}),
         platforms: [
           {
             platform,
@@ -230,4 +249,67 @@ export async function publishText(
     url: entry.platformPostUrl ?? null,
     deduped: false,
   };
+}
+
+
+/**
+ * Ask Zernio whether this would be accepted, without sending it.
+ *
+ * `POST /api/v1/tools/validate/post`. VERIFIED LIVE 2026-08-05 across all four
+ * channels — text alone is valid on X and rejected everywhere else, with the
+ * reason naming media.
+ *
+ * Errors are translated, not relayed: *"Tiktok posts require media content
+ * (images or videos)"* is a vendor sentence with a lowercase-T platform name
+ * in it. What reaches a founder should sound like her.
+ */
+export async function validatePost(input: {
+  client: ZernioClient;
+  channel: string;
+  text: string;
+  /** ⚠️ Must be passed, or the preflight rejects every media post it is
+   *  meant to be clearing — the validator judges the WHOLE payload. */
+  mediaItems?: Array<{ type: "image" | "video"; url: string }>;
+}): Promise<{ ok: boolean; reason?: string }> {
+  const platform = ZERNIO_PLATFORM_SLUG[input.channel];
+  if (!platform) {
+    return { ok: false, reason: `I can't post to ${input.channel}` };
+  }
+  try {
+    const raw = await input.client.request<unknown>(
+      "/api/v1/tools/validate/post",
+      {
+        method: "POST",
+        body: {
+          content: input.text,
+          platforms: [{ platform }],
+          ...(input.mediaItems && input.mediaItems.length > 0
+            ? { mediaItems: input.mediaItems }
+            : {}),
+        },
+      }
+    );
+    const body = raw as {
+      valid?: boolean;
+      errors?: Array<{ error?: string }>;
+    };
+    if (body.valid === true) return { ok: true };
+
+    const first = body.errors?.[0]?.error ?? "";
+    // The one case we know we cause, said in her words.
+    if (/require.*(media|video|image)/i.test(first)) {
+      return {
+        ok: false,
+        reason: `I can't post to ${input.channel} without a video or an image, and I don't have one yet`,
+      };
+    }
+    return { ok: false, reason: `${input.channel} wouldn't accept that post` };
+  } catch {
+    /**
+     * A preflight that cannot run must NOT block a publish. It is an early
+     * warning, not a gate — the safety critic below is the gate. Failing
+     * closed here would let a vendor blip stop every post.
+     */
+    return { ok: true };
+  }
 }

@@ -14,6 +14,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { BUNDLED_MAYA_PLUGIN_TOOLS } from "../../agents/packs/maya/bundledPlugin";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -61,12 +62,15 @@ describe("the manifest and the code agree", () => {
       "checkpoint",
       "draft",
       "history",
+      "inbox",
       "publish",
       "remember",
       "reply",
       "request_assets",
+      "rules",
       "scroll",
       "update",
+      "weekly_read",
     ]);
   });
 
@@ -97,10 +101,31 @@ describe("NO TOOL CAN NAME A TENANT", () => {
     // parameter here would hand the model the ability to name an account it
     // isn't — re-opening the exact class of bug the server surface was shaped
     // to eliminate, at the one layer that isn't guarded by it.
-    const schemas = index.match(/parameters:\s*Type\.Object\(\{[\s\S]*?\n\s*\}\)/g) ?? [];
-    expect(schemas.length).toBe(10);
-    for (const schema of schemas) {
-      expect(schema).not.toMatch(/customerId|accountId|tenantId|customer_id/i);
+    //
+    // ⚠️ Sliced PER TOOL, not by one regex over the whole file. The previous
+    // matcher required a newline before the closing `})`, so a single-line
+    // `Type.Object({})` — which `scroll` has always had — made the match run
+    // on into the NEXT tool. It still caught tenant fields (a longer match
+    // reads more, not less), but the count it asserted was never the number
+    // of schemas, so a tool could be added with nothing checking its own.
+    const blocks = index
+      .split(/tool\(\{/)
+      .slice(1)
+      .map((block) => {
+        const name = /name:\s*"([a-z_]+)"/.exec(block)?.[1] ?? "";
+        // Parameters end where the executable body begins.
+        const params = block.split(/execute:/)[0];
+        return { name, params };
+      });
+
+    expect(blocks.map((b) => b.name).sort()).toEqual(
+      [...BUNDLED_MAYA_PLUGIN_TOOLS].sort()
+    );
+    for (const { name, params } of blocks) {
+      expect(
+        /customerId|accountId|tenantId|customer_id/i.test(params),
+        `${name} takes a tenant id`
+      ).toBe(false);
     }
   });
 
@@ -128,7 +153,7 @@ describe("NO TOOL CAN NAME A TENANT", () => {
     // adds nothing of its own. If this ever built a body by hand, the schema
     // test would stop being sufficient.
     expect(index).toMatch(/body: JSON\.stringify\(payload \?\? \{\}\)/);
-    for (const tool of ["scroll", "draft", "publish", "reply", "remember", "update", "history", "request_assets", "ask_founder", "checkpoint"]) {
+    for (const tool of ["scroll", "draft", "publish", "reply", "remember", "rules", "update", "history", "inbox", "weekly_read", "request_assets", "ask_founder", "checkpoint"]) {
       expect(index).toContain(`call("${tool}", p, ctx.signal)`);
     }
   });

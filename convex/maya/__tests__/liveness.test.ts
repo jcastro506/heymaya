@@ -23,7 +23,7 @@ const MORNING_TODAY = Date.UTC(2026, 6, 31, 8, 0, 0);
 function facts(over: Partial<LivenessInput> = {}): LivenessInput {
   return {
     now: EVENING,
-    hourUtc: 20,
+    hourLocal: 20,
     briefSentToday: true,
     recapSentToday: true,
     placementsToday: 1,
@@ -74,13 +74,13 @@ describe("A SYSTEM CANNOT BE THE WATCHDOG FOR ITSELF", () => {
 describe("the brief", () => {
   it("isn't a breach until the grace period passes", () => {
     // Due 07:00, grace 2h. At 08:00 it's late, not broken.
-    expect(kinds(evaluate(facts({ briefSentToday: false, hourUtc: 8 })))).not.toContain(
+    expect(kinds(evaluate(facts({ briefSentToday: false, hourLocal: 8 })))).not.toContain(
       "brief_missed"
     );
   });
 
   it("is a breach two hours late, and re-enqueues ONCE", () => {
-    const breaches = evaluate(facts({ briefSentToday: false, hourUtc: 9 }));
+    const breaches = evaluate(facts({ briefSentToday: false, hourLocal: 9 }));
     const brief = breaches.find((b) => b.kind === "brief_missed");
     expect(brief?.action).toBe("reenqueue_brief");
     // Once — a re-enqueue loop on a broken brief is a message storm.
@@ -88,14 +88,14 @@ describe("the brief", () => {
   });
 
   it("a sent brief is never a breach, however late in the day", () => {
-    expect(kinds(evaluate(facts({ hourUtc: 23 })))).not.toContain("brief_missed");
+    expect(kinds(evaluate(facts({ hourLocal: 23 })))).not.toContain("brief_missed");
   });
 });
 
 describe("zero placements — escalation is by streak, and the words change", () => {
   it("not checked before the evening — a quiet morning is just a morning", () => {
     expect(
-      kinds(evaluate(facts({ placementsToday: 0, hourUtc: 12 })))
+      kinds(evaluate(facts({ placementsToday: 0, hourLocal: 12 })))
     ).not.toContain("zero_placements_today");
   });
 
@@ -150,7 +150,7 @@ describe("zero placements — escalation is by streak, and the words change", ()
 describe("HONEST SILENCE BEATS FAKE ACTIVITY", () => {
   it("every breach detail is plain language a founder could read", () => {
     const cases = [
-      facts({ briefSentToday: false, hourUtc: 10 }),
+      facts({ briefSentToday: false, hourLocal: 10 }),
       facts({ placementsToday: 0 }),
       facts({ placementsToday: 0, priorZeroDayStreak: 1 }),
       facts({ placementsToday: 0, priorZeroDayStreak: 5 }),
@@ -180,7 +180,12 @@ describe("HONEST SILENCE BEATS FAKE ACTIVITY", () => {
         briefSentToday: false,
         recapSentToday: false,
         placementsToday: 0,
-        hourUtc: 22,
+        // 23:00 local — past the recap deadline (21:00) plus its two-hour
+        // grace. The recap is SENT at 20:00 local, so the old deadline of 19
+        // was earlier than the thing it was policing; it never fired only
+        // because `recapSentToday` was permanently true (the UTC dayKey bug).
+        // Two defects cancelling is not the same as working.
+        hourLocal: 23,
       })
     );
     expect(kinds(breaches).sort()).toEqual([
@@ -233,7 +238,8 @@ describe("fleet-wide vendor balances", () => {
 async function seed(
   t: ReturnType<typeof convexTest>,
   suffix: string,
-  createdAt = EVENING - 30 * DAY
+  createdAt = EVENING - 30 * DAY,
+  timezone = "UTC"
 ) {
   return await t.run(async (ctx) => {
     const accountId = await ctx.db.insert("creators", {
@@ -250,7 +256,7 @@ async function seed(
       agentVersion: "v2",
       plan: "mvp",
       state: "active",
-      timezone: "UTC",
+      timezone,
       createdAt,
       updatedAt: createdAt,
     });
@@ -296,7 +302,75 @@ describe("gatherFacts — reads the world, judges nothing", () => {
     expect(f?.placementsToday).toBe(1);
     expect(f?.briefSentToday).toBe(true);
     expect(f?.recapSentToday).toBe(false);
-    expect(f?.hourUtc).toBe(20);
+    expect(f?.hourLocal).toBe(20);
+  });
+
+  /**
+   * ⭐ THE REGRESSION, taken from production on 2026-08-06.
+   *
+   * She published four times on the EVENING of 08-05 (20:00–23:00 New York).
+   * At 11:57 on 08-06, `gatherFacts` reported `placementsToday: 5` while
+   * cadence.ts — counting in her timezone — correctly reported zero.
+   *
+   * The cause was `floor(now / 86_400_000) * 86_400_000`, which starts "today"
+   * at 20:00 the PREVIOUS evening in New York. And because `evaluate()` gates
+   * the entire zero-placement escalation on `placementsToday === 0`, last
+   * night's posts suppressed today's alert outright. She posts in the evening,
+   * so this was not an edge case — it was the normal pattern, and the watchdog
+   * was blind on exactly the days it exists for.
+   */
+  it("counts the FOUNDER's day — last night's posts are not today's", async () => {
+    const t = convexTest(schema, modules);
+    const NY = "America/New_York";
+    // 2026-08-06 11:57 New York.
+    const noonToday = Date.UTC(2026, 7, 6, 15, 57);
+    const customerId = await seed(t, "tzday", noonToday - 30 * DAY, NY);
+
+    // Four placements on the evening of 08-05, New York time. Each of these is
+    // AFTER 00:00 UTC on 08-06, which is what fooled the old arithmetic.
+    for (const [i, hourUtc] of [0, 1, 2, 3].entries()) {
+      await place(t, customerId, Date.UTC(2026, 7, 6, hourUtc, 30), `ev${i}`);
+    }
+
+    const f = await t.query(internal.maya.liveness.gatherFacts, {
+      customerId,
+      now: noonToday,
+    });
+
+    expect(f?.placementsToday).toBe(0);
+    expect(f?.hourLocal).toBe(11);
+    // And the consequence that actually mattered: the alert can now fire.
+    const breaches = evaluate({
+      ...facts({ placementsToday: f!.placementsToday, hourLocal: 19 }),
+      priorZeroDayStreak: f!.priorZeroDayStreak,
+    });
+    expect(kinds(breaches)).toContain("zero_placements_today");
+  });
+
+  /**
+   * cadence.ts counts only `linkStatus: "live"`; this counted every row. A
+   * publish we cannot open is exactly the day the alert is most warranted.
+   */
+  it("an unconfirmed publish does not count as a placement", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "unknownlink");
+    await t.run((ctx) =>
+      ctx.db.insert("placements", {
+        customerId,
+        kind: "post",
+        channel: "x",
+        linkStatus: "unknown",
+        publishedAt: EVENING - 3600_000,
+        snapshotText: "a post we cannot open",
+        idempotencyKey: "unk1",
+      })
+    );
+
+    const f = await t.query(internal.maya.liveness.gatherFacts, {
+      customerId,
+      now: EVENING,
+    });
+    expect(f?.placementsToday).toBe(0);
   });
 
   it("counts a consecutive zero-day streak", async () => {
@@ -472,5 +546,40 @@ describe("correlateFleet — one incident, not N", () => {
       breaching("brief_missed")
     );
     expect(correlateFleet(at, at.length).correlated).toBe(true);
+  });
+});
+
+/**
+ * ⭐ The reserve logic existed since Sprint 6 with nothing fetching a balance.
+ *
+ * Twentieth zero-caller find, and the one with the widest blast radius: a
+ * vendor at zero is not one customer degraded, it is every customer's sweeps
+ * failing in the same minute.
+ */
+describe("⭐ VENDOR BALANCES — the reserve that could never fire", () => {
+  it("a healthy balance is ok and says the number", () => {
+    // Live at time of writing: 3181 against a 500 reserve.
+    const v = checkBalance("scrapecreators", 3181);
+    expect(v.verdict).toBe("ok");
+    expect(v.detail).toMatch(/3181/);
+  });
+
+  it("⭐ THE ALERT FIRES WELL ABOVE ZERO", () => {
+    // The gap between "alert" and "dead" has to be wide enough to actually
+    // buy more credit. At the reserve exactly, it is already low.
+    expect(checkBalance("scrapecreators", 500).verdict).toBe("low");
+    expect(checkBalance("scrapecreators", 501).verdict).toBe("ok");
+  });
+
+  it("⭐ CRITICAL NAMES THE CONSEQUENCE, NOT THE NUMBER", () => {
+    // "125 credits" means nothing to whoever reads the alert at 3am. "every
+    // customer stops when this hits zero" is the thing that gets acted on.
+    const v = checkBalance("scrapecreators", 100);
+    expect(v.verdict).toBe("critical");
+    expect(v.detail).toMatch(/every customer stops/);
+  });
+
+  it("zero is critical, not merely low", () => {
+    expect(checkBalance("creatify", 0).verdict).toBe("critical");
   });
 });

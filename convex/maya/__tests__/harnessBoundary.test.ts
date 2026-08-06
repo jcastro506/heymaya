@@ -43,12 +43,33 @@ const INPUT: MayaWorkspaceInput = {
  *   outlive the machine.
  * - **liveness** — a system cannot be the watchdog for itself. An agent that
  *   has stopped waking up cannot notice that it has stopped waking up.
+ * - **metrics refresh** — pure collection, no judgment, which §2.3 puts in
+ *   deterministic code by definition. It earns its place the same way the
+ *   other two do: the machine AUTO-STOPS, so on her clock the numbers would
+ *   only exist when she happened to be awake — and the evening recap, which
+ *   reports them, is exactly when she has just woken up. "The database is the
+ *   truth" cannot depend on the participant being running.
  *
  * Anything else on a Convex schedule is the drift returning. Adding to this
  * list should feel like a decision, which is why it's a literal and not a
  * pattern.
  */
 const CONVEX_MAY_SCHEDULE = [
+  /**
+   * A founder connecting an account at 2am must be noticed whether or not she
+   * is awake — and it is collection with no judgment in it (§2.3). Without
+   * this, three channels were connected live and nothing updated until someone
+   * ran the sync by hand.
+   */
+  /**
+   * A stale buyer map poisons every sweep downstream, and staleness is a
+   * date comparison — no judgment in it (§2.3). It also has to keep working
+   * for a customer whose machine has been asleep for a month, which is
+   * precisely the customer whose map went stale.
+   */
+  "maya-relearn-stale",
+  "maya-sync-channels",
+  "maya-refresh-metrics",
   "maya-drain-jobs",
   "maya-liveness-sweep",
 ] as const;

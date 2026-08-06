@@ -577,12 +577,18 @@ export interface Conversation {
 }
 
 /**
- * Result of `POST /api/v1/media/presign`. Spec returns `{ files: [...] }`,
- * each file carrying the upload URL + the public media URL to feed back into
- * `MediaItem.url`. [shape-unverified-live].
+ * Result of `POST /api/v1/media/presign`. VERIFIED LIVE 2026-08-05.
+ *
+ * ⭐ **Zernio hosts our media**, which means publishing needs no R2 of our
+ * own. That matters: R2 is unconfigured, so the library cannot store anything
+ * — and this path publishes anyway.
  */
 export interface PresignResult {
-  files: Array<Record<string, unknown>>;
+  /** Presigned R2 PUT. Valid ~1 hour — upload immediately. */
+  uploadUrl: string;
+  /** Permanent `media.zernio.com/...` address. This is what a post carries. */
+  publicUrl: string;
+  key?: string;
 }
 
 /**

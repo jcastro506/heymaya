@@ -63,3 +63,23 @@ scripts/veo-test.ts
 scripts/captions-test.ts
 scripts/captions-realworld.ts
 scripts/agentmedia-test.ts
+
+# ── Sync-conflict copies ────────────────────────────────────────────────────
+# iCloud/Dropbox duplicate an open file as "name 2.ts" when two machines touch
+# it. 58 of them were committed by a `git add -A` on 2026-08-05: every one a
+# STALE snapshot of a real file, including three that predated that session's
+# edits. They are invisible to Convex (module names can't contain spaces) and
+# to vitest (its globs don't match "__tests__ 2"), so nothing fails — they just
+# accumulate, and the real hazard is editing one by mistake and wondering why
+# nothing changed.
+*\ 2.ts
+*\ 2.tsx
+*\ 2.js
+*\ 2.json
+*\ 2.md
+# Directories too — iCloud duplicates folders, and a bare `setup 2/` has no
+# extension for the patterns above to catch. Found empty on 2026-08-06.
+*\ 2/
+*\ [0-9]/
+*\ [0-9].ts
+*\ [0-9].tsx

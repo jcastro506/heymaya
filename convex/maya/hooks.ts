@@ -341,6 +341,77 @@ export const historyHttp = httpAction(async (ctx, request) => {
   const parsed = await readJson(request);
   if ("error" in parsed) return parsed.error;
 
+  /**
+   * ⭐ Two modes that existed in `archive.ts` since Sprint 2 with no caller.
+   *
+   * `query` — "have I said this before?" She is told not to repeat herself and
+   * had no way to check. A timeline of the last 14 days answers "what went
+   * out"; it does not answer "did I already make this exact point in March",
+   * which is the question that stops an account sounding like a loop.
+   *
+   * `placementId` — "why did you post that?" The provenance chain (§16.8.4)
+   * links a placement back through its draft to the idea and the evidence.
+   * §10.2 again: the answer comes from the chain, never from a reconstruction.
+   */
+  const query = str(parsed.body, "query");
+  const placementId = str(parsed.body, "placementId");
+
+  if (placementId) {
+    const chain = await ctx.runQuery(internal.maya.archive.provenance, {
+      customerId: auth.customer._id,
+      placementId: placementId as Id<"placements">,
+    });
+    /**
+     * ⭐ Three states, not two. A placement that exists but has no draft or
+     * idea behind it is TRACEABLE TO NOTHING — and telling her to "quote the
+     * evidence" there is an instruction to invent some.
+     *
+     * Found by a test: an orphan placement returned a non-null chain (the
+     * placement itself) and got the full-provenance answer.
+     */
+    const traced = Boolean(chain?.draft ?? chain?.idea);
+    return respond({
+      ok: Boolean(chain),
+      data: { provenance: chain },
+      why: !chain
+        ? "no record of that placement"
+        : traced
+          ? "here's where that post came from"
+          : "that post is on record, but nothing links it back to an idea",
+      next: !chain
+        ? "say you can't find it rather than reconstructing a reason"
+        : traced
+          ? "quote the evidence it came from — the quote and the source URL are what make it an answer rather than a story"
+          : "say plainly that you can see the post but not what prompted it. Do NOT reconstruct a reason — a plausible story they can't correct is worse than admitting the trail is missing",
+    });
+  }
+
+  if (query) {
+    const hits = await ctx.runQuery(internal.maya.archive.search, {
+      customerId: auth.customer._id,
+      query,
+    });
+    return respond({
+      ok: true,
+      data: {
+        matches: hits.map((p) => ({
+          url: p.url ?? null,
+          text: p.snapshotText,
+          channel: p.channel,
+          publishedAt: p.publishedAt,
+        })),
+      },
+      why:
+        hits.length === 0
+          ? `nothing in the archive matches "${query}"`
+          : `${hits.length} past posts match "${query}"`,
+      next:
+        hits.length === 0
+          ? "this angle is new — go ahead"
+          : "you have covered this before. Either find a genuinely different angle or say plainly that you're returning to it and why",
+    });
+  }
+
   const days = Math.min(Math.max(num(parsed.body, "days") ?? 14, 1), 90);
   const since = Date.now() - days * 86_400_000;
 
@@ -350,6 +421,17 @@ export const historyHttp = httpAction(async (ctx, request) => {
     limit: 50,
   });
 
+  /**
+   * ⭐ THE NUMBERS RIDE ALONG.
+   *
+   * This returned URL, channel, kind, text and date — and no metrics at all —
+   * while her Sunday cron asked *"which of the five rungs is working"* (§14.2).
+   * A diagnosis with no numbers under it leaves two outcomes: she says she
+   * can't, or she guesses.
+   *
+   * `metricsAsOf` travels WITH them, always. The schema comment says why:
+   * a number with no date is how dashboards start lying.
+   */
   const posted = placements.map((p) => ({
     url: p.url ?? null,
     linkStatus: p.linkStatus,
@@ -357,6 +439,8 @@ export const historyHttp = httpAction(async (ctx, request) => {
     kind: p.kind,
     text: p.snapshotText,
     publishedAt: p.publishedAt,
+    metrics: p.metricsJson ? safeJson(p.metricsJson) : null,
+    metricsAsOf: p.metricsAsOf ?? null,
   }));
 
   if (posted.length === 0) {
@@ -383,6 +467,19 @@ export const historyHttp = httpAction(async (ctx, request) => {
     customerId: auth.customer._id,
   });
 
+  /**
+   * ⭐ The rung is COMPUTED, not left to her.
+   *
+   * §2.3 — deterministic code watches, the model judges. Which rung broke is
+   * arithmetic on rows; what it MEANS and what to do stays hers. Computing it
+   * also stops the failure §14.2 really guards against: a confident diagnosis
+   * with nothing under it.
+   */
+  const ladder = await ctx.runQuery(internal.maya.ladder.diagnose, {
+    customerId: auth.customer._id,
+    sinceDays: days,
+  });
+
   return respond({
     ok: true,
     data: {
@@ -393,8 +490,14 @@ export const historyHttp = httpAction(async (ctx, request) => {
         longestStreak: run.longestStreak,
         todayDone: run.todayDone,
       },
+      ladder: {
+        rung: ladder.rung,
+        views: ladder.views,
+        engagements: ladder.engagements,
+        unmeasured: ladder.unmeasured,
+      },
     },
-    why: `${posted.length} placements in the last ${days} days, ${live} with a live link — ${run.detail}`,
+    why: `${posted.length} placements in the last ${days} days, ${live} with a live link — ${run.detail}. ${ladder.detail}`,
     next: run.todayDone
       ? "quote the URLs when they ask what went out — never answer from memory, and never say you haven't posted without checking here first"
       : "nothing has gone live today yet. Quote URLs from here rather than memory, and if the day is nearly over, say so rather than letting the run break quietly",
@@ -576,6 +679,41 @@ export const scrollHttp = httpAction(async (ctx, request) => {
   });
 
   /**
+   * ⭐ MINE THE COMMENTS. This is the moat, and it never ran.
+   *
+   * CLAUDE.md states the whole pitch in one line: *"she watches what's
+   * actually working in the niche, MINES WHAT BUYERS ARE COMPLAINING ABOUT,
+   * and then writes."*
+   *
+   * `mineComplaints` had **no caller**. `complaintsFor` is read by
+   * `bankFromComplaints`, so complaints are consumed — they were simply never
+   * produced except by hand. And a complaint is the strongest evidence in the
+   * bank: `SOURCE_WEIGHT.complaint` is 1.0, the ceiling, because someone typed
+   * it about a real problem.
+   *
+   * Folded into the morning scroll rather than given a cron, because §5.2's
+   * sweep 4 IS part of "read the niche" — and a separate job is one more thing
+   * that can quietly stop running.
+   */
+  const complaints = await ctx.runAction(internal.maya.complaints.mineComplaints, {
+    customerId: auth.customer._id,
+  });
+
+  /**
+   * ⭐ The competition rides along, because it is the same question.
+   *
+   * "What's happening out there today" covers both what the niche is posting
+   * and whether anyone she watches just had a breakout. A separate tool would
+   * be a second thing to remember, and the thing this codebase keeps proving
+   * is that a module nobody calls does nothing at all — `watchCompetitors`
+   * was zero-caller ten minutes after I wrote it.
+   */
+  const competition = await ctx.runAction(
+    internal.maya.competitors.watchCompetitors,
+    { customerId: auth.customer._id }
+  );
+
+  /**
    * ⭐ THE SCROLL FILLS THE BANK. Not a separate job she has to remember.
    *
    * `bankFromObservations` shipped with nothing calling it, which is the ninth
@@ -619,9 +757,16 @@ export const scrollHttp = httpAction(async (ctx, request) => {
   if (observations.length === 0) {
     return respond({
       ok: true,
-      data: { observations: [], keywordsSwept: result.keywordsSwept ?? [] },
-      why: "the niche is quiet today — nothing moving worth posting about",
-      next: "a quiet day is a real finding. Say so rather than posting filler",
+      data: {
+        observations: [],
+        keywordsSwept: result.keywordsSwept ?? [],
+        competition: competition.breakouts,
+      },
+      why: `the niche is quiet today — nothing moving worth posting about. ${competition.detail}`,
+      next:
+        competition.breakouts.length > 0
+          ? "the niche is quiet but someone you watch just broke out — that's worth a look and worth telling them about"
+          : "a quiet day is a real finding. Say so rather than posting filler",
     });
   }
 
@@ -632,10 +777,17 @@ export const scrollHttp = httpAction(async (ctx, request) => {
       keywordsSwept: result.keywordsSwept ?? [],
       todaysIdea: idea,
       bankDepth: bank.depth,
+      complaintsFound: complaints.complaints?.length ?? 0,
+      /**
+       * Accounts she watches that just pulled far above their own usual. The
+       * multiple is against THEIR baseline, so it means something for a small
+       * account as much as a large one.
+       */
+      competition: competition.breakouts,
     },
     why: idea
-      ? `${observations.length} things moving, and the strongest banked idea is "${idea.angle}"`
-      : `${observations.length} things moving, but the idea bank is empty`,
+      ? `${observations.length} things moving, and the strongest banked idea is "${idea.angle}". ${competition.detail}`
+      : `${observations.length} things moving, but the idea bank is empty. ${competition.detail}`,
     next: idea
       ? "draft against data.todaysIdea.ideaId — its evidence is what you cite, and its quote is what a real person actually said"
       : "no banked idea means nothing has earned a post yet. Say that to the founder rather than inventing one",
@@ -679,6 +831,46 @@ export const draftHttp = httpAction(async (ctx, request) => {
   const kind =
     kindRaw === "reply" || kindRaw === "cold_reply" ? kindRaw : ("post" as const);
   const ideaId = str(parsed.body, "ideaId");
+
+  /**
+   * ⭐ THE PRE-SPEND GATE (§7.5.7), CHECK 3 — before the founder sees anything.
+   *
+   * `checkPostBudget` has existed since Sprint 2 with **no caller**, so the
+   * daily cap the plan tiers promise — `postsPerDayPerChannel: 2` on mvp — was
+   * never enforced anywhere. She could post fifty times, which is a platform
+   * ban risk and a broken promise in the same act.
+   *
+   * ⚠️ It belongs HERE, not at publish. `publishDecision`'s header is explicit
+   * that budgets are deliberately excluded from the iron rule: *"they belong to
+   * the pre-spend gate, which runs before the founder ever sees the idea,
+   * precisely so an approved idea can never fail on budget. Failing after a
+   * yes is the worst possible sequence."*
+   *
+   * Drafting is that moment. Refusing here costs her one tool call; refusing
+   * after approval costs the founder's trust.
+   *
+   * Replies are exempt — §1, inbound outranks outbound, and a daily post cap
+   * that silences answers turns a rate limit into rudeness.
+   */
+  if (kind === "post") {
+    const budget = await ctx.runQuery(internal.maya.planFeatures.checkPostBudget, {
+      customerId: auth.customer._id,
+      channel,
+    });
+    /**
+     * `hard_block` is the exhaustion verdict for this metric — §2.10's
+     * budgets-not-booleans rule means the answer is a rung, not a boolean, and
+     * the daily post cap is the one metric where the rung IS "stop".
+     */
+    if (budget.verdict === "hard_block") {
+      return respond({
+        ok: false,
+        data: { used: budget.used, limit: budget.limit },
+        why: `that's ${budget.used} of ${budget.limit} posts on ${channel} today`,
+        next: "don't draft another for this channel today — say what's already gone out, and if they want more, that's a plan change rather than something to push through",
+      });
+    }
+  }
 
   /**
    * ⭐ A POST MUST TRACE TO AN IDEA. A REPLY MUST NOT.
@@ -787,6 +979,38 @@ export const publishHttp = httpAction(async (ctx, request) => {
     );
   }
 
+  /**
+   * ⭐ CAPTURE THE EDIT — the strongest voice signal we get, and it was never
+   * recorded.
+   *
+   * SOUL.md says it outright: *"A writing sample shows me their register; an
+   * edit shows me what I got WRONG. When these disagree with anything above,
+   * these win."*
+   *
+   * `drafts.decide` has existed since Sprint 4 to store exactly that, with
+   * **no caller**. So the chain died at step one: she drafted, the founder
+   * rewrote it, nothing recorded the diff, `foldEdits` and `diffSignals` had
+   * no input, and the `editPairs` block in her workspace has rendered empty
+   * since the day it was written.
+   *
+   * ⚠️ Captured HERE rather than in a tool of its own, because the approval
+   * and the edit arrive in the same breath — *"post it but say 'ship' not
+   * 'deploy'"*. A separate tool is one she has to remember to call after the
+   * founder has already moved on, and that is precisely the shape of thing
+   * this codebase keeps not calling.
+   *
+   * The edited text also BECOMES the draft, so publishing posts what they
+   * approved rather than the version they rejected.
+   */
+  const editedText = str(parsed.body, "editedText");
+  if (editedText && editedText.trim().length > 0) {
+    await ctx.runMutation(internal.maya.drafts.decide, {
+      draftId: draftId as Id<"drafts">,
+      outcome: "edited",
+      editedText,
+    });
+  }
+
   // Double-publish prevention (invariant 4) BEFORE the decision, so a retry of
   // an already-published draft is idempotent rather than a second post.
   const already = await ctx.runQuery(internal.maya.publishDecision.alreadyPublished, {
@@ -808,14 +1032,39 @@ export const publishHttp = httpAction(async (ctx, request) => {
   });
 
   if (!decision.publish) {
+    /**
+     * ⭐ `show_me_first` MEANS SHOW THEM THE POST.
+     *
+     * Measured live 2026-08-05. The 11:00 job drafted, hit this hold, and sent
+     * the founder:
+     *
+     *   "I found a strong moment from a solo-founder TikTok and drafted a
+     *    237-character X post, but I'm not publishing it..."
+     *
+     * She described the draft in the third person and never showed it. The
+     * founder cannot approve what he cannot read, so the approval loop broke
+     * at the last inch — and nothing was technically wrong, which is why it
+     * survived a day.
+     *
+     * The text rides in the tool response rather than being left to her to
+     * remember (§2.8): the choreography is the server's job.
+     */
+    const showThem = decision.reason === "show_me_first";
     return respond({
       ok: false,
-      data: { published: false, holdReason: decision.reason },
+      data: {
+        published: false,
+        holdReason: decision.reason,
+        // What they have to see to be able to say yes.
+        draftText: showThem ? decision.snapshotText : undefined,
+      },
       why: decision.detail,
       // Named so the model relays rather than retries. A held post that gets
       // retried in a loop is how a machine burns its daily spend on a decision
       // that will not change.
-      next: `tell them: "${decision.detail}" — do not retry this publish`,
+      next: showThem
+        ? "⭐ SHOW THEM THE POST. Send data.draftText VERBATIM, on its own, then ask — \"say post it, or tell me what to change\". Describing it (\"I drafted a 237-character post\") is not showing it: they cannot approve what they cannot read. Do not retry this publish; wait for their answer."
+        : `tell them: "${decision.detail}" — do not retry this publish`,
     });
   }
 
@@ -859,6 +1108,13 @@ export const replyHttp = httpAction(async (ctx, request) => {
 
   const draftId = str(parsed.body, "draftId");
   const inReplyTo = str(parsed.body, "inReplyTo");
+  /**
+   * Optional, and the whole point when present: it closes the inbox item so
+   * the same person is never answered twice. §13.4 puts "whether I already
+   * replied to someone" in the rows column precisely because a model tracking
+   * it in context eventually gets it wrong.
+   */
+  const inboxItemId = str(parsed.body, "inboxItemId");
   if (!draftId) {
     return respond(
       { ok: false, why: "no draftId was given", next: "write the reply first, then send it" },
@@ -911,6 +1167,7 @@ export const replyHttp = httpAction(async (ctx, request) => {
       draftId,
       snapshotText: decision.snapshotText,
       inReplyTo,
+      inboxItemId,
     }),
   });
 
@@ -919,6 +1176,249 @@ export const replyHttp = httpAction(async (ctx, request) => {
     data: { published: false, queued: true, jobId },
     why: "cleared to reply — it's queued",
     next: "move on to the next one; don't wait on this",
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* rules                                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ `rules` — the three commands §18 Sprint 6 asks for, in one tool.
+ *
+ *   list          "what rules do I have?"       → their sentences, with dates
+ *   forget        "forget that"                  → retire one, never delete it
+ *   why           "why did/didn't you do that?"  → the stored record
+ *
+ * All three read a ledger that was WRITE-ONLY: `append` had a caller and
+ * `activeRules`, `forget`, `effectiveRule` and `history` had none. Nineteenth
+ * time this week.
+ *
+ * ⚠️ **`why` is answered from rows, never regenerated.** §10.2 is explicit: a
+ * model asked to explain its own past behaviour produces a plausible story,
+ * which is worse than "I don't know" because it cannot be corrected. So this
+ * returns what was recorded and she reads it out; if the ledger is silent, the
+ * honest answer is that she doesn't have a record.
+ *
+ * ⚠️ **Forget RETIRES, it never deletes.** §16 — the ledger is append-only, so
+ * "forget that" marks a rule inactive and leaves the history intact. A founder
+ * asking *"what did I used to tell you?"* deserves an answer.
+ */
+export const rulesHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if ("error" in auth) return auth.error;
+  const parsed = await readJson(request);
+  if ("error" in parsed) return parsed.error;
+
+  const action = str(parsed.body, "action") ?? "list";
+
+  if (action === "forget") {
+    const directiveId = str(parsed.body, "directiveId");
+    if (!directiveId) {
+      return respond(
+        {
+          ok: false,
+          why: "no rule was named",
+          next: "call with action:list first, then pass the directiveId of the one they mean — never guess which rule they want dropped",
+        },
+        400
+      );
+    }
+    const result = await ctx.runMutation(internal.maya.directives.forget, {
+      directiveId: directiveId as Id<"directives">,
+      customerId: auth.customer._id,
+    });
+    return respond({
+      ok: result.forgotten,
+      data: { forgotten: result.forgotten },
+      why: result.forgotten
+        ? "that rule is retired — it stays in the history, it just stops applying"
+        : "that rule wasn't active",
+      next: result.forgotten
+        ? "say it back in their words so they know exactly which one stopped: quote the sentence"
+        : "don't claim to have forgotten something that wasn't there",
+    });
+  }
+
+  if (action === "why") {
+    const kind = str(parsed.body, "kind");
+    const history = await ctx.runQuery(internal.maya.directives.history, {
+      customerId: auth.customer._id,
+      kind: kind as never,
+    });
+    return respond({
+      ok: true,
+      data: {
+        history: history.map((d) => ({
+          directiveId: d._id,
+          verbatim: d.verbatim,
+          kind: d.kind,
+          active: d.active,
+          createdAt: d.createdAt,
+        })),
+      },
+      why:
+        history.length === 0
+          ? "there's no rule on record about that"
+          : `${history.length} on record, newest first`,
+      /**
+       * The instruction that matters most in this file. §10.2.
+       */
+      next:
+        history.length === 0
+          ? "say you don't have a record of being told that. Do NOT reconstruct a reason — a plausible story you invented is worse than admitting you don't know, because they can't correct it"
+          : "quote the rule and its date. The answer is what's written here, not what you'd have decided",
+    });
+  }
+
+  const rules = await ctx.runQuery(internal.maya.directives.activeRules, {
+    customerId: auth.customer._id,
+  });
+  return respond({
+    ok: true,
+    data: {
+      rules: rules.map((d) => ({
+        directiveId: d._id,
+        verbatim: d.verbatim,
+        kind: d.kind,
+        createdAt: d.createdAt,
+      })),
+    },
+    why: rules.length === 0 ? "no rules yet" : `${rules.length} active`,
+    next:
+      rules.length === 0
+        ? "say there aren't any yet — anything they tell you becomes one"
+        : "read them back in THEIR words, with dates. Seeing their own sentences listed is the proof you remembered",
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* weekly_read                                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ `weekly_read` — the two sweeps that are worth money once a week.
+ *
+ * The daily `scroll` answers "what is moving in this niche today". This
+ * answers the slower questions, and both halves cost real requests:
+ *
+ *   trends       what SHAPES are working right now, including outside our
+ *                niche — where the topic is useless but the structure travels
+ *   wider world  what actually happened to these people this week, grounded
+ *                in sources it can cite
+ *
+ * Weekly, not daily, because neither changes hourly and the trend sweep's
+ * measured hit rate for a narrow niche is low (§5.2.3a: 0 in-niche of 56 on
+ * the first run). A cheap wide net is worth casting once.
+ *
+ * ⚠️ Both modules were written tonight and had NO CALLER ten minutes later —
+ * the same defect this codebase has produced eighteen times. A sweep nobody
+ * invokes is indistinguishable from a sweep that finds nothing.
+ */
+export const weeklyReadHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if ("error" in auth) return auth.error;
+
+  const shapes = await ctx.runAction(internal.maya.trends.sweepTrends, {
+    customerId: auth.customer._id,
+  });
+  const world = await ctx.runAction(internal.maya.widerWorld.sweepWiderWorld, {
+    customerId: auth.customer._id,
+  });
+
+  const nothing = shapes.kept === 0 && shapes.shapes === 0 && world.findings.length === 0;
+  return respond({
+    ok: true,
+    data: {
+      trendingInNiche: shapes.observations,
+      borrowableShapes: shapes.shapes,
+      world: world.findings,
+      /** ⚠️ Questions we asked and could not source. Never hidden. */
+      unciteable: world.ungrounded,
+    },
+    why: `${shapes.detail}. ${world.detail}`,
+    next: nothing
+      ? "a quiet week is a real finding — say so plainly rather than reaching for something to report"
+      : "use the world findings for WHAT to talk about and the shapes for HOW. Cite the sources when you mention what people are saying — an uncited claim is a guess",
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* inbox                                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ `inbox` — who is talking to her, and hasn't been answered.
+ *
+ * The missing half. `reply` has refused without an `inReplyTo` since Sprint 3,
+ * telling her to *"find it and call again"* — and nothing could find it. This
+ * is the finder.
+ *
+ * It syncs first, then returns what's open, so one call is the whole job. A
+ * separate "refresh" step would eventually be skipped and she'd answer from a
+ * stale list.
+ */
+export const inboxHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if ("error" in auth) return auth.error;
+
+  const sync = await ctx.runAction(internal.maya.inbox.sync, {
+    customerId: auth.customer._id,
+  });
+
+  const items = await ctx.runQuery(internal.maya.inbox.open, {
+    customerId: auth.customer._id,
+    limit: 20,
+  });
+
+  const waiting = items.map((item) => ({
+    inboxItemId: item._id,
+    // The id `reply` needs. Named to match so the chain is obvious.
+    inReplyTo: item.externalId,
+    channel: item.channel,
+    text: item.text,
+    permalink: item.permalink ?? null,
+    postedAt: item.postedAt,
+    waitingHours: Math.round((Date.now() - item.postedAt) / 3_600_000),
+  }));
+
+  /**
+   * ⚠️ Partial failure is reported, never swallowed. Zernio returns
+   * `meta.failedAccounts`, and a live call once returned
+   * `accountsQueried: 2, accountsFailed: 1` — reading half the inbox and
+   * saying "all clear" is exactly what this product exists not to do.
+   */
+  const caveats: string[] = [];
+  if (sync.unreadableAccounts.length > 0) {
+    caveats.push(
+      `couldn't read ${sync.unreadableAccounts.join(", ")} — say so rather than implying you've seen everything`
+    );
+  }
+  if (sync.truncated) {
+    caveats.push("there are more than this page — answer these, then call again");
+  }
+
+  if (waiting.length === 0) {
+    return respond({
+      ok: true,
+      data: { waiting: [], synced: sync.ok },
+      why: sync.ok
+        ? "nobody is waiting on a reply"
+        : sync.detail,
+      next: caveats.length
+        ? caveats.join(" · ")
+        : "nothing to answer — don't invent something to respond to",
+    });
+  }
+
+  return respond({
+    ok: true,
+    data: { waiting, synced: sync.ok },
+    why: `${waiting.length} waiting${sync.added > 0 ? `, ${sync.added} new` : ""}`,
+    next: [
+      "answer the oldest first — they have waited longest. Write the reply with `draft`, then `reply` with BOTH inReplyTo and inboxItemId so it gets marked answered",
+      ...caveats,
+    ].join(" · "),
   });
 });
 
@@ -1049,3 +1549,13 @@ export const askFounderHttp = httpAction(async (ctx, request) => {
         next: "don't repeat it — wait, or do something else",
       });
 });
+
+
+/** Parse stored JSON without letting one bad row break a whole report. */
+function safeJson(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}

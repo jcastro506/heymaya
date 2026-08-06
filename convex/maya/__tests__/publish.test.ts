@@ -15,6 +15,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import schema from "../../schema";
 import { internal } from "../../_generated/api";
+import { parseMediaUrls } from "../publish";
 import { modules } from "../../../tests/_modules";
 import {
   publishText,
@@ -51,23 +52,96 @@ interface Call {
   body: unknown;
 }
 
+/**
+ * ⭐ Stubs BOTH vendors the publish path touches, routed by host.
+ *
+ * The safety critic sits immediately before the Zernio call, so a stub that
+ * only answers Zernio hands the critic a Zernio-shaped body, it fails to parse
+ * a verdict, and — correctly — holds the post. Every publish test then fails
+ * for a reason that has nothing to do with what it is testing.
+ *
+ * Routing by host keeps that honest rather than papering over it: a future
+ * change that adds another vendor to this path will fail here loudly.
+ */
 function stubZernio(
   response: unknown,
-  init: { status?: number } = {}
+  init: { status?: number; criticSafe?: boolean; preflightValid?: boolean } = {}
 ): Call[] {
   const calls: Call[] = [];
+  // `callOpenRouter` returns early without a key and never reaches fetch, so
+  // the critic must have one for the stub above to be reachable at all.
+  vi.stubEnv("OPENROUTER_API_KEY", "test-key");
   globalThis.fetch = (async (input: RequestInfo | URL, opts?: RequestInit) => {
+    const url = String(input);
     calls.push({
-      url: String(input),
+      url,
       headers: (opts?.headers ?? {}) as Record<string, string>,
       body: opts?.body ? JSON.parse(opts.body as string) : undefined,
     });
+
+    /**
+     * The preflight — `POST /tools/validate/post`, which runs BEFORE the
+     * critic and before the post. Answered here so each test fails for the
+     * reason it is about, not because a post-created body looked invalid.
+     */
+    if (url.includes("/tools/validate/post")) {
+      return new Response(
+        JSON.stringify(
+          init.preflightValid === false
+            ? {
+                valid: false,
+                errors: [
+                  { platform: "instagram", error: "Instagram posts require media content (images or videos)" },
+                ],
+              }
+            : { valid: true, message: "No validation issues found." }
+        ),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }
+
+    // The safety critic — an OpenRouter chat completion, not a Zernio call.
+    if (url.includes("openrouter")) {
+      const safe = init.criticSafe !== false;
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify(
+                  safe
+                    ? { safe: true }
+                    : { safe: false, category: "impersonation", why: "names a real person" }
+                ),
+              },
+              finish_reason: "stop",
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }
+
     return new Response(JSON.stringify(response), {
       status: init.status ?? 200,
       headers: { "content-type": "application/json" },
     });
   }) as typeof fetch;
   return calls;
+}
+
+/**
+ * The Zernio calls only.
+ *
+ * ⭐ `zernioCalls(calls)[0]` is now the SAFETY CRITIC, not the post — the check runs
+ * immediately before the vendor call, so anything indexing position 0 is
+ * asserting on the critique. That two tests broke this way is the useful part:
+ * it proves the gate is genuinely on the path rather than beside it.
+ */
+function zernioCalls(calls: Call[]): Call[] {
+  return calls.filter(
+    (c) => !c.url.includes("openrouter") && !c.url.includes("/tools/validate/")
+  );
 }
 
 function client(): ZernioClient {
@@ -137,7 +211,7 @@ describe("IDEMPOTENCY — THE HEADER V1 NEVER SENT", () => {
   it("⭐ sends x-request-id, which is what makes a queue retry safe", async () => {
     const calls = stubZernio(created("https://twitter.com/a/status/1"));
     await publishText({ ...BASE, client: client() });
-    expect(calls[0].headers["x-request-id"]).toBe("idem_abc123");
+    expect(zernioCalls(calls)[0].headers["x-request-id"]).toBe("idem_abc123");
   });
 
   it("A 409 IS A SUCCESS — the text already went out", async () => {
@@ -170,14 +244,14 @@ describe("THE WIRE CONTRACT", () => {
     expect(ZERNIO_PLATFORM_SLUG.x).toBe("twitter");
     const calls = stubZernio(created("https://twitter.com/a/status/1"));
     await publishText({ ...BASE, client: client() });
-    const body = calls[0].body as { platforms: Array<{ platform: string }> };
+    const body = zernioCalls(calls)[0].body as { platforms: Array<{ platform: string }> };
     expect(body.platforms[0].platform).toBe("twitter");
   });
 
   it("publishes now rather than scheduling", async () => {
     const calls = stubZernio(created("https://twitter.com/a/status/1"));
     await publishText({ ...BASE, client: client() });
-    expect((calls[0].body as { publishNow: boolean }).publishNow).toBe(true);
+    expect((zernioCalls(calls)[0].body as { publishNow: boolean }).publishNow).toBe(true);
   });
 
   it("refuses empty text without calling the vendor", async () => {
@@ -293,7 +367,7 @@ describe("THE PLACEMENT IS THE PROOF", () => {
       idempotencyKey: "idem_snap",
     });
 
-    expect((calls[0].body as { content: string }).content).toBe(approved);
+    expect((zernioCalls(calls)[0].body as { content: string }).content).toBe(approved);
     const rows = (await t.run((ctx) =>
       ctx.db.query("placements").collect()
     )) as Doc<"placements">[];
@@ -386,7 +460,7 @@ describe("⭐ COLD REPLY — commenting on someone else's post", () => {
     // only. Marked live-proven in the spec.
     const calls = stubZernio(created("https://twitter.com/a/status/2"));
     await publishText({ ...BASE, client: client(), inReplyTo: "1991719382071013376" });
-    const body = calls[0].body as {
+    const body = zernioCalls(calls)[0].body as {
       platforms: Array<{ platformSpecificData?: { replyToTweetId?: string } }>;
     };
     expect(body.platforms[0].platformSpecificData?.replyToTweetId).toBe(
@@ -411,7 +485,7 @@ describe("⭐ COLD REPLY — commenting on someone else's post", () => {
   it("a plain post carries no platformSpecificData at all", async () => {
     const calls = stubZernio(created("https://twitter.com/a/status/1"));
     await publishText({ ...BASE, client: client() });
-    const body = calls[0].body as {
+    const body = zernioCalls(calls)[0].body as {
       platforms: Array<{ platformSpecificData?: unknown }>;
     };
     expect(body.platforms[0].platformSpecificData).toBeUndefined();
@@ -425,7 +499,9 @@ describe("⭐ COLD REPLY — commenting on someone else's post", () => {
 
     await t.action(internal.maya.publish.publishPlacement, {
       customerId,
-      snapshotText: "we hit this exact thing — here's what worked",
+      // No em-dash: it is a deterministic blocker on public posts. See the
+      // punctuation test below, which pins that behaviour deliberately.
+      snapshotText: "we hit this exact thing, here's what worked",
       idempotencyKey: "idem_cold",
       inReplyTo: "1991719382071013376",
     });
@@ -434,5 +510,137 @@ describe("⭐ COLD REPLY — commenting on someone else's post", () => {
       ctx.db.query("placements").collect()
     )) as Doc<"placements">[];
     expect(rows[0].kind).toBe("reply");
+  });
+
+  /**
+   * ⭐ An em-dash POSTS. It is drift, not a blocker.
+   *
+   * It blocked until 2026-08-05, along with a hyphen-as-dash and — the one
+   * that made it obvious — **a colon**, so *"here's the thing: it works"*
+   * never went out. Between the three, most well-written posts were held, and
+   * a held post is indistinguishable from a quiet day.
+   *
+   * The operator's call, and it restores the standing rule: *non-catastrophic
+   * drift is logged, never dropped.* The tells are still real; they are now
+   * `SOUL.md`'s job, which is where outbound discipline belongs. The denylist
+   * keeps only what a prompt structurally cannot catch — internal terms and
+   * "as an AI", both of which are fatal on a founder's real account.
+   */
+  it("⭐ AN EM-DASH POSTS — punctuation is drift, not a blocker", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "emdash");
+    vi.stubEnv("ZERNIO_API_KEY", "test-key");
+    const calls = stubZernio(created("https://twitter.com/a/status/3"));
+
+    const result = await t.action(internal.maya.publish.publishPlacement, {
+      customerId,
+      snapshotText: "we hit this exact thing — here's what worked",
+      idempotencyKey: "idem_emdash",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(zernioCalls(calls)).toHaveLength(1);
+    const rows = await t.run((ctx) => ctx.db.query("placements").collect());
+    expect(rows).toHaveLength(1);
+  });
+
+  it("⭐ A CHANNEL THAT NEEDS MEDIA IS HELD IN OUR WORDS, BEFORE ANYTHING IS SPENT", async () => {
+    /**
+     * Our publish path is TEXT-ONLY — `publishText` sends `content` and
+     * `platforms[]` and no `mediaItems` at all. The live dry run says, per
+     * channel: X accepts text alone; Instagram, TikTok and YouTube all reject
+     * it and name media.
+     *
+     * So three of four channels cannot be published to until the media
+     * pipeline lands (§18 Sprint 7). Without the preflight that arrives as a
+     * vendor rejection AFTER the attempt; with it, it is a named hold — and in
+     * her words, not "Tiktok posts require media content".
+     */
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "needsmedia");
+    vi.stubEnv("ZERNIO_API_KEY", "test-key");
+    const calls = stubZernio(created("https://x.com/a/status/9"), {
+      preflightValid: false,
+    });
+
+    const result = await t.action(internal.maya.publish.publishPlacement, {
+      customerId,
+      snapshotText: "a text-only post for a channel that needs a picture",
+      idempotencyKey: "idem_media",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/without a video or an image/i);
+    // Vendor phrasing never reaches the founder.
+    expect(result.error).not.toMatch(/Tiktok posts require/i);
+    // And nothing was spent: no publish call, no placement.
+    expect(zernioCalls(calls)).toHaveLength(0);
+    expect(await t.run((ctx) => ctx.db.query("placements").collect())).toHaveLength(0);
+  });
+
+  it("⭐ MEDIA REACHES BOTH THE PREFLIGHT AND THE POST", async () => {
+    /**
+     * Two places, and missing either is silent:
+     *
+     * - the PREFLIGHT judges the whole payload, so omitting media there makes
+     *   it reject the very post it is meant to be clearing
+     * - the POST is the point
+     *
+     * Threading it through the JOB PAYLOAD is the third time down this exact
+     * path — `inReplyTo` was dropped there and replies posted into the void;
+     * `inboxItemId` was dropped there and answered items stayed open.
+     */
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "withmedia");
+    vi.stubEnv("ZERNIO_API_KEY", "test-key");
+    const calls = stubZernio(created("https://x.com/a/status/11"));
+
+    const result = await t.action(internal.maya.publish.publishPlacement, {
+      customerId,
+      snapshotText: "a post with a picture",
+      idempotencyKey: "idem_media_ok",
+      mediaUrlsJson: JSON.stringify([
+        { type: "image", url: "https://example.com/shot.png" },
+      ]),
+    });
+
+    expect(result.ok).toBe(true);
+    const preflight = calls.find((c) => c.url.includes("/tools/validate/post"));
+    const post = zernioCalls(calls)[0];
+    expect((preflight?.body as { mediaItems?: unknown[] }).mediaItems).toHaveLength(1);
+    expect((post.body as { mediaItems?: unknown[] }).mediaItems).toHaveLength(1);
+  });
+
+  it("⭐ A MALFORMED MEDIA LIST HOLDS WITH A REASON, IT DOESN'T THROW", async () => {
+    // A job that dies on a parse error is invisible. A hold names itself.
+    expect(parseMediaUrls("not json")).toBeUndefined();
+    expect(parseMediaUrls("[]")).toBeUndefined();
+    expect(parseMediaUrls(JSON.stringify([{ nope: 1 }]))).toBeUndefined();
+    expect(parseMediaUrls(JSON.stringify([{ type: "video", url: "u" }]))).toEqual([
+      { type: "video", url: "u" },
+    ]);
+    // Unknown type falls back to image rather than dropping the asset.
+    expect(parseMediaUrls(JSON.stringify([{ type: "weird", url: "u" }]))).toEqual([
+      { type: "image", url: "u" },
+    ]);
+  });
+
+  it("⭐ BUT 'as an AI' STILL BLOCKS — that one IS catastrophic", async () => {
+    // The line the denylist still holds: our plumbing or a model unmasking
+    // itself, under the founder's real name.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "aiblock");
+    vi.stubEnv("ZERNIO_API_KEY", "test-key");
+    const calls = stubZernio(created("https://twitter.com/a/status/4"));
+
+    const result = await t.action(internal.maya.publish.publishPlacement, {
+      customerId,
+      snapshotText: "As an AI, I think this tool is great for founders",
+      idempotencyKey: "idem_ai",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(zernioCalls(calls)).toHaveLength(0);
+    expect(await t.run((ctx) => ctx.db.query("placements").collect())).toHaveLength(0);
   });
 });

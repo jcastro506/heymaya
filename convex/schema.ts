@@ -555,9 +555,13 @@ export default defineSchema({
   // local-post create/update, FB Pages post, IG Business post, plus TikTok
   // / LinkedIn / X / Pinterest / Threads. Per service plan § 3 layer table
   // (operator decision 2026-04-27), v0 stays Zernio-mediated until the
-  // operator's GBP / Meta / TikTok partner-access applications land — at
-  // which point the parked code under `convex/integrations/gbp/direct/`
-  // becomes the upgrade path.
+  // operator's GBP / Meta / TikTok partner-access applications land.
+  //
+  // ⚠️ STALE — this whole block describes the DELETED service product
+  // (plumbers/HVAC, GBP-driven). `convex/integrations/gbp/` was the parked
+  // "upgrade path" it referred to and was removed 2026-08-06: zero callers,
+  // and the product it served no longer exists. These tables are part of the
+  // orphaned set pending Sprint 0b.
   //
   // We deliberately do NOT extend the creator-side `connectedAccounts` table
   // — it is `creatorId`-scoped, single-account-per-creator, and the service
@@ -3787,6 +3791,20 @@ export default defineSchema({
     formatCardId: v.optional(v.string()),
     /** Invariant 4: every publish carries one. */
     idempotencyKey: v.string(),
+    /**
+     * ⭐ Zernio's own post id — the join key for backfilling a URL.
+     *
+     * Instagram publishes ASYNCHRONOUSLY: the create call returns `ok` with no
+     * `platformPostUrl`, and the link appears on the post record moments
+     * later. Verified live 2026-08-05 — our placement recorded `unknown`
+     * while `https://www.instagram.com/p/DbrZX_HDLhk/` was already live.
+     *
+     * Recording `unknown` is right (invariant 1: never an assumed URL), but
+     * without this id there is no way back to the post to ever learn the
+     * truth — so the placement stays `unknown` forever, never counts toward
+     * the cadence, and the founder never gets a link.
+     */
+    zernioPostId: v.optional(v.string()),
   })
     .index("by_customer", ["customerId"])
     .index("by_customer_and_publishedAt", ["customerId", "publishedAt"])
@@ -3795,6 +3813,61 @@ export default defineSchema({
       searchField: "snapshotText",
       filterFields: ["customerId", "channel"],
     }),
+
+  /**
+   * ⭐ People talking to her — the other half of the product (§5.2 sweep 5).
+   *
+   * "Posts it, and answers everyone who replies." The `reply` tool has existed
+   * since Sprint 3 and refuses without an `inReplyTo`, telling her to *"find it
+   * and call again"* — and **there was nothing to find it with.** The Zernio
+   * inbox wrappers were verified live on 2026-08-01 and no product code ever
+   * called them.
+   *
+   * This is a table rather than a live fetch for one reason: §13.4 puts
+   * *"whether I already replied to someone"* squarely in the rows column. A
+   * model deciding that from context will eventually answer the same person
+   * twice, which is the single most obvious way to look like a bot.
+   */
+  inboxItems: defineTable({
+    customerId: v.id("customers"),
+    /** The platform's own id. The dedupe key — see `by_customer_and_external`. */
+    externalId: v.string(),
+    channel: v.string(),
+    /** Who said it. Absent when the platform doesn't tell us. */
+    authorHandle: v.optional(v.string()),
+    text: v.string(),
+    permalink: v.optional(v.string()),
+    /** When THEY posted it, not when we saw it. */
+    postedAt: v.number(),
+    firstSeenAt: v.number(),
+    /**
+     * `answered` carries the placement that answered it, so "did we reply?"
+     * and "with what?" are the same lookup. `skipped` is a real decision with
+     * a reason, never silence.
+     */
+    status: v.union(
+      v.literal("open"),
+      v.literal("answered"),
+      v.literal("skipped")
+    ),
+    /**
+     * ⭐ What it takes to actually REPLY to this.
+     *
+     * Only X replies through the publish path (`platformSpecificData
+     * .replyToTweetId`). Instagram and YouTube go through
+     * `replyToComment`, which needs the PARENT POST's id and the Zernio
+     * account id — neither of which is derivable from a comment id. Without
+     * these stored at ingest, a comment is readable and unanswerable.
+     */
+    parentPostId: v.optional(v.string()),
+    zernioAccountId: v.optional(v.string()),
+    answeredWithPlacementId: v.optional(v.id("placements")),
+    skipReason: v.optional(v.string()),
+    resolvedAt: v.optional(v.number()),
+  })
+    .index("by_customer", ["customerId"])
+    .index("by_customer_and_status", ["customerId", "status"])
+    .index("by_customer_and_external", ["customerId", "externalId"]),
 
   /**
    * Point-in-time copies of the agent's curated long-term memory (§2.9.6).

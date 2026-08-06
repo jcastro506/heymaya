@@ -239,6 +239,135 @@ That's honest, still valuable, and it turns a hard ceiling into a visible servic
 | **YouTube** | Full loop + **permanent searchable content** |
 | **X** | Full loop + **cold reply** + real links |
 
+#### 2.15.1 ⭐ MEASURED, 2026-08-05 — the first live probe of the grid
+
+`convex/maya/zernioCapability.ts` calls Zernio and builds the grid. First run:
+
+| | count |
+|---|---|
+| `verified` | **0** |
+| `declared_only` | 6 — all X, all Zernio's own claim |
+| `unconnected` | 14 — TikTok, Instagram, YouTube |
+| `impossible` | 4 — with a platform reason each |
+
+**Nothing about Zernio is proven on any channel.** What the probe did find:
+
+- ⚠️ **`/inbox/comments` returned `accountsQueried: 0`** against one healthy
+  connected account, while `/inbox/conversations` returned `1` on the same
+  pass. Zero is not an empty inbox — it is *"I didn't look"*, and the two were
+  indistinguishable from `data: []`. **This made the inbox report "0 new" while
+  reading nothing at all.** Now surfaced as unreadable.
+- ⚠️ **`/analytics` is broken for our account**: `lastSync: null`, empty
+  `posts[]` while the overview claimed 9 published, and **zero results when
+  filtered by `platform=twitter`** — that account's own platform string. Post
+  metrics come from twitterapi.io instead.
+- ⚠️ **`/best-time?platform=twitter` returns HTTP 200 with an HTML page.** Not a
+  404 — a 200. A `.passthrough()` schema is exactly what fails to notice that.
+- ⚠️ **Two connections for the same handle**, one healthy and one
+  `needsReconnect` with `issues: ["Account inactive"]`. Only healthy accounts
+  define a channel's capability, or a stale duplicate answers for it.
+- **`tokenExpiresAt` is returned on `/api/v1/accounts` and nothing reads it.**
+  The live X token expired under two hours after this was written.
+
+⭐ **Declared is not verified.** That account declared
+`canFetchAnalytics: true` while analytics returned nothing usable. The grid
+keeps the two apart on purpose.
+
+⭐ **And `unconnected` is the finding that decides the roadmap.** Three of four
+channels have no account attached, so **nothing about them can be checked until
+one is.** That turns "should we connect Instagram and YouTube?" from a
+preference into a prerequisite — their entire column is a guess until then, and
+§2.15.05 already warns that guessing is how this matrix went wrong.
+
+#### 2.15.15 ⭐ MEASURED AGAIN, all four channels connected
+
+The operator connected TikTok, Instagram and YouTube. Re-probed, read-only,
+per channel — and the results do not match the doc matrix above:
+
+| | `inbox/comments` | `analytics` |
+|---|---|---|
+| **YouTube** | ✅ queried, **2 rows** | ✅ 1 post |
+| **Instagram** | ✅ queried, 0 rows | 0 |
+| **TikTok** | no `meta` at all — consistent with having no comment API | 0 |
+| **X** | ❌ **`accountsQueried: 0`** | 0, despite 3 published |
+
+⭐ **`/inbox/comments` does not return comments.** It returns the WORK QUEUE —
+posts of ours that may have comments — which is what §2.15.2 calls *"list
+commented posts"*. The two YouTube rows were **our own videos**:
+
+```
+{ id: "GtO7pd2o5BM", content: "Sensocore release 2",
+  accountUsername: "joshuacastro7418", commentCount: 0 }
+```
+
+`content` is the video title; `accountUsername` is ours. The inbox was
+recording these as inbound, so **she would have replied to the founder's own
+posts** — the same "answering yourself" failure the X path already guards
+against, arriving through the other vendor. Rows with `commentCount === 0` are
+now skipped, and this endpoint contributes the queue and never the content.
+
+**Getting the actual comment text needs a per-platform call.** `igListComments`
+is wrapped; the YouTube and X equivalents are not. Until they are, **X inbound
+comes entirely from twitterapi.io mentions** — which is fortunate rather than
+designed, since Zernio's X comment path returns `accountsQueried: 0`.
+
+⚠️ `analytics` now reports a real `lastSync`, where an hour earlier it was
+`null` — so the earlier "broken" reading was partly *never synced*. YouTube
+returns a post; X still returns nothing for three live placements. Re-check
+before concluding anything permanent about it.
+
+#### 2.15.17 ⭐ X analytics and inbox are OFF — and should stay off
+
+Both "breakages" in §2.15.15 have the same, non-bug cause. Every account row
+carries `xCapabilities`, and on the **twitter** row it reads:
+
+```json
+{ "analytics": false, "inbox": false }
+```
+
+That is why `/analytics` returns nothing for three live X placements and
+`/inbox/comments` reports `accountsQueried: 0`. Zernio is not broken; **X reads
+are switched off**, because X is the one channel Zernio bills **pass-through**
+rather than including — roughly **$0.005 per read**.
+
+⭐ **The decision, with the number:** leave them off.
+
+| | per read |
+|---|---|
+| Zernio X pass-through | **$0.005** |
+| twitterapi.io (`$0.15`/1,000) | **$0.00015** |
+
+**Thirty-three times cheaper**, for the same fact, from the vendor §2 already
+designates for X reads — *"read via twitterapi.io, write via Zernio."* We were
+already doing this by accident: post metrics come from
+`/twitter/tweets?tweet_ids=` (batched, so a whole fleet refresh is cents), and
+inbound comes from `getMentions`.
+
+So this is the first row of §2.15.2 to get an answer: **never**, on cost, with
+a working alternative already shipped. Turning them on would buy nothing and
+cost 33× per read forever.
+
+⚠️ It does mean **X is the one channel whose inbound does not flow through the
+Zernio path at all**. If the twitterapi.io mentions call ever breaks, X inbound
+goes silent with nothing behind it — worth a liveness check that is specifically
+about X, not about the inbox in general.
+
+#### 2.15.18 Instagram is a Business account — checked, not assumed
+
+The operator flagged it might be personal. It is not. The granted scopes are:
+
+```
+instagram_business_basic · instagram_business_content_publish
+instagram_business_manage_insights · instagram_business_manage_messages
+```
+
+Meta issues `instagram_business_content_publish` **only** to Business/Creator
+accounts — a personal account cannot complete that OAuth at all. Token valid to
+2026-10-04, `platformStatus: active`, `needsReconnection: false`.
+
+**No action needed**, and worth recording so nobody re-litigates it: the
+permission list is the evidence, not the account settings screen.
+
 #### 2.15.2 Zernio capability we're not using
 
 The docs expose considerably more than the client wraps:
@@ -1347,6 +1476,160 @@ brief = {
 }
 ```
 
+#### 7.5.35 ⭐ SPIKE — Creatify vs Higgsfield vs Arcads, decided by output
+
+*Operator-raised 2026-08-06, extended the same day to three vendors. Creatify
+is currently a single point of failure on the one capability that is fully
+blocked (§7.6.5a, §18 open question 1), and "the vendor we already wrapped" is
+not a reason to keep it.*
+
+⚠️ **Arcads is a different shape and must be judged as one.** It is built for
+PAID ad creative — AI actors reading scripts, made in volume, with spend behind
+them. Two consequences: its output may be tuned for a context where "looks like
+an ad" is correct, which is the opposite of §7.5.3's floor; and its per-unit
+price is set against ad budgets rather than a $149 tier. Both are answerable by
+the same tests below, and neither is a reason to skip it.
+
+**Both of Creatify's blockers are commercial, not technical** — self-serve API
+availability and **written commercial resale rights** — so a second vendor is
+not a nice-to-have. If Higgsfield answers either more cleanly, it changes what
+ships.
+
+⚠️ **Run the licence question FIRST and stop if it fails.** Rendering a hundred
+comparison videos against a vendor whose terms forbid reselling the output is
+work that cannot be used. This is the same trap §18's open question already
+names for Creatify; do not walk into it twice.
+
+| # | Question | Why it decides |
+|---|---|---|
+| 1 | ⭐ **Written commercial resale rights?** Get it in writing, not from a pricing page | A no ends the spike. Everything below is wasted otherwise |
+| 2 | **Self-serve API, or a sales call?** | §17.36 — a vendor gated behind enterprise onboarding cannot serve a $149 tier |
+| 3 | **Cost per 15s vertical, all-in** | Creatify's honest comparison is the `lipsyncs_v2` path at **7.5 cr ≈ $1.13**, not the Custom-Template 2.5 cr that isn't wrapped. Compare like for like |
+| 4 | **Does it take a founder's own footage?** | §7.5.3's authenticity floor is founder-footage → real screen recording → avatar last. A vendor that only does avatars is a rung, not a pipeline |
+| 5 | **Render time vs post time** | §7.5.7 check 7 — a 1:10 ratio is already the budgeted assumption |
+| 6 | **What happens on failure** | A render that dies silently at 11:00 costs a placement. Named failure or nothing |
+
+**The test that actually decides it (4 and 6 aside):**
+
+⭐ **One brief, both vendors, blind.** Take a real brief from the idea bank —
+grounded in a real complaint, with the founder's real screen recording — render
+it both ways, and judge with the **cringe eval already built** (§18 Sprint 4.5):
+pairwise against real niche posts, 50% is a perfect score, and a run that
+misses the synthetic control is **void**.
+
+That instrument exists and is the only honest way to answer "which is better",
+because "which looks better to us" is the judgment this product exists not to
+trust.
+
+⭐ **And one question only Arcads raises:** they appear to be launching an agent
+of their own. If a vendor is becoming a competitor, buying our core capability
+from them is a dependency on someone with a reason to raise our price or close
+the door. That is not a technical answer and it does not belong in a render
+test — but it belongs in the decision, so it is written here.
+
+**Exit:** a table with a price, a licence answer, and a cringe-eval number per
+vendor — and a decision written down. **Not** "Higgsfield seems nicer."
+
+**Cost:** a handful of renders each. Trivial next to the cost of building the
+whole video pipeline against the wrong vendor.
+
+#### 7.5.36 ⭐ The storyboard check — show the stills before spending a credit
+
+*Operator saw Arcads show the user still images from a post before rendering
+the whole thing, and asked whether we can do that through Creatify.*
+
+**Yes — and by not using Creatify's preview endpoint, which answers a different
+question.**
+
+##### What Creatify's preview actually is
+
+`preview_list_async` → `render_single_preview`
+(`convex/integrations/creatify/endpoints.ts`) fans out several **visual-style**
+previews at 1 cr/30s each, then renders only the chosen one at 4–5 cr/30s. It
+is a genuine **cost lever** and it is already built — but it answers *"which
+look?"*, not *"is this scene right?"*. It also still burns credits per preview.
+
+⚠️ It is wired only into `convex/gtmMaya/` — the frozen v1. `convex/maya/` has
+no video path at all until Sprint 9.
+
+##### ⭐ CORRECTION — the Link IS the screenshot-approval step
+
+*Operator, 2026-08-06: "when I use Creatify, it first creates screenshots and
+then it shows them to me… it says 'here's what I'm making,' and I okay them.
+Have you checked?" He was right; the first answer below was written from our
+own wrapper's comments rather than from Creatify. Checked against the published
+OpenAPI on 2026-08-06.*
+
+**The Studio step he describes is the `Link` object, and it is fully
+API-addressable.** It is not the preview endpoint at all:
+
+| Studio | API |
+|---|---|
+| paste a URL | `POST /api/links/` — scrapes and returns **`image_urls`**, `logo_url`, `title`, `description`, `ai_summary`, `ai_industry`, `ai_target_audiences` |
+| *"here's what I'm making"* | **those `image_urls` ARE the screenshots.** They come back on the create response — no extra call needed |
+| you okay / edit them | `PUT /api/links/{id}/` — we already wrap this as `updateLink` |
+| or supply your own | `POST /api/links/link_with_params/` — takes `image_urls`, `video_urls`, `logo_url`, `title`, `description`, `reviews` |
+| it makes the video | `POST /api/link_to_videos/` against that link id |
+
+**All three write wrappers already exist** in `convex/integrations/creatify/`.
+What is missing is only the pause — the moment where we show the founder and
+wait. ⚠️ There is no `GET /api/links/{id}/` wrapper, but none is needed for the
+approval flow: the create response already carries the images.
+
+⭐ **And §7.6.2's existing rule makes this stronger, not redundant.** Because we
+*always* use `link_with_params` and never let Creatify scrape, the founder is
+approving **our** picks from the media library (§7.5.31) — not Creatify's guess
+at their site. The approval step and the grounding rule are the same mechanism
+seen from two ends.
+
+⚠️ **What `preview_list_async` is NOT.** Confirmed against the OpenAPI: each
+preview carries `media_job`, `visual_style` ("FullScreenTemplate"), `url` (an
+embeddable *player* page), `aspect_ratio`. **No image, thumbnail, scene, frame
+or storyboard field anywhere**, and `video_thumbnail` stays `null` until the
+final render. It answers *"which look?"*, not *"is this scene right?"*.
+
+##### The same idea on the avatar path, for free
+
+
+
+`lipsync_v2` is a **composer, not a generator**: we supply the scenes. Every
+b-roll scene's `background.url` is a file *we* chose from the media library
+(§7.5.31), and every avatar scene's persona carries a `preview_image_9_16` from
+`/api/personas_v2/` — **a free GET**.
+
+So before a single credit is spent we already know, exactly, what every scene
+will show. The storyboard is assemblable from things we already hold:
+
+| Scene | The still we already have | The words |
+|---|---|---|
+| avatar | persona `preview_image_9_16` (free) | that scene's `input_text` |
+| b-roll | **the actual media-library asset** — the real screenshot | its voiceover line |
+
+⭐ **This is strictly better than the vendor preview**, on three axes: it costs
+**zero**, it shows the *exact* frames rather than a representative style, and it
+rides the approval loop that already exists (§4 — the founder answers in
+Telegram, one message, *just go* or a change).
+
+⭐ **And it makes the correction cheap at the only moment it is cheap.** A
+founder who says "that's the wrong screenshot" after the render has burned the
+credits; the same sentence before the render costs nothing. §7.5.3's
+anti-slop gate catches *our* failures — this catches the ones only the founder
+can see, because only they know the product is mid-redesign or that screen is
+from the old pricing page.
+
+⚠️ **Unverified, and honestly so.** `lipsync_v2` is marked *docs-derived and
+UNVERIFIED LIVE* in `types.ts`, and we hold **no Creatify API keys** (§18 open
+question 1). This is a design that can be built and cannot yet be proven.
+
+##### It becomes a spike axis
+
+"Can you check before you pay?" is now a **comparison question for all three
+vendors** in §7.5.35 — and the composer property is what makes it possible, so
+the axis is really *does this vendor let us supply the scenes, or does it only
+take a prompt?* A vendor that only accepts a prompt cannot be storyboarded at
+any price.
+
+
 #### 7.5.4a What we trust Creatify with, and what we never do
 
 *Operator, 2026-08-05: "Creatify is a whole business built on creating social
@@ -2404,6 +2687,213 @@ Five levels. **Which level is broken tells you what to fix** — and a real mana
 > "You got 11,000 views this week and 140 clicks — that's a healthy top of funnel. But 3 signups off 140 clicks is a 2% conversion rate, and for a free tool that should be 10–20%. The content is working. Your landing page isn't. I'd look at the headline before I make more videos."
 
 A manager who tells you the truth about *why* it isn't working is worth more than one who just posts more. **This should be built deliberately as a subsystem, not as a fallback** — it's more defensible than anything in the content pipeline, and it's the thing that makes the product feel like it has judgment.
+
+#### 14.2.1 ⭐ BUILT 2026-08-05 — and what still isn't
+
+`convex/maya/ladder.ts` computes the rung from `placements`, and `history`
+carries it plus every placement's metrics and `metricsAsOf`.
+
+**Before this, the Sunday cron asked *"which of the five rungs is working"* and
+`history` returned no numbers at all** — URL, channel, kind, text, date. A
+diagnosis with nothing under it leaves two outcomes: she says she can't, or she
+guesses.
+
+The rung is **computed, not judged** (§2.3): which rung broke is arithmetic on
+rows; what it means and what to do stays hers. First live run, on the real
+account:
+
+> *"6 posts and 90 views — almost nobody saw them, so this is a format problem,
+> not a topic one."* — `L1`
+
+⭐ **`unknown` is a real answer.** No numbers back yet returns `unknown` and
+says so, never a rung that sounds plausible. And `healthy` states what it
+cannot see — L3 and L4 need the attribution ladder (§14.45), so calling them
+fine from silence is the dishonesty §14.2's worked example exists to prevent.
+
+**Every channel's engagement vocabulary is summed**, not one of them: X returns
+`replies`/`reposts`, Zernio returns `comments`/`shares`/`saves`. Insisting on
+one silently scores the other channel as zero.
+
+### ✅ 14.2.2 The loop is CLOSED — the rung now reaches Monday
+
+*Was: `ideas.ts` never read performance, so the ladder told her on Sunday it
+was a format problem and Monday's idea selection happened exactly as if it
+hadn't.*
+
+`nextIdea` now reads the rung — from the **same pure function** the weekly
+verdict uses, so the report and the decision can never disagree.
+
+That is the difference between a manager who *reports* and one who *manages*.
+A human notices the posts that opened with a question got three times the
+replies, and **makes more of those**. Right now the finding reaches the founder
+and never reaches the work.
+
+⭐ **And deliberately NOT "the posts that did well used this hook, so use that
+hook."** §14.3 forbids it: at 30–90 posts a month own data **cannot** answer
+format questions, and a system optimising hooks off 40 data points *"is fitting
+noise and will produce confident nonsense"*.
+
+So own data is used only for the coarse thing it can answer — **which kind of
+problem we have** — and that selects which EVIDENCE to trust, straight from
+§14.2's own table:
+
+| rung | means | so prefer |
+|---|---|---|
+| **L1** | nobody saw it — a format problem | `observation` / `format_card` — things that demonstrably travelled here |
+| **L2** | they saw it and scrolled — a topic problem | `complaint` / `own_comment` — a real person naming what they care about |
+
+⭐ **The nudge is ±25% and evidence still dominates.** A one-off observation
+must never outrank a thing thirteen people complained about because a weekly
+verdict tilted the table — asserted by a test. **`L0` and `unknown` change
+nothing**: L0 is our own failure to post, and letting it reshuffle the bank
+would invent a content lesson from a week we simply didn't work.
+
+**It says so, too.** A ranking that shifted silently is one nobody can argue
+with later, so the reason names the rung: *"…but last week said nobody saw us,
+so what travels here matters more."*
+
+The remaining half:
+
+| Question | Answered from |
+|---|---|
+| Which channel is working? growing? clicking? | **own data** — coarse, and n is enough |
+| Which hook, length, shape, format? | **the niche corpus** — where n actually exists |
+
+The rung picks *which* question to ask; the corpus answers the format half.
+Scheduled as **Sprint 8**, with the ladder now real enough to build on.
+
+#### 5.2.3a ⚠️ MEASURED — the trend sweep has a low hit rate, and two sources are dead
+
+Built and run live 2026-08-05. Results worth writing down before anyone
+budgets time against this sweep:
+
+| source | state |
+|---|---|
+| TikTok `get-trending-feed` | ✅ works, normalised posts with statistics |
+| YouTube `shorts/trending` | ✅ works, 77 shorts with view/like/comment counts |
+| X `trends` | ✅ names + rank, **no engagement** |
+| TikTok `hashtags/popular` | ⛔ **dead upstream** — *"TikTok took this page down"* |
+| TikTok `songs/popular` | ⛔ **dead upstream** — *"this endpoint is unavailable"* |
+
+§5.2 lists all five. **Two no longer exist**, and the vendor says so in plain
+English rather than failing — recorded so nobody spends an afternoon
+re-discovering it.
+
+⭐ **And the first live run kept 0 of 56.**
+
+> *"nothing in 56 trending posts belongs to this niche"*
+
+That is the sweep working correctly, not failing. Global trending is
+mass-market — a live X pull had `#AEWDynamite` at rank 1 — and a narrow B2B
+niche rarely intersects it. Banking those would have her chasing wrestling
+hashtags, which is the failure `learn-business` already hit once when
+"engagement" surfaced wedding photographers.
+
+**The implication for §14.3's format question.** The corpus that answers *"what
+shape works here"* is **not** the global trending feed. It is the
+keyword-searched posts the topic sweep already ranks by velocity — those are
+in-niche by construction. The trend sweep is a **cheap wide net for the
+occasional crossover moment**, not a primary source, and should be scheduled
+and budgeted as one. **Weekly, not daily**, with the hit rate logged: a
+customer whose niche never intersects trending is a customer this sweep should
+stop running for.
+
+#### 5.2.6a ⭐ MEASURED — the grounded search was silently ungrounded
+
+Built and run live 2026-08-05. **All six sweeps now have callers.**
+
+⚠️ **The bug found on the way is the one worth recording.**
+`geminiGroundedSearch` defaulted to `maxOutputTokens: 1024`. Gemini emits its
+citations *after* the prose, so at that budget the same query returned:
+
+| budget | result |
+|---|---|
+| **1024** | `finishReason: MAX_TOKENS` · **0 `groundingChunks`** · a fluent, confident summary |
+| **4000** | `finishReason: STOP` · **7 chunks** (indiehackers.com, reddit.com) |
+
+**A too-small budget does not shorten the answer — it strips the grounding and
+leaves the prose.** For a product whose rule is *grounded or silent*, that is
+the worst possible output: a paragraph about nothing that reads like a finding,
+with nothing downstream able to tell.
+
+Exactly the shape of the safety critic's `maxTokens: 300`, which spent its
+budget on reasoning tokens and returned an empty verdict. **Two silent
+truncations in one codebase; assume a third.**
+
+⚠️ **Gemini's `uri` is an opaque redirect** —
+`vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQ…` — and the
+wrapper's `author` field is `domainOf(url)`, i.e. *the redirect's* domain.
+Using it would have her citing Google for everything. The chunk's `title`
+carries the real host, and that is what she quotes.
+
+**Live result:** 3 grounded findings, 0 unciteable, citing `dev.to`,
+`reddit.com`, `indiehackers.com`, `quora.com` — including a real quoted phrase,
+*"marketing tasks consume a brutal amount of time, often more than coding."*
+
+#### 6.4.6c ⚠️ MEASURED — the media library currently cannot fill by ANY route
+
+*2026-08-06. Both inlets checked live, both closed.*
+
+| inlet | state |
+|---|---|
+| founder sends a file to Telegram | ⛔ **R2 unconfigured** — all four env vars absent, so `uploadAsset` cannot store bytes |
+| scrape the product page | ⛔ **`hey-maya.ai` yields 0 extractable images** |
+
+The scraper itself works: `linear.app` returns **12** candidate images through
+the same call. `hey-maya.ai` returns **0** — HTTP 200, no `<img>` to find.
+
+⭐ **The consequence is concrete.** §7.5.35's dry run confirmed Instagram and
+TikTok both reject a text-only post. So with no library, those two channels
+have no path to a real image, and the only channel that can carry a post today
+is X.
+
+⭐ **And the scrape path needs no R2**, which is why it is worth having: Zernio
+FETCHES the URLs we hand it (verified — it pulled a 12.95 MB mp4 from
+`media.zernio.com`). A screenshot already hosted on the founder's own site is
+already a public URL, so there is nothing to store. `fillFromProductPage`
+records the URL and the publish path passes it straight through.
+
+**Two operator items, and the first is cheap:**
+
+1. **Put real product screenshots on the page.** It fixes the media library and
+   the keyword derivation at once — §5.0.0's keywords come from that same page.
+2. **R2 credentials**, which unblocks the founder-upload path.
+
+Only one is needed for Instagram to work.
+
+#### 5.2.1a ⭐ Watching the competition — and how we know who they are
+
+*Added 2026-08-05 on the operator's suggestion, while weighing a different
+product idea. It survived that comparison as a feature rather than a pivot.*
+
+**Nobody is ever asked to name their competitors.** `rankAccounts` already
+ranks accounts by how many **different validated keywords** they appear under,
+so an account showing up beneath two separate niche terms lives in this world,
+and one that appeared once was passing traffic. Live, that is **3 of 30**
+tracked accounts.
+
+⭐ **What earns a message is not "they posted."** They post constantly, and a
+feed of that is a notification setting, not an employee.
+
+It is **a post that materially beats their own baseline.** Discovery already
+stores each account's `medianVelocity`, so the question needs no judgment: is
+this one pulling far harder than what they normally pull?
+
+**Compared to themselves, never to an absolute floor.** A 10k-view account and
+a 200-view account both have breakout posts; an absolute threshold only ever
+surfaces the big accounts, who are the least comparable to a founder starting
+out and therefore the least useful to study.
+
+⚠️ **No baseline means no verdict.** A naive divide by a zero median makes
+every post infinitely surprising, so the first thing a founder ever heard would
+be noise about an account we know nothing about.
+
+**Live first run:** watched 3, one breakout — `@kelsietechtips`, a post at
+**12× their usual**, *"A great portfolio helps… but these are the 3 things…"*.
+
+**Cost:** one request per watched account, daily, capped by the two-keyword
+rule. A watchlist that costs thirty requests to say nothing is how a cheap read
+becomes a line item.
 
 ### 14.3 How she learns — and the small-n problem
 
@@ -3998,14 +4488,15 @@ new until Sprint 3's gate holds.
 |---|---|---|---|
 | **0 Reclaim** | ✅ done | both products deleted, schema 142→70, CI | — |
 | **1 Perception** | 🟡 ~85% | endpoints split per-platform · all P0 wrappers (params verified live) · X expansion · manifest 404s fixed · smoke suite tiers 1–2 green on 5 vendors · 5 of 14 Zernio wrappers verified | 9 Zernio wrappers (4 are writes) · Creatify + R2 keys · tier 3 |
-| **2 Spine** | 🟡 ~85% | data model · job queue · planFeatures · message log · agentVersion routing · **the watchers layer (Convex crons)** · Telegram transport · spend ceiling · the archive (§16.8) | persistent session + volume · runtime shape — **both need a live machine** |
+| **2 Spine** | ✅ **exit criterion MET** — asked in a fresh turn straight after a MACHINE RECREATE, she quoted two live X URLs from `placements`. That is the criterion verbatim: *you can text her and she answers from rows, across a redeploy* | data model · job queue · planFeatures · message log · agentVersion routing · **the watchers layer (Convex crons)** · Telegram transport · spend ceiling · the archive (§16.8) | persistent session + volume · runtime shape — **both need a live machine** |
 | **2.5 Luna** | ✅ shipped | main brain + judges on gpt-5.6-luna | the week-long watch hasn't run |
 | **2.9 Harness correction** | 🟢 **code complete** | always-on · heartbeat + cron store · memorySearch + temporal decay + MMR · dreaming · memory-wiki · active-memory · `MEMORY.md` seed-not-clobber · the boot script that actually installs the plugin · `scheduler.ts` shrunk to delivery + publish · anti-drift + handler-coverage tests · daily memory checkpoint | **only the exit criteria** — every one needs a deployed machine |
-| **3 X — the gamble** | 🟡 ~65% | ⭐ **`cadence.ts` — the streak instrument the exit criterion needs** · **the iron rule** · preflight (token, 280, duplicate) · **the tool surface** (`publish`/`reply`/`ask_founder`, tenant-safe by shape) · **the three skills + CONVENTIONS** · **the `maya-tools` plugin** | ⚠️ **brief + recap were counted as done and are not** — they were Convex crons feeding a `wake_agent` job with no handler · rate limits · **the 7-day exit** |
-| **4 Brand** | 🟡 ~45% | buyer map · voice-from-edits · asset classifier · **the §6.4.6 spike, run** | learn-business/voice/brand · brand kit · media library |
-| **5 Perception live** | 🔴 ~10% | complaint→content · quality gates | the six sweeps · Screen model · idea bank · plan-day |
+| **3 X — the gamble** | 🟡 ~80% | ⭐ **the chain runs end to end, live** — scroll → idea → draft → safety critic → approval → publish → placement → metrics. Two bugs were holding it: the safety critic had NO CALLER, and the prompt still demanded a critique subagent that had been deleted, so the 11:00 job drafted and held every day. `cadence.ts` measures the run | ⭐ **`cadence.ts` — the streak instrument the exit criterion needs** · **the iron rule** · preflight (token, 280, duplicate) · **the tool surface** (`publish`/`reply`/`ask_founder`, tenant-safe by shape) · **the three skills + CONVENTIONS** · **the `maya-tools` plugin** | ⚠️ **brief + recap were counted as done and are not** — they were Convex crons feeding a `wake_agent` job with no handler · rate limits · **the 7-day exit** |
+| **4 Brand** | 🟡 ~60% | media library + the asset ask (live: she asked for a screen recording unprompted, naming §7's no-fabricated-UI rule) · inbound Telegram files · ⭐ the plain-language guard — **8 of 39 real messages were leaking** (`"No response from OpenClaw."` ×4, a raw tool envelope, a draft id) | buyer map · voice-from-edits · asset classifier · **the §6.4.6 spike, run** | learn-business/voice/brand · brand kit · media library |
+| **5 Perception live** | 🟡 ~55% | scroll across **4 channels** (X was scrollable all along — its wrapper's only callers were in v1) · idea bank · complaint→content · quality gates · **the inbox** (`reply` had refused without an `inReplyTo` since Sprint 3 and nothing could produce one) · ⭐ **metrics read-back on every channel** | complaint→content · quality gates | the six sweeps · Screen model · idea bank · plan-day |
 | **6 Memory + liveness** | 🟡 ~65% | directive ledger · three commands · **liveness contract + sweep + fleet correlation** | directive compiler → server gates · balance circuit breakers |
-| **7–12** | 🔴 — | — | not started |
+| **5.5 Zernio, every channel** | 🟡 ~50% | ⭐ **all four channels published live through our own pipeline** · capability grid probed, not doc-read · X analytics/inbox priced and deliberately left OFF (33× twitterapi.io) · `validatePost` preflight | the write cells beyond `post` · smoke coverage per verified cell |
+| **7–12** | 🔴 — | ⭐ §14.2's **diagnostic ladder is built** (Sprint 8's spine) — computed from rows, live verdict `L1` on the real account | ⚠️ **§14.2.2 — the loop is open**: `ideas.ts`/`drafts.ts` never read performance, so she diagnoses on Sunday and Monday is unchanged. Sprint 7's media *generation* stays blocked on Creatify |
 
 **Three exit criteria are the real gates, and all three need a running agent:**
 
@@ -4520,6 +5011,72 @@ A lighter ask *and* a richer input, because one recording yields three things:
 | **Staleness** — every asset carries a capture date; a `product_truth` change flags assets as possibly stale; the public site is re-captured monthly |
 | **The Mission Control half** — the ONE place a founder can see what she has and drop in more. Not a media manager: a list, a drop zone, and what's missing |
 
+#### 6.4.7 ⭐ The drop zone — the Mission Control half, written out
+
+*Operator raised 2026-08-06: should we stop relying on the scrape and just ask?
+The measurements since say yes — but not in onboarding, and the ordering below
+is the whole design.*
+
+**What changed the weighting:**
+
+| | |
+|---|---|
+| §6.4.6b | **half** of target-type sites publish no usable product screenshot |
+| live, 2026-08-06 | **`hey-maya.ai` yields 0 extractable images** (linear.app yields 12 through the same code) |
+| live | **R2 unconfigured**, so the Telegram path cannot store bytes either |
+
+So scraping is demoted: not the primary source with the ask as fallback, but **a
+bonus that happens to work for about half of customers**. What the founder gives
+us is the reliable path, and today there is no working inlet at all.
+
+**⛔ Still not in onboarding**, and the existing reason holds: it competes with
+the OAuth step that decides activation, and a founder who has not yet seen a
+post has no reason to record anything. §14.45's rule is the same one — *ask for
+the next rung at the moment it matters, never at signup.*
+
+##### The upload path — and it may not need R2
+
+⭐ **Zernio's `/media/presign` hosts our files.** Verified live: a 12.95 MB mp4
+PUT in 6.4s, and **still fetchable byte-identical eight hours later** at
+`media.zernio.com`. Zernio then FETCHES that URL at publish time, which is the
+same path a scraped screenshot already takes.
+
+⚠️ **But the key is under `/temp/`.** Eight hours is not a retention policy, and
+a library whose assets vanish after thirty days is worse than no library —
+she would brief a video against a screenshot that 404s at render time. **Ask
+Zernio for the retention guarantee in writing before this becomes the storage
+layer.** If it is genuinely temporary, R2 is required and this is only a
+publish-time relay.
+
+##### What the screen is
+
+Per §18.9.3 this is **not a media manager**. Three things:
+
+1. **A drop zone** — one 30–60s screen recording, per §6.4.2's *one recording,
+   not five screenshots*: less work for them, and it yields frames, b-roll and
+   post ideas from a single file.
+2. **A grid of what she has**, with the depth indicator.
+3. **One line of what is missing**, in her words — *"Send me a screen recording
+   and I can make the good kind."* **Not a nag, not a modal.**
+
+⭐ **No tagging UI, no captioning, no folders, no editing.** Vision tags on
+ingest (§6.4, ~$0.0005/image) and the founder never sees a form. The moment a
+founder is *organising* their media, the dashboard has become the workbench
+§18.9.3 forbids, and she has become software with a UI.
+
+##### The rule the drop zone must not break
+
+**It does not replace the ask.** A founder who never opens Mission Control must
+still get everything — the Telegram ask already works and already fires only
+when the classifier says the library is genuinely empty. The drop zone is for
+the founder who prefers a browser, not a second thing to remember.
+
+**Exit:** a founder drags one recording into the grid and gets the same
+outcome as sending it in Telegram — tagged frames, usable b-roll, one banked
+idea. **Tests:** an upload through the drop zone and an upload through Telegram
+produce identical rows · the ask does not fire for a founder who has already
+dropped one · the grid never shows a nag when the library is healthy.
+
 #### Who gets asked, and when
 
 **Only the customers who need it, and only once.** The asset classifier already
@@ -4597,6 +5154,54 @@ and no metric substitutes for it.
 must stay majority real messages — a guard that mangles her metrics is worse
 than the leak it prevents (§13.55.2) · control-voids-the-run · every internal
 name is a proper noun, never a common word.
+
+### Sprint 5.5 — ⭐ Zernio, every channel, decided rather than inventoried
+
+*Added 2026-08-05. §2.15 already audits what Zernio can do per platform, §2.15.2
+lists what we aren't using, and §17.35.2 works out the COGS. **What's missing is
+a decision and a proof.** Three things force this sprint:*
+
+**1. The matrix is doc-only for three of four channels.** §2.15.05 says so
+outright. Every row for TikTok, Instagram and YouTube came from
+`docs.zernio.com`, and this repo's own history is a list of docs that were
+wrong: `create_time` in seconds, `nextCursor` nested in `pagination`, a
+`payload` field that is actually `raw`.
+
+**2. One smoke check guards all of it.** The vendor registry contains exactly
+one Zernio entry — `accounts-health`, a reachability ping. Publishing,
+analytics, inbox, DMs and comment replies have no coverage on any channel.
+
+**3. ⭐ Analytics is already known-broken on the one channel we use.** Checked
+live 2026-08-05, `/api/v1/analytics` returned `lastSync: null` and an empty
+`posts[]` while `overview.totalPosts` claimed 9 — and `?platform=twitter`, the
+account's own platform string, returned **zero** where no filter returned nine.
+Post metrics now come from twitterapi.io instead. **That is one channel. The
+other three have not been looked at, and the same failure there would be
+invisible** — an empty metrics field reads exactly like a post nobody saw.
+
+| Task |
+|---|
+| ⭐ **A capability × channel grid, live**: post · read own comments · reply to comment · DM · analytics · best-time, across TikTok / Instagram / YouTube / X. Each cell is `verified` with a date, `broken` with the observed payload, or `n/a` with the platform reason (TikTok comment reply is `n/a` — the API does not exist) |
+| Fold every cell into the vendor smoke suite at the right tier: **shape** daily, **round-trip** weekly and before any deploy touching Zernio (§17.36) |
+| ⭐ **Turn §2.15.2 into a decision, not a wish-list.** For each unused capability: adopt now / adopt later / never, with the COGS line and the reason. `frequency vs engagement` and `content performance decay` look like the two that pay for themselves — they answer *"should we post more or less"* with data instead of a guess |
+| **Replace the doc-derived caption limits with measured ones** — a rejected post because a limit moved is a lost day, and the founder sees a silent gap |
+| **`validatePost` as a real preflight** (§11): it exists, it is a dry run, and it is free. Catching a rejection before it happens is strictly better than a named failure afterwards |
+| **Decide the webhook question.** §2 calls `createWebhook` "what makes the watchers-not-polling architecture possible", and the inbox currently polls 3×/day. Event-driven is cheaper AND faster; the cost is an endpoint to secure |
+
+**COGS is the constraint, and it is the point.** Every "yes" here is a recurring
+per-customer cost forever. The grid exists so each adoption is priced before it
+is wired, not discovered in a bill — and per §2.10 anything adopted becomes a
+**budget**, never a boolean.
+
+**Exit:** the capability grid is **fully populated from live calls**, every
+`verified` cell has a smoke check behind it, and every row of §2.15.2 says
+adopt-now / adopt-later / never with a number next to it.
+
+**Tests:** ⭐ **a `n/a` cell must state a platform reason** — "we didn't try" and
+"the API does not exist" are opposite findings and only one is acceptable ·
+strict-parse drift on every wrapped response (`.passthrough()` hides exactly the
+change we need to see) · **a skip is not a pass**, the rule the smoke suite was
+built on.
 
 ### Sprint 6.5 — ⭐ The long conversation
 
@@ -4708,6 +5313,7 @@ simply the format that performs on TikTok/Reels/Shorts.
 |---|
 | Creatify: **always `link_with_params`** · Custom Templates (build ~5 masters) · `ads_clone` recreate flow |
 | ⭐ **The ad clone is a TEMPLATE, not a rerun.** $7.20 at 15s — 14× an avatar video, affordable once a month. Clone one proven ad, then produce 3 avatar videos **in that same shape** ($8.74 for four different videos, against $7.25 for the same video posted four times). Reposting an identical asset is also dampened by TikTok and IG, so the fourth post reaches fewer people than the first |
+| ⭐ **The storyboard check (§7.5.36)** — before any render, send the founder the exact stills and wait. On the URL path that is the **Link**: the `image_urls` we supplied via `link_with_params`, shown for a yes. On the avatar path it is the media-library asset per b-roll scene plus the persona `preview_image_9_16`, each with its line. **Zero credits either way.** A wrong screenshot caught here costs nothing; caught after the render it costs the render |
 | The **brief** schema + the **eight-check gate** |
 | **Global render queue**: fair-share, deadline priority, adaptive concurrency, pool circuit breaker |
 | `make-video` · weekly video plan ask |
@@ -4768,6 +5374,91 @@ Design work that doesn't depend on the agent. **Run it alongside 8–10 rather t
 **Exit:** you can answer, in under a minute and from your phone — *is anything broken · who isn't getting results · what are customers repeatedly asking her to change · and which rung of the ladder is the product itself failing most often.*
 
 **Tests:** every event defined in sprints 0–11 is present and queryable · cost-outlier alerting fires on a synthetic runaway · the fleet ladder reconciles against per-customer ladders.
+
+### Sprint 13 — ⭐ Go to market · *parallelizable from Sprint 3*
+
+*Operator asked 2026-08-06 for a marketing sprint. §18.9 Sprint 11 builds the
+**surfaces** — the landing page and Mission Control. It does not say how a
+stranger arrives at them. This does.*
+
+**The claim we are allowed to make, and the only one:** *she does the homework.*
+Not "she posts for you" (schedulers are free), not "she makes your videos"
+(§17.42 — that is the commodity lane). See §17.41 for why.
+
+#### 13.1 The dogfood is the marketing
+
+**Maya runs HeyMaya's own four channels.** This is not a nice-to-have, it is the
+cheapest and most honest acquisition channel we have, and it is *already running*
+as the Sprint 3 proof. One artifact serves both purposes:
+
+| Task |
+|---|
+| Every Sprint 3 placement is a public, permanent, timestamped demo |
+| ⭐ **The "she was right" post** — when a format card or mined complaint predicts something that then works, post the receipt. This is the only content in the category that a competitor cannot fake, because it requires having watched first |
+| A public changelog of what she found this week in *our* niche — the homework, shown |
+| ⚠️ **The dogfood account is a customer, with all the same rules** — House Rules, the directive gate, the safety critic. No exemptions for being us |
+
+⚠️ **If she cannot grow our account, the product does not work.** Treat a flat
+dogfood account as a product defect, not a marketing one. This is the most
+uncomfortable and most useful property of this channel.
+
+#### 13.2 The demo is the ad
+
+§18.9.2's **live URL-read demo, pre-signup** is the single strongest asset we
+have and should be lifted out of the landing page and used as the campaign
+itself: paste a URL, watch her be specifically right about your company, in
+under 20 seconds, before you have given us anything.
+
+| Task |
+|---|
+| Make the demo **shareable** — a permalink per read, so a founder can send *their* result to a peer |
+| The demo output is the ad creative: screenshot the specifically-right paragraph |
+| Guardrails ride along (§18.9.2): IP rate limit · URL cache · daily spend cap |
+
+#### 13.3 Where the ICP actually is
+
+Target (CLAUDE.md): **a solo founder who built something good and can't get
+customers.** They are reachable, and they are reachable by hand at our scale.
+
+| Task |
+|---|
+| Founder communities where launches happen and the "no customers" pain is stated out loud |
+| ⭐ **Answer, don't broadcast** — the same behaviour we sell. Founder posts a "how do I get users" question; we answer it usefully and for free. Consistency between what we sell and how we sell it *is* the campaign |
+| Directories and launch surfaces, at the moment of a launch — that is when the pain is acute |
+| ⚠️ **Do not buy paid acquisition before the ladder (§14.2) works.** Paid traffic onto a product that cannot yet prove results converts once and churns |
+
+#### 13.4 The copy rules, which are not negotiable
+
+| Rule | Why |
+|---|---|
+| ⭐ **Never the word "AI" in marketing copy** | The buyer has been sold "AI" nine times this year and it now reads as *unreliable*. She is a *social media manager*, described by what she does |
+| Direct, cheeky, non-technical | The landing voice. Never enterprise-neutral |
+| ⚠️ **Never claim she creates UGC on TikTok/Instagram** | It is not what she does (§7.5.3 — real screenshots first), and the claim is checkable |
+| Human-anchored price (§18.9.2 ⑪) | "Less than a day of a freelancer" beats a feature grid |
+| ⭐ **Honest limits published** (⑩) | Including the TikTok-has-no-comment-API caveat. The category lies about coverage; saying the true thing is itself differentiation |
+| Every claim on the page traceable to a real artifact | §18.9's "real artifact, not a mockup" rule extends to every channel, not just the site |
+
+#### 13.5 What we measure
+
+**Time-to-first-placement is the headline** (§16.9.2) — not signups. A signup
+that never reaches a live URL is a refund with a delay.
+
+| Metric | Why this one |
+|---|---|
+| Demo → signup rate | Tests whether "specifically right" actually converts |
+| Signup → **first placement** | The activation cliff; everything upstream is vanity |
+| Dogfood account growth | Whether the product works at all |
+| Which acquisition source produces customers who reach **month 2** | Cheap channels that churn are expensive |
+
+**Exit:** a founder who has never heard of us can paste their URL, see her be
+specifically right, sign up, and reach a live placement — and we can say which
+source they came from and whether that source has ever produced a month-2
+customer.
+
+**Tests:** demo permalink renders for a cold visitor with no session · demo
+abuse guardrails hold under repeat-IP load · **the copy denylist is enforced in
+CI on landing + marketing copy** ("AI", UGC-creation claims) rather than by
+review · attribution source survives signup → first placement.
 
 ---
 
@@ -5134,6 +5825,103 @@ An earlier draft of this section read the public REST API docs (post-creation on
 | Evergreen recycling · RSS auto-post · teams · multi-brand | — |
 
 **So the honest competitive picture is much tighter than "a scheduler."**
+
+#### ⭐ What she is called, and why not "a UGC creator"
+
+*Operator asked 2026-08-06 whether the distinguisher should be that she makes
+UGC — a personal content creator for a business — and noticed himself that it
+leaves X out.*
+
+**No, and the X problem is the tell.** Three reasons, in order of weight:
+
+**1. It leads with the commodity.** Making the video is the part Creatify,
+Higgsfield, Arcads and every model lab are racing to the bottom on. A pitch
+built on the artifact is a pitch that competes with all of them on price, at a
+$149 tier, against companies selling to buyers with ad budgets.
+
+**2. It inverts our own build order.** §7.5.3 is explicit: *"Generated video is
+the last resort, not the first — which inverts how this category usually
+builds."* Photo mode from real screenshots first, screen recordings next,
+generated video last. Naming her a UGC creator puts the last resort on the
+homepage.
+
+**3. X is not an awkward exception — it is the proof.** A service that only
+makes videos is a creative vendor. One that also answers the person who replied
+to you is doing a *job*. §1's inbound-outranks-outbound rule and the whole
+inbox exist because the answering half is what makes her an employee rather
+than a render farm.
+
+##### What the distinguisher actually is
+
+The operator's own instinct, stated as the product already builds it:
+
+> **Everyone can make content. Almost nobody knows what to make it about.**
+
+That is the homework — the six sweeps, the complaint mining, the format cards,
+the competitor watch — and it is the same wedge §17 found against Postiz:
+*"Postiz only ever looks at your own accounts. It has no eyes on the outside
+world."*
+
+CLAUDE.md already says it in one line, and it should stay the line: *"The pitch
+is not 'she posts for you' — open-source schedulers do that for free. It's that
+she does the homework."*
+
+⚠️ **The failure mode of the UGC framing is worth naming**, because it is
+seductive: UGC is easy to demo. A generated video looks like a product in
+thirty seconds; "she read four hundred comments and found what your buyers keep
+complaining about" does not. **Demo-ability is not the same as value**, and
+choosing the demo-able half is how a company ends up selling the commodity.
+
+#### Arcads — a vendor that may be becoming a competitor
+
+*Operator saw an ad, 2026-08-06, for what sounds like an agent of their own.*
+
+⚠️ **Unverified from here.** What follows is the shape of the question, not a
+finding — the spike in §7.5.35 is what answers it, and it now covers three
+vendors rather than two.
+
+**Which side of the line they land on is the whole question:**
+
+| | crowded and commoditizing | thin |
+|---|---|---|
+| | AI creative **generation** — Creatify, Higgsfield, Arcads, and every model lab | **perception + a provable placement** |
+
+⭐ **If generation is where they are racing, that is good for us, not bad.** We
+buy that capability rather than build it (§7.5.4a), so three vendors competing
+on price and quality lowers our COGS and raises our ceiling. A commodity input
+with three suppliers is a better position than one with a single blocked
+supplier, which is exactly where we are today.
+
+**The version that would actually threaten us** is an agent that does the whole
+job — reads the niche from the outside, decides, posts, and proves it. That
+needs a scraping layer, and §17's Postiz analysis already shows why that is the
+hard half: *"Postiz only ever looks at your own accounts. It has no eyes on the
+outside world"* — and structurally cannot, without building what we built.
+
+**⭐ The ad's philosophy is worth naming, because we deliberately reject it.**
+It described making a large range of creatives, seeing which wins, and doubling
+down. That is correct **for paid ads**: spend buys thousands of impressions per
+variant in a day, so the sample exists.
+
+§14.3 already ruled it out for us, with the reason: *"a founder posting 1–3×/day
+has 30–90 posts a month per channel. You cannot run a meaningful experiment at
+that volume. Any system claiming to optimize hooks off 40 data points is
+fitting noise and will produce confident nonsense."*
+
+Same words, different physics. Ours is §14.3's split — **own data for coarse
+questions, the niche corpus for format questions** — because the corpus is
+where n actually exists: someone else's ten thousand posts, not your forty.
+
+**What would settle it, in order:**
+
+1. **Do they read the outside world, or only the accounts you connect?** This
+   is the Postiz question and it is decisive.
+2. **Who is the buyer?** Ad creative is sold to someone with spend. We sell to a
+   founder who has no budget and no audience — a different motion, not a
+   cheaper one.
+3. **Sprint 3's seven-day run.** Whether a placement a day holds is a fact about
+   our product that no competitor's launch changes, and it arrives sooner than
+   any competitive read.
 
 #### Where the actual gap is
 
