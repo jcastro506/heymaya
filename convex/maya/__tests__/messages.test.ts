@@ -441,3 +441,97 @@ describe("⭐ THE QUEUE IS DURABLE, NOT SLOW", () => {
     expect(jobs.filter((j) => j.kind === "deliver_message")).toHaveLength(1);
   });
 });
+
+/**
+ * ⭐ THE 2026-08-06 FAILURE, one layer under the drafts one.
+ *
+ * `askFounder` did its own `ctx.db.insert` instead of going through `send`'s
+ * write path. `send`'s own comment claims *"every outbound message funnels
+ * through this function, which makes it the only place a guard can be
+ * complete"* — and that was false.
+ *
+ * Two consequences, both silent:
+ *   - no `deliver_message` job, so EVERY question she ever asked was written
+ *     to the table and never sent to Telegram
+ *   - no plain-language guard, so the one path that most often interpolates
+ *     machine strings was the one path with no backstop
+ *
+ * Caught by reading a real row: `awaitingAnswer: true`, `deliveredAt: null`,
+ * and no job that would ever move it.
+ */
+describe("ONE WRITER — a question is a message, not a row", () => {
+  async function jobsFor(
+    t: ReturnType<typeof convexTest>,
+    customerId: Id<"customers">
+  ) {
+    // The schema sits at TypeScript's instantiation ceiling, so the query
+    // builder stops narrowing indexes on this table — collect and filter in
+    // JS, as the sibling tests above do.
+    const all = (await t.run((ctx) => ctx.db.query("jobs").collect())) as Array<{
+      kind: string;
+      customerId: Id<"customers">;
+    }>;
+    return all.filter((j) => j.customerId === customerId);
+  }
+
+  it("askFounder enqueues delivery, exactly as send does", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "askdeliver");
+
+    await t.mutation(internal.maya.messages.askFounder, {
+      customerId,
+      surface: "telegram",
+      body: "want this to go out?",
+      dedupeKey: "q:one",
+    });
+
+    const jobs = await jobsFor(t, customerId);
+    // The regression: this was zero, so the question never left the database.
+    expect(jobs.filter((j) => j.kind === "deliver_message")).toHaveLength(1);
+  });
+
+  it("askFounder runs the plain-language guard", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "askplain");
+
+    await t.mutation(internal.maya.messages.askFounder, {
+      customerId,
+      surface: "telegram",
+      // The exact shape §2.5 exists to catch: a machine string interpolated
+      // into a body by code, not written by her.
+      body: "Zernio returned a 502 — want me to retry?",
+      dedupeKey: "q:leak",
+    });
+
+    const msg = await t.run((ctx) =>
+      ctx.db
+        .query("messages")
+        .withIndex("by_customer_and_dedupe", (q) =>
+          q.eq("customerId", customerId).eq("dedupeKey", "q:leak")
+        )
+        .first()
+    );
+    // The point of this test is that askFounder RUNS the guard at all — it
+    // previously ran none. Note the guard replaces the whole body rather than
+    // excising the token, so the question's wording does not survive; the
+    // message still goes out, which is what "redacted, never dropped" means.
+    expect(msg?.body).not.toContain("502");
+    expect(msg?.body).not.toContain("Zernio");
+    expect(msg?.body).toBeTruthy();
+  });
+
+  it("a deduped question does not enqueue a second delivery", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "askdedupe");
+    for (let i = 0; i < 3; i += 1) {
+      await t.mutation(internal.maya.messages.askFounder, {
+        customerId,
+        surface: "telegram",
+        body: "same question",
+        dedupeKey: "q:same",
+      });
+    }
+    const jobs = await jobsFor(t, customerId);
+    expect(jobs.filter((j) => j.kind === "deliver_message")).toHaveLength(1);
+  });
+});
