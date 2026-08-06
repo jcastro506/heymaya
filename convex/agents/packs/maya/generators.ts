@@ -463,13 +463,15 @@ Every tool returns the same envelope:
 
 | Tool | Args | What comes back |
 |---|---|---|
-| \`scroll\` | \`{}\` | \`{observations[], keywordsSwept[]}\` |
+| \`scroll\` | \`{}\` | \`{observations[], keywordsSwept[], todaysIdea, competition[]}\` |
 | \`draft\` | \`{text, channel, kind?, ideaId?}\` | \`{draftId, length}\` |
 | \`publish\` | \`{draftId, alreadyApproved?}\` | \`{published, queued, holdReason?}\` |
 | \`reply\` | \`{draftId, inReplyTo, alreadyApproved?}\` | same as publish |
 | \`remember\` | \`{verbatim, kind, meaning?}\` | \`{directiveId, productUpdated}\` |
 | \`update\` | \`{body, kind?}\` | \`{sent, sentToday}\` |
-| \`history\` | \`{days?}\` | \`{placements[]}\` |
+| \`history\` | \`{days?}\` | \`{placements[] with metrics, cadence, ladder}\` |
+| \`inbox\` | \`{}\` | \`{waiting[]}\` — each carries \`inReplyTo\` + \`inboxItemId\` |
+| \`weekly_read\` | \`{}\` | \`{world[], borrowableShapes, unciteable}\` |
 | \`request_assets\` | \`{body?}\` | \`{asked, library}\` |
 | \`ask_founder\` | \`{question}\` | \`{asked, openQuestion?}\` |
 | \`checkpoint\` | \`{memoryMarkdown, contextTruncated?}\` | \`{bytes, shrankBy?}\` |
@@ -842,7 +844,7 @@ function renderCronJobs(input: MayaWorkspaceInput): string {
       name: "Weekly review",
       expr: "0 19 * * 0",
       message:
-        "Weekly review. Which of the five rungs is working and which isn't (§14.2). Own data answers coarse questions only — format questions come from the niche corpus. Name one thing to change, not five.",
+        "Weekly review. Call `weekly_read` FIRST — it is the only place the wider-world findings and the borrowable shapes come from, and it only runs when you call it. Then `history`, which now carries the numbers and the rung. Which of the five rungs is working and which isn't (§14.2)? Own data answers coarse questions only — format questions come from the corpus. Name one thing to change, not five.",
     },
   ] as const;
 

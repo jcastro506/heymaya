@@ -608,6 +608,20 @@ export const scrollHttp = httpAction(async (ctx, request) => {
   });
 
   /**
+   * ⭐ The competition rides along, because it is the same question.
+   *
+   * "What's happening out there today" covers both what the niche is posting
+   * and whether anyone she watches just had a breakout. A separate tool would
+   * be a second thing to remember, and the thing this codebase keeps proving
+   * is that a module nobody calls does nothing at all — `watchCompetitors`
+   * was zero-caller ten minutes after I wrote it.
+   */
+  const competition = await ctx.runAction(
+    internal.maya.competitors.watchCompetitors,
+    { customerId: auth.customer._id }
+  );
+
+  /**
    * ⭐ THE SCROLL FILLS THE BANK. Not a separate job she has to remember.
    *
    * `bankFromObservations` shipped with nothing calling it, which is the ninth
@@ -651,9 +665,16 @@ export const scrollHttp = httpAction(async (ctx, request) => {
   if (observations.length === 0) {
     return respond({
       ok: true,
-      data: { observations: [], keywordsSwept: result.keywordsSwept ?? [] },
-      why: "the niche is quiet today — nothing moving worth posting about",
-      next: "a quiet day is a real finding. Say so rather than posting filler",
+      data: {
+        observations: [],
+        keywordsSwept: result.keywordsSwept ?? [],
+        competition: competition.breakouts,
+      },
+      why: `the niche is quiet today — nothing moving worth posting about. ${competition.detail}`,
+      next:
+        competition.breakouts.length > 0
+          ? "the niche is quiet but someone you watch just broke out — that's worth a look and worth telling them about"
+          : "a quiet day is a real finding. Say so rather than posting filler",
     });
   }
 
@@ -664,10 +685,16 @@ export const scrollHttp = httpAction(async (ctx, request) => {
       keywordsSwept: result.keywordsSwept ?? [],
       todaysIdea: idea,
       bankDepth: bank.depth,
+      /**
+       * Accounts she watches that just pulled far above their own usual. The
+       * multiple is against THEIR baseline, so it means something for a small
+       * account as much as a large one.
+       */
+      competition: competition.breakouts,
     },
     why: idea
-      ? `${observations.length} things moving, and the strongest banked idea is "${idea.angle}"`
-      : `${observations.length} things moving, but the idea bank is empty`,
+      ? `${observations.length} things moving, and the strongest banked idea is "${idea.angle}". ${competition.detail}`
+      : `${observations.length} things moving, but the idea bank is empty. ${competition.detail}`,
     next: idea
       ? "draft against data.todaysIdea.ideaId — its evidence is what you cite, and its quote is what a real person actually said"
       : "no banked idea means nothing has earned a post yet. Say that to the founder rather than inventing one",
@@ -959,6 +986,57 @@ export const replyHttp = httpAction(async (ctx, request) => {
     data: { published: false, queued: true, jobId },
     why: "cleared to reply — it's queued",
     next: "move on to the next one; don't wait on this",
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* weekly_read                                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ `weekly_read` — the two sweeps that are worth money once a week.
+ *
+ * The daily `scroll` answers "what is moving in this niche today". This
+ * answers the slower questions, and both halves cost real requests:
+ *
+ *   trends       what SHAPES are working right now, including outside our
+ *                niche — where the topic is useless but the structure travels
+ *   wider world  what actually happened to these people this week, grounded
+ *                in sources it can cite
+ *
+ * Weekly, not daily, because neither changes hourly and the trend sweep's
+ * measured hit rate for a narrow niche is low (§5.2.3a: 0 in-niche of 56 on
+ * the first run). A cheap wide net is worth casting once.
+ *
+ * ⚠️ Both modules were written tonight and had NO CALLER ten minutes later —
+ * the same defect this codebase has produced eighteen times. A sweep nobody
+ * invokes is indistinguishable from a sweep that finds nothing.
+ */
+export const weeklyReadHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if ("error" in auth) return auth.error;
+
+  const shapes = await ctx.runAction(internal.maya.trends.sweepTrends, {
+    customerId: auth.customer._id,
+  });
+  const world = await ctx.runAction(internal.maya.widerWorld.sweepWiderWorld, {
+    customerId: auth.customer._id,
+  });
+
+  const nothing = shapes.kept === 0 && shapes.shapes === 0 && world.findings.length === 0;
+  return respond({
+    ok: true,
+    data: {
+      trendingInNiche: shapes.observations,
+      borrowableShapes: shapes.shapes,
+      world: world.findings,
+      /** ⚠️ Questions we asked and could not source. Never hidden. */
+      unciteable: world.ungrounded,
+    },
+    why: `${shapes.detail}. ${world.detail}`,
+    next: nothing
+      ? "a quiet week is a real finding — say so plainly rather than reaching for something to report"
+      : "use the world findings for WHAT to talk about and the shapes for HOW. Cite the sources when you mention what people are saying — an uncited claim is a guess",
   });
 });
 
