@@ -515,8 +515,10 @@ export const bankFromObservations = internalAction({
       customerId: args.customerId,
     });
 
-    const { callOpenRouter } = await import("../integrations/openrouter/client");
-    const completion = await callOpenRouter({
+    const { callModel } = await import("./llm");
+    const completion = await callModel(ctx, {
+      customerId: args.customerId,
+      purpose: "idea_scoring",
       apiKey: process.env.OPENROUTER_API_KEY ?? "",
       model: IDEA_MODEL,
       temperature: 0.3,
@@ -573,6 +575,7 @@ export const bankFromObservations = internalAction({
     let filler = 0;
     for (const idea of scored) {
       const verdict = await ctx.runAction(internal.maya.quality.judgeFiller, {
+        customerId: args.customerId,
         text: idea.angle,
       });
       if (verdict.filler) {

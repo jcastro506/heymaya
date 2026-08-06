@@ -136,8 +136,10 @@ export const checkDirectives = internalAction({
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) return { ok: true };
 
-    const { callOpenRouter } = await import("../integrations/openrouter/client");
-    const completion = await callOpenRouter({
+    const { callModel } = await import("./llm");
+    const completion = await callModel(ctx, {
+      customerId: args.customerId,
+      purpose: "directive_gate",
       apiKey,
       model: DIRECTIVE_MODEL,
       temperature: 0,

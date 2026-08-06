@@ -357,8 +357,10 @@ export const mineComplaints = internalAction({
       };
     }
 
-    const { callOpenRouter } = await import("../integrations/openrouter/client");
-    const completion = await callOpenRouter({
+    const { callModel } = await import("./llm");
+    const completion = await callModel(ctx, {
+      customerId: args.customerId,
+      purpose: "complaint_mining",
       apiKey: process.env.OPENROUTER_API_KEY ?? "",
       model: COMPLAINT_MODEL,
       temperature: 0.1,

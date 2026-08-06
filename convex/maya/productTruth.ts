@@ -35,7 +35,7 @@ import {
 } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
-import { callOpenRouter } from "../integrations/openrouter/client";
+import { callModel } from "./llm";
 
 /**
  * A volume worker, not the main brain.
@@ -456,7 +456,9 @@ export const readProduct = internalAction({
     }
 
     const apiKey = process.env.OPENROUTER_API_KEY ?? "";
-    const completion = await callOpenRouter({
+    const completion = await callModel(ctx, {
+      customerId: args.customerId,
+      purpose: "product_read",
       apiKey,
       model: PRODUCT_READ_MODEL,
       temperature: 0.1,

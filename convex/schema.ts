@@ -3941,6 +3941,48 @@ export default defineSchema({
    * Idempotency key, attempts, status, deadline — nothing fails silently
    * (principle 5), and nothing runs twice on a retry.
    */
+  /**
+   * ⭐ What each customer actually costs us, per call.
+   *
+   * Operator, 2026-08-06: *"COGS are gonna amortize and blend over many users,
+   * but each user can't just blow out… we just got to make sure we're
+   * watching, if this specific machine was a user, how much money has it used
+   * so far, and how much is it projected to use for the month."*
+   *
+   * That is the purpose. This ledger is for **pricing**, not policing — the
+   * throttle already protects the fleet without silencing her, and per-user
+   * caps that stop her talking are explicitly not the product.
+   *
+   * ## Why a table rather than a field on `jobs`
+   *
+   * `spendCeiling.recordCost` stamps cost onto a job row, and `spendToday`
+   * sums job costs. But most model calls in `convex/maya` are crons and gates
+   * — research sweeps, the directive gate, the safety critic, idea scoring —
+   * which are not jobs at all. Counting only job-attributed spend reports a
+   * fraction of the bill and reads as a working ledger, which is how this
+   * product previously recorded $0.025 against a $22 charge.
+   *
+   * ⚠️ `costUsd` is what the VENDOR said the call cost, never a local
+   * calculation. A price table is a second source of truth that rots — ours
+   * claimed one model was $0.075 when it was $0.25.
+   */
+  costEvents: defineTable({
+    customerId: v.id("customers"),
+    at: v.number(),
+    /** "openrouter" · "creatify" · "scrapecreators" · "zernio" */
+    vendor: v.string(),
+    /** The model or endpoint actually served, which may not be the one asked for. */
+    resource: v.optional(v.string()),
+    /** What the spend was FOR — this is what makes an outlier explainable. */
+    purpose: v.string(),
+    costUsd: v.number(),
+    /** Present for LLM calls; absent for flat-rate vendor calls. */
+    promptTokens: v.optional(v.number()),
+    completionTokens: v.optional(v.number()),
+  })
+    .index("by_customer_and_at", ["customerId", "at"])
+    .index("by_at", ["at"]),
+
   jobs: defineTable({
     /** Absent for fleet-wide work like the vendor smoke suite. */
     customerId: v.optional(v.id("customers")),

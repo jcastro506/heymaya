@@ -351,12 +351,17 @@ export function parseFillerVerdict(
  * fail closed lives at the publish boundary.
  */
 export const judgeFiller = internalAction({
-  args: { text: v.string() },
-  handler: async (_ctx, args): Promise<{ filler: boolean; why: string }> => {
+  // ⚠️ `customerId` is not used by the judgement — it exists so the call's
+  // cost has an owner. A model call nobody is billed for is a hole in the
+  // COGS picture, and this one runs per idea.
+  args: { text: v.string(), customerId: v.id("customers") },
+  handler: async (ctx, args): Promise<{ filler: boolean; why: string }> => {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) return { filler: false, why: "" };
-    const { callOpenRouter } = await import("../integrations/openrouter/client");
-    const completion = await callOpenRouter({
+    const { callModel } = await import("./llm");
+    const completion = await callModel(ctx, {
+      customerId: args.customerId,
+      purpose: "filler_judge",
       apiKey,
       model: FILLER_MODEL,
       temperature: 0,
