@@ -28,18 +28,26 @@
 import { v } from "convex/values";
 import { internalAction, internalQuery } from "../_generated/server";
 import type { Doc } from "../_generated/dataModel";
-import { dayKey } from "./dailyReport";
+import { dayKeyInZone, previousDay as previousDayKey } from "./cadence";
 
 /* -------------------------------------------------------------------------- */
 /* The contract                                                                */
 /* -------------------------------------------------------------------------- */
 
-/** The brief is due early; two hours late is a breach, not a delay. */
-export const BRIEF_DUE_HOUR_UTC = 7;
+/**
+ * ⭐ All three are hours in the FOUNDER's timezone, not UTC.
+ *
+ * They were `*_HOUR_UTC` and compared against `new Date(now).getUTCHours()`.
+ * For `America/New_York` that put the "has anything gone out today?" check at
+ * 14:00 local and the recap deadline at 15:00 — before the recap is even due
+ * at 20:00. Renamed rather than re-based so the next reader cannot repeat the
+ * mistake by reading the name and believing it.
+ */
+export const BRIEF_DUE_HOUR_LOCAL = 7;
 export const BRIEF_GRACE_HOURS = 2;
 /** By this hour a working day should have produced something. */
-export const ZERO_PLACEMENT_CHECK_HOUR_UTC = 18;
-export const RECAP_DUE_HOUR_UTC = 19;
+export const ZERO_PLACEMENT_CHECK_HOUR_LOCAL = 18;
+export const RECAP_DUE_HOUR_LOCAL = 21;
 
 export type BreachKind =
   | "brief_missed"
@@ -68,7 +76,8 @@ export interface Breach {
 
 export interface LivenessInput {
   now: number;
-  hourUtc: number;
+  /** The hour of day where the FOUNDER is — never UTC. */
+  hourLocal: number;
   briefSentToday: boolean;
   recapSentToday: boolean;
   placementsToday: number;
@@ -111,7 +120,7 @@ export interface LivenessInput {
  */
 export function evaluate(input: LivenessInput): Breach[] {
   const {
-    hourUtc,
+    hourLocal,
     briefSentToday,
     recapSentToday,
     placementsToday,
@@ -154,7 +163,7 @@ export function evaluate(input: LivenessInput): Breach[] {
     });
   }
 
-  if (!briefSentToday && hourUtc >= BRIEF_DUE_HOUR_UTC + BRIEF_GRACE_HOURS) {
+  if (!briefSentToday && hourLocal >= BRIEF_DUE_HOUR_LOCAL + BRIEF_GRACE_HOURS) {
     breaches.push({
       kind: "brief_missed",
       action: "reenqueue_brief",
@@ -163,7 +172,7 @@ export function evaluate(input: LivenessInput): Breach[] {
     });
   }
 
-  if (!recapSentToday && hourUtc >= RECAP_DUE_HOUR_UTC + BRIEF_GRACE_HOURS) {
+  if (!recapSentToday && hourLocal >= RECAP_DUE_HOUR_LOCAL + BRIEF_GRACE_HOURS) {
     breaches.push({
       kind: "recap_missed",
       action: "diagnose_and_report",
@@ -171,7 +180,7 @@ export function evaluate(input: LivenessInput): Breach[] {
     });
   }
 
-  if (placementsToday === 0 && hourUtc >= ZERO_PLACEMENT_CHECK_HOUR_UTC) {
+  if (placementsToday === 0 && hourLocal >= ZERO_PLACEMENT_CHECK_HOUR_LOCAL) {
     const streak = priorZeroDayStreak + 1;
 
     // Escalation is by STREAK, and the wording changes with it. A first quiet
@@ -370,13 +379,31 @@ export const gatherFacts = internalQuery({
     if (!customer) return null;
 
     const now = args.now ?? Date.now();
-    const startOfToday = Math.floor(now / 86_400_000) * 86_400_000;
-    const today = dayKey(now);
+    const timezone = customer.timezone ?? "UTC";
+
+    /**
+     * ⭐ Every boundary in this function is the FOUNDER's day, not UTC.
+     *
+     * Until 2026-08-06 it was `floor(now / 86_400_000) * 86_400_000`, which in
+     * `America/New_York` starts "today" at **20:00 the previous evening**.
+     * Observed live: she published four times on the evening of 08-05, and at
+     * 11:57 on 08-06 this function reported `placementsToday: 5` while cadence
+     * — counting in her timezone — correctly reported zero.
+     *
+     * ⚠️ That is not a cosmetic drift. `evaluate()` gates the whole
+     * zero-placement escalation on `placementsToday === 0`, so a non-zero count
+     * carried over from last night **suppresses the alert entirely**. And
+     * because she posts in the evening, the suppression was not an edge case —
+     * it was the normal pattern. The watchdog was blind on exactly the days it
+     * existed for.
+     */
+    const today = dayKeyInZone(now, timezone);
+    const windowStart = now - 9 * 86_400_000;
 
     const messages = (await ctx.db
       .query("messages")
       .withIndex("by_customer_and_ts", (q) =>
-        q.eq("customerId", args.customerId).gte("ts", startOfToday - 86_400_000 * 8)
+        q.eq("customerId", args.customerId).gte("ts", windowStart)
       )
       .collect()) as Doc<"messages">[];
 
@@ -387,17 +414,29 @@ export const gatherFacts = internalQuery({
       (m) => m.dedupeKey === `recap:${today}`
     );
 
-    const placements = (await ctx.db
-      .query("placements")
-      .withIndex("by_customer_and_publishedAt", (q) =>
-        q
-          .eq("customerId", args.customerId)
-          .gte("publishedAt", startOfToday - 86_400_000 * 8)
-      )
-      .collect()) as Doc<"placements">[];
+    /**
+     * ⭐ `linkStatus === "live"` only — the same rule cadence.ts applies.
+     *
+     * These two functions both answer "did anything go out?", and they must
+     * not answer it differently. An `"unknown"` placement is a publish we
+     * could not confirm; counting it here would suppress the alert on exactly
+     * the day the alert is most warranted — we published something and cannot
+     * open it. §2.6: the unit of work is something *live, with a URL*.
+     */
+    const placements = (
+      (await ctx.db
+        .query("placements")
+        .withIndex("by_customer_and_publishedAt", (q) =>
+          q.eq("customerId", args.customerId).gte("publishedAt", windowStart)
+        )
+        .collect()) as Doc<"placements">[]
+    ).filter((p) => p.linkStatus === "live");
 
+    const placementDays = new Set(
+      placements.map((p) => dayKeyInZone(p.publishedAt, timezone))
+    );
     const placementsToday = placements.filter(
-      (p) => p.publishedAt >= startOfToday
+      (p) => dayKeyInZone(p.publishedAt, timezone) === today
     ).length;
 
     // Walk back day by day. Stops at the first day that HAD a placement, so an
@@ -411,15 +450,14 @@ export const gatherFacts = internalQuery({
     // day-in-the-life composition test, invisible to every unit test, since
     // each piece was individually correct.
     let priorZeroDayStreak = 0;
+    let cursor = previousDayKey(today);
     for (let back = 1; back <= 7; back += 1) {
-      const dayStart = startOfToday - back * 86_400_000;
-      const dayEnd = dayStart + 86_400_000;
-      if (dayEnd <= customer.createdAt) break;
-      const had = placements.some(
-        (p) => p.publishedAt >= dayStart && p.publishedAt < dayEnd
-      );
-      if (had) break;
+      // The creation clamp, still in the founder's timezone: a day that ended
+      // before the account existed is not a day she was silent.
+      if (dayKeyInZone(customer.createdAt, timezone) > cursor) break;
+      if (placementDays.has(cursor)) break;
       priorZeroDayStreak += 1;
+      cursor = previousDayKey(cursor);
     }
 
     // The machine's last self-report. Absent means it has never checked in,
@@ -434,7 +472,13 @@ export const gatherFacts = internalQuery({
 
     return {
       now,
-      hourUtc: new Date(now).getUTCHours(),
+      hourLocal: Number(
+        new Intl.DateTimeFormat("en-GB", {
+          timeZone: timezone,
+          hour: "2-digit",
+          hour12: false,
+        }).format(new Date(now))
+      ),
       briefSentToday,
       recapSentToday,
       placementsToday,
