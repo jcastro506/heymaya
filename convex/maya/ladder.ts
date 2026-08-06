@@ -90,13 +90,29 @@ export const diagnose = internalQuery({
     now: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<LadderVerdict> => {
-    const now = args.now ?? Date.now();
-    const since = now - (args.sinceDays ?? 7) * 86_400_000;
-
     const rows = (await ctx.db
       .query("placements")
       .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
       .collect()) as Doc<"placements">[];
+    return diagnoseFrom(rows, args.now ?? Date.now(), args.sinceDays ?? 7);
+  },
+});
+
+/**
+ * ⭐ Pure, because two different queries need this verdict.
+ *
+ * A Convex query cannot call another query, and `nextIdea` needs the rung to
+ * decide which evidence to trust more (§14.2.2). Duplicating the arithmetic
+ * there would give two answers to one question, which is how a report and a
+ * decision quietly stop agreeing.
+ */
+export function diagnoseFrom(
+  rows: Doc<"placements">[],
+  now: number,
+  sinceDays: number
+): LadderVerdict {
+  {
+    const since = now - sinceDays * 86_400_000;
     const window = rows.filter(
       (p) => p.publishedAt >= since && p.linkStatus === "live"
     );
@@ -175,5 +191,5 @@ export const diagnose = internalQuery({
       engagements,
       unmeasured,
     };
-  },
-});
+  }
+}

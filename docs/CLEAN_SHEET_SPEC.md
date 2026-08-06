@@ -2560,20 +2560,45 @@ fine from silence is the dishonesty §14.2's worked example exists to prevent.
 `replies`/`reposts`, Zernio returns `comments`/`shares`/`saves`. Insisting on
 one silently scores the other channel as zero.
 
-### ⚠️ 14.2.2 The loop is still open — she diagnoses, and nothing changes
+### ✅ 14.2.2 The loop is CLOSED — the rung now reaches Monday
 
-**`ideas.ts` and `drafts.ts` never read performance.** So the ladder tells her
-on Sunday that it's a format problem, and Monday's idea selection is made
-exactly as if it hadn't.
+*Was: `ideas.ts` never read performance, so the ladder told her on Sunday it
+was a format problem and Monday's idea selection happened exactly as if it
+hadn't.*
+
+`nextIdea` now reads the rung — from the **same pure function** the weekly
+verdict uses, so the report and the decision can never disagree.
 
 That is the difference between a manager who *reports* and one who *manages*.
 A human notices the posts that opened with a question got three times the
 replies, and **makes more of those**. Right now the finding reaches the founder
 and never reaches the work.
 
-Closing it is not "feed metrics to the model and hope". §14.3 is explicit about
-why: at 30–90 posts a month, own data **cannot** answer format-level questions,
-and a system that optimises hooks off 40 data points is fitting noise. So:
+⭐ **And deliberately NOT "the posts that did well used this hook, so use that
+hook."** §14.3 forbids it: at 30–90 posts a month own data **cannot** answer
+format questions, and a system optimising hooks off 40 data points *"is fitting
+noise and will produce confident nonsense"*.
+
+So own data is used only for the coarse thing it can answer — **which kind of
+problem we have** — and that selects which EVIDENCE to trust, straight from
+§14.2's own table:
+
+| rung | means | so prefer |
+|---|---|---|
+| **L1** | nobody saw it — a format problem | `observation` / `format_card` — things that demonstrably travelled here |
+| **L2** | they saw it and scrolled — a topic problem | `complaint` / `own_comment` — a real person naming what they care about |
+
+⭐ **The nudge is ±25% and evidence still dominates.** A one-off observation
+must never outrank a thing thirteen people complained about because a weekly
+verdict tilted the table — asserted by a test. **`L0` and `unknown` change
+nothing**: L0 is our own failure to post, and letting it reshuffle the bank
+would invent a content lesson from a week we simply didn't work.
+
+**It says so, too.** A ranking that shifted silently is one nobody can argue
+with later, so the reason names the rung: *"…but last week said nobody saw us,
+so what travels here matters more."*
+
+The remaining half:
 
 | Question | Answered from |
 |---|---|
@@ -4176,14 +4201,15 @@ new until Sprint 3's gate holds.
 |---|---|---|---|
 | **0 Reclaim** | ✅ done | both products deleted, schema 142→70, CI | — |
 | **1 Perception** | 🟡 ~85% | endpoints split per-platform · all P0 wrappers (params verified live) · X expansion · manifest 404s fixed · smoke suite tiers 1–2 green on 5 vendors · 5 of 14 Zernio wrappers verified | 9 Zernio wrappers (4 are writes) · Creatify + R2 keys · tier 3 |
-| **2 Spine** | 🟡 ~85% | data model · job queue · planFeatures · message log · agentVersion routing · **the watchers layer (Convex crons)** · Telegram transport · spend ceiling · the archive (§16.8) | persistent session + volume · runtime shape — **both need a live machine** |
+| **2 Spine** | ✅ **exit criterion MET** — asked in a fresh turn straight after a MACHINE RECREATE, she quoted two live X URLs from `placements`. That is the criterion verbatim: *you can text her and she answers from rows, across a redeploy* | data model · job queue · planFeatures · message log · agentVersion routing · **the watchers layer (Convex crons)** · Telegram transport · spend ceiling · the archive (§16.8) | persistent session + volume · runtime shape — **both need a live machine** |
 | **2.5 Luna** | ✅ shipped | main brain + judges on gpt-5.6-luna | the week-long watch hasn't run |
 | **2.9 Harness correction** | 🟢 **code complete** | always-on · heartbeat + cron store · memorySearch + temporal decay + MMR · dreaming · memory-wiki · active-memory · `MEMORY.md` seed-not-clobber · the boot script that actually installs the plugin · `scheduler.ts` shrunk to delivery + publish · anti-drift + handler-coverage tests · daily memory checkpoint | **only the exit criteria** — every one needs a deployed machine |
-| **3 X — the gamble** | 🟡 ~65% | ⭐ **`cadence.ts` — the streak instrument the exit criterion needs** · **the iron rule** · preflight (token, 280, duplicate) · **the tool surface** (`publish`/`reply`/`ask_founder`, tenant-safe by shape) · **the three skills + CONVENTIONS** · **the `maya-tools` plugin** | ⚠️ **brief + recap were counted as done and are not** — they were Convex crons feeding a `wake_agent` job with no handler · rate limits · **the 7-day exit** |
-| **4 Brand** | 🟡 ~45% | buyer map · voice-from-edits · asset classifier · **the §6.4.6 spike, run** | learn-business/voice/brand · brand kit · media library |
-| **5 Perception live** | 🔴 ~10% | complaint→content · quality gates | the six sweeps · Screen model · idea bank · plan-day |
+| **3 X — the gamble** | 🟡 ~80% | ⭐ **the chain runs end to end, live** — scroll → idea → draft → safety critic → approval → publish → placement → metrics. Two bugs were holding it: the safety critic had NO CALLER, and the prompt still demanded a critique subagent that had been deleted, so the 11:00 job drafted and held every day. `cadence.ts` measures the run | ⭐ **`cadence.ts` — the streak instrument the exit criterion needs** · **the iron rule** · preflight (token, 280, duplicate) · **the tool surface** (`publish`/`reply`/`ask_founder`, tenant-safe by shape) · **the three skills + CONVENTIONS** · **the `maya-tools` plugin** | ⚠️ **brief + recap were counted as done and are not** — they were Convex crons feeding a `wake_agent` job with no handler · rate limits · **the 7-day exit** |
+| **4 Brand** | 🟡 ~60% | media library + the asset ask (live: she asked for a screen recording unprompted, naming §7's no-fabricated-UI rule) · inbound Telegram files · ⭐ the plain-language guard — **8 of 39 real messages were leaking** (`"No response from OpenClaw."` ×4, a raw tool envelope, a draft id) | buyer map · voice-from-edits · asset classifier · **the §6.4.6 spike, run** | learn-business/voice/brand · brand kit · media library |
+| **5 Perception live** | 🟡 ~55% | scroll across **4 channels** (X was scrollable all along — its wrapper's only callers were in v1) · idea bank · complaint→content · quality gates · **the inbox** (`reply` had refused without an `inReplyTo` since Sprint 3 and nothing could produce one) · ⭐ **metrics read-back on every channel** | complaint→content · quality gates | the six sweeps · Screen model · idea bank · plan-day |
 | **6 Memory + liveness** | 🟡 ~65% | directive ledger · three commands · **liveness contract + sweep + fleet correlation** | directive compiler → server gates · balance circuit breakers |
-| **7–12** | 🔴 — | — | not started |
+| **5.5 Zernio, every channel** | 🟡 ~50% | ⭐ **all four channels published live through our own pipeline** · capability grid probed, not doc-read · X analytics/inbox priced and deliberately left OFF (33× twitterapi.io) · `validatePost` preflight | the write cells beyond `post` · smoke coverage per verified cell |
+| **7–12** | 🔴 — | ⭐ §14.2's **diagnostic ladder is built** (Sprint 8's spine) — computed from rows, live verdict `L1` on the real account | ⚠️ **§14.2.2 — the loop is open**: `ideas.ts`/`drafts.ts` never read performance, so she diagnoses on Sunday and Monday is unchanged. Sprint 7's media *generation* stays blocked on Creatify |
 
 **Three exit criteria are the real gates, and all three need a running agent:**
 
