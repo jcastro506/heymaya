@@ -291,7 +291,20 @@ export default defineToolPlugin({
             description: "How far back to look. Default 14, max 90.",
           })
         ),
-      }),
+      
+        query: Type.Optional(
+          Type.String({
+            description:
+              "Search everything you have EVER posted for this angle, instead of listing recent ones. Use it before drafting anything you suspect you have said before — you are told not to repeat yourself and this is the only way to check. A 14-day timeline cannot tell you whether you made this exact point in March.",
+          })
+        ),
+        placementId: Type.Optional(
+          Type.String({
+            description:
+              "Trace one post back to the idea and the evidence it came from. Use it when asked WHY you posted something. The answer is the chain — never reconstruct a reason, because a plausible story they cannot correct is worse than saying you cannot trace it.",
+          })
+        ),
+}),
       execute: async (p, _cfg, ctx) => call("history", p, ctx.signal),
     }),
 

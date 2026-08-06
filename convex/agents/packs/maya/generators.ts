@@ -469,7 +469,7 @@ Every tool returns the same envelope:
 | \`reply\` | \`{draftId, inReplyTo, alreadyApproved?}\` | same as publish |
 | \`remember\` | \`{verbatim, kind, meaning?}\` | \`{directiveId, productUpdated}\` |
 | \`update\` | \`{body, kind?}\` | \`{sent, sentToday}\` |
-| \`history\` | \`{days?}\` | \`{placements[] with metrics, cadence, ladder}\` |
+| \`history\` | \`{days?, query?, placementId?}\` | recent · or a search · or one post's provenance |
 | \`inbox\` | \`{}\` | \`{waiting[]}\` — each carries \`inReplyTo\` + \`inboxItemId\` |
 | \`weekly_read\` | \`{}\` | \`{world[], borrowableShapes, unciteable}\` |
 | \`rules\` | \`{action?, directiveId?, kind?}\` | \`{rules[]}\` or \`{history[]}\` |

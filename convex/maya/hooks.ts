@@ -341,6 +341,77 @@ export const historyHttp = httpAction(async (ctx, request) => {
   const parsed = await readJson(request);
   if ("error" in parsed) return parsed.error;
 
+  /**
+   * ⭐ Two modes that existed in `archive.ts` since Sprint 2 with no caller.
+   *
+   * `query` — "have I said this before?" She is told not to repeat herself and
+   * had no way to check. A timeline of the last 14 days answers "what went
+   * out"; it does not answer "did I already make this exact point in March",
+   * which is the question that stops an account sounding like a loop.
+   *
+   * `placementId` — "why did you post that?" The provenance chain (§16.8.4)
+   * links a placement back through its draft to the idea and the evidence.
+   * §10.2 again: the answer comes from the chain, never from a reconstruction.
+   */
+  const query = str(parsed.body, "query");
+  const placementId = str(parsed.body, "placementId");
+
+  if (placementId) {
+    const chain = await ctx.runQuery(internal.maya.archive.provenance, {
+      customerId: auth.customer._id,
+      placementId: placementId as Id<"placements">,
+    });
+    /**
+     * ⭐ Three states, not two. A placement that exists but has no draft or
+     * idea behind it is TRACEABLE TO NOTHING — and telling her to "quote the
+     * evidence" there is an instruction to invent some.
+     *
+     * Found by a test: an orphan placement returned a non-null chain (the
+     * placement itself) and got the full-provenance answer.
+     */
+    const traced = Boolean(chain?.draft ?? chain?.idea);
+    return respond({
+      ok: Boolean(chain),
+      data: { provenance: chain },
+      why: !chain
+        ? "no record of that placement"
+        : traced
+          ? "here's where that post came from"
+          : "that post is on record, but nothing links it back to an idea",
+      next: !chain
+        ? "say you can't find it rather than reconstructing a reason"
+        : traced
+          ? "quote the evidence it came from — the quote and the source URL are what make it an answer rather than a story"
+          : "say plainly that you can see the post but not what prompted it. Do NOT reconstruct a reason — a plausible story they can't correct is worse than admitting the trail is missing",
+    });
+  }
+
+  if (query) {
+    const hits = await ctx.runQuery(internal.maya.archive.search, {
+      customerId: auth.customer._id,
+      query,
+    });
+    return respond({
+      ok: true,
+      data: {
+        matches: hits.map((p) => ({
+          url: p.url ?? null,
+          text: p.snapshotText,
+          channel: p.channel,
+          publishedAt: p.publishedAt,
+        })),
+      },
+      why:
+        hits.length === 0
+          ? `nothing in the archive matches "${query}"`
+          : `${hits.length} past posts match "${query}"`,
+      next:
+        hits.length === 0
+          ? "this angle is new — go ahead"
+          : "you have covered this before. Either find a genuinely different angle or say plainly that you're returning to it and why",
+    });
+  }
+
   const days = Math.min(Math.max(num(parsed.body, "days") ?? 14, 1), 90);
   const since = Date.now() - days * 86_400_000;
 
