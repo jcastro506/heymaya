@@ -241,6 +241,70 @@ const PURE_INSTRUCTIONS = new Set([
   "perfect", "nice", "great", "cool", "hold off", "not yet", "later",
 ]);
 
+/**
+ * ⭐ The judge that decides what is actually their VOICE.
+ *
+ * `isVoiceSample` below is a pre-filter, not the decision. It removes "ok" and
+ * "post it" for free, and it cannot tell an instruction from a sentence — a
+ * long, well-punctuated *"do the daily placement now, take the strongest thing
+ * from this morning's scroll and publish it to X"* passes every rule in it.
+ *
+ * That distinction is semantic, so the model makes it.
+ */
+export const VOICE_JUDGE_SYSTEM = `You are given messages a founder sent to their social media manager.
+
+Some are them TALKING TO HER about her work — instructions, questions about what she did, approvals, corrections. Some are them SAYING SOMETHING — explaining, objecting, describing, complaining, telling a story, making a point.
+
+Only the second kind is a voice sample. We are learning how this person writes to an audience, and someone giving instructions to an assistant writes nothing like they do to their customers.
+
+Return STRICT JSON, no prose:
+{ "keep": [0, 3, 7] }
+
+"keep" is the INDEX of every message that is the second kind. Judge each one on its own.
+
+Keep it if they are expressing a thought, an opinion, a frustration, a story, or an explanation — even a short one, and even if it also contains an instruction.
+Drop it if it is only about what she should do, what she did, or whether something worked. A question about her work is not a voice sample no matter how well written.
+
+If none qualify, return an empty array. That is a real answer — a corpus of instructions is worse than no corpus, because it teaches her to write like a remote control.`;
+
+/** The prompt body. Indexed, so the judge returns positions rather than text. */
+export function buildVoiceJudgePrompt(candidates: ReadonlyArray<string>): string {
+  return [
+    "MESSAGES:",
+    ...candidates.map((c, i) => `${i}. ${c.replace(/\s+/g, " ").slice(0, 400)}`),
+    "",
+    "Which of these is this person SAYING something, rather than instructing her? Strict JSON only.",
+  ].join("\n");
+}
+
+/**
+ * Parse the judge's verdict into the excerpts to keep.
+ *
+ * Fails OPEN — an unreadable answer returns every candidate rather than none.
+ * A corpus built by the old heuristic is worse than one the model filtered, but
+ * it is far better than an empty "no writing samples yet", which is what she
+ * shipped with for weeks.
+ */
+export function applyVoiceJudge(
+  candidates: ReadonlyArray<string>,
+  raw: string
+): string[] {
+  try {
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) return [...candidates];
+    const parsed = JSON.parse(match[0]) as { keep?: unknown };
+    if (!Array.isArray(parsed.keep)) return [...candidates];
+    const keep = parsed.keep
+      .filter((i): i is number => typeof i === "number")
+      .filter((i) => Number.isInteger(i) && i >= 0 && i < candidates.length);
+    // An empty keep-list is a REAL answer: everything they sent was an
+    // instruction. Only a malformed response falls back to everything.
+    return keep.map((i) => candidates[i]);
+  } catch {
+    return [...candidates];
+  }
+}
+
 export function isVoiceSample(text: string): boolean {
   const t = text.trim();
   if (t.length < MIN_SAMPLE_CHARS || t.length > MAX_SAMPLE_CHARS) return false;
