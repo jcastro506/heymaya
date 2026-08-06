@@ -2373,9 +2373,25 @@ export async function sendDm(
 /* Media presign — POST /api/v1/media/presign                                  */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * ⭐ VERIFIED LIVE 2026-08-05 — and the guess was wrong.
+ *
+ * The response is FLAT, not `{ files: [...] }`:
+ *
+ *   { uploadUrl, publicUrl, key }
+ *
+ * `uploadUrl` is a presigned R2 PUT valid one hour; `publicUrl` is the
+ * permanent `media.zernio.com/...` address to hand back as `MediaItem.url`.
+ * A 12.95 MB mp4 PUT in 6.4s and fetched back byte-identical.
+ *
+ * The old shape came from `[shape-unverified-live]` and would have thrown on
+ * first contact — `files` simply does not exist.
+ */
 const PresignResponseSchema = z
   .object({
-    files: z.array(z.record(z.string(), z.unknown())).default([]),
+    uploadUrl: z.string(),
+    publicUrl: z.string(),
+    key: z.string().optional(),
   })
   .passthrough();
 
@@ -2410,7 +2426,11 @@ export async function presignMedia(
       `Unexpected presign payload: ${parsed.error.message}`
     );
   }
-  return { files: parsed.data.files };
+  return {
+    uploadUrl: parsed.data.uploadUrl,
+    publicUrl: parsed.data.publicUrl,
+    key: parsed.data.key,
+  };
 }
 
 /* -------------------------------------------------------------------------- */
