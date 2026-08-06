@@ -350,3 +350,164 @@ describe("⭐ MOST POSTS DO NOT MENTION THE PRODUCT", () => {
     expect(body).toMatch(/an ad, not an observation/i);
   });
 });
+
+/**
+ * ⭐ THE 2026-08-06 FAILURE.
+ *
+ * At 07:17 she told the founder she'd draft an X post and show it first. She
+ * created the draft at 11:04 and never sent a word. A second draft from the
+ * previous evening was hours from expiring unseen. Both rows read `pending`;
+ * the founder had no idea either existed, and Sprint 3's streak stalled on it.
+ *
+ * Nothing was broken — `create` simply inserted a row and returned, leaving
+ * the showing to the model remembering next turn. Principle 4: anything
+ * promised to the user is enforced by the server.
+ */
+describe("SHOWING IT IS PART OF CREATING IT", () => {
+  it("show_me_first sends the draft to the founder in the same call", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "showsend", { postingMode: "show_me_first" });
+
+    const res = await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "the post itself",
+      now: NOW,
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.shown).toBe(true);
+
+    const messages = await t.run(async (ctx) =>
+      ctx.db
+        .query("messages")
+        .withIndex("by_customer_and_dedupe", (q) =>
+          q.eq("customerId", customerId).eq("dedupeKey", `draft:${res.draftId}`)
+        )
+        .collect()
+    );
+    expect(messages).toHaveLength(1);
+    // The POST, not a description of it — "showing you this one" is not showing it.
+    expect(messages[0].body).toContain("the post itself");
+    expect(messages[0].awaitingAnswer).toBe(true);
+  });
+
+  it("just_go does not ask — the switch is the founder's, not ours", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "justgo", { postingMode: "just_go" });
+
+    const res = await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "goes straight out",
+      now: NOW,
+    });
+    if (!res.ok) return;
+    expect(res.shown).toBe(false);
+    const all = await t.run((ctx) =>
+      ctx.db
+        .query("messages")
+        .withIndex("by_customer_and_ts", (q) => q.eq("customerId", customerId))
+        .collect()
+    );
+    expect(all).toHaveLength(0);
+  });
+
+  it("sends exactly once, however many times create is retried", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "once", { postingMode: "show_me_first" });
+    const res = await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "only once",
+      now: NOW,
+    });
+    if (!res.ok) return;
+    // Same draft, re-offered by the sweep — must not ask twice.
+    await t.mutation(internal.maya.drafts.reofferUnshown, { customerId, now: NOW });
+    const all = await t.run((ctx) =>
+      ctx.db
+        .query("messages")
+        .withIndex("by_customer_and_ts", (q) => q.eq("customerId", customerId))
+        .collect()
+    );
+    expect(all).toHaveLength(1);
+  });
+
+  it("a draft written during an open question is re-offered, not lost", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "blocked", { postingMode: "show_me_first" });
+
+    // Something else is already awaiting an answer (invariant 5).
+    await t.mutation(internal.maya.messages.askFounder, {
+      customerId,
+      surface: "telegram",
+      body: "which angle do you prefer?",
+      dedupeKey: "q:angle",
+      ts: NOW,
+    });
+
+    const res = await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "written while blocked",
+      now: NOW,
+    });
+    if (!res.ok) return;
+    // Blocked — and REPORTED as blocked rather than silently dropped.
+    expect(res.shown).toBe(false);
+    expect(res.shownBlockedBy).toBeDefined();
+
+    // The sweep can't show it while the question is still open...
+    let swept = await t.mutation(internal.maya.drafts.reofferUnshown, {
+      customerId,
+      now: NOW,
+    });
+    expect(swept.unshown).toBe(1);
+    expect(swept.shown).toBe(0);
+
+    // ...but the moment it closes, the draft is offered rather than expiring.
+    await t.mutation(internal.maya.messages.closeOpenQuestion, { customerId });
+    swept = await t.mutation(internal.maya.drafts.reofferUnshown, {
+      customerId,
+      now: NOW,
+    });
+    expect(swept.shown).toBe(1);
+
+    const shownMsg = await t.run((ctx) =>
+      ctx.db
+        .query("messages")
+        .withIndex("by_customer_and_dedupe", (q) =>
+          q.eq("customerId", customerId).eq("dedupeKey", `draft:${res.draftId}`)
+        )
+        .first()
+    );
+    expect(shownMsg?.body).toContain("written while blocked");
+  });
+
+  it("an expired draft is never re-offered — the moment has passed", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "expired", { postingMode: "show_me_first" });
+    await t.mutation(internal.maya.messages.askFounder, {
+      customerId,
+      surface: "telegram",
+      body: "blocking question",
+      dedupeKey: "q:block",
+      ts: NOW,
+    });
+    await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "stale by tomorrow",
+      now: NOW,
+    });
+    await t.mutation(internal.maya.messages.closeOpenQuestion, { customerId });
+
+    const swept = await t.mutation(internal.maya.drafts.reofferUnshown, {
+      customerId,
+      now: NOW + DRAFT_TTL_MS + 1,
+    });
+    expect(swept.unshown).toBe(0);
+    expect(swept.shown).toBe(0);
+  });
+});

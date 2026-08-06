@@ -444,6 +444,29 @@ export const livenessSweep = internalAction({
       });
       if (!facts) continue;
       perCustomer.push({ customerId, breaches: evaluate(facts) });
+
+      /**
+       * ⭐ Re-offer drafts the founder was never shown.
+       *
+       * `drafts.create` now shows the draft in the same mutation that writes
+       * it — but `askFounder` refuses when a question is already open
+       * (invariant 5), so a draft written during an open question is created
+       * and NOT shown. Without this it would expire unseen, which is the exact
+       * failure the create-time send exists to end.
+       *
+       * Deliberately placed in the hourly sweep rather than a new cron: the
+       * dominant defect class in this codebase is finished machinery with no
+       * caller, and the watchdog already runs.
+       */
+      const reoffered = await ctx.runMutation(
+        internal.maya.drafts.reofferUnshown,
+        { customerId, now }
+      );
+      if (reoffered.shown > 0) {
+        console.log(
+          `[liveness] re-offered ${reoffered.shown} unshown draft(s) for ${customerId}`
+        );
+      }
     }
 
     // Is this many bad days, or one incident? A vendor outage makes every
