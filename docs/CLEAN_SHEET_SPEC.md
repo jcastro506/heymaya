@@ -2608,6 +2608,42 @@ The remaining half:
 The rung picks *which* question to ask; the corpus answers the format half.
 Scheduled as **Sprint 8**, with the ladder now real enough to build on.
 
+#### 5.2.3a ⚠️ MEASURED — the trend sweep has a low hit rate, and two sources are dead
+
+Built and run live 2026-08-05. Results worth writing down before anyone
+budgets time against this sweep:
+
+| source | state |
+|---|---|
+| TikTok `get-trending-feed` | ✅ works, normalised posts with statistics |
+| YouTube `shorts/trending` | ✅ works, 77 shorts with view/like/comment counts |
+| X `trends` | ✅ names + rank, **no engagement** |
+| TikTok `hashtags/popular` | ⛔ **dead upstream** — *"TikTok took this page down"* |
+| TikTok `songs/popular` | ⛔ **dead upstream** — *"this endpoint is unavailable"* |
+
+§5.2 lists all five. **Two no longer exist**, and the vendor says so in plain
+English rather than failing — recorded so nobody spends an afternoon
+re-discovering it.
+
+⭐ **And the first live run kept 0 of 56.**
+
+> *"nothing in 56 trending posts belongs to this niche"*
+
+That is the sweep working correctly, not failing. Global trending is
+mass-market — a live X pull had `#AEWDynamite` at rank 1 — and a narrow B2B
+niche rarely intersects it. Banking those would have her chasing wrestling
+hashtags, which is the failure `learn-business` already hit once when
+"engagement" surfaced wedding photographers.
+
+**The implication for §14.3's format question.** The corpus that answers *"what
+shape works here"* is **not** the global trending feed. It is the
+keyword-searched posts the topic sweep already ranks by velocity — those are
+in-niche by construction. The trend sweep is a **cheap wide net for the
+occasional crossover moment**, not a primary source, and should be scheduled
+and budgeted as one. **Weekly, not daily**, with the hit rate logged: a
+customer whose niche never intersects trending is a customer this sweep should
+stop running for.
+
 ### 14.3 How she learns — and the small-n problem
 
 **The trap:** a founder posting 1–3×/day has 30–90 posts a month per channel. You cannot run a meaningful experiment at that volume. Any system claiming to optimize hooks off 40 data points is fitting noise and will produce confident nonsense.

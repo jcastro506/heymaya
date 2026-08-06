@@ -241,6 +241,7 @@ import type * as maya_setup from "../maya/setup.js";
 import type * as maya_spendCeiling from "../maya/spendCeiling.js";
 import type * as maya_telegram from "../maya/telegram.js";
 import type * as maya_telegramFiles from "../maya/telegramFiles.js";
+import type * as maya_trends from "../maya/trends.js";
 import type * as maya_voice from "../maya/voice.js";
 import type * as maya_voiceCorpus from "../maya/voiceCorpus.js";
 import type * as maya_zernioCapability from "../maya/zernioCapability.js";
@@ -496,6 +497,7 @@ declare const fullApi: ApiFromModules<{
   "maya/spendCeiling": typeof maya_spendCeiling;
   "maya/telegram": typeof maya_telegram;
   "maya/telegramFiles": typeof maya_telegramFiles;
+  "maya/trends": typeof maya_trends;
   "maya/voice": typeof maya_voice;
   "maya/voiceCorpus": typeof maya_voiceCorpus;
   "maya/zernioCapability": typeof maya_zernioCapability;
