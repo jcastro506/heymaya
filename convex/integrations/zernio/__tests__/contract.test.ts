@@ -533,8 +533,19 @@ describe("inbox write wrappers — templated POST paths + required body", () => 
 /* -------------------------------------------------------------------------- */
 
 describe("presignMedia — POST /api/v1/media/presign", () => {
-  it("sends {filename, contentType, size}", async () => {
-    const rec = recordingClient({ files: [{ uploadUrl: "u", url: "https://cdn/x.jpg" }] });
+  it("⭐ sends {filename, contentType, size} and reads the FLAT response", async () => {
+    /**
+     * The old fixture asserted `{ files: [...] }`, which the guess in
+     * `[shape-unverified-live]` invented. VERIFIED LIVE 2026-08-05, the real
+     * response is flat — `{ uploadUrl, publicUrl, key }` — and the old schema
+     * would have thrown on first contact. A test written against a guessed
+     * shape passes forever and proves nothing.
+     */
+    const rec = recordingClient({
+      uploadUrl: "https://late-media.../temp/x.jpg?X-Amz-Signature=...",
+      publicUrl: "https://media.zernio.com/temp/x.jpg",
+      key: "temp/x.jpg",
+    });
     const out = await presignMedia(rec.client, {
       filename: "x.jpg",
       contentType: "image/jpeg",
@@ -546,7 +557,9 @@ describe("presignMedia — POST /api/v1/media/presign", () => {
       contentType: "image/jpeg",
       size: 1234,
     });
-    expect(out.files).toHaveLength(1);
+    // `publicUrl` is what a post carries; `uploadUrl` is where the bytes go.
+    expect(out.publicUrl).toBe("https://media.zernio.com/temp/x.jpg");
+    expect(out.uploadUrl).toMatch(/X-Amz-Signature/);
   });
 
   it("rejects missing filename / contentType", async () => {
