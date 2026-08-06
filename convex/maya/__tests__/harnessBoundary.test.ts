@@ -55,6 +55,13 @@ const INPUT: MayaWorkspaceInput = {
  * pattern.
  */
 const CONVEX_MAY_SCHEDULE = [
+  /**
+   * A founder connecting an account at 2am must be noticed whether or not she
+   * is awake — and it is collection with no judgment in it (§2.3). Without
+   * this, three channels were connected live and nothing updated until someone
+   * ran the sync by hand.
+   */
+  "maya-sync-channels",
   "maya-refresh-metrics",
   "maya-drain-jobs",
   "maya-liveness-sweep",
