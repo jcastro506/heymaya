@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import {
   assessInsight,
   assessSweep,
-  hedgeDensity,
+  parseFillerVerdict,
   MIN_AUTHOR_DIVERSITY,
   namesSomethingConcrete,
   similarity,
@@ -233,13 +233,26 @@ describe("the primitives", () => {
     expect(namesSomethingConcrete("there are 3 things")).toBe(false);
   });
 
-  it("hedgeDensity rises with filler", () => {
-    expect(
-      hedgeDensity("engagement audience content strategy value growth")
-    ).toBeGreaterThan(0.5);
-    expect(
-      hedgeDensity("@dan posted a rollback thread that hit 41000 views overnight")
-    ).toBeLessThan(0.15);
+  it("⭐ THE HEDGE WORDLIST IS GONE — a judge reads the sentence", () => {
+    /**
+     * It was thirteen words deciding whether text was padding, and it was
+     * wrong in the obvious direction: "drive engagement" is filler,
+     * "3 engagements on that post" is a fact. A wordlist counts both.
+     *
+     * A word is not filler because of the word. That distinction needs
+     * reading, so it needs a model.
+     */
+    expect(parseFillerVerdict(JSON.stringify({ filler: true, why: "no subject" })))
+      .toEqual({ filler: true, why: "no subject" });
+    expect(parseFillerVerdict(JSON.stringify({ filler: false, why: "names a post" })))
+      .toEqual({ filler: false, why: "names a post" });
+  });
+
+  it("⭐ AN UNREADABLE VERDICT IS null, AND THE CALLER FAILS OPEN", () => {
+    // A quality nudge that can't run must not silently reject every idea. The
+    // gate that DOES fail closed is the safety critic, at the publish boundary.
+    expect(parseFillerVerdict("probably filler tbh")).toBeNull();
+    expect(parseFillerVerdict(JSON.stringify({ why: "hm" }))).toBeNull();
   });
 
   it("similarity is symmetric and bounded", () => {

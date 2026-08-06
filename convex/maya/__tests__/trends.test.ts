@@ -94,28 +94,31 @@ describe("⭐ A SHAPE WORTH STEALING", () => {
     expect(parseShape(JSON.stringify({ keep: true, shape: "  ", why: "nice" }))).toBeNull();
   });
 
-  it("⭐ THE SUBJECT WEARING A DISGUISE IS REJECTED", () => {
+  it("⭐ THE EVASION WORDLIST IS GONE — the prompt shows the model its own failures", () => {
     /**
-     * Measured on the first live run: 11 shapes came back and about half were
-     * this. Told not to name what the post was about, the model substituted a
-     * placeholder rather than answering false.
+     * It listed the placeholders the judge reached for ("best X", "a known
+     * entity", "a famous figure") and rejected them in code. That worked, and
+     * it was the wrong shape: a lookup table deciding whether language is
+     * evasive, when the model that produced the evasion can recognise it
+     * perfectly well once it is shown what it did.
      *
-     * None of these is a shape. A structure needing a celebrity, a fandom, or
-     * a literal `X` cannot carry a dashboard.
+     * The four real failures are now quoted verbatim in the prompt, named as
+     * its own answers — so this parser no longer second-guesses the verdict.
      */
-    for (const shape of [
-      "Ranking the best X moments",
-      "Showcase a signature feature of a known entity in a short video",
-      "A lesser-known individual repeats a surprising action against a famous figure",
-      "Showcase a personal talent or performance while using a trending hashtag",
-    ]) {
-      const v = parseShape(JSON.stringify({ keep: true, shape, why: "it works" }));
-      expect(v?.keep, shape).toBe(false);
-    }
+    const v = parseShape(
+      JSON.stringify({
+        keep: true,
+        shape: "Showcase a signature feature of a known entity in a short eye-catching video",
+        why: "x",
+      })
+    );
+    // Not filtered here any more. If the model still says keep, we keep it —
+    // and the PROMPT is where that gets fixed, because the model can recognise
+    // its own evasion once it is shown it.
+    expect(v?.keep).toBe(true);
   });
 
-  it("⭐ AND THE GOOD ONES FROM THE SAME RUN STILL PASS", () => {
-    // The guard has to be narrow enough to keep what actually worked.
+  it("the good ones from the real run still pass", () => {
     for (const shape of [
       "Time-lapse of a massive task being completed quickly, ending with an emotional payoff",
       "Document a quest to locate a rare or valuable item, showing the search process and final discovery",

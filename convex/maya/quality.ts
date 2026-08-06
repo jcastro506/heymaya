@@ -1,3 +1,5 @@
+import { v } from "convex/values";
+import { internalAction } from "../_generated/server";
 /**
  * Research and sweep QUALITY gates.
  *
@@ -101,25 +103,20 @@ const URL = /https?:\/\/\S+/i;
 const NUMBER = /\b\d{2,}(?:[.,]\d+)?%?\b/;
 
 /**
- * Hedges that survive removal of every concrete fact. An insight built only
- * from these is one that would read identically for any product in any niche —
- * which is precisely the thing this product exists not to produce (§7.5.2).
+ * ⭐ The hedge wordlist is GONE, and `judgeFiller` replaced it.
+ *
+ * It was thirteen words — engagement, audience, strategy, value — deciding
+ * whether text was padding. That is a judgment call in a lookup table, and it
+ * is wrong in the obvious direction: *"drive engagement"* is filler,
+ * *"3 engagements on that post"* is a fact. A wordlist counts both.
+ *
+ * The operator's standing rule covers this: trust the model where the question
+ * is judgment. A 13-word list is not a cheaper judge, it is a worse one.
+ *
+ * The gates BELOW stay deterministic, and the difference is worth naming:
+ * "does this text contain a handle, a URL or a number" is **presence**, not
+ * quality. No model is needed to see whether a digit is there.
  */
-const HEDGE_WORDS = [
-  "engagement",
-  "audience",
-  "content",
-  "strategy",
-  "leverage",
-  "optimize",
-  "resonate",
-  "authentic",
-  "value",
-  "insights",
-  "trends",
-  "brand",
-  "growth",
-];
 
 /**
  * Does this text name anything real?
@@ -133,13 +130,7 @@ export function namesSomethingConcrete(text: string): boolean {
   return HANDLE.test(text) || URL.test(text) || NUMBER.test(text);
 }
 
-/** Fraction of words that are hedges. High means the text is mostly padding. */
-export function hedgeDensity(text: string): number {
-  const words = text.toLowerCase().match(/[a-z]+/g) ?? [];
-  if (words.length === 0) return 1;
-  const hedges = words.filter((w) => HEDGE_WORDS.includes(w)).length;
-  return hedges / words.length;
-}
+
 
 /** Word-level Jaccard. Cheap, and good enough to catch a restated insight. */
 export function similarity(a: string, b: string): number {
@@ -298,11 +289,6 @@ export function assessInsight(input: {
       detail:
         "names no handle, URL or number — this would read identically for any product in any niche",
     });
-  } else if (hedgeDensity(text) > 0.25) {
-    failures.push({
-      gate: "generic",
-      detail: "mostly filler words around a thin fact",
-    });
   }
 
   for (const prior of priorInsights) {
@@ -319,3 +305,68 @@ export function assessInsight(input: {
 
   return { ok: failures.length === 0, failures };
 }
+
+
+/* -------------------------------------------------------------------------- */
+/* The filler judge                                                            */
+/* -------------------------------------------------------------------------- */
+
+/** Cheap. This reads one short string and answers one question. */
+export const FILLER_MODEL = "openai/gpt-oss-120b";
+
+const FILLER_SYSTEM = `You are reading one line that a social media manager wants to post about, for a specific product.
+
+One question: **would this line read identically for any product in any niche?**
+
+Return STRICT JSON, no prose:
+{ "filler": boolean, "why": string }
+
+- "filler": true when the line is padding — words that survive the removal of every concrete fact. "Drive engagement with authentic content that resonates with your audience" is filler: nothing in it is about anything.
+- "filler": false when it names something real — a person, a moment, a number, a specific complaint, a specific thing that happened. Specific and DULL is still false. You are not judging whether it is good.
+- "why": one short clause.
+
+⚠️ A word is not filler because of the word. "Engagement" in "drive engagement" is padding; "engagement" in "3 engagements on that post" is a measurement. Read the sentence, not the vocabulary.`;
+
+export function parseFillerVerdict(
+  raw: string
+): { filler: boolean; why: string } | null {
+  const fenced = raw.replace(/```json|```/g, "").trim();
+  try {
+    const parsed = JSON.parse(fenced) as Record<string, unknown>;
+    if (typeof parsed.filler !== "boolean") return null;
+    return {
+      filler: parsed.filler,
+      why: typeof parsed.why === "string" ? parsed.why : "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ⭐ Is this line about anything?
+ *
+ * Fails OPEN: an unreachable judge must not silently reject every idea. §2.5 —
+ * this is a quality nudge, not a safety gate, and the safety gate that DOES
+ * fail closed lives at the publish boundary.
+ */
+export const judgeFiller = internalAction({
+  args: { text: v.string() },
+  handler: async (_ctx, args): Promise<{ filler: boolean; why: string }> => {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) return { filler: false, why: "" };
+    const { callOpenRouter } = await import("../integrations/openrouter/client");
+    const completion = await callOpenRouter({
+      apiKey,
+      model: FILLER_MODEL,
+      temperature: 0,
+      maxTokens: 300,
+      messages: [
+        { role: "system", content: FILLER_SYSTEM },
+        { role: "user", content: args.text.slice(0, 600) },
+      ],
+    });
+    if (!completion.ok) return { filler: false, why: "" };
+    return parseFillerVerdict(completion.content) ?? { filler: false, why: "" };
+  },
+});
