@@ -1476,6 +1476,49 @@ brief = {
 }
 ```
 
+#### 7.5.35 ⭐ SPIKE — Higgsfield vs Creatify, decided by output
+
+*Operator-raised 2026-08-06. Creatify is currently a single point of failure on
+the one capability that is fully blocked (§7.6.5a, §18 open question 1), and
+"the vendor we already wrapped" is not a reason to keep it.*
+
+**Both of Creatify's blockers are commercial, not technical** — self-serve API
+availability and **written commercial resale rights** — so a second vendor is
+not a nice-to-have. If Higgsfield answers either more cleanly, it changes what
+ships.
+
+⚠️ **Run the licence question FIRST and stop if it fails.** Rendering a hundred
+comparison videos against a vendor whose terms forbid reselling the output is
+work that cannot be used. This is the same trap §18's open question already
+names for Creatify; do not walk into it twice.
+
+| # | Question | Why it decides |
+|---|---|---|
+| 1 | ⭐ **Written commercial resale rights?** Get it in writing, not from a pricing page | A no ends the spike. Everything below is wasted otherwise |
+| 2 | **Self-serve API, or a sales call?** | §17.36 — a vendor gated behind enterprise onboarding cannot serve a $149 tier |
+| 3 | **Cost per 15s vertical, all-in** | Creatify's honest comparison is the `lipsyncs_v2` path at **7.5 cr ≈ $1.13**, not the Custom-Template 2.5 cr that isn't wrapped. Compare like for like |
+| 4 | **Does it take a founder's own footage?** | §7.5.3's authenticity floor is founder-footage → real screen recording → avatar last. A vendor that only does avatars is a rung, not a pipeline |
+| 5 | **Render time vs post time** | §7.5.7 check 7 — a 1:10 ratio is already the budgeted assumption |
+| 6 | **What happens on failure** | A render that dies silently at 11:00 costs a placement. Named failure or nothing |
+
+**The test that actually decides it (4 and 6 aside):**
+
+⭐ **One brief, both vendors, blind.** Take a real brief from the idea bank —
+grounded in a real complaint, with the founder's real screen recording — render
+it both ways, and judge with the **cringe eval already built** (§18 Sprint 4.5):
+pairwise against real niche posts, 50% is a perfect score, and a run that
+misses the synthetic control is **void**.
+
+That instrument exists and is the only honest way to answer "which is better",
+because "which looks better to us" is the judgment this product exists not to
+trust.
+
+**Exit:** a table with a price, a licence answer, and a cringe-eval number per
+vendor — and a decision written down. **Not** "Higgsfield seems nicer."
+
+**Cost:** a handful of renders each. Trivial next to the cost of building the
+whole video pipeline against the wrong vendor.
+
 #### 7.5.4a What we trust Creatify with, and what we never do
 
 *Operator, 2026-08-05: "Creatify is a whole business built on creating social
