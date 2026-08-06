@@ -426,3 +426,101 @@ export function parseTags(
     return null;
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Filling the library from the product page                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ Scrape the founder's own site for real product imagery.
+ *
+ * `extractFromUrl` and `classifyImages` were built for the §6.4.6 spike and
+ * have had **no production caller** — twenty-ninth and thirtieth finds. So the
+ * media library's only inlet was a founder sending a file by hand.
+ *
+ * ⚠️ And that inlet does not work: **R2 is unconfigured**, so `uploadAsset`
+ * cannot store bytes. Which means until now the library could not fill AT ALL,
+ * and Instagram and TikTok — both of which reject a text-only post — had no
+ * path to a real image.
+ *
+ * ## This path needs no R2, and that is the point
+ *
+ * Zernio FETCHES the media URLs we hand it (verified live: it pulled a 12.95MB
+ * mp4 from `media.zernio.com`). A screenshot already hosted on the founder's
+ * own site is already a public URL. So there is nothing to store — we record
+ * the URL, and the publish path passes it straight through.
+ *
+ * §6.4.6b measured that **half of target-type sites publish no usable product
+ * screenshot at all**, so this fills the library for roughly half of customers
+ * and correctly finds nothing for the rest. Finding nothing is the answer that
+ * triggers the asset ask, which already works.
+ */
+export const fillFromProductPage = internalAction({
+  args: { customerId: v.id("customers"), now: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: boolean; found: number; kept: number; detail: string }> => {
+    const truth = await ctx.runQuery(internal.maya.productTruth.forCustomer, {
+      customerId: args.customerId,
+    });
+    const url = truth?.source?.url;
+    if (!url) {
+      return { ok: false, found: 0, kept: 0, detail: "no product page read yet" };
+    }
+
+    const extracted = await ctx.runAction(
+      internal.maya.assetClassifier.extractFromUrl,
+      { url }
+    );
+    if (!extracted.ok || extracted.images.length === 0) {
+      return {
+        ok: true,
+        found: 0,
+        kept: 0,
+        detail: "nothing usable on the page",
+      };
+    }
+
+    const classified = await ctx.runAction(
+      internal.maya.assetClassifier.classifyImages,
+      { urls: extracted.images.map((i) => i.url) }
+    );
+
+    /**
+     * ⭐ Only real product screenshots are kept.
+     *
+     * §6.4.6b's measurement is the reason: neon.tech returned 12 images and
+     * ZERO screenshots — all illustration. Keeping those would fill the
+     * library with decoration, satisfy every presence check, and suppress the
+     * asset ask for exactly the founders who most need it.
+     */
+    let kept = 0;
+    for (const result of classified.results) {
+      if (result.kind !== "product_screenshot") continue;
+      await ctx.runMutation(internal.maya.media.record, {
+        customerId: args.customerId,
+        kind: "screenshot",
+        source: "scrape",
+        // The page's own URL IS the storage — Zernio fetches it directly, so
+        // there is nothing to upload and no R2 dependency on this path.
+        storageKey: result.url,
+        publicUrl: result.url,
+        contentType: "image/*",
+        classifiedAs: result.kind,
+        now: args.now,
+      });
+      kept += 1;
+    }
+
+    return {
+      ok: true,
+      found: extracted.images.length,
+      kept,
+      detail:
+        kept === 0
+          ? `${extracted.images.length} images on the page and none of them show the product`
+          : `${kept} real product screenshots of ${extracted.images.length} images`,
+    };
+  },
+});
