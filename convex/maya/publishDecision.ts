@@ -142,8 +142,11 @@ export function decide(input: {
   channel: Doc<"channels"> | null;
   draft: Doc<"drafts"> | null;
   alreadyApproved: boolean;
+  /** Injected so the expiry check is testable against a fixed clock. */
+  now?: number;
 }): PublishDecision {
   const { customer, channel, draft, alreadyApproved } = input;
+  const now = input.now ?? Date.now();
 
   if (!customer) {
     return {
@@ -190,6 +193,31 @@ export function decide(input: {
     };
   }
 
+  /**
+   * ⭐ THE TTL, ENFORCED WHERE IT MATTERS.
+   *
+   * `outcome: "expired"` is checked above and **nothing has ever set it** —
+   * the 24-hour TTL lived only in the `drafts.pending` query filter, which
+   * decides what gets LISTED, not what can be POSTED. So any draft, at any
+   * age, could be published.
+   *
+   * Not hypothetical: on 2026-08-06 a draft was surfaced twelve minutes before
+   * expiry and approved thirty-three minutes after it. Had the publish call
+   * been made, a 25-hour-old post would have gone out against a founder's
+   * "Yep" that was answering something they'd read as current.
+   *
+   * Invariant 8: a pending draft cannot sit forever. A stale yes is not
+   * consent to the thing it names — the moment it was written for has passed.
+   */
+  if (draft.expiresAt <= now) {
+    const hours = Math.floor((now - draft.proposedAt) / 3_600_000);
+    return {
+      publish: false,
+      reason: "safety_floor",
+      detail: `that one's ${hours}h old now — the moment's passed, let me write you a fresh one`,
+    };
+  }
+
   // THE SWITCH. The only mode-based hold there is.
   if (channel.postingMode === "show_me_first" && !alreadyApproved) {
     return {
@@ -229,6 +257,7 @@ export const decidePublish = internalQuery({
     customerId: v.id("customers"),
     draftId: v.id("drafts"),
     alreadyApproved: v.optional(v.boolean()),
+    now: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<PublishDecision> => {
     const customer = await get<Doc<"customers">>(ctx, args.customerId);
@@ -264,6 +293,7 @@ export const decidePublish = internalQuery({
       channel,
       draft,
       alreadyApproved: args.alreadyApproved ?? false,
+      now: args.now,
     });
   },
 });

@@ -56,7 +56,15 @@ function draft(over: Partial<Doc<"drafts">> = {}): Doc<"drafts"> {
   } as Doc<"drafts">;
 }
 
-const base = { customer: customer(), channel: channel(), draft: draft() };
+// ⭐ `now` is pinned to the fixture clock. `decide` enforces the draft TTL, and
+// without this every fixture draft would read as expired the moment the suite
+// runs on a real wall clock — which is exactly the check working.
+const base = {
+  customer: customer(),
+  channel: channel(),
+  draft: draft(),
+  now: NOW,
+};
 
 /* -------------------------------------------------------------------------- */
 
@@ -97,6 +105,7 @@ describe("THE IRON RULE — the closed set of reasons a publish may be held", ()
                 channel: channel({ status, postingMode }),
                 draft: draft({ outcome }),
                 alreadyApproved,
+                now: NOW,
               });
               if (!result.publish) {
                 expect(HOLD_REASONS).toContain(result.reason as HoldReason);
@@ -110,8 +119,73 @@ describe("THE IRON RULE — the closed set of reasons a publish may be held", ()
     // Failing after a yes is the worst possible sequence, and re-checking here
     // would reintroduce the exact class of silent hold this function kills.
     // `decide` takes no budget argument at all — the type system enforces it.
+    //
+    // ⭐ `now` was added 2026-08-06 and is the ONLY addition since. It is a
+    // clock, not a policy input: it makes the draft TTL testable against a
+    // fixed time rather than the wall clock. The distinction that keeps this
+    // guard meaningful is that `now` cannot express a REASON to hold — it can
+    // only answer "has this draft's own stated expiry passed", which is a fact
+    // already on the row. A budget, a trust score or a ramp would each be a
+    // new opinion, and each still costs whoever adds it this failing test.
     const args = Object.keys({ ...base, alreadyApproved: false });
-    expect(args).toEqual(["customer", "channel", "draft", "alreadyApproved"]);
+    expect(args).toEqual([
+      "customer",
+      "channel",
+      "draft",
+      "now",
+      "alreadyApproved",
+    ]);
+  });
+});
+
+/**
+ * ⭐ THE TTL, WHICH WAS DECORATIVE UNTIL 2026-08-06.
+ *
+ * `decide` checked `outcome === "expired"` and nothing has ever SET that
+ * outcome. The 24-hour limit lived only in the `drafts.pending` query filter,
+ * which decides what gets listed — not what can be posted.
+ *
+ * Live that day: a draft was surfaced twelve minutes before expiry and
+ * approved thirty-three minutes after it. Had the publish call been made, a
+ * 25-hour-old post would have gone out against a "Yep" the founder wrote
+ * believing it was current.
+ */
+describe("a stale yes is not consent", () => {
+  const DAY = 86_400_000;
+
+  it("an expired draft never publishes, however clearly it was approved", () => {
+    const result = decide({
+      ...base,
+      draft: draft({ proposedAt: NOW - DAY - 1, expiresAt: NOW - 1 }),
+      alreadyApproved: true,
+      now: NOW,
+    });
+    expect(result.publish).toBe(false);
+    if (!result.publish) expect(result.reason).toBe("safety_floor");
+  });
+
+  it("says how old it is and offers a fresh one, in their language", () => {
+    const result = decide({
+      ...base,
+      draft: draft({ proposedAt: NOW - 25 * 3_600_000, expiresAt: NOW - 3_600_000 }),
+      alreadyApproved: true,
+      now: NOW,
+    });
+    if (result.publish) throw new Error("expected a hold");
+    expect(result.detail).toContain("25h");
+    expect(result.detail).toMatch(/fresh/);
+    // Plain language — she relays this verbatim.
+    expect(result.detail).not.toMatch(/expired|TTL|draft_/i);
+  });
+
+  it("one second before expiry it still publishes — the boundary is not a buffer", () => {
+    const result = decide({
+      ...base,
+      draft: draft({ proposedAt: NOW - DAY + 1000, expiresAt: NOW + 1000 }),
+      alreadyApproved: true,
+      now: NOW,
+    });
+    expect(result.publish).toBe(true);
   });
 });
 
@@ -374,6 +448,7 @@ describe("decidePublish through Convex", () => {
     const t = convexTest(schema, modules);
     const { customerId, draftId } = await seed(t, "live");
     const result = await t.query(internal.maya.publishDecision.decidePublish, {
+      now: NOW,
       customerId,
       draftId,
     });
@@ -386,6 +461,7 @@ describe("decidePublish through Convex", () => {
     const a = await seed(t, "tenant_a");
     const b = await seed(t, "tenant_b");
     const result = await t.query(internal.maya.publishDecision.decidePublish, {
+      now: NOW,
       customerId: a.customerId,
       draftId: b.draftId,
       alreadyApproved: true,
@@ -405,6 +481,7 @@ describe("decidePublish through Convex", () => {
       for (const row of rows) await ctx.db.delete(row._id);
     });
     const result = await t.query(internal.maya.publishDecision.decidePublish, {
+      now: NOW,
       customerId,
       draftId,
       alreadyApproved: true,
@@ -423,7 +500,7 @@ describe("decidePublish through Convex", () => {
     // Publish it, using the key `decide` minted.
     const decision = await t.query(
       internal.maya.publishDecision.decidePublish,
-      { customerId, draftId }
+      { customerId, draftId, now: NOW }
     );
     expect(decision.publish).toBe(true);
     if (!decision.publish) return;
