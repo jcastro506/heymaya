@@ -587,3 +587,78 @@ describe("⭐ THE DAILY POST CAP IS CHECKED BEFORE DRAFTING, NOT AFTER APPROVAL"
     expect(res.why ?? "").not.toMatch(/posts on x today/);
   });
 });
+
+
+/**
+ * ⭐ The voice-from-edits loop, dead at step one until now.
+ *
+ * SOUL.md: "A writing sample shows me their register; an edit shows me what I
+ * got WRONG. When these disagree with anything above, these win."
+ *
+ * `drafts.decide` existed since Sprint 4 to store exactly that, with no
+ * caller — so `foldEdits` and `diffSignals` had no input and the `editPairs`
+ * block in her workspace rendered empty from the day it was written.
+ */
+describe("⭐ A FOUNDER'S EDIT IS CAPTURED, NOT JUST OBEYED", () => {
+  it("⭐ THE DIFF IS STORED, AND THE EDITED TEXT BECOMES THE DRAFT", async () => {
+    const t = convexTest(schema, modules);
+    const { customerId, token } = await seed(t, "editcap", {
+      postingMode: "just_go",
+    });
+    const draftId = await t.run(async (ctx) =>
+      ctx.db.insert("drafts", {
+        customerId,
+        channel: "x",
+        kind: "post",
+        snapshotText: "we deployed a new dashboard today",
+        outcome: "pending",
+        proposedAt: Date.now(),
+        expiresAt: Date.now() + 86_400_000,
+      })
+    );
+
+    await post(t, "/maya/publish", token, {
+      draftId,
+      alreadyApproved: true,
+      editedText: "shipped a new dashboard today",
+    });
+
+    const row = await t.run(async (ctx) => ctx.db.get(draftId));
+    const draft = row as { outcome: string; editDiff?: string; snapshotText: string };
+    expect(draft.outcome).toBe("edited");
+    // ⭐ Publishing reads snapshotText, so the ORIGINAL staying here would post
+    // the version they rejected.
+    expect(draft.snapshotText).toBe("shipped a new dashboard today");
+
+    const diff = JSON.parse(draft.editDiff!) as { before: string; after: string };
+    expect(diff.before).toMatch(/deployed/);
+    expect(diff.after).toMatch(/shipped/);
+  });
+
+  it("no edit means no diff — approving unchanged is not an edit", async () => {
+    // Recording every approval as an edit would teach her voice from her own
+    // writing, which is exactly the feedback loop that makes an agent drift.
+    const t = convexTest(schema, modules);
+    const { customerId, token } = await seed(t, "noedit", {
+      postingMode: "just_go",
+    });
+    const draftId = await t.run(async (ctx) =>
+      ctx.db.insert("drafts", {
+        customerId,
+        channel: "x",
+        kind: "post",
+        snapshotText: "left exactly as written",
+        outcome: "pending",
+        proposedAt: Date.now(),
+        expiresAt: Date.now() + 86_400_000,
+      })
+    );
+
+    await post(t, "/maya/publish", token, { draftId, alreadyApproved: true });
+
+    const draft = (await t.run(async (ctx) => ctx.db.get(draftId))) as {
+      editDiff?: string;
+    };
+    expect(draft.editDiff).toBeUndefined();
+  });
+});

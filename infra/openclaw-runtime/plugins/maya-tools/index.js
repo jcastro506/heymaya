@@ -193,7 +193,14 @@ export default defineToolPlugin({
               "True only when the founder approved THIS draft. Their words in chat count exactly as much as a tap.",
           })
         ),
-      }),
+      
+        editedText: Type.Optional(
+          Type.String({
+            description:
+              "The founder's OWN rewrite, if they changed anything before saying yes. Pass it verbatim — do not tidy it. This is the strongest signal you ever get about how they write: a sample shows their register, an edit shows what you got wrong. It is stored and folded into your voice, and the edited text is what gets posted.",
+          })
+        ),
+}),
       execute: async (p, _cfg, ctx) => call("publish", p, ctx.signal),
     }),
 
