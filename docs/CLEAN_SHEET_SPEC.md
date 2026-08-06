@@ -2534,6 +2534,55 @@ Five levels. **Which level is broken tells you what to fix** — and a real mana
 
 A manager who tells you the truth about *why* it isn't working is worth more than one who just posts more. **This should be built deliberately as a subsystem, not as a fallback** — it's more defensible than anything in the content pipeline, and it's the thing that makes the product feel like it has judgment.
 
+#### 14.2.1 ⭐ BUILT 2026-08-05 — and what still isn't
+
+`convex/maya/ladder.ts` computes the rung from `placements`, and `history`
+carries it plus every placement's metrics and `metricsAsOf`.
+
+**Before this, the Sunday cron asked *"which of the five rungs is working"* and
+`history` returned no numbers at all** — URL, channel, kind, text, date. A
+diagnosis with nothing under it leaves two outcomes: she says she can't, or she
+guesses.
+
+The rung is **computed, not judged** (§2.3): which rung broke is arithmetic on
+rows; what it means and what to do stays hers. First live run, on the real
+account:
+
+> *"6 posts and 90 views — almost nobody saw them, so this is a format problem,
+> not a topic one."* — `L1`
+
+⭐ **`unknown` is a real answer.** No numbers back yet returns `unknown` and
+says so, never a rung that sounds plausible. And `healthy` states what it
+cannot see — L3 and L4 need the attribution ladder (§14.45), so calling them
+fine from silence is the dishonesty §14.2's worked example exists to prevent.
+
+**Every channel's engagement vocabulary is summed**, not one of them: X returns
+`replies`/`reposts`, Zernio returns `comments`/`shares`/`saves`. Insisting on
+one silently scores the other channel as zero.
+
+### ⚠️ 14.2.2 The loop is still open — she diagnoses, and nothing changes
+
+**`ideas.ts` and `drafts.ts` never read performance.** So the ladder tells her
+on Sunday that it's a format problem, and Monday's idea selection is made
+exactly as if it hadn't.
+
+That is the difference between a manager who *reports* and one who *manages*.
+A human notices the posts that opened with a question got three times the
+replies, and **makes more of those**. Right now the finding reaches the founder
+and never reaches the work.
+
+Closing it is not "feed metrics to the model and hope". §14.3 is explicit about
+why: at 30–90 posts a month, own data **cannot** answer format-level questions,
+and a system that optimises hooks off 40 data points is fitting noise. So:
+
+| Question | Answered from |
+|---|---|
+| Which channel is working? growing? clicking? | **own data** — coarse, and n is enough |
+| Which hook, length, shape, format? | **the niche corpus** — where n actually exists |
+
+The rung picks *which* question to ask; the corpus answers the format half.
+Scheduled as **Sprint 8**, with the ladder now real enough to build on.
+
 ### 14.3 How she learns — and the small-n problem
 
 **The trap:** a founder posting 1–3×/day has 30–90 posts a month per channel. You cannot run a meaningful experiment at that volume. Any system claiming to optimize hooks off 40 data points is fitting noise and will produce confident nonsense.
