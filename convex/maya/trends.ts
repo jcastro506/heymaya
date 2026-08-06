@@ -5,17 +5,30 @@
  * *format* problem, and idea scoring then prefers evidence of things that
  * demonstrably travelled. This is where that evidence comes from.
  *
- * ## ⚠️ Trending is not the same as relevant, and that is the whole risk
+ * ## ⭐ TWO things come out of a trending feed, and they are not the same
  *
- * A live pull returned `#AEWDynamite` at rank 1 on X. It is genuinely trending
- * and it means nothing to an indie SaaS founder. Banking it would have her
- * chasing wrestling hashtags — the same failure `learn-business` already hit
- * once, where "engagement" surfaced wedding photographers and "threads"
- * surfaced sewing.
+ * The first version of this file kept only in-niche trends and dropped
+ * everything else. That was wrong, and it threw away the case a real manager
+ * uses most.
  *
- * So nothing here is banked on popularity alone. A trend has to **intersect
- * the niche's own vocabulary** before it counts as evidence, and the ones that
- * don't are dropped rather than ranked lower.
+ * | what | why it's useful | banked as |
+ * |---|---|---|
+ * | **in-niche** | someone in our world is talking about this **topic** | `observation` — topic evidence |
+ * | **out-of-niche** | the topic is useless, but the **SHAPE** might travel | `format_card` — a proven shape looking for content |
+ *
+ * A live pull had `#AEWDynamite` at rank 1. Nobody should post about
+ * wrestling. But if that clip works because of a three-beat "everyone thinks
+ * X / actually Y / here's proof" structure, **that structure works for a
+ * dashboard too** — which is exactly §5.3's `reusableAs`: *"the shape,
+ * described so it can be applied to a different product."*
+ *
+ * So popularity alone still banks nothing. In-niche is decided by vocabulary;
+ * out-of-niche has to earn its place by having a shape worth stealing, and a
+ * model decides that because "is this adaptable" is judgment, not a regex.
+ *
+ * ⚠️ The old failure is still guarded: what gets banked from an out-of-niche
+ * trend is **the shape and never the subject**. `learn-business` already hit
+ * this once, where "engagement" surfaced wedding photographers.
  *
  * ## What actually exists, checked 2026-08-05
  *
@@ -37,6 +50,94 @@ import { internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Observation } from "./scroll";
 import { velocity, toMillis } from "./learnBusiness";
+
+
+/**
+ * ⭐ Cheap on purpose. This judges shapes, not prose — and it runs over a
+ * couple of dozen captions once a week, not per post.
+ */
+export const SHAPE_MODEL = "openai/gpt-oss-120b";
+
+/** How many out-of-niche trends to put in front of the judge. */
+export const SHAPES_JUDGED = 12;
+
+const SHAPE_SYSTEM = `You are looking at posts that are trending RIGHT NOW, in a niche that has nothing to do with the business you work for.
+
+The subject is irrelevant. You are only asking one thing: **is the SHAPE worth stealing?**
+
+A shape is the structure underneath the content — "everyone thinks X, actually Y, here's proof", "three things I got wrong in my first year", "before/after with the reveal held to the last second", "answering a comment as the whole video".
+
+Return STRICT JSON, no prose:
+{ "keep": boolean, "shape": string, "why": string }
+
+- "keep": true ONLY if the structure would still work for a completely different product. A shape that depends on the subject — a celebrity, a sport, a meme nobody outside that world knows — is FALSE.
+- "shape": the structure in one sentence, with NO reference to the original subject. If you cannot describe it without naming what the post was about, it is not reusable and "keep" is false.
+- "why": what makes it work, in one short clause.
+
+Most trending posts are not reusable. Saying false is the common, correct answer.`;
+
+/**
+ * Ask whether an out-of-niche trend has a shape worth borrowing.
+ *
+ * The instruction to describe the shape WITHOUT naming the subject is the
+ * whole guard: a shape you cannot state without saying "wrestling" is not a
+ * shape, it's the topic wearing a disguise.
+ */
+/**
+ * ⭐ Evasions the shape judge produces when it cannot honestly comply.
+ *
+ * Measured on the first live run: 11 shapes came back and roughly half were
+ * the subject wearing a disguise. Told not to name what the post was about,
+ * the model substituted a placeholder instead of answering false:
+ *
+ *   "Ranking the best X moments"
+ *   "a signature feature of a known entity"
+ *   "a lesser-known individual ... against a famous figure"
+ *
+ * None of those is a shape. A structure that needs a celebrity, a fandom, or a
+ * literal `X` standing in for the subject cannot carry a dashboard, and
+ * borrowing it would put her back to chasing the trend rather than the form.
+ *
+ * Checked in code rather than asked for again in the prompt, because the
+ * prompt already asked and this is what came back.
+ */
+const SUBJECT_EVASIONS = [
+  /\bbest X\b/i,
+  /\bthe X\b/i,
+  /\ba known entity\b/i,
+  /\ba famous (figure|person|celebrity)\b/i,
+  /\ba celebrity\b/i,
+  /\bthe subject\b/i,
+  /\bwell-known (figure|person)\b/i,
+  /\btrending hashtag\b/i,
+];
+
+/** A shape too short to be a structure is a label. */
+const MIN_SHAPE_WORDS = 6;
+
+export function parseShape(
+  raw: string
+): { keep: boolean; shape: string; why: string } | null {
+  const fenced = raw.replace(/```json|```/g, "").trim();
+  try {
+    const parsed = JSON.parse(fenced) as Record<string, unknown>;
+    if (typeof parsed.keep !== "boolean") return null;
+    if (!parsed.keep) return { keep: false, shape: "", why: "" };
+    const shape = typeof parsed.shape === "string" ? parsed.shape.trim() : "";
+    const why = typeof parsed.why === "string" ? parsed.why.trim() : "";
+    // A "keep" with no shape is the model agreeing rather than answering.
+    if (!shape) return null;
+    // The subject wearing a disguise — see SUBJECT_EVASIONS.
+    if (SUBJECT_EVASIONS.some((re) => re.test(shape))) return { keep: false, shape: "", why: "" };
+    // "Showcase a personal talent" is a label, not a structure.
+    if (shape.split(/\s+/).filter(Boolean).length < MIN_SHAPE_WORDS) {
+      return { keep: false, shape: "", why: "" };
+    }
+    return { keep: true, shape, why };
+  } catch {
+    return null;
+  }
+}
 
 /** How many trending items to consider per source before filtering. */
 export const TREND_SAMPLE = 40;
@@ -75,6 +176,7 @@ export const sweepTrends = internalAction({
     ok: boolean;
     considered: number;
     kept: number;
+    shapes: number;
     observations: Observation[];
     detail: string;
   }> => {
@@ -87,6 +189,7 @@ export const sweepTrends = internalAction({
         ok: false,
         considered: 0,
         kept: 0,
+        shapes: 0,
         observations: [],
         detail: "I don't know what to watch yet",
       };
@@ -94,6 +197,8 @@ export const sweepTrends = internalAction({
 
     const keywords = targets.keywords;
     const kept: Observation[] = [];
+    /** Out-of-niche trends, held for the shape judge rather than discarded. */
+    const foreign: Array<{ text: string; sourceUrl: string; channel: string }> = [];
     let considered = 0;
 
     const { tiktok } = await import(
@@ -118,7 +223,19 @@ export const sweepTrends = internalAction({
       for (const post of result.posts.slice(0, TREND_SAMPLE)) {
         considered += 1;
         const desc = post.caption ?? "";
-        if (!intersectsNiche(desc, keywords)) continue;
+        if (!intersectsNiche(desc, keywords)) {
+          if (desc.trim())
+            foreign.push({
+              text: desc,
+              sourceUrl:
+                post.url ??
+                (post.authorHandle
+                  ? `https://www.tiktok.com/@${post.authorHandle}/video/${post.postId}`
+                  : ""),
+              channel: "tiktok",
+            });
+          continue;
+        }
 
         const ms = toMillis(post.postedAt);
         const metrics = {
@@ -154,7 +271,19 @@ export const sweepTrends = internalAction({
         const short = item as Record<string, unknown>;
         considered += 1;
         const text = `${String(short.title ?? "")} ${String(short.description ?? "")}`;
-        if (!intersectsNiche(text, keywords)) continue;
+        if (!intersectsNiche(text, keywords)) {
+          const title = String(short.title ?? "").trim();
+          if (title)
+            foreign.push({
+              text: title,
+              sourceUrl:
+                typeof short.url === "string"
+                  ? short.url
+                  : `https://www.youtube.com/watch?v=${String(short.id ?? "")}`,
+              channel: "youtube",
+            });
+          continue;
+        }
 
         const channel = (short.channel ?? {}) as { handle?: string };
         const metrics = {
@@ -194,20 +323,83 @@ export const sweepTrends = internalAction({
       });
     }
 
+    /**
+     * ⭐ THE OTHER HALF — shapes worth stealing from trends that aren't ours.
+     *
+     * One model call over a couple of dozen captions, once a week. Judged
+     * rather than matched, because "would this structure work for a different
+     * product" is exactly the kind of question a regex answers badly.
+     *
+     * What lands in the bank is the SHAPE, never the subject — and the prompt
+     * enforces that by refusing any shape that can't be described without
+     * naming what the post was about.
+     */
+    let shapes = 0;
+    if (foreign.length > 0 && process.env.OPENROUTER_API_KEY) {
+      const sample = foreign.slice(0, SHAPES_JUDGED);
+      const { callOpenRouter } = await import("../integrations/openrouter/client");
+      for (const item of sample) {
+        try {
+          const completion = await callOpenRouter({
+            apiKey: process.env.OPENROUTER_API_KEY,
+            model: SHAPE_MODEL,
+            temperature: 0,
+            maxTokens: 400,
+            messages: [
+              { role: "system", content: SHAPE_SYSTEM },
+              { role: "user", content: `TRENDING POST:\n${item.text.slice(0, 600)}` },
+            ],
+          });
+          if (!completion.ok) continue;
+          const verdict = parseShape(completion.content);
+          if (!verdict?.keep) continue;
+
+          await ctx.runMutation(internal.maya.ideas.bankIdeas, {
+            customerId: args.customerId,
+            ideasJson: JSON.stringify([
+              {
+                angle: verdict.shape,
+                source: "format_card",
+                evidence: {
+                  // The trending post is the evidence that the shape travels.
+                  quote: verdict.why || verdict.shape,
+                  sourceUrls: [item.sourceUrl],
+                  frequency: 1,
+                  observedAt: now,
+                },
+              },
+            ]),
+            now,
+          });
+          shapes += 1;
+        } catch (error) {
+          console.error(`[trends] shape judge failed: ${String(error)}`);
+        }
+      }
+    }
+
     return {
       ok: true,
       considered,
       kept: kept.length,
+      shapes,
       observations: kept,
       /**
        * A zero here is a real finding, not a failure: it means nothing
        * trending right now belongs to this niche, which is the normal case and
        * far better than banking wrestling hashtags.
        */
-      detail:
-        kept.length === 0
-          ? `nothing in ${considered} trending posts belongs to this niche`
-          : `${kept.length} of ${considered} trending posts are ours`,
+      /**
+       * Both halves reported. A sweep that found no in-niche trend but three
+       * borrowable shapes did real work, and a detail that only counted the
+       * first half would call that a blank week.
+       */
+      detail: [
+        kept.length > 0
+          ? `${kept.length} of ${considered} trending posts are in our niche`
+          : `nothing in ${considered} trending posts is in our niche`,
+        shapes > 0 ? `${shapes} shapes worth borrowing` : "no shapes worth borrowing",
+      ].join(", "),
     };
   },
 });
