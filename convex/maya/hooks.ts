@@ -886,6 +886,38 @@ export const publishHttp = httpAction(async (ctx, request) => {
     );
   }
 
+  /**
+   * ⭐ CAPTURE THE EDIT — the strongest voice signal we get, and it was never
+   * recorded.
+   *
+   * SOUL.md says it outright: *"A writing sample shows me their register; an
+   * edit shows me what I got WRONG. When these disagree with anything above,
+   * these win."*
+   *
+   * `drafts.decide` has existed since Sprint 4 to store exactly that, with
+   * **no caller**. So the chain died at step one: she drafted, the founder
+   * rewrote it, nothing recorded the diff, `foldEdits` and `diffSignals` had
+   * no input, and the `editPairs` block in her workspace has rendered empty
+   * since the day it was written.
+   *
+   * ⚠️ Captured HERE rather than in a tool of its own, because the approval
+   * and the edit arrive in the same breath — *"post it but say 'ship' not
+   * 'deploy'"*. A separate tool is one she has to remember to call after the
+   * founder has already moved on, and that is precisely the shape of thing
+   * this codebase keeps not calling.
+   *
+   * The edited text also BECOMES the draft, so publishing posts what they
+   * approved rather than the version they rejected.
+   */
+  const editedText = str(parsed.body, "editedText");
+  if (editedText && editedText.trim().length > 0) {
+    await ctx.runMutation(internal.maya.drafts.decide, {
+      draftId: draftId as Id<"drafts">,
+      outcome: "edited",
+      editedText,
+    });
+  }
+
   // Double-publish prevention (invariant 4) BEFORE the decision, so a retry of
   // an already-published draft is idempotent rather than a second post.
   const already = await ctx.runQuery(internal.maya.publishDecision.alreadyPublished, {
