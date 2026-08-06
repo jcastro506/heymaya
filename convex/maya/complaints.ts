@@ -26,6 +26,7 @@ import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { toMillis } from "./learnBusiness";
+import { BUYER_MAP_MAX_AGE_MS } from "./buyerMap";
 import type { Doc, Id } from "../_generated/dataModel";
 
 /**
@@ -92,7 +93,7 @@ export function prepareComments(comments: MinedComment[]): MinedComment[] {
     .slice(0, MAX_COMMENTS_PER_CALL);
 }
 
-const COMPLAINT_SYSTEM = `You read comment sections from one niche and report what people keep saying they want, hate, or don't understand.
+export const COMPLAINT_SYSTEM = `You read comment sections from one niche and report what people keep saying they want, hate, or don't understand.
 
 Return STRICT JSON, no prose:
 { "complaints": [ { "text": string, "quotes": string[], "frequency": number } ] }
@@ -105,22 +106,57 @@ The job is CLUSTERING, not listing. "how much is it", "what's the price", and "i
 
 Only report things said more than once. A single comment is an anecdote and this list is meant to be acted on.
 
+You may be given ALREADY KNOWN complaints from previous weeks. When you are, MERGE rather than start over:
+- if new comments say a version of something already known, keep the known wording, ADD the new frequency to it, and include the new quotes
+- if the new comments say it better — closer to how a buyer actually talks — use the better wording and say so by using it
+- carry forward anything still true even when nothing new was said about it this week, with its existing frequency unchanged
+- only drop something if the niche has clearly moved on
+
+A complaint people have raised for three weeks is stronger evidence than one raised loudly once. Starting from scratch each week throws that away.
+
 Ignore: praise, tagging friends, spam, off-topic chatter, and anything about the creator rather than the subject.
 
 If there is no repeated complaint in here, return an empty array. That is a real answer.`;
 
 export function buildComplaintPrompt(
   niche: string,
-  comments: MinedComment[]
+  comments: MinedComment[],
+  /**
+   * ⭐ What we already knew, so the map ACCUMULATES.
+   *
+   * `storeComplaints` overwrote the whole list every run, so the buyer map was
+   * a snapshot of one sweep's eight posts rather than a map. A complaint that
+   * was loud in week one vanished in week two if that week's eight posts
+   * happened not to mention it, and frequency never counted past a single run
+   * — which is the opposite of what makes this evidence worth anything.
+   *
+   * Merging is done by the MODEL rather than by a similarity threshold here.
+   * Word overlap scores "pricing is confusing" against "I can't work out what
+   * this would cost me" at 0.07 — the same complaint, counted twice, therefore
+   * never surfaced. The model reads them as the same sentence because they
+   * are.
+   */
+  known: ReadonlyArray<Complaint> = []
 ): string {
-  return [
-    `NICHE: ${niche}`,
-    "",
-    "COMMENTS:",
+  const lines = [`NICHE: ${niche}`, ""];
+
+  if (known.length > 0) {
+    lines.push(
+      "ALREADY KNOWN (from previous weeks — merge into these, don't start over):"
+    );
+    for (const k of known) {
+      lines.push(`- [${k.frequency}x] ${k.text}`);
+    }
+    lines.push("");
+  }
+
+  lines.push(
+    "NEW COMMENTS:",
     ...comments.map((c) => `- ${c.text.replace(/\s+/g, " ").slice(0, 240)}`),
     "",
-    "What do these people keep saying? Strict JSON only.",
-  ].join("\n");
+    "What do these people keep saying? Strict JSON only."
+  );
+  return lines.join("\n");
 }
 
 /* -------------------------------------------------------------------------- */
@@ -357,6 +393,15 @@ export const mineComplaints = internalAction({
       };
     }
 
+    // What we already knew. Stale entries are dropped BEFORE the model sees
+    // them, so a complaint the niche moved on from isn't carried forward
+    // forever by its own history.
+    const known = (
+      await ctx.runQuery(internal.maya.complaints.complaintsFor, {
+        customerId: args.customerId,
+      })
+    ).filter((c) => now - c.lastSeen <= BUYER_MAP_MAX_AGE_MS);
+
     const { callModel } = await import("./llm");
     const completion = await callModel(ctx, {
       customerId: args.customerId,
@@ -369,7 +414,11 @@ export const mineComplaints = internalAction({
         { role: "system", content: COMPLAINT_SYSTEM },
         {
           role: "user",
-          content: buildComplaintPrompt(targets.keywords.join(", "), prepared),
+          content: buildComplaintPrompt(
+            targets.keywords.join(", "),
+            prepared,
+            known
+          ),
         },
       ],
     });
