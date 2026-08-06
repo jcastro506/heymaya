@@ -413,7 +413,172 @@ const perceptionChecks: SmokeCheck[] = [
 /* The registry                                                                */
 /* -------------------------------------------------------------------------- */
 
+/* -------------------------------------------------------------------------- */
+/* Zernio — the endpoints proved by hand on 2026-08-05, now guarded            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ `POST /api/v1/media/presign` — the check that would have caught a wrapper
+ * that was simply wrong.
+ *
+ * `PresignResponseSchema` expected `{ files: [...] }` for months. The real
+ * response is FLAT — `{uploadUrl, publicUrl, key}` — so `presignMedia` would
+ * have thrown on first contact, and the contract test asserted the invented
+ * shape, so it passed forever and proved nothing.
+ *
+ * This is what a smoke check is for: the guess and the test agreed with each
+ * other and neither had met the vendor.
+ */
+const zernioPresign: SmokeCheck = {
+  vendor: "zernio",
+  tier: 2,
+  check: "zernio.media-presign",
+  requiredEnv: ["ZERNIO_API_KEY"],
+  // A presign mints a URL and stores nothing. Free.
+  estCostUsd: 0,
+  schema: z.strictObject({
+    uploadUrl: z.string(),
+    publicUrl: z.string(),
+    key: z.string(),
+    expiresIn: z.unknown().optional(),
+  }),
+  run: async () => {
+    const { ZernioClient } = await import("../integrations/zernio/client");
+    return await new ZernioClient({
+      apiKey: process.env.ZERNIO_API_KEY!,
+    }).request<unknown>("/api/v1/media/presign", {
+      method: "POST",
+      body: { filename: "smoke.png", contentType: "image/png", size: 1024 },
+    });
+  },
+};
+
+/**
+ * ⭐ `POST /api/v1/tools/validate/post` — the preflight, and a canary for the
+ * per-channel media rules.
+ *
+ * Verified live: X accepts text alone; Instagram, TikTok and YouTube reject it
+ * and name media. That distinction is load-bearing — it is what tells a founder
+ * "I can't post to Instagram without a picture" BEFORE anything is spent.
+ *
+ * Asserting the REJECTION is deliberate. A check that only proves the endpoint
+ * answers would still pass on the day Instagram silently starts accepting text,
+ * which is the day our preflight starts lying.
+ */
+const zernioValidatePost: SmokeCheck = {
+  vendor: "zernio",
+  tier: 2,
+  check: "zernio.validate-post",
+  requiredEnv: ["ZERNIO_API_KEY"],
+  estCostUsd: 0,
+  laxReason:
+    "The per-error object is lax because Zernio phrases the message freely and adds hints — asserting the exact prose would fail on a copy edit. What is strict is the part that matters: `valid` must be literally false for a text-only Instagram post, so the day that starts returning true, this fails.",
+  schema: z.strictObject({
+    valid: z.literal(false),
+    errors: z.array(
+      z.object({ platform: z.string(), error: z.string() }).passthrough()
+    ),
+  }),
+  run: async () => {
+    const { ZernioClient } = await import("../integrations/zernio/client");
+    return await new ZernioClient({
+      apiKey: process.env.ZERNIO_API_KEY!,
+    }).request<unknown>("/api/v1/tools/validate/post", {
+      method: "POST",
+      // Text-only to Instagram MUST be rejected. If this starts returning
+      // valid:true, the strict schema fails and someone looks.
+      body: { content: "smoke", platforms: [{ platform: "instagram" }] },
+    });
+  },
+};
+
+/**
+ * ⭐ `GET /api/v1/inbox/comments` — the work queue, and `accountsQueried`.
+ *
+ * The field matters more than the rows. Live, this returned
+ * `accountsQueried: 0` against a healthy connected account while
+ * `/inbox/conversations` returned 1 — and zero is *"I didn't look"*, which was
+ * indistinguishable from an empty inbox until the wrapper surfaced it.
+ *
+ * For a product whose job is "answer everyone", a schema change that drops
+ * that field returns us to answering nobody and reporting success.
+ */
+const zernioInboxQueue: SmokeCheck = {
+  vendor: "zernio",
+  tier: 2,
+  check: "zernio.inbox-comments",
+  requiredEnv: ["ZERNIO_API_KEY"],
+  estCostUsd: 0,
+  laxReason:
+    "The envelope is lax because Zernio has already added fields here mid-flight (`meta.lastUpdated` appeared without notice) and a new one is not a breakage. What is asserted is the three that must never DISAPPEAR — accountsQueried, accountsFailed, failedAccounts — because losing accountsQueried returns us to reading zero accounts and reporting an empty inbox.",
+  schema: z
+    .object({
+      data: z.array(z.unknown()),
+      pagination: z
+        .object({ hasMore: z.boolean(), nextCursor: z.unknown() })
+        .passthrough(),
+      meta: z
+        .object({
+          // The three that must never silently disappear.
+          accountsQueried: z.number(),
+          accountsFailed: z.number(),
+          failedAccounts: z.array(z.unknown()),
+        })
+        .passthrough(),
+    })
+    .passthrough(),
+  run: async () => {
+    const { ZernioClient } = await import("../integrations/zernio/client");
+    return await new ZernioClient({
+      apiKey: process.env.ZERNIO_API_KEY!,
+    }).request<unknown>("/api/v1/inbox/comments", {
+      method: "GET",
+      query: { limit: 1 },
+    });
+  },
+};
+
+/**
+ * ⭐ `GET /api/v1/analytics` — where every non-X metric comes from.
+ *
+ * `overview` is asserted and `posts` is not, because a quiet account returns an
+ * empty array and that is not a failure. What must not change is the envelope:
+ * `metrics.ts` matches placements to rows by `platformPostUrl`, and a rename
+ * there silently stops every number arriving.
+ */
+const zernioAnalytics: SmokeCheck = {
+  vendor: "zernio",
+  tier: 2,
+  check: "zernio.analytics",
+  requiredEnv: ["ZERNIO_API_KEY"],
+  estCostUsd: 0,
+  laxReason:
+    "`posts[]` is unknown because a quiet account returns an empty array and the row shape differs per platform — TikTok carries igReels fields that YouTube does not. Asserting a per-row shape would fail on whichever channel is quiet that day. The envelope and `overview` are what metrics.ts depends on, and those are asserted.",
+  schema: z
+    .object({
+      overview: z
+        .object({ totalPosts: z.number(), publishedPosts: z.number() })
+        .passthrough(),
+      posts: z.array(z.unknown()),
+      pagination: z.unknown().optional(),
+    })
+    .passthrough(),
+  run: async () => {
+    const { ZernioClient } = await import("../integrations/zernio/client");
+    return await new ZernioClient({
+      apiKey: process.env.ZERNIO_API_KEY!,
+    }).request<unknown>("/api/v1/analytics", {
+      method: "GET",
+      query: { limit: 1 },
+    });
+  },
+};
+
 export const SMOKE_CHECKS: SmokeCheck[] = [
+  zernioPresign,
+  zernioValidatePost,
+  zernioInboxQueue,
+  zernioAnalytics,
   scrapeCreatorsCredits,
   creatifyPersonas,
   creatifyVoices,
