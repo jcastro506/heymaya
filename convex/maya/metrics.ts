@@ -211,6 +211,23 @@ export const refresh = internalAction({
   },
 });
 
+/**
+ * ⭐ The same post, spelled two ways.
+ *
+ * Found by testing against a real placement: TikTok's analytics payload
+ * returns the post URL WITH tracking params —
+ * `...?utm_campaign=tt4d_open_api&utm_source=aw4smjxfftapkprm` — while
+ * `/posts/{id}` returns it bare. Exact-string matching silently found nothing,
+ * so a post sitting at 38 views showed no metrics at all.
+ *
+ * Silent, because "no match" and "no numbers yet" produce the same empty
+ * result — the failure shape this file keeps running into.
+ */
+export function canonicalUrl(url: string): string {
+  const withoutQuery = url.split("?")[0].split("#")[0];
+  return withoutQuery.replace(/\/+$/, "").toLowerCase();
+}
+
 /** A missing count is `0`, not `null` — but see the note in `refresh`. */
 function numberOf(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -240,6 +257,12 @@ export const refreshAll = internalAction({
         now: args.now,
       });
       updated += result.updated;
+      // The other three channels, via Zernio — X is not in that payload.
+      const viaZernio = await ctx.runAction(
+        internal.maya.metrics.refreshFromZernio,
+        { customerId, now: args.now }
+      );
+      updated += viaZernio.updated;
     }
     return { customers: customers.length, updated };
   },
@@ -250,6 +273,124 @@ export const activeCustomers = internalQuery({
   handler: async (ctx): Promise<Id<"customers">[]> => {
     const rows = (await ctx.db.query("customers").collect()) as Doc<"customers">[];
     return rows.filter((c) => c.state === "active").map((c) => c._id);
+  },
+});
+
+/**
+ * ⭐ Metrics for the channels twitterapi.io can't see.
+ *
+ * `refresh` above covers X only. Zernio's `/analytics` covers the rest, and it
+ * is RICHER than anything we get for X — verified live 2026-08-05 against real
+ * placements:
+ *
+ *   TikTok  { views: 38, likes, comments, shares, saves, clicks, follows,
+ *             impressions, reach, engagementRate, lastUpdated }
+ *   YouTube { views: 50, likes: 1, engagementRate: 2, ... }
+ *
+ * ⚠️ It returns **nothing for X** — `xCapabilities.analytics` is `false` on
+ * that account because X is billed pass-through, and §2.15.17 decides to leave
+ * it that way at 33× the price of twitterapi.io. So the two paths are
+ * complementary by design, not redundant.
+ *
+ * ⚠️ Instagram returned 0 posts despite three live placements at the time of
+ * writing. Recorded rather than explained — the sync may simply lag, and
+ * calling it broken before re-checking is what §2.15.1 exists to prevent.
+ *
+ * Matched on `platformPostUrl`, not on our idempotency key, because that is
+ * what the analytics payload actually carries back.
+ */
+export const refreshFromZernio = internalAction({
+  args: { customerId: v.id("customers"), now: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ checked: number; updated: number; detail: string }> => {
+    const now = args.now ?? Date.now();
+    const apiKey = process.env.ZERNIO_API_KEY;
+    if (!apiKey) {
+      return { checked: 0, updated: 0, detail: "the accounts aren't connected yet" };
+    }
+
+    const all = (await ctx.runQuery(internal.maya.metrics.awaitingMetrics, {
+      customerId: args.customerId,
+      now,
+    })) as Doc<"placements">[];
+    if (all.length === 0) {
+      return { checked: 0, updated: 0, detail: "nothing recent to check" };
+    }
+
+    const byUrl = new Map<string, Id<"placements">>();
+    for (const p of all) if (p.url) byUrl.set(canonicalUrl(p.url), p._id);
+
+    const { ZernioClient } = await import("../integrations/zernio/client");
+    const client = new ZernioClient({ apiKey });
+    let updated = 0;
+
+    // X is deliberately absent — see the note above.
+    for (const platform of ["tiktok", "instagram", "youtube"]) {
+      try {
+        const raw = (await client.request<unknown>("/api/v1/analytics", {
+          method: "GET",
+          query: { platform, limit: 50 },
+        })) as { posts?: Array<Record<string, unknown>> };
+
+        for (const post of raw.posts ?? []) {
+          const url = typeof post.platformPostUrl === "string" ? post.platformPostUrl : null;
+          const placementId = url ? byUrl.get(canonicalUrl(url)) : undefined;
+          if (!placementId) continue;
+
+          const a = (post.analytics ?? {}) as Record<string, unknown>;
+          await ctx.runMutation(internal.maya.metrics.recordMetrics, {
+            placementId,
+            metricsJson: JSON.stringify({
+              views: numberOf(a.views),
+              likes: numberOf(a.likes),
+              comments: numberOf(a.comments),
+              shares: numberOf(a.shares),
+              saves: numberOf(a.saves),
+              impressions: numberOf(a.impressions),
+              reach: numberOf(a.reach),
+              clicks: numberOf(a.clicks),
+              follows: numberOf(a.follows),
+              engagementRate: numberOf(a.engagementRate),
+            }),
+            now,
+          });
+          updated += 1;
+        }
+      } catch (error) {
+        console.error(
+          `[metrics] zernio analytics failed for ${platform}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
+
+    return {
+      checked: all.length,
+      updated,
+      detail: updated === 0 ? "no numbers back yet" : `${updated} updated`,
+    };
+  },
+});
+
+/** Live placements on the channels Zernio reports on, inside the window. */
+export const awaitingMetrics = internalQuery({
+  args: { customerId: v.id("customers"), now: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<Doc<"placements">[]> => {
+    const now = args.now ?? Date.now();
+    const rows = (await ctx.db
+      .query("placements")
+      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+      .collect()) as Doc<"placements">[];
+    return rows.filter(
+      (p) =>
+        p.channel !== "x" &&
+        p.linkStatus === "live" &&
+        Boolean(p.url) &&
+        now - p.publishedAt <= REFRESH_WINDOW_MS
+    );
   },
 });
 
