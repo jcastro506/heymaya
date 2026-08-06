@@ -210,12 +210,35 @@ describe("tool descriptions carry the choreography the model needs", () => {
     expect(publish).toMatch(/holdReason/);
   });
 
-  it("publish does not let the model announce a queued post as live", () => {
+  it("publish does not let the model announce an in-flight post as live", () => {
     // Invariant 6: the unit of work is a placement — something live, with a
-    // URL. Queued is not posted, and claiming otherwise is the fabrication this
-    // product cannot afford.
+    // URL. In flight is not posted, and claiming otherwise is the fabrication
+    // this product cannot afford.
+    //
+    // ⚠️ Asserts the RULE, not the sentence. This matched the literal string
+    // "do not announce it as posted" until 2026-08-06, when that description
+    // had to be rewritten — it used our internal nouns ("the placement row
+    // with its URL is the proof") and she paraphrased them straight back to
+    // the founder. A test pinned to prose blocks the fix for the leak it
+    // wasn't watching for. Conventions: assert on structure, never on wording.
     const publish = index.slice(index.indexOf('name: "publish"'));
-    expect(publish).toMatch(/do not announce it as posted/i);
+    expect(publish).toMatch(/live link|went live|is up/i);
+    expect(publish).toMatch(/not that it is up|before you tell them it posted/i);
+  });
+
+  it("no tool teaches her a word the founder must never hear", () => {
+    // The root cause of the 2026-08-06 leak: SOUL says "never a table or a
+    // queue or a job", and the publish description said "the placement row
+    // with its URL is the proof it went live". The specific instruction won,
+    // and she replied "I'll need its placement URL before I can say it
+    // posted." You cannot forbid a vocabulary in the prompt and then model it
+    // in the instruction being executed.
+    //
+    // Tools legitimately need precise nouns (draftId, ok:false) — so the rule
+    // is not that they're absent, it's that any tool using OUR internal nouns
+    // must also carry the translation instruction.
+    const INTERNAL_NOUNS = /\bplacement row\b|\bqueued successfully\b/i;
+    expect(index).not.toMatch(INTERNAL_NOUNS);
   });
 
   it("ask_founder frames the one-question refusal as correct, not broken", () => {
