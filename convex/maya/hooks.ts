@@ -990,6 +990,119 @@ export const replyHttp = httpAction(async (ctx, request) => {
 });
 
 /* -------------------------------------------------------------------------- */
+/* rules                                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ `rules` — the three commands §18 Sprint 6 asks for, in one tool.
+ *
+ *   list          "what rules do I have?"       → their sentences, with dates
+ *   forget        "forget that"                  → retire one, never delete it
+ *   why           "why did/didn't you do that?"  → the stored record
+ *
+ * All three read a ledger that was WRITE-ONLY: `append` had a caller and
+ * `activeRules`, `forget`, `effectiveRule` and `history` had none. Nineteenth
+ * time this week.
+ *
+ * ⚠️ **`why` is answered from rows, never regenerated.** §10.2 is explicit: a
+ * model asked to explain its own past behaviour produces a plausible story,
+ * which is worse than "I don't know" because it cannot be corrected. So this
+ * returns what was recorded and she reads it out; if the ledger is silent, the
+ * honest answer is that she doesn't have a record.
+ *
+ * ⚠️ **Forget RETIRES, it never deletes.** §16 — the ledger is append-only, so
+ * "forget that" marks a rule inactive and leaves the history intact. A founder
+ * asking *"what did I used to tell you?"* deserves an answer.
+ */
+export const rulesHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if ("error" in auth) return auth.error;
+  const parsed = await readJson(request);
+  if ("error" in parsed) return parsed.error;
+
+  const action = str(parsed.body, "action") ?? "list";
+
+  if (action === "forget") {
+    const directiveId = str(parsed.body, "directiveId");
+    if (!directiveId) {
+      return respond(
+        {
+          ok: false,
+          why: "no rule was named",
+          next: "call with action:list first, then pass the directiveId of the one they mean — never guess which rule they want dropped",
+        },
+        400
+      );
+    }
+    const result = await ctx.runMutation(internal.maya.directives.forget, {
+      directiveId: directiveId as Id<"directives">,
+      customerId: auth.customer._id,
+    });
+    return respond({
+      ok: result.forgotten,
+      data: { forgotten: result.forgotten },
+      why: result.forgotten
+        ? "that rule is retired — it stays in the history, it just stops applying"
+        : "that rule wasn't active",
+      next: result.forgotten
+        ? "say it back in their words so they know exactly which one stopped: quote the sentence"
+        : "don't claim to have forgotten something that wasn't there",
+    });
+  }
+
+  if (action === "why") {
+    const kind = str(parsed.body, "kind");
+    const history = await ctx.runQuery(internal.maya.directives.history, {
+      customerId: auth.customer._id,
+      kind: kind as never,
+    });
+    return respond({
+      ok: true,
+      data: {
+        history: history.map((d) => ({
+          directiveId: d._id,
+          verbatim: d.verbatim,
+          kind: d.kind,
+          active: d.active,
+          createdAt: d.createdAt,
+        })),
+      },
+      why:
+        history.length === 0
+          ? "there's no rule on record about that"
+          : `${history.length} on record, newest first`,
+      /**
+       * The instruction that matters most in this file. §10.2.
+       */
+      next:
+        history.length === 0
+          ? "say you don't have a record of being told that. Do NOT reconstruct a reason — a plausible story you invented is worse than admitting you don't know, because they can't correct it"
+          : "quote the rule and its date. The answer is what's written here, not what you'd have decided",
+    });
+  }
+
+  const rules = await ctx.runQuery(internal.maya.directives.activeRules, {
+    customerId: auth.customer._id,
+  });
+  return respond({
+    ok: true,
+    data: {
+      rules: rules.map((d) => ({
+        directiveId: d._id,
+        verbatim: d.verbatim,
+        kind: d.kind,
+        createdAt: d.createdAt,
+      })),
+    },
+    why: rules.length === 0 ? "no rules yet" : `${rules.length} active`,
+    next:
+      rules.length === 0
+        ? "say there aren't any yet — anything they tell you becomes one"
+        : "read them back in THEIR words, with dates. Seeing their own sentences listed is the proof you remembered",
+  });
+});
+
+/* -------------------------------------------------------------------------- */
 /* weekly_read                                                                 */
 /* -------------------------------------------------------------------------- */
 

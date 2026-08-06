@@ -472,6 +472,7 @@ Every tool returns the same envelope:
 | \`history\` | \`{days?}\` | \`{placements[] with metrics, cadence, ladder}\` |
 | \`inbox\` | \`{}\` | \`{waiting[]}\` — each carries \`inReplyTo\` + \`inboxItemId\` |
 | \`weekly_read\` | \`{}\` | \`{world[], borrowableShapes, unciteable}\` |
+| \`rules\` | \`{action?, directiveId?, kind?}\` | \`{rules[]}\` or \`{history[]}\` |
 | \`request_assets\` | \`{body?}\` | \`{asked, library}\` |
 | \`ask_founder\` | \`{question}\` | \`{asked, openQuestion?}\` |
 | \`checkpoint\` | \`{memoryMarkdown, contextTruncated?}\` | \`{bytes, shrankBy?}\` |

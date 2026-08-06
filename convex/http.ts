@@ -29,6 +29,7 @@ import {
   historyHttp,
   inboxHttp,
   weeklyReadHttp,
+  rulesHttp,
   requestAssetsHttp,
 } from "./maya/hooks";
 import {
@@ -1031,6 +1032,7 @@ http.route({ path: "/maya/update", method: "POST", handler: updateHttp });
 http.route({ path: "/maya/history", method: "POST", handler: historyHttp });
 http.route({ path: "/maya/inbox", method: "POST", handler: inboxHttp });
 http.route({ path: "/maya/weekly_read", method: "POST", handler: weeklyReadHttp });
+http.route({ path: "/maya/rules", method: "POST", handler: rulesHttp });
 http.route({ path: "/maya/request_assets", method: "POST", handler: requestAssetsHttp });
 http.route({ path: "/maya/draft", method: "POST", handler: draftHttp });
 http.route({ path: "/maya/publish", method: "POST", handler: publishHttp });

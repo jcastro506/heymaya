@@ -152,6 +152,7 @@ describe("the install contract", () => {
       "remember",
       "reply",
       "request_assets",
+      "rules",
       "scroll",
       "update",
       "weekly_read",
