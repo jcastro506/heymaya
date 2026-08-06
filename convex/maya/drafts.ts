@@ -27,6 +27,7 @@
 
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
+import { internal } from "../_generated/api";
 import { check as preflightCheck } from "./preflight";
 import type { Doc, Id } from "../_generated/dataModel";
 
@@ -54,7 +55,14 @@ export const create = internalMutation({
     ctx,
     args
   ): Promise<
-    | { ok: true; draftId: Id<"drafts">; weightedLength: number }
+    | {
+        ok: true;
+        draftId: Id<"drafts">;
+        weightedLength: number;
+        /** Was the founder actually shown it? See the block below. */
+        shown: boolean;
+        shownBlockedBy?: Id<"messages">;
+      }
     | { ok: false; message: string; failure: string }
   > => {
     const channels = (await ctx.db
@@ -86,7 +94,53 @@ export const create = internalMutation({
       expiresAt: now + DRAFT_TTL_MS,
     });
 
-    return { ok: true, draftId, weightedLength: verdict.weightedLength };
+    /**
+     * ⭐ SHOWING IT IS PART OF CREATING IT.
+     *
+     * On `show_me_first` the draft is a promise — *"I'll show you this one
+     * first"* — and principle 4 says anything promised to the user is enforced
+     * by the server. This used to insert the row and return, leaving the
+     * sending to the model remembering to do it next turn.
+     *
+     * It didn't. Observed 2026-08-06: she told the founder at 07:17 she would
+     * draft an X post and show it, created the draft at 11:04, and never sent
+     * a word. A second draft from the previous evening was hours from expiring
+     * unseen. Both rows said `pending`; the founder had no idea either existed.
+     *
+     * Prompts drift; rows don't. So the message goes out in the same mutation
+     * as the insert, keyed to the draft id so it can be sent exactly once.
+     */
+    const needsApproval =
+      channelRow?.postingMode === "show_me_first" || args.channel === "tiktok";
+
+    let shown = false;
+    let shownBlockedBy: Id<"messages"> | undefined;
+
+    if (needsApproval) {
+      // `askFounder`, not `send` — this awaits an answer, so it has to respect
+      // invariant 5 (one open question at a time) rather than talk over one.
+      const asked = await ctx.runMutation(internal.maya.messages.askFounder, {
+        customerId: args.customerId,
+        surface: "telegram",
+        body: `${args.text}\n\nWant this to go out?`,
+        dedupeKey: `draft:${draftId}`,
+        ts: now,
+      });
+      shown = asked.asked;
+      // ⚠️ Blocked is NOT silent. The draft exists and the founder hasn't seen
+      // it, which is the exact state this fix exists to end — so it is
+      // reported here and re-offered by the hourly sweep once the open
+      // question closes.
+      shownBlockedBy = asked.blockedBy;
+    }
+
+    return {
+      ok: true,
+      draftId,
+      weightedLength: verdict.weightedLength,
+      shown,
+      shownBlockedBy,
+    };
   },
 });
 
@@ -153,5 +207,73 @@ export const decide = internalMutation({
 
     await ctx.db.patch(args.draftId, patch);
     return { ok: true };
+  },
+});
+
+/**
+ * ⭐ Show any pending draft the founder has never actually seen.
+ *
+ * The companion to the create-time send. `askFounder` refuses while another
+ * question is open (invariant 5), so a draft written during one is created
+ * unshown — and a draft nobody sees expires in 24h having achieved nothing.
+ *
+ * Detection is by the absence of the draft's own message, not by a flag on the
+ * draft: the message row IS the record of having shown it, and a second flag
+ * would be a second source of truth that drifts the first time a send fails.
+ *
+ * Called hourly by `livenessSweep`. Oldest first, one per pass — the invariant
+ * allows exactly one open question, so offering two would be a no-op anyway.
+ */
+export const reofferUnshown = internalMutation({
+  args: { customerId: v.id("customers"), now: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ pending: number; unshown: number; shown: number }> => {
+    const now = args.now ?? Date.now();
+    const drafts = (
+      (await ctx.db
+        .query("drafts")
+        .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+        .collect()) as Doc<"drafts">[]
+    ).filter((d) => d.outcome === "pending" && d.expiresAt > now);
+
+    const channels = (await ctx.db
+      .query("channels")
+      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+      .collect()) as Doc<"channels">[];
+
+    let unshown = 0;
+    let shown = 0;
+
+    for (const draft of [...drafts].sort((a, b) => a.proposedAt - b.proposedAt)) {
+      const channelRow = channels.find((c) => c.channel === draft.channel) ?? null;
+      const needsApproval =
+        channelRow?.postingMode === "show_me_first" || draft.channel === "tiktok";
+      if (!needsApproval) continue;
+
+      const key = `draft:${draft._id}`;
+      const already = await ctx.db
+        .query("messages")
+        .withIndex("by_customer_and_dedupe", (q) =>
+          q.eq("customerId", args.customerId).eq("dedupeKey", key)
+        )
+        .first();
+      if (already) continue;
+
+      unshown += 1;
+      if (shown > 0) continue; // One open question at a time.
+
+      const asked = await ctx.runMutation(internal.maya.messages.askFounder, {
+        customerId: args.customerId,
+        surface: "telegram",
+        body: `${draft.snapshotText}\n\nWant this to go out?`,
+        dedupeKey: key,
+        ts: now,
+      });
+      if (asked.asked) shown += 1;
+    }
+
+    return { pending: drafts.length, unshown, shown };
   },
 });
