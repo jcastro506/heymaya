@@ -350,6 +350,17 @@ export const historyHttp = httpAction(async (ctx, request) => {
     limit: 50,
   });
 
+  /**
+   * ⭐ THE NUMBERS RIDE ALONG.
+   *
+   * This returned URL, channel, kind, text and date — and no metrics at all —
+   * while her Sunday cron asked *"which of the five rungs is working"* (§14.2).
+   * A diagnosis with no numbers under it leaves two outcomes: she says she
+   * can't, or she guesses.
+   *
+   * `metricsAsOf` travels WITH them, always. The schema comment says why:
+   * a number with no date is how dashboards start lying.
+   */
   const posted = placements.map((p) => ({
     url: p.url ?? null,
     linkStatus: p.linkStatus,
@@ -357,6 +368,8 @@ export const historyHttp = httpAction(async (ctx, request) => {
     kind: p.kind,
     text: p.snapshotText,
     publishedAt: p.publishedAt,
+    metrics: p.metricsJson ? safeJson(p.metricsJson) : null,
+    metricsAsOf: p.metricsAsOf ?? null,
   }));
 
   if (posted.length === 0) {
@@ -383,6 +396,19 @@ export const historyHttp = httpAction(async (ctx, request) => {
     customerId: auth.customer._id,
   });
 
+  /**
+   * ⭐ The rung is COMPUTED, not left to her.
+   *
+   * §2.3 — deterministic code watches, the model judges. Which rung broke is
+   * arithmetic on rows; what it MEANS and what to do stays hers. Computing it
+   * also stops the failure §14.2 really guards against: a confident diagnosis
+   * with nothing under it.
+   */
+  const ladder = await ctx.runQuery(internal.maya.ladder.diagnose, {
+    customerId: auth.customer._id,
+    sinceDays: days,
+  });
+
   return respond({
     ok: true,
     data: {
@@ -393,8 +419,14 @@ export const historyHttp = httpAction(async (ctx, request) => {
         longestStreak: run.longestStreak,
         todayDone: run.todayDone,
       },
+      ladder: {
+        rung: ladder.rung,
+        views: ladder.views,
+        engagements: ladder.engagements,
+        unmeasured: ladder.unmeasured,
+      },
     },
-    why: `${posted.length} placements in the last ${days} days, ${live} with a live link — ${run.detail}`,
+    why: `${posted.length} placements in the last ${days} days, ${live} with a live link — ${run.detail}. ${ladder.detail}`,
     next: run.todayDone
       ? "quote the URLs when they ask what went out — never answer from memory, and never say you haven't posted without checking here first"
       : "nothing has gone live today yet. Quote URLs from here rather than memory, and if the day is nearly over, say so rather than letting the run break quietly",
@@ -1136,3 +1168,13 @@ export const askFounderHttp = httpAction(async (ctx, request) => {
         next: "don't repeat it — wait, or do something else",
       });
 });
+
+
+/** Parse stored JSON without letting one bad row break a whole report. */
+function safeJson(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
