@@ -46,6 +46,26 @@ import { dayKeyInZone, isSameMonthInZone, monthScanFloor } from "./cadence";
  */
 export const MIN_DAYS_TO_PROJECT = 3;
 
+/**
+ * Money, at the scale this actually reports.
+ *
+ * ⚠️ `toFixed(2)` alone is wrong here. The first live reading was
+ * **$0.00006925**, which renders as "$0.00 over 3 days — on track for about
+ * $0.00 this month": technically true, completely useless, and
+ * indistinguishable from a ledger that isn't recording. Early in a month, or
+ * for a cheap customer, sub-cent totals are the normal case rather than an
+ * edge one.
+ *
+ * Two decimals once there's a cent to show; enough significant figures below
+ * that to tell $0.00007 from $0.007 — a 100× difference that both round to
+ * zero.
+ */
+export function formatUsd(usd: number): string {
+  if (usd >= 0.01) return `$${usd.toFixed(2)}`;
+  if (usd === 0) return "$0.00";
+  return `$${usd.toPrecision(2)}`;
+}
+
 export interface CostProjection {
   /** Spend so far in the current calendar month, in the founder's timezone. */
   monthToDateUsd: number;
@@ -89,7 +109,7 @@ export function project(input: {
       daysObserved,
       daysInMonth,
       projectedMonthUsd: null,
-      detail: `$${monthToDateUsd.toFixed(2)} so far — too early in the month to project`,
+      detail: `${formatUsd(monthToDateUsd)} so far — too early in the month to project`,
     };
   }
 
@@ -100,7 +120,7 @@ export function project(input: {
     daysObserved,
     daysInMonth,
     projectedMonthUsd,
-    detail: `$${monthToDateUsd.toFixed(2)} over ${daysObserved} days — on track for about $${projectedMonthUsd.toFixed(2)} this month`,
+    detail: `${formatUsd(monthToDateUsd)} over ${daysObserved} days — on track for about ${formatUsd(projectedMonthUsd)} this month`,
   };
 }
 
