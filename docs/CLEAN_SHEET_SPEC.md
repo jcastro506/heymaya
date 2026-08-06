@@ -2644,6 +2644,38 @@ and budgeted as one. **Weekly, not daily**, with the hit rate logged: a
 customer whose niche never intersects trending is a customer this sweep should
 stop running for.
 
+#### 5.2.6a ⭐ MEASURED — the grounded search was silently ungrounded
+
+Built and run live 2026-08-05. **All six sweeps now have callers.**
+
+⚠️ **The bug found on the way is the one worth recording.**
+`geminiGroundedSearch` defaulted to `maxOutputTokens: 1024`. Gemini emits its
+citations *after* the prose, so at that budget the same query returned:
+
+| budget | result |
+|---|---|
+| **1024** | `finishReason: MAX_TOKENS` · **0 `groundingChunks`** · a fluent, confident summary |
+| **4000** | `finishReason: STOP` · **7 chunks** (indiehackers.com, reddit.com) |
+
+**A too-small budget does not shorten the answer — it strips the grounding and
+leaves the prose.** For a product whose rule is *grounded or silent*, that is
+the worst possible output: a paragraph about nothing that reads like a finding,
+with nothing downstream able to tell.
+
+Exactly the shape of the safety critic's `maxTokens: 300`, which spent its
+budget on reasoning tokens and returned an empty verdict. **Two silent
+truncations in one codebase; assume a third.**
+
+⚠️ **Gemini's `uri` is an opaque redirect** —
+`vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQ…` — and the
+wrapper's `author` field is `domainOf(url)`, i.e. *the redirect's* domain.
+Using it would have her citing Google for everything. The chunk's `title`
+carries the real host, and that is what she quotes.
+
+**Live result:** 3 grounded findings, 0 unciteable, citing `dev.to`,
+`reddit.com`, `indiehackers.com`, `quora.com` — including a real quoted phrase,
+*"marketing tasks consume a brutal amount of time, often more than coding."*
+
 ### 14.3 How she learns — and the small-n problem
 
 **The trap:** a founder posting 1–3×/day has 30–90 posts a month per channel. You cannot run a meaningful experiment at that volume. Any system claiming to optimize hooks off 40 data points is fitting noise and will produce confident nonsense.
