@@ -21,6 +21,7 @@
       "update",
       "history",
       "inbox",
+      "weekly_read",
       "request_assets",
       "ask_founder",
       "checkpoint"

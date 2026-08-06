@@ -154,6 +154,7 @@ describe("the install contract", () => {
       "request_assets",
       "scroll",
       "update",
+      "weekly_read",
     ]);
   });
 

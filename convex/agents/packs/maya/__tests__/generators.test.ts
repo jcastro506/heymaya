@@ -490,17 +490,25 @@ describe("the doctrine stays coherent with the server", () => {
     // nothing from; a route with no docs is one it never learns exists.
     const tools = files.get("TOOLS.md")!;
     const documented = [...tools.matchAll(/\| `(\w+)` \|/g)].map((m) => m[1]);
+    /**
+     * ⚠️ `inbox` was absent from BOTH sides until 2026-08-05 — the tool
+     * shipped without a TOOLS.md row, and this list was never updated, so the
+     * test agreed with itself and passed. A coherence check that compares two
+     * things which are wrong in the same way is not a check.
+     */
     expect(documented.sort()).toEqual([
       "ask_founder",
       "checkpoint",
       "draft",
       "history",
+      "inbox",
       "publish",
       "remember",
       "reply",
       "request_assets",
       "scroll",
       "update",
+      "weekly_read",
     ]);
   });
 

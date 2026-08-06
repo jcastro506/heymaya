@@ -298,6 +298,15 @@ export default defineToolPlugin({
     }),
 
     tool({
+      name: "weekly_read",
+      label: "Weekly read",
+      description:
+        "The slower questions, once a week: what SHAPES are working right now (including outside this niche, where the topic is useless but the structure travels), and what actually happened to these people this week with sources you can cite. Use the world findings for WHAT to talk about and the shapes for HOW. Cite a source when you mention what people are saying — an uncited claim is a guess wearing a finding's clothes. `unciteable` counts questions that came back without a source; if it is high, say the week was hard to read rather than reporting thin findings as solid. A quiet week is a real answer.",
+      parameters: Type.Object({}),
+      execute: async (p, _cfg, ctx) => call("weekly_read", p, ctx.signal),
+    }),
+
+    tool({
       name: "request_assets",
       label: "Request assets",
       description:
