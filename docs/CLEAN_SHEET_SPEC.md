@@ -1476,11 +1476,19 @@ brief = {
 }
 ```
 
-#### 7.5.35 ⭐ SPIKE — Higgsfield vs Creatify, decided by output
+#### 7.5.35 ⭐ SPIKE — Creatify vs Higgsfield vs Arcads, decided by output
 
-*Operator-raised 2026-08-06. Creatify is currently a single point of failure on
-the one capability that is fully blocked (§7.6.5a, §18 open question 1), and
-"the vendor we already wrapped" is not a reason to keep it.*
+*Operator-raised 2026-08-06, extended the same day to three vendors. Creatify
+is currently a single point of failure on the one capability that is fully
+blocked (§7.6.5a, §18 open question 1), and "the vendor we already wrapped" is
+not a reason to keep it.*
+
+⚠️ **Arcads is a different shape and must be judged as one.** It is built for
+PAID ad creative — AI actors reading scripts, made in volume, with spend behind
+them. Two consequences: its output may be tuned for a context where "looks like
+an ad" is correct, which is the opposite of §7.5.3's floor; and its per-unit
+price is set against ad budgets rather than a $149 tier. Both are answerable by
+the same tests below, and neither is a reason to skip it.
 
 **Both of Creatify's blockers are commercial, not technical** — self-serve API
 availability and **written commercial resale rights** — so a second vendor is
@@ -1512,6 +1520,12 @@ misses the synthetic control is **void**.
 That instrument exists and is the only honest way to answer "which is better",
 because "which looks better to us" is the judgment this product exists not to
 trust.
+
+⭐ **And one question only Arcads raises:** they appear to be launching an agent
+of their own. If a vendor is becoming a competitor, buying our core capability
+from them is a dependency on someone with a reason to raise our price or close
+the door. That is not a technical answer and it does not belong in a render
+test — but it belongs in the decision, so it is written here.
 
 **Exit:** a table with a price, a licence answer, and a cringe-eval number per
 vendor — and a decision written down. **Not** "Higgsfield seems nicer."
@@ -5628,6 +5642,57 @@ An earlier draft of this section read the public REST API docs (post-creation on
 | Evergreen recycling · RSS auto-post · teams · multi-brand | — |
 
 **So the honest competitive picture is much tighter than "a scheduler."**
+
+#### Arcads — a vendor that may be becoming a competitor
+
+*Operator saw an ad, 2026-08-06, for what sounds like an agent of their own.*
+
+⚠️ **Unverified from here.** What follows is the shape of the question, not a
+finding — the spike in §7.5.35 is what answers it, and it now covers three
+vendors rather than two.
+
+**Which side of the line they land on is the whole question:**
+
+| | crowded and commoditizing | thin |
+|---|---|---|
+| | AI creative **generation** — Creatify, Higgsfield, Arcads, and every model lab | **perception + a provable placement** |
+
+⭐ **If generation is where they are racing, that is good for us, not bad.** We
+buy that capability rather than build it (§7.5.4a), so three vendors competing
+on price and quality lowers our COGS and raises our ceiling. A commodity input
+with three suppliers is a better position than one with a single blocked
+supplier, which is exactly where we are today.
+
+**The version that would actually threaten us** is an agent that does the whole
+job — reads the niche from the outside, decides, posts, and proves it. That
+needs a scraping layer, and §17's Postiz analysis already shows why that is the
+hard half: *"Postiz only ever looks at your own accounts. It has no eyes on the
+outside world"* — and structurally cannot, without building what we built.
+
+**⭐ The ad's philosophy is worth naming, because we deliberately reject it.**
+It described making a large range of creatives, seeing which wins, and doubling
+down. That is correct **for paid ads**: spend buys thousands of impressions per
+variant in a day, so the sample exists.
+
+§14.3 already ruled it out for us, with the reason: *"a founder posting 1–3×/day
+has 30–90 posts a month per channel. You cannot run a meaningful experiment at
+that volume. Any system claiming to optimize hooks off 40 data points is
+fitting noise and will produce confident nonsense."*
+
+Same words, different physics. Ours is §14.3's split — **own data for coarse
+questions, the niche corpus for format questions** — because the corpus is
+where n actually exists: someone else's ten thousand posts, not your forty.
+
+**What would settle it, in order:**
+
+1. **Do they read the outside world, or only the accounts you connect?** This
+   is the Postiz question and it is decisive.
+2. **Who is the buyer?** Ad creative is sold to someone with spend. We sell to a
+   founder who has no budget and no audience — a different motion, not a
+   cheaper one.
+3. **Sprint 3's seven-day run.** Whether a placement a day holds is a fact about
+   our product that no competitor's launch changes, and it arrives sooner than
+   any competitive read.
 
 #### Where the actual gap is
 
