@@ -382,3 +382,80 @@ export const runEval = internalAction({
     };
   },
 });
+
+/* -------------------------------------------------------------------------- */
+/* Running it on what she actually published                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ Run the eval against her REAL posts, not a sample someone typed.
+ *
+ * `runEval` takes `herPosts` as an argument and had **no caller** — so the
+ * instrument Sprint 4.5 exists to build has never measured anything.
+ * Twenty-eighth find.
+ *
+ * That matters more than one more unwired module, because §18's Sprint 4 exit
+ * is *"a stranger can't tell it isn't the founder writing"* and this is the
+ * only thing that can answer it. Six anti-slop layers were built and the number
+ * that says whether they work has never existed.
+ *
+ * ⚠️ It reads `placements`, not `drafts`. A draft is what she proposed; a
+ * placement is what a stranger actually saw. Measuring drafts would grade the
+ * work rather than the product — and would include everything the founder
+ * rejected, which is precisely the writing we want excluded.
+ */
+export const runEvalOnPublished = internalAction({
+  args: {
+    customerId: v.id("customers"),
+    sinceDays: v.optional(v.number()),
+    now: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: boolean; result?: EvalResult; detail: string }> => {
+    const now = args.now ?? Date.now();
+    const since = now - (args.sinceDays ?? 60) * 86_400_000;
+
+    const placements = await ctx.runQuery(internal.maya.archive.timeline, {
+      customerId: args.customerId,
+      since,
+      limit: 50,
+    });
+    const herPosts = placements
+      .filter((p) => p.kind === "post" && p.linkStatus === "live")
+      .map((p) => p.snapshotText)
+      .filter((t) => t.trim().length > 0);
+
+    /**
+     * ⚠️ Below the floor this is not a weak signal, it is noise. §18 Sprint
+     * 4.5 sets `MIN_PAIRS` for a reason: an accuracy computed from three pairs
+     * swings on one judge call, and a number that moves at random is worse
+     * than no number because someone will act on it.
+     */
+    if (herPosts.length < MIN_PAIRS) {
+      return {
+        ok: false,
+        detail: `only ${herPosts.length} published posts — needs ${MIN_PAIRS} before the number means anything`,
+      };
+    }
+
+    const result = await ctx.runAction(internal.maya.cringeEval.runEval, {
+      customerId: args.customerId,
+      herPosts,
+    });
+    return {
+      ok: result.verdict !== "void",
+      result,
+      /**
+       * A void run is reported as a FAILURE, not a pass. If the judge missed
+       * the synthetic control it was not judging — and the accuracy from that
+       * run is a number with nothing behind it.
+       */
+      detail:
+        result.verdict === "void"
+          ? "the run is void — the judge missed the planted synthetic post, so its verdict on the real ones means nothing"
+          : result.detail,
+    };
+  },
+});
