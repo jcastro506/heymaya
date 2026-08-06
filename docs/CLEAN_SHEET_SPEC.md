@@ -2676,6 +2676,40 @@ carries the real host, and that is what she quotes.
 `reddit.com`, `indiehackers.com`, `quora.com` — including a real quoted phrase,
 *"marketing tasks consume a brutal amount of time, often more than coding."*
 
+#### 5.2.1a ⭐ Watching the competition — and how we know who they are
+
+*Added 2026-08-05 on the operator's suggestion, while weighing a different
+product idea. It survived that comparison as a feature rather than a pivot.*
+
+**Nobody is ever asked to name their competitors.** `rankAccounts` already
+ranks accounts by how many **different validated keywords** they appear under,
+so an account showing up beneath two separate niche terms lives in this world,
+and one that appeared once was passing traffic. Live, that is **3 of 30**
+tracked accounts.
+
+⭐ **What earns a message is not "they posted."** They post constantly, and a
+feed of that is a notification setting, not an employee.
+
+It is **a post that materially beats their own baseline.** Discovery already
+stores each account's `medianVelocity`, so the question needs no judgment: is
+this one pulling far harder than what they normally pull?
+
+**Compared to themselves, never to an absolute floor.** A 10k-view account and
+a 200-view account both have breakout posts; an absolute threshold only ever
+surfaces the big accounts, who are the least comparable to a founder starting
+out and therefore the least useful to study.
+
+⚠️ **No baseline means no verdict.** A naive divide by a zero median makes
+every post infinitely surprising, so the first thing a founder ever heard would
+be noise about an account we know nothing about.
+
+**Live first run:** watched 3, one breakout — `@kelsietechtips`, a post at
+**12× their usual**, *"A great portfolio helps… but these are the 3 things…"*.
+
+**Cost:** one request per watched account, daily, capped by the two-keyword
+rule. A watchlist that costs thirty requests to say nothing is how a cheap read
+becomes a line item.
+
 ### 14.3 How she learns — and the small-n problem
 
 **The trap:** a founder posting 1–3×/day has 30–90 posts a month per channel. You cannot run a meaningful experiment at that volume. Any system claiming to optimize hooks off 40 data points is fitting noise and will produce confident nonsense.
