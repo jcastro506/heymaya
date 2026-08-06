@@ -14,6 +14,7 @@ import {
   attachReceipts,
   parseClusters,
   buildComplaintPrompt,
+  COMPLAINT_SYSTEM,
   MAX_COMMENTS_PER_CALL,
   type MinedComment,
 } from "../complaints";
@@ -188,5 +189,62 @@ describe("THE PROMPT", () => {
     // and inflate every frequency count.
     const prompt = buildComplaintPrompt("x", [c("line one\nline two")]);
     expect(prompt).toContain("- line one line two");
+  });
+});
+
+/**
+ * ⭐ THE BUYER MAP HAS TO ACCUMULATE, OR IT ISN'T A MAP.
+ *
+ * `storeComplaints` overwrote the entire complaint list on every run, so what
+ * §5.0.0 calls the buyer map was a snapshot of one sweep's eight posts. Two
+ * consequences, both silent:
+ *
+ *  - a complaint that was loud in week one vanished in week two if that week's
+ *    eight posts happened not to mention it
+ *  - frequency never counted past a single run, so "people keep saying this"
+ *    could never actually be measured
+ *
+ * CLAUDE.md's pitch is that she "mines what buyers are complaining about, and
+ * THEN writes". A list that resets weekly cannot support that claim.
+ *
+ * ⚠️ Merging is the MODEL's job, not a similarity threshold's. Word overlap
+ * scores "pricing is confusing" against "I can't work out what this would cost
+ * me" at 0.07 — the same complaint, counted twice as frequency-1, therefore
+ * never surfaced. `buyerMap.rankComplaints` exists for that deterministic
+ * approach and is deliberately not used here.
+ */
+describe("the buyer map accumulates across weeks", () => {
+  const known = [
+    {
+      text: "nobody explains what it actually costs",
+      frequency: 6,
+      sourceUrls: ["https://tiktok.com/@a/video/1"],
+      lastSeen: Date.UTC(2026, 7, 1),
+    },
+  ];
+
+  it("carries what we already knew into the prompt, with its frequency", () => {
+    const prompt = buildComplaintPrompt("pricing tools", [c("what's the price")], known);
+    expect(prompt).toContain("ALREADY KNOWN");
+    expect(prompt).toContain("[6x] nobody explains what it actually costs");
+  });
+
+  it("tells the model to merge rather than start over", () => {
+    const prompt = buildComplaintPrompt("x", [c("how much is it")], known);
+    expect(prompt).toMatch(/merge into these, don't start over/i);
+  });
+
+  it("a first run has no known section at all — not an empty one", () => {
+    // An empty "ALREADY KNOWN:" header reads as "we looked and found nothing",
+    // which is a different claim from "this is the first week".
+    const prompt = buildComplaintPrompt("x", [c("how much is it")]);
+    expect(prompt).not.toContain("ALREADY KNOWN");
+    expect(prompt).toContain("NEW COMMENTS:");
+  });
+
+  it("the system prompt says frequency across weeks beats a loud single week", () => {
+    // The judgement that makes accumulation worth anything.
+    expect(COMPLAINT_SYSTEM).toMatch(/three weeks is stronger evidence/i);
+    expect(COMPLAINT_SYSTEM).toMatch(/carry forward/i);
   });
 });
