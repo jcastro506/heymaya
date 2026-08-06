@@ -555,9 +555,13 @@ export default defineSchema({
   // local-post create/update, FB Pages post, IG Business post, plus TikTok
   // / LinkedIn / X / Pinterest / Threads. Per service plan § 3 layer table
   // (operator decision 2026-04-27), v0 stays Zernio-mediated until the
-  // operator's GBP / Meta / TikTok partner-access applications land — at
-  // which point the parked code under `convex/integrations/gbp/direct/`
-  // becomes the upgrade path.
+  // operator's GBP / Meta / TikTok partner-access applications land.
+  //
+  // ⚠️ STALE — this whole block describes the DELETED service product
+  // (plumbers/HVAC, GBP-driven). `convex/integrations/gbp/` was the parked
+  // "upgrade path" it referred to and was removed 2026-08-06: zero callers,
+  // and the product it served no longer exists. These tables are part of the
+  // orphaned set pending Sprint 0b.
   //
   // We deliberately do NOT extend the creator-side `connectedAccounts` table
   // — it is `creatorId`-scoped, single-account-per-creator, and the service
