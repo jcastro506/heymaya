@@ -12,7 +12,12 @@ import { convexTest } from "convex-test";
 import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
-import { tweetIdFromUrl, REFRESH_WINDOW_MS, BATCH_SIZE } from "../metrics";
+import {
+  tweetIdFromUrl,
+  canonicalUrl,
+  REFRESH_WINDOW_MS,
+  BATCH_SIZE,
+} from "../metrics";
 import type { Doc, Id } from "../../_generated/dataModel";
 
 const NOW = Date.UTC(2026, 7, 5, 14, 0, 0);
@@ -84,6 +89,65 @@ describe("⭐ WHAT GETS REFRESHED, AND WHAT DOESN'T", () => {
     // is one request rather than 30.
     expect(BATCH_SIZE).toBeGreaterThan(1);
   });
+});
+
+describe("⭐ THE SAME POST, SPELLED TWO WAYS", () => {
+  it("⭐ TRACKING PARAMS DON'T MAKE IT A DIFFERENT POST", () => {
+    /**
+     * Found against a real placement. TikTok's ANALYTICS payload returns the
+     * URL with tracking params attached, while `/posts/{id}` returns it bare:
+     *
+     *   analytics  .../video/7670709537535544590?utm_campaign=tt4d_open_api&...
+     *   post       .../video/7670709537535544590
+     *
+     * Exact-string matching found nothing, so a post sitting at 38 views
+     * showed no metrics at all — and silently, because "no match" and "no
+     * numbers yet" are the same empty result.
+     */
+    const bare = "https://www.tiktok.com/@kevin.castro9996/video/7670709537535544590";
+    const tagged = `${bare}?utm_campaign=tt4d_open_api&utm_source=aw4smjxfftapkprm`;
+    expect(canonicalUrl(tagged)).toBe(canonicalUrl(bare));
+  });
+
+  it("a trailing slash and casing don't either", () => {
+    expect(canonicalUrl("https://X.com/a/status/1/")).toBe(
+      canonicalUrl("https://x.com/a/status/1")
+    );
+  });
+
+  it("⭐ BUT TWO GENUINELY DIFFERENT POSTS STAY DIFFERENT", () => {
+    // The failure that would matter more: collapsing distinct posts onto one
+    // placement, so one post's numbers get written over another's.
+    expect(canonicalUrl("https://x.com/a/status/1")).not.toBe(
+      canonicalUrl("https://x.com/a/status/2")
+    );
+  });
+});
+
+describe("⭐ THE OTHER THREE CHANNELS COME FROM ZERNIO", () => {
+  it("X is excluded from that path on purpose", () =>
+    // `xCapabilities.analytics` is false on the X account — X is billed
+    // pass-through, and §2.15.17 leaves it off at 33× twitterapi.io's price.
+    // So the two paths are complementary, not redundant, and an X placement
+    // must not be picked up here.
+    withSeed(async (t, customerId) => {
+      await placement(t, customerId, { channel: "x" });
+      await placement(t, customerId, { channel: "tiktok" });
+      const due = await t.query(internal.maya.metrics.awaitingMetrics, {
+        customerId,
+        now: NOW,
+      });
+      expect(due).toHaveLength(1);
+      expect(due[0].channel).toBe("tiktok");
+    }));
+
+  it("a placement with no link is not eligible — there is nothing to match on", () =>
+    withSeed(async (t, customerId) => {
+      await placement(t, customerId, { channel: "tiktok", linkStatus: "unknown" });
+      expect(
+        await t.query(internal.maya.metrics.awaitingMetrics, { customerId, now: NOW })
+      ).toHaveLength(0);
+    }));
 });
 
 describe("⭐ A NUMBER WITHOUT A DATE IS HOW DASHBOARDS START LYING", () => {
