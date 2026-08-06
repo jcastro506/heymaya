@@ -512,3 +512,78 @@ describe("a throttled machine still publishes what was already approved", () => 
     expect(allowsKind("throttled", "some_future_expensive_thing")).toBe(false);
   });
 });
+
+
+/**
+ * ⭐ The pre-spend gate (§7.5.7), check 3.
+ *
+ * `checkPostBudget` existed since Sprint 2 with no caller, so the daily cap
+ * the plan tiers promise — `postsPerDayPerChannel: 2` on mvp — was enforced
+ * nowhere. She could post fifty times: a platform ban risk and a broken
+ * promise in one act.
+ */
+describe("⭐ THE DAILY POST CAP IS CHECKED BEFORE DRAFTING, NOT AFTER APPROVAL", () => {
+  it("⭐ REFUSES A DRAFT ONCE THE CHANNEL'S DAY IS SPENT", async () => {
+    const t = convexTest(schema, modules);
+    const { customerId, token } = await seed(t, "budgetcap");
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 5; i += 1) {
+        await ctx.db.insert("placements", {
+          customerId,
+          kind: "post",
+          channel: "x",
+          url: `https://x.com/a/status/${i}`,
+          linkStatus: "live",
+          publishedAt: Date.now(),
+          snapshotText: "already out",
+          idempotencyKey: `cap-${i}`,
+        });
+      }
+    });
+
+    const res = await envelope(
+      await post(t, "/maya/draft", token, {
+        text: "one more for today",
+        channel: "x",
+      })
+    );
+    expect(res.ok).toBe(false);
+    expect(res.why).toMatch(/posts on x today/);
+    // And it tells her what to do instead of leaving her to retry.
+    expect(res.next).toMatch(/plan change/);
+  });
+
+  it("⭐ A REPLY IS NEVER CAPPED — inbound outranks outbound", async () => {
+    /**
+     * §1. A daily post cap that silences answers turns a rate limit into
+     * rudeness — the founder's customers are still asking questions.
+     */
+    const t = convexTest(schema, modules);
+    const { customerId, token } = await seed(t, "budgetreply");
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 5; i += 1) {
+        await ctx.db.insert("placements", {
+          customerId,
+          kind: "post",
+          channel: "x",
+          url: `https://x.com/a/status/r${i}`,
+          linkStatus: "live",
+          publishedAt: Date.now(),
+          snapshotText: "already out",
+          idempotencyKey: `capr-${i}`,
+        });
+      }
+    });
+
+    const res = await envelope(
+      await post(t, "/maya/draft", token, {
+        text: "answering someone who asked about pricing",
+        channel: "x",
+        kind: "reply",
+      })
+    );
+    // Not blocked by the cap. (It may still fail for another reason, but never
+    // with the budget message.)
+    expect(res.why ?? "").not.toMatch(/posts on x today/);
+  });
+});
