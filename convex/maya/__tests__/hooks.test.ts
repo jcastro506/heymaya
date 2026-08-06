@@ -732,3 +732,78 @@ describe("⭐ SHE CAN SEARCH HER OWN ARCHIVE", () => {
     expect(res.next).toMatch(/Do NOT reconstruct a reason/);
   });
 });
+
+
+/**
+ * ⭐ `show_me_first` means SHOW THEM THE POST.
+ *
+ * Measured live 2026-08-05. The 11:00 job drafted, hit the hold, and sent:
+ *
+ *   "I found a strong moment from a solo-founder TikTok and drafted a
+ *    237-character X post, but I'm not publishing it..."
+ *
+ * She described the draft in the third person and never showed it. The founder
+ * cannot approve what he cannot read, so the approval loop broke at the last
+ * inch — and nothing was technically wrong, which is why it survived a day.
+ */
+describe("⭐ A HELD POST CARRIES ITS OWN TEXT", () => {
+  it("⭐ THE DRAFT COMES BACK ON THE HOLD, NOT JUST A DESCRIPTION", async () => {
+    const t = convexTest(schema, modules);
+    const { customerId, token } = await seed(t, "showme", {
+      postingMode: "show_me_first",
+    });
+    const draftId = await t.run(async (ctx) =>
+      ctx.db.insert("drafts", {
+        customerId,
+        channel: "x",
+        kind: "post",
+        snapshotText: "the exact words the founder has to be able to read",
+        outcome: "pending",
+        proposedAt: Date.now(),
+        expiresAt: Date.now() + 86_400_000,
+      })
+    );
+
+    const res = await envelope(
+      await post(t, "/maya/publish", token, { draftId })
+    );
+    expect(res.ok).toBe(false);
+    expect((res.data as { holdReason: string }).holdReason).toBe("show_me_first");
+    // The post itself, verbatim.
+    expect((res.data as { draftText?: string }).draftText).toBe(
+      "the exact words the founder has to be able to read"
+    );
+    // And the instruction that stops her paraphrasing it.
+    expect(res.next).toMatch(/SHOW THEM THE POST/);
+    expect(res.next).toMatch(/VERBATIM/);
+  });
+
+  it("a hold for any OTHER reason does not carry the text", async () => {
+    /**
+     * Only the approval hold needs it. A post held by the safety floor or a
+     * dead channel is not something the founder is being asked to read and
+     * approve — sending the text there invites "just post it anyway".
+     */
+    const t = convexTest(schema, modules);
+    const { customerId, token } = await seed(t, "holdother", {
+      channelStatus: "error",
+    });
+    const draftId = await t.run(async (ctx) =>
+      ctx.db.insert("drafts", {
+        customerId,
+        channel: "x",
+        kind: "post",
+        snapshotText: "should not be shown for approval",
+        outcome: "pending",
+        proposedAt: Date.now(),
+        expiresAt: Date.now() + 86_400_000,
+      })
+    );
+
+    const res = await envelope(
+      await post(t, "/maya/publish", token, { draftId })
+    );
+    expect(res.ok).toBe(false);
+    expect((res.data as { draftText?: string }).draftText).toBeUndefined();
+  });
+});
