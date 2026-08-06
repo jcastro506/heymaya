@@ -5277,6 +5277,91 @@ Design work that doesn't depend on the agent. **Run it alongside 8–10 rather t
 
 **Tests:** every event defined in sprints 0–11 is present and queryable · cost-outlier alerting fires on a synthetic runaway · the fleet ladder reconciles against per-customer ladders.
 
+### Sprint 13 — ⭐ Go to market · *parallelizable from Sprint 3*
+
+*Operator asked 2026-08-06 for a marketing sprint. §18.9 Sprint 11 builds the
+**surfaces** — the landing page and Mission Control. It does not say how a
+stranger arrives at them. This does.*
+
+**The claim we are allowed to make, and the only one:** *she does the homework.*
+Not "she posts for you" (schedulers are free), not "she makes your videos"
+(§17.42 — that is the commodity lane). See §17.41 for why.
+
+#### 13.1 The dogfood is the marketing
+
+**Maya runs HeyMaya's own four channels.** This is not a nice-to-have, it is the
+cheapest and most honest acquisition channel we have, and it is *already running*
+as the Sprint 3 proof. One artifact serves both purposes:
+
+| Task |
+|---|
+| Every Sprint 3 placement is a public, permanent, timestamped demo |
+| ⭐ **The "she was right" post** — when a format card or mined complaint predicts something that then works, post the receipt. This is the only content in the category that a competitor cannot fake, because it requires having watched first |
+| A public changelog of what she found this week in *our* niche — the homework, shown |
+| ⚠️ **The dogfood account is a customer, with all the same rules** — House Rules, the directive gate, the safety critic. No exemptions for being us |
+
+⚠️ **If she cannot grow our account, the product does not work.** Treat a flat
+dogfood account as a product defect, not a marketing one. This is the most
+uncomfortable and most useful property of this channel.
+
+#### 13.2 The demo is the ad
+
+§18.9.2's **live URL-read demo, pre-signup** is the single strongest asset we
+have and should be lifted out of the landing page and used as the campaign
+itself: paste a URL, watch her be specifically right about your company, in
+under 20 seconds, before you have given us anything.
+
+| Task |
+|---|
+| Make the demo **shareable** — a permalink per read, so a founder can send *their* result to a peer |
+| The demo output is the ad creative: screenshot the specifically-right paragraph |
+| Guardrails ride along (§18.9.2): IP rate limit · URL cache · daily spend cap |
+
+#### 13.3 Where the ICP actually is
+
+Target (CLAUDE.md): **a solo founder who built something good and can't get
+customers.** They are reachable, and they are reachable by hand at our scale.
+
+| Task |
+|---|
+| Founder communities where launches happen and the "no customers" pain is stated out loud |
+| ⭐ **Answer, don't broadcast** — the same behaviour we sell. Founder posts a "how do I get users" question; we answer it usefully and for free. Consistency between what we sell and how we sell it *is* the campaign |
+| Directories and launch surfaces, at the moment of a launch — that is when the pain is acute |
+| ⚠️ **Do not buy paid acquisition before the ladder (§14.2) works.** Paid traffic onto a product that cannot yet prove results converts once and churns |
+
+#### 13.4 The copy rules, which are not negotiable
+
+| Rule | Why |
+|---|---|
+| ⭐ **Never the word "AI" in marketing copy** | The buyer has been sold "AI" nine times this year and it now reads as *unreliable*. She is a *social media manager*, described by what she does |
+| Direct, cheeky, non-technical | The landing voice. Never enterprise-neutral |
+| ⚠️ **Never claim she creates UGC on TikTok/Instagram** | It is not what she does (§7.5.3 — real screenshots first), and the claim is checkable |
+| Human-anchored price (§18.9.2 ⑪) | "Less than a day of a freelancer" beats a feature grid |
+| ⭐ **Honest limits published** (⑩) | Including the TikTok-has-no-comment-API caveat. The category lies about coverage; saying the true thing is itself differentiation |
+| Every claim on the page traceable to a real artifact | §18.9's "real artifact, not a mockup" rule extends to every channel, not just the site |
+
+#### 13.5 What we measure
+
+**Time-to-first-placement is the headline** (§16.9.2) — not signups. A signup
+that never reaches a live URL is a refund with a delay.
+
+| Metric | Why this one |
+|---|---|
+| Demo → signup rate | Tests whether "specifically right" actually converts |
+| Signup → **first placement** | The activation cliff; everything upstream is vanity |
+| Dogfood account growth | Whether the product works at all |
+| Which acquisition source produces customers who reach **month 2** | Cheap channels that churn are expensive |
+
+**Exit:** a founder who has never heard of us can paste their URL, see her be
+specifically right, sign up, and reach a live placement — and we can say which
+source they came from and whether that source has ever produced a month-2
+customer.
+
+**Tests:** demo permalink renders for a cold visitor with no session · demo
+abuse guardrails hold under repeat-IP load · **the copy denylist is enforced in
+CI on landing + marketing copy** ("AI", UGC-creation claims) rather than by
+review · attribution source survives signup → first placement.
+
 ---
 
 *(An earlier nine-step ordering lived here. **It is superseded by the eleven sprints in §18** and has been removed — it referenced LinkedIn, which is no longer a channel. The two ordering principles it contained are preserved in the sprint plan: brand before perception, and group by modality rather than by channel.)*
@@ -5642,6 +5727,52 @@ An earlier draft of this section read the public REST API docs (post-creation on
 | Evergreen recycling · RSS auto-post · teams · multi-brand | — |
 
 **So the honest competitive picture is much tighter than "a scheduler."**
+
+#### ⭐ What she is called, and why not "a UGC creator"
+
+*Operator asked 2026-08-06 whether the distinguisher should be that she makes
+UGC — a personal content creator for a business — and noticed himself that it
+leaves X out.*
+
+**No, and the X problem is the tell.** Three reasons, in order of weight:
+
+**1. It leads with the commodity.** Making the video is the part Creatify,
+Higgsfield, Arcads and every model lab are racing to the bottom on. A pitch
+built on the artifact is a pitch that competes with all of them on price, at a
+$149 tier, against companies selling to buyers with ad budgets.
+
+**2. It inverts our own build order.** §7.5.3 is explicit: *"Generated video is
+the last resort, not the first — which inverts how this category usually
+builds."* Photo mode from real screenshots first, screen recordings next,
+generated video last. Naming her a UGC creator puts the last resort on the
+homepage.
+
+**3. X is not an awkward exception — it is the proof.** A service that only
+makes videos is a creative vendor. One that also answers the person who replied
+to you is doing a *job*. §1's inbound-outranks-outbound rule and the whole
+inbox exist because the answering half is what makes her an employee rather
+than a render farm.
+
+##### What the distinguisher actually is
+
+The operator's own instinct, stated as the product already builds it:
+
+> **Everyone can make content. Almost nobody knows what to make it about.**
+
+That is the homework — the six sweeps, the complaint mining, the format cards,
+the competitor watch — and it is the same wedge §17 found against Postiz:
+*"Postiz only ever looks at your own accounts. It has no eyes on the outside
+world."*
+
+CLAUDE.md already says it in one line, and it should stay the line: *"The pitch
+is not 'she posts for you' — open-source schedulers do that for free. It's that
+she does the homework."*
+
+⚠️ **The failure mode of the UGC framing is worth naming**, because it is
+seductive: UGC is easy to demo. A generated video looks like a product in
+thirty seconds; "she read four hundred comments and found what your buyers keep
+complaining about" does not. **Demo-ability is not the same as value**, and
+choosing the demo-able half is how a company ends up selling the commodity.
 
 #### Arcads — a vendor that may be becoming a competitor
 
