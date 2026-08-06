@@ -1204,6 +1204,52 @@ export const replyHttp = httpAction(async (ctx, request) => {
  * "forget that" marks a rule inactive and leaves the history intact. A founder
  * asking *"what did I used to tell you?"* deserves an answer.
  */
+/**
+ * ⭐ What she has written and the founder has not answered yet.
+ *
+ * The gap that broke the 2026-08-06 approval: `publish` needs a `draftId`, and
+ * nothing in the tool surface returned one for a draft written on an earlier
+ * turn. `draft` returns an id only for what it just created; `history` returns
+ * placements, which are things already posted. So a draft offered yesterday
+ * was unpublishable today — not because she'd forgotten it, but because the
+ * id existed nowhere she could reach.
+ *
+ * Expired drafts are excluded rather than listed as stale: offering a
+ * 25-hour-old post is worse than not offering it, because saying yes commits
+ * the founder to something written for a moment that has passed.
+ */
+export const pendingHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if ("error" in auth) return auth.error;
+
+  const drafts = await ctx.runQuery(internal.maya.drafts.pending, {
+    customerId: auth.customer._id,
+  });
+
+  const now = Date.now();
+  const data = drafts.map((d) => ({
+    draftId: d._id,
+    channel: d.channel,
+    kind: d.kind,
+    text: d.snapshotText,
+    offeredMinutesAgo: Math.round((now - d.proposedAt) / 60_000),
+    expiresInMinutes: Math.round((d.expiresAt - now) / 60_000),
+  }));
+
+  return respond({
+    ok: true,
+    data: { drafts: data, count: data.length },
+    why:
+      data.length === 0
+        ? "nothing is waiting on them right now"
+        : `${data.length} draft${data.length === 1 ? "" : "s"} waiting on their answer`,
+    next:
+      data.length === 0
+        ? "an empty list is a real answer — say the zero plainly rather than implying something is in flight"
+        : "if they have said yes to one, call publish with its draftId and alreadyApproved:true. Their words in chat count exactly as much as a tap",
+  });
+});
+
 export const rulesHttp = httpAction(async (ctx, request) => {
   const auth = await authenticate(ctx, request);
   if ("error" in auth) return auth.error;

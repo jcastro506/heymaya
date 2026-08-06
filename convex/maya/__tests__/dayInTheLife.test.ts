@@ -118,7 +118,7 @@ describe("a full day, walked through every module", () => {
         snapshotText: draftText,
         outcome: "pending",
         proposedAt: MIDDAY,
-        expiresAt: MIDDAY + 86_400_000,
+        expiresAt: Date.now() + 86_400_000,
       })
     );
 
@@ -227,7 +227,7 @@ describe("a full day, walked through every module", () => {
         snapshotText: "a perfectly good post nobody will see",
         outcome: "pending",
         proposedAt: MIDDAY,
-        expiresAt: MIDDAY + 86_400_000,
+        expiresAt: Date.now() + 86_400_000,
       })
     );
 
@@ -299,7 +299,7 @@ describe("a full day, walked through every module", () => {
         snapshotText: "should not go out",
         outcome: "approved",
         proposedAt: MIDDAY,
-        expiresAt: MIDDAY + 86_400_000,
+        expiresAt: Date.now() + 86_400_000,
       })
     );
     const decision = await t.query(

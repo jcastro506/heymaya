@@ -138,6 +138,49 @@ export const routeInboundToMachine = internalAction({
       return { delivered: false, reason: "no machine or no paired chat" };
     }
 
+    /**
+     * ⭐ WHAT SHE IS WAITING ON, CARRIED INTO THE TURN.
+     *
+     * The 2026-08-06 failure: a draft was shown at 12:18, the founder said
+     * "Yep" at 13:03, and she replied "👍" without posting. It was read as a
+     * memory problem and it wasn't — `publish` requires a `draftId`, the only
+     * tool that returns one is `draft` (for a draft written in that same
+     * turn), and `history` returns placements. **No tool in the surface
+     * returned a pending draft**, so the one parameter she needed did not
+     * exist anywhere she could reach. "👍" was the only move available.
+     *
+     * This turn used to send `[{role:"user", content: text}]` — the bare word
+     * "Yep", with nothing to attach it to. Now the outstanding draft rides in
+     * as a system note carrying its id, which is principle 8: choreography
+     * rides in tool responses, never in a prompt she has to remember.
+     *
+     * ⚠️ It is a SYSTEM note, not a user message. Putting this in the user
+     * turn would be words in the founder's mouth, and she quotes the founder
+     * back to them.
+     *
+     * It states the facts and names the tool. It does NOT decide whether the
+     * message is an approval — that is a judgment call and hers. §2.3:
+     * deterministic code watches; the model judges.
+     */
+    const waiting = await ctx.runQuery(internal.maya.drafts.pending, {
+      customerId: args.customerId,
+    });
+    const outstanding = waiting
+      .slice(0, 3)
+      .map(
+        (d) =>
+          `- draftId ${d._id} · ${d.channel} · shown ${Math.round(
+            (Date.now() - d.proposedAt) / 60_000
+          )} min ago · expires in ${Math.round(
+            (d.expiresAt - Date.now()) / 60_000
+          )} min\n  "${d.snapshotText}"`
+      )
+      .join("\n");
+
+    const systemNote = outstanding
+      ? `You are waiting on the founder for ${waiting.length === 1 ? "this draft" : `these ${waiting.length} drafts`}:\n${outstanding}\n\nIf their message approves one, call publish with that draftId and alreadyApproved: true. If they changed the wording, pass their version as editedText. If it isn't about a draft, ignore this note.`
+      : null;
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), CHAT_TURN_TIMEOUT_MS);
     try {
@@ -152,7 +195,10 @@ export const routeInboundToMachine = internalAction({
         },
         body: JSON.stringify({
           model: "openclaw/main",
-          messages: [{ role: "user", content: args.text }],
+          messages: [
+            ...(systemNote ? [{ role: "system", content: systemNote }] : []),
+            { role: "user", content: args.text },
+          ],
           stream: false,
         }),
         signal: controller.signal,

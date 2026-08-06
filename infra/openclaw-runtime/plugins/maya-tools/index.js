@@ -179,6 +179,15 @@ export default defineToolPlugin({
     }),
 
     tool({
+      name: "pending",
+      label: "Pending",
+      description:
+        "What you have written that the founder has NOT answered yet, with the draftId for each. CALL THIS WHENEVER THEY SAY YES, GO, SEND IT, DO IT, OR ANYTHING THAT SOUNDS LIKE APPROVAL — publish needs a draftId and this is the only way to get one for a draft you offered on an earlier turn. `draft` only returns the id of what it just wrote, and `history` returns things already POSTED. Without this a post you showed them yesterday can never be published, however clearly they approve it. Also call it when they ask what you are waiting on. An empty list is a real answer — say the zero plainly rather than implying something is in flight. Expired drafts are not listed: offering a day-old post is worse than not offering it, because saying yes commits them to something written for a moment that has passed.",
+      parameters: Type.Object({}),
+      execute: async (p, _cfg, ctx) => call("pending", p, ctx.signal),
+    }),
+
+    tool({
       name: "publish",
       label: "Publish",
       description:

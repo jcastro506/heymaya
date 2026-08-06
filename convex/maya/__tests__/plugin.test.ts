@@ -57,12 +57,16 @@ describe("the manifest and the code agree", () => {
   it("ships exactly the tools this build supports", () => {
     // `checkpoint` joined in Sprint 2.9 — it mirrors MEMORY.md off the machine,
     // the one artifact on the volume that isn't reproducible.
+    // `pending` joined 2026-08-06 — it is the only source of a draftId for a
+    // draft offered on an earlier turn, without which an approved post could
+    // never be published.
     expect(manifest.contracts.tools.sort()).toEqual([
       "ask_founder",
       "checkpoint",
       "draft",
       "history",
       "inbox",
+      "pending",
       "publish",
       "remember",
       "reply",
