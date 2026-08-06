@@ -18,6 +18,7 @@ import {
   rankAccounts,
   MIN_FRESH_POSTS,
   FRESH_WINDOW_MS,
+  parseKeywordProposal,
 } from "../learnBusiness";
 
 const NOW = Date.UTC(2026, 7, 5, 3, 0, 0);
@@ -235,5 +236,85 @@ describe("OVERLAP IS THE SIGNAL, NOT REACH", () => {
       velocity: i,
     }));
     expect(rankAccounts(many)).toHaveLength(30);
+  });
+});
+
+
+/**
+ * ⭐ Judgment proposes, measurement validates.
+ *
+ * `deriveKeywords` EXTRACTED from the page, and the output proved why that's
+ * the wrong shape: HeyMaya's own read produced `draft reply`, `native
+ * posting`, `conversion` — the words the marketing page uses about itself.
+ * No human marketer types those into TikTok search.
+ *
+ * Handed the same brief, Luna proposed `built app no users`, `how get first
+ * users`, `indie hackers building`, `building in public`. That is the moment
+ * of need and what the community calls itself.
+ */
+describe("⭐ THE KEYWORDS A PERSON WOULD ACTUALLY TYPE", () => {
+  it("⭐ ACCEPTS WHAT LUNA ACTUALLY RETURNED", () => {
+    // Captured from a live call against the real product truth.
+    const out = parseKeywordProposal(
+      JSON.stringify({
+        keywords: [
+          "how market my app",
+          "built app no users",
+          "no time for marketing",
+          "how get first users",
+          "indie hackers building",
+          "building in public",
+        ],
+      })
+    );
+    expect(out).toHaveLength(6);
+    expect(out).toContain("built app no users");
+  });
+
+  it("⭐ THE GENERIC FLOOR STILL CATCHES A BARE CATEGORY NOUN", () => {
+    /**
+     * The wordlist survives as a FLOOR, not a decision. It encodes a measured
+     * fact — a bare category noun returns millions of unrelated posts — and
+     * the prompt says the same thing. This catches the times the model agrees
+     * and then does it anyway.
+     */
+    const out = parseKeywordProposal(
+      JSON.stringify({ keywords: ["dashboard", "saas", "built app no users"] })
+    );
+    expect(out).toEqual(["built app no users"]);
+  });
+
+  it("a qualified category noun survives — the floor is bare nouns only", () => {
+    expect(parseKeywordProposal(JSON.stringify({ keywords: ["csv dashboard"] }))).toEqual([
+      "csv dashboard",
+    ]);
+  });
+
+  it("strips hashes and casing, because search terms aren't posts", () => {
+    expect(
+      parseKeywordProposal(JSON.stringify({ keywords: ["#IndieHackers", "Building In Public"] }))
+    ).toEqual(["indiehackers", "building in public"]);
+  });
+
+  it("⭐ AN UNUSABLE RESPONSE IS null, SO THE FALLBACK CAN RUN", () => {
+    // Worse terms beat no terms: `deriveKeywords` still exists for a dead key
+    // or a bad response, and both paths face the same two gates afterwards.
+    expect(parseKeywordProposal("here are some ideas!")).toBeNull();
+    expect(parseKeywordProposal(JSON.stringify({ keywords: [] }))).toBeNull();
+    expect(parseKeywordProposal(JSON.stringify({ keywords: ["ai", "saas"] }))).toBeNull();
+  });
+
+  it("survives a fenced response", () => {
+    expect(
+      parseKeywordProposal('```json\n{"keywords":["built app no users"]}\n```')
+    ).toEqual(["built app no users"]);
+  });
+
+  it("⭐ AND THE GATES DID NOT MOVE", () => {
+    // The validating half is untouched on purpose: it tests against reality
+    // rather than reasoning about it, which is what caught `threads` returning
+    // sewing and `engagement` returning wedding photos. A better proposer
+    // makes those gates cheaper, not optional.
+    expect(typeof judgeKeyword).toBe("function");
   });
 });
