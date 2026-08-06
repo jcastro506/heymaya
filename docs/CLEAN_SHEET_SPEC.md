@@ -2719,6 +2719,37 @@ carries the real host, and that is what she quotes.
 `reddit.com`, `indiehackers.com`, `quora.com` — including a real quoted phrase,
 *"marketing tasks consume a brutal amount of time, often more than coding."*
 
+#### 6.4.6c ⚠️ MEASURED — the media library currently cannot fill by ANY route
+
+*2026-08-06. Both inlets checked live, both closed.*
+
+| inlet | state |
+|---|---|
+| founder sends a file to Telegram | ⛔ **R2 unconfigured** — all four env vars absent, so `uploadAsset` cannot store bytes |
+| scrape the product page | ⛔ **`hey-maya.ai` yields 0 extractable images** |
+
+The scraper itself works: `linear.app` returns **12** candidate images through
+the same call. `hey-maya.ai` returns **0** — HTTP 200, no `<img>` to find.
+
+⭐ **The consequence is concrete.** §7.5.35's dry run confirmed Instagram and
+TikTok both reject a text-only post. So with no library, those two channels
+have no path to a real image, and the only channel that can carry a post today
+is X.
+
+⭐ **And the scrape path needs no R2**, which is why it is worth having: Zernio
+FETCHES the URLs we hand it (verified — it pulled a 12.95 MB mp4 from
+`media.zernio.com`). A screenshot already hosted on the founder's own site is
+already a public URL, so there is nothing to store. `fillFromProductPage`
+records the URL and the publish path passes it straight through.
+
+**Two operator items, and the first is cheap:**
+
+1. **Put real product screenshots on the page.** It fixes the media library and
+   the keyword derivation at once — §5.0.0's keywords come from that same page.
+2. **R2 credentials**, which unblocks the founder-upload path.
+
+Only one is needed for Instagram to work.
+
 #### 5.2.1a ⭐ Watching the competition — and how we know who they are
 
 *Added 2026-08-05 on the operator's suggestion, while weighing a different
