@@ -4900,6 +4900,72 @@ A lighter ask *and* a richer input, because one recording yields three things:
 | **Staleness** — every asset carries a capture date; a `product_truth` change flags assets as possibly stale; the public site is re-captured monthly |
 | **The Mission Control half** — the ONE place a founder can see what she has and drop in more. Not a media manager: a list, a drop zone, and what's missing |
 
+#### 6.4.7 ⭐ The drop zone — the Mission Control half, written out
+
+*Operator raised 2026-08-06: should we stop relying on the scrape and just ask?
+The measurements since say yes — but not in onboarding, and the ordering below
+is the whole design.*
+
+**What changed the weighting:**
+
+| | |
+|---|---|
+| §6.4.6b | **half** of target-type sites publish no usable product screenshot |
+| live, 2026-08-06 | **`hey-maya.ai` yields 0 extractable images** (linear.app yields 12 through the same code) |
+| live | **R2 unconfigured**, so the Telegram path cannot store bytes either |
+
+So scraping is demoted: not the primary source with the ask as fallback, but **a
+bonus that happens to work for about half of customers**. What the founder gives
+us is the reliable path, and today there is no working inlet at all.
+
+**⛔ Still not in onboarding**, and the existing reason holds: it competes with
+the OAuth step that decides activation, and a founder who has not yet seen a
+post has no reason to record anything. §14.45's rule is the same one — *ask for
+the next rung at the moment it matters, never at signup.*
+
+##### The upload path — and it may not need R2
+
+⭐ **Zernio's `/media/presign` hosts our files.** Verified live: a 12.95 MB mp4
+PUT in 6.4s, and **still fetchable byte-identical eight hours later** at
+`media.zernio.com`. Zernio then FETCHES that URL at publish time, which is the
+same path a scraped screenshot already takes.
+
+⚠️ **But the key is under `/temp/`.** Eight hours is not a retention policy, and
+a library whose assets vanish after thirty days is worse than no library —
+she would brief a video against a screenshot that 404s at render time. **Ask
+Zernio for the retention guarantee in writing before this becomes the storage
+layer.** If it is genuinely temporary, R2 is required and this is only a
+publish-time relay.
+
+##### What the screen is
+
+Per §18.9.3 this is **not a media manager**. Three things:
+
+1. **A drop zone** — one 30–60s screen recording, per §6.4.2's *one recording,
+   not five screenshots*: less work for them, and it yields frames, b-roll and
+   post ideas from a single file.
+2. **A grid of what she has**, with the depth indicator.
+3. **One line of what is missing**, in her words — *"Send me a screen recording
+   and I can make the good kind."* **Not a nag, not a modal.**
+
+⭐ **No tagging UI, no captioning, no folders, no editing.** Vision tags on
+ingest (§6.4, ~$0.0005/image) and the founder never sees a form. The moment a
+founder is *organising* their media, the dashboard has become the workbench
+§18.9.3 forbids, and she has become software with a UI.
+
+##### The rule the drop zone must not break
+
+**It does not replace the ask.** A founder who never opens Mission Control must
+still get everything — the Telegram ask already works and already fires only
+when the classifier says the library is genuinely empty. The drop zone is for
+the founder who prefers a browser, not a second thing to remember.
+
+**Exit:** a founder drags one recording into the grid and gets the same
+outcome as sending it in Telegram — tagged frames, usable b-roll, one banked
+idea. **Tests:** an upload through the drop zone and an upload through Telegram
+produce identical rows · the ask does not fire for a founder who has already
+dropped one · the grid never shows a nag when the library is healthy.
+
 #### Who gets asked, and when
 
 **Only the customers who need it, and only once.** The asset classifier already
