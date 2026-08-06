@@ -72,6 +72,21 @@ Return STRICT JSON, no prose:
 
 - "keep": true ONLY if the structure would still work for a completely different product. A shape that depends on the subject — a celebrity, a sport, a meme nobody outside that world knows — is FALSE.
 - "shape": the structure in one sentence, with NO reference to the original subject. If you cannot describe it without naming what the post was about, it is not reusable and "keep" is false.
+
+⚠️ THESE ARE REAL ANSWERS YOU HAVE GIVEN, AND ALL FOUR ARE WRONG:
+
+  "Ranking the best X moments"
+  "Showcase a signature feature of a known entity"
+  "A lesser-known individual repeats a surprising action against a famous figure"
+  "Showcase a personal talent while using a trending hashtag"
+
+Each one is the SUBJECT WEARING A DISGUISE. Told not to name what the post was
+about, you substituted a placeholder — "X", "a known entity", "a famous figure"
+— instead of answering false. A structure that needs a celebrity, a fandom, or
+a blank to stand in for the subject cannot carry a dashboard.
+
+If your shape contains a placeholder, the honest answer was "keep": false.
+Saying false is the common, correct answer.
 - "why": what makes it work, in one short clause.
 
 Most trending posts are not reusable. Saying false is the common, correct answer.`;
@@ -84,33 +99,19 @@ Most trending posts are not reusable. Saying false is the common, correct answer
  * shape, it's the topic wearing a disguise.
  */
 /**
- * ⭐ Evasions the shape judge produces when it cannot honestly comply.
+ * ⭐ The evasion WORDLIST is gone — the prompt shows the model its own
+ * failures instead.
  *
- * Measured on the first live run: 11 shapes came back and roughly half were
- * the subject wearing a disguise. Told not to name what the post was about,
- * the model substituted a placeholder instead of answering false:
+ * It listed the placeholders the judge reached for ("best X", "a known
+ * entity", "a famous figure") and rejected them in code. That worked, and it
+ * was the wrong shape: a lookup table deciding whether language is evasive,
+ * when the model that produced the evasion can recognise it perfectly well if
+ * it is shown what it did.
  *
- *   "Ranking the best X moments"
- *   "a signature feature of a known entity"
- *   "a lesser-known individual ... against a famous figure"
- *
- * None of those is a shape. A structure that needs a celebrity, a fandom, or a
- * literal `X` standing in for the subject cannot carry a dashboard, and
- * borrowing it would put her back to chasing the trend rather than the form.
- *
- * Checked in code rather than asked for again in the prompt, because the
- * prompt already asked and this is what came back.
+ * So the four real failures are quoted verbatim in `SHAPE_SYSTEM`, named as
+ * its own answers. Per the standing rule: trust the model where the question
+ * is judgment, and spend the words on a better prompt rather than a filter.
  */
-const SUBJECT_EVASIONS = [
-  /\bbest X\b/i,
-  /\bthe X\b/i,
-  /\ba known entity\b/i,
-  /\ba famous (figure|person|celebrity)\b/i,
-  /\ba celebrity\b/i,
-  /\bthe subject\b/i,
-  /\bwell-known (figure|person)\b/i,
-  /\btrending hashtag\b/i,
-];
 
 /** A shape too short to be a structure is a label. */
 const MIN_SHAPE_WORDS = 6;
@@ -127,9 +128,12 @@ export function parseShape(
     const why = typeof parsed.why === "string" ? parsed.why.trim() : "";
     // A "keep" with no shape is the model agreeing rather than answering.
     if (!shape) return null;
-    // The subject wearing a disguise — see SUBJECT_EVASIONS.
-    if (SUBJECT_EVASIONS.some((re) => re.test(shape))) return { keep: false, shape: "", why: "" };
-    // "Showcase a personal talent" is a label, not a structure.
+    /**
+     * The length floor stays. It is not judging language — it is asking
+     * whether a sentence describing a structure is even present. "funny dog
+     * video" is a label, and no amount of model intelligence makes three words
+     * into a structure.
+     */
     if (shape.split(/\s+/).filter(Boolean).length < MIN_SHAPE_WORDS) {
       return { keep: false, shape: "", why: "" };
     }

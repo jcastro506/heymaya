@@ -553,11 +553,42 @@ export const bankFromObservations = internalAction({
       scored.push({ angle: a.angle, source: "observation", evidence, score, why });
     }
 
+    /**
+     * ⭐ Drop the angles that are about nothing.
+     *
+     * `assessInsight` has had an anti-generic gate since Sprint 5 and NO
+     * PRODUCTION CALLER — the seventeenth thing this week that was built,
+     * tested, and never invoked. This is the moment it was for: an angle like
+     * *"drive engagement with authentic content"* survives every other check
+     * here, because it has a real source URL attached and scores fine.
+     *
+     * Judged, not matched. The wordlist this replaced counted "engagement" as
+     * padding in both *"drive engagement"* and *"3 engagements on that post"*.
+     *
+     * Fails OPEN — an unreachable judge banks everything rather than nothing.
+     * A quality nudge that silently empties the bank is worse than one that
+     * occasionally lets a dull idea through.
+     */
+    const kept: ScoredIdea[] = [];
+    let filler = 0;
+    for (const idea of scored) {
+      const verdict = await ctx.runAction(internal.maya.quality.judgeFiller, {
+        text: idea.angle,
+      });
+      if (verdict.filler) {
+        filler += 1;
+        continue;
+      }
+      kept.push(idea);
+    }
+
     const result = await ctx.runMutation(internal.maya.ideas.bankIdeas, {
       customerId: args.customerId,
-      ideasJson: JSON.stringify(scored),
+      ideasJson: JSON.stringify(kept),
       now,
     });
-    return { ...result, considered: observations.length };
+    return { ...result, considered: observations.length,
+      // Named, so a bank that rejected everything is visible rather than empty.
+      rejected: result.rejected + filler };
   },
 });
