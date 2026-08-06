@@ -643,6 +643,42 @@ That single metric is three things at once: a **quality signal** (content ground
 
 **It belongs in the weekly review**, stated plainly: *"4 of 6 posts this week came from something your buyers actually said."*
 
+#### 5.0.0a ⚠️ MEASURED — follower-list intersection does not work at page one
+
+*Built and run against the live dogfood account, 2026-08-06.*
+
+§5.0.0 specifies audience overlap as *"pull the competitors' follower lists and
+rank people by how many they follow"*. Built end to end, it returned **one
+person** from five audiences.
+
+**The arithmetic explains it and it is not fixable by tuning.** The
+ScrapeCreators follower endpoint is `min_time` paginated and we read page one:
+
+| account | followers returned |
+|---|---|
+| `@kelsietechtips` | 26 |
+| `@adrielscales` | 50 |
+
+Intersecting ~30-person samples drawn from audiences of thousands gives an
+expected overlap near zero. The signal isn't weak, it's absent — and deeper
+pagination doesn't rescue it: ten pages each is 50 credits a run to sample
+maybe 500 of 100,000, which is still 0.5%.
+
+⭐ **Invert the direction instead.** We already collect the people who
+*commented* on niche posts — `mineComplaints` reads ~300 of them every sweep,
+free, because the comments are already pulled. Those people are demonstrably in
+the niche and demonstrably active, which is more than a follower row proves.
+Then ask what *they* follow: one credit each, on a pool that is already
+qualified.
+
+**Follower-list intersection asks "who might be in this market". Starting from
+commenters asks "who is in this market right now, talking".** The second is
+cheaper, smaller, and better evidence — and it is the same data the complaint
+mining already pays for.
+
+The overlap code stays: given a qualified pool it is the right ranking. What
+changes is where the pool comes from.
+
 ### 5.0 Who decides what to watch
 
 Every sweep needs targets. They come from `learn-business` at onboarding and refresh monthly:
@@ -5245,7 +5281,7 @@ ban-safest one — this is the pillar applied to an action we don't perform.
 | Task |
 |---|
 | **Comment targets** — a post is worth their 30 seconds only if someone is describing the problem the product removes. Sourced from the sweeps already running (§5.1) and the mined complaints, not a new collector |
-| ⭐ **Run the buyer map's audience half.** `computeAudienceOverlap` and `discoverGathering` are pure functions with **zero callers** — §5.0.0's *"who follows the competitors is the ICP"* has never actually executed. This sprint is what they were written for |
+| ⭐ **Source the follow list from COMMENTERS, not follower lists** (§5.0.0a — measured 2026-08-06: follower-list intersection returned one person from five audiences, because page one is 26–50 rows against audiences of thousands). `mineComplaints` already pulls ~300 real commenters per sweep for free; check what *they* follow. `computeAudienceOverlap` stays as the ranking, applied to a pool that is already qualified |
 | **Follow ranking** — overlap with competitor audiences · posted about the problem recently · size **inverted** past a threshold. Follow the audience, never the celebrities (§5.6.2) |
 | **The comment message** — link, the exact words to paste, and one sentence of why. Complete or not sent (§5.6.1 rule 3). Spends a proactive message, which IS the rate limiter |
 | **The follow list** — 10–20 with a reason each, on the **weekly** review, never mixed into the comment's message |

@@ -871,6 +871,27 @@ export const relearnIfStale = internalAction({
         customerId,
       });
       relearned += 1;
+
+      /**
+       * ⭐ The audience map rides the relearn rather than getting its own cron.
+       *
+       * It reads `trackedAccounts`, which this call just rewrote — so building
+       * it here means it can never be computed from targets that have already
+       * moved. A separate schedule would be one more thing that can quietly
+       * stop running, which is the failure mode this codebase produces most.
+       *
+       * ⚠️ Costs ~20 ScrapeCreators credits per customer per run. Gated behind
+       * the staleness check above for exactly that reason: it spends only when
+       * the targets it depends on have actually changed.
+       */
+      const built = await ctx.runAction(internal.maya.audience.buildAudienceMap, {
+        customerId,
+      });
+      if (!built.ok) {
+        // Named, not silent — a buyer map that never builds should be visible
+        // as a reason rather than as an absent section.
+        console.warn(`[relearn] audience map skipped: ${built.error}`);
+      }
     }
 
     return { checked: customerIds.length, relearned };
