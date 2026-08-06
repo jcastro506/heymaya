@@ -229,6 +229,12 @@ export const refreshAll = internalAction({
     const customers = await ctx.runQuery(internal.maya.metrics.activeCustomers, {});
     let updated = 0;
     for (const customerId of customers) {
+      // Links first: a placement without one can't be measured, counted
+      // toward the cadence, or shown to the founder.
+      await ctx.runAction(internal.maya.metrics.backfillUrls, {
+        customerId,
+        now: args.now,
+      });
       const result = await ctx.runAction(internal.maya.metrics.refresh, {
         customerId,
         now: args.now,
@@ -244,5 +250,122 @@ export const activeCustomers = internalQuery({
   handler: async (ctx): Promise<Id<"customers">[]> => {
     const rows = (await ctx.db.query("customers").collect()) as Doc<"customers">[];
     return rows.filter((c) => c.state === "active").map((c) => c._id);
+  },
+});
+
+/**
+ * ⭐ Backfill the URL for a placement that published asynchronously.
+ *
+ * Instagram — and any channel Zernio queues rather than posts inline — returns
+ * `ok` with no `platformPostUrl`. Verified live 2026-08-05: our placement
+ * recorded `unknown` while `https://www.instagram.com/p/DbrZX_HDLhk/` was
+ * already live on the account.
+ *
+ * `unknown` was the right thing to record — invariant 1 forbids assuming a
+ * URL. But without this, it stays `unknown` forever: the placement never
+ * counts toward the seven-day cadence, the evening recap has no link, and the
+ * founder is told nothing went out when something did.
+ *
+ * §2.6 puts it plainly — the unit of work is *something live, with a URL*.
+ * This is how a queued publish becomes one.
+ */
+export const backfillUrls = internalAction({
+  args: { customerId: v.id("customers"), now: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ checked: number; resolved: number; detail: string }> => {
+    const pending = await ctx.runQuery(internal.maya.metrics.awaitingUrl, {
+      customerId: args.customerId,
+      now: args.now,
+    });
+    if (pending.length === 0) {
+      return { checked: 0, resolved: 0, detail: "nothing waiting on a link" };
+    }
+
+    const apiKey = process.env.ZERNIO_API_KEY;
+    if (!apiKey) {
+      return { checked: 0, resolved: 0, detail: "the accounts aren't connected yet" };
+    }
+
+    const { ZernioClient } = await import("../integrations/zernio/client");
+    const client = new ZernioClient({ apiKey });
+    let resolved = 0;
+
+    for (const placement of pending) {
+      if (!placement.zernioPostId) continue;
+      try {
+        const raw = (await client.request<unknown>(
+          `/api/v1/posts/${encodeURIComponent(placement.zernioPostId)}`,
+          { method: "GET" }
+        )) as {
+          post?: { platforms?: Array<{ platformPostUrl?: string | null; status?: string }> };
+          platforms?: Array<{ platformPostUrl?: string | null; status?: string }>;
+        };
+        const platforms = raw.post?.platforms ?? raw.platforms ?? [];
+        const url = platforms.find((p) => p.platformPostUrl)?.platformPostUrl;
+        if (url) {
+          await ctx.runMutation(internal.maya.metrics.setUrl, {
+            placementId: placement._id,
+            url,
+            now: args.now,
+          });
+          resolved += 1;
+        }
+      } catch (error) {
+        console.error(
+          `[metrics] url backfill failed for ${placement._id}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
+
+    return {
+      checked: pending.length,
+      resolved,
+      detail:
+        resolved === 0
+          ? `${pending.length} still waiting on a link`
+          : `${resolved} of ${pending.length} now have one`,
+    };
+  },
+});
+
+/**
+ * Placements that published but whose link we never saw.
+ *
+ * Bounded to the refresh window: a post that never produced a URL in two weeks
+ * is not going to, and re-asking forever is a bill with no answer at the end.
+ */
+export const awaitingUrl = internalQuery({
+  args: { customerId: v.id("customers"), now: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<Doc<"placements">[]> => {
+    const now = args.now ?? Date.now();
+    const rows = (await ctx.db
+      .query("placements")
+      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+      .collect()) as Doc<"placements">[];
+    return rows.filter(
+      (p) =>
+        p.linkStatus === "unknown" &&
+        Boolean(p.zernioPostId) &&
+        now - p.publishedAt <= REFRESH_WINDOW_MS
+    );
+  },
+});
+
+export const setUrl = internalMutation({
+  args: {
+    placementId: v.id("placements"),
+    url: v.string(),
+    now: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<void> => {
+    // `live` only ever set alongside a real URL — invariant 1.
+    await ctx.db.patch(args.placementId, {
+      url: args.url,
+      linkStatus: "live",
+    });
   },
 });

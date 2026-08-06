@@ -117,6 +117,11 @@ export interface PublishTextInput {
    * the job queue's retry safe.
    */
   idempotencyKey: string;
+  /**
+   * Images or video for the post. Absent for a text-only X post; REQUIRED for
+   * Instagram, TikTok and YouTube — see the note on `publishText`.
+   */
+  mediaItems?: Array<{ type: "image" | "video"; url: string; altText?: string }>;
 }
 
 /**
@@ -124,6 +129,17 @@ export interface PublishTextInput {
  *
  * Never throws — the caller is a job handler, where an uncaught throw becomes a
  * retry of work that may already have posted.
+ */
+/**
+ * ⭐ Media, which three of four channels cannot post without.
+ *
+ * Verified live 2026-08-05 via `validatePost`: X accepts text alone;
+ * Instagram, TikTok and YouTube all reject it and name media. Instagram and
+ * TikTok accept an image; YouTube requires video specifically.
+ *
+ * Zernio FETCHES these URLs from its own servers, so they must be publicly
+ * reachable for long enough to be pulled — which is why a library asset needs
+ * a SIGNED url with a real TTL rather than the private storage path.
  */
 export async function publishText(
   input: PublishTextInput
@@ -148,6 +164,9 @@ export async function publishText(
       body: {
         content: input.text,
         publishNow: true,
+        ...(input.mediaItems && input.mediaItems.length > 0
+          ? { mediaItems: input.mediaItems }
+          : {}),
         platforms: [
           {
             platform,
@@ -248,6 +267,9 @@ export async function validatePost(input: {
   client: ZernioClient;
   channel: string;
   text: string;
+  /** ⚠️ Must be passed, or the preflight rejects every media post it is
+   *  meant to be clearing — the validator judges the WHOLE payload. */
+  mediaItems?: Array<{ type: "image" | "video"; url: string }>;
 }): Promise<{ ok: boolean; reason?: string }> {
   const platform = ZERNIO_PLATFORM_SLUG[input.channel];
   if (!platform) {
@@ -261,6 +283,9 @@ export async function validatePost(input: {
         body: {
           content: input.text,
           platforms: [{ platform }],
+          ...(input.mediaItems && input.mediaItems.length > 0
+            ? { mediaItems: input.mediaItems }
+            : {}),
         },
       }
     );

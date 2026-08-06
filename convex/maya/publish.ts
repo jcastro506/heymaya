@@ -94,6 +94,7 @@ export const recordPlacement = internalMutation({
     snapshotText: v.string(),
     idempotencyKey: v.string(),
     url: v.optional(v.string()),
+    zernioPostId: v.optional(v.string()),
     draftId: v.optional(v.id("drafts")),
     publishedAt: v.optional(v.number()),
     /** A reply is a different KIND of placement, and the archive cares. */
@@ -117,6 +118,7 @@ export const recordPlacement = internalMutation({
       kind: args.kind ?? "post",
       channel: args.channel,
       url: args.url,
+      zernioPostId: args.zernioPostId,
       linkStatus: args.url ? "live" : "unknown",
       publishedAt: args.publishedAt ?? Date.now(),
       snapshotText: args.snapshotText,
@@ -144,6 +146,14 @@ export const publishPlacement = internalAction({
     inReplyTo: v.optional(v.string()),
     /** Set when this reply answers someone from the inbox — see below. */
     inboxItemId: v.optional(v.id("inboxItems")),
+    /**
+     * ⭐ Public URLs for the post's media.
+     *
+     * Zernio fetches these from its own servers, so a library asset needs a
+     * SIGNED url minted here with a TTL longer than that fetch — never the
+     * private storage path.
+     */
+    mediaUrlsJson: v.optional(v.string()),
   },
   handler: async (
     ctx,
@@ -188,11 +198,14 @@ export const publishPlacement = internalAction({
       "../integrations/zernio/publish"
     );
 
+    const mediaItems = parseMediaUrls(args.mediaUrlsJson);
+
     {
       const preflight = await validatePost({
         client: new ZernioClient({ apiKey }),
         channel: context.channel,
         text: args.snapshotText,
+        mediaItems,
       });
       if (!preflight.ok) {
         return { ok: false, error: `held: ${preflight.reason}` };
@@ -259,6 +272,7 @@ export const publishPlacement = internalAction({
     }
 
     const outcome = await publishText({
+      mediaItems,
       client: new ZernioClient({ apiKey }),
       accountId: context.zernioAccountId,
       channel: context.channel,
@@ -280,6 +294,9 @@ export const publishPlacement = internalAction({
         snapshotText: args.snapshotText,
         idempotencyKey: args.idempotencyKey,
         url: outcome.url ?? undefined,
+        // The join key for the URL backfill — Instagram publishes async and
+        // returns no link until moments later.
+        zernioPostId: outcome.postId || undefined,
         draftId: args.draftId,
         kind: args.inReplyTo ? "reply" : "post",
       },
@@ -309,3 +326,36 @@ export const publishPlacement = internalAction({
     };
   },
 });
+
+
+/**
+ * Read the media list off a job payload.
+ *
+ * Tolerant on purpose: a malformed list yields NO media rather than throwing,
+ * so the preflight then holds the post with a reason a founder can act on
+ * ("I can't post to instagram without a video or an image") instead of the job
+ * dying on a parse error nobody sees.
+ */
+export function parseMediaUrls(
+  json: string | undefined
+): Array<{ type: "image" | "video"; url: string }> | undefined {
+  if (!json) return undefined;
+  try {
+    const parsed = JSON.parse(json) as unknown;
+    if (!Array.isArray(parsed)) return undefined;
+    const items = parsed
+      .filter(
+        (m): m is { type: string; url: string } =>
+          typeof m === "object" &&
+          m !== null &&
+          typeof (m as { url?: unknown }).url === "string"
+      )
+      .map((m) => ({
+        type: m.type === "video" ? ("video" as const) : ("image" as const),
+        url: m.url,
+      }));
+    return items.length > 0 ? items : undefined;
+  } catch {
+    return undefined;
+  }
+}

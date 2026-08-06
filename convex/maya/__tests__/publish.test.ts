@@ -15,6 +15,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import schema from "../../schema";
 import { internal } from "../../_generated/api";
+import { parseMediaUrls } from "../publish";
 import { modules } from "../../../tests/_modules";
 import {
   publishText,
@@ -575,6 +576,53 @@ describe("⭐ COLD REPLY — commenting on someone else's post", () => {
     // And nothing was spent: no publish call, no placement.
     expect(zernioCalls(calls)).toHaveLength(0);
     expect(await t.run((ctx) => ctx.db.query("placements").collect())).toHaveLength(0);
+  });
+
+  it("⭐ MEDIA REACHES BOTH THE PREFLIGHT AND THE POST", async () => {
+    /**
+     * Two places, and missing either is silent:
+     *
+     * - the PREFLIGHT judges the whole payload, so omitting media there makes
+     *   it reject the very post it is meant to be clearing
+     * - the POST is the point
+     *
+     * Threading it through the JOB PAYLOAD is the third time down this exact
+     * path — `inReplyTo` was dropped there and replies posted into the void;
+     * `inboxItemId` was dropped there and answered items stayed open.
+     */
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "withmedia");
+    vi.stubEnv("ZERNIO_API_KEY", "test-key");
+    const calls = stubZernio(created("https://x.com/a/status/11"));
+
+    const result = await t.action(internal.maya.publish.publishPlacement, {
+      customerId,
+      snapshotText: "a post with a picture",
+      idempotencyKey: "idem_media_ok",
+      mediaUrlsJson: JSON.stringify([
+        { type: "image", url: "https://example.com/shot.png" },
+      ]),
+    });
+
+    expect(result.ok).toBe(true);
+    const preflight = calls.find((c) => c.url.includes("/tools/validate/post"));
+    const post = zernioCalls(calls)[0];
+    expect((preflight?.body as { mediaItems?: unknown[] }).mediaItems).toHaveLength(1);
+    expect((post.body as { mediaItems?: unknown[] }).mediaItems).toHaveLength(1);
+  });
+
+  it("⭐ A MALFORMED MEDIA LIST HOLDS WITH A REASON, IT DOESN'T THROW", async () => {
+    // A job that dies on a parse error is invisible. A hold names itself.
+    expect(parseMediaUrls("not json")).toBeUndefined();
+    expect(parseMediaUrls("[]")).toBeUndefined();
+    expect(parseMediaUrls(JSON.stringify([{ nope: 1 }]))).toBeUndefined();
+    expect(parseMediaUrls(JSON.stringify([{ type: "video", url: "u" }]))).toEqual([
+      { type: "video", url: "u" },
+    ]);
+    // Unknown type falls back to image rather than dropping the asset.
+    expect(parseMediaUrls(JSON.stringify([{ type: "weird", url: "u" }]))).toEqual([
+      { type: "image", url: "u" },
+    ]);
   });
 
   it("⭐ BUT 'as an AI' STILL BLOCKS — that one IS catastrophic", async () => {
