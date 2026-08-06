@@ -1533,6 +1533,65 @@ vendor — and a decision written down. **Not** "Higgsfield seems nicer."
 **Cost:** a handful of renders each. Trivial next to the cost of building the
 whole video pipeline against the wrong vendor.
 
+#### 7.5.36 ⭐ The storyboard check — show the stills before spending a credit
+
+*Operator saw Arcads show the user still images from a post before rendering
+the whole thing, and asked whether we can do that through Creatify.*
+
+**Yes — and by not using Creatify's preview endpoint, which answers a different
+question.**
+
+##### What Creatify's preview actually is
+
+`preview_list_async` → `render_single_preview`
+(`convex/integrations/creatify/endpoints.ts`) fans out several **visual-style**
+previews at 1 cr/30s each, then renders only the chosen one at 4–5 cr/30s. It
+is a genuine **cost lever** and it is already built — but it answers *"which
+look?"*, not *"is this scene right?"*. It also still burns credits per preview.
+
+⚠️ It is wired only into `convex/gtmMaya/` — the frozen v1. `convex/maya/` has
+no video path at all until Sprint 9.
+
+##### What we can do instead, for free
+
+`lipsync_v2` is a **composer, not a generator**: we supply the scenes. Every
+b-roll scene's `background.url` is a file *we* chose from the media library
+(§7.5.31), and every avatar scene's persona carries a `preview_image_9_16` from
+`/api/personas_v2/` — **a free GET**.
+
+So before a single credit is spent we already know, exactly, what every scene
+will show. The storyboard is assemblable from things we already hold:
+
+| Scene | The still we already have | The words |
+|---|---|---|
+| avatar | persona `preview_image_9_16` (free) | that scene's `input_text` |
+| b-roll | **the actual media-library asset** — the real screenshot | its voiceover line |
+
+⭐ **This is strictly better than the vendor preview**, on three axes: it costs
+**zero**, it shows the *exact* frames rather than a representative style, and it
+rides the approval loop that already exists (§4 — the founder answers in
+Telegram, one message, *just go* or a change).
+
+⭐ **And it makes the correction cheap at the only moment it is cheap.** A
+founder who says "that's the wrong screenshot" after the render has burned the
+credits; the same sentence before the render costs nothing. §7.5.3's
+anti-slop gate catches *our* failures — this catches the ones only the founder
+can see, because only they know the product is mid-redesign or that screen is
+from the old pricing page.
+
+⚠️ **Unverified, and honestly so.** `lipsync_v2` is marked *docs-derived and
+UNVERIFIED LIVE* in `types.ts`, and we hold **no Creatify API keys** (§18 open
+question 1). This is a design that can be built and cannot yet be proven.
+
+##### It becomes a spike axis
+
+"Can you check before you pay?" is now a **comparison question for all three
+vendors** in §7.5.35 — and the composer property is what makes it possible, so
+the axis is really *does this vendor let us supply the scenes, or does it only
+take a prompt?* A vendor that only accepts a prompt cannot be storyboarded at
+any price.
+
+
 #### 7.5.4a What we trust Creatify with, and what we never do
 
 *Operator, 2026-08-05: "Creatify is a whole business built on creating social
@@ -5216,6 +5275,7 @@ simply the format that performs on TikTok/Reels/Shorts.
 |---|
 | Creatify: **always `link_with_params`** · Custom Templates (build ~5 masters) · `ads_clone` recreate flow |
 | ⭐ **The ad clone is a TEMPLATE, not a rerun.** $7.20 at 15s — 14× an avatar video, affordable once a month. Clone one proven ad, then produce 3 avatar videos **in that same shape** ($8.74 for four different videos, against $7.25 for the same video posted four times). Reposting an identical asset is also dampened by TikTok and IG, so the fourth post reaches fewer people than the first |
+| ⭐ **The storyboard check (§7.5.36)** — before any render, send the founder the exact stills: the real media-library asset per b-roll scene, the persona `preview_image_9_16` per avatar scene, each with its line. **Zero credits.** A wrong screenshot caught here costs nothing; caught after the render it costs the render |
 | The **brief** schema + the **eight-check gate** |
 | **Global render queue**: fair-share, deadline priority, adaptive concurrency, pool circuit breaker |
 | `make-video` · weekly video plan ask |
