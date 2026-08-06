@@ -191,6 +191,7 @@ import type * as lib_usageEvents from "../lib/usageEvents.js";
 import type * as lib_webhookSecret from "../lib/webhookSecret.js";
 import type * as maya_archive from "../maya/archive.js";
 import type * as maya_assetClassifier from "../maya/assetClassifier.js";
+import type * as maya_audience from "../maya/audience.js";
 import type * as maya_buyerMap from "../maya/buyerMap.js";
 import type * as maya_cadence from "../maya/cadence.js";
 import type * as maya_channels from "../maya/channels.js";
@@ -440,6 +441,7 @@ declare const fullApi: ApiFromModules<{
   "lib/webhookSecret": typeof lib_webhookSecret;
   "maya/archive": typeof maya_archive;
   "maya/assetClassifier": typeof maya_assetClassifier;
+  "maya/audience": typeof maya_audience;
   "maya/buyerMap": typeof maya_buyerMap;
   "maya/cadence": typeof maya_cadence;
   "maya/channels": typeof maya_channels;
