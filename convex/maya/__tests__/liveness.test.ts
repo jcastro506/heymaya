@@ -474,3 +474,38 @@ describe("correlateFleet — one incident, not N", () => {
     expect(correlateFleet(at, at.length).correlated).toBe(true);
   });
 });
+
+/**
+ * ⭐ The reserve logic existed since Sprint 6 with nothing fetching a balance.
+ *
+ * Twentieth zero-caller find, and the one with the widest blast radius: a
+ * vendor at zero is not one customer degraded, it is every customer's sweeps
+ * failing in the same minute.
+ */
+describe("⭐ VENDOR BALANCES — the reserve that could never fire", () => {
+  it("a healthy balance is ok and says the number", () => {
+    // Live at time of writing: 3181 against a 500 reserve.
+    const v = checkBalance("scrapecreators", 3181);
+    expect(v.verdict).toBe("ok");
+    expect(v.detail).toMatch(/3181/);
+  });
+
+  it("⭐ THE ALERT FIRES WELL ABOVE ZERO", () => {
+    // The gap between "alert" and "dead" has to be wide enough to actually
+    // buy more credit. At the reserve exactly, it is already low.
+    expect(checkBalance("scrapecreators", 500).verdict).toBe("low");
+    expect(checkBalance("scrapecreators", 501).verdict).toBe("ok");
+  });
+
+  it("⭐ CRITICAL NAMES THE CONSEQUENCE, NOT THE NUMBER", () => {
+    // "125 credits" means nothing to whoever reads the alert at 3am. "every
+    // customer stops when this hits zero" is the thing that gets acted on.
+    const v = checkBalance("scrapecreators", 100);
+    expect(v.verdict).toBe("critical");
+    expect(v.detail).toMatch(/every customer stops/);
+  });
+
+  it("zero is critical, not merely low", () => {
+    expect(checkBalance("creatify", 0).verdict).toBe("critical");
+  });
+});
