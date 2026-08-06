@@ -191,7 +191,7 @@ export default defineToolPlugin({
       name: "publish",
       label: "Publish",
       description:
-        "Publish an approved draft to its channel. THE ONLY WAY TO POST. Pass draftId; set alreadyApproved when the founder has said yes to THIS draft in chat or tapped it. Returns {ok, data, next, why}. ok:false with data.holdReason is a real ANSWER, not an error — the post is held for a named reason (show_me_first · safety_floor · channel_unavailable · tiktok_preview_consent). Relay `why` to the founder in their language and DO NOT RETRY. ok:true means cleared and queued; the placement row with its URL is the proof it went live, so do not announce it as posted yet.",
+        "Publish an approved draft to its channel. THE ONLY WAY TO POST. Pass draftId; set alreadyApproved when the founder has said yes to THIS draft in chat or tapped it. Returns {ok, data, next, why}. ok:false with data.holdReason is a real ANSWER, not an error — the post is held for a named reason (show_me_first · safety_floor · channel_unavailable · tiktok_preview_consent). Relay `why` to the founder in their language and DO NOT RETRY. ok:true means it is on its way, NOT that it is up. Wait until you can see the live link before you tell them it posted \u2014 and say it the way a person would: \"it's going out now, I'll send you the link when it's up.\" Never repeat the words in this description back to them.",
       parameters: Type.Object({
         draftId: Type.String({
           description: "The draft to publish. It carries the exact text the founder saw.",
