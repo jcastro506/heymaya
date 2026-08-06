@@ -23,11 +23,35 @@
  * What's wanted is the messages where they *explain*, *object*, or *describe* —
  * because that's the register they'd use writing to their own audience.
  *
- * ## Why no model
+ * ## Why a model, after all
  *
- * Selection is length, shape and punctuation — cheap, deterministic, and
- * re-runnable. A model would cost money to reproduce a rule that fits in twenty
- * lines, and §5.2's "no LLM in collection" applies to voice as much as to posts.
+ * This originally said selection was *"length, shape and punctuation — cheap,
+ * deterministic"*. **Live data disproved it.** The first real corpus on the
+ * dogfood account was five excerpts, and four were instructions to her:
+ *
+ * > *"do the daily placement now, for real. take the strongest thing from this
+ * > morning's scroll, write it, and publish it to X."*
+ * > *"did your 11am daily placement job run today?"*
+ *
+ * Each is long, well punctuated, and not in the acknowledgement wordlist, so
+ * every heuristic passed it. Only one of the five was actually the founder
+ * writing:
+ *
+ * > *"honestly the thing that bugs me is when tools promise automation and then
+ * > you spend an hour a day babysitting them anyway"*
+ *
+ * The difference is not shape. It is whether the message is addressed **to her
+ * about her work** or is the founder **saying something about the world** — a
+ * semantic distinction that no length rule will ever catch, and precisely the
+ * kind of thing to give the model rather than another wordlist.
+ *
+ * ⚠️ And this is the layer §7.5.2 calls the highest-leverage of all. A corpus
+ * of commands doesn't produce a weak voice, it produces the wrong one: she
+ * learns to write like someone barking orders at a bot.
+ *
+ * The cheap filter stays as a pre-pass — it removes "ok" and "post it" for
+ * free — and the model only judges what survives. Fails OPEN: if it can't run,
+ * the heuristic result is kept, because a worse corpus beats no corpus.
  *
  * ## Where the logic lives
  *
@@ -37,8 +61,16 @@
  */
 
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "../_generated/server";
-import { selectExcerpts, buildFewShot, type FewShotExample } from "./voice";
+import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internal } from "../_generated/api";
+import {
+  applyVoiceJudge,
+  buildFewShot,
+  buildVoiceJudgePrompt,
+  selectExcerpts,
+  VOICE_JUDGE_SYSTEM,
+  type FewShotExample,
+} from "./voice";
 import type { Doc } from "../_generated/dataModel";
 
 /* -------------------------------------------------------------------------- */
@@ -49,6 +81,118 @@ import type { Doc } from "../_generated/dataModel";
  * Idempotent and cheap enough to run on every deploy — there is no state to
  * accumulate, just a re-read of the message log.
  */
+/** The model that judges instruction-vs-voice. Cheap: one call per deploy. */
+export const VOICE_JUDGE_MODEL = "google/gemini-2.5-flash";
+
+/**
+ * ⭐ Rebuild the corpus, with the model deciding what is actually their voice.
+ *
+ * An action because it calls a model. The heuristic pre-pass runs first (free,
+ * removes "ok" and "post it"), the judge sees only what survives, and the
+ * mutation below does the write — so a model outage degrades to the old
+ * behaviour instead of to an empty corpus.
+ */
+export const refreshVoiceCorpusJudged = internalAction({
+  args: { customerId: v.id("customers"), limit: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ excerpts: number; scanned: number; judged: boolean }> => {
+    const candidates = await ctx.runQuery(
+      internal.maya.voiceCorpus.excerptCandidates,
+      { customerId: args.customerId, limit: args.limit }
+    );
+    if (candidates.excerpts.length === 0) {
+      await ctx.runMutation(internal.maya.voiceCorpus.storeExcerpts, {
+        customerId: args.customerId,
+        excerpts: [],
+      });
+      return { excerpts: 0, scanned: candidates.scanned, judged: false };
+    }
+
+    let kept = candidates.excerpts;
+    let judged = false;
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (apiKey) {
+      const { callModel } = await import("./llm");
+      const completion = await callModel(ctx, {
+        customerId: args.customerId,
+        purpose: "voice_judge",
+        apiKey,
+        model: VOICE_JUDGE_MODEL,
+        temperature: 0,
+        maxTokens: 500,
+        messages: [
+          { role: "system", content: VOICE_JUDGE_SYSTEM },
+          { role: "user", content: buildVoiceJudgePrompt(candidates.excerpts) },
+        ],
+      });
+      if (completion.ok) {
+        kept = applyVoiceJudge(candidates.excerpts, completion.content);
+        judged = true;
+      } else {
+        // Fails OPEN and says so — the heuristic corpus is worse, not absent.
+        console.warn(`[voice] judge unavailable: ${completion.reason}`);
+      }
+    }
+
+    await ctx.runMutation(internal.maya.voiceCorpus.storeExcerpts, {
+      customerId: args.customerId,
+      excerpts: kept,
+    });
+    return { excerpts: kept.length, scanned: candidates.scanned, judged };
+  },
+});
+
+/** The cheap pre-pass, as a query so the action can read the table. */
+export const excerptCandidates = internalQuery({
+  args: { customerId: v.id("customers"), limit: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ excerpts: string[]; scanned: number }> => {
+    const inbound = (await ctx.db
+      .query("messages")
+      .withIndex("by_customer_and_ts", (q) => q.eq("customerId", args.customerId))
+      .order("desc")
+      .take(args.limit ?? 300)) as Doc<"messages">[];
+    return {
+      excerpts: selectExcerpts(
+        inbound.map((m) => ({ body: m.body, ts: m.ts, direction: m.direction }))
+      ),
+      scanned: inbound.filter((m) => m.direction === "in").length,
+    };
+  },
+});
+
+/** The write, kept separate so the judge can fail without losing the corpus. */
+export const storeExcerpts = internalMutation({
+  args: { customerId: v.id("customers"), excerpts: v.array(v.string()) },
+  handler: async (ctx, args): Promise<null> => {
+    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    if (!customer) return null;
+    let profile: Record<string, unknown> = {};
+    try {
+      profile = customer.voiceProfileJson
+        ? (JSON.parse(customer.voiceProfileJson) as Record<string, unknown>)
+        : {};
+    } catch {
+      profile = {};
+    }
+    await ctx.db.patch(args.customerId, {
+      voiceProfileJson: JSON.stringify({
+        ...profile,
+        excerpts: args.excerpts,
+        excerptSource: "founder_messages",
+        excerptsRefreshedAt: Date.now(),
+      }),
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+/** @deprecated Superseded by `refreshVoiceCorpusJudged` — heuristic only. */
 export const refreshVoiceCorpus = internalMutation({
   args: { customerId: v.id("customers"), limit: v.optional(v.number()) },
   handler: async (

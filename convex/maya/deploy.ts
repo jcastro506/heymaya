@@ -768,7 +768,10 @@ export const workspaceFor = internalAction({
      * source 2 and notes that nobody uses it; SOUL.md has rendered
      * `voiceExcerpts` since Sprint 2 with nothing ever filling it.
      */
-    await ctx.runMutation(internal.maya.voiceCorpus.refreshVoiceCorpus, {
+    // ⭐ The JUDGED refresh. The heuristic version selected four instructions
+    // out of five excerpts on the live account — "do the daily placement now"
+    // reads as writing to a length rule and as a command to anyone else.
+    await ctx.runAction(internal.maya.voiceCorpus.refreshVoiceCorpusJudged, {
       customerId: args.customerId,
     });
 

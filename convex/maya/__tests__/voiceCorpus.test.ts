@@ -10,6 +10,11 @@
  */
 
 import { describe, expect, it } from "vitest";
+import {
+  applyVoiceJudge,
+  buildVoiceJudgePrompt,
+  VOICE_JUDGE_SYSTEM,
+} from "../voice";
 import { convexTest } from "convex-test";
 import schema from "../../schema";
 import { internal } from "../../_generated/api";
@@ -313,5 +318,73 @@ describe("LAYER 2 — WHAT THEY CHANGED", () => {
     expect(soul).toContain("Widgetly is a game changer");
     expect(soul).toContain("csv in, dashboard out");
     expect(soul).toMatch(/strongest signal/i);
+  });
+});
+
+/**
+ * ⭐ A CORPUS OF INSTRUCTIONS TEACHES HER TO WRITE LIKE A REMOTE CONTROL.
+ *
+ * The heuristic selector produced this on the live dogfood account — five
+ * excerpts, four of them commands:
+ *
+ *   "do the daily placement now, for real. take the strongest thing from this
+ *    morning's scroll, write it, and publish it to X."
+ *   "did your 11am daily placement job run today?"
+ *   "what have you posted so far? and did the draft save ok?"
+ *
+ * Each is long, well punctuated, and absent from the acknowledgement wordlist,
+ * so every rule in `isVoiceSample` passed it. Exactly one was the founder
+ * actually writing:
+ *
+ *   "honestly the thing that bugs me is when tools promise automation and then
+ *    you spend an hour a day babysitting them anyway"
+ *
+ * §7.5.2 calls this the highest-leverage anti-slop layer, so getting it wrong
+ * doesn't produce a weak voice — it produces the wrong one.
+ */
+describe("the voice judge separates saying from instructing", () => {
+  const LIVE = [
+    "do the daily placement now, for real. take the strongest thing from this morning's scroll, write it, and publish it to X.",
+    "honestly the thing that bugs me is when tools promise automation and then you spend an hour a day babysitting them anyway",
+    "did your 11am daily placement job run today? if it never ran, say that plainly.",
+  ];
+
+  it("keeps only what the judge picked", () => {
+    expect(applyVoiceJudge(LIVE, '{"keep":[1]}')).toEqual([LIVE[1]]);
+  });
+
+  it("an EMPTY keep-list is a real answer, not a parse failure", () => {
+    // A week of nothing but instructions must produce an empty corpus rather
+    // than silently falling back to all of them — which is the bug.
+    expect(applyVoiceJudge(LIVE, '{"keep":[]}')).toEqual([]);
+  });
+
+  it("a malformed answer fails OPEN — a worse corpus beats none", () => {
+    expect(applyVoiceJudge(LIVE, "the model rambled")).toEqual(LIVE);
+    expect(applyVoiceJudge(LIVE, "")).toEqual(LIVE);
+  });
+
+  it("ignores indexes that don't exist rather than emitting undefined", () => {
+    // An out-of-range index would otherwise put `undefined` into SOUL.md.
+    const kept = applyVoiceJudge(LIVE, '{"keep":[1,99,-2]}');
+    expect(kept).toEqual([LIVE[1]]);
+    expect(kept.every((k) => typeof k === "string")).toBe(true);
+  });
+
+  it("survives the JSON arriving wrapped in prose", () => {
+    expect(applyVoiceJudge(LIVE, 'Sure!\n```json\n{"keep":[1]}\n```')).toEqual([
+      LIVE[1],
+    ]);
+  });
+
+  it("the prompt indexes candidates so the judge returns positions", () => {
+    const prompt = buildVoiceJudgePrompt(LIVE);
+    expect(prompt).toContain("0. do the daily placement");
+    expect(prompt).toContain("1. honestly the thing that bugs me");
+  });
+
+  it("the system prompt names the distinction that actually matters", () => {
+    expect(VOICE_JUDGE_SYSTEM).toMatch(/instruct/i);
+    expect(VOICE_JUDGE_SYSTEM).toMatch(/remote control/i);
   });
 });
