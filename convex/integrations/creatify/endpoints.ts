@@ -85,7 +85,13 @@ export async function createLinkWithParams(
   fields: { title?: string; description?: string; image_urls?: string[] },
   client: CreatifyClient = getDefaultClient()
 ): Promise<CreatifyLink> {
-  const res = await client.request<CreatifyLink>("/api/link_with_params/", {
+  // ⚠️ `/api/links/link_with_params/` — the `links/` segment is NOT optional.
+  // This read `/api/link_with_params/` until 2026-08-06 and would have 404'd
+  // on the one call §7.6.2 says to ALWAYS use ("never let Creatify scrape").
+  // Never exercised, because we hold no API key. Path confirmed against the
+  // published OpenAPI `paths` section, which is also what our own
+  // docs/CREATIFY_API_REFERENCE.md line 121 said all along.
+  const res = await client.request<CreatifyLink>("/api/links/link_with_params/", {
     method: "POST",
     body: compact(fields),
   });
