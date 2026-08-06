@@ -258,3 +258,98 @@ describe("⭐ SOUNDING HUMAN IS NOT THE SAME AS BEING WORTH POSTING", () => {
     expect(MAX_TOPIC_COVERAGE).toBeGreaterThan(0.5);
   });
 });
+
+/**
+ * ⭐ The instrument that had never measured anything.
+ *
+ * `runEval` took `herPosts` as an argument and had no caller. Sprint 4's exit
+ * is "a stranger can't tell it isn't the founder writing", and this is the only
+ * thing that can answer it — six anti-slop layers built, and the number saying
+ * whether they work had never existed.
+ */
+describe("⭐ RUN IT ON WHAT SHE ACTUALLY PUBLISHED", () => {
+  it("⭐ REFUSES TO REPORT A NUMBER BELOW THE FLOOR", async () => {
+    /**
+     * Below `MIN_PAIRS` this is not a weak signal, it is noise: an accuracy
+     * from three pairs swings on one judge call. A number that moves at random
+     * is worse than no number, because someone will act on it.
+     */
+    const t = convexTest(schema, modules);
+    const customerId = await seedEvalCustomer(t);
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 3; i += 1) {
+        await ctx.db.insert("placements", {
+          customerId,
+          kind: "post",
+          channel: "x",
+          url: `https://x.com/a/status/e${i}`,
+          linkStatus: "live",
+          publishedAt: Date.now(),
+          snapshotText: `a real post ${i}`,
+          idempotencyKey: `eval-${i}`,
+        });
+      }
+    });
+
+    const res = await t.action(internal.maya.cringeEval.runEvalOnPublished, {
+      customerId,
+    });
+    expect(res.ok).toBe(false);
+    expect(res.detail).toMatch(/needs \d+ before the number means anything/);
+  });
+
+  it("⭐ MEASURES PLACEMENTS, NOT DRAFTS", async () => {
+    /**
+     * A draft is what she proposed; a placement is what a stranger actually
+     * saw. Grading drafts measures the work rather than the product — and
+     * includes everything the founder rejected, which is exactly the writing
+     * we want excluded.
+     */
+    const t = convexTest(schema, modules);
+    const customerId = await seedEvalCustomer(t);
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 12; i += 1) {
+        await ctx.db.insert("drafts", {
+          customerId,
+          channel: "x",
+          kind: "post",
+          snapshotText: `a rejected draft ${i}`,
+          outcome: "rejected",
+          proposedAt: Date.now(),
+          expiresAt: Date.now() + 86_400_000,
+        });
+      }
+    });
+
+    // Twelve drafts, zero placements — still below the floor, because drafts
+    // are not what anyone read.
+    const res = await t.action(internal.maya.cringeEval.runEvalOnPublished, {
+      customerId,
+    });
+    expect(res.ok).toBe(false);
+    expect(res.detail).toMatch(/only 0 published posts/);
+  });
+});
+
+async function seedEvalCustomer(t: ReturnType<typeof convexTest>) {
+  return await t.run(async (ctx) => {
+    const accountId = await ctx.db.insert("creators", {
+      clerkUserId: `u_eval_${Math.random()}`,
+      email: "eval@example.com",
+      channelPreference: "telegram",
+      timezone: "UTC",
+      status: "active",
+      plan: "manager",
+      createdAt: Date.now(),
+    });
+    return await ctx.db.insert("customers", {
+      accountId,
+      agentVersion: "v2",
+      plan: "mvp",
+      state: "active",
+      timezone: "UTC",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  });
+}
