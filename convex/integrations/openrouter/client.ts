@@ -52,7 +52,30 @@ export interface OpenRouterRequest {
 }
 
 export type OpenRouterResult =
-  | { ok: true; content: string; usage?: { promptTokens: number; completionTokens: number } }
+  | {
+      ok: true;
+      content: string;
+      usage?: {
+        promptTokens: number;
+        completionTokens: number;
+        /**
+         * ⭐ What this call ACTUALLY cost, in USD, as reported by OpenRouter.
+         *
+         * Asked for rather than computed. A local price table is a second
+         * source of truth that rots silently — one already claimed Lite was
+         * $0.075 when it was $0.25, a 3.3× error nobody noticed because
+         * nothing reconciled it against a bill. The vendor knows the real
+         * number for the real model actually served, including any fallback
+         * routing we didn't choose.
+         *
+         * Absent when OpenRouter omits it; callers must treat undefined as
+         * "unknown", never as zero. A cost ledger that records 0 for unknown
+         * reads as free, and this product has already shipped a ledger that
+         * reported $0.025 against a $22 bill.
+         */
+        costUsd?: number;
+      };
+    }
   | { ok: false; reason: string };
 
 /**
@@ -81,6 +104,9 @@ export async function callOpenRouter(
         messages: request.messages,
         temperature: request.temperature ?? 0.2,
         max_tokens: request.maxTokens ?? 4_000,
+        // Opt in to cost reporting. Without this the response carries token
+        // counts and no price, which is the half that can't be budgeted.
+        usage: { include: true },
       }),
       signal: controller.signal,
     });
@@ -92,7 +118,11 @@ export async function callOpenRouter(
 
     let parsed: {
       choices?: Array<{ message?: { content?: string } }>;
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
+      usage?: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        cost?: number;
+      };
     };
     try {
       parsed = JSON.parse(raw);
@@ -112,6 +142,9 @@ export async function callOpenRouter(
         ? {
             promptTokens: parsed.usage.prompt_tokens ?? 0,
             completionTokens: parsed.usage.completion_tokens ?? 0,
+            // Left undefined rather than defaulted to 0 — see the field docs.
+            costUsd:
+              typeof parsed.usage.cost === "number" ? parsed.usage.cost : undefined,
           }
         : undefined,
     };

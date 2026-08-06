@@ -60,6 +60,60 @@ export function dayKeyInZone(ts: number, timezone: string): string {
   }).format(new Date(ts));
 }
 
+/**
+ * ⭐ Is this timestamp in the founder's TODAY?
+ *
+ * Every "per day" budget in this codebase originally wrote
+ * `Math.floor(now / 86_400_000) * 86_400_000` — UTC midnight, which in
+ * `America/New_York` starts the day at **20:00 the previous evening**. Seven
+ * instances were found on 2026-08-06 across five files: the liveness watchdog,
+ * the evening recap, the daily spend ceiling, the throttle alert, the post and
+ * video budgets, and her daily proactive-message allowance.
+ *
+ * Each was silently wrong in the same direction — evening activity counted
+ * against the wrong day, so budgets reset at 8pm and a watchdog went blind.
+ *
+ * Comparing day KEYS rather than doing millisecond arithmetic is also correct
+ * across DST, where the offset is not constant and a fixed subtraction is
+ * wrong twice a year.
+ */
+export function isSameDayInZone(
+  ts: number,
+  now: number,
+  timezone: string
+): boolean {
+  return dayKeyInZone(ts, timezone) === dayKeyInZone(now, timezone);
+}
+
+/** Same, for a calendar month — the monthly video and asset budgets. */
+export function isSameMonthInZone(
+  ts: number,
+  now: number,
+  timezone: string
+): boolean {
+  return (
+    dayKeyInZone(ts, timezone).slice(0, 7) ===
+    dayKeyInZone(now, timezone).slice(0, 7)
+  );
+}
+
+/**
+ * The widest safe lower bound for an index scan of "today in any timezone".
+ *
+ * Index ranges need a number, and no timezone is more than 26 hours from UTC
+ * — so two days back always contains the founder's day, and the key filter
+ * above decides actual membership. Scanning two days of one customer's rows is
+ * cheaper than being wrong about which day it is.
+ */
+export function dayScanFloor(now: number): number {
+  return now - 2 * 86_400_000;
+}
+
+/** The same bound for a month scan: the longest month plus two days of slack. */
+export function monthScanFloor(now: number): number {
+  return now - 33 * 86_400_000;
+}
+
 /** Step back one calendar day from a YYYY-MM-DD key. */
 export function previousDay(dayKey: string): string {
   const [y, m, d] = dayKey.split("-").map(Number);

@@ -223,6 +223,30 @@ describe("fleet-wide vendor balances", () => {
       expect(reserve).toBeGreaterThan(50);
     }
   });
+
+  /**
+   * ⭐ The gap wasn't a wrong threshold, it was a MISSING VENDOR.
+   *
+   * This table watched ScrapeCreators and Creatify — the two that were fine —
+   * and not OpenRouter, which pays for every model call she makes and which
+   * §7.2's own COGS work names as cost driver #1. A live read on 2026-08-06
+   * found **$26.16 left of $2,535**, half way through the seven-day run, and
+   * nothing anywhere would have said so: at zero she stops mid-sentence for
+   * every customer at once.
+   *
+   * Asserting the KEY rather than a number, because the failure mode here is
+   * absence. A vendor nobody watches has no wrong value to catch.
+   */
+  it("watches the vendor that pays for thinking", () => {
+    expect(Object.keys(CREDIT_RESERVES)).toContain("openrouter");
+  });
+
+  it("openrouter is graded in dollars, and a low balance is LOW not ok", () => {
+    // Its balance is a dollar figure, not vendor credits — the one entry in
+    // this table with a different unit, which is why it carries its own test.
+    expect(checkBalance("openrouter", 26.16).verdict).not.toBe("ok");
+    expect(checkBalance("openrouter", 500).verdict).toBe("ok");
+  });
 });
 
 /* -------------------------------------------------------------------------- */
