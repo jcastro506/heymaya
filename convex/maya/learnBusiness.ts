@@ -808,3 +808,60 @@ export const learnBusiness = internalAction({
     return { ok: true, targets };
   },
 });
+
+
+/* -------------------------------------------------------------------------- */
+/* Staleness                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ Re-learn the niche when the map goes stale.
+ *
+ * §5.0.0: the buyer map is *"refreshed monthly, because a stale buyer map
+ * silently poisons the idea bank, the format library, and the benchmarks all
+ * at once."*
+ *
+ * `buyerMap.ts` has an `isStale` and a `BUYER_MAP_MAX_AGE_MS` written for
+ * exactly this. **The entire module was unimported** — twenty-seventh find —
+ * so nothing has ever checked, and a niche learned in July would still be
+ * driving every keyword, every sweep and every idea in December.
+ *
+ * ⚠️ The word "silently" in that sentence is the whole problem. Stale keywords
+ * do not fail; they return posts. They return the WRONG posts, and everything
+ * downstream reports success.
+ */
+export const relearnIfStale = internalAction({
+  args: { now: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ checked: number; relearned: number }> => {
+    const now = args.now ?? Date.now();
+    const customerIds = await ctx.runQuery(
+      internal.maya.scheduler.activeV2Customers,
+      {}
+    );
+    const { isStale } = await import("./buyerMap");
+
+    let relearned = 0;
+    for (const customerId of customerIds) {
+      const targets = await ctx.runQuery(internal.maya.learnBusiness.targetsFor, {
+        customerId,
+      });
+      /**
+       * No map at all is NOT stale — it is unlearned, and onboarding owns
+       * that. Re-running the full learn for a customer who has never had one
+       * would spend twelve searches on someone who may not even be set up.
+       */
+      if (!targets) continue;
+      if (!isStale(targets.learnedAt, now)) continue;
+
+      await ctx.runAction(internal.maya.learnBusiness.learnBusiness, {
+        customerId,
+      });
+      relearned += 1;
+    }
+
+    return { checked: customerIds.length, relearned };
+  },
+});

@@ -127,6 +127,22 @@ crons.interval(
 // being unreachable.
 
 /**
+ * ⭐ Re-learns a niche whose map has gone stale (§5.0.0).
+ *
+ * Daily check, monthly effect: `isStale` only fires past
+ * `BUYER_MAP_MAX_AGE_MS`, so this is twelve searches a month per customer, not
+ * a day. Cheap, and the alternative is a niche learned in July still driving
+ * every keyword in December — silently, because stale keywords do not fail,
+ * they return the wrong posts and everything downstream reports success.
+ */
+crons.interval(
+  "maya-relearn-stale",
+  { hours: 24 },
+  internal.maya.learnBusiness.relearnIfStale,
+  {}
+);
+
+/**
  * ⭐ Notices when a founder connects a channel.
  *
  * `syncChannels` had no caller, and it showed live: three channels were
