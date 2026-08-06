@@ -329,3 +329,45 @@ describe("isStale — a stale map poisons everything downstream, silently", () =
     expect(isStale(NOW - BUYER_MAP_MAX_AGE_MS, NOW)).toBe(false);
   });
 });
+
+/**
+ * ⭐ The staleness check that nothing called.
+ *
+ * §5.0.0: the buyer map is "refreshed monthly, because a stale buyer map
+ * silently poisons the idea bank, the format library, and the benchmarks all
+ * at once."
+ *
+ * `isStale` and `BUYER_MAP_MAX_AGE_MS` were written for exactly that, and the
+ * WHOLE MODULE was unimported — so nothing ever checked, and a niche learned
+ * in July would still be driving every keyword in December.
+ */
+describe("⭐ STALENESS — the check nothing ran", () => {
+  const now = Date.UTC(2026, 7, 6);
+
+  it("a map inside the window is fine", () => {
+    expect(isStale(now - 5 * 86_400_000, now)).toBe(false);
+  });
+
+  it("⭐ PAST A MONTH IT IS STALE — and stale never announces itself", () => {
+    /**
+     * The word "silently" in §5.0.0 is the whole problem. Stale keywords do
+     * not fail; they return posts. They return the WRONG posts, and every
+     * sweep downstream reports success.
+     */
+    expect(isStale(now - BUYER_MAP_MAX_AGE_MS - 1, now)).toBe(true);
+  });
+
+  it("⭐ NEVER REFRESHED IS STALE — and the CALLER decides what that means", () => {
+    /**
+     * `isStale(undefined)` is `true`, which is the right answer to the
+     * question it was asked: a map with no refresh date is not fresh.
+     *
+     * But "never learned" and "learned in July" are different problems with
+     * different owners — onboarding builds the first map, and re-learning for
+     * a customer who may not be set up yet spends twelve searches on nobody.
+     * So `relearnIfStale` checks for a map at ALL before consulting this, and
+     * the split is deliberate rather than a gap.
+     */
+    expect(isStale(undefined, now)).toBe(true);
+  });
+});

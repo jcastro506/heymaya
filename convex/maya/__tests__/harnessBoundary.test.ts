@@ -61,6 +61,13 @@ const CONVEX_MAY_SCHEDULE = [
    * this, three channels were connected live and nothing updated until someone
    * ran the sync by hand.
    */
+  /**
+   * A stale buyer map poisons every sweep downstream, and staleness is a
+   * date comparison — no judgment in it (§2.3). It also has to keep working
+   * for a customer whose machine has been asleep for a month, which is
+   * precisely the customer whose map went stale.
+   */
+  "maya-relearn-stale",
   "maya-sync-channels",
   "maya-refresh-metrics",
   "maya-drain-jobs",
