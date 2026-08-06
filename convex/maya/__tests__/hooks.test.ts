@@ -662,3 +662,73 @@ describe("⭐ A FOUNDER'S EDIT IS CAPTURED, NOT JUST OBEYED", () => {
     expect(draft.editDiff).toBeUndefined();
   });
 });
+
+
+/**
+ * ⭐ Two archive modes that had no caller since Sprint 2.
+ *
+ * `history` answered "what went out recently". It could not answer "have I
+ * said this before" — the question that stops an account sounding like a loop
+ * — or "why did you post that", which §16.8.4's provenance chain exists for.
+ */
+describe("⭐ SHE CAN SEARCH HER OWN ARCHIVE", () => {
+  it("⭐ A REPEATED ANGLE COMES BACK WITH A WARNING, NOT A LIST", async () => {
+    const t = convexTest(schema, modules);
+    const { customerId, token } = await seed(t, "archsearch");
+    await t.run(async (ctx) => {
+      await ctx.db.insert("placements", {
+        customerId,
+        kind: "post",
+        channel: "x",
+        url: "https://x.com/a/status/900",
+        linkStatus: "live",
+        publishedAt: Date.now() - 120 * 86_400_000,
+        snapshotText: "the rollback problem nobody warns you about at 3am",
+        idempotencyKey: "arch-1",
+      });
+    });
+
+    const res = await envelope(
+      await post(t, "/maya/history", token, { query: "rollback" })
+    );
+    expect(res.ok).toBe(true);
+    // Four months old — outside any timeline she'd otherwise look at.
+    expect((res.data as { matches: unknown[] }).matches).toHaveLength(1);
+    expect(res.next).toMatch(/covered this before/);
+  });
+
+  it("nothing matching means the angle is new, and says so", async () => {
+    const t = convexTest(schema, modules);
+    const { token } = await seed(t, "archempty");
+    const res = await envelope(
+      await post(t, "/maya/history", token, { query: "something never posted" })
+    );
+    expect(res.next).toMatch(/this angle is new/);
+  });
+
+  it("⭐ AN UNTRACEABLE POST IS SAID, NOT RECONSTRUCTED", async () => {
+    /**
+     * §10.2. A plausible story they cannot correct is worse than admitting the
+     * chain doesn't reach — and the `next` says exactly that rather than
+     * leaving her to improvise.
+     */
+    const t = convexTest(schema, modules);
+    const { customerId, token } = await seed(t, "archprov");
+    const orphan = await t.run(async (ctx) =>
+      ctx.db.insert("placements", {
+        customerId,
+        kind: "post",
+        channel: "x",
+        url: "https://x.com/a/status/901",
+        linkStatus: "live",
+        publishedAt: Date.now(),
+        snapshotText: "no draft, no idea, no chain",
+        idempotencyKey: "arch-2",
+      })
+    );
+    const res = await envelope(
+      await post(t, "/maya/history", token, { placementId: orphan })
+    );
+    expect(res.next).toMatch(/Do NOT reconstruct a reason/);
+  });
+});
