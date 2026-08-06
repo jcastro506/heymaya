@@ -840,6 +840,81 @@ what they can't do. Four rules keep it on the right side of the line:
 interruptions wearing a helpful costume, and the honest response is to stop
 sending them rather than to send more.
 
+#### 5.6.2 ⭐ The follow list — and why it is NOT the comment handoff
+
+*Operator asked 2026-08-06 to architect follows alongside comments. §5.6.1
+already designs the comment handoff; this is the half that was missing, and the
+mistake to avoid is treating them as one feature.*
+
+**Comments are perishable. Follows are not.** That single difference sets
+everything else:
+
+| | Comment handoff | Follow list |
+|---|---|---|
+| Effort per item | read the post, paste, ~30s | one tap, ~3s |
+| Risk | their words, in public, under their name | ~none |
+| Reversible | awkward to delete | unfollow, trivial |
+| Decay | **hours** — a two-day-old comment section is dead | **none** — worth following today is worth following next week |
+| Right batch size | **1**, rarely | **10–20**, together |
+| Right rhythm | when something is genuinely hot | **weekly** |
+
+⚠️ **So they must not share a message, a cadence, or a budget.** Sending them
+together makes the urgent one look routine and the routine one look urgent.
+§5.6.1's rule 2 — one proactive message, and that budget is the rate limiter —
+applies to the comment. The follow list rides the **weekly** review instead,
+where a list is expected and costs no extra interruption.
+
+##### Who to follow, and the trap
+
+The generic answer — *"big accounts in your niche"* — is what every growth tool
+ships and it is worthless. Following fifteen influencers gets you nothing; they
+don't follow back, they aren't buyers, and the algorithm learns you're a fan.
+
+⭐ **The buyer map already holds the right answer and has never been run.**
+§5.0.0: *"who follows the competitors **is** the ICP."* `computeAudienceOverlap`
+and `discoverGathering` are pure functions in `convex/maya/buyerMap.ts` with
+**zero callers** — this is what they were written for.
+
+**Follow the audience, not the celebrities.** Fifteen people who follow two
+competitors and post about the problem are worth more than any single large
+account, because they follow back, they are the buyer, and their engagement
+teaches the algorithm the right neighbourhood.
+
+Ranked by, in order: overlap with competitor audiences · whether they have
+posted about the problem recently · account size **inverted** past a threshold
+(a 200k account will not notice; a 2k account will).
+
+##### The rules, which differ from the comment's
+
+1. **Never a name without a reason.** *"Follows both @x and @y, posted about
+   pricing confusion twice this month"* — one line, per account. A bare list of
+   handles is a chore; a list with reasons is research.
+2. ⚠️ **Say to spread them out.** Fifteen follows in sixty seconds looks
+   automated to the platform even when a human does it by hand, and the account
+   at risk is theirs. This is the ban-safety pillar applied to an action we
+   don't perform.
+3. **Never re-ask.** An account offered once is never offered again, whether or
+   not they followed. Nagging about a tap is worse than losing the tap.
+4. **No expiry.** Unlike a draft, an unfollowed suggestion stays valid — it
+   simply rolls into next week's list behind fresher names.
+
+##### What we can and cannot know
+
+⛔ **Neither the follow nor the comment can be verified.** No vendor exposes
+"did this account follow that one", and TikTok exposes no comment API at all
+(§5.6).
+
+⭐ **So neither may ever count as a placement.** §2.6 is explicit that the unit
+of work is *something live, with a URL* — and Sprint 3's seven-day criterion is
+built on exactly that. A self-reported action counted as a placement turns the
+product's central gate into an honour system. They are tracked as **asks**, with
+their own counter, and the streak does not see them.
+
+What *is* measurable is the aggregate: follower count on our own account is
+readable through analytics, so *"you followed 40 of these and gained 60
+followers"* is a real sentence. Per-item attribution is not, and claiming it
+would be a fabricated number (§2.7).
+
 ### 5.5 What she never does
 
 - **Never logs in as the user.** No password custody, no session driving, no browser automation as them. It's a ToS violation on all four platforms, a security liability, an onboarding conversion killer, and the fastest known route to getting their real account banned.
@@ -5154,6 +5229,53 @@ and no metric substitutes for it.
 must stay majority real messages — a guard that mangles her metrics is worse
 than the leak it prevents (§13.55.2) · control-voids-the-run · every internal
 name is a proper noun, never a common word.
+
+### Sprint 5.7 — ⭐ The handoff: comments and follows the founder performs
+
+*Operator-raised 2026-08-06. §5.6.1 designed the comment handoff on 2026-08-05
+and no sprint built it; §5.6.2 adds the follow list. Both exist because the
+platforms removed the capability, not because we chose to delegate.*
+
+⛔ **This rung is gone by API on every channel we sell** (§5.6): X blocks cold
+replies since February 2026, TikTok exposes no comment API at all, Instagram is
+own-comments only, YouTube's insert is untested. **The founder is the only path
+that remains**, and a human acting from their own device is also the
+ban-safest one — this is the pillar applied to an action we don't perform.
+
+| Task |
+|---|
+| **Comment targets** — a post is worth their 30 seconds only if someone is describing the problem the product removes. Sourced from the sweeps already running (§5.1) and the mined complaints, not a new collector |
+| ⭐ **Run the buyer map's audience half.** `computeAudienceOverlap` and `discoverGathering` are pure functions with **zero callers** — §5.0.0's *"who follows the competitors is the ICP"* has never actually executed. This sprint is what they were written for |
+| **Follow ranking** — overlap with competitor audiences · posted about the problem recently · size **inverted** past a threshold. Follow the audience, never the celebrities (§5.6.2) |
+| **The comment message** — link, the exact words to paste, and one sentence of why. Complete or not sent (§5.6.1 rule 3). Spends a proactive message, which IS the rate limiter |
+| **The follow list** — 10–20 with a reason each, on the **weekly** review, never mixed into the comment's message |
+| ⚠️ **"Spread these out over the day"** stated in the message — fifteen follows in a minute looks automated to the platform even done by hand, and the account at risk is theirs |
+| **An `asks` counter, separate from placements** — offered · acted on · ignored |
+| Never re-ask a declined or ignored item; comment asks expire in hours, follows never expire and simply fall behind fresher names |
+
+⭐ **The measurement that decides whether this ships at all.** §5.6.1: *"measure
+whether they ever paste it. If the founder ignores these, they are
+interruptions wearing a helpful costume, and the honest response is to stop
+sending them rather than to send more."* Build the counter in the same sprint
+as the feature, or there is no way to obey that rule.
+
+⚠️ **Neither action is verifiable and neither may count as a placement.** No
+vendor exposes "did this account follow that one". §2.6 says the unit of work
+is *something live, with a URL*, and Sprint 3's whole criterion rests on it —
+counting a self-reported action as a placement turns the product's central gate
+into an honour system. Aggregate follower movement IS measurable and is the
+honest claim; per-item attribution is not, and asserting it would be a
+fabricated number.
+
+**Exit:** the founder pastes a comment she wrote, and follows accounts she
+picked, **without being asked twice** — and the ask counter can say what
+fraction they acted on.
+
+**Tests:** an ask is never counted as a placement (the streak is unmoved by any
+number of asks) · no ask is ever re-sent · a comment ask carries link, text and
+reason or is not sent at all · follows and comments never share a message ·
+declined items never reappear · the ignored-rate is queryable, because the rule
+that says stop sending needs a number behind it.
 
 ### Sprint 5.5 — ⭐ Zernio, every channel, decided rather than inventoried
 
