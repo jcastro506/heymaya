@@ -26,7 +26,7 @@
  */
 
 import { v } from "convex/values";
-import { internalQuery } from "../_generated/server";
+import { internalAction, internalQuery } from "../_generated/server";
 import type { Doc } from "../_generated/dataModel";
 import { dayKey } from "./dailyReport";
 
@@ -447,5 +447,68 @@ export const gatherFacts = internalQuery({
       everCheckpointed: checkpoint !== null,
       contextTruncated: checkpoint?.contextTruncated === true,
     };
+  },
+});
+
+/* -------------------------------------------------------------------------- */
+/* Reading the balances — the part that was missing                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ Fetch what's actually left, so `checkBalance` has something to judge.
+ *
+ * `CREDIT_RESERVES` and `checkBalance` have existed since Sprint 6 with **no
+ * caller** — the twentieth such find this week, and the one with the widest
+ * blast radius. Nothing ever asked a vendor how much credit remained, so the
+ * fleet could reach zero and the first anyone would know is every customer's
+ * sweeps failing at once.
+ *
+ * ScrapeCreators returns `credits_remaining` on **every** response, so this
+ * costs one credit rather than needing a dedicated endpoint. Live at time of
+ * writing: 3181.
+ *
+ * ⚠️ Creatify is checked only when configured. An unconfigured vendor is not a
+ * vendor at zero, and reporting it as `critical` would train whoever reads
+ * these alerts to ignore them — which is how a real one gets missed.
+ */
+export const readBalances = internalAction({
+  args: {},
+  handler: async (): Promise<BalanceCheck[]> => {
+    const out: BalanceCheck[] = [];
+
+    const scKey = process.env.SCRAPE_CREATORS_API_KEY;
+    if (scKey) {
+      try {
+        const res = await fetch(
+          "https://api.scrapecreators.com/v1/tiktok/profile?handle=tiktok",
+          { headers: { "x-api-key": scKey } }
+        );
+        const body = (await res.json()) as { credits_remaining?: unknown };
+        if (typeof body.credits_remaining === "number") {
+          out.push(checkBalance("scrapecreators", body.credits_remaining));
+        }
+      } catch (error) {
+        console.error(`[liveness] scrapecreators balance failed: ${String(error)}`);
+      }
+    }
+
+    const cfId = process.env.CREATIFY_API_ID;
+    const cfKey = process.env.CREATIFY_API_KEY;
+    if (cfId && cfKey) {
+      try {
+        const res = await fetch(
+          "https://api.creatify.ai/api/remaining_credits/",
+          { headers: { "X-API-ID": cfId, "X-API-KEY": cfKey } }
+        );
+        const body = (await res.json()) as { remaining_credits?: unknown };
+        if (typeof body.remaining_credits === "number") {
+          out.push(checkBalance("creatify", body.remaining_credits));
+        }
+      } catch (error) {
+        console.error(`[liveness] creatify balance failed: ${String(error)}`);
+      }
+    }
+
+    return out;
   },
 });

@@ -404,12 +404,33 @@ export const livenessSweep = internalAction({
   handler: async (
     ctx,
     args
-  ): Promise<{ checked: number; breached: number; fleetIncident: boolean }> => {
+  ): Promise<{
+    checked: number;
+    breached: number;
+    fleetIncident: boolean;
+    vendorAlerts: string[];
+  }> => {
     const now = args.now ?? Date.now();
     const customerIds = await ctx.runQuery(
       internal.maya.scheduler.activeV2Customers,
       {}
     );
+
+    /**
+     * ⭐ The fleet balances, read before the per-customer pass.
+     *
+     * `CREDIT_RESERVES` and `checkBalance` shipped in Sprint 6 with nothing
+     * fetching an actual number, so the reserve logic could never fire. A
+     * vendor at zero is not one customer degraded — it is every customer's
+     * sweeps failing in the same minute, which is why this belongs in the
+     * watchdog rather than in anyone's daily loop.
+     */
+    const balances = await ctx.runAction(internal.maya.liveness.readBalances, {});
+    for (const b of balances) {
+      if (b.verdict !== "ok") {
+        console.error(`[liveness] VENDOR ${b.verdict.toUpperCase()}: ${b.detail}`);
+      }
+    }
 
     const perCustomer: Array<{
       customerId: (typeof customerIds)[number];
@@ -469,6 +490,8 @@ export const livenessSweep = internalAction({
       checked: customerIds.length,
       breached,
       fleetIncident: fleet.correlated,
+      // Surfaced, not just logged — an alert nobody can query is a log line.
+      vendorAlerts: balances.filter((b) => b.verdict !== "ok").map((b) => b.detail),
     };
   },
 });
