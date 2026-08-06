@@ -1032,14 +1032,39 @@ export const publishHttp = httpAction(async (ctx, request) => {
   });
 
   if (!decision.publish) {
+    /**
+     * ⭐ `show_me_first` MEANS SHOW THEM THE POST.
+     *
+     * Measured live 2026-08-05. The 11:00 job drafted, hit this hold, and sent
+     * the founder:
+     *
+     *   "I found a strong moment from a solo-founder TikTok and drafted a
+     *    237-character X post, but I'm not publishing it..."
+     *
+     * She described the draft in the third person and never showed it. The
+     * founder cannot approve what he cannot read, so the approval loop broke
+     * at the last inch — and nothing was technically wrong, which is why it
+     * survived a day.
+     *
+     * The text rides in the tool response rather than being left to her to
+     * remember (§2.8): the choreography is the server's job.
+     */
+    const showThem = decision.reason === "show_me_first";
     return respond({
       ok: false,
-      data: { published: false, holdReason: decision.reason },
+      data: {
+        published: false,
+        holdReason: decision.reason,
+        // What they have to see to be able to say yes.
+        draftText: showThem ? decision.snapshotText : undefined,
+      },
       why: decision.detail,
       // Named so the model relays rather than retries. A held post that gets
       // retried in a loop is how a machine burns its daily spend on a decision
       // that will not change.
-      next: `tell them: "${decision.detail}" — do not retry this publish`,
+      next: showThem
+        ? "⭐ SHOW THEM THE POST. Send data.draftText VERBATIM, on its own, then ask — \"say post it, or tell me what to change\". Describing it (\"I drafted a 237-character post\") is not showing it: they cannot approve what they cannot read. Do not retry this publish; wait for their answer."
+        : `tell them: "${decision.detail}" — do not retry this publish`,
     });
   }
 
