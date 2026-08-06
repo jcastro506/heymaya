@@ -34,6 +34,7 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
 import type { Doc } from "../_generated/dataModel";
 import { budgetsFor } from "./planFeatures";
+import { dayScanFloor, isSameDayInZone } from "./cadence";
 
 /**
  * The only two states. Deliberately no third.
@@ -145,17 +146,20 @@ export const spendToday = internalQuery({
   args: { customerId: v.id("customers"), now: v.optional(v.number()) },
   handler: async (ctx, args): Promise<SpendVerdict> => {
     const now = args.now ?? Date.now();
-    const since = Math.floor(now / 86_400_000) * 86_400_000;
-
     const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
     const ceilingUsd = budgetsFor(customer).dailySpendCeilingUsd;
+    // The founder's day. On the old UTC boundary a spend ceiling reset at
+    // 20:00 local, so an evening runaway got a fresh budget at 8pm.
+    const timezone = customer?.timezone ?? "UTC";
 
-    const jobs = (await ctx.db
-      .query("jobs")
-      .withIndex("by_customer_and_createdAt", (q) =>
-        q.eq("customerId", args.customerId).gte("createdAt", since)
-      )
-      .collect()) as Doc<"jobs">[];
+    const jobs = (
+      (await ctx.db
+        .query("jobs")
+        .withIndex("by_customer_and_createdAt", (q) =>
+          q.eq("customerId", args.customerId).gte("createdAt", dayScanFloor(now))
+        )
+        .collect()) as Doc<"jobs">[]
+    ).filter((job) => isSameDayInZone(job.createdAt, now, timezone));
 
     const spentUsd = jobs.reduce((sum, job) => sum + (job.costUsd ?? 0), 0);
     return judgeSpend({ spentUsd, ceilingUsd });
@@ -202,17 +206,21 @@ export const alertThrottled = internalMutation({
     if (!customer) return { alerted: false };
 
     const now = args.now ?? Date.now();
-    const since = Math.floor(now / 86_400_000) * 86_400_000;
+    const timezone = customer.timezone ?? "UTC";
 
-    // One alert per customer per day. A throttle that re-alerts every sweep
-    // buries the operator surface in a condition they already know about.
+    // One alert per customer per day, counted in THEIR day — otherwise the
+    // "one per day" resets at 20:00 local and they get two.
+    // A throttle that re-alerts every sweep buries the operator surface in a
+    // condition they already know about.
     const existing = await ctx.db
       .query("gtmAuditEvents")
       .withIndex("by_account", (q) => q.eq("accountId", customer.accountId))
       .collect();
     if (
       existing.some(
-        (e) => e.eventType === "spend.throttled" && e.createdAt >= since
+        (e) =>
+          e.eventType === "spend.throttled" &&
+          isSameDayInZone(e.createdAt, now, timezone)
       )
     ) {
       return { alerted: false };

@@ -327,6 +327,25 @@ export function correlateFleet(
 export const CREDIT_RESERVES = {
   scrapecreators: 500,
   creatify: 100,
+  /**
+   * ⭐ OpenRouter, in **US dollars** rather than vendor credits — its balance
+   * simply is a dollar figure.
+   *
+   * Added 2026-08-06, and it is the one that mattered: this table watched the
+   * two vendors that were fine and not the one that pays for every model call
+   * she makes. §7.2's own COGS work says the LLM is cost driver #1. A live
+   * read that day found **$26.16 left of $2,535** — mid-way through the
+   * seven-day run — with nothing anywhere that would have said so.
+   *
+   * Set high on purpose. Hitting zero doesn't degrade her, it stops her
+   * mid-sentence for every customer at once, so the threshold has to leave
+   * time to notice and top up — and this account has burned $22 in a single
+   * hour during a runaway, so a small cushion is no cushion at all.
+   *
+   * ⚠️ At $75 this fires on the CURRENT balance ($26 on 2026-08-06),
+   * immediately. That is the alert working, not a misconfiguration.
+   */
+  openrouter: 75,
 } as const;
 
 export type BalanceVerdict = "ok" | "low" | "critical";
@@ -550,6 +569,32 @@ export const readBalances = internalAction({
         }
       } catch (error) {
         console.error(`[liveness] creatify balance failed: ${String(error)}`);
+      }
+    }
+
+    /**
+     * ⚠️ The balance that pays for thinking. Read last because it is the one
+     * most likely to be missing a key in a partial environment, and a throw
+     * here would drop the two above it.
+     */
+    const orKey = process.env.OPENROUTER_API_KEY;
+    if (orKey) {
+      try {
+        const res = await fetch("https://openrouter.ai/api/v1/credits", {
+          headers: { Authorization: `Bearer ${orKey}` },
+        });
+        const body = (await res.json()) as {
+          data?: { total_credits?: unknown; total_usage?: unknown };
+        };
+        const bought = body.data?.total_credits;
+        const used = body.data?.total_usage;
+        if (typeof bought === "number" && typeof used === "number") {
+          // OpenRouter reports lifetime bought and lifetime used; the number
+          // that matters is neither of them.
+          out.push(checkBalance("openrouter", bought - used));
+        }
+      } catch (error) {
+        console.error(`[liveness] openrouter balance failed: ${String(error)}`);
       }
     }
 

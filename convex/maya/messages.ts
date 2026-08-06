@@ -24,6 +24,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { checkPlainLanguage } from "./plainLanguage";
+import { dayScanFloor, isSameDayInZone } from "./cadence";
 
 const SURFACE = v.union(
   v.literal("telegram"),
@@ -340,15 +341,24 @@ export const proactiveSentToday = internalQuery({
   args: { customerId: v.id("customers"), now: v.optional(v.number()) },
   handler: async (ctx, args): Promise<number> => {
     const now = args.now ?? Date.now();
-    const since = Math.floor(now / 86_400_000) * 86_400_000;
+    // ⚠️ The founder's day, not UTC. On the old boundary her daily allowance
+    // reset at 20:00 local, so she could spend it during the evening and then
+    // spend it again two hours later — the budget silently doubled on exactly
+    // the evenings she is most active.
+    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    const timezone = customer?.timezone ?? "UTC";
     const rows = await ctx.db
       .query("messages")
       .withIndex("by_customer_and_ts", (q) =>
-        q.eq("customerId", args.customerId).gte("ts", since)
+        q.eq("customerId", args.customerId).gte("ts", dayScanFloor(now))
       )
       .collect();
-    return rows.filter((row) => row.direction === "out" && row.proactive === true)
-      .length;
+    return rows.filter(
+      (row) =>
+        row.direction === "out" &&
+        row.proactive === true &&
+        isSameDayInZone(row.ts, now, timezone)
+    ).length;
   },
 });
 
