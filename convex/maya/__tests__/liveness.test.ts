@@ -241,6 +241,17 @@ describe("fleet-wide vendor balances", () => {
     expect(Object.keys(CREDIT_RESERVES)).toContain("openrouter");
   });
 
+  it("reads the unit the operator expects — dollars, to two places", () => {
+    // First live run printed "25.92035670899986 credits": wrong unit, fifteen
+    // decimals. A real alert that looks like a debug print gets ignored.
+    const low = checkBalance("openrouter", 25.92035670899986);
+    expect(low.detail).toContain("$25.92");
+    expect(low.detail).not.toMatch(/credits/);
+    expect(low.detail).not.toMatch(/\d\.\d{3}/);
+    // The credit-denominated vendors keep their own unit.
+    expect(checkBalance("scrapecreators", 3065).detail).toContain("credits");
+  });
+
   it("openrouter is graded in dollars, and a low balance is LOW not ok", () => {
     // Its balance is a dollar figure, not vendor credits — the one entry in
     // this table with a different unit, which is why it carries its own test.

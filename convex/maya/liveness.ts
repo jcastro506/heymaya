@@ -371,12 +371,28 @@ export function checkBalance(
   const reserve = CREDIT_RESERVES[vendor];
   const verdict: BalanceVerdict =
     balance <= reserve / 4 ? "critical" : balance <= reserve ? "low" : "ok";
+
+  /**
+   * ⚠️ OpenRouter's balance is DOLLARS; the other two are vendor credits.
+   *
+   * The first live run of this alert read *"openrouter is at
+   * 25.92035670899986 credits, below the 75 reserve"* — the wrong unit and
+   * fifteen decimal places, in a line an operator reads at a glance. It is a
+   * small thing that makes a real alert look like a debug print, which is how
+   * alerts start getting ignored.
+   */
+  const DOLLARS = new Set<keyof typeof CREDIT_RESERVES>(["openrouter"]);
+  const amount = DOLLARS.has(vendor)
+    ? `$${balance.toFixed(2)}`
+    : `${Math.round(balance)} credits`;
+  const limit = DOLLARS.has(vendor) ? `$${reserve}` : `${reserve}`;
+
   const detail =
     verdict === "ok"
-      ? `${balance} credits`
+      ? amount
       : verdict === "critical"
-        ? `${vendor} is at ${balance} credits — every customer stops when this hits zero`
-        : `${vendor} is at ${balance} credits, below the ${reserve} reserve`;
+        ? `${vendor} is at ${amount} — every customer stops when this hits zero`
+        : `${vendor} is at ${amount}, below the ${limit} reserve`;
   return { vendor, balance, verdict, detail };
 }
 
