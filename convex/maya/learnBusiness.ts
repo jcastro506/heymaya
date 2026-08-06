@@ -32,6 +32,7 @@ import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
+import type { ActionCtx } from "../_generated/server";
 
 /**
  * The main brain, deliberately.
@@ -574,6 +575,12 @@ export const targetsFor = internalQuery({
  */
 /** One call for every keyword. Fails open — see the call site. */
 async function judgeRelevance(
+  // ⚠️ ctx and customerId are threaded in purely so this call's cost has an
+  // owner. Spend with no customer is unpriceable, and this helper is one of
+  // the more expensive calls in the package — a reasoning model, once per
+  // keyword batch.
+  ctx: ActionCtx,
+  customerId: Id<"customers">,
   truth: { whatItIs?: string; whoItsFor?: string },
   samples: Array<{ keyword: string; captions: string[] }>
 ): Promise<{
@@ -584,8 +591,10 @@ async function judgeRelevance(
   if (samples.length === 0) {
     return { state: "skipped", verdicts: new Map() };
   }
-  const { callOpenRouter } = await import("../integrations/openrouter/client");
-  const completion = await callOpenRouter({
+  const { callModel } = await import("./llm");
+  const completion = await callModel(ctx, {
+    customerId,
+    purpose: "keyword_relevance",
     apiKey: process.env.OPENROUTER_API_KEY ?? "",
     model: RELEVANCE_MODEL,
     temperature: 0,
@@ -643,8 +652,10 @@ export const learnBusiness = internalAction({
     let candidates: string[] = [];
     if (process.env.OPENROUTER_API_KEY) {
       try {
-        const { callOpenRouter } = await import("../integrations/openrouter/client");
-        const completion = await callOpenRouter({
+        const { callModel } = await import("./llm");
+        const completion = await callModel(ctx, {
+          customerId: args.customerId,
+          purpose: "keyword_proposal",
           apiKey: process.env.OPENROUTER_API_KEY,
           model: KEYWORD_MODEL,
           temperature: 0.4,
@@ -770,7 +781,7 @@ export const learnBusiness = internalAction({
      * account" and §5.0 makes that a directive. An empty one silently starves
      * every sweep downstream.
      */
-    const relevance = await judgeRelevance(truth, samples);
+    const relevance = await judgeRelevance(ctx, args.customerId, truth, samples);
     if (relevance.state === "unavailable") {
       console.warn(
         `[learn-business] relevance judge unavailable: ${relevance.detail ?? "no reason given"}`

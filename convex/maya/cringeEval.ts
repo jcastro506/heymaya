@@ -337,11 +337,13 @@ export const runEval = internalAction({
       limit: args.herPosts.length,
     });
 
-    const { callOpenRouter } = await import("../integrations/openrouter/client");
+    const { callModel } = await import("./llm");
     const apiKey = process.env.OPENROUTER_API_KEY ?? "";
 
     const judge = async (a: string, b: string): Promise<"A" | "B" | null> => {
-      const completion = await callOpenRouter({
+      const completion = await callModel(ctx, {
+      customerId: args.customerId,
+      purpose: "cringe_eval",
         apiKey,
         model: JUDGE_MODEL,
         temperature: 0,

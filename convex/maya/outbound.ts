@@ -31,7 +31,7 @@
 
 import { v } from "convex/values";
 import { internalAction } from "../_generated/server";
-import { callOpenRouter } from "../integrations/openrouter/client";
+import { callModel } from "./llm";
 
 /**
  * The critic must be a DIFFERENT FAMILY from the writer.
@@ -361,13 +361,18 @@ approve a held post; nobody can un-publish a bad one.`;
  * post costs a message and a bad post costs an account.
  */
 export const critiqueSafety = internalAction({
-  args: { text: v.string() },
+  // ⚠️ `customerId` does not affect the verdict — it gives this call's cost an
+  // owner. The critic is a reasoning model and runs on every public post, so
+  // leaving it unattributed hides one of the larger per-customer line items.
+  args: { text: v.string(), customerId: v.id("customers") },
   handler: async (
-    _ctx,
+    ctx,
     args
   ): Promise<{ safe: boolean; findings: OutboundFinding[] }> => {
     const apiKey = process.env.OPENROUTER_API_KEY ?? "";
-    const completion = await callOpenRouter({
+    const completion = await callModel(ctx, {
+      customerId: args.customerId,
+      purpose: "safety_critic",
       apiKey,
       model: SAFETY_CRITIC_MODEL,
       temperature: 0,
@@ -445,7 +450,7 @@ export const critiqueSafety = internalAction({
  * money and the answer cannot change.
  */
 export const checkPublicPost = internalAction({
-  args: { text: v.string() },
+  args: { text: v.string(), customerId: v.id("customers") },
   handler: async (
     ctx,
     args
@@ -455,6 +460,7 @@ export const checkPublicPost = internalAction({
     if (blockers.length > 0) return { ok: false, findings: blockers, drift };
 
     const safety = (await ctx.runAction(internal.maya.outbound.critiqueSafety, {
+      customerId: args.customerId,
       text: args.text,
     })) as { safe: boolean; findings: OutboundFinding[] };
 

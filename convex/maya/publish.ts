@@ -285,6 +285,7 @@ export const publishPlacement = internalAction({
      * than the silence that hid this for a day.
      */
     const check = (await ctx.runAction(internal.maya.outbound.checkPublicPost, {
+      customerId: args.customerId,
       text: args.snapshotText,
     })) as {
       ok: boolean;
