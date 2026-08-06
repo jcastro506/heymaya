@@ -32,7 +32,7 @@
  */
 
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { dayKeyInZone, isSameMonthInZone, monthScanFloor } from "./cadence";
 
@@ -286,5 +286,68 @@ export const fleet = internalQuery({
       .slice(0, 10);
 
     return { customers, totalUsd, averageUsd, outliers, windowDays: 30 };
+  },
+});
+
+/**
+ * ⭐ THE WHOLE BILL, from the vendor rather than from our own bookkeeping.
+ *
+ * `forCustomer` sums `costEvents`, and `costEvents` only ever contains calls
+ * made from **Convex** — the gates, the sweeps, the critic. It cannot see the
+ * largest line item by far: OpenClaw, on the Fly machine, calling OpenRouter
+ * directly for every turn of the agent loop. Reading the Convex ledger alone
+ * and calling it "what this customer costs" would understate it by an order of
+ * magnitude, which is the same shape of mistake as the $0.025-against-$22
+ * ledger this product already shipped.
+ *
+ * OpenRouter reports usage **per key**, which is the honest source:
+ *
+ *     usage_daily · usage_weekly · usage_monthly · usage (lifetime)
+ *
+ * ⚠️ **Today this is the whole account, not one customer.** Every machine
+ * shares one key, so with a single dogfood customer it happens to be the same
+ * number — and it stops being true the moment there are two. The fix is a key
+ * per customer machine, minted with a provisioning key at deploy time, so this
+ * same call answers per customer. Named here rather than assumed: see §17.
+ */
+export const accountSpend = internalAction({
+  args: {},
+  handler: async (): Promise<{
+    ok: boolean;
+    todayUsd?: number;
+    weekUsd?: number;
+    monthUsd?: number;
+    lifetimeUsd?: number;
+    detail: string;
+  }> => {
+    const key = process.env.OPENROUTER_API_KEY;
+    if (!key) return { ok: false, detail: "no OpenRouter key configured" };
+    try {
+      const res = await fetch("https://openrouter.ai/api/v1/auth/key", {
+        headers: { Authorization: `Bearer ${key}` },
+      });
+      const body = (await res.json()) as {
+        data?: {
+          usage?: number;
+          usage_daily?: number;
+          usage_weekly?: number;
+          usage_monthly?: number;
+        };
+      };
+      const d = body.data;
+      if (!d || typeof d.usage_monthly !== "number") {
+        return { ok: false, detail: "OpenRouter did not report usage" };
+      }
+      return {
+        ok: true,
+        todayUsd: d.usage_daily,
+        weekUsd: d.usage_weekly,
+        monthUsd: d.usage_monthly,
+        lifetimeUsd: d.usage,
+        detail: `${formatUsd(d.usage_monthly)} this month, ${formatUsd(d.usage_daily ?? 0)} today`,
+      };
+    } catch (error) {
+      return { ok: false, detail: `couldn't read OpenRouter usage: ${String(error)}` };
+    }
   },
 });
