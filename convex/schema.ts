@@ -3787,6 +3787,20 @@ export default defineSchema({
     formatCardId: v.optional(v.string()),
     /** Invariant 4: every publish carries one. */
     idempotencyKey: v.string(),
+    /**
+     * ⭐ Zernio's own post id — the join key for backfilling a URL.
+     *
+     * Instagram publishes ASYNCHRONOUSLY: the create call returns `ok` with no
+     * `platformPostUrl`, and the link appears on the post record moments
+     * later. Verified live 2026-08-05 — our placement recorded `unknown`
+     * while `https://www.instagram.com/p/DbrZX_HDLhk/` was already live.
+     *
+     * Recording `unknown` is right (invariant 1: never an assumed URL), but
+     * without this id there is no way back to the post to ever learn the
+     * truth — so the placement stays `unknown` forever, never counts toward
+     * the cadence, and the founder never gets a link.
+     */
+    zernioPostId: v.optional(v.string()),
   })
     .index("by_customer", ["customerId"])
     .index("by_customer_and_publishedAt", ["customerId", "publishedAt"])

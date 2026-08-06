@@ -197,6 +197,7 @@ async function runHandler(
       snapshotText?: string;
       inReplyTo?: string;
       inboxItemId?: Id<"inboxItems">;
+      mediaUrlsJson?: string;
     };
     if (!payload.snapshotText) {
       return { ok: false, error: "publish job carried no text" };
@@ -218,6 +219,7 @@ async function runHandler(
             draftId?: Id<"drafts">;
             inReplyTo?: string;
             inboxItemId?: Id<"inboxItems">;
+            mediaUrlsJson?: string;
           }
         ) => Promise<{ ok: boolean; error?: string }>;
       }
@@ -235,6 +237,14 @@ async function runHandler(
        * same person on every sync.
        */
       inboxItemId: payload.inboxItemId,
+      /**
+       * ⚠️ THIRD time down this exact path. `inReplyTo` was enqueued and
+       * dropped here, so replies posted into the void. `inboxItemId` was
+       * enqueued and dropped here, so answered items stayed open. Media
+       * dropped here means Instagram and TikTok silently fall back to a
+       * text-only post the platform then rejects.
+       */
+      mediaUrlsJson: payload.mediaUrlsJson,
     })) as { ok: boolean; error?: string };
     return result.ok ? { ok: true } : { ok: false, error: result.error ?? "publish failed" };
   }
