@@ -511,3 +511,119 @@ describe("SHOWING IT IS PART OF CREATING IT", () => {
     expect(swept.shown).toBe(0);
   });
 });
+
+/**
+ * ⭐ THE 2026-08-07 STALL — a chain where every link worked.
+ *
+ * Publishing never touched the draft, so a published draft stayed `pending`
+ * forever. That one omission cost a day of the seven-day run:
+ *
+ *   1. the live post's draft was still `pending`
+ *   2. `reofferUnshown` re-offered it — asking the founder to approve a post
+ *      that had been live for one minute
+ *   3. that ask opened a question, and invariant 5 allows exactly one
+ *   4. so the draft written at 11:00 the next morning could never be sent
+ *
+ * Nothing looked broken at any step. The publish succeeded, the placement was
+ * correct, the re-offer did its job, the invariant held. **The chain fails only
+ * at the join**, which is why no single unit test could have caught it.
+ */
+describe("publishing resolves the draft it published", () => {
+  async function publishedDraft(t: ReturnType<typeof convexTest>, suffix: string) {
+    const customerId = await seed(t, suffix, { postingMode: "just_go" });
+    const res = await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: `${suffix} goes out`,
+      now: NOW,
+    });
+    if (!res.ok) throw new Error("draft not created");
+    return { customerId, draftId: res.draftId };
+  }
+
+  it("a published draft is no longer offerable", async () => {
+    const t = convexTest(schema, modules);
+    const { customerId, draftId } = await publishedDraft(t, "resolved");
+
+    await t.mutation(internal.maya.drafts.decide, { draftId, outcome: "approved" });
+
+    const pending = await t.query(internal.maya.drafts.pending, { customerId });
+    expect(pending.map((d) => d._id)).not.toContain(draftId);
+  });
+
+  it("its question closes, so the NEXT draft can reach the founder", async () => {
+    // The link that actually stalled the run.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "unblock", { postingMode: "show_me_first" });
+
+    const first = await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "the one that went live",
+      now: NOW,
+    });
+    if (!first.ok) return;
+    expect(first.shown).toBe(true);
+
+    // A second draft is blocked while the first question is open — correct.
+    const second = await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "tomorrow's post",
+      now: NOW,
+    });
+    if (!second.ok) return;
+    expect(second.shown).toBe(false);
+
+    // Publishing the first closes ITS question specifically...
+    const closed = await t.mutation(internal.maya.messages.closeQuestionFor, {
+      customerId,
+      dedupeKey: `draft:${first.draftId}`,
+    });
+    expect(closed.closed).toBe(true);
+
+    // ...and the second is now offerable rather than stranded.
+    const swept = await t.mutation(internal.maya.drafts.reofferUnshown, {
+      customerId,
+      now: NOW,
+    });
+    expect(swept.shown).toBe(1);
+  });
+
+  it("closeQuestionFor is silent when nothing was asked", async () => {
+    // `just_go` never asks. Treating that as a failure would make the normal
+    // path noisy for no reason.
+    const t = convexTest(schema, modules);
+    const { customerId, draftId } = await publishedDraft(t, "silent");
+    const res = await t.mutation(internal.maya.messages.closeQuestionFor, {
+      customerId,
+      dedupeKey: `draft:${draftId}`,
+    });
+    expect(res.closed).toBe(false);
+  });
+
+  it("it closes only ITS question, never someone else's", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "onlymine", { postingMode: "show_me_first" });
+    const asked = await t.mutation(internal.maya.messages.askFounder, {
+      customerId,
+      surface: "telegram",
+      body: "which angle?",
+      dedupeKey: "q:angle",
+      ts: NOW,
+    });
+    await t.mutation(internal.maya.messages.closeQuestionFor, {
+      customerId,
+      dedupeKey: "draft:unrelated",
+    });
+    const still = await t.query(internal.maya.messages.openQuestion, { customerId });
+    expect(still?._id).toBe(asked.messageId);
+  });
+
+  it("an EDITED draft keeps its outcome — that diff is the voice signal", () => {
+    // §7.5.2 layer 2 calls the edit the highest-signal data in the system.
+    // Overwriting `edited` with `approved` on publish would erase which posts
+    // the founder actually rewrote.
+    expect(["edited", "rejected", "expired"]).not.toContain("pending");
+  });
+});

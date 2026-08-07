@@ -278,6 +278,36 @@ export const askFounder = internalMutation({
 });
 
 /**
+ * ⭐ Close the question about ONE thing, by its key.
+ *
+ * `closeOpenQuestion` closes whatever happens to be open. This closes a
+ * specific one, which is what a publish needs: the founder should not be left
+ * holding *"want this to go out?"* for something that went out a minute ago —
+ * and while that question stays open, invariant 5 means the NEXT draft can
+ * never reach them.
+ *
+ * That exact chain stalled a day of the seven-day run on 2026-08-07.
+ *
+ * Silent when nothing is open under that key: publishing on `just_go` never
+ * asked anything, and treating that as a failure would make the normal path
+ * noisy.
+ */
+export const closeQuestionFor = internalMutation({
+  args: { customerId: v.id("customers"), dedupeKey: v.string() },
+  handler: async (ctx, args): Promise<{ closed: boolean }> => {
+    const row = (await ctx.db
+      .query("messages")
+      .withIndex("by_customer_and_dedupe", (q) =>
+        q.eq("customerId", args.customerId).eq("dedupeKey", args.dedupeKey)
+      )
+      .first()) as Doc<"messages"> | null;
+    if (!row?.awaitingAnswer) return { closed: false };
+    await ctx.db.patch(row._id, { awaitingAnswer: false });
+    return { closed: true };
+  },
+});
+
+/**
  * Close the open question.
  *
  * Called when the founder answers — or when the question stops mattering.

@@ -342,6 +342,44 @@ export const publishPlacement = internalAction({
     );
 
     /**
+     * ⭐ THE DRAFT IS DONE. Marked here, after the placement exists.
+     *
+     * Publishing never touched the draft, so a published draft stayed
+     * `pending` forever — and that one omission stalled the seven-day run on
+     * 2026-08-07:
+     *
+     *   1. the live post's draft was still `pending`
+     *   2. `reofferUnshown` therefore re-offered it, asking the founder to
+     *      approve a post that had been live for a minute
+     *   3. that ask opened a question, and invariant 5 allows exactly one
+     *   4. so the draft written at 11:00 the next morning could never be sent,
+     *      and the day had no placement to show
+     *
+     * Nothing looked broken at any step. The publish succeeded, the placement
+     * was correct, the re-offer did what it was built to do, and the invariant
+     * held. The chain only fails at the join.
+     *
+     * ⚠️ Only when still `pending`. An `edited` draft carries the founder's
+     * rewrite in `editDiff` — §7.5.2 layer 2, the highest-signal voice data we
+     * get — and overwriting that outcome would erase which posts they changed.
+     */
+    if (args.draftId) {
+      const draft = await ctx.runQuery(internal.maya.drafts.byId, {
+        draftId: args.draftId,
+      });
+      if (draft?.outcome === "pending") {
+        await ctx.runMutation(internal.maya.drafts.decide, {
+          draftId: args.draftId,
+          outcome: "approved",
+        });
+      }
+      await ctx.runMutation(internal.maya.messages.closeQuestionFor, {
+        customerId: args.customerId,
+        dedupeKey: `draft:${args.draftId}`,
+      });
+    }
+
+    /**
      * ⭐ Close the inbox item — AFTER the placement exists, never before.
      *
      * Marking it answered at enqueue time would lose the person entirely if
