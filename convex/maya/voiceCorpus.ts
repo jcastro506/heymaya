@@ -82,7 +82,12 @@ import type { Doc } from "../_generated/dataModel";
  * accumulate, just a re-read of the message log.
  */
 /** The model that judges instruction-vs-voice. Cheap: one call per deploy. */
-export const VOICE_JUDGE_MODEL = "google/gemini-2.5-flash";
+/**
+ * ⚠️ Not `gemini-2.5-flash` — that is $2.50/M output, **14.7× this model**, for
+ * deciding whether a sentence is an instruction. Cheapest tier that can do the
+ * job, per the house rule.
+ */
+export const VOICE_JUDGE_MODEL = "openai/gpt-oss-120b";
 
 /**
  * ⭐ Rebuild the corpus, with the model deciding what is actually their voice.

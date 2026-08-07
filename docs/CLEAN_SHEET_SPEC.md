@@ -4038,7 +4038,7 @@ Verified 2026-07-29 where marked. **Modelled at 200 customers, 2 active channels
 | **Zernio** | **Graduated per connected-account-month: first 10 @ $6 · next 90 @ $3 · 100+ @ $1.** Daily prorated. **$12/mo free credit** | ✅ `docs.zernio.com/billing` |
 | **Creatify** | API Starter 500 cr / $99 = **$0.198/cr** · API Pro 2,000 cr / $299 = **$0.1495/cr** | ✅ `docs.creatify.ai/billing` |
 | **twitterapi.io** | $0.15 / 1,000 tweets · $0.18 / 1,000 profiles · ~$0.00015 min/request | ✅ |
-| **ScrapeCreators** | Solo Dev $10 · Freelance $47 · Business $497 · Enterprise custom. **Credits never expire, no rate limits** | 🟡 tiers confirmed, **credits-per-tier unknown** |
+| **ScrapeCreators** | Free 100 cr · **Freelance $47 = 25,000 cr ($0.00188/cr)** · **Business $497 = 500,000 cr ($0.00099/cr)** · Enterprise 1M+ custom. **Credits never expire, no subscription** | ✅ `scrapecreators.com/#pricing`, 2026-08-07 |
 | **OpenRouter** | Per-model. ⚠️ **`/api/v1/models` is the only truth — comments rot.** Local egress is blocked; **query from the Fly machine** | ⚠️ re-verify before locking routing |
 
 #### 17.35.2 Zernio, worked out
@@ -4067,6 +4067,41 @@ Six sweeps per customer ≈ **55 requests/day** → ~1,650/month → **330,000/m
 
 **This plausibly cuts ScrapeCreators *and* Gemini-multimodal spend 3–5× at scale**, and it improves quality too — a shared corpus is deeper than any one customer could justify funding alone. **It should be in the schema from Sprint 1**, because retrofitting a shared cache onto per-tenant rows is painful.
 
+#### 17.35.3a ⭐ MEASURED MODEL PRICES — 2026-08-07, from `/api/v1/models`
+
+*Operator asked whether we had "dropped the model to the very cheap luna". We
+had not, and the check turned up three things worth keeping.*
+
+| Model | in $/M | out $/M | vs cheapest | Used for |
+|---|---|---|---|---|
+| `openai/gpt-oss-120b` | **0.037** | **0.170** | **1.0×** | filler · directive gate · product read · trend shape |
+| `openai/gpt-5.6-luna` | 0.100 | 0.600 | 3.5× | — |
+| `openai/gpt-5.6-luna-pro` | 0.100 | 0.600 | 3.5× | keywords · complaints · ideas · relevance |
+| `google/gemini-2.5-flash-lite` | 0.100 | 0.400 | 2.4× | — |
+| `google/gemini-3.1-flash-lite` | 0.250 | 1.500 | 8.8× | tagging · cringe judge · safety critic |
+| `google/gemini-2.5-flash` | 0.300 | 2.500 | 14.7× | ⛔ removed |
+
+**Three findings:**
+
+1. ⭐ **There is no cheap Luna.** `gpt-5.6-luna` and `gpt-5.6-luna-pro` are the
+   **same price**, $0.10/$0.60. Downgrading from pro saves nothing, and using
+   pro is free upside — the opposite of the assumption.
+
+2. ⚠️ **Newer is not cheaper.** `gemini-3.1-flash-lite` ($0.25/$1.50) costs
+   **2.5× more** than `gemini-2.5-flash-lite` ($0.10/$0.40). A version bump is
+   a pricing decision, not a maintenance one.
+
+3. ⛔ **`gemini-2.5-flash` is the most expensive model in the catalogue we
+   touch** and had been introduced into two paths the same day — 14.7× the
+   cheapest, to decide whether a sentence is an instruction. Both moved to
+   `gpt-oss-120b`. It was also drift: nothing else in `convex/maya` used it.
+
+**The rule this leaves:** `gpt-oss-120b` for volume work, a Flash for judges
+where the judgement genuinely needs one, Luna for anything that writes. And the
+price comes from `/api/v1/models` at the time of the decision — a comment
+naming a price rots, and one in this repo already claimed $0.075 for a model
+that cost $0.25.
+
 #### 17.35.4 The model, per customer per month
 
 | Line | Est. | Notes |
@@ -4074,7 +4109,7 @@ Six sweeps per customer ≈ **55 requests/day** → ~1,650/month → **330,000/m
 | **LLM — the agent** (converse · plan · write · critique) | **$10–15** | Event-driven wakes. **The #1 line.** |
 | LLM — Screen model on sweep haul | $1–2 | Cheapest tier, high volume |
 | Gemini multimodal — video watching | $1–2 | **Shared per niche → falls with scale** |
-| **ScrapeCreators — sweeps** | **$4–8** | 🟡 assumes ~$0.005/request **and** niche sharing. **Without sharing, 3–5× this.** |
+| **ScrapeCreators — sweeps** | **$3.86–7.33** | ✅ **measured + priced 2026-08-07.** 130 credits/day on the live account = 3,900/mo → $3.86 at Business, $7.33 at Freelance. ⭐ The old $0.005/request assumption was **5× too high**, and this is the figure **without** niche sharing — so sharing is now an optimisation, not a requirement |
 | twitterapi.io — X reads | <$0.50 | Genuinely negligible |
 | **Zernio** — 2 accounts | **$3.15** | ✅ confirmed; falls with scale |
 | Nano Banana — slides (~70/mo) | ~$2 | |
