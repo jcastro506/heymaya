@@ -336,7 +336,20 @@ export function extractFromHtml(
 /* The one judgement call                                                      */
 /* -------------------------------------------------------------------------- */
 
-export const REGISTER_MODEL = "google/gemini-2.5-flash";
+/**
+ * ⚠️ Was `google/gemini-2.5-flash` for a few hours on 2026-08-06, which is the
+ * most expensive model in the stack — **$2.50/M output, 14.7× `gpt-oss-120b`**
+ * — for a task that reads one page and returns one short phrase.
+ *
+ * It was also drift: nothing else in `convex/maya` uses 2.5-flash. The house
+ * tiers are gpt-oss-120b for volume work and a Flash for judges, and this is
+ * volume work that runs once per brand extraction.
+ *
+ * Prices read from `/api/v1/models`, which is the only truth — a comment
+ * naming a price rots, and one in this repo already claimed $0.075 for a model
+ * that cost $0.25.
+ */
+export const REGISTER_MODEL = "openai/gpt-oss-120b";
 
 export const REGISTER_SYSTEM = `You are given the visible text of a product's homepage. Say how its visuals should FEEL, in one short phrase a designer could act on.
 
