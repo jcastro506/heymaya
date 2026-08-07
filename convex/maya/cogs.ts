@@ -34,6 +34,7 @@
 import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
+import { internal } from "../_generated/api";
 import { dayKeyInZone, isSameMonthInZone, monthScanFloor } from "./cadence";
 
 /**
@@ -349,5 +350,166 @@ export const accountSpend = internalAction({
     } catch (error) {
       return { ok: false, detail: `couldn't read OpenRouter usage: ${String(error)}` };
     }
+  },
+});
+
+/* -------------------------------------------------------------------------- */
+/* Per-customer keys — the only way the LLM number can be both complete and    */
+/* attributable                                                                */
+/* -------------------------------------------------------------------------- */
+
+export const storeKeyHash = internalMutation({
+  args: { customerId: v.id("customers"), hash: v.string() },
+  handler: async (ctx, args): Promise<null> => {
+    await ctx.db.patch(args.customerId, {
+      openRouterKeyHash: args.hash,
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+/**
+ * ⭐ Mint this customer's own OpenRouter key.
+ *
+ * Measured 2026-08-07: `costEvents` — the ledger built the day before — covers
+ * **2% of the LLM bill**. It records what Convex spends: the gates, the sweeps,
+ * the critics, totalling $0.16/month. The other 98% is OpenClaw's agent loop on
+ * Fly, calling OpenRouter directly, where nothing of ours can see it.
+ *
+ * Per-key usage closes that, because OpenRouter reports `usage_daily` and
+ * `usage_monthly` on each key. One key per machine makes the number complete
+ * AND per-customer, which no amount of instrumentation on our side could.
+ *
+ * ## ⚠️ NO SPEND LIMIT IS SET, DELIBERATELY
+ *
+ * The API supports a per-key `limit`. We do not use it, because a key that
+ * hits its cap stops answering — and the operator's rule is explicit:
+ *
+ * > *"We're not gonna cap any one user, like heymaya is just gonna stop
+ * > talking to them."*
+ *
+ * A hard vendor cap is exactly that failure, one layer lower and less visible:
+ * she would go silent mid-conversation with no throttle state, no alert and no
+ * degraded mode. `spendCeiling` already protects the fleet the right way — it
+ * pauses speculative work and never the conversation. This key is an
+ * instrument, not a valve.
+ *
+ * Returns the key ONCE. OpenRouter never shows it again, so the caller must
+ * hand it to the machine in the same breath; only the hash is stored.
+ */
+export const provisionKey = internalAction({
+  args: { customerId: v.id("customers"), label: v.optional(v.string()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<
+    { ok: true; key: string; hash: string } | { ok: false; error: string }
+  > => {
+    const provisioning = process.env.OPENROUTER_PROVISIONING_KEY;
+    if (!provisioning) {
+      // Named, not thrown: without it the shared key still works and the
+      // ledger stays incomplete, which is a degradation rather than an outage.
+      return {
+        ok: false,
+        error: "no OPENROUTER_PROVISIONING_KEY — falling back to the shared key",
+      };
+    }
+    try {
+      const res = await fetch("https://openrouter.ai/api/v1/keys", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${provisioning}`,
+          "Content-Type": "application/json",
+        },
+        // No `limit`. See the block above — a capped key is a silent mute.
+        body: JSON.stringify({
+          name: args.label ?? `maya-${args.customerId}`,
+        }),
+      });
+      const body = (await res.json()) as {
+        key?: string;
+        data?: { hash?: string; name?: string };
+        error?: { message?: string };
+      };
+      if (!res.ok || !body.key || !body.data?.hash) {
+        return {
+          ok: false,
+          error: body.error?.message ?? `OpenRouter returned ${res.status}`,
+        };
+      }
+      await ctx.runMutation(internal.maya.cogs.storeKeyHash, {
+        customerId: args.customerId,
+        hash: body.data.hash,
+      });
+      return { ok: true, key: body.key, hash: body.data.hash };
+    } catch (error) {
+      return { ok: false, error: `couldn't mint a key: ${String(error)}` };
+    }
+  },
+});
+
+/**
+ * What THIS customer's machine has actually spent, from the vendor.
+ *
+ * The complete number, unlike `forCustomer` which sums only what Convex did.
+ * Falls back to reporting nothing rather than to the account total: a
+ * whole-fleet figure presented as one customer's is worse than a gap, and with
+ * one customer today the two are identical, which is exactly how that mistake
+ * would go unnoticed until there were two.
+ */
+export const machineSpend = internalAction({
+  args: { customerId: v.id("customers") },
+  handler: async (
+    ctx,
+    args
+  ): Promise<
+    | { ok: true; todayUsd: number; monthUsd: number; lifetimeUsd: number }
+    | { ok: false; error: string }
+  > => {
+    const provisioning = process.env.OPENROUTER_PROVISIONING_KEY;
+    const hash = await ctx.runQuery(internal.maya.cogs.keyHashFor, {
+      customerId: args.customerId,
+    });
+    if (!provisioning || !hash) {
+      return {
+        ok: false,
+        error: hash
+          ? "no provisioning key to read usage with"
+          : "this customer has no key of their own yet",
+      };
+    }
+    try {
+      const res = await fetch(`https://openrouter.ai/api/v1/keys/${hash}`, {
+        headers: { Authorization: `Bearer ${provisioning}` },
+      });
+      const body = (await res.json()) as {
+        data?: {
+          usage?: number;
+          usage_daily?: number;
+          usage_monthly?: number;
+        };
+      };
+      const d = body.data;
+      if (!d || typeof d.usage_monthly !== "number") {
+        return { ok: false, error: "OpenRouter did not report usage for that key" };
+      }
+      return {
+        ok: true,
+        todayUsd: d.usage_daily ?? 0,
+        monthUsd: d.usage_monthly,
+        lifetimeUsd: d.usage ?? 0,
+      };
+    } catch (error) {
+      return { ok: false, error: `couldn't read key usage: ${String(error)}` };
+    }
+  },
+});
+
+export const keyHashFor = internalQuery({
+  args: { customerId: v.id("customers") },
+  handler: async (ctx, args): Promise<string | null> => {
+    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    return customer?.openRouterKeyHash ?? null;
   },
 });

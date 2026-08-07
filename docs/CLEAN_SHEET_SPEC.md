@@ -4102,6 +4102,60 @@ price comes from `/api/v1/models` at the time of the decision — a comment
 naming a price rots, and one in this repo already claimed $0.075 for a model
 that cost $0.25.
 
+#### 17.35.3b ⭐ THE LEDGER SEES 2% OF THE BILL — measured 2026-08-07
+
+`costEvents` records what **Convex** spends: the directive gate, the sweeps,
+complaint mining, idea scoring, every critic. Measured per purpose on the live
+account:
+
+| purpose | share |
+|---|---|
+| complaint mining | 49% |
+| idea scoring | 39% |
+| brand register · filler judge · voice judge | 12% |
+| **total** | **$0.16/month** |
+
+The OpenRouter account spent **$8.58** over the same window. So the ledger built
+the day before covers **2%**, and the other 98% is **OpenClaw's agent loop on
+Fly, calling OpenRouter directly** — outside anything Convex can instrument.
+
+⚠️ **Two consequences that changed the plan:**
+
+1. **Optimising Convex-side model choice is noise.** A 14.7× model swap made
+   the same morning moved fractions of a cent. It was still right — the model
+   was drift and the wrong tier — but it was not a cost lever.
+2. **The lever is tokens per agent turn, not price per token.** At $0.10/M
+   input, $8.40/month is roughly 2.8M input tokens a day: the workspace plus
+   history, re-sent every turn.
+
+⛔ **And prompt caching is NOT the lever either — it already works.** Measured
+directly: two identical 11,165-token prompts to `luna-pro` returned
+`cached_tokens: 4,834` then `7,251`, the second call **29% cheaper**. OpenClaw
+is deliberately built for it — its docs state the system prompt carries *"the
+time zone only (no clock/time format) to keep prompt caching stable."*
+
+*(An earlier reading of this section claimed caching was off. That came from a
+two-token probe, which can never cache. It was not evidence, and the measurement
+above replaces it.)*
+
+##### The fix: one OpenRouter key per machine
+
+OpenRouter's management API reports `usage_daily` / `usage_monthly` **per key**.
+A key per machine makes the LLM number **complete and per-customer in one move**
+— which no amount of instrumentation on our side can, because the spend happens
+in a process we don't own.
+
+⚠️ **No per-key spend limit, deliberately.** The API supports `limit`, and using
+it would be the operator's explicitly rejected failure — *"we're not gonna cap
+any one user, like heymaya is just gonna stop talking to them"* — one layer
+lower and less visible: she would go silent mid-conversation with no throttle
+state, no alert, and no degraded mode. `spendCeiling` already protects the fleet
+correctly by pausing speculative work and never the conversation. **The key is
+an instrument, not a valve.**
+
+**Operator-required:** an `OPENROUTER_PROVISIONING_KEY`. Until it exists the
+shared key still works and the ledger stays at 2%.
+
 #### 17.35.4 The model, per customer per month
 
 | Line | Est. | Notes |
