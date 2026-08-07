@@ -3446,6 +3446,24 @@ export default defineSchema({
     voiceProfileJson: v.optional(v.string()),
     /** Colors, fonts, logo refs, on-brand/off-brand examples. JSON. */
     brandKitJson: v.optional(v.string()),
+    /**
+     * ⭐ This customer's own OpenRouter key hash (§17.35.3a).
+     *
+     * Every machine shared one key until 2026-08-07, which made per-customer
+     * LLM cost unknowable: the `costEvents` ledger only sees calls made from
+     * Convex, and those turned out to be **2% of the bill** — the other 98% is
+     * OpenClaw's own agent loop on Fly, calling OpenRouter directly where
+     * nothing of ours can observe it.
+     *
+     * A key per machine fixes both at once: OpenRouter reports `usage_daily`
+     * and `usage_monthly` PER KEY, so the number becomes complete and
+     * per-customer in one move.
+     *
+     * ⚠️ The hash, never the key. The key itself goes to the machine's Fly
+     * secrets and is never stored here — a table that holds live vendor keys
+     * is a different security posture than one that holds ids.
+     */
+    openRouterKeyHash: v.optional(v.string()),
     /** Where she texts them. Absent until Telegram pairing completes. */
     telegramChatId: v.optional(v.string()),
     /**
