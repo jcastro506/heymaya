@@ -268,7 +268,7 @@ async function seed(t: ReturnType<typeof convexTest>): Promise<Id<"customers">> 
 describe("a post that was taken down stops counting", () => {
   it("markGone flips a live placement", async () => {
     const t = convexTest(schema, modules);
-    const customerId = await seed(t, "gone_one");
+    const customerId = await seed(t);
     const placementId = await t.run((ctx) =>
       ctx.db.insert("placements", {
         customerId,
@@ -295,7 +295,7 @@ describe("a post that was taken down stops counting", () => {
 
   it("never resurrects — a flapping API can't toggle the streak", async () => {
     const t = convexTest(schema, modules);
-    const customerId = await seed(t, "gone_twice");
+    const customerId = await seed(t);
     const placementId = await t.run((ctx) =>
       ctx.db.insert("placements", {
         customerId,
@@ -318,7 +318,7 @@ describe("a post that was taken down stops counting", () => {
     // The whole reason this matters: Sprint 3's exit criterion is derived from
     // live placements, so a deleted post must move the number.
     const t = convexTest(schema, modules);
-    const customerId = await seed(t, "gone_streak");
+    const customerId = await seed(t);
     const placementId = await t.run((ctx) =>
       ctx.db.insert("placements", {
         customerId,
