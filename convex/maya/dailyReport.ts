@@ -348,10 +348,36 @@ export const sendEveningRecap = internalMutation({
       zeroDayReason: args.zeroDayReason,
     });
 
+    /**
+     * ⭐ THE PROMISE, CHECKED. Sprint 5's `plan-day`, read back at the end.
+     *
+     * The recap reports what went live. It could not report what she SAID she
+     * would do, because until `dayPlans` existed the only record of the
+     * intention was a sentence in the morning brief — and a sentence cannot be
+     * checked.
+     *
+     * Twice in three days a brief promised a post that never came (08-06,
+     * 08-08) and the recap that evening was perfectly accurate about the zero
+     * while silent about the promise. §12: *"honest silence beats fake
+     * activity"* — but silence about a broken promise is neither.
+     *
+     * Appended rather than folded in, so the receipt stays the receipt: what
+     * went live is a fact about the world; what was planned is a fact about
+     * her, and blurring them is how a report starts arguing with itself.
+     */
+    const plan = await ctx.runQuery(internal.maya.dayPlan.planFor, {
+      customerId: args.customerId,
+      now,
+    });
+    const body =
+      plan.outstanding.length > 0 || plan.dropped > 0
+        ? `${recap.text}\n\n${plan.detail}`
+        : recap.text;
+
     const sent = await ctx.runMutation(internal.maya.messages.send, {
       customerId: args.customerId,
       surface: "telegram",
-      body: recap.text,
+      body,
       dedupeKey: `recap:${today}`,
       proactive: true,
       ts: now,

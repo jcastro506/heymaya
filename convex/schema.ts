@@ -4026,6 +4026,46 @@ export default defineSchema({
     .index("by_customer_and_at", ["customerId", "at"])
     .index("by_at", ["at"]),
 
+  /**
+   * ⭐ What she said she would do today (§8, Sprint 5's `plan-day`).
+   *
+   * A plan is a PROMISE, and principle 4 says anything promised to the user is
+   * enforced by the server. Twice in three days her morning brief said she
+   * would draft and show an X post, and twice the day ended with nothing —
+   * 2026-08-06 and 2026-08-08. Both times the brief was the only record of the
+   * intention, so nothing could compare what she said to what happened.
+   *
+   * One row per customer per founder-day per intended post. The evening recap
+   * reads it back: *"this morning I said X; here is whether it happened, and
+   * why not."* An unkept plan that nobody names is indistinguishable from
+   * never having had one.
+   *
+   * ⚠️ `ideaId` is required, not optional. A plan with no idea behind it is
+   * the freehand drafting that made traceability read 1 of 7 — the plan is
+   * exactly where the bank should be spent.
+   */
+  dayPlans: defineTable({
+    customerId: v.id("customers"),
+    /** YYYY-MM-DD in the FOUNDER's timezone — never UTC. */
+    day: v.string(),
+    channel: v.string(),
+    ideaId: v.id("ideas"),
+    /** The angle, copied so the plan reads without a join. */
+    angle: v.string(),
+    status: v.union(
+      v.literal("planned"),
+      v.literal("done"),
+      v.literal("dropped")
+    ),
+    /** Why it didn't happen. Required to drop — silence is not a reason. */
+    droppedReason: v.optional(v.string()),
+    placementId: v.optional(v.id("placements")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_customer_and_day", ["customerId", "day"])
+    .index("by_customer", ["customerId"]),
+
   jobs: defineTable({
     /** Absent for fleet-wide work like the vendor smoke suite. */
     customerId: v.optional(v.id("customers")),
