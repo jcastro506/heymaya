@@ -326,16 +326,28 @@ describe("the system note covers the ambiguous middle", () => {
     "utf8"
   );
 
-  it("names the ways approval actually arrives", () => {
-    // It almost never arrives as the word "yes".
-    for (const phrase of ["looks great", "love it", "go for it"]) {
-      expect(NOTE_SOURCE.toLowerCase()).toContain(phrase);
-    }
+  /**
+   * ⚠️ The first version of this test listed example phrases — "looks great",
+   * "love it", "go for it" — and asserted they appeared in the note.
+   *
+   * Two things wrong with that. It pinned PROSE, which our own conventions
+   * forbid and which freezes wording that should be free to improve. And it
+   * encoded a pattern list for a judgment the model makes better than any list
+   * can: Luna does not need to be told that "looks great" is approval.
+   *
+   * What it needed was POLICY — that ambiguity means ask, and that silence is
+   * the worst outcome. That is a rule about behaviour, not about words, and it
+   * is what these assert.
+   */
+  it("leaves the judgment to her rather than listing phrases", () => {
+    expect(NOTE_SOURCE).toMatch(/You decide what counts as approval/);
+    // And says why she is trusted with it.
+    expect(NOTE_SOURCE).toMatch(/better than any rule/);
   });
 
   it("tells her to ASK when she isn't sure, rather than let it drop", () => {
-    expect(NOTE_SOURCE).toMatch(/NOT SURE|not sure/);
-    expect(NOTE_SOURCE).toMatch(/want me to send it/i);
+    expect(NOTE_SOURCE).toMatch(/unsure, ask/);
+    expect(NOTE_SOURCE).toMatch(/same message as your reply/);
   });
 
   it("names silence as the worst outcome, because it's the invisible one", () => {
