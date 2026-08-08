@@ -25,6 +25,7 @@ import {
   scoreVariety,
   MAX_MEAN_SIMILARITY,
   MAX_TOPIC_COVERAGE,
+  NEAR_DUPLICATE_AT,
 } from "../cringeEval";
 import type { Id } from "../../_generated/dataModel";
 
@@ -353,3 +354,81 @@ async function seedEvalCustomer(t: ReturnType<typeof convexTest>) {
     });
   });
 }
+
+/**
+ * ⭐ MEASURED ON THE LIVE ACCOUNT, 2026-08-07 — the first time this eval ran.
+ *
+ * Sixteen of her posts contained **five near-duplicate pairs**, and
+ * `scoreVariety` returned `varied: true` with a mean of 0.073. The two closest
+ * were 0.87 apart:
+ *
+ *   "When you're building alone, a CSV shouldn't BECOME a dashboard project."
+ *   "When you're building alone, a CSV shouldn't TURN INTO a dashboard project."
+ *
+ * 115 dissimilar pairs averaged the five away. **A mean cannot detect
+ * repetition** — repetition is a property of the worst pair.
+ *
+ * It matters because §3.2 names it directly: saying the same thing twice "is
+ * how she stops sounding like an employee."
+ */
+describe("REPETITION IS THE WORST PAIR, NEVER THE AVERAGE", () => {
+  const REAL_DUPLICATE_A =
+    "When you're building alone, a CSV shouldn't become a dashboard project. Widgetly turns it into a dashboard in one paste.";
+  const REAL_DUPLICATE_B =
+    "When you're building alone, a CSV shouldn't turn into a dashboard project. Widgetly turns it into a dashboard in one paste.";
+
+  /** Enough unrelated posts to drown two duplicates in the mean. */
+  const FILLER = [
+    "Nobody warns you that shipping is the easy part and being seen is the hard one.",
+    "Spent four hours on a landing page nobody visited. Spent ten minutes answering one question and got a customer.",
+    "The best marketing advice I got was to go where people are already complaining.",
+    "Every founder I know has a graveyard of half-built growth experiments.",
+    "Cold outreach felt gross until I started only messaging people who asked a question first.",
+    "Your pricing page is doing more selling than your homepage and you probably haven't touched it.",
+    "I stopped writing threads and started answering replies. Signups went up.",
+    "Nobody cares that you built it in a weekend. They care that it fixes their Tuesday.",
+    "Analytics told me what happened. Comments told me why.",
+    "The hardest part of solo founding is deciding what not to do today.",
+  ];
+
+  it("catches a duplicate pair that the mean hides", () => {
+    const posts = [REAL_DUPLICATE_A, REAL_DUPLICATE_B, ...FILLER];
+    const result = scoreVariety(posts);
+
+    // The exact shape of the live miss: a low mean AND a real duplicate.
+    expect(result.meanSimilarity).toBeLessThan(MAX_MEAN_SIMILARITY);
+    expect(result.duplicatePairs).toBeGreaterThan(0);
+    // ...and it must still fail.
+    expect(result.varied).toBe(false);
+  });
+
+  it("names the pair, so it can be acted on rather than investigated", () => {
+    const result = scoreVariety([REAL_DUPLICATE_A, REAL_DUPLICATE_B, ...FILLER]);
+    expect(result.detail).toMatch(/say the same thing/);
+    expect(result.detail).toContain("building alone");
+  });
+
+  it("reports the worst pair, not just that one exists", () => {
+    const result = scoreVariety([REAL_DUPLICATE_A, REAL_DUPLICATE_B, ...FILLER]);
+    expect(result.maxSimilarity).toBeGreaterThanOrEqual(NEAR_DUPLICATE_AT);
+    // The mean stays low — which is exactly why it was the wrong statistic.
+    expect(result.maxSimilarity! - result.meanSimilarity).toBeGreaterThan(0.4);
+  });
+
+  it("genuinely different posts still pass", () => {
+    const result = scoreVariety(FILLER);
+    expect(result.varied).toBe(true);
+    expect(result.duplicatePairs).toBe(0);
+  });
+
+  it("a rephrase that changes the point is not a duplicate", () => {
+    // The bar is "same post", not "same topic". Two posts about CSVs that make
+    // different points must pass, or she can never return to a subject.
+    const result = scoreVariety([
+      "A CSV shouldn't become a dashboard project when you're building alone.",
+      "Most dashboards die because nobody updates the CSV behind them.",
+      ...FILLER,
+    ]);
+    expect(result.duplicatePairs).toBe(0);
+  });
+});

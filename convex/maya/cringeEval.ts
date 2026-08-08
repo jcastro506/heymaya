@@ -71,6 +71,10 @@ export const DETECTABLE_AT = 0.75;
  * against prior posts.
  */
 export interface VarietyResult {
+  /** The WORST pair — the one a founder would notice. */
+  maxSimilarity?: number;
+  /** How many pairs are effectively the same post. */
+  duplicatePairs?: number;
   /** Mean pairwise similarity across her batch. Lower is better. */
   meanSimilarity: number;
   /** Share of posts containing the single most common content word. */
@@ -109,6 +113,25 @@ export interface VarietyResult {
 export const MAX_MEAN_SIMILARITY = 0.1;
 export const MAX_TOPIC_COVERAGE = 0.85;
 
+/**
+ * ⭐ Two posts this alike are the same post.
+ *
+ * ⚠️ The mean above **cannot detect repetition, structurally**, and the first
+ * live run proved it. Sixteen of her posts contained five near-duplicate pairs
+ * — including these two, at 0.87 —
+ *
+ *   "When you're building alone, a CSV shouldn't BECOME a dashboard project."
+ *   "When you're building alone, a CSV shouldn't TURN INTO a dashboard project."
+ *
+ * — and `scoreVariety` returned `varied: true` with a mean of 0.073, because
+ * 115 dissimilar pairs averaged the five away.
+ *
+ * Repetition is a property of the WORST pair, never the average. And it is the
+ * failure the product actually cares about: §3.2 says saying the same thing
+ * twice "is how she stops sounding like an employee."
+ */
+export const NEAR_DUPLICATE_AT = 0.5;
+
 function contentWords(text: string): Set<string> {
   return new Set(
     (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((w) => w.length > 3)
@@ -127,10 +150,15 @@ export function scoreVariety(posts: string[]): VarietyResult {
 
   let total = 0;
   let count = 0;
+  let maxSimilarity = 0;
+  const duplicates: Array<[string, string]> = [];
   for (let i = 0; i < posts.length; i += 1) {
     for (let j = i + 1; j < posts.length; j += 1) {
-      total += similarity(posts[i], posts[j]);
+      const sim = similarity(posts[i], posts[j]);
+      total += sim;
       count += 1;
+      if (sim > maxSimilarity) maxSimilarity = sim;
+      if (sim >= NEAR_DUPLICATE_AT) duplicates.push([posts[i], posts[j]]);
     }
   }
   const mean = total / count;
@@ -145,19 +173,27 @@ export function scoreVariety(posts: string[]): VarietyResult {
     [...freq.entries()].sort((a, b) => b[1] - a[1])[0] ?? ["", 0];
   const topicCoverage = hits / posts.length;
 
+  // Worst pair FIRST. A single duplicate fails variety however varied the rest
+  // is — the founder notices the repeat, not the average.
   const varied =
-    mean <= MAX_MEAN_SIMILARITY && topicCoverage <= MAX_TOPIC_COVERAGE;
+    duplicates.length === 0 &&
+    mean <= MAX_MEAN_SIMILARITY &&
+    topicCoverage <= MAX_TOPIC_COVERAGE;
 
   return {
     meanSimilarity: mean,
+    maxSimilarity,
+    duplicatePairs: duplicates.length,
     topicCoverage,
     dominantTerm: dominantTerm || undefined,
     varied,
-    detail: varied
-      ? `${Math.round(mean * 100)}% average overlap — these are different posts`
-      : topicCoverage > MAX_TOPIC_COVERAGE
-        ? `"${dominantTerm}" appears in ${hits} of ${posts.length} posts — this is one idea, however differently phrased`
-        : `${Math.round(mean * 100)}% average overlap — this is one idea rewritten ${posts.length} times`,
+    detail: duplicates.length
+      ? `${duplicates.length} pair${duplicates.length === 1 ? "" : "s"} say the same thing — closest: "${duplicates[0][0].slice(0, 60)}…" and "${duplicates[0][1].slice(0, 60)}…"`
+      : varied
+        ? `${Math.round(mean * 100)}% average overlap — these are different posts`
+        : topicCoverage > MAX_TOPIC_COVERAGE
+          ? `"${dominantTerm}" appears in ${hits} of ${posts.length} posts — this is one idea, however differently phrased`
+          : `${Math.round(mean * 100)}% average overlap — this is one idea rewritten ${posts.length} times`,
   };
 }
 
@@ -459,5 +495,97 @@ export const runEvalOnPublished = internalAction({
           ? "the run is void — the judge missed the planted synthetic post, so its verdict on the real ones means nothing"
           : result.detail,
     };
+  },
+});
+
+/**
+ * ⭐ Everything SHE has written, for the eval's other half.
+ *
+ * `runEval` takes `herPosts` as an argument and nothing ever assembled them,
+ * which is why Sprint 4.5's entire deliverable had zero callers: the eval was
+ * finished and uncallable. This is the missing half.
+ *
+ * ## Why drafts count, not only placements
+ *
+ * The question is *"can a stranger tell this wasn't written by the founder"* —
+ * a property of the WRITING, not of whether it got published. A draft she wrote
+ * and the founder never answered is exactly as diagnostic as one that went
+ * live, and excluding it would mean the eval can't run until a week of
+ * placements exists. On this account that is the difference between 6 samples
+ * and enough.
+ *
+ * ⚠️ Rejected drafts are excluded, and deliberately. The founder said no to
+ * those, so they are a measure of what we stopped shipping rather than of what
+ * we ship — including them would flatter the number in the one direction that
+ * matters.
+ */
+export const herWriting = internalQuery({
+  args: { customerId: v.id("customers"), limit: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<string[]> => {
+    const limit = args.limit ?? 20;
+
+    const placements = (await ctx.db
+      .query("placements")
+      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+      .collect()) as Doc<"placements">[];
+
+    const drafts = (await ctx.db
+      .query("drafts")
+      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+      .collect()) as Doc<"drafts">[];
+
+    const seen = new Set<string>();
+    const out: string[] = [];
+    const push = (text: string | undefined) => {
+      if (!text) return;
+      const t = text.trim();
+      // Same shape filter as the human side, so the judge cannot win on length
+      // alone — a 20-character reply beside a 300-character post is a tell
+      // about the sampling, not about the writing.
+      if (t.length < 60 || t.length > 400) return;
+      if (seen.has(t)) return;
+      seen.add(t);
+      out.push(t);
+    };
+
+    // Newest first: the eval should measure what she writes NOW, not what she
+    // wrote before the last prompt change.
+    for (const p of [...placements].sort((a, b) => b.publishedAt - a.publishedAt)) {
+      push(p.snapshotText);
+    }
+    for (const d of [...drafts].sort((a, b) => b.proposedAt - a.proposedAt)) {
+      if (d.outcome === "rejected") continue;
+      push(d.snapshotText);
+    }
+    return out.slice(0, limit);
+  },
+});
+
+/**
+ * Run the eval for one customer, assembling both sides.
+ *
+ * The entry point that was missing. Returns the shortfall by name when there
+ * isn't enough of her writing yet — a small-n eval is worse than none, because
+ * a 3-pair run swings 33 points on one judgement and reads as a signal.
+ */
+export const runEvalForCustomer = internalAction({
+  args: { customerId: v.id("customers") },
+  handler: async (
+    ctx,
+    args
+  ): Promise<EvalResult | { ok: false; error: string }> => {
+    const herPosts = await ctx.runQuery(internal.maya.cringeEval.herWriting, {
+      customerId: args.customerId,
+    });
+    if (herPosts.length < MIN_PAIRS) {
+      return {
+        ok: false,
+        error: `only ${herPosts.length} of her posts are long enough to compare — need ${MIN_PAIRS}`,
+      };
+    }
+    return await ctx.runAction(internal.maya.cringeEval.runEval, {
+      customerId: args.customerId,
+      herPosts,
+    });
   },
 });
