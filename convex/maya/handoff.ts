@@ -178,7 +178,7 @@ export const routeInboundToMachine = internalAction({
       .join("\n");
 
     const systemNote = outstanding
-      ? `You are waiting on the founder for ${waiting.length === 1 ? "this draft" : `these ${waiting.length} drafts`}:\n${outstanding}\n\nIf their message approves one, call publish with that draftId and alreadyApproved: true. If they changed the wording, pass their version as editedText. If it isn't about a draft, ignore this note.`
+      ? `You are waiting on the founder for ${waiting.length === 1 ? "this draft" : `these ${waiting.length} drafts`}:\n${outstanding}\n\nIf their message approves one, call publish with that draftId and alreadyApproved: true. Approval rarely arrives as the word "yes" — "looks great", "love it", "nice one", "go for it" are all approval when they answer "want this to go out?". If they changed the wording, pass their version as editedText.\n\nIf you are NOT SURE whether it was approval, ask — one short question, "want me to send it?" — and do it in the same message as your reply. Do not thank them and move on: a pending draft they think they just approved, sitting unposted, is the worst of the three outcomes and the only one they cannot see. If it genuinely isn't about a draft, ignore this note.`
       : null;
 
     const controller = new AbortController();
