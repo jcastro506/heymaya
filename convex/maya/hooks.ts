@@ -40,6 +40,7 @@ import { httpAction, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
+import { dayKeyInZone } from "./cadence";
 
 /* -------------------------------------------------------------------------- */
 /* The envelope                                                                */
@@ -289,7 +290,8 @@ export const requestAssetsHttp = httpAction(async (ctx, request) => {
       "Quick ask, and it's the only one I'll make: could you send me a 30–60 second screen recording of you using it? Just talk through what you'd show someone. I can pull stills, clips and post ideas out of one recording — it saves you sending screenshots one at a time, and right now I've got nothing real of the product to work with.",
     proactive: true,
     // One ask per customer per day, ever — see the guard above.
-    dedupeKey: `asset-ask:${new Date().toISOString().slice(0, 10)}`,
+    // The founder's day — see the note on the update hook's key below.
+    dedupeKey: `asset-ask:${dayKeyInZone(Date.now(), auth.customer.timezone ?? "UTC")}`,
   });
 
   return result.sent
@@ -554,8 +556,22 @@ export const updateHttp = httpAction(async (ctx, request) => {
     });
   }
 
-  // Deduped per kind per day, so a cron that fires twice sends one brief.
-  const today = new Date().toISOString().slice(0, 10);
+  /**
+   * Deduped per kind per day, so a cron that fires twice sends one brief.
+   *
+   * ⚠️ The FOUNDER's day. This was `new Date().toISOString().slice(0, 10)` —
+   * UTC — and the 20:00 recap on 2026-08-07 was filed as `recap:2026-08-08`,
+   * because 20:00 in New York IS 00:00 UTC the next day.
+   *
+   * Two failures from one line: liveness reported `recapSentToday: false` and
+   * would have raised a false `recap_missed`, and the FOLLOWING evening's
+   * recap would compute that same key and be deduped away entirely — one
+   * recap every two days, silently.
+   *
+   * Eighth instance of this class. `dailyReport` and `liveness` were fixed on
+   * 08-06; this file has its own key builder and was missed.
+   */
+  const today = dayKeyInZone(Date.now(), auth.customer.timezone ?? "UTC");
   const result = await ctx.runMutation(internal.maya.messages.send, {
     customerId: auth.customer._id,
     surface: "telegram",
@@ -1084,8 +1100,27 @@ export const publishHttp = httpAction(async (ctx, request) => {
   return respond({
     ok: true,
     data: { published: false, queued: true, jobId },
-    why: "cleared to post — it's queued",
-    next: "don't announce it as live yet; the placement row with its URL is the proof",
+    /**
+     * ⚠️ THE FOUNDER'S WORDS, because she reads these back verbatim.
+     *
+     * This said *"don't announce it as live yet; the placement row with its
+     * URL is the proof"* — and on 2026-08-07 she told the founder *"I'll need
+     * the placement URL before I can say it posted."* Three times, across two
+     * days.
+     *
+     * The plugin description and SOUL were both corrected on 08-06 and it
+     * changed nothing, because THIS is the stronger signal: §2.8 says
+     * choreography rides in tool responses, and this one is handed to her on
+     * the exact turn she publishes. A prompt rule cannot outrank the
+     * instruction she just received — nor her own transcript, which by then
+     * held the phrase three times as worked examples.
+     *
+     * The guidance itself was right. Publishing is queued, so there is no link
+     * yet and she genuinely must not claim it is live. Only the vocabulary was
+     * ours.
+     */
+    why: "it's on its way",
+    next: "tell them it's going out and that you'll send the link when it's up — do NOT say it's posted yet, because it isn't. Check back for the link rather than claiming one",
   });
 });
 
@@ -1174,7 +1209,7 @@ export const replyHttp = httpAction(async (ctx, request) => {
   return respond({
     ok: true,
     data: { published: false, queued: true, jobId },
-    why: "cleared to reply — it's queued",
+    why: "it's on its way",
     next: "move on to the next one; don't wait on this",
   });
 });
@@ -1578,7 +1613,7 @@ export const askFounderHttp = httpAction(async (ctx, request) => {
     // Deduped on the text so a retried tool call can't send the same question
     // twice. The date bounds it so a genuinely recurring question can be asked
     // again tomorrow.
-    dedupeKey: `ask:${new Date().toISOString().slice(0, 10)}:${question}`,
+    dedupeKey: `ask:${dayKeyInZone(Date.now(), auth.customer.timezone ?? "UTC")}:${question}`,
   });
 
   return result.asked

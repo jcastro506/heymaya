@@ -14,9 +14,9 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { BUNDLED_MAYA_PLUGIN_TOOLS } from "../../agents/packs/maya/bundledPlugin";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { BUNDLED_MAYA_PLUGIN_TOOLS } from "../../agents/packs/maya/bundledPlugin";
 
 const PLUGIN = join(
   __dirname,
@@ -252,5 +252,75 @@ describe("tool descriptions carry the choreography the model needs", () => {
       expect(index).toContain(field);
     }
     expect(index).toMatch(/\{ok, data, next, why\}/);
+  });
+});
+
+/**
+ * ⭐ WHAT SHE READS BACK IS THE `next` FIELD, NOT THE PROMPT.
+ *
+ * On 2026-08-06 the operator flagged that she'd said *"I'll need its placement
+ * URL before I can say it posted."* The plugin description and SOUL were both
+ * corrected. **On 2026-08-07 she said it again, twice.**
+ *
+ * The cause was never the prompt. `hooks.ts` returned
+ *
+ *     next: "don't announce it as live yet; the placement row with its URL
+ *            is the proof"
+ *
+ * §2.8: *choreography rides in tool responses, never in prompts.* That makes
+ * `why`/`next` the STRONGEST instruction she gets — handed to her on the exact
+ * turn she acts. A prompt rule cannot outrank the sentence she just received,
+ * and by then her own transcript held the phrase three times as worked
+ * examples.
+ *
+ * Checking the prompt three times missed it because the prompt was never where
+ * it lived.
+ */
+describe("the envelope speaks the founder's language too", () => {
+  const HOOKS = readFileSync(
+    join(__dirname, "..", "hooks.ts"),
+    "utf8"
+  );
+
+  /** Our nouns. Correct for us, meaningless or alarming to a founder. */
+  const INTERNAL = [
+    "placement row",
+    "draft row",
+    "idempotency",
+    "dedupe key",
+    "envelope",
+    "payloadJson",
+    "mutation",
+  ];
+
+  it("no why/next hands her a word we forbid her to say", () => {
+    const offenders: string[] = [];
+    HOOKS.split("\n").forEach((line, i) => {
+      const m = /\b(why|next):\s*"([^"]+)"/.exec(line);
+      if (!m) return;
+      for (const term of INTERNAL) {
+        if (m[2].toLowerCase().includes(term)) {
+          offenders.push(`hooks.ts:${i + 1} — ${term}`);
+        }
+      }
+    });
+    expect(
+      offenders,
+      "These are the sentences she repeats verbatim to the founder.\n" +
+        offenders.join("\n"),
+    ).toEqual([]);
+  });
+
+  it("publish still tells her NOT to claim it's live", () => {
+    // The guidance was right; only the vocabulary was ours. Publishing is
+    // queued, so there is no link yet and claiming one would be a fabricated
+    // fact about the founder's own account (§2.7).
+    // Window past the explanatory comment to the `next` itself. Kept as a
+    // slice rather than a regex on the whole file so this asserts the PUBLISH
+    // response specifically, not any sentence anywhere that happens to match.
+    const idx = HOOKS.indexOf('data: { published: false, queued: true, jobId }');
+    const near = HOOKS.slice(idx, idx + 2000);
+    expect(near).toMatch(/do NOT say it's posted yet|don't say it'?s posted/i);
+    expect(near).toMatch(/link when it'?s up|send the link/i);
   });
 });
