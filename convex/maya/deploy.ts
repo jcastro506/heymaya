@@ -389,6 +389,29 @@ export const workspaceInput = internalQuery({
 
     const product = safeJson(customer.productTruthJson);
     const voice = safeJson(customer.voiceProfileJson);
+    /**
+     * The founder's standing rules, carried onto the machine.
+     *
+     * Without this they existed only in the ledger and the publish gate — she
+     * could break one, get held, and learn the rule from the hold. Sprint 6's
+     * "house-rules block" is this.
+     */
+    const rules = await ctx.runQuery(internal.maya.directives.activeRules, {
+      customerId: args.customerId,
+    });
+    const houseRules = rules.map((r) => {
+      let meaning: string | undefined;
+      try {
+        const parsed = r.interpretationJson
+          ? (JSON.parse(r.interpretationJson) as { meaning?: unknown })
+          : {};
+        meaning = typeof parsed.meaning === "string" ? parsed.meaning : undefined;
+      } catch {
+        /* the verbatim rule is what matters; a bad interpretation is dropped */
+      }
+      return { verbatim: r.verbatim, meaning };
+    });
+
     const rejections = await ctx.runQuery(
       internal.maya.voiceCorpus.rejectionsFor,
       { customerId: args.customerId }
@@ -454,6 +477,7 @@ export const workspaceInput = internalQuery({
       // wrote, because an edit says what was WRONG.
       editPairs: editPairs.length > 0 ? editPairs : undefined,
       rejections: rejections.length > 0 ? rejections : undefined,
+      houseRules: houseRules.length > 0 ? houseRules : undefined,
     };
   },
 });

@@ -135,6 +135,22 @@ export interface MayaWorkspaceInput {
    * that it was a bad idea is them saying so, once.
    */
   rejections?: Array<{ text: string; reason: string }>;
+  /**
+   * ⭐ The founder's standing rules, in THEIR words (§5.0, Sprint 6).
+   *
+   * Sprint 6 names a "house-rules block" and there wasn't one. The rules lived
+   * in the `directives` ledger, enforced at publish by the server gate — so a
+   * rule was enforced but not KNOWN. She could write a draft that broke one,
+   * get held, and learn about it only from the hold.
+   *
+   * That is the same shape as the sweeps before they became watchers: correct,
+   * and dependent on her remembering to go and look.
+   *
+   * ⚠️ Verbatim, never the interpretation. The ledger stores both, and the
+   * founder's own sentence is the one that can be argued with — "you told me:
+   * we do NOT use Reddit" is correctable; "channel policy applied" is not.
+   */
+  houseRules?: Array<{ verbatim: string; meaning?: string }>;
   /** Current strategy and today's posture. */
   posture?: string;
 }
@@ -551,7 +567,22 @@ function renderSoul(input: MayaWorkspaceInput): string {
 Let their form dominate and it's a lecture nobody watches. Let the niche's
 substance dominate and it's content that could be any product in the category.
 
-## Their actual writing
+${
+    input.houseRules?.length
+      ? `## Rules they have given me
+
+${input.houseRules.map((r) => `- "${r.verbatim}"${r.meaning ? `\n  (${r.meaning})` : ""}`).join("\n")}
+
+**These are standing, and they outrank anything else in this file.** They were
+said once and they hold until the founder retires them — I never need reminding
+and I never ask again. If something I want to write would break one, the answer
+is to write something else, not to write it more carefully.
+
+The server checks these at publish too, so breaking one costs a held post and a
+message explaining why. That check is a backstop, not my memory.
+`
+      : ""
+  }## Their actual writing
 
 ${excerpts}
 
