@@ -209,6 +209,31 @@ export const sweepDue = internalAction({
 
       const day = dayKeyInZone(now, timezone);
 
+      /**
+       * ⚠️ Don't spend the day's sweeps on a vendor that has no money.
+       *
+       * Every sweep here reads through ScrapeCreators. With the balance at
+       * zero, running them costs five failed calls and five retries per
+       * customer and produces nothing — and at 200 customers that is a
+       * thousand pointless requests an hour against an endpoint that is
+       * already refusing us.
+       *
+       * The breaker fails OPEN by design (never checked, or a stale reading,
+       * both mean go), so this can only stop work when a recent reading
+       * actually says the vendor is out.
+       */
+      const breaker = await ctx.runQuery(internal.maya.breaker.vendorOpen, {
+        vendor: "scrapecreators",
+        now,
+      });
+      if (!breaker.open) {
+        skipped += SWEEPS.length;
+        console.warn(
+          `[watchers] skipped ${customerId} — ${breaker.reason ?? "vendor unavailable"}`
+        );
+        continue;
+      }
+
       for (const sweep of SWEEPS) {
         const claim = await ctx.runMutation(internal.maya.watchers.claimSweep, {
           customerId,
