@@ -1481,6 +1481,48 @@ The model's job shrinks to what models are good at: framing a real screenshot at
 
 If it reads as AI, nothing else in this document matters. So this gets built as a system, not a prompt line.
 
+#### ⚠️ 7.5.2a MEASURED — most of the table below is wrong for this niche
+
+*Sprint 4 says the §7.5.2 table is "a starting hypothesis, not the finding" and
+asks for the denylist to be derived from measured differences. Measured
+2026-08-07: 63 real niche posts against 16 of hers (`convex/maya/tells.ts`).*
+
+| feature | human | hers | |
+|---|---|---|---|
+| lexical — delve · tapestry · game-changer · … | **0.00** | **0.00** | ⛔ absent from **both** |
+| *"it's not X, it's Y"* | 0.00 | 0.00 | ⛔ absent from both |
+| triadic lists | 0.25 | **0.00** | ⚠️ **humans use them MORE** |
+| rhetorical-question opener | 1.59 | **0.00** | ⚠️ **humans use them MORE** |
+| emoji | 4.33 | **0.00** | ⭐ her tell |
+| hashtags | 6.81 | **0.40** | ⭐ her tell |
+| starts lowercase | 4.76 | **31.25** | ⭐ her tell |
+
+**Four findings, none of them in the hypothesis:**
+
+1. ⛔ **The lexical denylist defends against nothing.** Zero occurrences in 63
+   real posts and zero in hers. It is a 2023 tell; in this niche it is dead
+   weight. Kept in code so it keeps being *tested* rather than deleted on a
+   hunch — a niche where these do appear would want to know.
+
+2. ⚠️ **Two entries point the wrong way.** Triadic lists and question openers
+   are **more human here**. A critic penalising them would push her *away* from
+   how this niche writes — **the hypothesis would have made her worse.**
+
+3. ⭐ **Her real tells are ABSENCES.** No emoji against a niche average of 4.33
+   per 100 words; hashtags 17× rarer. **A denylist can only catch what is
+   present** — it is structurally incapable of catching what is missing, which
+   is why nothing we had could see her actual tell.
+
+4. ⭐ **The anti-slop work has produced its own tell.** She opens a post in
+   lowercase **6.6× more often than humans do**. Trying hard not to sound like a
+   machine has become a signature: performed casualness.
+
+⚠️ **n=16 on her side — directional, not settled.** `measureTells` re-runs as
+the corpus grows, so the denylist stops being a thing someone wrote down once.
+
+**The table below is retained as the hypothesis it was.** Read it knowing three
+of its rows measure zero here.
+
 **What actually makes text sound like AI** — name the tells so the critic can hunt them:
 
 | Class | Tells |
