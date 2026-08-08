@@ -627,3 +627,119 @@ describe("publishing resolves the draft it published", () => {
     expect(["edited", "rejected", "expired"]).not.toContain("pending");
   });
 });
+
+/**
+ * ⭐ WHY SHE WROTE THE SAME POST FOUR TIMES — measured 2026-08-07.
+ *
+ * The cringe eval's first run found four near-duplicate posts among sixteen,
+ * closest pair at 0.87:
+ *
+ *   "When you're building alone, a CSV shouldn't BECOME a dashboard project"
+ *   "When you're building alone, a CSV shouldn't TURN INTO a dashboard project"
+ *
+ * `nextIdea` returns the highest-scored idea whose status is `bank`.
+ * `markUsed` existed with **zero callers**, so nothing ever left the bank —
+ * 51 ideas banked, and the same one won every day.
+ *
+ * §3.2 names the cost directly: saying the same thing twice "is how she stops
+ * sounding like an employee."
+ */
+describe("AN IDEA IS SPENT WHEN IT BECOMES A DRAFT", () => {
+  async function bankAnIdea(
+    t: ReturnType<typeof convexTest>,
+    customerId: Id<"customers">,
+    angle: string
+  ) {
+    return await t.run((ctx) =>
+      ctx.db.insert("ideas", {
+        customerId,
+        angle,
+        status: "bank",
+        sourceKind: "observation",
+        evidenceJson: JSON.stringify({
+          quote: "a real person said this out loud",
+          sourceUrls: ["https://x.com/someone/status/1"],
+        }),
+        createdAt: NOW,
+        updatedAt: NOW,
+      })
+    );
+  }
+
+  it("drafting an idea takes it out of the bank", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "spent", { postingMode: "just_go" });
+    const ideaId = await bankAnIdea(t, customerId, "csv to dashboard in one paste");
+
+    await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "When you're building alone, a CSV shouldn't become a dashboard project.",
+      ideaId,
+      now: NOW,
+    });
+
+    const idea = await t.run((ctx) => ctx.db.get(ideaId));
+    expect((idea as { status?: string } | null)?.status).toBe("used");
+  });
+
+  it("⭐ the SAME idea is never served twice — the actual regression", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "notwice", { postingMode: "just_go" });
+    const first = await bankAnIdea(t, customerId, "csv to dashboard in one paste");
+    await bankAnIdea(t, customerId, "nobody warns you shipping is the easy part");
+
+    const one = await t.query(internal.maya.ideas.nextIdea, { customerId, now: NOW });
+    expect(one?.ideaId).toBe(first);
+
+    await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "A CSV shouldn't become a dashboard project when you're building alone.",
+      ideaId: one!.ideaId,
+      now: NOW,
+    });
+
+    // Before the fix this returned the same idea, forever.
+    const two = await t.query(internal.maya.ideas.nextIdea, { customerId, now: NOW });
+    expect(two?.ideaId).not.toBe(first);
+  });
+
+  it("a draft with no idea behind it spends nothing", async () => {
+    // Replies and cold replies carry no ideaId — the thing being answered IS
+    // the evidence. They must not consume the bank.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "noidea", { postingMode: "just_go" });
+    const ideaId = await bankAnIdea(t, customerId, "untouched");
+
+    await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "Answering someone who asked about exporting to CSV — here's how.",
+      kind: "reply",
+      now: NOW,
+    });
+
+    const idea = await t.run((ctx) => ctx.db.get(ideaId));
+    expect((idea as { status?: string } | null)?.status).toBe("bank");
+  });
+
+  it("the bank empties one idea per draft, not all at once", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "drain", { postingMode: "just_go" });
+    for (const angle of ["a", "b", "c"]) await bankAnIdea(t, customerId, angle);
+
+    const before = await t.query(internal.maya.ideas.bankDepth, { customerId });
+    const idea = await t.query(internal.maya.ideas.nextIdea, { customerId, now: NOW });
+    await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "One post drawn from one banked idea, leaving the rest alone.",
+      ideaId: idea!.ideaId,
+      now: NOW,
+    });
+    const after = await t.query(internal.maya.ideas.bankDepth, { customerId });
+
+    expect(after.depth).toBe(before.depth - 1);
+  });
+});
