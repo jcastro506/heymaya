@@ -47,6 +47,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { correlateFleet, evaluate, type Breach } from "./liveness";
 import { allowsKind } from "./spendCeiling";
+import { dayKeyInZone } from "./cadence";
 
 /* -------------------------------------------------------------------------- */
 /* Who the loop runs for                                                       */
@@ -501,6 +502,66 @@ export const livenessSweep = internalAction({
             .map((b) => `${b.kind} → ${b.action}`)
             .join(", ")}`
         );
+      }
+
+      /**
+       * ⭐ AND NOW DO THE THING. The action was metadata until 2026-08-08.
+       *
+       * Every breach carries an `action` — `reenqueue_brief`,
+       * `operator_alert_and_tell_founder`, `open_support_thread` — and the
+       * sweep wrote it into an audit row and stopped. The watchdog detected
+       * correctly and then did nothing, which principle 5 forbids in as many
+       * words: *"Nothing fails silently. Every job produces a result or a named
+       * failure that reaches the user."* An audit row is not a user.
+       *
+       * Found live: on 08-08 the morning brief never went out. The sweep
+       * noticed at 09:00, wrote `liveness.brief_missed`, and the founder heard
+       * nothing until they asked. The contract that exists to catch a silent
+       * failure was itself failing silently — §12 opens with *"a system cannot
+       * be the watchdog for itself"*, and this was one layer of that trap
+       * further in.
+       *
+       * ⚠️ Only the actions with somewhere to go are executed here. The rest
+       * are still logged, and that is stated rather than implied — a switch
+       * with a silent default is how this happened.
+       */
+      // ⚠️ Their day, not UTC. Writing `dayKeyInZone(now, "UTC")` here would
+      // have reintroduced the exact bug this codebase spent two days removing
+      // — an alert deduped on the wrong day fires twice or not at all.
+      const timezone = await ctx.runQuery(internal.maya.liveness.timezoneFor, {
+        customerId,
+      });
+
+      for (const breach of breaches) {
+        if (fleet.correlated) break; // one incident, not N notifications
+
+        if (breach.action === "reenqueue_brief") {
+          // Once. §12's own note: "a re-enqueue loop on a broken brief is a
+          // message storm." `send` dedupes on the day key, so a second sweep
+          // an hour later is a no-op rather than a second brief.
+          await ctx.runAction(internal.maya.dailyReport.sendLateBrief, {
+            customerId,
+            now,
+          });
+        } else if (
+          breach.action === "operator_alert_and_tell_founder" ||
+          breach.action === "diagnose_and_report" ||
+          breach.action === "open_support_thread"
+        ) {
+          /**
+           * The founder hears it in their words. `breach.detail` is already
+           * written that way — §12 requires every detail to be plain language
+           * precisely so it can be relayed unchanged.
+           */
+          await ctx.runMutation(internal.maya.messages.send, {
+            customerId,
+            surface: "telegram",
+            body: breach.detail,
+            proactive: true,
+            dedupeKey: `liveness:${breach.kind}:${dayKeyInZone(now, timezone)}`,
+            ts: now,
+          });
+        }
       }
     }
 

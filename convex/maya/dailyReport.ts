@@ -28,7 +28,7 @@
  */
 
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { namesSomethingConcrete } from "./quality";
@@ -358,5 +358,51 @@ export const sendEveningRecap = internalMutation({
     });
 
     return { sent: sent.sent, messageId: sent.messageId, count: placements.length };
+  },
+});
+
+/**
+ * ⭐ Send the brief the machine didn't.
+ *
+ * The liveness contract's `reenqueue_brief` action had nowhere to go: the
+ * sweep recorded it and stopped. On 2026-08-08 the morning brief never went
+ * out, the sweep noticed at 09:00, and the founder heard nothing.
+ *
+ * Deliberately thin. It does NOT reconstruct the day's plan — that needs the
+ * agent, and if the agent is why the brief is missing, asking it again is the
+ * loop §12 warns about ("a re-enqueue loop on a broken brief is a message
+ * storm"). It sends the honest short version instead: nothing has gone out
+ * yet, and here is what she does know from rows.
+ *
+ * Once per day by construction — `send` dedupes on `brief:<founder's day>`, so
+ * if the real brief lands later it is the SAME key and only one arrives. And
+ * if the machine recovers first, this becomes a no-op rather than a duplicate.
+ */
+export const sendLateBrief = internalAction({
+  args: { customerId: v.id("customers"), now: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<{ sent: boolean }> => {
+    const now = args.now ?? Date.now();
+    const cadence = await ctx.runQuery(internal.maya.cadence.cadence, {
+      customerId: args.customerId,
+      now,
+    });
+    const timezone = await ctx.runQuery(internal.maya.liveness.timezoneFor, {
+      customerId: args.customerId,
+    });
+
+    const streak =
+      cadence.streak > 0
+        ? `${cadence.streak} day${cadence.streak === 1 ? "" : "s"} in a row so far`
+        : "nothing live in the last few days";
+
+    const result = await ctx.runMutation(internal.maya.messages.send, {
+      customerId: args.customerId,
+      surface: "telegram",
+      body: `Morning — running late today, that one's on me. Nothing has gone out yet. Where things stand: ${streak}. I'll come back with today's post shortly.`,
+      proactive: true,
+      dedupeKey: `brief:${dayKey(now, timezone)}`,
+      ts: now,
+    });
+    return { sent: result.sent };
   },
 });

@@ -12,6 +12,7 @@ import {
   CREDIT_RESERVES,
   evaluate,
   type LivenessInput,
+  type BreachAction,
 } from "../liveness";
 
 const DAY = 86_400_000;
@@ -616,5 +617,85 @@ describe("⭐ VENDOR BALANCES — the reserve that could never fire", () => {
 
   it("zero is critical, not merely low", () => {
     expect(checkBalance("creatify", 0).verdict).toBe("critical");
+  });
+});
+
+/**
+ * ⭐ THE WATCHDOG THAT WATCHED AND DID NOTHING.
+ *
+ * Every breach carries an `action` — `reenqueue_brief`,
+ * `operator_alert_and_tell_founder`, `open_support_thread`. Until 2026-08-08
+ * the sweep wrote that action into an **audit row** and stopped.
+ *
+ * Found live: the morning brief never went out on 08-08. The sweep noticed at
+ * 09:00, recorded `liveness.brief_missed`, and the founder heard nothing until
+ * they asked what was going on.
+ *
+ * ⚠️ Principle 5 forbids this in as many words: *"Nothing fails silently. Every
+ * job produces a result or a named failure that **reaches the user**."* An
+ * audit row is not a user. §12 opens with *"a system cannot be the watchdog for
+ * itself"* — and this was one layer further into that same trap: the contract
+ * that exists to catch silent failure was failing silently.
+ */
+describe("every action has somewhere to go", () => {
+  it("no action is left with nothing that handles it", () => {
+    // The list below is the contract. Adding a seventh action costs a line
+    // here and a decision about what it DOES — which is the point, because
+    // the six that existed were all metadata.
+    const HANDLED = new Set<BreachAction>([
+      "reenqueue_brief",
+      "operator_alert_and_tell_founder",
+      "diagnose_and_report",
+      "open_support_thread",
+    ]);
+    const LOG_ONLY = new Set<BreachAction>([
+      // Deliberate: the founder cannot act on either, and telling them their
+      // agent's context is truncated is noise dressed as transparency.
+      "operator_alert_only",
+      // Carried INTO the recap rather than sent separately — a second message
+      // saying the same thing is the message storm §12 warns about.
+      "state_plainly_in_recap",
+    ]);
+
+    const all: BreachAction[] = [
+      "reenqueue_brief",
+      "diagnose_and_report",
+      "state_plainly_in_recap",
+      "operator_alert_and_tell_founder",
+      "open_support_thread",
+      "operator_alert_only",
+    ];
+    for (const action of all) {
+      expect(
+        HANDLED.has(action) || LOG_ONLY.has(action),
+        `${action} has no handler and is not deliberately log-only`,
+      ).toBe(true);
+    }
+  });
+
+  it("a missed brief is an action, not a note", () => {
+    // The live case. At 10:00 with no brief, this must resolve to something
+    // that sends — not to a row.
+    const breaches = evaluate(facts({ briefSentToday: false, hourLocal: 10 }));
+    const brief = breaches.find((b) => b.kind === "brief_missed");
+    expect(brief?.action).toBe("reenqueue_brief");
+  });
+
+  it("every detail is sendable to the founder unchanged", () => {
+    // Because the sweep now relays `detail` verbatim, it has to already be in
+    // their language — no ids, no vendor names, no status codes.
+    const cases = [
+      facts({ briefSentToday: false, hourLocal: 10 }),
+      facts({ placementsToday: 0, priorZeroDayStreak: 1 }),
+      facts({ placementsToday: 0, priorZeroDayStreak: 5 }),
+      facts({ recapSentToday: false, hourLocal: 23 }),
+    ];
+    for (const input of cases) {
+      for (const breach of evaluate(input)) {
+        expect(breach.detail).not.toMatch(/[a-z0-9]{20,}/i); // an id
+        expect(breach.detail).not.toMatch(/\b(convex|fly|openrouter|zernio)\b/i);
+        expect(breach.detail).not.toMatch(/\b[45]\d{2}\b/);
+      }
+    }
   });
 });
