@@ -3767,6 +3767,21 @@ export default defineSchema({
     ),
     /** What they changed, when they edited rather than approved. */
     editDiff: v.optional(v.string()),
+    /**
+     * ⭐ Why the founder said no, in their words.
+     *
+     * The second-highest-signal voice data after an edit, and it was not
+     * recorded at all: `outcome: "rejected"` was a value nothing in
+     * `convex/maya` ever wrote (only the frozen v1 did), so a rejection left
+     * no trace and the draft sat `pending` until it expired.
+     *
+     * ⚠️ An edit says what she got wrong about the WORDS. A rejection says
+     * what she got wrong about the IDEA — *"too salesy"*, *"we don't say that
+     * about competitors"*, *"wrong week for this"*. Those are different
+     * lessons and the second one is unavailable anywhere else: an idea nobody
+     * ever posts leaves no metric behind.
+     */
+    rejectionReason: v.optional(v.string()),
     proposedAt: v.number(),
     decidedAt: v.optional(v.number()),
     /** Invariant 8 again: a pending draft cannot sit forever. */

@@ -312,3 +312,36 @@ export const editPairsFor = internalQuery({
     return buildFewShot(edits, args.limit ?? 10);
   },
 });
+
+/**
+ * ⭐ What the founder said NO to, and why.
+ *
+ * The companion to {@link editPairsFor}, and a different lesson. An edit says
+ * what she got wrong about the WORDS. A rejection says what she got wrong
+ * about the IDEA — *"too salesy"*, *"we don't say that about competitors"*,
+ * *"wrong week for this"*.
+ *
+ * ⚠️ That second lesson is available nowhere else. An idea nobody posts
+ * produces no metric, no engagement, no signal of any kind — the only record
+ * that it was a bad idea is the founder saying so, once.
+ *
+ * Newest first: what they rejected last month may already be fixed.
+ */
+export const rejectionsFor = internalQuery({
+  args: { customerId: v.id("customers"), limit: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<Array<{ text: string; reason: string }>> => {
+    const drafts = (await ctx.db
+      .query("drafts")
+      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+      .collect()) as Doc<"drafts">[];
+
+    return drafts
+      .filter((d) => d.outcome === "rejected" && d.rejectionReason)
+      .sort((a, b) => (b.decidedAt ?? b.proposedAt) - (a.decidedAt ?? a.proposedAt))
+      .slice(0, args.limit ?? 5)
+      .map((d) => ({ text: d.snapshotText, reason: d.rejectionReason! }));
+  },
+});

@@ -743,3 +743,147 @@ describe("AN IDEA IS SPENT WHEN IT BECOMES A DRAFT", () => {
     expect(after.depth).toBe(before.depth - 1);
   });
 });
+
+/**
+ * ⭐ A NO IS THE SECOND-STRONGEST SIGNAL, AND IT WASN'T RECORDED AT ALL.
+ *
+ * `outcome: "rejected"` was a value nothing in `convex/maya` ever wrote — only
+ * the frozen v1 did. Found 2026-08-07 while sweeping for terminal states with
+ * no writer, alongside published drafts stuck `pending` (#291) and banked
+ * ideas stuck `bank` (#295).
+ *
+ * ⚠️ An edit says what she got wrong about the WORDS. A no says what she got
+ * wrong about the IDEA — and that lesson exists nowhere else: a post the
+ * founder never lets out earns no views, no engagement, no metric of any kind.
+ * The only record that it was a bad idea is them saying so, once.
+ */
+describe("recording a no, and the reason that makes it useful", () => {
+  it("stores the founder's reason verbatim", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "rejreason", { postingMode: "show_me_first" });
+    const res = await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "Our competitor's onboarding is a mess and ours takes 30 seconds.",
+      now: NOW,
+    });
+    if (!res.ok) return;
+
+    await t.mutation(internal.maya.drafts.decide, {
+      draftId: res.draftId,
+      outcome: "rejected",
+      reason: "we don't talk about competitors like that",
+    });
+
+    const draft = await t.query(internal.maya.drafts.byId, { draftId: res.draftId });
+    expect(draft?.outcome).toBe("rejected");
+    expect(draft?.rejectionReason).toBe("we don't talk about competitors like that");
+  });
+
+  it("a rejected draft stops being offered", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "rejgone", { postingMode: "show_me_first" });
+    const res = await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "Something the founder is about to turn down for a good reason.",
+      now: NOW,
+    });
+    if (!res.ok) return;
+
+    await t.mutation(internal.maya.drafts.decide, {
+      draftId: res.draftId,
+      outcome: "rejected",
+      reason: "too salesy",
+    });
+
+    const pending = await t.query(internal.maya.drafts.pending, { customerId });
+    expect(pending.map((d) => d._id)).not.toContain(res.draftId);
+  });
+
+  it("⭐ it reaches the workspace as a standing lesson", async () => {
+    // The whole point: a no she can't read again is a no she repeats.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "rejworkspace", { postingMode: "show_me_first" });
+    const res = await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "A post about how much better we are than the alternatives.",
+      now: NOW,
+    });
+    if (!res.ok) return;
+    await t.mutation(internal.maya.drafts.decide, {
+      draftId: res.draftId,
+      outcome: "rejected",
+      reason: "we never punch at competitors",
+    });
+
+    const rejections = await t.query(internal.maya.voiceCorpus.rejectionsFor, {
+      customerId,
+    });
+    expect(rejections).toHaveLength(1);
+    expect(rejections[0].reason).toBe("we never punch at competitors");
+    expect(rejections[0].text).toContain("better we are");
+  });
+
+  it("an EDIT and a NO are kept apart — different lessons", async () => {
+    // Folding them together would teach "these words were wrong" when the
+    // founder actually said "this idea was wrong".
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "rejvsedit", { postingMode: "show_me_first" });
+
+    const edited = await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "Ship fast and iterate on the feedback you get from real users.",
+      now: NOW,
+    });
+    const rejected = await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "A different post entirely, about pricing pages and conversion.",
+      now: NOW,
+    });
+    if (!edited.ok || !rejected.ok) return;
+
+    await t.mutation(internal.maya.drafts.decide, {
+      draftId: edited.draftId,
+      outcome: "edited",
+      editedText: "ship fast, listen to whoever actually uses it",
+    });
+    await t.mutation(internal.maya.drafts.decide, {
+      draftId: rejected.draftId,
+      outcome: "rejected",
+      reason: "wrong week for pricing talk",
+    });
+
+    const pairs = await t.query(internal.maya.voiceCorpus.editPairsFor, { customerId });
+    const nos = await t.query(internal.maya.voiceCorpus.rejectionsFor, { customerId });
+    expect(pairs).toHaveLength(1);
+    expect(nos).toHaveLength(1);
+    expect(nos[0].reason).toBe("wrong week for pricing talk");
+  });
+
+  it("a no without a reason records nothing to learn from", async () => {
+    // The hook refuses these outright; this pins the storage side, so a caller
+    // that skips the hook still can't create a reasonless rejection lesson.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "rejnoreason", { postingMode: "show_me_first" });
+    const res = await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "Something turned down with no explanation given at all.",
+      now: NOW,
+    });
+    if (!res.ok) return;
+    await t.mutation(internal.maya.drafts.decide, {
+      draftId: res.draftId,
+      outcome: "rejected",
+    });
+
+    const rejections = await t.query(internal.maya.voiceCorpus.rejectionsFor, {
+      customerId,
+    });
+    expect(rejections).toHaveLength(0);
+  });
+});

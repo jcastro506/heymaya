@@ -389,6 +389,10 @@ export const workspaceInput = internalQuery({
 
     const product = safeJson(customer.productTruthJson);
     const voice = safeJson(customer.voiceProfileJson);
+    const rejections = await ctx.runQuery(
+      internal.maya.voiceCorpus.rejectionsFor,
+      { customerId: args.customerId }
+    );
     const editPairs = await ctx.runQuery(
       internal.maya.voiceCorpus.editPairsFor,
       { customerId: args.customerId }
@@ -449,6 +453,7 @@ export const workspaceInput = internalQuery({
       // §7.5.2 layer 2 — what they changed is stronger signal than what they
       // wrote, because an edit says what was WRONG.
       editPairs: editPairs.length > 0 ? editPairs : undefined,
+      rejections: rejections.length > 0 ? rejections : undefined,
     };
   },
 });

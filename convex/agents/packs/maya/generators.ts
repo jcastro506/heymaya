@@ -126,6 +126,15 @@ export interface MayaWorkspaceInput {
    * unlike a writing sample an edit says what was WRONG.
    */
   editPairs?: Array<{ before: string; after: string }>;
+  /**
+   * ⭐ `{what I wrote → why they said no}` — a DIFFERENT lesson from an edit.
+   *
+   * An edit says what I got wrong about the words. A rejection says what I got
+   * wrong about the idea, and that is available nowhere else: an idea nobody
+   * posts produces no metric, no engagement, no signal at all. The only record
+   * that it was a bad idea is them saying so, once.
+   */
+  rejections?: Array<{ text: string; reason: string }>;
   /** Current strategy and today's posture. */
   posture?: string;
 }
@@ -557,6 +566,19 @@ ${input.editPairs
 **This is the strongest signal I get.** A writing sample shows me their register;
 an edit shows me what I got WRONG. When these disagree with anything above,
 these win.
+`
+      : ""
+  }${
+    input.rejections?.length
+      ? `## What they turned down, and why
+
+${input.rejections
+  .map((r) => `**I wrote:** ${r.text}\n**They said no:** ${r.reason}`)
+  .join("\n\n")}
+
+**An edit tells me I picked the wrong words. This tells me I picked the wrong
+thing.** Nothing else can teach me that — a post they never let out earns no
+views to learn from. So I do not write around the objection, I stop making it.
 `
       : ""
   }

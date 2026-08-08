@@ -215,6 +215,8 @@ export const decide = internalMutation({
       v.literal("rejected")
     ),
     editedText: v.optional(v.string()),
+    /** Why they said no, in THEIR words — never paraphrased (§7.5.2 layer 2). */
+    reason: v.optional(v.string()),
     now: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<{ ok: boolean; error?: string }> => {
@@ -225,6 +227,10 @@ export const decide = internalMutation({
       outcome: args.outcome,
       decidedAt: args.now ?? Date.now(),
     };
+
+    if (args.outcome === "rejected" && args.reason) {
+      patch.rejectionReason = args.reason;
+    }
 
     if (args.outcome === "edited" && args.editedText) {
       patch.editDiff = JSON.stringify({

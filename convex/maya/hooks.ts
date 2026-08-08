@@ -1257,6 +1257,56 @@ export const pendingHttp = httpAction(async (ctx, request) => {
   const auth = await authenticate(ctx, request);
   if ("error" in auth) return auth.error;
 
+  /**
+   * ⭐ Recording a NO, on the tool that lists what's awaiting one.
+   *
+   * `outcome: "rejected"` was a value nothing in `convex/maya` ever wrote —
+   * only the frozen v1 did. So a founder saying no left no trace: the draft
+   * sat `pending` until it expired, and the reason was lost entirely.
+   *
+   * ⚠️ The reason is the point, not the rejection. An edit says what she got
+   * wrong about the WORDS; a no says what she got wrong about the IDEA, and
+   * that lesson exists nowhere else — a post nobody lets out earns no views to
+   * learn from. It goes into the workspace as a standing "don't make this
+   * argument again".
+   *
+   * Lives here rather than in its own tool because this is the surface she
+   * already calls when handling drafts, and a separate tool is one more thing
+   * to remember at the moment the founder has already moved on — the same
+   * reasoning that put edit capture inside `publish`.
+   */
+  const parsedBody = await readJson(request);
+  if ("error" in parsedBody) return parsedBody.error;
+  const rejectId = str(parsedBody.body, "rejectDraftId");
+  if (rejectId) {
+    const reason = str(parsedBody.body, "reason");
+    if (!reason || reason.trim().length < 3) {
+      return respond(
+        {
+          ok: false,
+          why: "a no without a reason teaches me nothing",
+          next: "ask them what was wrong with it, in their words, then record that — don't guess or paraphrase it into something tidier",
+        },
+        400
+      );
+    }
+    await ctx.runMutation(internal.maya.drafts.decide, {
+      draftId: rejectId as Id<"drafts">,
+      outcome: "rejected",
+      reason,
+    });
+    await ctx.runMutation(internal.maya.messages.closeQuestionFor, {
+      customerId: auth.customer._id,
+      dedupeKey: `draft:${rejectId}`,
+    });
+    return respond({
+      ok: true,
+      data: { rejected: true },
+      why: "noted, and it will shape what I write next",
+      next: "say it back so they know it stuck — quote their reason. Do NOT rewrite the same idea more carefully; the idea was the problem",
+    });
+  }
+
   const drafts = await ctx.runQuery(internal.maya.drafts.pending, {
     customerId: auth.customer._id,
   });
