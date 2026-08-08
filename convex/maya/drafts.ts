@@ -83,10 +83,54 @@ export const create = internalMutation({
     }
 
     const now = args.now ?? Date.now();
+
+    /**
+     * ⭐ A POST NEEDS AN IDEA. The tool has always said so; nothing checked.
+     *
+     * The `draft` tool's description reads *"ideaId: REQUIRED for a post…
+     * without one you get ok:false and the idea you should have used."* That
+     * `ok:false` never happened — `ideaId` was optional and no gate looked at
+     * it. Principle 4: **anything promised to the user is enforced by the
+     * server. Prompts drift; rows don't.**
+     *
+     * Measured cost, 2026-08-08: traceability read **1 of 7**. Six posts had
+     * no idea behind them at all — written freehand while 57 researched ideas
+     * sat banked. The homework was being done and then not used, and §5.0.0's
+     * *"% traceable to a real buyer complaint"* is the number that tests
+     * whether this product is anything more than a scheduler.
+     *
+     * ⚠️ Replies carry no ideaId by design — the thing being answered IS the
+     * evidence, which is why `publish` accepts a reply without one.
+     *
+     * ⚠️ And an EMPTY bank does not block her. If perception has produced
+     * nothing, refusing the post turns a research gap into a zero-placement
+     * day — trading a traceable post for no post at all. The refusal only
+     * fires when there was something she should have used.
+     */
+    const kind = args.kind ?? "post";
+    if (kind === "post" && !args.ideaId) {
+      const banked = (
+        (await ctx.db
+          .query("ideas")
+          .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+          .collect()) as Doc<"ideas">[]
+      ).filter((i) => i.status === "bank");
+
+      if (banked.length > 0) {
+        const suggestion = banked[0];
+        return {
+          ok: false,
+          // Her language, because she relays this rather than reporting a code.
+          message: `every post has to trace back to something a real person said. There are ${banked.length} banked ideas — the strongest is "${suggestion.angle}". Use that one, or pick another from scroll.`,
+          failure: "no_idea",
+        };
+      }
+    }
+
     const draftId = await ctx.db.insert("drafts", {
       customerId: args.customerId,
       channel: args.channel,
-      kind: args.kind ?? "post",
+      kind,
       snapshotText: args.text,
       ideaId: args.ideaId,
       outcome: "pending",
