@@ -887,3 +887,125 @@ describe("recording a no, and the reason that makes it useful", () => {
     expect(rejections).toHaveLength(0);
   });
 });
+
+/**
+ * ⭐ THE PROMISE THE TOOL MADE AND NOTHING KEPT.
+ *
+ * The `draft` tool's description has always read *"ideaId: REQUIRED for a
+ * post… without one you get ok:false and the idea you should have used."*
+ *
+ * That `ok:false` never happened. `ideaId` was optional and no gate looked at
+ * it — principle 4 inverted: *anything promised to the user is enforced by the
+ * server. Prompts drift; rows don't.*
+ *
+ * ⚠️ Measured cost, 2026-08-08: traceability read **1 of 7**. Six posts had no
+ * idea behind them at all, written freehand while 57 researched ideas sat
+ * banked. §5.0.0's *"% traceable to a real buyer complaint"* is the number that
+ * tests whether this is anything more than a scheduler.
+ */
+describe("EVERY POST TRACES BACK TO SOMETHING SOMEONE SAID", () => {
+  async function bank(
+    t: ReturnType<typeof convexTest>,
+    customerId: Id<"customers">,
+    angle: string
+  ) {
+    return await t.run((ctx) =>
+      ctx.db.insert("ideas", {
+        customerId,
+        angle,
+        status: "bank",
+        sourceKind: "complaint",
+        evidenceJson: JSON.stringify({
+          quote: "a real person said this",
+          sourceUrls: ["https://x.com/a/status/1"],
+        }),
+        createdAt: NOW,
+        updatedAt: NOW,
+      })
+    );
+  }
+
+  it("a post with no idea is refused when the bank has one", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "needidea", { postingMode: "just_go" });
+    await bank(t, customerId, "csv to dashboard in one paste");
+
+    const res = await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "Something I made up with no evidence behind it whatsoever.",
+      now: NOW,
+    });
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.failure).toBe("no_idea");
+  });
+
+  it("the refusal NAMES the idea she should have used", async () => {
+    // "ok:false is an ANSWER you can act on immediately" — the tool's own
+    // contract. A refusal with no next step is just a wall.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "namesit", { postingMode: "just_go" });
+    await bank(t, customerId, "csv to dashboard in one paste");
+
+    const res = await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "Freehand again, ignoring everything that was researched today.",
+      now: NOW,
+    });
+    if (res.ok) return;
+    expect(res.message).toContain("csv to dashboard in one paste");
+    // Plain language — she relays this, she doesn't report a code.
+    expect(res.message).not.toMatch(/ideaId|null|undefined|ok:false/);
+  });
+
+  it("⚠️ an EMPTY bank does not block her", async () => {
+    // If perception produced nothing, refusing turns a research gap into a
+    // zero-placement day — trading a traceable post for no post at all.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "emptybank", { postingMode: "just_go" });
+
+    const res = await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "Nothing was banked today, so this one goes out ungrounded.",
+      now: NOW,
+    });
+    expect(res.ok).toBe(true);
+  });
+
+  it("⚠️ a REPLY never needs an idea", async () => {
+    // The thing being answered IS the evidence. Requiring one would block half
+    // the product — §1: inbound outranks outbound.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "replyfree", { postingMode: "just_go" });
+    await bank(t, customerId, "an idea that has nothing to do with this reply");
+
+    const res = await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "Answering someone who asked how the CSV import handles headers.",
+      kind: "reply",
+      now: NOW,
+    });
+    expect(res.ok).toBe(true);
+  });
+
+  it("a post WITH an idea passes, and spends it", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "withidea", { postingMode: "just_go" });
+    const ideaId = await bank(t, customerId, "the one she actually used");
+
+    const res = await t.mutation(internal.maya.drafts.create, {
+      customerId,
+      channel: "x",
+      text: "A post that traces back to something a real person actually said.",
+      ideaId,
+      now: NOW,
+    });
+    expect(res.ok).toBe(true);
+    const idea = await t.run((ctx) => ctx.db.get(ideaId));
+    expect((idea as { status?: string } | null)?.status).toBe("used");
+  });
+});
