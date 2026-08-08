@@ -5368,6 +5368,41 @@ an agent says when it cannot look.
 **Exit:** a directive survives a redeploy **and a deliberate model swap**.
 **Tests:** ⭐ **model-swap directive test** — swap the main model, assert every directive still enforced · liveness breach escalation · zero-day honesty.
 
+##### ✅ MEASURED 2026-08-08 — the exit criterion passes
+
+Four model families, three cases, run live against the real gate prompt:
+
+| model | "we do NOT use Reddit" | "never call yourself an AI" | a clean post |
+|---|---|---|---|
+| `openai/gpt-oss-120b` | ✅ blocked | ✅ blocked | ✅ passed |
+| `openai/gpt-5.6-luna-pro` | ✅ blocked | ✅ blocked | ✅ passed |
+| `google/gemini-3.1-flash-lite` | ✅ blocked | ✅ blocked | ✅ passed |
+| `mistralai/mistral-small-24b-instruct-2501` | ✅ blocked | ✅ blocked | ✅ passed |
+
+**Twelve of twelve.** ⭐ The clean case matters as much as the violations — a
+gate that blocks everything also "enforces every directive", and would be
+useless.
+
+⚠️ **Why it holds, and it isn't the prompt.** The gate refuses to block on a
+rule it cannot **quote verbatim** from the founder's own list. A model that
+paraphrases, invents or half-remembers a rule produces no block at all — so
+model-to-model variation in *wording* cannot produce variation in
+*enforcement*. That constraint is what makes this portable, not the model
+choice.
+
+The live run is not repeated in CI: it costs four vendor calls per case and
+would make the suite depend on four vendors being up.
+`convex/maya/__tests__/modelSwap.test.ts` runs the structural half — that
+nothing in the enforcement path is bound to a particular model.
+
+⚠️ **Found in the same pass:** the gate returned a bare `{ok: true}` when no
+OpenRouter key was configured — indistinguishable, to the caller, from *"I
+checked and it's fine."* Every house rule the founder had ever set silently
+stopped being enforced. Open rather than closed is still correct (failing
+closed turns an expired key into a zero-placement week), but principle 5
+forbids doing it silently. It now returns `unchecked: true` and logs which
+rules went unenforced.
+
 ### Sprint 4.6 — ⭐ The chat eval: does she sound like a person to the founder?
 
 *Added 2026-08-05. Sprint 4.5 built the cringe eval for **posts**. This is the
