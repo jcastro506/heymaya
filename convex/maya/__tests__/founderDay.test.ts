@@ -51,6 +51,54 @@ describe("no module reinvents the UTC day", () => {
     expect(sourceFiles().length).toBeGreaterThan(20);
   });
 
+  /**
+   * ⚠️ THE GUARD MISSED THE EIGHTH INSTANCE, because it only knew one spelling.
+   *
+   * `hooks.ts` built day keys with `new Date().toISOString().slice(0, 10)` in
+   * three places — same UTC bug, different syntax, invisible to the check
+   * below. The 20:00 recap on 2026-08-07 was filed as `recap:2026-08-08`, and
+   * the next evening's recap would have been deduped away against it.
+   *
+   * A guard that knows one spelling of a mistake catches one spelling of it.
+   */
+  /**
+   * Two legitimate uses, named rather than pattern-matched around.
+   *
+   * The rule is about deriving a DAY BOUNDARY from a timestamp. Neither of
+   * these does:
+   *
+   * - `cadence.previousDay` steps back one calendar day on a YYYY-MM-DD key
+   *   that has ALREADY been resolved in the founder's zone. The `Date.UTC`
+   *   construction is what makes that arithmetic exact.
+   * - `voice.ts` buckets samples by day to pick a spread across sessions.
+   *   It needs days to be *distinguishable*, not aligned to anyone — any
+   *   consistent split does the job.
+   *
+   * Listed by file and reason so adding a third costs a sentence of
+   * justification, which is the point.
+   */
+  const GROUPING_NOT_BOUNDARIES = new Set(["cadence.ts", "voice.ts"]);
+
+  it("nothing derives a day key from an ISO string either", () => {
+    const offenders: string[] = [];
+    for (const { name, text } of sourceFiles()) {
+      if (GROUPING_NOT_BOUNDARIES.has(name)) continue;
+      const code = text
+        .replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, " "))
+        .replace(/^\s*\/\/.*$/gm, "");
+      code.split("\n").forEach((line, i) => {
+        if (/toISOString\(\)\s*\.\s*slice\(\s*0\s*,\s*10\s*\)/.test(line)) {
+          offenders.push(`${name}:${i + 1}`);
+        }
+      });
+    }
+    expect(
+      offenders,
+      "Use dayKeyInZone(ts, timezone) — an ISO slice is UTC, and 20:00 in New " +
+        "York is already tomorrow there.\n" + offenders.join("\n"),
+    ).toEqual([]);
+  });
+
   it("nothing computes a day boundary by dividing by 86_400_000", () => {
     const offenders: string[] = [];
     for (const { name, text } of sourceFiles()) {
