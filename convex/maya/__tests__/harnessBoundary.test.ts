@@ -67,6 +67,33 @@ const CONVEX_MAY_SCHEDULE = [
    * for a customer whose machine has been asleep for a month, which is
    * precisely the customer whose map went stale.
    */
+  /**
+   * ⭐ The six sweeps (§3.1), added 2026-08-08.
+   *
+   * §3.1 could not be more direct: *"She is NOT the thing polling APIs"*, and
+   * the list of what the agent never owns opens with **polling** and
+   * **scraping**. Until this cron existed, every sweep was reachable only
+   * through `hooks.ts` — so the niche was watched only when she remembered to
+   * call the tool.
+   *
+   * It earns its place on the same argument already written for
+   * `maya-refresh-metrics`: *"the database is the truth" cannot depend on the
+   * participant being running.* On 2026-08-08 her morning-brief turn produced
+   * nothing at all. The scroll turn happened to survive; had it been the other
+   * way round, the day's perception would have been silently empty and the
+   * evening recap would have reported on rows nobody collected.
+   *
+   * ⚠️ **The honest caveat: these sweeps are not model-free.** Complaint
+   * mining and trend shaping both make model calls. What makes them collection
+   * rather than agency is *what the model is asked for* — extraction from text
+   * that already exists, never a decision. Nothing here chooses what to post,
+   * when to post, or whether an idea is good. Those stay entirely hers, and
+   * this cron only guarantees there are rows in front of her when she wakes.
+   *
+   * It does NOT touch her cadence. The OpenClaw cron store still owns the
+   * brief, the placement, the recap and the heartbeat.
+   */
+  "maya-watchers-sweep",
   "maya-relearn-stale",
   "maya-sync-channels",
   "maya-refresh-metrics",
