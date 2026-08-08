@@ -95,6 +95,37 @@ export const create = internalMutation({
     });
 
     /**
+     * ⭐ THE IDEA IS SPENT. Marked here, at the moment it becomes a draft.
+     *
+     * `markUsed` existed with **zero callers**, so no idea ever left `bank` —
+     * and `nextIdea` returns the highest-scored banked idea. With nothing
+     * moving them out, the same idea won every single day.
+     *
+     * That is not theoretical. The cringe eval's first run (2026-08-07) found
+     * four near-duplicate posts among sixteen, closest pair at 0.87:
+     *
+     *   "When you're building alone, a CSV shouldn't BECOME a dashboard project"
+     *   "When you're building alone, a CSV shouldn't TURN INTO a dashboard project"
+     *
+     * 51 ideas banked, one of them used forever. §3.2: saying the same thing
+     * twice "is how she stops sounding like an employee."
+     *
+     * ⚠️ Spent at DRAFT time, not at publish. A draft that sits pending for a
+     * day would otherwise let tomorrow pick the same idea again — which is
+     * exactly how four variations of one post got written. The bank holds 51;
+     * burning one on a draft the founder rejects is cheap, and `bankDepth`
+     * already watches for the bank running dry.
+     */
+    if (args.ideaId) {
+      // Through `markUsed` rather than a direct patch, so there is one writer
+      // of an idea's terminal state.
+      await ctx.runMutation(internal.maya.ideas.markUsed, {
+        ideaId: args.ideaId,
+        status: "used",
+      });
+    }
+
+    /**
      * ⭐ SHOWING IT IS PART OF CREATING IT.
      *
      * On `show_me_first` the draft is a promise — *"I'll show you this one
