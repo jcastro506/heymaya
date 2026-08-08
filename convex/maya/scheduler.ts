@@ -431,6 +431,22 @@ export const livenessSweep = internalAction({
       if (b.verdict !== "ok") {
         console.error(`[liveness] VENDOR ${b.verdict.toUpperCase()}: ${b.detail}`);
       }
+      /**
+       * ⭐ Record it, so something can ACT on it.
+       *
+       * This loop logged and stopped. A vendor at zero changed nothing: every
+       * sweep still fired, every call still failed, every retry still burned
+       * budget and latency, and the founder got silence. Knowing a vendor is
+       * down and behaving as though it is are different things, and only the
+       * second one is a circuit breaker.
+       */
+      await ctx.runMutation(internal.maya.breaker.record, {
+        vendor: b.vendor,
+        verdict: b.verdict,
+        balance: b.balance,
+        detail: b.detail,
+        now,
+      });
     }
 
     const perCustomer: Array<{

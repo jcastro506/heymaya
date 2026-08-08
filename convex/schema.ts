@@ -4066,6 +4066,36 @@ export default defineSchema({
     .index("by_customer_and_day", ["customerId", "day"])
     .index("by_customer", ["customerId"]),
 
+  /**
+   * ⭐ The vendor circuit breaker (Sprint 6).
+   *
+   * `CREDIT_RESERVES` and `checkBalance` shipped with nothing fetching a real
+   * number; the hourly sweep fixed that and then only logged. So a vendor at
+   * zero changed nothing: every sweep still fired, every call still failed,
+   * every retry still burned, and the founder got silence.
+   *
+   * One row per vendor, fleet-wide — a balance is not a per-customer fact, and
+   * a vendor at zero is *"every customer's sweeps failing in the same minute"*
+   * (§12), not one customer's bad day.
+   *
+   * ⚠️ Read as advice, never as a lock. See `vendorOpen` for why a missing or
+   * stale row must mean GO.
+   *
+   * ⚠️ NOT `vendorHealth` — that name is taken by the vendor smoke suite,
+   * which records per-check pass/fail per run. These are different facts:
+   * smoke answers "did this endpoint's contract change", the breaker answers
+   * "is there money left". Naming the second one `vendorHealth` shadowed the
+   * first and was caught only by the typechecker.
+   */
+  vendorBreaker: defineTable({
+    vendor: v.string(),
+    verdict: v.union(v.literal("ok"), v.literal("low"), v.literal("critical")),
+    balance: v.number(),
+    /** Plain language, relayed to the operator unchanged. */
+    detail: v.string(),
+    checkedAt: v.number(),
+  }).index("by_vendor", ["vendor"]),
+
   jobs: defineTable({
     /** Absent for fleet-wide work like the vendor smoke suite. */
     customerId: v.optional(v.id("customers")),
