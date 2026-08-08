@@ -1445,12 +1445,42 @@ Cheapest rung that carries the angle. Always.
 |---|---|---|
 | Text | Write model | free |
 | Real screenshot | media library | free |
-| **Photo set / carousel / designed slide** | **`generate_slide_image` — Nano Banana 2 (`google/gemini-3.1-flash-image-preview`) via OpenRouter, framing a real screenshot** | **~$0.03** ⚠️ **still unverified — see §7.6.11a** |
+| **Photo set / carousel / designed slide** | **`generate_slide_image` — `google/gemini-2.5-flash-image` via OpenRouter, framing a real screenshot** | **$0.039/image** ✅ **measured 2026-08-08 — see §7.6.11a** |
 | Screen recording of the product | scripted capture or founder | free |
 | **Founder-filmed, auto-edited** | Creatify `ai_editing` | ~$0.50 |
 | Product demo video | Creatify `product_to_videos` | ~$0.79 |
 | UGC talking head | Creatify `lipsyncs_v2` (aurora_fast) | ~$1.49 |
 | Ad clone | Creatify `ads_clone` | ~$4.75 |
+
+#### 7.6.11a ✅ MEASURED — the image rung, and a comparison that was wrong
+
+*Ran live against OpenRouter, 2026-08-08. Both candidates returned a real image
+on the first call; the ladder's "⚠️ still unverified" is retired.*
+
+| model | measured cost/image | |
+|---|---|---|
+| `google/gemini-3.1-flash-image-preview` | **$0.068** | the one the ladder named |
+| `google/gemini-2.5-flash-image` | **$0.039** | ⭐ **43% cheaper** |
+
+**The ladder claimed ~$0.03.** The model it named is **2.3× that**. Switched to
+`2.5-flash-image`: for a *background treatment* — which is all §7.5.1 asks the
+model for — the newer model's advantages are marginal and the price is not.
+
+⚠️ **And the vendor comparison in §7.5.4a compares different units.** It reads
+*"ours is $0.03 and unverified; theirs is $0.40 and exists"* — but $0.40 is
+Creatify's **per-image** `iab_images` rate. Per image the honest ratio is
+**$0.039 vs $0.40, about 10×**, which is a stronger case for ours than the line
+suggested, not a weaker one. Comparing a per-image cost to a per-set cost in
+either direction is how a vendor decision gets made on the wrong number.
+
+⭐ **The number that actually matters is lower than any of these**, because the
+fixed frame means most slides are never generated at all. §7.5.1: the model's
+job shrinks to *"framing a real screenshot attractively inside a slot, or
+producing a background treatment."* A title, point or CTA slide is deterministic
+SVG — **$0**. A five-slide carousel needing one background treatment costs
+**$0.039**, not $0.19.
+
+That is the whole argument for owning the layout system, priced.
 
 ### 7.5.1 Carousel coherence — a layout problem, not a generation problem
 
