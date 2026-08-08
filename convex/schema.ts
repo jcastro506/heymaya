@@ -3464,6 +3464,16 @@ export default defineSchema({
      * is a different security posture than one that holds ids.
      */
     openRouterKeyHash: v.optional(v.string()),
+    /**
+     * Which collection sweeps have already run today, as `{sweep: dayKey}`.
+     *
+     * The once-a-day claim for the watchers layer (§3.1). A JSON field rather
+     * than a table because the schema sits near TypeScript's instantiation
+     * ceiling — and rather than a JOB, which the first draft used and which
+     * would have dead-lettered five entries per customer per day: a dedupe
+     * lock borrowed from a work queue is a work item.
+     */
+    sweptJson: v.optional(v.string()),
     /** Where she texts them. Absent until Telegram pairing completes. */
     telegramChatId: v.optional(v.string()),
     /**

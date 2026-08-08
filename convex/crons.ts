@@ -191,6 +191,27 @@ crons.interval(
   {}
 );
 
+/**
+ * ⭐ THE WATCHERS (§3.1) — collection that does not depend on her.
+ *
+ * *"She is NOT the thing polling APIs."* Every sweep was reachable only through
+ * `hooks.ts` until 2026-08-08, so the niche was watched only when she
+ * remembered to call the tool. The morning-brief turn failed that day and
+ * produced nothing; had it been the scroll turn instead, the day's perception
+ * would have been silently empty.
+ *
+ * Every 10 minutes, but each customer runs once — `isDue` gates on their own
+ * jittered slot inside the 07:00 local hour, and `claimSweep` makes it once per
+ * founder-day however many ticks pass. Firing often and claiming once is what
+ * makes a missed tick recoverable instead of a lost day.
+ */
+crons.interval(
+  "maya-watchers-sweep",
+  { minutes: 10 },
+  internal.maya.watchers.sweepDue,
+  {}
+);
+
 // The liveness contract (§12), independent of every worker above.
 crons.interval(
   "maya-liveness-sweep",
