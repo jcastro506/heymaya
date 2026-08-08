@@ -404,6 +404,15 @@ export function checkBalance(
  * Gather the facts for one customer. Deliberately a query with no judgment in
  * it — `evaluate` decides, and it's pure so every branch is testable.
  */
+/** The founder's timezone, for anything the sweep keys per day. */
+export const timezoneFor = internalQuery({
+  args: { customerId: v.id("customers") },
+  handler: async (ctx, args): Promise<string> => {
+    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    return customer?.timezone ?? "UTC";
+  },
+});
+
 export const gatherFacts = internalQuery({
   args: { customerId: v.id("customers"), now: v.optional(v.number()) },
   handler: async (
