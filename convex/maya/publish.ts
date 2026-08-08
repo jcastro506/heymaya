@@ -385,6 +385,22 @@ export const publishPlacement = internalAction({
       const draft = await ctx.runQuery(internal.maya.drafts.byId, {
         draftId: args.draftId,
       });
+
+      /**
+       * ⭐ The promise is kept HERE, matched on the idea.
+       *
+       * Not passed in by the caller: a join something has to remember is a
+       * join that eventually isn't made, which is exactly how
+       * `placements.ideaId` stayed empty for a whole sprint. Publishing keeps
+       * the plan without the publish path needing to know a plan exists.
+       */
+      if (draft?.ideaId) {
+        await ctx.runMutation(internal.maya.dayPlan.markDoneByIdea, {
+          customerId: args.customerId,
+          ideaId: draft.ideaId,
+          placementId,
+        });
+      }
       if (draft?.outcome === "pending") {
         await ctx.runMutation(internal.maya.drafts.decide, {
           draftId: args.draftId,

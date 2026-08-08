@@ -202,6 +202,7 @@ import type * as maya_competitors from "../maya/competitors.js";
 import type * as maya_complaints from "../maya/complaints.js";
 import type * as maya_cringeEval from "../maya/cringeEval.js";
 import type * as maya_dailyReport from "../maya/dailyReport.js";
+import type * as maya_dayPlan from "../maya/dayPlan.js";
 import type * as maya_deploy from "../maya/deploy.js";
 import type * as maya_directiveGate from "../maya/directiveGate.js";
 import type * as maya_directives from "../maya/directives.js";
@@ -458,6 +459,7 @@ declare const fullApi: ApiFromModules<{
   "maya/complaints": typeof maya_complaints;
   "maya/cringeEval": typeof maya_cringeEval;
   "maya/dailyReport": typeof maya_dailyReport;
+  "maya/dayPlan": typeof maya_dayPlan;
   "maya/deploy": typeof maya_deploy;
   "maya/directiveGate": typeof maya_directiveGate;
   "maya/directives": typeof maya_directives;
