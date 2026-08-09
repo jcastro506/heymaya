@@ -62,6 +62,21 @@ export interface BrandKit {
   };
   fonts?: { display?: string; body?: string };
   /**
+   * ⭐ Where the font FILES live — not just their names.
+   *
+   * ⚠️ Measured 2026-08-08: a renderer given only the name silently falls back
+   * to a generic face. Geist, Instrument Serif and `sans-serif` produced
+   * **byte-identical output** — 2,634 bytes each. Nothing errored; every slide
+   * would just quietly have been off-brand.
+   *
+   * With the actual file embedded, the same slide renders at 13,865 bytes in
+   * the real typeface. So the name is decorative and the URL is the asset.
+   *
+   * `woff2` is what every modern site ships and resvg accepts it directly —
+   * verified against hey-maya.ai's own Geist file.
+   */
+  fontUrls?: string[];
+  /**
    * The colours the site uses most, in order — OBSERVED, not assigned.
    *
    * Present when no named palette could be read. Downstream must treat these
@@ -246,6 +261,24 @@ export function observedColors(css: string, limit = 5): string[] {
     .map(([hex]) => hex);
 }
 
+/**
+ * The font FILES a stylesheet points at.
+ *
+ * Deduped and capped: a site ships one `@font-face` per unicode-range — the
+ * live page declared eight for Geist alone, all the same typeface sliced by
+ * script. Six is comfortably enough for a display and a body face in Latin,
+ * and pulling forty would spend a second of render time on glyphs no post uses.
+ */
+export function extractFontUrls(css: string, pageUrl: string): string[] {
+  const found: string[] = [];
+  for (const m of css.matchAll(/url\(([^)]+\.woff2?[^)]*)\)/gi)) {
+    const raw = m[1].replace(/["']/g, "").trim();
+    const abs = absoluteUrl(raw, pageUrl);
+    if (abs && !found.includes(abs)) found.push(abs);
+  }
+  return found.slice(0, 6);
+}
+
 /** Fonts, in declaration order — the first family a page names is its display. */
 export function extractFonts(html: string): BrandKit["fonts"] {
   const families: string[] = [];
@@ -308,7 +341,18 @@ export function extractFromHtml(
   html: string,
   pageUrl: string,
   /** Concatenated external stylesheets, where the colours and fonts live. */
-  css = ""
+  css = "",
+  /**
+   * ⚠️ The STYLESHEET's URL, which is not the page's.
+   *
+   * `url(../media/geist.woff2)` inside `/_next/static/chunks/app.css` resolves
+   * to `/_next/static/media/geist.woff2`. Resolved against the page instead it
+   * becomes `/media/geist.woff2` — a 404, and one that would surface as
+   * "brand fonts unavailable" rather than as a bad URL.
+   *
+   * Defaults to the page so a caller with only inline `<style>` still works.
+   */
+  cssUrl?: string
 ): BrandKit {
   const logos = extractLogos(html, pageUrl);
   // The page first — an inline `:root` block is the site's own declaration and
@@ -316,8 +360,10 @@ export function extractFromHtml(
   const named = extractPalette(html) ?? extractPalette(css);
   const all = `${html}\n${css}`;
 
+  const fontUrls = extractFontUrls(css, cssUrl ?? pageUrl);
   const kit: BrandKit = {
     logo: logos.length > 0 ? { primary: logos[0], mark: logos[1] } : undefined,
+    fontUrls: fontUrls.length > 0 ? fontUrls : undefined,
     palette: named,
     // Only when nothing was NAMED. Observed colours are a proposal, and
     // offering them alongside a real palette would invite treating them as one.
@@ -445,7 +491,9 @@ export const extractBrandKit = internalAction({
      * the register are still worth having.
      */
     let css = "";
+    let cssUrl: string | undefined;
     for (const href of extractStylesheets(page.html, page.finalUrl)) {
+      cssUrl ??= href;
       try {
         const res = await fetch(href, {
           headers: { "User-Agent": "HeyMaya/1.0 (+https://hey-maya.ai)" },
@@ -456,7 +504,7 @@ export const extractBrandKit = internalAction({
       }
     }
 
-    const kit = extractFromHtml(page.html, url, css);
+    const kit = extractFromHtml(page.html, url, css, cssUrl);
 
     // The one thing not written down in the markup.
     const apiKey = process.env.OPENROUTER_API_KEY;
