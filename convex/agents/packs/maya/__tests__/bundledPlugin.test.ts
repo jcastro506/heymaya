@@ -153,6 +153,10 @@ describe("the install contract", () => {
       "draft",
       "history",
       "inbox",
+      // ⭐ Joined 2026-08-09. It existed as an action with ZERO callers — built,
+      // tested, verified live by hand, and unreachable by the agent, which is
+      // this codebase's dominant defect class.
+      "make_carousel",
       "pending",
       "publish",
       "remember",
