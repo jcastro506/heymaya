@@ -14,6 +14,8 @@ import {
   nicheFingerprint,
   parseCard,
   parseMetrics,
+  mineHashtags,
+  MAX_TAGS_PER_CHANNEL,
   pickCard,
   videoIdFrom,
   type FormatCard,
@@ -207,5 +209,76 @@ describe("extractYoutubeTranscript", () => {
   it("returns null when there's nothing, rather than an empty-looking string", () => {
     expect(extractYoutubeTranscript(null)).toBeNull();
     expect(extractYoutubeTranscript({ nope: true })).toBeNull();
+  });
+});
+
+describe("mineHashtags", () => {
+  const post = (text: string, views: number) => ({ text, views });
+
+  /**
+   * ⭐ §7.5.9: "Hashtags are a research output, not a generation output."
+   *
+   * Ranked by the median views of the posts using each tag, NOT by frequency.
+   * Frequency finds the tags everyone uses; median performance finds the ones
+   * that were on the posts that worked — a different set, and the one worth
+   * borrowing.
+   */
+  it("ranks by how the posts using a tag performed, not by how common it is", () => {
+    const mined = mineHashtags([
+      post("a #common", 10),
+      post("b #common", 10),
+      post("c #common", 10),
+      post("d #rare", 900_000),
+      post("e #rare", 900_000),
+    ]);
+    expect(mined[0].tag).toBe("rare");
+    // The common tag appears more often and still loses. That's the point.
+    expect(mined.find((t) => t.tag === "common")?.uses).toBe(3);
+  });
+
+  it("drops a tag seen only once — that's a lucky post, not a pattern", () => {
+    const mined = mineHashtags([post("x #once", 5_000_000)]);
+    expect(mined).toEqual([]);
+  });
+
+  /**
+   * ⚠️ `#fyp` and family are the most common output of "ask a model for ten
+   * hashtags" and do nothing. They also dominate any frequency ranking, so
+   * mining without excluding them returns them every time.
+   */
+  it("excludes platform-noise tags however well they appear to perform", () => {
+    const mined = mineHashtags([
+      post("a #fyp #foryou #viral #realtag", 1_000_000),
+      post("b #fyp #foryou #viral #realtag", 1_000_000),
+    ]);
+    expect(mined.map((t) => t.tag)).toEqual(["realtag"]);
+  });
+
+  it("counts one post once, however many times it repeats a tag", () => {
+    const mined = mineHashtags([
+      post("#dup #dup #dup", 100),
+      post("#dup", 100),
+    ]);
+    expect(mined[0].uses).toBe(2);
+  });
+
+  it("reads tags with non-ASCII letters and digits", () => {
+    const mined = mineHashtags([post("#café2 x", 100), post("#café2 y", 100)]);
+    expect(mined[0].tag).toBe("café2");
+  });
+
+  it("returns an empty set rather than inventing one", () => {
+    // The caller must then post with NO hashtags. An empty set is a real
+    // answer; generating tags here would undo the whole point.
+    expect(mineHashtags([])).toEqual([]);
+    expect(mineHashtags([post("no tags here", 100)])).toEqual([]);
+  });
+
+  it("caps the set so it stays a set rather than a dictionary", () => {
+    const posts = Array.from({ length: 60 }, (_, i) => [
+      post(`#tag${i}`, 100),
+      post(`#tag${i}`, 100),
+    ]).flat();
+    expect(mineHashtags(posts).length).toBeLessThanOrEqual(MAX_TAGS_PER_CHANNEL);
   });
 });
