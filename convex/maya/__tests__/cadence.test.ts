@@ -17,7 +17,9 @@ import { convexTest } from "convex-test";
 import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
-import { dayKeyInZone, EXIT_STREAK_DAYS } from "../cadence";
+import { dayKeyInZone, EXIT_STREAK_DAYS,
+  weekKeyInZone,
+} from "../cadence";
 import type { Id } from "../../_generated/dataModel";
 
 /** Wednesday 2026-08-05, 14:00 UTC = 10:00 in New York. */
@@ -240,3 +242,36 @@ async function addPlacement(
     });
   });
 }
+
+describe("weekKeyInZone", () => {
+  it("gives one key for every day of the same week", () => {
+    // Mon 2026-08-03 through Sun 2026-08-09, all in New York.
+    const keys = [3, 4, 5, 6, 7, 8, 9].map((d) =>
+      weekKeyInZone(Date.parse(`2026-08-0${d}T15:00:00Z`), "America/New_York")
+    );
+    expect(new Set(keys).size).toBe(1);
+    expect(keys[0]).toBe("w2026-08-03");
+  });
+
+  it("rolls over on Monday, not Sunday", () => {
+    const sunday = weekKeyInZone(Date.parse("2026-08-09T15:00:00Z"), "America/New_York");
+    const monday = weekKeyInZone(Date.parse("2026-08-10T15:00:00Z"), "America/New_York");
+    expect(sunday).toBe("w2026-08-03");
+    expect(monday).toBe("w2026-08-10");
+  });
+
+  /**
+   * ⚠️ The reason this is built on `dayKeyInZone` rather than UTC.
+   *
+   * 20:00 Sunday in New York is already Monday in UTC. A UTC-derived week
+   * boundary would move the founder's week by a day — and a weekly job would
+   * claim a week they haven't reached, reporting a skipped run as a completed
+   * one.
+   */
+  it("uses the founder's week, not UTC's", () => {
+    // 2026-08-10T01:00Z is Monday in UTC but still Sunday evening in New York.
+    const ts = Date.parse("2026-08-10T01:00:00Z");
+    expect(weekKeyInZone(ts, "America/New_York")).toBe("w2026-08-03");
+    expect(weekKeyInZone(ts, "UTC")).toBe("w2026-08-10");
+  });
+});
