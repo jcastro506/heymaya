@@ -3474,6 +3474,17 @@ export default defineSchema({
      * lock borrowed from a work queue is a work item.
      */
     sweptJson: v.optional(v.string()),
+    /**
+     * ⭐ TikTok rendered-preview confirmations, `{fingerprint: confirmedAt}`.
+     *
+     * Keyed to a fingerprint of the exact assets + caption the founder was
+     * shown, because a boolean would authorise the NEXT post rather than the
+     * one they looked at. See `maya/tiktokConsent.ts`.
+     *
+     * A JSON field rather than a table: the schema sits near TypeScript's
+     * instantiation ceiling, and this is a small bounded per-customer map.
+     */
+    tiktokConsentJson: v.optional(v.string()),
     /** Where she texts them. Absent until Telegram pairing completes. */
     telegramChatId: v.optional(v.string()),
     /**

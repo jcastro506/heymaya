@@ -99,6 +99,19 @@ export interface PublishTextInput {
   channel: string;
   text: string;
   /**
+   * ⭐ TikTok's rendered-preview consent, and ONLY when it was really given.
+   *
+   * TikTok requires a human to confirm what will be posted before an
+   * API-published post goes out. This is deliberately not a boolean the caller
+   * flips — it arrives as the settings object or not at all, produced by
+   * `maya/tiktokConsent.tiktokSettingsFor`, so there is one place these flags
+   * can originate.
+   *
+   * ⚠️ Never default it to true. Doing so is a compliance statement about a
+   * human action that didn't happen.
+   */
+  tiktokSettings?: { contentPreviewConfirmed: true; expressConsentGiven: true };
+  /**
    * ⭐ The post this replies to — a COLD REPLY when it's someone else's.
    *
    * §5's "join conversations" rung, and the spec marks it **live-proven** on X
@@ -178,6 +191,10 @@ export async function publishText(
                   // comment API, Instagram is own-comments only).
                   platformSpecificData: { replyToTweetId: input.inReplyTo },
                 }
+              : {}),
+            // Present only when a matching confirmation was on file.
+            ...(platform === "tiktok" && input.tiktokSettings
+              ? { platformSpecificData: { ...input.tiktokSettings } }
               : {}),
           },
         ],
