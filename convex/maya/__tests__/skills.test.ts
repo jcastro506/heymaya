@@ -21,10 +21,18 @@ const HOOKS = join(__dirname, "..", "hooks.ts");
 const HTTP = join(__dirname, "..", "..", "http.ts");
 
 function skillDirs(): string[] {
-  return readdirSync(PACK).filter((name) =>
-    statSync(join(PACK, name)).isDirectory()
+  return readdirSync(PACK).filter(
+    (name) =>
+      // ⚠️ `PLATFORM_ALGO/` is channel expertise, not a skill: it holds
+      // `{channel}.md`, not a `SKILL.md`. Every check here reads `SKILL.md`
+      // from each directory, so leaving it in makes the whole file ENOENT
+      // rather than fail one assertion.
+      name !== PLATFORM_ALGO_DIR && statSync(join(PACK, name)).isDirectory()
   );
 }
+
+/** Channel prose the skills cite. Covered by its own checks below. */
+const PLATFORM_ALGO_DIR = "PLATFORM_ALGO";
 
 function read(name: string): string {
   return readFileSync(join(PACK, name, "SKILL.md"), "utf8");
