@@ -130,9 +130,13 @@ const FONT_TIMEOUT_MS = 5_000;
  * Fetch the brand's own font files.
  *
  * ⚠️ Measured 2026-08-08: without these, `Geist`, `Instrument Serif` and
- * `sans-serif` render **byte-identically** — the renderer falls back to a
- * generic face and reports nothing. Every slide would be quietly off-brand,
- * which is worse than a wrong colour because type is on all of them.
+ * `sans-serif` render **byte-identically**. Read at the time as "falls back to
+ * a generic face"; **corrected 2026-08-09 — it drew no text at all.** They
+ * matched because all three were blank. See `loadBundledFonts`, which is why
+ * the floor is now a real typeface rather than nothing.
+ *
+ * These are still the upgrade: the bundled face is *a* font, not *their* font,
+ * and type is on every slide.
  *
  * A font that fails to fetch is skipped rather than fatal, and the count is
  * returned so the caller can tell "rendered in your fonts" from "rendered in
