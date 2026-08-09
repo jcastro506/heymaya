@@ -40,7 +40,7 @@ import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
-import { dayKeyInZone } from "./cadence";
+import { dayKeyInZone, weekKeyInZone } from "./cadence";
 
 /** Local hour the day's collection should have happened by. */
 export const SWEEP_HOUR_LOCAL = 7;
@@ -159,6 +159,21 @@ export const sweptFor = internalQuery({
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * ⭐ Weekly collection, claimed per WEEK rather than per day.
+ *
+ * ⚠️ Both of these had **zero callers** when they were written. §5.3 calls the
+ * format library *"the single most differentiated capability in the product"*,
+ * and it was an `internalAction` nobody invoked — which is this codebase's
+ * dominant defect class (14 prior instances) and exactly what it looks like
+ * from the inside: the code is right, the tests pass, and nothing happens.
+ *
+ * They ride the same daily cron as the sweeps above. The week key is what makes
+ * them weekly — a claim that already exists for this week is skipped, so the
+ * cron can fire every day and the work happens once.
+ */
+export const WEEKLY_SWEEPS = ["formats", "hashtags"] as const;
+
 export const SWEEPS = [
   "scroll",
   "trends",
@@ -252,6 +267,43 @@ export const sweepDue = internalAction({
           failed += 1;
           console.error(
             `[watchers] ${sweep} failed for ${customerId}: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        }
+      }
+
+      /**
+       * The weekly half.
+       *
+       * ⚠️ Runs AFTER the daily sweeps, deliberately. `watch-formats` reads the
+       * observations `scroll` collects, so running it first would build this
+       * week's format library out of last week's rows — which would look
+       * completely normal and be quietly a week stale, forever.
+       */
+      const week = weekKeyInZone(now, timezone);
+      const weeklyRefs = {
+        formats: internal.maya.formats.watchFormats,
+        hashtags: internal.maya.formats.mineHashtagSets,
+      } as const;
+
+      for (const sweep of WEEKLY_SWEEPS) {
+        const claim = await ctx.runMutation(internal.maya.watchers.claimSweep, {
+          customerId,
+          sweep,
+          day: week,
+        });
+        if (!claim.claimed) {
+          skipped += 1;
+          continue;
+        }
+        try {
+          await ctx.runAction(weeklyRefs[sweep], { customerId, now });
+          ran += 1;
+        } catch (error) {
+          failed += 1;
+          console.error(
+            `[watchers] weekly ${sweep} failed for ${customerId}: ${
               error instanceof Error ? error.message : String(error)
             }`
           );

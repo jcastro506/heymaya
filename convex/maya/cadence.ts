@@ -298,3 +298,27 @@ export const fleetCadence = internalQuery({
     return rows;
   },
 });
+
+/**
+ * The week a moment falls in, in the founder's timezone.
+ *
+ * ⭐ Monday-anchored and expressed as that Monday's day key, so a weekly job
+ * claimed on Sunday night and one claimed on Monday morning are correctly
+ * different weeks — and the same job on Tuesday and Friday is correctly the
+ * same one.
+ *
+ * ⚠️ Built on `dayKeyInZone` rather than on UTC dates for the reason that
+ * whole file exists: 20:00 New York is already tomorrow in UTC, so a
+ * UTC-derived week boundary moves the founder's week by a day and reports a
+ * skipped run as a completed one.
+ */
+export function weekKeyInZone(ts: number, timezone: string): string {
+  const dayKey = dayKeyInZone(ts, timezone);
+  // `en-CA` gives YYYY-MM-DD; parsed as UTC midnight it's a stable calendar
+  // date with no clock component to drift.
+  const asUtc = new Date(`${dayKey}T00:00:00Z`);
+  // getUTCDay: 0 = Sunday. Shift so Monday starts the week.
+  const shift = (asUtc.getUTCDay() + 6) % 7;
+  asUtc.setUTCDate(asUtc.getUTCDate() - shift);
+  return `w${asUtc.toISOString().slice(0, 10)}`;
+}
