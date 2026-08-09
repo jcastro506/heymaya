@@ -13,6 +13,8 @@
  */
 import { describe, expect, it, beforeAll } from "vitest";
 import { NextRequest } from "next/server";
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
 
 const SECRET = "test-secret";
 const SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920"><rect width="1080" height="1920" fill="#0a0a0a"/><text x="72" y="500" font-family="Geist" font-size="84" fill="#fbfaf6">Nobody knows it exists</text></svg>`;
@@ -75,22 +77,39 @@ describe("it produces a real image", () => {
   });
 });
 
+/** The faces that ship with the deploy — the floor the count can never go under. */
+const BUNDLED_COUNT = readdirSync(join(process.cwd(), "assets", "fonts")).filter(
+  (f) => f.endsWith(".ttf")
+).length;
+
 describe("⭐ it says whether these are really their fonts", () => {
-  it("reports zero when none were supplied", async () => {
-    // The measured trap: with no font file, Geist and sans-serif render
-    // byte-identically and nothing errors. The count is how a caller tells
-    // "rendered in your fonts" from "rendered in something".
+  /**
+   * ⚠️ These two assertions used to require `x-fonts-embedded: 0`, on the
+   * reasoning that *"with no font file, Geist and sans-serif render
+   * byte-identically and nothing errors."*
+   *
+   * The first half of that was a misreading of a real measurement. The two
+   * outputs were identical because **neither drew any text at all** — resvg
+   * with no font buffers omits every glyph and still returns a valid PNG. The
+   * comparison that produced it never looked at the image.
+   *
+   * So zero is not a reportable state any more; it's the one state the route
+   * refuses to return. The count now starts at the bundled floor and rises
+   * when the brand's own faces load.
+   */
+  it("reports the bundled floor when no brand fonts were supplied", async () => {
     const res = await POST(req({ svg: SVG }));
-    expect(res.headers.get("x-fonts-embedded")).toBe("0");
+    expect(res.headers.get("x-fonts-embedded")).toBe(String(BUNDLED_COUNT));
+    expect(res.headers.get("x-fonts-embedded")).not.toBe("0");
   });
 
-  it("a font that fails to fetch is skipped, not fatal", async () => {
-    // Five of six faces still beats a generic render.
+  it("a font that fails to fetch degrades to the bundled face, not to blank", async () => {
     const res = await POST(
       req({ svg: SVG, fontUrls: ["https://127.0.0.1:1/nope.woff2"] })
     );
     expect(res.status).toBe(200);
-    expect(res.headers.get("x-fonts-embedded")).toBe("0");
+    // Still renders real text — the brand face is the upgrade, not the floor.
+    expect(res.headers.get("x-fonts-embedded")).toBe(String(BUNDLED_COUNT));
   });
 });
 
