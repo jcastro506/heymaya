@@ -12,19 +12,36 @@
  * approximately nothing.
  */
 import { describe, expect, it, beforeAll } from "vitest";
+import { NextRequest } from "next/server";
 
 const SECRET = "test-secret";
 const SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920"><rect width="1080" height="1920" fill="#0a0a0a"/><text x="72" y="500" font-family="Geist" font-size="84" fill="#fbfaf6">Nobody knows it exists</text></svg>`;
 
-let POST: (req: Request) => Promise<Response>;
+/**
+ * ⚠️ Typed from the route itself rather than hand-written.
+ *
+ * The first version declared `(req: Request) => Promise<Response>`, which is
+ * the shape a caller sees but not the one Next exports — `NextRequest` is
+ * narrower than `Request`, so the assignment failed tsc while every test
+ * passed. Deriving the type means the test can never disagree with the route.
+ */
+type RouteModule = typeof import("../route");
+let POST: RouteModule["POST"];
 
 beforeAll(async () => {
   process.env.RENDER_SHARED_SECRET = SECRET;
   ({ POST } = await import("../route"));
 });
 
-function req(body: unknown, auth = `Bearer ${SECRET}`): Request {
-  return new Request("http://test/api/render/slide", {
+/**
+ * Builds what the route actually accepts.
+ *
+ * ⚠️ `NextRequest` is narrower than `Request` — it adds `cookies`, `nextUrl`,
+ * `page` and `ua`. Constructing the real thing here beats casting at each call
+ * site, which is a cast that would keep spreading.
+ */
+function req(body: unknown, auth = `Bearer ${SECRET}`): NextRequest {
+  return new NextRequest("http://test/api/render/slide", {
     method: "POST",
     headers: { authorization: auth, "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -93,7 +110,7 @@ describe("what it refuses", () => {
 
   it("refuses a body that isn't JSON", async () => {
     const res = await POST(
-      new Request("http://test/api/render/slide", {
+      new NextRequest("http://test/api/render/slide", {
         method: "POST",
         headers: { authorization: `Bearer ${SECRET}` },
         body: "not json",
