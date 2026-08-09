@@ -230,6 +230,58 @@ export const scrollNiche = internalAction({
       };
     }
 
+    /**
+     * ⭐ Screen for the niche BEFORE ranking.
+     *
+     * ⚠️ Measured 2026-08-09: this loop was recording whatever the keyword
+     * search returned. For a solo-founder-SaaS account that meant the mined
+     * hashtag sets came back led by `#games`, `#familygames`, `#fungames`, and
+     * the format library held a card from a video about whether the earth gets
+     * heavier as we build buildings.
+     *
+     * The keywords were right — "no time for marketing", "building not
+     * marketing". TikTok's search returns loose matches, and nothing here
+     * checked. `trends.ts` has filtered all along, holding non-matching results
+     * aside as `foreign`; this file, which produces far more rows, did not.
+     *
+     * Nothing looked broken: real posts, real metrics, sweeps reporting
+     * success. The pollution only surfaced two layers downstream.
+     *
+     * Screened before `interleave` on purpose — filtering afterwards would let
+     * off-niche posts consume the returned slots and then be discarded, which
+     * is how a good day still reports three usable observations.
+     */
+    const screen = await ctx.runAction(internal.maya.relevance.screenForNiche, {
+      customerId: args.customerId,
+      niche: targets.keywords,
+      itemsJson: JSON.stringify(
+        observations.map((o) => ({ key: o.sourceUrl, text: o.text }))
+      ),
+    });
+    const inNiche = new Set(screen.keep);
+    for (const [channel, rows] of byChannel) {
+      byChannel.set(
+        channel,
+        rows.filter((o) => inNiche.has(o.sourceUrl))
+      );
+    }
+
+    /**
+     * ⚠️ A screen that removed everything is reported, not published as an
+     * empty morning. §12: honest silence beats fake activity — but "the niche
+     * was quiet" and "I threw all of it away" are different sentences and the
+     * founder is owed the right one.
+     */
+    if ([...byChannel.values()].flat().length === 0) {
+      return {
+        ok: true,
+        observations: [],
+        keywordsSwept: swept,
+        channelsSwept: channels,
+        error: `nothing that came back today was actually about your niche — ${screen.screened} posts, none of them yours`,
+      };
+    }
+
     // Interleaved, NOT globally sorted — the channels don't report the same
     // metrics, so their velocities aren't on one scale. See `channelVelocity`.
     const ranked = interleave([...byChannel.values()], OBSERVATIONS_RETURNED);
