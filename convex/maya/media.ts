@@ -604,3 +604,94 @@ export const storeRendered = internalAction({
     return { ok: true, assetId, url, bytes: bytes.length };
   },
 });
+
+/* -------------------------------------------------------------------------- */
+/* Removing things                                                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ Take an asset back out of the library.
+ *
+ * ⚠️ There was no way to do this. `record` had callers, `tagAsset` had callers,
+ * and nothing could remove anything — so a founder who sent the wrong
+ * screenshot, or a stale one showing an old UI, was stuck with it in
+ * `search_my_media` forever. The only remedies were leaving it and hoping she
+ * didn't pick it, or a hand-written mutation.
+ *
+ * That matters more here than in most libraries: §7.5.3's authenticity floor
+ * ranks a real screenshot ABOVE a generated one, so a wrong screenshot doesn't
+ * merely sit there — it actively outranks the alternatives and gets chosen.
+ *
+ * Deletes the stored bytes too. An orphaned blob nobody can reach is billed
+ * storage that no query will ever surface again.
+ */
+export const forget = internalMutation({
+  args: {
+    customerId: v.id("customers"),
+    assetId: v.id("mediaAssets"),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ forgotten: boolean; reason?: string }> => {
+    const asset = (await ctx.db.get(args.assetId)) as Doc<"mediaAssets"> | null;
+    if (!asset) return { forgotten: false, reason: "that's not in the library" };
+
+    // Cross-tenant guard: an id from another account never resolves.
+    if (asset.customerId !== args.customerId) {
+      return { forgotten: false, reason: "that belongs to a different account" };
+    }
+
+    /**
+     * ⚠️ The row goes whether or not the blob does.
+     *
+     * `storageKey` is a Convex storage id only for assets we rendered
+     * ourselves; anything ingested against an external bucket has a key that
+     * `ctx.storage.delete` will reject. A failed blob delete must not strand
+     * the row — the founder asked for this to be gone, and a visible asset is
+     * the part they can see.
+     */
+    try {
+      await ctx.storage.delete(asset.storageKey as Id<"_storage">);
+    } catch (error) {
+      console.warn(
+        `[media] row ${args.assetId} removed, blob ${asset.storageKey} not: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+
+    await ctx.db.delete(args.assetId);
+    return { forgotten: true };
+  },
+});
+
+/**
+ * Remove every generated asset, keeping everything real.
+ *
+ * The asymmetry is the point: generated slides are reproducible from the idea
+ * that made them, and what the founder sent is not. So a bulk clear can only
+ * ever remove the half we can rebuild.
+ */
+export const forgetGenerated = internalMutation({
+  args: { customerId: v.id("customers") },
+  handler: async (ctx, args): Promise<{ forgotten: number; kept: number }> => {
+    const assets = (await ctx.db
+      .query("mediaAssets")
+      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+      .collect()) as Doc<"mediaAssets">[];
+
+    let forgotten = 0;
+    for (const asset of assets) {
+      if (asset.source !== "generated") continue;
+      try {
+        await ctx.storage.delete(asset.storageKey as Id<"_storage">);
+      } catch {
+        // Same reasoning as `forget` — the row is what matters.
+      }
+      await ctx.db.delete(asset._id);
+      forgotten += 1;
+    }
+    return { forgotten, kept: assets.length - forgotten };
+  },
+});

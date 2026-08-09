@@ -218,6 +218,56 @@ export const publishPlacement = internalAction({
 
     const mediaItems = parseMediaUrls(args.mediaUrlsJson);
 
+    /**
+     * ⭐ TikTok's rendered-preview consent — FAILS CLOSED.
+     *
+     * ⚠️ Nothing in this codebase has ever set `contentPreviewConfirmed` or
+     * `expressConsentGiven`; the only occurrences were in a vendor contract
+     * test. TikTok requires a human to see what will be posted and confirm it
+     * before anything published through the API goes out.
+     *
+     * The tempting fix is to hardcode both flags true. That is worse than the
+     * bug: it is a compliance statement about a human action that never
+     * happened, made by a machine, on the founder's account.
+     *
+     * Unlike the house-rule gate above — which fails OPEN because a missed
+     * house rule costs an apology — this one fails CLOSED. A missed house rule
+     * is between us and the founder; this is a platform requirement, and the
+     * cost of getting it wrong is the account.
+     *
+     * Consent is matched on a fingerprint of exactly these assets and this
+     * caption, so an edit after approval, a re-render, or a reordered set all
+     * correctly stop matching. That is the point, not an inconvenience.
+     */
+    let tiktokSettings:
+      | { contentPreviewConfirmed: true; expressConsentGiven: true }
+      | undefined;
+    if (context.channel === "tiktok") {
+      const { previewFingerprint, tiktokSettingsFor } = await import(
+        "./tiktokConsent"
+      );
+      const fingerprint = previewFingerprint({
+        assetUrls: (mediaItems ?? []).map((m) => m.url),
+        caption: args.snapshotText,
+      });
+      const consent = await ctx.runQuery(
+        internal.maya.tiktokConsent.consentFor,
+        { customerId: args.customerId, fingerprint }
+      );
+      const settings = tiktokSettingsFor({ confirmed: consent.confirmed });
+      if (!settings) {
+        // Stated as TikTok's requirement, not our caution — framed as ours, a
+        // founder can reasonably ask us to skip it.
+        return {
+          ok: false,
+          error: `held — TikTok needs you to see the post before it goes out, and ${
+            consent.reason ?? "I don't have that from you yet"
+          }`,
+        };
+      }
+      tiktokSettings = settings;
+    }
+
     {
       const preflight = await validatePost({
         client: new ZernioClient({ apiKey }),
@@ -336,6 +386,9 @@ export const publishPlacement = internalAction({
       text: args.snapshotText,
       inReplyTo: args.inReplyTo,
       idempotencyKey: args.idempotencyKey,
+      // Present only for TikTok, and only when consent matched these exact
+      // assets and this exact caption. Computed above; never defaulted.
+      tiktokSettings,
     });
 
     if (!outcome.ok) return { ok: false, error: outcome.reason };
