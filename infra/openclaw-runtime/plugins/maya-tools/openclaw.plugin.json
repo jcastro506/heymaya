@@ -14,6 +14,7 @@
   "contracts": {
     "tools": [
       "scroll",
+      "make_carousel",
       "draft",
       "pending",
       "publish",

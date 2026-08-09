@@ -150,6 +150,26 @@ export default defineToolPlugin({
     }),
 
     tool({
+      name: "make_carousel",
+      label: "Make carousel",
+      description:
+        "Turn a banked idea into a finished set of slide images, stored and ready to post. THIS IS THE CHEAP DAILY FORMAT — title, point and CTA slides are the founder's words in their own typeface and colours, so a photo post costs almost nothing to make. Needs an ideaId; there is no free-text path, because a picture has to trace to real evidence for the same reason a caption does. Returns data.slides[] with a public url per slide, in order. ok:false is an ANSWER, and `next` tells you what to actually do: a rejected set or a broken house rule must NOT be retried on the same angle — take a different angle or a different idea. For TikTok the founder must see these and okay them before publishing; that is TikTok's requirement, not ours, and publish will hold without it.",
+      parameters: Type.Object({
+        ideaId: Type.String({
+          description:
+            "The idea this set is built from. Comes from scroll's data.todaysIdea.ideaId, or the bank.",
+        }),
+        steer: Type.Optional(
+          Type.String({
+            description:
+              "Optional nudge from the founder — 'lead with the pricing bit'. Leave it out unless they said something.",
+          })
+        ),
+      }),
+      execute: async (p, _cfg, ctx) => call("make_carousel", p, ctx.signal),
+    }),
+
+    tool({
       name: "draft",
       label: "Draft",
       description:

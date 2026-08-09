@@ -1690,3 +1690,90 @@ function safeJson(raw: string): unknown {
     return null;
   }
 }
+
+/**
+ * ⭐ `make_carousel` — turn a banked idea into a stored, postable slide set.
+ *
+ * ⚠️ `makeCarousel` had **zero callers**. It was built, tested, and verified by
+ * hand against a live deploy, and the agent could not reach it — which is this
+ * codebase's dominant defect class and the exact shape it takes: the code is
+ * right, the suite is green, and in production nothing happens.
+ *
+ * §3435's hard rules are enforced inside the action, not here. This is the
+ * door, not a second gate — a tool that re-checked them would be a second place
+ * they could disagree.
+ */
+export const carouselHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if ("error" in auth) return auth.error;
+  const parsed = await readJson(request);
+  if ("error" in parsed) return parsed.error;
+
+  const ideaId = str(parsed.body, "ideaId");
+  if (!ideaId) {
+    /**
+     * ⚠️ No free-text path, deliberately. §6: every post traces back to
+     * something a real person said, and `drafts.ts` already refuses a post with
+     * no idea. It would be strange for the picture to have a weaker standard
+     * than the caption.
+     */
+    return respond(
+      {
+        ok: false,
+        why: "a carousel has to come from a banked idea, not a prompt",
+        next: "pick an idea from the bank — `scroll` returns today's, and the bank has the rest",
+      },
+      400
+    );
+  }
+
+  const result = await ctx.runAction(internal.maya.carousel.makeCarousel, {
+    customerId: auth.customer._id,
+    ideaId: ideaId as Id<"ideas">,
+    steer: str(parsed.body, "steer") || undefined,
+  });
+
+  if (!result.ok) {
+    /**
+     * ⭐ `next` differs by failure, because the right move genuinely differs.
+     *
+     * Principle 8 — choreography rides in the tool response, never the prompt.
+     * A single "it failed, try again" would make her retry the two cases where
+     * retrying is exactly wrong: a house rule she'd break again, and a critic
+     * that already judged the argument.
+     */
+    const next =
+      result.failure === "house_rule"
+        ? "do not retry this angle. Tell the founder which of their rules it kept breaking and ask whether the rule or the angle should change"
+        : result.failure === "critic_rejected"
+          ? "do not re-render the same set. Either take a different angle on this idea or pick another idea"
+          : result.failure === "no_idea"
+            ? "that idea doesn't exist on this account — pick one from the bank"
+            : "stop and tell the founder you couldn't make the images. Do not retry more than once";
+
+    return respond({
+      ok: false,
+      data: { failure: result.failure ?? "unknown" },
+      why: result.detail,
+      next,
+    });
+  }
+
+  return respond({
+    ok: true,
+    data: {
+      slides: result.slides,
+      /** Provenance — which proven shape this borrowed, if any. */
+      formatCardId: result.formatCardId,
+    },
+    why: result.detail,
+    /**
+     * ⚠️ The consent step is named here rather than left to her judgment.
+     * TikTok requires the founder to confirm the rendered preview, `publish`
+     * fails closed without it, and the hold would otherwise arrive as a
+     * surprise after the work was done.
+     */
+    next:
+      "these are stored and postable. For TikTok the founder must see them and okay them first — that's TikTok's requirement, not ours — so send the images and ask before publishing",
+  });
+});

@@ -23,6 +23,7 @@ import {
   askFounderHttp,
   checkpointHttp,
   draftHttp,
+  carouselHttp,
   scrollHttp,
   rememberHttp,
   updateHttp,
@@ -1028,6 +1029,14 @@ http.route({
 // envelope, including auth failures. See convex/maya/hooks.ts.
 // ---------------------------------------------------------------------------
 http.route({ path: "/maya/scroll", method: "POST", handler: scrollHttp });
+/**
+ * ⭐ The route that made `make_carousel` reachable at all.
+ *
+ * The action, its critic, its house-rule gate and its render chain were all
+ * built and verified live — and had zero callers, because nothing routed to
+ * them. In this codebase that is the failure, not a detail.
+ */
+http.route({ path: "/maya/make_carousel", method: "POST", handler: carouselHttp });
 http.route({ path: "/maya/remember", method: "POST", handler: rememberHttp });
 http.route({ path: "/maya/update", method: "POST", handler: updateHttp });
 http.route({ path: "/maya/history", method: "POST", handler: historyHttp });
