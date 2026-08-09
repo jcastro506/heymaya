@@ -637,3 +637,243 @@ export const cardById = internalQuery({
     return lib.cards.find((c: FormatCard) => c.cardId === args.cardId) ?? null;
   },
 });
+
+/* -------------------------------------------------------------------------- */
+/* Hashtag mining (§7.5.9)                                                     */
+/* -------------------------------------------------------------------------- */
+
+export const HASHTAG_CACHE_KIND = "hashtag_sets";
+
+/** Below this the ranking is one lucky post, not a pattern. */
+export const MIN_TAG_USES = 2;
+
+/** Kept per channel. Past this it stops being a set and becomes a dictionary. */
+export const MAX_TAGS_PER_CHANNEL = 24;
+
+export interface MinedTag {
+  tag: string;
+  /** How many top-performing niche posts used it. Evidence, not a guess. */
+  uses: number;
+  /** Median views of the posts that used it — the ranking signal. */
+  medianViews: number;
+}
+
+/**
+ * ⚠️ Tags that describe the platform, not the topic.
+ *
+ * `#fyp` and its family are the single most common output of "ask a model for
+ * ten hashtags", and they do nothing — they are a tell that the account is
+ * trying rather than a lever that works. They also dominate any frequency
+ * ranking, so mining without excluding them returns them every time.
+ */
+const NOISE_TAGS = new Set([
+  "fyp",
+  "fypage",
+  "foryou",
+  "foryoupage",
+  "viral",
+  "viralvideo",
+  "trending",
+  "explore",
+  "explorepage",
+  "tiktok",
+  "reels",
+  "shorts",
+  "instagram",
+  "youtube",
+]);
+
+/**
+ * ⭐ Which tags the top-performing posts in THIS niche actually use.
+ *
+ * §7.5.9: *"Hashtags are a research output, not a generation output."* The
+ * default everywhere else is to generate them from the post's own text, which
+ * produces generic tag soup that helps nobody.
+ *
+ * ⚠️ No vendor call. The captions of the niche posts we already collected carry
+ * the tags their authors chose, and those rows are paid for. A dedicated
+ * hashtag endpoint exists (`/v1/tiktok/hashtags/popular`) and is the wrong
+ * tool: it returns what is popular *globally*, which is how you end up
+ * recommending `#fyp`.
+ *
+ * Ranked by the median views of the posts using each tag rather than by
+ * frequency. Frequency finds the tags everyone uses; median performance finds
+ * the ones that were on the posts that worked, which is a different set and the
+ * one worth borrowing.
+ */
+export function mineHashtags(
+  posts: Array<{ text: string; views: number }>
+): MinedTag[] {
+  const byTag = new Map<string, number[]>();
+
+  for (const post of posts) {
+    // One post can't vote twice for the same tag.
+    const tags = new Set(
+      (post.text.match(/#[\p{L}\p{N}_]+/gu) ?? []).map((t) =>
+        t.slice(1).toLowerCase()
+      )
+    );
+    for (const tag of tags) {
+      if (!tag || NOISE_TAGS.has(tag)) continue;
+      // A single character isn't a topic.
+      if (tag.length < 2) continue;
+      const list = byTag.get(tag) ?? [];
+      list.push(post.views);
+      byTag.set(tag, list);
+    }
+  }
+
+  const out: MinedTag[] = [];
+  for (const [tag, views] of byTag) {
+    if (views.length < MIN_TAG_USES) continue;
+    out.push({ tag, uses: views.length, medianViews: median(views) });
+  }
+
+  return out
+    .sort((a, b) => b.medianViews - a.medianViews || b.uses - a.uses)
+    .slice(0, MAX_TAGS_PER_CHANNEL);
+}
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? Math.round((sorted[mid - 1] + sorted[mid]) / 2)
+    : sorted[mid];
+}
+
+/**
+ * Mine and cache the sets, per channel.
+ *
+ * Per channel because the tags that work on TikTok are not the tags that work
+ * on YouTube, and pooling them produces a set that is wrong everywhere.
+ */
+export const mineHashtagSets = internalAction({
+  args: { customerId: v.id("customers"), now: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: boolean; perChannel: Record<string, number>; detail: string }> => {
+    const targets = await ctx.runQuery(internal.maya.learnBusiness.targetsFor, {
+      customerId: args.customerId,
+    });
+    if (!targets || targets.keywords.length === 0) {
+      return { ok: false, perChannel: {}, detail: "no niche keywords yet" };
+    }
+
+    const observations = await ctx.runQuery(
+      internal.maya.scroll.recentObservations,
+      { customerId: args.customerId, limit: 400 }
+    );
+
+    const byChannel = new Map<string, Array<{ text: string; views: number }>>();
+    for (const row of observations) {
+      const metrics = parseMetrics(row.metricsJson);
+      if (metrics.views <= 0) continue;
+      const list = byChannel.get(row.channel) ?? [];
+      list.push({ text: row.text ?? "", views: metrics.views });
+      byChannel.set(row.channel, list);
+    }
+
+    const sets: Record<string, MinedTag[]> = {};
+    const perChannel: Record<string, number> = {};
+    for (const [channel, posts] of byChannel) {
+      const mined = mineHashtags(posts);
+      if (mined.length === 0) continue;
+      sets[channel] = mined;
+      perChannel[channel] = mined.length;
+    }
+
+    if (Object.keys(sets).length === 0) {
+      return {
+        ok: false,
+        perChannel: {},
+        detail: "nothing in the niche used tags worth borrowing yet",
+      };
+    }
+
+    await ctx.runMutation(internal.maya.formats.storeHashtagSets, {
+      fingerprint: nicheFingerprint(targets.keywords),
+      setsJson: JSON.stringify(sets),
+      now: args.now,
+    });
+
+    return {
+      ok: true,
+      perChannel,
+      detail: Object.entries(perChannel)
+        .map(([c, n]) => `${c}: ${n}`)
+        .join(", "),
+    };
+  },
+});
+
+export const storeHashtagSets = internalMutation({
+  args: {
+    fingerprint: v.string(),
+    setsJson: v.string(),
+    now: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<{ ok: boolean }> => {
+    const now = args.now ?? Date.now();
+    const existing = (await ctx.db
+      .query("nicheCache")
+      .withIndex("by_fingerprint_and_kind", (q) =>
+        q.eq("nicheFingerprint", args.fingerprint).eq("kind", HASHTAG_CACHE_KIND)
+      )
+      .unique()
+      .catch(() => null)) as Doc<"nicheCache"> | null;
+
+    const row = {
+      nicheFingerprint: args.fingerprint,
+      kind: HASHTAG_CACHE_KIND,
+      payloadJson: args.setsJson,
+      fetchedAt: now,
+      /**
+       * ⚠️ Weekly, deliberately. §7.5.9: *"a tag that worked in March is dead by
+       * July and a stale set is a slow, invisible leak of reach."*
+       */
+      ttlSec: CARD_TTL_SEC,
+      sourceKind: "mined_from_observations",
+    };
+    if (existing) await ctx.db.patch(existing._id, row);
+    else await ctx.db.insert("nicheCache", row);
+    return { ok: true };
+  },
+});
+
+/**
+ * The mined set for one channel.
+ *
+ * ⚠️ Returns `[]` when nothing has been mined. The caller must then post with
+ * NO hashtags — §7.5.9's rule is that tags are *selected from mined sets, never
+ * invented*, and an empty set is a real answer. Falling back to generated tags
+ * here would quietly undo the whole point.
+ */
+export const hashtagsFor = internalQuery({
+  args: { customerId: v.id("customers"), channel: v.string() },
+  handler: async (ctx, args): Promise<MinedTag[]> => {
+    const targets = await ctx.runQuery(internal.maya.learnBusiness.targetsFor, {
+      customerId: args.customerId,
+    });
+    if (!targets || targets.keywords.length === 0) return [];
+
+    const row = (await ctx.db
+      .query("nicheCache")
+      .withIndex("by_fingerprint_and_kind", (q) =>
+        q
+          .eq("nicheFingerprint", nicheFingerprint(targets.keywords))
+          .eq("kind", HASHTAG_CACHE_KIND)
+      )
+      .unique()
+      .catch(() => null)) as Doc<"nicheCache"> | null;
+    if (!row) return [];
+
+    try {
+      const sets = JSON.parse(row.payloadJson) as Record<string, MinedTag[]>;
+      return sets[args.channel] ?? [];
+    } catch {
+      return [];
+    }
+  },
+});

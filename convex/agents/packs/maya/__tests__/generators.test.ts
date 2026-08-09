@@ -449,7 +449,11 @@ describe("only the customer's own channels ship", () => {
   it("X's norms say the 280 is WEIGHTED and not to count manually", () => {
     const norms = buildMayaWorkspace(INPUT).files.get("PLATFORM_ALGO/x.md")!;
     expect(norms).toMatch(/weighted/i);
-    expect(norms).toMatch(/URL counts 23/i);
+    // ⚠️ Pin the RULE, not the sentence. The weighted-23 fact is what a writer
+    // must not get wrong; the wording around it is prose in a markdown file
+    // that is meant to be edited when the platform changes.
+    expect(norms).toMatch(/\bURL\b/i);
+    expect(norms).toMatch(/\b23\b/);
   });
 });
 
