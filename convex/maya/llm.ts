@@ -54,6 +54,51 @@ export interface CallModelInput {
  * A failed recording never fails the call: losing a ledger row is bad, losing
  * the answer the founder is waiting on is worse.
  */
+/**
+ * ⚠️ Models that think before answering, and bill the thinking to `max_tokens`.
+ *
+ * This is the single most expensive misunderstanding in the codebase, and it
+ * has now been discovered twice. `outbound.ts` records the first instance —
+ * *"`maxTokens: 300` against 188 reasoning tokens"* — and fixed it locally by
+ * raising one number, so the trap stayed set everywhere else.
+ *
+ * The second instance, measured 2026-08-09 on `make-carousel`:
+ *
+ * | | |
+ * |---|---|
+ * | `max_tokens` requested | 1200 |
+ * | `reasoning_tokens` spent | **892** |
+ * | left for the actual answer | ~300 |
+ *
+ * That call *just* fit. Add the voice excerpts and a format card to the prompt,
+ * reasoning grows, and the content budget reaches zero — which surfaces as an
+ * **empty completion, not an error.** The post simply doesn't get made, and the
+ * failure names the wrong thing ("I couldn't get a set out of this angle").
+ */
+export const REASONING_MODELS = ["openai/gpt-5.6-luna-pro"];
+
+/**
+ * Room to think, added on top of whatever the caller budgeted.
+ *
+ * ⭐ The point is that `maxTokens` keeps meaning *"how long may the answer
+ * be"*. Callers reason about output length; none of them can reason about how
+ * long a model will deliberate, and requiring them to would put the trap back.
+ *
+ * 1500 covers the observed spread with headroom — the measured cases ran 188
+ * and 892 reasoning tokens.
+ */
+export const REASONING_ALLOWANCE = 1_500;
+
+export function isReasoningModel(model: string): boolean {
+  return REASONING_MODELS.some((m) => model.startsWith(m));
+}
+
+/** What to actually send, given what the caller wants back. */
+export function budgetFor(model: string, maxTokens?: number): number | undefined {
+  if (maxTokens === undefined) return undefined;
+  return isReasoningModel(model) ? maxTokens + REASONING_ALLOWANCE : maxTokens;
+}
+
 export async function callModel(
   ctx: ActionCtx,
   input: CallModelInput
@@ -64,9 +109,22 @@ export async function callModel(
     model: input.model,
     messages: input.messages,
     temperature: input.temperature,
-    maxTokens: input.maxTokens,
+    maxTokens: budgetFor(input.model, input.maxTokens),
     apiKey: input.apiKey,
   });
+
+  /**
+   * ⚠️ An empty completion from a reasoning model is almost always this bug,
+   * and "openrouter returned an empty completion" sends whoever reads it
+   * looking at the vendor instead of at the budget.
+   */
+  if (!result.ok && isReasoningModel(input.model)) {
+    console.error(
+      `[llm] ${input.purpose}: ${result.reason} — ${input.model} reasons before ` +
+        `answering and bills it to max_tokens. Requested ${input.maxTokens ?? "default"} ` +
+        `+ ${REASONING_ALLOWANCE} allowance. If this repeats, the content budget is too small.`
+    );
+  }
 
   // ⚠️ Recorded on failure too. A call that timed out mid-stream, or returned
   // an empty completion after burning reasoning tokens, still cost money —
