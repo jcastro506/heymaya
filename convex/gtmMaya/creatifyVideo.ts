@@ -150,6 +150,14 @@ interface StartResult {
   budgetMode?: string;
   /** On graceful_degrade — the cheaper format Maya should fall back to. */
   suggest?: string;
+  /**
+   * ⭐ §7.6.5a — the degrade, STATED.
+   *
+   * Set when the multi-scene render the caller asked for could not happen and
+   * a single-scene one was made instead. Plain language, relayed to the
+   * founder unchanged. Absent when nothing was given up.
+   */
+  degraded?: string;
 }
 interface JobView {
   jobId: string;
@@ -686,10 +694,35 @@ export const startUgcVideoJob = internalAction({
       };
     }
 
-    // Multi-scene v2 needs an explicit avatar id per avatar scene; without one
-    // we fall back to single-scene v1 (which has a provider default avatar).
+    /**
+     * ⚠️ Multi-scene v2 needs an explicit avatar id, and without one this drops
+     * to single-scene v1 — which uses a PROVIDER DEFAULT AVATAR.
+     *
+     * §7.6.5a names this as the failure it exists to prevent: *"the founder got
+     * an AI talking head they never agreed to, and nothing said so."* The
+     * fallback itself is fine; the silence was the defect. The scene sandwich
+     * the caller asked for simply didn't happen, the result said `ok: true`,
+     * and no field distinguished it from the video that was requested.
+     *
+     * §7.5.3 is why this matters more than it looks: an avatar is the most
+     * reliably AI-flagged artifact on TikTok, so an unrequested one is an
+     * authenticity cost the founder never chose to pay. Principle 5 — nothing
+     * fails silently — and `assetFloor.needsStating` encodes the same rule for
+     * the planning side.
+     */
     const wantsScenes = (args.scenes?.length ?? 0) > 0;
     const useV2 = wantsScenes && Boolean(args.overrideAvatar);
+    const degraded =
+      wantsScenes && !args.overrideAvatar
+        ? "this came out as one continuous take rather than the cut-together version — " +
+          "no presenter was picked, so it used a generic one. Pick one and I'll rebuild it properly."
+        : undefined;
+    if (degraded) {
+      console.warn(
+        `[creatifyVideo] agent ${args.agentId}: ${args.scenes?.length ?? 0} scenes requested, ` +
+          `no overrideAvatar — falling back to single-scene v1 with a provider default avatar`
+      );
+    }
 
     try {
       const aspect =
@@ -765,6 +798,7 @@ export const startUgcVideoJob = internalAction({
         creatifyId: job.id,
         status: job.status ?? "pending",
         budgetMode: verdict.mode,
+        degraded,
       };
     } catch (err) {
       return {
