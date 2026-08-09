@@ -24,6 +24,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { checkPlainLanguage } from "./plainLanguage";
+import { dayScanFloor, isSameDayInZone } from "./cadence";
 
 const SURFACE = v.union(
   v.literal("telegram"),
@@ -73,6 +74,73 @@ export const recordInbound = internalMutation({
  * Scope the key to the thing it's about, not to the moment: `brief:<date>`,
  * not `brief:<timestamp>`.
  */
+
+/**
+ * ⭐ THE ONE WRITER. Every outbound message goes through here.
+ *
+ * Two things must happen for a message to actually reach a founder, and both
+ * were previously duplicated in `send` and simply missing from `askFounder`:
+ *
+ *  1. **The plain-language guard** — the last thing between her machinery and
+ *     their chat. It catches the class the prompt structurally cannot: strings
+ *     she never wrote, interpolated by code. `ingestFromTelegram` returned
+ *     `error.message` and `telegramFiles` put it straight into a body, so an
+ *     R2 failure would have reached a founder as "The specified bucket does
+ *     not exist". Redacted, never dropped (§2.5) — the LOG keeps the original
+ *     so an operator can find the source instead of guessing.
+ *
+ *  2. **The delivery job** — delivery is a JOB, not a side effect of writing.
+ *     Sending inline would mean a transient Telegram 502 silently loses a
+ *     brief; through the queue it retries with backoff and, failing that,
+ *     lands in the dead-letter view where someone can see it.
+ *
+ * A second write path that skips either one is not a shortcut, it is a message
+ * that never arrives. That is precisely what `askFounder` was.
+ */
+async function writeOutbound(
+  ctx: MutationCtx,
+  row: {
+    customerId: Id<"customers">;
+    surface: "telegram" | "web" | "system";
+    body: string;
+    dedupeKey: string;
+    proactive?: boolean;
+    awaitingAnswer?: boolean;
+    turnId?: string;
+    ts: number;
+  }
+): Promise<Id<"messages">> {
+  const plain = checkPlainLanguage(row.body);
+  if (!plain.ok) {
+    console.error(
+      `[messages] redacted ${plain.redacted.join(", ")} from ${row.dedupeKey}: ${row.body}`
+    );
+  }
+
+  const messageId = await ctx.db.insert("messages", {
+    customerId: row.customerId,
+    direction: "out",
+    surface: row.surface,
+    body: plain.clean,
+    dedupeKey: row.dedupeKey,
+    proactive: row.proactive,
+    awaitingAnswer: row.awaitingAnswer,
+    turnId: row.turnId,
+    ts: row.ts,
+  });
+
+  if (row.surface === "telegram") {
+    await ctx.runMutation(internal.maya.jobs.enqueue, {
+      kind: "deliver_message",
+      idempotencyKey: `deliver:${messageId}`,
+      customerId: row.customerId,
+      payloadJson: JSON.stringify({ messageId }),
+    });
+  }
+
+  return messageId;
+}
+
 export const send = internalMutation({
   args: {
     customerId: v.id("customers"),
@@ -99,76 +167,29 @@ export const send = internalMutation({
       .first();
     if (existing) return { messageId: existing._id, sent: false };
 
-    /**
-     * ⭐ THE LAST THING BETWEEN HER MACHINERY AND THEIR CHAT.
-     *
-     * Every outbound message funnels through this function, which makes it the
-     * only place a guard can be complete. It catches the class the prompt
-     * structurally cannot — strings she never wrote, interpolated in by code:
-     * an exception, a vendor's name, a bucket error, an id.
-     *
-     * That is not hypothetical. `ingestFromTelegram` returned `error.message`
-     * and `telegramFiles` put it straight into a body, so an R2 failure would
-     * have reached a founder as "The specified bucket does not exist". Fixed
-     * at the source; this is the backstop for the next one.
-     *
-     * Redacted, never dropped (§2.5) — and the LOG keeps the original, so an
-     * operator can find the source instead of guessing from a sanitized
-     * sentence.
-     */
-    const plain = checkPlainLanguage(args.body);
-    if (!plain.ok) {
-      console.error(
-        `[messages] redacted ${plain.redacted.join(", ")} from ${args.dedupeKey}: ${args.body}`
-      );
-    }
-
-    const messageId = await ctx.db.insert("messages", {
+    // ⭐ One writer — the plain-language guard and the delivery job both live
+    // in `writeOutbound`. `askFounder` skipped this block entirely when it was
+    // inline here, and its questions were never delivered.
+    const messageId = await writeOutbound(ctx, {
       customerId: args.customerId,
-      direction: "out",
       surface: args.surface,
-      body: plain.clean,
+      body: args.body,
       dedupeKey: args.dedupeKey,
       proactive: args.proactive,
       turnId: args.turnId,
       ts: args.ts ?? Date.now(),
     });
 
-    // Delivery is a JOB, not a side effect of writing. Sending inline would
-    // mean a transient Telegram 502 silently loses a brief; through the queue
-    // it retries with backoff and, if it never lands, ends up in the
-    // dead-letter view where someone can see it.
-    if (args.surface === "telegram") {
-      await ctx.runMutation(internal.maya.jobs.enqueue, {
-        kind: "deliver_message",
-        idempotencyKey: `deliver:${messageId}`,
-        customerId: args.customerId,
-        payloadJson: JSON.stringify({ messageId }),
-      });
-
-      /**
-       * ⭐ Delivery latency is the CALLER's call, not this function's.
-       *
-       * `drainJobs` had exactly one caller — a **5-minute** interval cron — so
-       * every message written here sat in the queue an average of two and a
-       * half minutes. Including her replies: `handoff` routes those through
-       * here too, so a founder could ask a question, watch the typing
-       * indicator stop, and get the answer four minutes later.
-       *
-       * Measured on staging 2026-08-05: two messages created 22s apart were
-       * delivered 316ms apart — one sweep — and the gap to the previous sweep
-       * was exactly 1,200,000ms. Cron-only, confirmed.
-       *
-       * The cron was never *meant* to be the delivery path. The comment above
-       * it says what it's for: work that must survive *"the machine being
-       * unreachable."* It stays exactly that — a backstop.
-       *
-       * So anything with a human waiting calls `deliverNow()` (scheduler.ts)
-       * straight after this, which drains inline and returns once the message
-       * is actually out. Batch work — a brief, a recap — just lets the cron
-       * pick it up, because five minutes there is invisible.
-       */
-    }
+    /**
+     * ⭐ Delivery latency is the CALLER's call, not this function's.
+     *
+     * `drainJobs` had exactly one caller — a 5-minute interval cron — so every
+     * message sat in the queue an average of two and a half minutes,
+     * including her replies. Anything with a human waiting calls
+     * `deliverNow()` (scheduler.ts) straight after this, which drains inline
+     * and returns once the message is actually out. Batch work — a brief, a
+     * recap — just lets the cron pick it up.
+     */
 
     return { messageId, sent: true };
   },
@@ -228,9 +249,23 @@ export const askFounder = internalMutation({
       .first();
     if (existing) return { messageId: existing._id, asked: false };
 
-    const messageId = await ctx.db.insert("messages", {
+    /**
+     * ⚠️ This used to `ctx.db.insert` directly, and that was two bugs.
+     *
+     * `send`'s comment claims *"every outbound message funnels through this
+     * function, which makes it the only place a guard can be complete."* This
+     * one didn't, so it got **neither** the plain-language guard **nor** the
+     * `deliver_message` job — meaning every question she has ever asked was
+     * written to the table and never sent to Telegram at all.
+     *
+     * Caught 2026-08-06 by watching a real row: a draft question was created
+     * with `awaitingAnswer: true` and `deliveredAt: null`, and nothing was
+     * ever going to move it, because delivery is enqueued and no job existed.
+     *
+     * Now both paths share one writer, so the claim in that comment is true.
+     */
+    const messageId = await writeOutbound(ctx, {
       customerId: args.customerId,
-      direction: "out",
       surface: args.surface,
       body: args.body,
       dedupeKey: args.dedupeKey,
@@ -239,6 +274,36 @@ export const askFounder = internalMutation({
       ts: args.ts ?? Date.now(),
     });
     return { messageId, asked: true };
+  },
+});
+
+/**
+ * ⭐ Close the question about ONE thing, by its key.
+ *
+ * `closeOpenQuestion` closes whatever happens to be open. This closes a
+ * specific one, which is what a publish needs: the founder should not be left
+ * holding *"want this to go out?"* for something that went out a minute ago —
+ * and while that question stays open, invariant 5 means the NEXT draft can
+ * never reach them.
+ *
+ * That exact chain stalled a day of the seven-day run on 2026-08-07.
+ *
+ * Silent when nothing is open under that key: publishing on `just_go` never
+ * asked anything, and treating that as a failure would make the normal path
+ * noisy.
+ */
+export const closeQuestionFor = internalMutation({
+  args: { customerId: v.id("customers"), dedupeKey: v.string() },
+  handler: async (ctx, args): Promise<{ closed: boolean }> => {
+    const row = (await ctx.db
+      .query("messages")
+      .withIndex("by_customer_and_dedupe", (q) =>
+        q.eq("customerId", args.customerId).eq("dedupeKey", args.dedupeKey)
+      )
+      .first()) as Doc<"messages"> | null;
+    if (!row?.awaitingAnswer) return { closed: false };
+    await ctx.db.patch(row._id, { awaitingAnswer: false });
+    return { closed: true };
   },
 });
 
@@ -306,15 +371,24 @@ export const proactiveSentToday = internalQuery({
   args: { customerId: v.id("customers"), now: v.optional(v.number()) },
   handler: async (ctx, args): Promise<number> => {
     const now = args.now ?? Date.now();
-    const since = Math.floor(now / 86_400_000) * 86_400_000;
+    // ⚠️ The founder's day, not UTC. On the old boundary her daily allowance
+    // reset at 20:00 local, so she could spend it during the evening and then
+    // spend it again two hours later — the budget silently doubled on exactly
+    // the evenings she is most active.
+    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    const timezone = customer?.timezone ?? "UTC";
     const rows = await ctx.db
       .query("messages")
       .withIndex("by_customer_and_ts", (q) =>
-        q.eq("customerId", args.customerId).gte("ts", since)
+        q.eq("customerId", args.customerId).gte("ts", dayScanFloor(now))
       )
       .collect();
-    return rows.filter((row) => row.direction === "out" && row.proactive === true)
-      .length;
+    return rows.filter(
+      (row) =>
+        row.direction === "out" &&
+        row.proactive === true &&
+        isSameDayInZone(row.ts, now, timezone)
+    ).length;
   },
 });
 

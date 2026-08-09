@@ -162,9 +162,11 @@ export const refresh = internalAction({
       const batch = ids.slice(i, i + BATCH_SIZE);
       try {
         const page = await getTweetsByIds(batch);
+        const returned = new Set<string>();
         for (const raw of page.items) {
           const tweet = raw as Record<string, unknown>;
           const id = typeof tweet.id === "string" ? tweet.id : null;
+          if (id) returned.add(id);
           const placementId = id ? byTweetId.get(id) : undefined;
           if (!placementId) continue;
 
@@ -182,6 +184,40 @@ export const refresh = internalAction({
             now,
           });
           updated += 1;
+        }
+
+        /**
+         * ⭐ A POST WE ASKED FOR AND DIDN'T GET BACK IS GONE.
+         *
+         * The loop above silently skipped these, and `linkStatus: "gone"` was
+         * a value **nothing in `convex/maya` ever wrote** — only the frozen v1
+         * did. So a deleted post stayed `live` forever.
+         *
+         * ⚠️ That corrupts the one gate the whole plan hangs on. `cadence.ts`
+         * counts only `live` placements and says so in its own doc: a dead
+         * link *"counts as having happened and then stopped being true, which
+         * the streak should notice rather than paper over."* It couldn't
+         * notice. Delete a post and it still counts toward the seven days.
+         *
+         * Detection is free — the platform answering about four of five tweets
+         * IS the statement that the fifth doesn't exist.
+         *
+         * ⚠️ Guarded on `returned.size > 0`. A batch that comes back entirely
+         * empty is far more likely to be the API having a bad minute than five
+         * posts vanishing at once, and wrongly marking them `gone` would break
+         * the streak in the opposite direction — silently, and in the
+         * direction that loses real work.
+         */
+        if (returned.size > 0) {
+          for (const askedFor of batch) {
+            if (returned.has(askedFor)) continue;
+            const placementId = byTweetId.get(askedFor);
+            if (!placementId) continue;
+            await ctx.runMutation(internal.maya.metrics.markGone, {
+              placementId,
+              now,
+            });
+          }
         }
       } catch (error) {
         // Plain language out, diagnosis to the log.
@@ -508,5 +544,32 @@ export const setUrl = internalMutation({
       url: args.url,
       linkStatus: "live",
     });
+  },
+});
+
+/**
+ * Mark a placement's link dead.
+ *
+ * Separate from `recordMetrics` because it is a different KIND of fact: one
+ * says how a live post is doing, this says the post is no longer there. Rolled
+ * into one mutation they would be easy to confuse at the call site, and the
+ * consequence of confusing them is a streak that counts deleted posts.
+ *
+ * Never resurrects: a placement already `gone` stays gone, so a flapping API
+ * cannot toggle the streak back and forth.
+ */
+export const markGone = internalMutation({
+  args: { placementId: v.id("placements"), now: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<{ marked: boolean }> => {
+    const placement = (await ctx.db.get(args.placementId)) as Doc<"placements"> | null;
+    if (!placement || placement.linkStatus === "gone") return { marked: false };
+    await ctx.db.patch(args.placementId, {
+      linkStatus: "gone",
+      metricsAsOf: args.now ?? Date.now(),
+    });
+    console.warn(
+      `[metrics] placement ${args.placementId} is gone — the post was removed`
+    );
+    return { marked: true };
   },
 });

@@ -249,3 +249,100 @@ async function seed(t: ReturnType<typeof convexTest>): Promise<Id<"customers">> 
     });
   });
 }
+
+/**
+ * ⭐ A DELETED POST MUST STOP COUNTING.
+ *
+ * `linkStatus: "gone"` was a value **nothing in `convex/maya` ever wrote** —
+ * only the frozen v1 did. Found 2026-08-07 by sweeping for terminal states with
+ * no writer, after the same shape had already cost a stalled day (#291,
+ * published drafts stuck `pending`) and four duplicate posts (#295, banked
+ * ideas stuck `bank`).
+ *
+ * ⚠️ This one corrupts the gate the whole plan hangs on. `cadence.ts` counts
+ * only `live` and says so itself: a dead link *"counts as having happened and
+ * then stopped being true, which the streak should notice rather than paper
+ * over."* It could not notice. Delete a post and it still counted toward the
+ * seven days, permanently.
+ */
+describe("a post that was taken down stops counting", () => {
+  it("markGone flips a live placement", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t);
+    const placementId = await t.run((ctx) =>
+      ctx.db.insert("placements", {
+        customerId,
+        kind: "post",
+        channel: "x",
+        linkStatus: "live",
+        url: "https://x.com/w/status/1",
+        publishedAt: NOW,
+        snapshotText: "a post that will be deleted",
+        idempotencyKey: "g1",
+      })
+    );
+
+    const res = await t.mutation(internal.maya.metrics.markGone, {
+      placementId,
+      now: NOW,
+    });
+    expect(res.marked).toBe(true);
+    const row = (await t.run((ctx) => ctx.db.get(placementId))) as {
+      linkStatus: string;
+    };
+    expect(row.linkStatus).toBe("gone");
+  });
+
+  it("never resurrects — a flapping API can't toggle the streak", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t);
+    const placementId = await t.run((ctx) =>
+      ctx.db.insert("placements", {
+        customerId,
+        kind: "post",
+        channel: "x",
+        linkStatus: "gone",
+        publishedAt: NOW,
+        snapshotText: "already gone",
+        idempotencyKey: "g2",
+      })
+    );
+    const res = await t.mutation(internal.maya.metrics.markGone, {
+      placementId,
+      now: NOW,
+    });
+    expect(res.marked).toBe(false);
+  });
+
+  it("⭐ and the streak drops when it happens", async () => {
+    // The whole reason this matters: Sprint 3's exit criterion is derived from
+    // live placements, so a deleted post must move the number.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t);
+    const placementId = await t.run((ctx) =>
+      ctx.db.insert("placements", {
+        customerId,
+        kind: "post",
+        channel: "x",
+        linkStatus: "live",
+        publishedAt: NOW,
+        snapshotText: "the only post of the day",
+        idempotencyKey: "g3",
+      })
+    );
+
+    const before = await t.query(internal.maya.cadence.cadence, {
+      customerId,
+      now: NOW,
+    });
+    expect(before.todayDone).toBe(true);
+
+    await t.mutation(internal.maya.metrics.markGone, { placementId, now: NOW });
+
+    const after = await t.query(internal.maya.cadence.cadence, {
+      customerId,
+      now: NOW,
+    });
+    expect(after.todayDone).toBe(false);
+  });
+});

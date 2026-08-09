@@ -304,3 +304,61 @@ describe("readiness is measured, not assumed", () => {
   });
 });
 
+
+/**
+ * ⭐ THE AMBIGUOUS YES — 2026-08-08.
+ *
+ * She showed a draft asking *"Want this to go out?"*. The founder replied
+ * **"Looks great. Loving your work"**. She answered *"Thank you — that means a
+ * lot 😊"* and did not post it.
+ *
+ * This was not the plumbing. By then she had the `pending` tool, the draftId
+ * arrived in the system note, and `publish` worked — the three fixes that
+ * preceded it all held. **She read approval as a compliment.**
+ *
+ * The note covered three cases — approves, changed the wording, unrelated — and
+ * had nothing for the ambiguous middle, and never said that letting it drop is
+ * itself a failure. "Looks great" fell straight into the gap.
+ */
+describe("the system note covers the ambiguous middle", () => {
+  const NOTE_SOURCE = readFileSync(
+    join(__dirname, "..", "handoff.ts"),
+    "utf8"
+  );
+
+  /**
+   * ⚠️ The first version of this test listed example phrases — "looks great",
+   * "love it", "go for it" — and asserted they appeared in the note.
+   *
+   * Two things wrong with that. It pinned PROSE, which our own conventions
+   * forbid and which freezes wording that should be free to improve. And it
+   * encoded a pattern list for a judgment the model makes better than any list
+   * can: Luna does not need to be told that "looks great" is approval.
+   *
+   * What it needed was POLICY — that ambiguity means ask, and that silence is
+   * the worst outcome. That is a rule about behaviour, not about words, and it
+   * is what these assert.
+   */
+  it("leaves the judgment to her rather than listing phrases", () => {
+    expect(NOTE_SOURCE).toMatch(/You decide what counts as approval/);
+    // And says why she is trusted with it.
+    expect(NOTE_SOURCE).toMatch(/better than any rule/);
+  });
+
+  it("tells her to ASK when she isn't sure, rather than let it drop", () => {
+    expect(NOTE_SOURCE).toMatch(/unsure, ask/);
+    expect(NOTE_SOURCE).toMatch(/same message as your reply/);
+  });
+
+  it("names silence as the worst outcome, because it's the invisible one", () => {
+    // A founder who thinks they approved something, and it never posts, has no
+    // way to see that — unlike a bad post or a question they can answer.
+    expect(NOTE_SOURCE).toMatch(/cannot see|can't see/);
+  });
+
+  it("still tells her to ignore it when the message isn't about a draft", () => {
+    // The note rides EVERY inbound turn. Without this it would push her to
+    // relate unrelated conversation back to a pending draft.
+    expect(NOTE_SOURCE).toMatch(/isn't about a draft|is not about a draft/);
+  });
+});

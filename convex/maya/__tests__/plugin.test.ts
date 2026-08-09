@@ -14,9 +14,9 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { BUNDLED_MAYA_PLUGIN_TOOLS } from "../../agents/packs/maya/bundledPlugin";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { BUNDLED_MAYA_PLUGIN_TOOLS } from "../../agents/packs/maya/bundledPlugin";
 
 const PLUGIN = join(
   __dirname,
@@ -57,12 +57,16 @@ describe("the manifest and the code agree", () => {
   it("ships exactly the tools this build supports", () => {
     // `checkpoint` joined in Sprint 2.9 — it mirrors MEMORY.md off the machine,
     // the one artifact on the volume that isn't reproducible.
+    // `pending` joined 2026-08-06 — it is the only source of a draftId for a
+    // draft offered on an earlier turn, without which an approved post could
+    // never be published.
     expect(manifest.contracts.tools.sort()).toEqual([
       "ask_founder",
       "checkpoint",
       "draft",
       "history",
       "inbox",
+      "pending",
       "publish",
       "remember",
       "reply",
@@ -206,12 +210,35 @@ describe("tool descriptions carry the choreography the model needs", () => {
     expect(publish).toMatch(/holdReason/);
   });
 
-  it("publish does not let the model announce a queued post as live", () => {
+  it("publish does not let the model announce an in-flight post as live", () => {
     // Invariant 6: the unit of work is a placement — something live, with a
-    // URL. Queued is not posted, and claiming otherwise is the fabrication this
-    // product cannot afford.
+    // URL. In flight is not posted, and claiming otherwise is the fabrication
+    // this product cannot afford.
+    //
+    // ⚠️ Asserts the RULE, not the sentence. This matched the literal string
+    // "do not announce it as posted" until 2026-08-06, when that description
+    // had to be rewritten — it used our internal nouns ("the placement row
+    // with its URL is the proof") and she paraphrased them straight back to
+    // the founder. A test pinned to prose blocks the fix for the leak it
+    // wasn't watching for. Conventions: assert on structure, never on wording.
     const publish = index.slice(index.indexOf('name: "publish"'));
-    expect(publish).toMatch(/do not announce it as posted/i);
+    expect(publish).toMatch(/live link|went live|is up/i);
+    expect(publish).toMatch(/not that it is up|before you tell them it posted/i);
+  });
+
+  it("no tool teaches her a word the founder must never hear", () => {
+    // The root cause of the 2026-08-06 leak: SOUL says "never a table or a
+    // queue or a job", and the publish description said "the placement row
+    // with its URL is the proof it went live". The specific instruction won,
+    // and she replied "I'll need its placement URL before I can say it
+    // posted." You cannot forbid a vocabulary in the prompt and then model it
+    // in the instruction being executed.
+    //
+    // Tools legitimately need precise nouns (draftId, ok:false) — so the rule
+    // is not that they're absent, it's that any tool using OUR internal nouns
+    // must also carry the translation instruction.
+    const INTERNAL_NOUNS = /\bplacement row\b|\bqueued successfully\b/i;
+    expect(index).not.toMatch(INTERNAL_NOUNS);
   });
 
   it("ask_founder frames the one-question refusal as correct, not broken", () => {
@@ -225,5 +252,75 @@ describe("tool descriptions carry the choreography the model needs", () => {
       expect(index).toContain(field);
     }
     expect(index).toMatch(/\{ok, data, next, why\}/);
+  });
+});
+
+/**
+ * ⭐ WHAT SHE READS BACK IS THE `next` FIELD, NOT THE PROMPT.
+ *
+ * On 2026-08-06 the operator flagged that she'd said *"I'll need its placement
+ * URL before I can say it posted."* The plugin description and SOUL were both
+ * corrected. **On 2026-08-07 she said it again, twice.**
+ *
+ * The cause was never the prompt. `hooks.ts` returned
+ *
+ *     next: "don't announce it as live yet; the placement row with its URL
+ *            is the proof"
+ *
+ * §2.8: *choreography rides in tool responses, never in prompts.* That makes
+ * `why`/`next` the STRONGEST instruction she gets — handed to her on the exact
+ * turn she acts. A prompt rule cannot outrank the sentence she just received,
+ * and by then her own transcript held the phrase three times as worked
+ * examples.
+ *
+ * Checking the prompt three times missed it because the prompt was never where
+ * it lived.
+ */
+describe("the envelope speaks the founder's language too", () => {
+  const HOOKS = readFileSync(
+    join(__dirname, "..", "hooks.ts"),
+    "utf8"
+  );
+
+  /** Our nouns. Correct for us, meaningless or alarming to a founder. */
+  const INTERNAL = [
+    "placement row",
+    "draft row",
+    "idempotency",
+    "dedupe key",
+    "envelope",
+    "payloadJson",
+    "mutation",
+  ];
+
+  it("no why/next hands her a word we forbid her to say", () => {
+    const offenders: string[] = [];
+    HOOKS.split("\n").forEach((line, i) => {
+      const m = /\b(why|next):\s*"([^"]+)"/.exec(line);
+      if (!m) return;
+      for (const term of INTERNAL) {
+        if (m[2].toLowerCase().includes(term)) {
+          offenders.push(`hooks.ts:${i + 1} — ${term}`);
+        }
+      }
+    });
+    expect(
+      offenders,
+      "These are the sentences she repeats verbatim to the founder.\n" +
+        offenders.join("\n"),
+    ).toEqual([]);
+  });
+
+  it("publish still tells her NOT to claim it's live", () => {
+    // The guidance was right; only the vocabulary was ours. Publishing is
+    // queued, so there is no link yet and claiming one would be a fabricated
+    // fact about the founder's own account (§2.7).
+    // Window past the explanatory comment to the `next` itself. Kept as a
+    // slice rather than a regex on the whole file so this asserts the PUBLISH
+    // response specifically, not any sentence anywhere that happens to match.
+    const idx = HOOKS.indexOf('data: { published: false, queued: true, jobId }');
+    const near = HOOKS.slice(idx, idx + 2000);
+    expect(near).toMatch(/do NOT say it's posted yet|don't say it'?s posted/i);
+    expect(near).toMatch(/link when it'?s up|send the link/i);
   });
 });

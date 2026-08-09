@@ -40,6 +40,7 @@ import { httpAction, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
+import { dayKeyInZone } from "./cadence";
 
 /* -------------------------------------------------------------------------- */
 /* The envelope                                                                */
@@ -289,7 +290,8 @@ export const requestAssetsHttp = httpAction(async (ctx, request) => {
       "Quick ask, and it's the only one I'll make: could you send me a 30–60 second screen recording of you using it? Just talk through what you'd show someone. I can pull stills, clips and post ideas out of one recording — it saves you sending screenshots one at a time, and right now I've got nothing real of the product to work with.",
     proactive: true,
     // One ask per customer per day, ever — see the guard above.
-    dedupeKey: `asset-ask:${new Date().toISOString().slice(0, 10)}`,
+    // The founder's day — see the note on the update hook's key below.
+    dedupeKey: `asset-ask:${dayKeyInZone(Date.now(), auth.customer.timezone ?? "UTC")}`,
   });
 
   return result.sent
@@ -554,8 +556,22 @@ export const updateHttp = httpAction(async (ctx, request) => {
     });
   }
 
-  // Deduped per kind per day, so a cron that fires twice sends one brief.
-  const today = new Date().toISOString().slice(0, 10);
+  /**
+   * Deduped per kind per day, so a cron that fires twice sends one brief.
+   *
+   * ⚠️ The FOUNDER's day. This was `new Date().toISOString().slice(0, 10)` —
+   * UTC — and the 20:00 recap on 2026-08-07 was filed as `recap:2026-08-08`,
+   * because 20:00 in New York IS 00:00 UTC the next day.
+   *
+   * Two failures from one line: liveness reported `recapSentToday: false` and
+   * would have raised a false `recap_missed`, and the FOLLOWING evening's
+   * recap would compute that same key and be deduped away entirely — one
+   * recap every two days, silently.
+   *
+   * Eighth instance of this class. `dailyReport` and `liveness` were fixed on
+   * 08-06; this file has its own key builder and was missed.
+   */
+  const today = dayKeyInZone(Date.now(), auth.customer.timezone ?? "UTC");
   const result = await ctx.runMutation(internal.maya.messages.send, {
     customerId: auth.customer._id,
     surface: "telegram",
@@ -1084,8 +1100,27 @@ export const publishHttp = httpAction(async (ctx, request) => {
   return respond({
     ok: true,
     data: { published: false, queued: true, jobId },
-    why: "cleared to post — it's queued",
-    next: "don't announce it as live yet; the placement row with its URL is the proof",
+    /**
+     * ⚠️ THE FOUNDER'S WORDS, because she reads these back verbatim.
+     *
+     * This said *"don't announce it as live yet; the placement row with its
+     * URL is the proof"* — and on 2026-08-07 she told the founder *"I'll need
+     * the placement URL before I can say it posted."* Three times, across two
+     * days.
+     *
+     * The plugin description and SOUL were both corrected on 08-06 and it
+     * changed nothing, because THIS is the stronger signal: §2.8 says
+     * choreography rides in tool responses, and this one is handed to her on
+     * the exact turn she publishes. A prompt rule cannot outrank the
+     * instruction she just received — nor her own transcript, which by then
+     * held the phrase three times as worked examples.
+     *
+     * The guidance itself was right. Publishing is queued, so there is no link
+     * yet and she genuinely must not claim it is live. Only the vocabulary was
+     * ours.
+     */
+    why: "it's on its way",
+    next: "tell them it's going out and that you'll send the link when it's up — do NOT say it's posted yet, because it isn't. Check back for the link rather than claiming one",
   });
 });
 
@@ -1174,7 +1209,7 @@ export const replyHttp = httpAction(async (ctx, request) => {
   return respond({
     ok: true,
     data: { published: false, queued: true, jobId },
-    why: "cleared to reply — it's queued",
+    why: "it's on its way",
     next: "move on to the next one; don't wait on this",
   });
 });
@@ -1204,6 +1239,102 @@ export const replyHttp = httpAction(async (ctx, request) => {
  * "forget that" marks a rule inactive and leaves the history intact. A founder
  * asking *"what did I used to tell you?"* deserves an answer.
  */
+/**
+ * ⭐ What she has written and the founder has not answered yet.
+ *
+ * The gap that broke the 2026-08-06 approval: `publish` needs a `draftId`, and
+ * nothing in the tool surface returned one for a draft written on an earlier
+ * turn. `draft` returns an id only for what it just created; `history` returns
+ * placements, which are things already posted. So a draft offered yesterday
+ * was unpublishable today — not because she'd forgotten it, but because the
+ * id existed nowhere she could reach.
+ *
+ * Expired drafts are excluded rather than listed as stale: offering a
+ * 25-hour-old post is worse than not offering it, because saying yes commits
+ * the founder to something written for a moment that has passed.
+ */
+export const pendingHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if ("error" in auth) return auth.error;
+
+  /**
+   * ⭐ Recording a NO, on the tool that lists what's awaiting one.
+   *
+   * `outcome: "rejected"` was a value nothing in `convex/maya` ever wrote —
+   * only the frozen v1 did. So a founder saying no left no trace: the draft
+   * sat `pending` until it expired, and the reason was lost entirely.
+   *
+   * ⚠️ The reason is the point, not the rejection. An edit says what she got
+   * wrong about the WORDS; a no says what she got wrong about the IDEA, and
+   * that lesson exists nowhere else — a post nobody lets out earns no views to
+   * learn from. It goes into the workspace as a standing "don't make this
+   * argument again".
+   *
+   * Lives here rather than in its own tool because this is the surface she
+   * already calls when handling drafts, and a separate tool is one more thing
+   * to remember at the moment the founder has already moved on — the same
+   * reasoning that put edit capture inside `publish`.
+   */
+  const parsedBody = await readJson(request);
+  if ("error" in parsedBody) return parsedBody.error;
+  const rejectId = str(parsedBody.body, "rejectDraftId");
+  if (rejectId) {
+    const reason = str(parsedBody.body, "reason");
+    if (!reason || reason.trim().length < 3) {
+      return respond(
+        {
+          ok: false,
+          why: "a no without a reason teaches me nothing",
+          next: "ask them what was wrong with it, in their words, then record that — don't guess or paraphrase it into something tidier",
+        },
+        400
+      );
+    }
+    await ctx.runMutation(internal.maya.drafts.decide, {
+      draftId: rejectId as Id<"drafts">,
+      outcome: "rejected",
+      reason,
+    });
+    await ctx.runMutation(internal.maya.messages.closeQuestionFor, {
+      customerId: auth.customer._id,
+      dedupeKey: `draft:${rejectId}`,
+    });
+    return respond({
+      ok: true,
+      data: { rejected: true },
+      why: "noted, and it will shape what I write next",
+      next: "say it back so they know it stuck — quote their reason. Do NOT rewrite the same idea more carefully; the idea was the problem",
+    });
+  }
+
+  const drafts = await ctx.runQuery(internal.maya.drafts.pending, {
+    customerId: auth.customer._id,
+  });
+
+  const now = Date.now();
+  const data = drafts.map((d) => ({
+    draftId: d._id,
+    channel: d.channel,
+    kind: d.kind,
+    text: d.snapshotText,
+    offeredMinutesAgo: Math.round((now - d.proposedAt) / 60_000),
+    expiresInMinutes: Math.round((d.expiresAt - now) / 60_000),
+  }));
+
+  return respond({
+    ok: true,
+    data: { drafts: data, count: data.length },
+    why:
+      data.length === 0
+        ? "nothing is waiting on them right now"
+        : `${data.length} draft${data.length === 1 ? "" : "s"} waiting on their answer`,
+    next:
+      data.length === 0
+        ? "an empty list is a real answer — say the zero plainly rather than implying something is in flight"
+        : "if they have said yes to one, call publish with its draftId and alreadyApproved:true. Their words in chat count exactly as much as a tap",
+  });
+});
+
 export const rulesHttp = httpAction(async (ctx, request) => {
   const auth = await authenticate(ctx, request);
   if ("error" in auth) return auth.error;
@@ -1532,7 +1663,7 @@ export const askFounderHttp = httpAction(async (ctx, request) => {
     // Deduped on the text so a retried tool call can't send the same question
     // twice. The date bounds it so a genuinely recurring question can be asked
     // again tomorrow.
-    dedupeKey: `ask:${new Date().toISOString().slice(0, 10)}:${question}`,
+    dedupeKey: `ask:${dayKeyInZone(Date.now(), auth.customer.timezone ?? "UTC")}:${question}`,
   });
 
   return result.asked

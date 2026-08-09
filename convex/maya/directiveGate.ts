@@ -71,7 +71,7 @@ export const CONTENT_KINDS = [
   "icp_correction",
 ] as const;
 
-const GATE_SYSTEM = `You are checking one post against the house rules a founder gave their social media manager, in the founder's own words.
+export const GATE_SYSTEM = `You are checking one post against the house rules a founder gave their social media manager, in the founder's own words.
 
 Return STRICT JSON, no prose:
 { "violates": boolean, "rule": string, "why": string }
@@ -124,7 +124,13 @@ export const checkDirectives = internalAction({
   handler: async (
     ctx,
     args
-  ): Promise<{ ok: boolean; rule?: string; why?: string }> => {
+  ): Promise<{
+    ok: boolean;
+    rule?: string;
+    why?: string;
+    /** True when the gate could not run at all — see the no-key branch. */
+    unchecked?: boolean;
+  }> => {
     const rules = await ctx.runQuery(internal.maya.directives.activeRules, {
       customerId: args.customerId,
     });
@@ -134,10 +140,31 @@ export const checkDirectives = internalAction({
     if (relevant.length === 0) return { ok: true };
 
     const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) return { ok: true };
+    if (!apiKey) {
+      /**
+       * ⚠️ FAILS OPEN, AND SAYS SO.
+       *
+       * This returned a bare `{ok: true}` — indistinguishable, to the caller,
+       * from "I checked and it's fine." With no key, every house rule the
+       * founder has ever set silently stops being enforced: "we don't use
+       * Reddit", "never call yourself an AI", all of it, passing a gate that
+       * never ran.
+       *
+       * Open rather than closed is still the right call — failing closed would
+       * block every post the moment a key expires, turning a config problem
+       * into a zero-placement week. But principle 5 is explicit that nothing
+       * fails silently, and `unchecked` is a different fact from `ok`.
+       */
+      console.error(
+        `[directive-gate] NOT RUN for ${args.customerId} — no OpenRouter key, ${relevant.length} house rule(s) unenforced`
+      );
+      return { ok: true, unchecked: true };
+    }
 
-    const { callOpenRouter } = await import("../integrations/openrouter/client");
-    const completion = await callOpenRouter({
+    const { callModel } = await import("./llm");
+    const completion = await callModel(ctx, {
+      customerId: args.customerId,
+      purpose: "directive_gate",
       apiKey,
       model: DIRECTIVE_MODEL,
       temperature: 0,

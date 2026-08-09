@@ -3446,6 +3446,34 @@ export default defineSchema({
     voiceProfileJson: v.optional(v.string()),
     /** Colors, fonts, logo refs, on-brand/off-brand examples. JSON. */
     brandKitJson: v.optional(v.string()),
+    /**
+     * ⭐ This customer's own OpenRouter key hash (§17.35.3a).
+     *
+     * Every machine shared one key until 2026-08-07, which made per-customer
+     * LLM cost unknowable: the `costEvents` ledger only sees calls made from
+     * Convex, and those turned out to be **2% of the bill** — the other 98% is
+     * OpenClaw's own agent loop on Fly, calling OpenRouter directly where
+     * nothing of ours can observe it.
+     *
+     * A key per machine fixes both at once: OpenRouter reports `usage_daily`
+     * and `usage_monthly` PER KEY, so the number becomes complete and
+     * per-customer in one move.
+     *
+     * ⚠️ The hash, never the key. The key itself goes to the machine's Fly
+     * secrets and is never stored here — a table that holds live vendor keys
+     * is a different security posture than one that holds ids.
+     */
+    openRouterKeyHash: v.optional(v.string()),
+    /**
+     * Which collection sweeps have already run today, as `{sweep: dayKey}`.
+     *
+     * The once-a-day claim for the watchers layer (§3.1). A JSON field rather
+     * than a table because the schema sits near TypeScript's instantiation
+     * ceiling — and rather than a JOB, which the first draft used and which
+     * would have dead-lettered five entries per customer per day: a dedupe
+     * lock borrowed from a work queue is a work item.
+     */
+    sweptJson: v.optional(v.string()),
     /** Where she texts them. Absent until Telegram pairing completes. */
     telegramChatId: v.optional(v.string()),
     /**
@@ -3749,6 +3777,21 @@ export default defineSchema({
     ),
     /** What they changed, when they edited rather than approved. */
     editDiff: v.optional(v.string()),
+    /**
+     * ⭐ Why the founder said no, in their words.
+     *
+     * The second-highest-signal voice data after an edit, and it was not
+     * recorded at all: `outcome: "rejected"` was a value nothing in
+     * `convex/maya` ever wrote (only the frozen v1 did), so a rejection left
+     * no trace and the draft sat `pending` until it expired.
+     *
+     * ⚠️ An edit says what she got wrong about the WORDS. A rejection says
+     * what she got wrong about the IDEA — *"too salesy"*, *"we don't say that
+     * about competitors"*, *"wrong week for this"*. Those are different
+     * lessons and the second one is unavailable anywhere else: an idea nobody
+     * ever posts leaves no metric behind.
+     */
+    rejectionReason: v.optional(v.string()),
     proposedAt: v.number(),
     decidedAt: v.optional(v.number()),
     /** Invariant 8 again: a pending draft cannot sit forever. */
@@ -3941,6 +3984,118 @@ export default defineSchema({
    * Idempotency key, attempts, status, deadline — nothing fails silently
    * (principle 5), and nothing runs twice on a retry.
    */
+  /**
+   * ⭐ What each customer actually costs us, per call.
+   *
+   * Operator, 2026-08-06: *"COGS are gonna amortize and blend over many users,
+   * but each user can't just blow out… we just got to make sure we're
+   * watching, if this specific machine was a user, how much money has it used
+   * so far, and how much is it projected to use for the month."*
+   *
+   * That is the purpose. This ledger is for **pricing**, not policing — the
+   * throttle already protects the fleet without silencing her, and per-user
+   * caps that stop her talking are explicitly not the product.
+   *
+   * ## Why a table rather than a field on `jobs`
+   *
+   * `spendCeiling.recordCost` stamps cost onto a job row, and `spendToday`
+   * sums job costs. But most model calls in `convex/maya` are crons and gates
+   * — research sweeps, the directive gate, the safety critic, idea scoring —
+   * which are not jobs at all. Counting only job-attributed spend reports a
+   * fraction of the bill and reads as a working ledger, which is how this
+   * product previously recorded $0.025 against a $22 charge.
+   *
+   * ⚠️ `costUsd` is what the VENDOR said the call cost, never a local
+   * calculation. A price table is a second source of truth that rots — ours
+   * claimed one model was $0.075 when it was $0.25.
+   */
+  costEvents: defineTable({
+    customerId: v.id("customers"),
+    at: v.number(),
+    /** "openrouter" · "creatify" · "scrapecreators" · "zernio" */
+    vendor: v.string(),
+    /** The model or endpoint actually served, which may not be the one asked for. */
+    resource: v.optional(v.string()),
+    /** What the spend was FOR — this is what makes an outlier explainable. */
+    purpose: v.string(),
+    costUsd: v.number(),
+    /** Present for LLM calls; absent for flat-rate vendor calls. */
+    promptTokens: v.optional(v.number()),
+    completionTokens: v.optional(v.number()),
+  })
+    .index("by_customer_and_at", ["customerId", "at"])
+    .index("by_at", ["at"]),
+
+  /**
+   * ⭐ What she said she would do today (§8, Sprint 5's `plan-day`).
+   *
+   * A plan is a PROMISE, and principle 4 says anything promised to the user is
+   * enforced by the server. Twice in three days her morning brief said she
+   * would draft and show an X post, and twice the day ended with nothing —
+   * 2026-08-06 and 2026-08-08. Both times the brief was the only record of the
+   * intention, so nothing could compare what she said to what happened.
+   *
+   * One row per customer per founder-day per intended post. The evening recap
+   * reads it back: *"this morning I said X; here is whether it happened, and
+   * why not."* An unkept plan that nobody names is indistinguishable from
+   * never having had one.
+   *
+   * ⚠️ `ideaId` is required, not optional. A plan with no idea behind it is
+   * the freehand drafting that made traceability read 1 of 7 — the plan is
+   * exactly where the bank should be spent.
+   */
+  dayPlans: defineTable({
+    customerId: v.id("customers"),
+    /** YYYY-MM-DD in the FOUNDER's timezone — never UTC. */
+    day: v.string(),
+    channel: v.string(),
+    ideaId: v.id("ideas"),
+    /** The angle, copied so the plan reads without a join. */
+    angle: v.string(),
+    status: v.union(
+      v.literal("planned"),
+      v.literal("done"),
+      v.literal("dropped")
+    ),
+    /** Why it didn't happen. Required to drop — silence is not a reason. */
+    droppedReason: v.optional(v.string()),
+    placementId: v.optional(v.id("placements")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_customer_and_day", ["customerId", "day"])
+    .index("by_customer", ["customerId"]),
+
+  /**
+   * ⭐ The vendor circuit breaker (Sprint 6).
+   *
+   * `CREDIT_RESERVES` and `checkBalance` shipped with nothing fetching a real
+   * number; the hourly sweep fixed that and then only logged. So a vendor at
+   * zero changed nothing: every sweep still fired, every call still failed,
+   * every retry still burned, and the founder got silence.
+   *
+   * One row per vendor, fleet-wide — a balance is not a per-customer fact, and
+   * a vendor at zero is *"every customer's sweeps failing in the same minute"*
+   * (§12), not one customer's bad day.
+   *
+   * ⚠️ Read as advice, never as a lock. See `vendorOpen` for why a missing or
+   * stale row must mean GO.
+   *
+   * ⚠️ NOT `vendorHealth` — that name is taken by the vendor smoke suite,
+   * which records per-check pass/fail per run. These are different facts:
+   * smoke answers "did this endpoint's contract change", the breaker answers
+   * "is there money left". Naming the second one `vendorHealth` shadowed the
+   * first and was caught only by the typechecker.
+   */
+  vendorBreaker: defineTable({
+    vendor: v.string(),
+    verdict: v.union(v.literal("ok"), v.literal("low"), v.literal("critical")),
+    balance: v.number(),
+    /** Plain language, relayed to the operator unchanged. */
+    detail: v.string(),
+    checkedAt: v.number(),
+  }).index("by_vendor", ["vendor"]),
+
   jobs: defineTable({
     /** Absent for fleet-wide work like the vendor smoke suite. */
     customerId: v.optional(v.id("customers")),

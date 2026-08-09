@@ -524,3 +524,83 @@ export const fillFromProductPage = internalAction({
     };
   },
 });
+
+/* -------------------------------------------------------------------------- */
+/* Storing what we render                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ Put a rendered slide in the library, using Convex's own file storage.
+ *
+ * ⚠️ The media library has been blocked on "R2 credentials" as an
+ * operator-required item since Sprint 4. It didn't need them: `mediaAssets`
+ * carries `storageKey` and `publicUrl` because it was designed against R2, and
+ * **Convex stores files natively and hands back a public URL** — which is
+ * exactly what Zernio needs to publish. No credentials, no bucket, no CORS.
+ *
+ * That unblocks the whole photo-mode path without waiting on anyone. R2 is
+ * still the right destination at scale — cheaper egress, a CDN we control —
+ * but "we cannot ship until someone creates a bucket" was never true.
+ *
+ * Marked `source: "generated"` and `kind: "slide"`, which matters downstream:
+ * §7.5.3's authenticity floor ranks a generated asset **below** a real
+ * screenshot, and it can only do that if the asset says what it is.
+ */
+export const storeRendered = internalAction({
+  args: {
+    customerId: v.id("customers"),
+    /** The PNG, base64. Actions cannot take binary directly. */
+    pngBase64: v.string(),
+    caption: v.optional(v.string()),
+    now: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<
+    | { ok: true; assetId: Id<"mediaAssets">; url: string; bytes: number }
+    | { ok: false; error: string }
+  > => {
+    let buffer: ArrayBuffer;
+    let bytes: Uint8Array;
+    try {
+      const binary = atob(args.pngBase64);
+      buffer = new ArrayBuffer(binary.length);
+      bytes = new Uint8Array(buffer);
+      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    } catch {
+      return { ok: false, error: "that wasn't valid base64" };
+    }
+
+    // ⚠️ Check the magic bytes, not the caller's word. A JSON error page
+    // stored as a .png publishes as a broken image, and the failure surfaces
+    // on the platform rather than here.
+    const isPng =
+      bytes.length > 8 &&
+      bytes[0] === 0x89 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x4e &&
+      bytes[3] === 0x47;
+    if (!isPng) return { ok: false, error: "those bytes aren't a PNG" };
+
+    const storageId = await ctx.storage.store(
+      new Blob([buffer], { type: "image/png" })
+    );
+    const url = await ctx.storage.getUrl(storageId);
+    if (!url) return { ok: false, error: "stored it but couldn't get a link" };
+
+    const { assetId } = await ctx.runMutation(internal.maya.media.record, {
+      customerId: args.customerId,
+      kind: "slide",
+      source: "generated",
+      storageKey: storageId,
+      publicUrl: url,
+      contentType: "image/png",
+      bytes: bytes.length,
+      caption: args.caption,
+      now: args.now,
+    });
+
+    return { ok: true, assetId, url, bytes: bytes.length };
+  },
+});

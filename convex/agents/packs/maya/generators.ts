@@ -33,7 +33,11 @@
  * learned — silently, on every redeploy.
  */
 
-import { BUNDLED_MAYA_SKILLS, MAYA_CONVENTIONS } from "./bundledSkills";
+import {
+  BUNDLED_MAYA_SKILLS,
+  MAYA_CONVENTIONS,
+  MAYA_PLATFORM_ALGO,
+} from "./bundledSkills";
 
 export type MayaChannel = "tiktok" | "instagram" | "youtube" | "x";
 
@@ -126,6 +130,31 @@ export interface MayaWorkspaceInput {
    * unlike a writing sample an edit says what was WRONG.
    */
   editPairs?: Array<{ before: string; after: string }>;
+  /**
+   * ⭐ `{what I wrote → why they said no}` — a DIFFERENT lesson from an edit.
+   *
+   * An edit says what I got wrong about the words. A rejection says what I got
+   * wrong about the idea, and that is available nowhere else: an idea nobody
+   * posts produces no metric, no engagement, no signal at all. The only record
+   * that it was a bad idea is them saying so, once.
+   */
+  rejections?: Array<{ text: string; reason: string }>;
+  /**
+   * ⭐ The founder's standing rules, in THEIR words (§5.0, Sprint 6).
+   *
+   * Sprint 6 names a "house-rules block" and there wasn't one. The rules lived
+   * in the `directives` ledger, enforced at publish by the server gate — so a
+   * rule was enforced but not KNOWN. She could write a draft that broke one,
+   * get held, and learn about it only from the hold.
+   *
+   * That is the same shape as the sweeps before they became watchers: correct,
+   * and dependent on her remembering to go and look.
+   *
+   * ⚠️ Verbatim, never the interpretation. The ledger stores both, and the
+   * founder's own sentence is the one that can be argued with — "you told me:
+   * we do NOT use Reddit" is correctable; "channel policy applied" is not.
+   */
+  houseRules?: Array<{ verbatim: string; meaning?: string }>;
   /** Current strategy and today's posture. */
   posture?: string;
 }
@@ -315,7 +344,9 @@ export function buildMayaWorkspace(
   // Only this customer's channels. A founder on X alone should never carry
   // TikTok, Instagram, and YouTube norms in context (§15.1.2).
   for (const { channel } of input.channels) {
-    files.set(`PLATFORM_ALGO/${channel}.md`, renderPlatformAlgo(channel));
+    const algo = renderPlatformAlgo(channel);
+    // Skip rather than write an empty file — see `renderPlatformAlgo`.
+    if (algo) files.set(`PLATFORM_ALGO/${channel}.md`, algo);
   }
 
   for (const skill of BUNDLED_MAYA_SKILLS) {
@@ -542,7 +573,22 @@ function renderSoul(input: MayaWorkspaceInput): string {
 Let their form dominate and it's a lecture nobody watches. Let the niche's
 substance dominate and it's content that could be any product in the category.
 
-## Their actual writing
+${
+    input.houseRules?.length
+      ? `## Rules they have given me
+
+${input.houseRules.map((r) => `- "${r.verbatim}"${r.meaning ? `\n  (${r.meaning})` : ""}`).join("\n")}
+
+**These are standing, and they outrank anything else in this file.** They were
+said once and they hold until the founder retires them — I never need reminding
+and I never ask again. If something I want to write would break one, the answer
+is to write something else, not to write it more carefully.
+
+The server checks these at publish too, so breaking one costs a held post and a
+message explaining why. That check is a backstop, not my memory.
+`
+      : ""
+  }## Their actual writing
 
 ${excerpts}
 
@@ -557,6 +603,19 @@ ${input.editPairs
 **This is the strongest signal I get.** A writing sample shows me their register;
 an edit shows me what I got WRONG. When these disagree with anything above,
 these win.
+`
+      : ""
+  }${
+    input.rejections?.length
+      ? `## What they turned down, and why
+
+${input.rejections
+  .map((r) => `**I wrote:** ${r.text}\n**They said no:** ${r.reason}`)
+  .join("\n\n")}
+
+**An edit tells me I picked the wrong words. This tells me I picked the wrong
+thing.** Nothing else can teach me that — a post they never let out earns no
+views to learn from. So I do not write around the objection, I stop making it.
 `
       : ""
   }
@@ -609,6 +668,22 @@ I'm built from, and naming it makes me sound like a dashboard with opinions. So:
 never a vendor's name, never a table or a queue or a job, never an error string,
 never an id, never a status code. **Not "the ingest failed" — "I couldn't save
 it on my end."**
+
+**⭐ MY TOOLS TALK TO ME IN MY VOCABULARY. THE FOUNDER NEVER HEARS IT.**
+Tool descriptions and tool responses are written for me and they are precise on
+purpose — draftId, ok:false, placement, queued, row, envelope. That precision is
+how I use them correctly. It is *not* language, and repeating it is the most
+common way I sound like software: I paraphrase the instruction I just followed
+straight back at them.
+
+That is not hypothetical. Told a post was queued and that its placement URL was
+the proof it went live, I replied *"the second was approved and queued
+successfully; I'll need its placement URL before I can say it posted."* Every
+word true, and it read like a build log.
+
+The translation is always the same shape — what it means for THEM, and what
+happens next: **"it's going out now, I'll send you the link when it's up."**
+If a word appears in a tool and not in ordinary speech, it stops at me.
 
 **A real person says what happened and what's next.** When something breaks,
 they get the consequence and the fix in their terms, and I keep the diagnosis to
@@ -1258,44 +1333,36 @@ function renderOpenClawConfig(tz: string): string {
   );
 }
 
+/**
+ * ⭐ Per-channel expertise, read from `agents/skills/maya/PLATFORM_ALGO/*.md`.
+ *
+ * ⚠️ These norms used to live HERE, as a `Record<MayaChannel, string>` of
+ * template literals — which is the exact thing `CONVENTIONS.md` forbids:
+ *
+ * > *"In `PLATFORM_ALGO/{channel}.md`, as prose. Never as a branch in a skill,
+ * > and **never hardcoded into a tool.** Each channel rewards a different shape
+ * > and those shapes drift; prose can be edited when they do, a conditional
+ * > can't."*
+ *
+ * The file even closed with a note claiming *"platform knowledge lives here as
+ * prose, never as a branch in code"* — printed into a workspace file whose own
+ * source was a TypeScript record. It was a statement about where the knowledge
+ * ought to live, sitting in the place it wasn't supposed to be.
+ *
+ * They now live in the repo as markdown, are bundled by
+ * `npm run sync:maya-skills`, and a drift test asserts the two still agree. The
+ * practical difference: editing TikTok's norms is a markdown edit anyone can
+ * review, rather than a code change inside a generator.
+ */
 function renderPlatformAlgo(channel: MayaChannel): string {
-  const norms: Record<MayaChannel, string> = {
-    x: `**Length:** 280, *weighted* — a URL counts 23 whatever its real length, CJK and emoji weigh 2. The server computes it; I don't count characters myself.
-
-**Register:** lowercase is normal. Fragments are normal. Threads earn attention, they don't assume it.
-
-**Links:** a link in an unsolicited reply is a spam signal. Bio, or when asked.
-
-**Hashtags:** 1–2 at most, and only from sets we've actually seen work here.
-
-**What matters:** replies and profile clicks, not impressions.`,
-    tiktok: `**Publish-only. There is NO comment API** — not gated, not rate-limited, absent. I never claim to be watching TikTok comments.
-
-**Consent:** the founder must confirm the rendered preview before anything posts. That's TikTok's legal requirement, and I say so as theirs, not as my caution.
-
-**Register:** the first second is the whole hook. Captions are short; the video carries it.
-
-**What matters:** completion rate and shares.`,
-    instagram: `**Format:** 9:16 for Reels; the cover frame is doing more work than the caption.
-
-**Register:** the caption's first line is a hook, never a description.
-
-**Never carbon-copy** a TikTok caption here. Identical captions across platforms are a recognizable tell.
-
-**What matters:** saves and sends, not likes.`,
-    youtube: `**Title and thumbnail dominate everything else.** A great short with a weak title is a dead short.
-
-**Description:** where a link belongs, and it's fine there.
-
-**What matters:** retention, and specifically the first 15 seconds.`,
-  };
-
-  return `# PLATFORM_ALGO/${channel}.md
-
-${norms[channel]}
-
-_Loaded only when planning or writing for ${channel}. Platform knowledge lives
-here as prose, never as a branch in code — when ${channel} changes, this file
-changes and every customer updates on the next deploy._
-`;
+  const body = MAYA_PLATFORM_ALGO[channel];
+  /**
+   * A channel with no file gets nothing rather than an empty heading.
+   *
+   * An empty `PLATFORM_ALGO/x.md` in the workspace is worse than a missing one:
+   * it reads as "we have no norms for X" instead of "this wasn't written yet",
+   * and the skills treat the file as authoritative.
+   */
+  if (!body) return "";
+  return body;
 }

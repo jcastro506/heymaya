@@ -142,12 +142,18 @@ describe("the install contract", () => {
     // `inbox` joined in Sprint 5 — `reply` had refused without an `inReplyTo`
     // since Sprint 3 and nothing could produce one, so half the product
     // ("answers everyone who replies") had no input at all.
+    // `pending` joined 2026-08-06 — `publish` needs a draftId, `draft` only
+    // returns one for what it just wrote and `history` returns PLACEMENTS, so
+    // a draft offered on an earlier turn could never be published however
+    // clearly the founder approved it. Live that day: shown at 12:18,
+    // approved at 13:03, and the only reply she could give was a thumbs-up.
     expect([...BUNDLED_MAYA_PLUGIN_TOOLS].sort()).toEqual([
       "ask_founder",
       "checkpoint",
       "draft",
       "history",
       "inbox",
+      "pending",
       "publish",
       "remember",
       "reply",

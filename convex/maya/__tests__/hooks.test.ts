@@ -62,8 +62,12 @@ async function seed(
       kind: "post",
       snapshotText: "the exact words the founder saw",
       outcome: "approved",
-      proposedAt: NOW,
-      expiresAt: NOW + 86_400_000,
+      // ⭐ Live clock, not the fixture's NOW. The publish HOOK deliberately
+      // uses the real time — only `decide` takes an injectable one — and
+      // `decide` now enforces the draft TTL. A draft stamped with a fixed 2026
+      // date reads as expired, which is the check working rather than failing.
+      proposedAt: Date.now(),
+      expiresAt: Date.now() + 86_400_000,
     });
     return { customerId, draftId };
   });

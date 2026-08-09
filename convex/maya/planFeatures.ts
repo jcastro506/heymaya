@@ -25,6 +25,11 @@ import { v } from "convex/values";
 import { internalQuery } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
+import {
+  dayScanFloor,
+  isSameDayInZone,
+  isSameMonthInZone,
+} from "./cadence";
 
 export interface Budgets {
   maxChannels: number;
@@ -156,14 +161,15 @@ export function verdictFor(
   };
 }
 
-function startOfDayUtc(now: number): number {
-  return Math.floor(now / 86_400_000) * 86_400_000;
-}
-
-function startOfMonthUtc(now: number): number {
-  const d = new Date(now);
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
-}
+/**
+ * ⚠️ These were `startOfDayUtc` / `startOfMonthUtc` until 2026-08-06 and both
+ * were wrong for the same reason: a budget belongs to the FOUNDER's day, not
+ * to UTC's. In `America/New_York` a UTC-midnight boundary hands out a fresh
+ * daily post budget at 20:00 local — during the evening she is most active.
+ *
+ * Kept as scan floors only. Membership is decided by `isSameDayInZone` /
+ * `isSameMonthInZone`, which are also correct across DST.
+ */
 
 async function loadCustomer(
   ctx: QueryCtx,
@@ -202,15 +208,18 @@ export const checkPostBudget = internalQuery({
       };
     }
     const now = args.now ?? Date.now();
-    const since = startOfDayUtc(now);
+    const timezone = customer.timezone ?? "UTC";
     const today = await ctx.db
       .query("placements")
       .withIndex("by_customer_and_publishedAt", (q) =>
-        q.eq("customerId", args.customerId).gte("publishedAt", since)
+        q.eq("customerId", args.customerId).gte("publishedAt", dayScanFloor(now))
       )
       .collect();
     const used = today.filter(
-      (row) => row.channel === args.channel && row.kind === "post"
+      (row) =>
+        row.channel === args.channel &&
+        row.kind === "post" &&
+        isSameDayInZone(row.publishedAt, now, timezone)
     ).length;
     return verdictFor("postsPerDayPerChannel", used, budgets);
   },
@@ -245,7 +254,7 @@ export const checkVideoBudget = internalQuery({
       (row) =>
         row.kind === "render_video" &&
         row.status === "succeeded" &&
-        row.createdAt >= startOfMonthUtc(now)
+        isSameMonthInZone(row.createdAt, now, customer.timezone ?? "UTC")
     ).length;
     return verdictFor("videosPerMonth", used, budgets);
   },

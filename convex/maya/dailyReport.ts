@@ -28,7 +28,7 @@
  */
 
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { namesSomethingConcrete } from "./quality";
@@ -348,15 +348,87 @@ export const sendEveningRecap = internalMutation({
       zeroDayReason: args.zeroDayReason,
     });
 
+    /**
+     * ⭐ THE PROMISE, CHECKED. Sprint 5's `plan-day`, read back at the end.
+     *
+     * The recap reports what went live. It could not report what she SAID she
+     * would do, because until `dayPlans` existed the only record of the
+     * intention was a sentence in the morning brief — and a sentence cannot be
+     * checked.
+     *
+     * Twice in three days a brief promised a post that never came (08-06,
+     * 08-08) and the recap that evening was perfectly accurate about the zero
+     * while silent about the promise. §12: *"honest silence beats fake
+     * activity"* — but silence about a broken promise is neither.
+     *
+     * Appended rather than folded in, so the receipt stays the receipt: what
+     * went live is a fact about the world; what was planned is a fact about
+     * her, and blurring them is how a report starts arguing with itself.
+     */
+    const plan = await ctx.runQuery(internal.maya.dayPlan.planFor, {
+      customerId: args.customerId,
+      now,
+    });
+    const body =
+      plan.outstanding.length > 0 || plan.dropped > 0
+        ? `${recap.text}\n\n${plan.detail}`
+        : recap.text;
+
     const sent = await ctx.runMutation(internal.maya.messages.send, {
       customerId: args.customerId,
       surface: "telegram",
-      body: recap.text,
+      body,
       dedupeKey: `recap:${today}`,
       proactive: true,
       ts: now,
     });
 
     return { sent: sent.sent, messageId: sent.messageId, count: placements.length };
+  },
+});
+
+/**
+ * ⭐ Send the brief the machine didn't.
+ *
+ * The liveness contract's `reenqueue_brief` action had nowhere to go: the
+ * sweep recorded it and stopped. On 2026-08-08 the morning brief never went
+ * out, the sweep noticed at 09:00, and the founder heard nothing.
+ *
+ * Deliberately thin. It does NOT reconstruct the day's plan — that needs the
+ * agent, and if the agent is why the brief is missing, asking it again is the
+ * loop §12 warns about ("a re-enqueue loop on a broken brief is a message
+ * storm"). It sends the honest short version instead: nothing has gone out
+ * yet, and here is what she does know from rows.
+ *
+ * Once per day by construction — `send` dedupes on `brief:<founder's day>`, so
+ * if the real brief lands later it is the SAME key and only one arrives. And
+ * if the machine recovers first, this becomes a no-op rather than a duplicate.
+ */
+export const sendLateBrief = internalAction({
+  args: { customerId: v.id("customers"), now: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<{ sent: boolean }> => {
+    const now = args.now ?? Date.now();
+    const cadence = await ctx.runQuery(internal.maya.cadence.cadence, {
+      customerId: args.customerId,
+      now,
+    });
+    const timezone = await ctx.runQuery(internal.maya.liveness.timezoneFor, {
+      customerId: args.customerId,
+    });
+
+    const streak =
+      cadence.streak > 0
+        ? `${cadence.streak} day${cadence.streak === 1 ? "" : "s"} in a row so far`
+        : "nothing live in the last few days";
+
+    const result = await ctx.runMutation(internal.maya.messages.send, {
+      customerId: args.customerId,
+      surface: "telegram",
+      body: `Morning — running late today, that one's on me. Nothing has gone out yet. Where things stand: ${streak}. I'll come back with today's post shortly.`,
+      proactive: true,
+      dedupeKey: `brief:${dayKey(now, timezone)}`,
+      ts: now,
+    });
+    return { sent: result.sent };
   },
 });

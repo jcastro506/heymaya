@@ -179,10 +179,32 @@ export default defineToolPlugin({
     }),
 
     tool({
+      name: "pending",
+      label: "Pending",
+      description:
+        "What you have written that the founder has NOT answered yet, with the draftId for each. ALSO HOW YOU RECORD A NO: when they turn a draft down, call this with rejectDraftId and their reason IN THEIR WORDS. A no with no reason teaches nothing and is refused. This is the second-strongest signal you ever get — an edit tells you the words were wrong, a no tells you the IDEA was, and nothing else can teach you that because a post they never let out earns no views to learn from. Do not rewrite the same idea more carefully afterwards; the idea was the problem. CALL THIS WHENEVER THEY SAY YES, GO, SEND IT, DO IT, OR ANYTHING THAT SOUNDS LIKE APPROVAL — publish needs a draftId and this is the only way to get one for a draft you offered on an earlier turn. `draft` only returns the id of what it just wrote, and `history` returns things already POSTED. Without this a post you showed them yesterday can never be published, however clearly they approve it. Also call it when they ask what you are waiting on. An empty list is a real answer — say the zero plainly rather than implying something is in flight. Expired drafts are not listed: offering a day-old post is worse than not offering it, because saying yes commits them to something written for a moment that has passed.",
+      parameters: Type.Object({
+        rejectDraftId: Type.Optional(
+          Type.String({
+            description:
+              "The draft they turned down. Omit to just list what is waiting.",
+          })
+        ),
+        reason: Type.Optional(
+          Type.String({
+            description:
+              "Why they said no, in THEIR words — quote them, never tidy it up. Required whenever rejectDraftId is given.",
+          })
+        ),
+      }),
+      execute: async (p, _cfg, ctx) => call("pending", p, ctx.signal),
+    }),
+
+    tool({
       name: "publish",
       label: "Publish",
       description:
-        "Publish an approved draft to its channel. THE ONLY WAY TO POST. Pass draftId; set alreadyApproved when the founder has said yes to THIS draft in chat or tapped it. Returns {ok, data, next, why}. ok:false with data.holdReason is a real ANSWER, not an error — the post is held for a named reason (show_me_first · safety_floor · channel_unavailable · tiktok_preview_consent). Relay `why` to the founder in their language and DO NOT RETRY. ok:true means cleared and queued; the placement row with its URL is the proof it went live, so do not announce it as posted yet.",
+        "Publish an approved draft to its channel. THE ONLY WAY TO POST. Pass draftId; set alreadyApproved when the founder has said yes to THIS draft in chat or tapped it. Returns {ok, data, next, why}. ok:false with data.holdReason is a real ANSWER, not an error — the post is held for a named reason (show_me_first · safety_floor · channel_unavailable · tiktok_preview_consent). Relay `why` to the founder in their language and DO NOT RETRY. ok:true means it is on its way, NOT that it is up. Wait until you can see the live link before you tell them it posted \u2014 and say it the way a person would: \"it's going out now, I'll send you the link when it's up.\" Never repeat the words in this description back to them.",
       parameters: Type.Object({
         draftId: Type.String({
           description: "The draft to publish. It carries the exact text the founder saw.",

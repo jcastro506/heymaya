@@ -449,7 +449,11 @@ describe("only the customer's own channels ship", () => {
   it("X's norms say the 280 is WEIGHTED and not to count manually", () => {
     const norms = buildMayaWorkspace(INPUT).files.get("PLATFORM_ALGO/x.md")!;
     expect(norms).toMatch(/weighted/i);
-    expect(norms).toMatch(/URL counts 23/i);
+    // ⚠️ Pin the RULE, not the sentence. The weighted-23 fact is what a writer
+    // must not get wrong; the wording around it is prose in a markdown file
+    // that is meant to be edited when the platform changes.
+    expect(norms).toMatch(/\bURL\b/i);
+    expect(norms).toMatch(/\b23\b/);
   });
 });
 
@@ -565,5 +569,67 @@ describe("the bundled skills match their source files", () => {
       expect(files.has(`skills/${slug}/SKILL.md`), slug).toBe(true);
     }
     expect(files.has("CONVENTIONS.md")).toBe(true);
+  });
+});
+
+/**
+ * ⭐ THE HOUSE-RULES BLOCK (Sprint 6) — enforced was not the same as known.
+ *
+ * Sprint 6 names *"compiler → server gates + house-rules block"* and there was
+ * no block. The founder's rules lived in the `directives` ledger and were
+ * enforced at publish by the server gate — so a rule was **enforced but not
+ * known.** She could write a draft that broke one, get held, and learn about
+ * it from the hold.
+ *
+ * Same shape as the sweeps before they became watchers: correct, and dependent
+ * on her remembering to go and look.
+ */
+describe("rules they have given me", () => {
+  const RULES = [
+    {
+      verbatim: "we do NOT use Reddit or LinkedIn. Only TikTok, Instagram, YouTube and X.",
+      meaning: "Reddit and LinkedIn are off.",
+    },
+    { verbatim: "never call yourself an AI in anything public." },
+  ];
+
+  it("carries the founder's own sentence, not our summary", () => {
+    // ⚠️ The verbatim rule is the one that can be argued with. "you told me:
+    // we do NOT use Reddit" is correctable; "channel policy applied" is not.
+    // `files` is a Map of path → body; the block can live in any of them, so
+    // the assertion is about the bundle rather than a filename that may move.
+    const soul = [...buildMayaWorkspace({ ...INPUT, houseRules: RULES }).files.values()].join("\n");
+    expect(soul).toContain("we do NOT use Reddit or LinkedIn");
+    expect(soul).toContain("never call yourself an AI");
+  });
+
+  it("says they outrank everything else in the file", () => {
+    const soul = [...buildMayaWorkspace({ ...INPUT, houseRules: RULES }).files.values()].join("\n");
+    expect(soul).toMatch(/outrank/i);
+  });
+
+  it("tells her the gate is a backstop, not her memory", () => {
+    // Otherwise the cheapest strategy is to write whatever and let the server
+    // catch it — which costs a held post and a message every time.
+    const soul = [...buildMayaWorkspace({ ...INPUT, houseRules: RULES }).files.values()].join("\n");
+    expect(soul).toMatch(/backstop, not my memory/);
+  });
+
+  it("a rule with no interpretation still renders", () => {
+    const soul = [
+      ...buildMayaWorkspace({
+        ...INPUT,
+        houseRules: [{ verbatim: "keep it short" }],
+      }).files.values(),
+    ].join("\n");
+    expect(soul).toContain("keep it short");
+    expect(soul).not.toContain("undefined");
+  });
+
+  it("no rules yet renders no block at all", () => {
+    // An empty "Rules they have given me" heading reads as "you have no rules",
+    // which is a claim rather than an absence.
+    const soul = [...buildMayaWorkspace(INPUT).files.values()].join("\n");
+    expect(soul).not.toMatch(/Rules they have given me/);
   });
 });

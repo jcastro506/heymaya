@@ -643,6 +643,42 @@ That single metric is three things at once: a **quality signal** (content ground
 
 **It belongs in the weekly review**, stated plainly: *"4 of 6 posts this week came from something your buyers actually said."*
 
+#### 5.0.0a ⚠️ MEASURED — follower-list intersection does not work at page one
+
+*Built and run against the live dogfood account, 2026-08-06.*
+
+§5.0.0 specifies audience overlap as *"pull the competitors' follower lists and
+rank people by how many they follow"*. Built end to end, it returned **one
+person** from five audiences.
+
+**The arithmetic explains it and it is not fixable by tuning.** The
+ScrapeCreators follower endpoint is `min_time` paginated and we read page one:
+
+| account | followers returned |
+|---|---|
+| `@kelsietechtips` | 26 |
+| `@adrielscales` | 50 |
+
+Intersecting ~30-person samples drawn from audiences of thousands gives an
+expected overlap near zero. The signal isn't weak, it's absent — and deeper
+pagination doesn't rescue it: ten pages each is 50 credits a run to sample
+maybe 500 of 100,000, which is still 0.5%.
+
+⭐ **Invert the direction instead.** We already collect the people who
+*commented* on niche posts — `mineComplaints` reads ~300 of them every sweep,
+free, because the comments are already pulled. Those people are demonstrably in
+the niche and demonstrably active, which is more than a follower row proves.
+Then ask what *they* follow: one credit each, on a pool that is already
+qualified.
+
+**Follower-list intersection asks "who might be in this market". Starting from
+commenters asks "who is in this market right now, talking".** The second is
+cheaper, smaller, and better evidence — and it is the same data the complaint
+mining already pays for.
+
+The overlap code stays: given a qualified pool it is the right ranking. What
+changes is where the pool comes from.
+
 ### 5.0 Who decides what to watch
 
 Every sweep needs targets. They come from `learn-business` at onboarding and refresh monthly:
@@ -839,6 +875,81 @@ what they can't do. Four rules keep it on the right side of the line:
 **Measure whether they ever paste it.** If the founder ignores these, they are
 interruptions wearing a helpful costume, and the honest response is to stop
 sending them rather than to send more.
+
+#### 5.6.2 ⭐ The follow list — and why it is NOT the comment handoff
+
+*Operator asked 2026-08-06 to architect follows alongside comments. §5.6.1
+already designs the comment handoff; this is the half that was missing, and the
+mistake to avoid is treating them as one feature.*
+
+**Comments are perishable. Follows are not.** That single difference sets
+everything else:
+
+| | Comment handoff | Follow list |
+|---|---|---|
+| Effort per item | read the post, paste, ~30s | one tap, ~3s |
+| Risk | their words, in public, under their name | ~none |
+| Reversible | awkward to delete | unfollow, trivial |
+| Decay | **hours** — a two-day-old comment section is dead | **none** — worth following today is worth following next week |
+| Right batch size | **1**, rarely | **10–20**, together |
+| Right rhythm | when something is genuinely hot | **weekly** |
+
+⚠️ **So they must not share a message, a cadence, or a budget.** Sending them
+together makes the urgent one look routine and the routine one look urgent.
+§5.6.1's rule 2 — one proactive message, and that budget is the rate limiter —
+applies to the comment. The follow list rides the **weekly** review instead,
+where a list is expected and costs no extra interruption.
+
+##### Who to follow, and the trap
+
+The generic answer — *"big accounts in your niche"* — is what every growth tool
+ships and it is worthless. Following fifteen influencers gets you nothing; they
+don't follow back, they aren't buyers, and the algorithm learns you're a fan.
+
+⭐ **The buyer map already holds the right answer and has never been run.**
+§5.0.0: *"who follows the competitors **is** the ICP."* `computeAudienceOverlap`
+and `discoverGathering` are pure functions in `convex/maya/buyerMap.ts` with
+**zero callers** — this is what they were written for.
+
+**Follow the audience, not the celebrities.** Fifteen people who follow two
+competitors and post about the problem are worth more than any single large
+account, because they follow back, they are the buyer, and their engagement
+teaches the algorithm the right neighbourhood.
+
+Ranked by, in order: overlap with competitor audiences · whether they have
+posted about the problem recently · account size **inverted** past a threshold
+(a 200k account will not notice; a 2k account will).
+
+##### The rules, which differ from the comment's
+
+1. **Never a name without a reason.** *"Follows both @x and @y, posted about
+   pricing confusion twice this month"* — one line, per account. A bare list of
+   handles is a chore; a list with reasons is research.
+2. ⚠️ **Say to spread them out.** Fifteen follows in sixty seconds looks
+   automated to the platform even when a human does it by hand, and the account
+   at risk is theirs. This is the ban-safety pillar applied to an action we
+   don't perform.
+3. **Never re-ask.** An account offered once is never offered again, whether or
+   not they followed. Nagging about a tap is worse than losing the tap.
+4. **No expiry.** Unlike a draft, an unfollowed suggestion stays valid — it
+   simply rolls into next week's list behind fresher names.
+
+##### What we can and cannot know
+
+⛔ **Neither the follow nor the comment can be verified.** No vendor exposes
+"did this account follow that one", and TikTok exposes no comment API at all
+(§5.6).
+
+⭐ **So neither may ever count as a placement.** §2.6 is explicit that the unit
+of work is *something live, with a URL* — and Sprint 3's seven-day criterion is
+built on exactly that. A self-reported action counted as a placement turns the
+product's central gate into an honour system. They are tracked as **asks**, with
+their own counter, and the streak does not see them.
+
+What *is* measurable is the aggregate: follower count on our own account is
+readable through analytics, so *"you followed 40 of these and gained 60
+followers"* is a real sentence. Per-item attribution is not, and claiming it
+would be a fabricated number (§2.7).
 
 ### 5.5 What she never does
 
@@ -1334,12 +1445,42 @@ Cheapest rung that carries the angle. Always.
 |---|---|---|
 | Text | Write model | free |
 | Real screenshot | media library | free |
-| **Photo set / carousel / designed slide** | **`generate_slide_image` — Nano Banana 2 (`google/gemini-3.1-flash-image-preview`) via OpenRouter, framing a real screenshot** | **~$0.03** ⚠️ **still unverified — see §7.6.11a** |
+| **Photo set / carousel / designed slide** | **`generate_slide_image` — `google/gemini-2.5-flash-image` via OpenRouter, framing a real screenshot** | **$0.039/image** ✅ **measured 2026-08-08 — see §7.6.11a** |
 | Screen recording of the product | scripted capture or founder | free |
 | **Founder-filmed, auto-edited** | Creatify `ai_editing` | ~$0.50 |
 | Product demo video | Creatify `product_to_videos` | ~$0.79 |
 | UGC talking head | Creatify `lipsyncs_v2` (aurora_fast) | ~$1.49 |
 | Ad clone | Creatify `ads_clone` | ~$4.75 |
+
+#### 7.6.11a ✅ MEASURED — the image rung, and a comparison that was wrong
+
+*Ran live against OpenRouter, 2026-08-08. Both candidates returned a real image
+on the first call; the ladder's "⚠️ still unverified" is retired.*
+
+| model | measured cost/image | |
+|---|---|---|
+| `google/gemini-3.1-flash-image-preview` | **$0.068** | the one the ladder named |
+| `google/gemini-2.5-flash-image` | **$0.039** | ⭐ **43% cheaper** |
+
+**The ladder claimed ~$0.03.** The model it named is **2.3× that**. Switched to
+`2.5-flash-image`: for a *background treatment* — which is all §7.5.1 asks the
+model for — the newer model's advantages are marginal and the price is not.
+
+⚠️ **And the vendor comparison in §7.5.4a compares different units.** It reads
+*"ours is $0.03 and unverified; theirs is $0.40 and exists"* — but $0.40 is
+Creatify's **per-image** `iab_images` rate. Per image the honest ratio is
+**$0.039 vs $0.40, about 10×**, which is a stronger case for ours than the line
+suggested, not a weaker one. Comparing a per-image cost to a per-set cost in
+either direction is how a vendor decision gets made on the wrong number.
+
+⭐ **The number that actually matters is lower than any of these**, because the
+fixed frame means most slides are never generated at all. §7.5.1: the model's
+job shrinks to *"framing a real screenshot attractively inside a slot, or
+producing a background treatment."* A title, point or CTA slide is deterministic
+SVG — **$0**. A five-slide carousel needing one background treatment costs
+**$0.039**, not $0.19.
+
+That is the whole argument for owning the layout system, priced.
 
 ### 7.5.1 Carousel coherence — a layout problem, not a generation problem
 
@@ -1369,6 +1510,48 @@ The model's job shrinks to what models are good at: framing a real screenshot at
 ### 7.5.2 The anti-slop system — the only moat
 
 If it reads as AI, nothing else in this document matters. So this gets built as a system, not a prompt line.
+
+#### ⚠️ 7.5.2a MEASURED — most of the table below is wrong for this niche
+
+*Sprint 4 says the §7.5.2 table is "a starting hypothesis, not the finding" and
+asks for the denylist to be derived from measured differences. Measured
+2026-08-07: 63 real niche posts against 16 of hers (`convex/maya/tells.ts`).*
+
+| feature | human | hers | |
+|---|---|---|---|
+| lexical — delve · tapestry · game-changer · … | **0.00** | **0.00** | ⛔ absent from **both** |
+| *"it's not X, it's Y"* | 0.00 | 0.00 | ⛔ absent from both |
+| triadic lists | 0.25 | **0.00** | ⚠️ **humans use them MORE** |
+| rhetorical-question opener | 1.59 | **0.00** | ⚠️ **humans use them MORE** |
+| emoji | 4.33 | **0.00** | ⭐ her tell |
+| hashtags | 6.81 | **0.40** | ⭐ her tell |
+| starts lowercase | 4.76 | **31.25** | ⭐ her tell |
+
+**Four findings, none of them in the hypothesis:**
+
+1. ⛔ **The lexical denylist defends against nothing.** Zero occurrences in 63
+   real posts and zero in hers. It is a 2023 tell; in this niche it is dead
+   weight. Kept in code so it keeps being *tested* rather than deleted on a
+   hunch — a niche where these do appear would want to know.
+
+2. ⚠️ **Two entries point the wrong way.** Triadic lists and question openers
+   are **more human here**. A critic penalising them would push her *away* from
+   how this niche writes — **the hypothesis would have made her worse.**
+
+3. ⭐ **Her real tells are ABSENCES.** No emoji against a niche average of 4.33
+   per 100 words; hashtags 17× rarer. **A denylist can only catch what is
+   present** — it is structurally incapable of catching what is missing, which
+   is why nothing we had could see her actual tell.
+
+4. ⭐ **The anti-slop work has produced its own tell.** She opens a post in
+   lowercase **6.6× more often than humans do**. Trying hard not to sound like a
+   machine has become a signature: performed casualness.
+
+⚠️ **n=16 on her side — directional, not settled.** `measureTells` re-runs as
+the corpus grows, so the denylist stops being a thing someone wrote down once.
+
+**The table below is retained as the hypothesis it was.** Read it knowing three
+of its rows measure zero here.
 
 **What actually makes text sound like AI** — name the tells so the critic can hunt them:
 
@@ -3927,7 +4110,7 @@ Verified 2026-07-29 where marked. **Modelled at 200 customers, 2 active channels
 | **Zernio** | **Graduated per connected-account-month: first 10 @ $6 · next 90 @ $3 · 100+ @ $1.** Daily prorated. **$12/mo free credit** | ✅ `docs.zernio.com/billing` |
 | **Creatify** | API Starter 500 cr / $99 = **$0.198/cr** · API Pro 2,000 cr / $299 = **$0.1495/cr** | ✅ `docs.creatify.ai/billing` |
 | **twitterapi.io** | $0.15 / 1,000 tweets · $0.18 / 1,000 profiles · ~$0.00015 min/request | ✅ |
-| **ScrapeCreators** | Solo Dev $10 · Freelance $47 · Business $497 · Enterprise custom. **Credits never expire, no rate limits** | 🟡 tiers confirmed, **credits-per-tier unknown** |
+| **ScrapeCreators** | Free 100 cr · **Freelance $47 = 25,000 cr ($0.00188/cr)** · **Business $497 = 500,000 cr ($0.00099/cr)** · Enterprise 1M+ custom. **Credits never expire, no subscription** | ✅ `scrapecreators.com/#pricing`, 2026-08-07 |
 | **OpenRouter** | Per-model. ⚠️ **`/api/v1/models` is the only truth — comments rot.** Local egress is blocked; **query from the Fly machine** | ⚠️ re-verify before locking routing |
 
 #### 17.35.2 Zernio, worked out
@@ -3956,6 +4139,95 @@ Six sweeps per customer ≈ **55 requests/day** → ~1,650/month → **330,000/m
 
 **This plausibly cuts ScrapeCreators *and* Gemini-multimodal spend 3–5× at scale**, and it improves quality too — a shared corpus is deeper than any one customer could justify funding alone. **It should be in the schema from Sprint 1**, because retrofitting a shared cache onto per-tenant rows is painful.
 
+#### 17.35.3a ⭐ MEASURED MODEL PRICES — 2026-08-07, from `/api/v1/models`
+
+*Operator asked whether we had "dropped the model to the very cheap luna". We
+had not, and the check turned up three things worth keeping.*
+
+| Model | in $/M | out $/M | vs cheapest | Used for |
+|---|---|---|---|---|
+| `openai/gpt-oss-120b` | **0.037** | **0.170** | **1.0×** | filler · directive gate · product read · trend shape |
+| `openai/gpt-5.6-luna` | 0.100 | 0.600 | 3.5× | — |
+| `openai/gpt-5.6-luna-pro` | 0.100 | 0.600 | 3.5× | keywords · complaints · ideas · relevance |
+| `google/gemini-2.5-flash-lite` | 0.100 | 0.400 | 2.4× | — |
+| `google/gemini-3.1-flash-lite` | 0.250 | 1.500 | 8.8× | tagging · cringe judge · safety critic |
+| `google/gemini-2.5-flash` | 0.300 | 2.500 | 14.7× | ⛔ removed |
+
+**Three findings:**
+
+1. ⭐ **There is no cheap Luna.** `gpt-5.6-luna` and `gpt-5.6-luna-pro` are the
+   **same price**, $0.10/$0.60. Downgrading from pro saves nothing, and using
+   pro is free upside — the opposite of the assumption.
+
+2. ⚠️ **Newer is not cheaper.** `gemini-3.1-flash-lite` ($0.25/$1.50) costs
+   **2.5× more** than `gemini-2.5-flash-lite` ($0.10/$0.40). A version bump is
+   a pricing decision, not a maintenance one.
+
+3. ⛔ **`gemini-2.5-flash` is the most expensive model in the catalogue we
+   touch** and had been introduced into two paths the same day — 14.7× the
+   cheapest, to decide whether a sentence is an instruction. Both moved to
+   `gpt-oss-120b`. It was also drift: nothing else in `convex/maya` used it.
+
+**The rule this leaves:** `gpt-oss-120b` for volume work, a Flash for judges
+where the judgement genuinely needs one, Luna for anything that writes. And the
+price comes from `/api/v1/models` at the time of the decision — a comment
+naming a price rots, and one in this repo already claimed $0.075 for a model
+that cost $0.25.
+
+#### 17.35.3b ⭐ THE LEDGER SEES 2% OF THE BILL — measured 2026-08-07
+
+`costEvents` records what **Convex** spends: the directive gate, the sweeps,
+complaint mining, idea scoring, every critic. Measured per purpose on the live
+account:
+
+| purpose | share |
+|---|---|
+| complaint mining | 49% |
+| idea scoring | 39% |
+| brand register · filler judge · voice judge | 12% |
+| **total** | **$0.16/month** |
+
+The OpenRouter account spent **$8.58** over the same window. So the ledger built
+the day before covers **2%**, and the other 98% is **OpenClaw's agent loop on
+Fly, calling OpenRouter directly** — outside anything Convex can instrument.
+
+⚠️ **Two consequences that changed the plan:**
+
+1. **Optimising Convex-side model choice is noise.** A 14.7× model swap made
+   the same morning moved fractions of a cent. It was still right — the model
+   was drift and the wrong tier — but it was not a cost lever.
+2. **The lever is tokens per agent turn, not price per token.** At $0.10/M
+   input, $8.40/month is roughly 2.8M input tokens a day: the workspace plus
+   history, re-sent every turn.
+
+⛔ **And prompt caching is NOT the lever either — it already works.** Measured
+directly: two identical 11,165-token prompts to `luna-pro` returned
+`cached_tokens: 4,834` then `7,251`, the second call **29% cheaper**. OpenClaw
+is deliberately built for it — its docs state the system prompt carries *"the
+time zone only (no clock/time format) to keep prompt caching stable."*
+
+*(An earlier reading of this section claimed caching was off. That came from a
+two-token probe, which can never cache. It was not evidence, and the measurement
+above replaces it.)*
+
+##### The fix: one OpenRouter key per machine
+
+OpenRouter's management API reports `usage_daily` / `usage_monthly` **per key**.
+A key per machine makes the LLM number **complete and per-customer in one move**
+— which no amount of instrumentation on our side can, because the spend happens
+in a process we don't own.
+
+⚠️ **No per-key spend limit, deliberately.** The API supports `limit`, and using
+it would be the operator's explicitly rejected failure — *"we're not gonna cap
+any one user, like heymaya is just gonna stop talking to them"* — one layer
+lower and less visible: she would go silent mid-conversation with no throttle
+state, no alert, and no degraded mode. `spendCeiling` already protects the fleet
+correctly by pausing speculative work and never the conversation. **The key is
+an instrument, not a valve.**
+
+**Operator-required:** an `OPENROUTER_PROVISIONING_KEY`. Until it exists the
+shared key still works and the ledger stays at 2%.
+
 #### 17.35.4 The model, per customer per month
 
 | Line | Est. | Notes |
@@ -3963,7 +4235,7 @@ Six sweeps per customer ≈ **55 requests/day** → ~1,650/month → **330,000/m
 | **LLM — the agent** (converse · plan · write · critique) | **$10–15** | Event-driven wakes. **The #1 line.** |
 | LLM — Screen model on sweep haul | $1–2 | Cheapest tier, high volume |
 | Gemini multimodal — video watching | $1–2 | **Shared per niche → falls with scale** |
-| **ScrapeCreators — sweeps** | **$4–8** | 🟡 assumes ~$0.005/request **and** niche sharing. **Without sharing, 3–5× this.** |
+| **ScrapeCreators — sweeps** | **$3.86–7.33** | ✅ **measured + priced 2026-08-07.** 130 credits/day on the live account = 3,900/mo → $3.86 at Business, $7.33 at Freelance. ⭐ The old $0.005/request assumption was **5× too high**, and this is the figure **without** niche sharing — so sharing is now an optimisation, not a requirement |
 | twitterapi.io — X reads | <$0.50 | Genuinely negligible |
 | **Zernio** — 2 accounts | **$3.15** | ✅ confirmed; falls with scale |
 | Nano Banana — slides (~70/mo) | ~$2 | |
@@ -5126,6 +5398,41 @@ an agent says when it cannot look.
 **Exit:** a directive survives a redeploy **and a deliberate model swap**.
 **Tests:** ⭐ **model-swap directive test** — swap the main model, assert every directive still enforced · liveness breach escalation · zero-day honesty.
 
+##### ✅ MEASURED 2026-08-08 — the exit criterion passes
+
+Four model families, three cases, run live against the real gate prompt:
+
+| model | "we do NOT use Reddit" | "never call yourself an AI" | a clean post |
+|---|---|---|---|
+| `openai/gpt-oss-120b` | ✅ blocked | ✅ blocked | ✅ passed |
+| `openai/gpt-5.6-luna-pro` | ✅ blocked | ✅ blocked | ✅ passed |
+| `google/gemini-3.1-flash-lite` | ✅ blocked | ✅ blocked | ✅ passed |
+| `mistralai/mistral-small-24b-instruct-2501` | ✅ blocked | ✅ blocked | ✅ passed |
+
+**Twelve of twelve.** ⭐ The clean case matters as much as the violations — a
+gate that blocks everything also "enforces every directive", and would be
+useless.
+
+⚠️ **Why it holds, and it isn't the prompt.** The gate refuses to block on a
+rule it cannot **quote verbatim** from the founder's own list. A model that
+paraphrases, invents or half-remembers a rule produces no block at all — so
+model-to-model variation in *wording* cannot produce variation in
+*enforcement*. That constraint is what makes this portable, not the model
+choice.
+
+The live run is not repeated in CI: it costs four vendor calls per case and
+would make the suite depend on four vendors being up.
+`convex/maya/__tests__/modelSwap.test.ts` runs the structural half — that
+nothing in the enforcement path is bound to a particular model.
+
+⚠️ **Found in the same pass:** the gate returned a bare `{ok: true}` when no
+OpenRouter key was configured — indistinguishable, to the caller, from *"I
+checked and it's fine."* Every house rule the founder had ever set silently
+stopped being enforced. Open rather than closed is still correct (failing
+closed turns an expired key into a zero-placement week), but principle 5
+forbids doing it silently. It now returns `unchecked: true` and logs which
+rules went unenforced.
+
 ### Sprint 4.6 — ⭐ The chat eval: does she sound like a person to the founder?
 
 *Added 2026-08-05. Sprint 4.5 built the cringe eval for **posts**. This is the
@@ -5154,6 +5461,53 @@ and no metric substitutes for it.
 must stay majority real messages — a guard that mangles her metrics is worse
 than the leak it prevents (§13.55.2) · control-voids-the-run · every internal
 name is a proper noun, never a common word.
+
+### Sprint 5.7 — ⭐ The handoff: comments and follows the founder performs
+
+*Operator-raised 2026-08-06. §5.6.1 designed the comment handoff on 2026-08-05
+and no sprint built it; §5.6.2 adds the follow list. Both exist because the
+platforms removed the capability, not because we chose to delegate.*
+
+⛔ **This rung is gone by API on every channel we sell** (§5.6): X blocks cold
+replies since February 2026, TikTok exposes no comment API at all, Instagram is
+own-comments only, YouTube's insert is untested. **The founder is the only path
+that remains**, and a human acting from their own device is also the
+ban-safest one — this is the pillar applied to an action we don't perform.
+
+| Task |
+|---|
+| **Comment targets** — a post is worth their 30 seconds only if someone is describing the problem the product removes. Sourced from the sweeps already running (§5.1) and the mined complaints, not a new collector |
+| ⭐ **Source the follow list from COMMENTERS, not follower lists** (§5.0.0a — measured 2026-08-06: follower-list intersection returned one person from five audiences, because page one is 26–50 rows against audiences of thousands). `mineComplaints` already pulls ~300 real commenters per sweep for free; check what *they* follow. `computeAudienceOverlap` stays as the ranking, applied to a pool that is already qualified |
+| **Follow ranking** — overlap with competitor audiences · posted about the problem recently · size **inverted** past a threshold. Follow the audience, never the celebrities (§5.6.2) |
+| **The comment message** — link, the exact words to paste, and one sentence of why. Complete or not sent (§5.6.1 rule 3). Spends a proactive message, which IS the rate limiter |
+| **The follow list** — 10–20 with a reason each, on the **weekly** review, never mixed into the comment's message |
+| ⚠️ **"Spread these out over the day"** stated in the message — fifteen follows in a minute looks automated to the platform even done by hand, and the account at risk is theirs |
+| **An `asks` counter, separate from placements** — offered · acted on · ignored |
+| Never re-ask a declined or ignored item; comment asks expire in hours, follows never expire and simply fall behind fresher names |
+
+⭐ **The measurement that decides whether this ships at all.** §5.6.1: *"measure
+whether they ever paste it. If the founder ignores these, they are
+interruptions wearing a helpful costume, and the honest response is to stop
+sending them rather than to send more."* Build the counter in the same sprint
+as the feature, or there is no way to obey that rule.
+
+⚠️ **Neither action is verifiable and neither may count as a placement.** No
+vendor exposes "did this account follow that one". §2.6 says the unit of work
+is *something live, with a URL*, and Sprint 3's whole criterion rests on it —
+counting a self-reported action as a placement turns the product's central gate
+into an honour system. Aggregate follower movement IS measurable and is the
+honest claim; per-item attribution is not, and asserting it would be a
+fabricated number.
+
+**Exit:** the founder pastes a comment she wrote, and follows accounts she
+picked, **without being asked twice** — and the ask counter can say what
+fraction they acted on.
+
+**Tests:** an ask is never counted as a placement (the streak is unmoved by any
+number of asks) · no ask is ever re-sent · a comment ask carries link, text and
+reason or is not sent at all · follows and comments never share a message ·
+declined items never reappear · the ignored-rate is queryable, because the rule
+that says stop sending needs a number behind it.
 
 ### Sprint 5.5 — ⭐ Zernio, every channel, decided rather than inventoried
 

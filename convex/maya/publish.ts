@@ -113,6 +113,23 @@ export const recordPlacement = internalMutation({
       .first()) as Doc<"placements"> | null;
     if (existing) return { placementId: existing._id };
 
+    /**
+     * ⭐ Carry the IDEA onto the placement, not just the draft.
+     *
+     * `placements.ideaId` exists in the schema and nothing wrote it, so the
+     * chain complaint → idea → draft → placement could only be walked
+     * backwards one hop at a time. §5.0.0's *"% of posts traceable to a real
+     * buyer complaint"* is the number that tests the product's central claim —
+     * that she does the homework — and it was underivable.
+     *
+     * Denormalised deliberately. A draft can expire or be superseded; the
+     * placement is the permanent record, and a provenance chain that breaks
+     * when an intermediate row ages out is not provenance.
+     */
+    const draft = args.draftId
+      ? ((await ctx.db.get(args.draftId)) as Doc<"drafts"> | null)
+      : null;
+
     const placementId = await ctx.db.insert("placements", {
       customerId: args.customerId,
       kind: args.kind ?? "post",
@@ -123,6 +140,7 @@ export const recordPlacement = internalMutation({
       publishedAt: args.publishedAt ?? Date.now(),
       snapshotText: args.snapshotText,
       draftId: args.draftId,
+      ideaId: draft?.ideaId,
       idempotencyKey: args.idempotencyKey,
     });
     return { placementId };
@@ -285,6 +303,7 @@ export const publishPlacement = internalAction({
      * than the silence that hid this for a day.
      */
     const check = (await ctx.runAction(internal.maya.outbound.checkPublicPost, {
+      customerId: args.customerId,
       text: args.snapshotText,
     })) as {
       ok: boolean;
@@ -339,6 +358,60 @@ export const publishPlacement = internalAction({
         kind: args.inReplyTo ? "reply" : "post",
       },
     );
+
+    /**
+     * ⭐ THE DRAFT IS DONE. Marked here, after the placement exists.
+     *
+     * Publishing never touched the draft, so a published draft stayed
+     * `pending` forever — and that one omission stalled the seven-day run on
+     * 2026-08-07:
+     *
+     *   1. the live post's draft was still `pending`
+     *   2. `reofferUnshown` therefore re-offered it, asking the founder to
+     *      approve a post that had been live for a minute
+     *   3. that ask opened a question, and invariant 5 allows exactly one
+     *   4. so the draft written at 11:00 the next morning could never be sent,
+     *      and the day had no placement to show
+     *
+     * Nothing looked broken at any step. The publish succeeded, the placement
+     * was correct, the re-offer did what it was built to do, and the invariant
+     * held. The chain only fails at the join.
+     *
+     * ⚠️ Only when still `pending`. An `edited` draft carries the founder's
+     * rewrite in `editDiff` — §7.5.2 layer 2, the highest-signal voice data we
+     * get — and overwriting that outcome would erase which posts they changed.
+     */
+    if (args.draftId) {
+      const draft = await ctx.runQuery(internal.maya.drafts.byId, {
+        draftId: args.draftId,
+      });
+
+      /**
+       * ⭐ The promise is kept HERE, matched on the idea.
+       *
+       * Not passed in by the caller: a join something has to remember is a
+       * join that eventually isn't made, which is exactly how
+       * `placements.ideaId` stayed empty for a whole sprint. Publishing keeps
+       * the plan without the publish path needing to know a plan exists.
+       */
+      if (draft?.ideaId) {
+        await ctx.runMutation(internal.maya.dayPlan.markDoneByIdea, {
+          customerId: args.customerId,
+          ideaId: draft.ideaId,
+          placementId,
+        });
+      }
+      if (draft?.outcome === "pending") {
+        await ctx.runMutation(internal.maya.drafts.decide, {
+          draftId: args.draftId,
+          outcome: "approved",
+        });
+      }
+      await ctx.runMutation(internal.maya.messages.closeQuestionFor, {
+        customerId: args.customerId,
+        dedupeKey: `draft:${args.draftId}`,
+      });
+    }
 
     /**
      * ⭐ Close the inbox item — AFTER the placement exists, never before.

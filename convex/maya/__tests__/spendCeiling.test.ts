@@ -259,6 +259,12 @@ describe("recordCost", () => {
       idempotencyKey: "r2",
       customerId,
     });
+    // ⚠️ `enqueue` stamps `createdAt` from the real clock while this asserts
+    // against the frozen NOW. That mismatch was invisible while "today" was a
+    // UTC division; now that spend is counted in the FOUNDER's day, a fixture
+    // created today and read at a 2026 date is genuinely not the same day.
+    // Pin it, rather than widening the window to hide it.
+    await t.run((ctx) => ctx.db.patch(jobId, { createdAt: NOW }));
     await t.mutation(internal.maya.jobs.claimNext, {});
     await t.mutation(internal.maya.spendCeiling.recordCost, { jobId, costUsd: 7 });
     await t.mutation(internal.maya.jobs.fail, { jobId, error: "vendor 500" });

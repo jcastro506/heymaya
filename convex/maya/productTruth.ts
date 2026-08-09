@@ -35,7 +35,7 @@ import {
 } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
-import { callOpenRouter } from "../integrations/openrouter/client";
+import { callModel } from "./llm";
 
 /**
  * A volume worker, not the main brain.
@@ -114,7 +114,26 @@ export interface ProductTruth {
  * failure is invisible until something ships describing the wrong thing.
  */
 export type PageOutcome =
-  | { ok: true; text: string; title: string | null; finalUrl: string }
+  | {
+      ok: true;
+      text: string;
+      title: string | null;
+      finalUrl: string;
+      /**
+       * ⭐ The raw markup, kept rather than discarded.
+       *
+       * The product read only wants prose, so this used to be stripped and
+       * thrown away. The BRAND KIT (§6.2) needs the opposite half: fonts and
+       * palette are *declared* in the markup — `font-family`, and CSS custom
+       * properties usually named literally (`--brand`, `--primary`).
+       *
+       * Returned here so the kit costs no second request. Fetching the same
+       * page twice would double the latency, and a site seeing two hits in a
+       * second from one agent is exactly the pattern that gets a scraper
+       * blocked.
+       */
+      html: string;
+    }
   | { ok: false; reason: string; loginWalled: boolean };
 
 const LOGIN_WALL_MARKERS = [
@@ -237,7 +256,13 @@ export async function fetchProductPage(url: string): Promise<PageOutcome> {
       };
     }
 
-    return { ok: true, text: text.slice(0, MAX_EXTRACT_CHARS), title, finalUrl: res.url || url };
+    return {
+      ok: true,
+      text: text.slice(0, MAX_EXTRACT_CHARS),
+      title,
+      finalUrl: res.url || url,
+      html,
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
@@ -456,7 +481,9 @@ export const readProduct = internalAction({
     }
 
     const apiKey = process.env.OPENROUTER_API_KEY ?? "";
-    const completion = await callOpenRouter({
+    const completion = await callModel(ctx, {
+      customerId: args.customerId,
+      purpose: "product_read",
       apiKey,
       model: PRODUCT_READ_MODEL,
       temperature: 0.1,

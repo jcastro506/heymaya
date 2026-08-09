@@ -341,10 +341,12 @@ export const sweepTrends = internalAction({
     let shapes = 0;
     if (foreign.length > 0 && process.env.OPENROUTER_API_KEY) {
       const sample = foreign.slice(0, SHAPES_JUDGED);
-      const { callOpenRouter } = await import("../integrations/openrouter/client");
+      const { callModel } = await import("./llm");
       for (const item of sample) {
         try {
-          const completion = await callOpenRouter({
+          const completion = await callModel(ctx, {
+            customerId: args.customerId,
+            purpose: "trend_shape",
             apiKey: process.env.OPENROUTER_API_KEY,
             model: SHAPE_MODEL,
             temperature: 0,
