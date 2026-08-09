@@ -186,9 +186,26 @@ const TikTokCommentsResponseSchema = z
   })
   .passthrough();
 
+/**
+ * ⚠️ `nullish`, not `optional`.
+ *
+ * The endpoint answers `{"transcript": null}` for a video with no captions —
+ * which is common, and is a legitimate empty result rather than an error. With
+ * `.optional()` (undefined only) that response fails validation and the caller
+ * sees a thrown ZodError.
+ *
+ * Which made `transcript()`'s own `return { transcript: null }` branch
+ * **unreachable**: the function is written to handle the empty case and never
+ * could, because `parse` threw first. Measured 2026-08-09 against live TikTok
+ * URLs — 3 of 8 came back null and every one surfaced as a vendor failure.
+ *
+ * The cost of the wrong validator here is that "no transcript" and "the vendor
+ * is broken" are indistinguishable in the logs, which is exactly the pair you
+ * need to tell apart when deciding whether to retry.
+ */
 const TikTokTranscriptResponseSchema = z
   .object({
-    transcript: z.string().optional(),
+    transcript: z.string().nullish(),
     segments: z
       .array(
         z
@@ -199,7 +216,7 @@ const TikTokTranscriptResponseSchema = z
           })
           .passthrough()
       )
-      .optional(),
+      .nullish(),
   })
   .passthrough();
 

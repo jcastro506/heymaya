@@ -43,6 +43,7 @@ import type { ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { renderSlide, type SlideContent, type SlideLayout } from "./slides";
+import { pickCard } from "./formats";
 import type { BrandKit } from "./brandKit";
 
 /** Plans the set. The headlines ARE the post's words, so this is the voice tier. */
@@ -94,6 +95,8 @@ export interface CarouselResult {
   slides: RenderedSlide[];
   /** Plain language for the founder. Never mentions a model or a vendor. */
   detail: string;
+  /** ⭐ Which proven shape this borrowed, if any. Written onto the placement. */
+  formatCardId?: string;
   /** Why it stopped, when it did. Named, never silent. */
   failure?:
     | "no_idea"
@@ -240,6 +243,27 @@ export const makeCarousel = internalAction({
       { customerId: args.customerId }
     );
 
+    /**
+     * ⭐ Borrow a shape that demonstrably worked in this niche.
+     *
+     * §18's *"format card → brief"* row: *"without it she picks a template
+     * because it looks fun rather than because three top posts in this niche
+     * were that shape."*
+     *
+     * ⚠️ The card supplies the SHAPE, never the content. §9's rule for
+     * `ads_clone` applies just as hard here: *"copy the structure, never the
+     * content"* — a set that reproduces someone else's claims with this
+     * founder's logo on it is a defect, not a feature. That's why `reusableAs`
+     * is the only field that reaches the prompt: it is written to be
+     * product-agnostic, and the hook line and metrics deliberately are not
+     * passed.
+     */
+    const library = await ctx.runQuery(internal.maya.formats.formatCardsFor, {
+      customerId: args.customerId,
+      now: args.now,
+    });
+    const card = pickCard(library.cards, { channel: "tiktok" });
+
     const { callModel } = await import("./llm");
     const apiKey = process.env.OPENROUTER_API_KEY ?? "";
 
@@ -261,6 +285,9 @@ export const makeCarousel = internalAction({
             .slice(0, 8)
             .map((e: string) => `- ${e}`)
             .join("\n")}`
+        : "",
+      card
+        ? `A SHAPE THAT WORKED IN THIS NICHE — follow the structure, never the content:\n${card.reusableAs}`
         : "",
       args.steer ? `THE FOUNDER ASKED: ${args.steer}` : "",
     ]
@@ -418,6 +445,7 @@ export const makeCarousel = internalAction({
     return {
       ok: true,
       slides: rendered.slides,
+      formatCardId: card?.cardId,
       detail: `${rendered.slides.length} slides, in your colours${
         screenshots.length > 0 ? "" : " — no real screenshots on file yet, so this set is all type"
       }.`,
