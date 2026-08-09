@@ -595,3 +595,16 @@ export const bankFromObservations = internalAction({
       rejected: result.rejected + filler };
   },
 });
+
+/**
+ * One idea by id, tenant-checked by the caller.
+ *
+ * Exists because `nextIdea` picks and `bankDepth` counts, but nothing could
+ * simply *read* one — so anything working from an id the founder or a tool
+ * already chose had no way to resolve it.
+ */
+export const byId = internalQuery({
+  args: { ideaId: v.id("ideas") },
+  handler: async (ctx, args): Promise<Doc<"ideas"> | null> =>
+    (await ctx.db.get(args.ideaId)) as Doc<"ideas"> | null,
+});

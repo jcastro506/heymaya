@@ -64,13 +64,21 @@ export interface BrandKit {
   /**
    * ⭐ Where the font FILES live — not just their names.
    *
-   * ⚠️ Measured 2026-08-08: a renderer given only the name silently falls back
-   * to a generic face. Geist, Instrument Serif and `sans-serif` produced
-   * **byte-identical output** — 2,634 bytes each. Nothing errored; every slide
-   * would just quietly have been off-brand.
+   * ⚠️ Measured 2026-08-08: Geist, Instrument Serif and `sans-serif` produced
+   * **byte-identical output** — 2,634 bytes each, nothing errored. That was
+   * read at the time as "silently falls back to a generic face", i.e. off-brand
+   * but legible.
    *
-   * With the actual file embedded, the same slide renders at 13,865 bytes in
-   * the real typeface. So the name is decorative and the URL is the asset.
+   * **That reading was wrong, corrected 2026-08-09 by looking at the image.**
+   * They were identical because *no text was drawn at all* — resvg with no font
+   * buffer omits every glyph and still returns a valid PNG. The output wasn't
+   * off-brand, it was blank. The original comparison only ever compared file
+   * sizes.
+   *
+   * The conclusion survives and gets stronger: the name is decorative and the
+   * URL is the asset. With a real file the same slide renders at 13,865 bytes
+   * with actual letters in it. `route.ts` now ships a bundled face so the floor
+   * is "right words, wrong typeface" rather than "no words".
    *
    * `woff2` is what every modern site ships and resvg accepts it directly —
    * verified against hey-maya.ai's own Geist file.
