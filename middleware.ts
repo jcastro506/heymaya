@@ -18,7 +18,26 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 // otherwise public marketing — so it needs an explicit auth gate.
 const isMissionControl = createRouteMatcher(["/clawlaunch/mission(.*)"]);
 
-const isPublic = createRouteMatcher([
+/**
+ * ⭐ Routes reached by a machine, never a browser — each gated by its own
+ * credential, and each therefore required to be public *at the Clerk layer*.
+ *
+ * Exported so a test can assert every one of them is actually listed below.
+ * The whole point of this file's failure mode is that a missing entry is
+ * indistinguishable from a route that doesn't exist, so "we remembered" is not
+ * a mechanism. Adding a server-to-server route means adding it here, and the
+ * test fails until it is also public.
+ */
+export const SERVER_TO_SERVER_ROUTES = [
+  /** Clerk user lifecycle → Convex. Verifies a Svix signature. */
+  "/api/clerk/webhook",
+  /** Stripe billing events. Verifies an HMAC over the raw body. */
+  "/api/billing/stripe-webhook",
+  /** Convex → SVG rasteriser. Verifies a bearer token. */
+  "/api/render/slide",
+] as const;
+
+export const PUBLIC_ROUTES = [
   "/",
   "/vibecoders",
   "/waitlist",
@@ -34,8 +53,35 @@ const isPublic = createRouteMatcher([
   "/account/delete",
   "/sign-in(.*)",
   "/sign-up(.*)",
-  "/api/clerk/webhook",
-]);
+  /**
+   * ⚠️ Server-to-server callers, each gated by its OWN credential.
+   *
+   * "Public" here means *Clerk does not gate it* — not that it is open. Every
+   * entry below rejects an unauthenticated request itself, and none of them can
+   * ever carry a Clerk session because no browser is involved.
+   *
+   * This distinction is load-bearing because `auth.protect()` answers an
+   * unauthenticated API request with **404, not 401** — deliberately, so it
+   * doesn't leak which routes exist. The consequence is that a missing entry
+   * here looks exactly like a route that was never deployed: the handler never
+   * runs, nothing is logged, and the caller sees a plain Next.js 404 page.
+   *
+   * Two were missing, and both were invisible for the same reason.
+   *
+   * `stripe-webhook` has NEVER been listed — `git log -S` finds no commit that
+   * ever added it. It survived only because no real subscription has been
+   * processed yet: the first paying customer's `checkout.session.completed`
+   * would have 404'd, Stripe would have retried for three days and given up,
+   * and the account would sit unactivated with the payment taken. It verifies
+   * its own HMAC over the raw body, which is a stronger gate than a session.
+   *
+   * `render/slide` is called by Convex with a bearer token and would have
+   * failed the same way the moment anything tried to render a carousel.
+   */
+  ...SERVER_TO_SERVER_ROUTES,
+];
+
+const isPublic = createRouteMatcher(PUBLIC_ROUTES);
 
 export default clerkMiddleware(async (auth, req) => {
   if (!isPublic(req) || isMissionControl(req)) {
