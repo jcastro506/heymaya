@@ -24,6 +24,7 @@ import {
   checkpointHttp,
   draftHttp,
   carouselHttp,
+  confirmPreviewHttp,
   scrollHttp,
   rememberHttp,
   updateHttp,
@@ -1037,6 +1038,16 @@ http.route({ path: "/maya/scroll", method: "POST", handler: scrollHttp });
  * them. In this codebase that is the failure, not a detail.
  */
 http.route({ path: "/maya/make_carousel", method: "POST", handler: carouselHttp });
+/**
+ * ⚠️ The key to the lock added in #322. Without this route the TikTok consent
+ * gate holds every post forever, which is a safety feature that looks like one
+ * right up until someone tries to publish.
+ */
+http.route({
+  path: "/maya/confirm_preview",
+  method: "POST",
+  handler: confirmPreviewHttp,
+});
 http.route({ path: "/maya/remember", method: "POST", handler: rememberHttp });
 http.route({ path: "/maya/update", method: "POST", handler: updateHttp });
 http.route({ path: "/maya/history", method: "POST", handler: historyHttp });

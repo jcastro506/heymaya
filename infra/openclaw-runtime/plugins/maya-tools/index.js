@@ -150,6 +150,23 @@ export default defineToolPlugin({
     }),
 
     tool({
+      name: "confirm_preview",
+      label: "Confirm preview",
+      description:
+        "Record that the founder okayed EXACTLY this post and these images. REQUIRED BEFORE ANY TIKTOK POST — TikTok requires a human to see what will be published, publish holds without it, and that is TikTok's rule rather than ours. Call this only after they actually said yes to what you showed them. Pass the assetIds in the order you showed them; a carousel's order is part of what they approved. ⚠️ The approval covers that exact wording and those exact images: change a character of the caption or swap a slide afterwards and it no longer applies, and you will have to ask again.",
+      parameters: Type.Object({
+        draftId: Type.String({
+          description: "The draft they approved. `pending` lists drafts waiting on an answer.",
+        }),
+        assetIds: Type.Array(Type.String(), {
+          description:
+            "The slide assetIds you showed them, in the order you showed them. From make_carousel's data.slides[].assetId.",
+        }),
+      }),
+      execute: async (p, _cfg, ctx) => call("confirm_preview", p, ctx.signal),
+    }),
+
+    tool({
       name: "make_carousel",
       label: "Make carousel",
       description:

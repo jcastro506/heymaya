@@ -178,3 +178,83 @@ export function tiktokSettingsFor(input: {
     ? { contentPreviewConfirmed: true, expressConsentGiven: true }
     : null;
 }
+
+/**
+ * ⭐ Record a confirmation from server-side rows only.
+ *
+ * The caller names a draft and some assets. Everything the fingerprint is built
+ * from — the caption, the URLs — is read here, from the database. Nothing the
+ * caller says about *what was approved* is trusted, which is what stops an
+ * agent from attesting to an approval of something nobody saw.
+ */
+export const confirmFromDraft = internalMutation({
+  args: {
+    customerId: v.id("customers"),
+    draftId: v.id("drafts"),
+    assetIds: v.array(v.id("mediaAssets")),
+    now: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: boolean; fingerprint?: string; reason?: string }> => {
+    const draft = (await ctx.db.get(args.draftId)) as Doc<"drafts"> | null;
+    if (!draft || draft.customerId !== args.customerId) {
+      return { ok: false, reason: "that draft isn't on this account" };
+    }
+
+    /**
+     * ⚠️ Order is preserved from the caller's list, not from the database.
+     *
+     * The founder saw a sequence, and a carousel's order is part of what they
+     * approved. Reading the assets back in insertion order would quietly
+     * approve a different arrangement than the one on their screen.
+     */
+    const assetUrls: string[] = [];
+    for (const assetId of args.assetIds) {
+      const asset = (await ctx.db.get(assetId)) as Doc<"mediaAssets"> | null;
+      if (!asset || asset.customerId !== args.customerId) {
+        return { ok: false, reason: "one of those images isn't on this account" };
+      }
+      if (!asset.publicUrl) {
+        // An asset with no URL can't have been shown to anyone.
+        return { ok: false, reason: "one of those images has no link to show" };
+      }
+      assetUrls.push(asset.publicUrl);
+    }
+
+    const fingerprint = previewFingerprint({
+      assetUrls,
+      /**
+       * `snapshotText` is documented as "the exact text shown to the founder;
+       * publishing reads THIS" — so consent and publication are computed from
+       * the same field, and cannot describe different sentences.
+       */
+      caption: draft.snapshotText,
+    });
+
+    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    if (!customer) return { ok: false, reason: "no such account" };
+
+    const now = args.now ?? Date.now();
+    let confirmations: Record<string, number> = {};
+    try {
+      confirmations = customer.tiktokConsentJson
+        ? (JSON.parse(customer.tiktokConsentJson) as Record<string, number>)
+        : {};
+    } catch {
+      confirmations = {};
+    }
+    confirmations[fingerprint] = now;
+
+    const trimmed = Object.entries(confirmations)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 50);
+    await ctx.db.patch(args.customerId, {
+      tiktokConsentJson: JSON.stringify(Object.fromEntries(trimmed)),
+      updatedAt: now,
+    });
+
+    return { ok: true, fingerprint };
+  },
+});
