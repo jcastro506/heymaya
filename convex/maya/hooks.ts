@@ -1777,3 +1777,92 @@ export const carouselHttp = httpAction(async (ctx, request) => {
       "these are stored and postable. For TikTok the founder must see them and okay them first — that's TikTok's requirement, not ours — so send the images and ask before publishing",
   });
 });
+
+/**
+ * ⭐ `confirm_preview` — the founder okayed exactly this, and now it can post.
+ *
+ * ⚠️ Shipped because the gate arrived without it. The consent check in
+ * `publish` fails closed, and nothing could record a confirmation — so every
+ * TikTok post held forever. A lock with no key, and the kind of thing that
+ * looks like a working safety feature right up until someone tries to use it.
+ *
+ * ## The property that makes the record mean anything
+ *
+ * The fingerprint is computed HERE, from the draft's own text and the stored
+ * assets' own URLs. It is never accepted from the caller.
+ *
+ * That distinction is the whole design. A tool taking `{fingerprint}` — or
+ * worse `{confirmed: true}` — lets the agent describe an approval of something
+ * nobody was shown, and the compliance record would then attest to a human
+ * action that never happened. Here the only thing she can influence is WHICH
+ * draft and WHICH assets, both of which are server-side rows.
+ *
+ * ⛔ What this does NOT prove: that she asked at all. Questions key on
+ * `dedupeKey` rather than a draft, so "a question about this draft was
+ * outstanding and got answered" isn't a cheap lookup yet. The founder's actual
+ * reply is in the message log and auditable, but the precondition is not
+ * enforced — worth closing, and stated rather than papered over.
+ */
+export const confirmPreviewHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if ("error" in auth) return auth.error;
+  const parsed = await readJson(request);
+  if ("error" in parsed) return parsed.error;
+
+  const draftId = str(parsed.body, "draftId");
+  const rawAssets = (parsed.body as Record<string, unknown>).assetIds;
+  const assetIds = Array.isArray(rawAssets)
+    ? rawAssets.filter((a): a is string => typeof a === "string")
+    : [];
+
+  if (!draftId) {
+    return respond(
+      {
+        ok: false,
+        why: "no draft was named",
+        next: "say which draft the founder just okayed — `pending` lists the ones waiting",
+      },
+      400
+    );
+  }
+  if (assetIds.length === 0) {
+    return respond(
+      {
+        ok: false,
+        why: "no images were named",
+        next: "list the slide assetIds you showed them, in the order you showed them",
+      },
+      400
+    );
+  }
+
+  const result = await ctx.runMutation(
+    internal.maya.tiktokConsent.confirmFromDraft,
+    {
+      customerId: auth.customer._id,
+      draftId: draftId as Id<"drafts">,
+      assetIds: assetIds as Array<Id<"mediaAssets">>,
+    }
+  );
+
+  if (!result.ok) {
+    return respond({
+      ok: false,
+      why: result.reason ?? "couldn't record that",
+      next: "check the draftId and the assetIds are the ones you actually showed them, then try once more",
+    });
+  }
+
+  return respond({
+    ok: true,
+    data: { confirmed: true },
+    why: "recorded — the founder okayed this exact version",
+    /**
+     * ⚠️ Names the binding, because it is the thing most likely to surprise
+     * her later: editing the caption after this point silently invalidates the
+     * approval, and `publish` will hold with a message about a version they
+     * didn't see.
+     */
+    next: "publish it as-is. If the words or the images change at all, this approval no longer covers it and you'll need to ask again",
+  });
+});

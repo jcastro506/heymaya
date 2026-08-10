@@ -63,6 +63,7 @@ describe("the manifest and the code agree", () => {
     expect(manifest.contracts.tools.sort()).toEqual([
       "ask_founder",
       "checkpoint",
+  "confirm_preview",
       "draft",
       "history",
       "inbox",

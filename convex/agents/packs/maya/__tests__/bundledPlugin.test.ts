@@ -150,6 +150,7 @@ describe("the install contract", () => {
     expect([...BUNDLED_MAYA_PLUGIN_TOOLS].sort()).toEqual([
       "ask_founder",
       "checkpoint",
+  "confirm_preview",
       "draft",
       "history",
       "inbox",
