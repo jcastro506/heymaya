@@ -148,11 +148,13 @@ describe("the install contract", () => {
     // clearly the founder approved it. Live that day: shown at 12:18,
     // approved at 13:03, and the only reply she could give was a thumbs-up.
     expect([...BUNDLED_MAYA_PLUGIN_TOOLS].sort()).toEqual([
-      "ask_founder",
+      "adapt_crosspost",
+  "ask_founder",
       "checkpoint",
   "confirm_preview",
       "draft",
-      "history",
+      "forget_asset",
+  "history",
       "inbox",
       // ⭐ Joined 2026-08-09. It existed as an action with ZERO callers — built,
       // tested, verified live by hand, and unreachable by the agent, which is

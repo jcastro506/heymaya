@@ -25,6 +25,8 @@ import {
   draftHttp,
   carouselHttp,
   confirmPreviewHttp,
+  crosspostHttp,
+  forgetAssetHttp,
   scrollHttp,
   rememberHttp,
   updateHttp,
@@ -1048,6 +1050,12 @@ http.route({
   method: "POST",
   handler: confirmPreviewHttp,
 });
+http.route({
+  path: "/maya/adapt_crosspost",
+  method: "POST",
+  handler: crosspostHttp,
+});
+http.route({ path: "/maya/forget_asset", method: "POST", handler: forgetAssetHttp });
 http.route({ path: "/maya/remember", method: "POST", handler: rememberHttp });
 http.route({ path: "/maya/update", method: "POST", handler: updateHttp });
 http.route({ path: "/maya/history", method: "POST", handler: historyHttp });
