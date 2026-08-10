@@ -216,6 +216,7 @@ import type * as maya_formats from "../maya/formats.js";
 import type * as maya_handoff from "../maya/handoff.js";
 import type * as maya_hooks from "../maya/hooks.js";
 import type * as maya_ideas from "../maya/ideas.js";
+import type * as maya_imagery from "../maya/imagery.js";
 import type * as maya_inbox from "../maya/inbox.js";
 import type * as maya_jobs from "../maya/jobs.js";
 import type * as maya_ladder from "../maya/ladder.js";
@@ -480,6 +481,7 @@ declare const fullApi: ApiFromModules<{
   "maya/handoff": typeof maya_handoff;
   "maya/hooks": typeof maya_hooks;
   "maya/ideas": typeof maya_ideas;
+  "maya/imagery": typeof maya_imagery;
   "maya/inbox": typeof maya_inbox;
   "maya/jobs": typeof maya_jobs;
   "maya/ladder": typeof maya_ladder;
