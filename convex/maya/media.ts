@@ -546,6 +546,27 @@ export const fillFromProductPage = internalAction({
  * §7.5.3's authenticity floor ranks a generated asset **below** a real
  * screenshot, and it can only do that if the asset says what it is.
  */
+/**
+ * The image formats a platform will actually accept, by signature.
+ *
+ * Returns the MIME type or null. Kept small deliberately — an unrecognised
+ * format is far more likely to be an error page than an exotic image, and
+ * storing it would move the failure to the platform.
+ */
+export function detectImageType(bytes: Uint8Array): string | null {
+  if (bytes.length < 12) return null;
+  const is = (offset: number, ...sig: number[]) =>
+    sig.every((b, i) => bytes[offset + i] === b);
+
+  if (is(0, 0x89, 0x50, 0x4e, 0x47)) return "image/png";
+  if (is(0, 0xff, 0xd8, 0xff)) return "image/jpeg";
+  // RIFF....WEBP
+  if (is(0, 0x52, 0x49, 0x46, 0x46) && is(8, 0x57, 0x45, 0x42, 0x50)) {
+    return "image/webp";
+  }
+  return null;
+}
+
 export const storeRendered = internalAction({
   args: {
     customerId: v.id("customers"),
@@ -572,19 +593,23 @@ export const storeRendered = internalAction({
       return { ok: false, error: "that wasn't valid base64" };
     }
 
-    // ⚠️ Check the magic bytes, not the caller's word. A JSON error page
-    // stored as a .png publishes as a broken image, and the failure surfaces
-    // on the platform rather than here.
-    const isPng =
-      bytes.length > 8 &&
-      bytes[0] === 0x89 &&
-      bytes[1] === 0x50 &&
-      bytes[2] === 0x4e &&
-      bytes[3] === 0x47;
-    if (!isPng) return { ok: false, error: "those bytes aren't a PNG" };
+    /**
+     * ⚠️ Check the magic bytes, not the caller's word. A JSON error page or an
+     * SSO redirect stored as a `.png` publishes as a broken image, and the
+     * failure then surfaces on the platform hours later rather than here.
+     *
+     * ⚠️ Detects the TYPE rather than demanding PNG. The guard's job is "these
+     * bytes are an image"; requiring PNG specifically rejected the generated
+     * rung, which returns whatever the image model chose — and a legitimate
+     * JPEG failing this check would have read as a broken generator.
+     */
+    const detected = detectImageType(bytes);
+    if (!detected) {
+      return { ok: false, error: "those bytes aren't an image" };
+    }
 
     const storageId = await ctx.storage.store(
-      new Blob([buffer], { type: "image/png" })
+      new Blob([buffer], { type: detected })
     );
     const url = await ctx.storage.getUrl(storageId);
     if (!url) return { ok: false, error: "stored it but couldn't get a link" };
@@ -595,7 +620,7 @@ export const storeRendered = internalAction({
       source: "generated",
       storageKey: storageId,
       publicUrl: url,
-      contentType: "image/png",
+      contentType: detected,
       bytes: bytes.length,
       caption: args.caption,
       now: args.now,

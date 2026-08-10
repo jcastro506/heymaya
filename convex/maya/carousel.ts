@@ -411,6 +411,41 @@ export const makeCarousel = internalAction({
 
     /* ---------------------------------------------------------------------- */
 
+    /**
+     * ⭐ The generated rung, and ONLY when there is nothing real to show.
+     *
+     * §7.5.1 keeps the cheap path as the default: real text on brand colours
+     * costs nothing, and that is what makes a daily placement free. So this
+     * fires on one condition — the library had no usable screenshot, meaning
+     * the set would otherwise be entirely type.
+     *
+     * ⚠️ Self-limiting by design. One image per set (~$0.039), on the title
+     * slide, which is the one that decides whether anyone swipes. A founder
+     * who sends real screenshots never pays for this at all, and the spend
+     * falls away by itself the moment their library improves rather than
+     * needing a flag someone remembers to turn off.
+     *
+     * §7.5.3's ordering is preserved: a generated background is the LAST
+     * resort, never a substitute for a screenshot that exists.
+     */
+    if (screenshots.length === 0 && planned[0]?.layout === "title") {
+      const background = await ctx.runAction(internal.maya.imagery.backgroundFor, {
+        customerId: args.customerId,
+        // The headline is the brief. It already describes the slide's subject,
+        // and inventing a separate art direction would be a second thing that
+        // can disagree with the words.
+        brief: planned[0].content.headline,
+        now: args.now,
+      });
+      if (background.ok && background.url) {
+        planned[0].content.imageUrl = background.url;
+      } else {
+        // Not fatal — the set still works as type. Named so a repeated failure
+        // is visible rather than looking like a stylistic choice.
+        console.warn(`[carousel] no background: ${background.reason ?? "unknown"}`);
+      }
+    }
+
     const rendered = await renderAndStore(ctx, {
       customerId: args.customerId,
       planned,
