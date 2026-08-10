@@ -23,6 +23,10 @@ import { internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+// ⚠️ Static. Convex MUTATIONS cannot do dynamic imports — only actions can, and
+// the failure is a runtime `dynamic module import unsupported`, not a compile
+// error, so it surfaces the first time the mutation actually runs.
+import { dayKeyInZone } from "./cadence";
 import { checkPlainLanguage } from "./plainLanguage";
 import { dayScanFloor, isSameDayInZone } from "./cadence";
 
@@ -394,3 +398,75 @@ export const proactiveSentToday = internalQuery({
 
 /** Re-exported for tests and callers that need to read one row back. */
 export { getMessage };
+
+/**
+ * ⭐ An unanswered question must not block her forever.
+ *
+ * ⚠️ **This is the bug that broke the cadence.** Measured 2026-08-10: a
+ * question asked on 08-08 — *"Do you want to publish the pending draft…?"* —
+ * was never answered. `askFounder` refuses a second question while one is
+ * outstanding, so every ask for the next two days returned
+ * `{asked: false, blockedBy}`. She woke up, sent her brief, and could not offer
+ * anything. Two zero-placement days, and nothing said why.
+ *
+ * The invariant was already written down. `closeOpenQuestion`'s own comment
+ * says: *"Invariant 8: an open question is a non-terminal state, so something
+ * has to be able to end it other than an answer that may never come."* The
+ * function existed. **Nothing called it.**
+ *
+ * ## Expiry is by the founder's DAY, not by a fixed number of hours
+ *
+ * The question she asks is *"shall I post this today"*, and it stops being
+ * askable when today ends. A fixed TTL would either expire mid-afternoon —
+ * cutting off an answer that was still coming — or survive into a day where the
+ * draft it names is already stale.
+ *
+ * ⚠️ **Expiring is not approval.** The draft stays `pending` and unpublished.
+ * All this restores is her ability to ask about something else, which is the
+ * thing that was actually broken.
+ */
+export const expireStaleQuestions = internalMutation({
+  args: { customerId: v.id("customers"), now: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ expired: number; question?: string }> => {
+    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    if (!customer) return { expired: 0 };
+
+    const now = args.now ?? Date.now();
+    const today = dayKeyInZone(now, customer.timezone ?? "UTC");
+
+    const open = (await ctx.db
+      .query("messages")
+      .withIndex("by_customer_and_awaiting", (q) =>
+        q.eq("customerId", args.customerId).eq("awaitingAnswer", true)
+      )
+      .collect()) as Doc<"messages">[];
+
+    let expired = 0;
+    let question: string | undefined;
+    for (const row of open) {
+      // Asked today, in their timezone — still live, leave it alone.
+      if (dayKeyInZone(row.ts, customer.timezone ?? "UTC") === today) continue;
+
+      await ctx.db.patch(row._id, { awaitingAnswer: false });
+      expired += 1;
+      question ??= row.body?.slice(0, 120);
+
+      /**
+       * Logged, not silent. An expiry that leaves no trace makes "she never
+       * asked" and "they never answered" indistinguishable afterwards — and
+       * those need different fixes.
+       */
+      console.warn(
+        `[messages] expired an unanswered question from ${dayKeyInZone(
+          row.ts,
+          customer.timezone ?? "UTC"
+        )} for ${args.customerId} — she was blocked from asking anything else`
+      );
+    }
+
+    return { expired, question };
+  },
+});

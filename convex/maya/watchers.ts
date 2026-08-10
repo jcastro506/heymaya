@@ -237,6 +237,32 @@ export const sweepDue = internalAction({
        * both mean go), so this can only stop work when a recent reading
        * actually says the vendor is out.
        */
+      /**
+       * ⭐ Unblock her before anything else runs.
+       *
+       * ⚠️ An unanswered question from a previous day makes `askFounder` refuse
+       * every subsequent ask — she wakes, briefs, and can offer nothing. That
+       * broke the real account's cadence for two days on 2026-08-10 and left no
+       * signal at all.
+       *
+       * First in the sweep, and outside the vendor breaker below, deliberately:
+       * this costs no vendor call, and a customer whose collection is skipped
+       * for a dead vendor still needs to be able to talk.
+       */
+      try {
+        const expiry = await ctx.runMutation(
+          internal.maya.messages.expireStaleQuestions,
+          { customerId, now }
+        );
+        if (expiry.expired > 0) ran += 1;
+      } catch (error) {
+        console.error(
+          `[watchers] question expiry failed for ${customerId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+
       const breaker = await ctx.runQuery(internal.maya.breaker.vendorOpen, {
         vendor: "scrapecreators",
         now,
