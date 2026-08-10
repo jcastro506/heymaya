@@ -33,16 +33,22 @@
  * customers repeatedly asking her to change · and which rung of the ladder is
  * the product itself failing most often."*
  *
- * The first two are here. The last two need `diagnose` and the directive
- * aggregation from Sprint 8/12 proper, and are deliberately absent rather than
- * approximated — a number that looks like an answer and isn't is worse than a
- * gap, especially on the screen you check when something is wrong.
+ * `health` answers the first two. `aggregateLearning` answers the last two —
+ * the fleet-wide ladder and directives counted per account.
+ *
+ * ⚠️ `notYetAnswered` stays as a field even now that it is empty. The next
+ * thing this view cannot answer belongs there: a screen that silently covers
+ * three of four questions is how an operator concludes the fourth is fine.
  */
 
 import { v } from "convex/values";
 import { query } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
+// ⚠️ Static. Convex queries and mutations cannot do dynamic imports — the
+// failure is a RUNTIME `dynamic module import unsupported`, not a compile
+// error, so it typechecks cleanly and dies on first call.
+import { diagnoseFrom } from "../maya/ladder";
 
 /** Same gate as the rest of the ops view — the token IS the auth. */
 function authorized(token: string): boolean {
@@ -196,10 +202,142 @@ export const health = query({
        * this is the screen someone opens when they already suspect something is
        * wrong, and a wrong number there sends them the wrong way.
        */
-      notYetAnswered: [
-        "what customers repeatedly ask her to change — needs directive aggregation (§16.9.3)",
-        "which ladder rung the product fails most often — needs `diagnose` (Sprint 8)",
-      ],
+      /**
+       * ⭐ Empty, because both gaps are now closed by `aggregateLearning`
+       * below — §18's four questions all have an answer on this screen.
+       *
+       * ⚠️ Kept as a field rather than deleted. The next thing this view can't
+       * answer should be *stated here*, not omitted: a screen that silently
+       * covers three of four questions is how an operator concludes the fourth
+       * is fine.
+       */
+      notYetAnswered: [],
+    };
+  },
+});
+
+/* -------------------------------------------------------------------------- */
+/* Aggregate learning (§16.9.3)                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ The fleet-wide ladder — *"which rung is most commonly broken across ALL
+ * customers, which is a statement about our product, not theirs."*
+ *
+ * That framing is the whole point. A single customer stuck at L1 has a format
+ * problem. **Most** customers stuck at L1 means the thing we ship doesn't
+ * travel, and no amount of per-account coaching fixes it.
+ *
+ * Computed from the same `diagnoseFrom` the weekly verdict and `nextIdea` use,
+ * so the fleet number and every per-customer number are the same arithmetic.
+ * Re-deriving it here would let the operator view and the founder's own recap
+ * quietly disagree about the same week.
+ */
+export interface FleetLadder {
+  /** Customers with enough data to place on the ladder at all. */
+  measured: number;
+  /** Rung → how many customers are sitting there, worst-first. */
+  byRung: Array<{ rung: string; customers: number }>;
+  /** ⭐ The one that is a statement about us. Null when nothing is measurable. */
+  mostCommonBreak: string | null;
+}
+
+/**
+ * What customers keep asking her to change.
+ *
+ * §16.9.3 lists *"directives by type"* as aggregate learning, and the reason is
+ * that a rule one founder sets is a preference — the same rule set by nine is a
+ * default we got wrong. This is the difference between reading complaints and
+ * counting them.
+ */
+export interface DirectivePatterns {
+  total: number;
+  /** Kind → how many ACCOUNTS set one, not how many rows exist. */
+  byKind: Array<{ kind: string; accounts: number }>;
+}
+
+export const aggregateLearning = query({
+  args: { token: v.string(), now: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    ok: boolean;
+    ladder?: FleetLadder;
+    directives?: DirectivePatterns;
+  }> => {
+    if (!authorized(args.token)) return { ok: false };
+    const now = args.now ?? Date.now();
+
+    const customers = (await ctx.db
+      .query("customers")
+      .collect()) as Doc<"customers">[];
+    const active = customers.filter((c) => c.state === "active");
+
+    const rungCounts = new Map<string, number>();
+    let measured = 0;
+
+    for (const customer of active) {
+      const placements = (await ctx.db
+        .query("placements")
+        .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+        .collect()) as Doc<"placements">[];
+
+      const verdict = diagnoseFrom(placements, now, 7);
+      /**
+       * ⚠️ `unknown` is excluded from the fleet picture, not counted as a rung.
+       *
+       * §14.2.1: *"`unknown` is a real answer"* — it means no numbers came
+       * back. Folding it in would make "we can't see" look like a diagnosis,
+       * and at low customer counts it would usually be the winner.
+       */
+      if (verdict.rung === "unknown") continue;
+      measured += 1;
+      rungCounts.set(verdict.rung, (rungCounts.get(verdict.rung) ?? 0) + 1);
+    }
+
+    const byRung = [...rungCounts.entries()]
+      .map(([rung, count]) => ({ rung, customers: count }))
+      .sort((a, b) => b.customers - a.customers);
+
+    /**
+     * ⚠️ `healthy` is never "the most common break".
+     *
+     * It is the good outcome, and a fleet that is mostly healthy would
+     * otherwise report "healthy" as the thing to fix.
+     */
+    const broken = byRung.filter((r) => r.rung !== "healthy");
+
+    const directiveRows = (await ctx.db
+      .query("directives")
+      .collect()) as Doc<"directives">[];
+    const activeDirectives = directiveRows.filter((d) => d.active);
+
+    /**
+     * Counted per ACCOUNT, not per row. One founder who restates the same rule
+     * five times is one signal, not five — otherwise the loudest customer sets
+     * the product roadmap.
+     */
+    const accountsByKind = new Map<string, Set<string>>();
+    for (const row of activeDirectives) {
+      const set = accountsByKind.get(row.kind) ?? new Set<string>();
+      set.add(row.customerId as string);
+      accountsByKind.set(row.kind, set);
+    }
+
+    return {
+      ok: true,
+      ladder: {
+        measured,
+        byRung,
+        mostCommonBreak: broken[0]?.rung ?? null,
+      },
+      directives: {
+        total: activeDirectives.length,
+        byKind: [...accountsByKind.entries()]
+          .map(([kind, accounts]) => ({ kind, accounts: accounts.size }))
+          .sort((a, b) => b.accounts - a.accounts),
+      },
     };
   },
 });

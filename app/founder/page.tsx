@@ -173,6 +173,12 @@ function Overview({
    * view shows a healthy dashboard for something that no longer runs.
    */
   const fleet = useQuery(api.founder.fleetHealth.health, { token });
+  /**
+   * §18's other two questions. A second query rather than one fat read: this
+   * scans every customer's placements, and the "is anything broken" numbers
+   * above should not wait on it.
+   */
+  const learning = useQuery(api.founder.fleetHealth.aggregateLearning, { token });
 
   if (data === undefined)
     return <p className="text-paper-faint">Loading…</p>;
@@ -189,7 +195,7 @@ function Overview({
   return (
     <div>
       <h1 className="mb-1 text-xl font-semibold text-paper">Founder view</h1>
-      <FleetHealth fleet={fleet} />
+      <FleetHealth fleet={fleet} learning={learning} />
       <p className="mb-5 text-xs text-paper-faint">
         Every Maya · refreshed live · {clock(data.generatedAt)}
       </p>
@@ -359,8 +365,12 @@ function FounderInner() {
  */
 function FleetHealth({
   fleet,
+  learning,
 }: {
   fleet: typeof api.founder.fleetHealth.health._returnType | undefined;
+  learning:
+    | typeof api.founder.fleetHealth.aggregateLearning._returnType
+    | undefined;
 }) {
   if (fleet === undefined || !fleet.ok || !fleet.cadence) return null;
   const c = fleet.cadence;
@@ -406,6 +416,29 @@ function FleetHealth({
             </p>
           ))}
         </div>
+      )}
+
+      {/* ⭐ A statement about OUR product, not theirs: one customer stuck at
+          L1 has a format problem; most customers stuck at L1 means what we
+          ship doesn't travel. */}
+      {learning?.ok && learning.ladder && learning.ladder.measured > 0 && (
+        <p className="mt-3 text-xs text-paper-faint">
+          {learning.ladder.mostCommonBreak
+            ? `Most common break: ${learning.ladder.mostCommonBreak} (${learning.ladder.measured} measured)`
+            : `No rung broken across ${learning.ladder.measured} measured`}
+        </p>
+      )}
+
+      {/* Counted per ACCOUNT — one founder restating a rule five times is one
+          signal, not five. A rule nine accounts set is a default we got wrong. */}
+      {learning?.ok && learning.directives && learning.directives.byKind.length > 0 && (
+        <p className="mt-1 text-xs text-paper-faint">
+          Most-set rules:{" "}
+          {learning.directives.byKind
+            .slice(0, 3)
+            .map((d) => `${d.kind} (${d.accounts})`)
+            .join(" · ")}
+        </p>
       )}
 
       <p className="mt-3 text-xs text-paper-faint">
