@@ -1866,3 +1866,154 @@ export const confirmPreviewHttp = httpAction(async (ctx, request) => {
     next: "publish it as-is. If the words or the images change at all, this approval no longer covers it and you'll need to ask again",
   });
 });
+
+/**
+ * ⭐ `adapt_crosspost` — one post, three channels, never the same words twice.
+ *
+ * ⚠️ The last of the four actions built on 2026-08-09 with zero callers. The
+ * three hard rules (§3433) are enforced inside the action; this is the door.
+ *
+ * Takes a `draftId` rather than free text, deliberately. The draft is where
+ * traceability lives — `drafts.ts` already refuses a post with no idea — and
+ * adapting loose text would create per-channel variants of something that never
+ * had evidence behind it.
+ */
+export const crosspostHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if ("error" in auth) return auth.error;
+  const parsed = await readJson(request);
+  if ("error" in parsed) return parsed.error;
+
+  const draftId = str(parsed.body, "draftId");
+  if (!draftId) {
+    return respond(
+      {
+        ok: false,
+        why: "no draft was named",
+        next: "write the post first with `draft`, then adapt that draftId for the other channels",
+      },
+      400
+    );
+  }
+
+  const rawChannels = (parsed.body as Record<string, unknown>).channels;
+  const channels = Array.isArray(rawChannels)
+    ? rawChannels.filter((c): c is string => typeof c === "string")
+    : [];
+  if (channels.length === 0) {
+    return respond(
+      {
+        ok: false,
+        why: "no channels were given",
+        next: "say which channels this should go to — only the ones the founder has connected",
+      },
+      400
+    );
+  }
+
+  const draft = await ctx.runQuery(internal.maya.drafts.byId, {
+    draftId: draftId as Id<"drafts">,
+  });
+  if (!draft || draft.customerId !== auth.customer._id) {
+    return respond({
+      ok: false,
+      why: "that draft isn't on this account",
+      next: "check the draftId — `pending` lists the ones waiting",
+    });
+  }
+
+  const result = await ctx.runAction(internal.maya.crosspost.adaptCrosspost, {
+    customerId: auth.customer._id,
+    // Server-side, so the variants adapt the text the founder will actually see.
+    text: draft.snapshotText,
+    channels,
+    assetSummary: str(parsed.body, "assetSummary") || undefined,
+  });
+
+  if (!result.ok) {
+    /**
+     * ⚠️ A carbon copy is NOT retryable by repeating the call.
+     *
+     * The action already retried once with the collision named. A second
+     * identical request gets a second identical failure, and §3433's rule is
+     * that identical captions across channels are a recognisable tell — so the
+     * honest move is fewer channels, not another roll.
+     */
+    return respond({
+      ok: false,
+      data: { failure: result.failure ?? "unknown" },
+      why: result.detail,
+      next:
+        result.failure === "carbon_copy"
+          ? "do not retry this. Post it to one channel only, or rewrite the draft so the other channel has something genuinely different to say"
+          : "tell the founder you couldn't adapt it, and post it to the one channel it was written for",
+    });
+  }
+
+  return respond({
+    ok: true,
+    data: {
+      variants: result.variants,
+      /** Tags the model reached for that weren't in the mined set. Dropped. */
+      droppedTags: result.droppedTags,
+    },
+    why: result.detail,
+    /**
+     * Each variant still has to become its own draft — `publish` takes a
+     * draftId, so a variant that was never drafted cannot be posted no matter
+     * how good it is.
+     */
+    next: "save each variant as its own draft for that channel, then publish them separately",
+  });
+});
+
+/**
+ * ⭐ `forget_asset` — take something back out of the media library.
+ *
+ * ⚠️ The library had no delete at all. A founder who sent a wrong or stale
+ * screenshot was stuck with it forever, and §7.5.3's authenticity floor ranks a
+ * real screenshot ABOVE a generated one — so a wrong screenshot doesn't merely
+ * sit there, it outranks the alternatives and gets chosen.
+ */
+export const forgetAssetHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if ("error" in auth) return auth.error;
+  const parsed = await readJson(request);
+  if ("error" in parsed) return parsed.error;
+
+  const assetId = str(parsed.body, "assetId");
+  if (!assetId) {
+    return respond(
+      {
+        ok: false,
+        why: "no image was named",
+        next: "say which assetId to remove — `request_assets` lists what's on file",
+      },
+      400
+    );
+  }
+
+  const result = await ctx.runMutation(internal.maya.media.forget, {
+    customerId: auth.customer._id,
+    assetId: assetId as Id<"mediaAssets">,
+  });
+
+  if (!result.forgotten) {
+    return respond({
+      ok: false,
+      why: result.reason ?? "that isn't in the library",
+      next: "check the assetId, and do not retry more than once",
+    });
+  }
+
+  return respond({
+    ok: true,
+    data: { forgotten: true },
+    why: "removed it from the library",
+    /**
+     * ⚠️ Named because it is irreversible and the founder may not realise.
+     * Re-sending is the only way back for anything they supplied.
+     */
+    next: "it's gone for good — if that was a mistake, ask them to send it again",
+  });
+});

@@ -14,7 +14,9 @@
   "contracts": {
     "tools": [
       "scroll",
+      "adapt_crosspost",
       "confirm_preview",
+      "forget_asset",
       "make_carousel",
       "draft",
       "pending",

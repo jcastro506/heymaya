@@ -150,6 +150,29 @@ export default defineToolPlugin({
     }),
 
     tool({
+      name: "adapt_crosspost",
+      label: "Adapt crosspost",
+      description:
+        "Rewrite one drafted post for other channels. NEVER POST THE SAME CAPTION TO TWO CHANNELS — identical captions across TikTok and Reels are one of the most recognisable signs of an automated account, and this tool refuses rather than shipping one. Takes a draftId; the words come from the draft so the variants adapt what the founder will actually see. Hashtags are chosen only from sets mined from the niche — if a channel has none, you get an empty list, and that is correct rather than a gap to fill. YouTube also gets a title, which is a promise about the next thirty seconds, not a caption. Each variant still has to be saved as its OWN draft before it can be published.",
+      parameters: Type.Object({
+        draftId: Type.String({
+          description: "The post to adapt. From draft's data.draftId.",
+        }),
+        channels: Type.Array(Type.String(), {
+          description:
+            "Which channels to adapt for — only ones the founder has actually connected.",
+        }),
+        assetSummary: Type.Optional(
+          Type.String({
+            description:
+              "What the image or video shows, in a few words, so a caption doesn't just describe it back.",
+          })
+        ),
+      }),
+      execute: async (p, _cfg, ctx) => call("adapt_crosspost", p, ctx.signal),
+    }),
+
+    tool({
       name: "confirm_preview",
       label: "Confirm preview",
       description:
@@ -164,6 +187,19 @@ export default defineToolPlugin({
         }),
       }),
       execute: async (p, _cfg, ctx) => call("confirm_preview", p, ctx.signal),
+    }),
+
+    tool({
+      name: "forget_asset",
+      label: "Forget asset",
+      description:
+        "Remove an image or video from the media library for good. Use it when the founder says a screenshot is wrong, out of date, or shows something they'd rather not show — a stale screenshot is worse than none, because real screenshots outrank generated ones and this one would get picked. IRREVERSIBLE: anything they sent can only come back if they send it again, so ask before removing something you are not sure about.",
+      parameters: Type.Object({
+        assetId: Type.String({
+          description: "The asset to remove. From request_assets, or make_carousel's slides.",
+        }),
+      }),
+      execute: async (p, _cfg, ctx) => call("forget_asset", p, ctx.signal),
     }),
 
     tool({

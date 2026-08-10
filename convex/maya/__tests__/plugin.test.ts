@@ -61,11 +61,13 @@ describe("the manifest and the code agree", () => {
     // draft offered on an earlier turn, without which an approved post could
     // never be published.
     expect(manifest.contracts.tools.sort()).toEqual([
-      "ask_founder",
+      "adapt_crosspost",
+  "ask_founder",
       "checkpoint",
   "confirm_preview",
       "draft",
-      "history",
+      "forget_asset",
+  "history",
       "inbox",
       // ⭐ Joined 2026-08-09. It existed as an action with ZERO callers — built,
       // tested, verified live by hand, and unreachable by the agent, which is
