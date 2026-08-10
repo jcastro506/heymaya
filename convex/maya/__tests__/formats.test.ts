@@ -15,6 +15,8 @@ import {
   parseCard,
   parseMetrics,
   mineHashtags,
+  mergeWatch,
+  handleFrom,
   MAX_TAGS_PER_CHANNEL,
   pickCard,
   videoIdFrom,
@@ -280,5 +282,77 @@ describe("mineHashtags", () => {
       post(`#tag${i}`, 100),
     ]).flat();
     expect(mineHashtags(posts).length).toBeLessThanOrEqual(MAX_TAGS_PER_CHANNEL);
+  });
+});
+
+describe("mergeWatch", () => {
+  const read = card({ depth: "read" });
+  const seen = JSON.stringify({
+    visualDevice: "tight vertical frame, man talking straight to camera",
+    onScreenText: "Does the earth get heavier?",
+    beats: [
+      { atSec: 0, whatHappens: "asks the question" },
+      { atSec: 6, whatHappens: "elaborates with gestures" },
+    ],
+    textOverlay: { style: "bold white", placement: "upper third", timing: "0-3s" },
+    pacing: { cutsPerSecond: 0.25, totalLength: 65 },
+  });
+
+  it("promotes to watch and fills the visual fields", () => {
+    const out = mergeWatch(read, seen);
+    expect(out?.depth).toBe("watch");
+    expect(out?.hook.visualDevice).toContain("tight vertical frame");
+    expect(out?.beats).toHaveLength(2);
+    expect(out?.pacing?.totalLength).toBe(65);
+  });
+
+  it("keeps everything the read tier established", () => {
+    // The watch tier ADDS. Losing `reusableAs` would throw away the field the
+    // whole library exists for.
+    const out = mergeWatch(read, seen);
+    expect(out?.reusableAs).toBe(read.reusableAs);
+    expect(out?.hook.spokenLine).toBe(read.hook.spokenLine);
+    expect(out?.cardId).toBe(read.cardId);
+  });
+
+  /**
+   * ⭐ A card stamped "watched" with nothing seen is worse than a read card:
+   * it claims a stronger observation than was made, and downstream it is
+   * indistinguishable from a real one (§2.7).
+   */
+  it("refuses to promote when nothing was actually seen", () => {
+    expect(mergeWatch(read, JSON.stringify({ visualDevice: "" }))).toBeNull();
+    expect(mergeWatch(read, JSON.stringify({ beats: [] }))).toBeNull();
+    expect(mergeWatch(read, "the video wouldn't load")).toBeNull();
+  });
+
+  it("drops malformed beats rather than keeping half a shape", () => {
+    const out = mergeWatch(
+      read,
+      JSON.stringify({
+        visualDevice: "something",
+        beats: [{ atSec: "nope", whatHappens: "x" }, { atSec: 3, whatHappens: "ok" }],
+      })
+    );
+    expect(out?.beats).toEqual([{ atSec: 3, whatHappens: "ok" }]);
+  });
+
+  it("caps beats so a card stays a shape rather than a transcript", () => {
+    const many = Array.from({ length: 20 }, (_, i) => ({ atSec: i, whatHappens: "x" }));
+    const out = mergeWatch(read, JSON.stringify({ visualDevice: "v", beats: many }));
+    expect(out?.beats?.length).toBeLessThanOrEqual(6);
+  });
+});
+
+describe("handleFrom", () => {
+  it("reads the @handle out of a share URL", () => {
+    expect(handleFrom("https://www.tiktok.com/@some.user/video/123?_r=1")).toBe(
+      "some.user"
+    );
+  });
+
+  it("returns undefined when there's no handle to find", () => {
+    // A card with no handle can't be watched — `post()` needs both parts.
+    expect(handleFrom("https://example.com/video/1")).toBeUndefined();
   });
 });

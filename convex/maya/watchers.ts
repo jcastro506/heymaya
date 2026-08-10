@@ -172,7 +172,7 @@ export const sweptFor = internalQuery({
  * them weekly — a claim that already exists for this week is skipped, so the
  * cron can fire every day and the work happens once.
  */
-export const WEEKLY_SWEEPS = ["formats", "hashtags"] as const;
+export const WEEKLY_SWEEPS = ["formats", "hashtags", "watch"] as const;
 
 export const SWEEPS = [
   "scroll",
@@ -285,6 +285,13 @@ export const sweepDue = internalAction({
       const weeklyRefs = {
         formats: internal.maya.formats.watchFormats,
         hashtags: internal.maya.formats.mineHashtagSets,
+        /**
+         * ⚠️ LAST, and that ordering is load-bearing. The watch tier upgrades
+         * cards the read tier produced — running it before `formats` would
+         * watch last week's top videos every week, which looks identical to
+         * working and is permanently a week behind.
+         */
+        watch: internal.maya.formats.watchTopFormats,
       } as const;
 
       for (const sweep of WEEKLY_SWEEPS) {

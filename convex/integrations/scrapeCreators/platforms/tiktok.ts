@@ -714,7 +714,22 @@ export const tiktok = {
     const raw = await clientOf(deps).request<unknown>("/v2/tiktok/video", {
       query: { url: tiktokVideoUrl(handle, awemeId) },
     });
-    const list = normalizeTikTokPosts({ aweme_list: [raw] });
+    /**
+     * ⚠️ Unwrap `aweme_detail` before normalising.
+     *
+     * `/v2/tiktok/video` answers `{ aweme_detail: {...} }` — the aweme is
+     * nested, not the top-level object. Passing the wrapper straight in meant
+     * the normaliser looked for `desc`, `statistics` and `video` on an object
+     * that only had `aweme_detail`, so EVERY field came back null: no caption,
+     * no metrics, and no `videoUrl`.
+     *
+     * Measured 2026-08-10 while wiring the watch tier. Nothing failed loudly —
+     * a post object with null fields is a valid post object, and §5.3.1 records
+     * this path as "SOLVED AND VERIFIED END TO END" on the strength of a raw
+     * probe rather than a call through this wrapper.
+     */
+    const detail = (raw as { aweme_detail?: unknown })?.aweme_detail ?? raw;
+    const list = normalizeTikTokPosts({ aweme_list: [detail] });
     return list[0] ?? null;
   },
   async comments(
