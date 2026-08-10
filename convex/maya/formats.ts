@@ -17,13 +17,14 @@
  * | **Read** — transcripts + metrics | ~50/week | spoken hook, script shape, claim structure, length |
  * | **Watch** — multimodal on the video | top 5–10/week | visual hook, cuts, overlay style, pacing |
  *
- * ⛔ **This file implements the Read tier only.** The Watch tier needs video
- * bytes reaching a multimodal model (§5.3.1) — the path exists in
- * `gtmMaya/walkthrough.ts`, which is frozen, and porting it is its own piece of
- * work with its own cost profile. A card produced from a transcript says so in
- * `depth`, so nothing downstream can mistake a read for a watch. Claiming the
- * visual fields without having looked at the video would be worse than not
- * having them.
+ **Both tiers are implemented here.** `watchFormats` reads; `watchTopFormats`
+ * watches the top few and upgrades those cards in place.
+ *
+ * ⚠️ `depth` on every card says which it was. A card produced from a transcript
+ * cannot claim `visualDevice` — that would be a fabricated observation (§2.7),
+ * and it would be indistinguishable from a real one downstream. `beats`,
+ * `textOverlay` and `pacing` stay absent on a read card rather than guessed,
+ * and `mergeWatch` refuses to promote a card that came back with nothing seen.
  *
  * ## Why the cards are shared, not per-customer
  *
@@ -877,3 +878,304 @@ export const hashtagsFor = internalQuery({
     }
   },
 });
+
+/* -------------------------------------------------------------------------- */
+/* The watch tier (§5.3.1)                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ §5.3: *"Reading is where the volume is; watching is where the format
+ * really lives."*
+ *
+ * A transcript gives the spoken hook and the script shape. It cannot see the
+ * visual hook, the cut rhythm, or when text appears on screen — and those are
+ * most of what makes a short video work. This is the second tier: the top few
+ * cards a week, watched properly.
+ *
+ * ⚠️ **Uses the direct Gemini API, not OpenRouter.** Every other model call in
+ * `convex/maya` goes through `callModel` deliberately, and `mediaAssets.ts`
+ * says why: one key, one telemetry profile. This one deviates because the
+ * request carries **video bytes as `inlineData`**, which is a Gemini-native
+ * shape — the proven path in `gtmMaya/walkthrough.ts` uses it, and routing
+ * video through a text-completions API is not something to discover is broken
+ * in production. `GEMINI_API_KEY` is already set. Cost is still recorded, under
+ * vendor `gemini` rather than `openrouter`, so the ledger stays complete.
+ */
+export const WATCH_MODEL = process.env.MAYA_WATCH_MODEL ?? "gemini-2.5-flash";
+
+/** §5.3's "top 5–10 a week". Watching is the expensive half; this is the cap. */
+export const WATCH_LIMIT = 5;
+
+/**
+ * ⚠️ Video bytes are base64'd into the request, inflating ~1.33×. A long video
+ * would blow the action's memory before it ever reached the model, so the cap
+ * is on the download rather than on the model's own limit.
+ */
+export const MAX_VIDEO_BYTES = 12 * 1024 * 1024;
+
+const WATCH_SYSTEM = `You are watching a short video to describe HOW it is made, not what it is about.
+
+Return STRICT JSON, no prose:
+{ "visualDevice": string,
+  "onScreenText": string,
+  "beats": [ { "atSec": number, "whatHappens": string } ],
+  "textOverlay": { "style": string, "placement": string, "timing": string },
+  "pacing": { "cutsPerSecond": number, "totalLength": number } }
+
+- "visualDevice": what the FIRST TWO SECONDS show, and why it stops a scroll.
+  The thing on screen, not the topic.
+- "beats": what happens when. Six at most. This is the shape someone else would
+  follow.
+- "textOverlay": how on-screen text looks, where it sits, when it appears.
+- "pacing": cuts per second and total length, as numbers.
+
+Describe only what you can actually see. If the video has no on-screen text,
+say so with an empty string rather than inventing a style.`;
+
+/**
+ * ⭐ Upgrade the top cards from read to watch.
+ *
+ * Only cards already in the library, and only ones still at `depth: "read"` —
+ * re-watching a card we already watched spends the expensive tier on a question
+ * that is already answered.
+ */
+export const watchTopFormats = internalAction({
+  args: {
+    customerId: v.id("customers"),
+    limit: v.optional(v.number()),
+    now: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: boolean; watched: number; failed: number; detail: string }> => {
+    const targets = await ctx.runQuery(internal.maya.learnBusiness.targetsFor, {
+      customerId: args.customerId,
+    });
+    if (!targets || targets.keywords.length === 0) {
+      return { ok: false, watched: 0, failed: 0, detail: "no niche keywords yet" };
+    }
+
+    const library = await ctx.runQuery(internal.maya.formats.formatCardsFor, {
+      customerId: args.customerId,
+      now: args.now,
+    });
+    const unwatched = library.cards
+      .filter((c: FormatCard) => c.depth === "read" && c.channel === "tiktok")
+      .sort((a: FormatCard, b: FormatCard) => b.metrics.views - a.metrics.views)
+      .slice(0, args.limit ?? WATCH_LIMIT);
+
+    if (unwatched.length === 0) {
+      return {
+        ok: true,
+        watched: 0,
+        failed: 0,
+        detail: "nothing new worth watching — the top cards are already watched",
+      };
+    }
+
+    const apiKey =
+      process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "";
+    if (!apiKey) {
+      return { ok: false, watched: 0, failed: 0, detail: "watching isn't configured" };
+    }
+
+    const upgraded = new Map<string, FormatCard>();
+    let failed = 0;
+
+    for (const card of unwatched) {
+      try {
+        const seen = await watchOne(ctx, { card, apiKey, customerId: args.customerId });
+        if (seen) upgraded.set(card.cardId, seen);
+        else failed += 1;
+      } catch (error) {
+        failed += 1;
+        console.error(
+          `[formats] watch ${card.sourceUrl} threw: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
+
+    if (upgraded.size === 0) {
+      return {
+        ok: false,
+        watched: 0,
+        failed,
+        detail: "couldn't watch any of this week's top videos",
+      };
+    }
+
+    // Merge back, preserving every card the watch tier didn't touch.
+    const merged = library.cards.map((c: FormatCard) => upgraded.get(c.cardId) ?? c);
+    await ctx.runMutation(internal.maya.formats.storeCards, {
+      fingerprint: nicheFingerprint(targets.keywords),
+      cardsJson: JSON.stringify(merged),
+      now: args.now,
+    });
+
+    return {
+      ok: true,
+      watched: upgraded.size,
+      failed,
+      detail: `watched ${upgraded.size} of this week's top videos properly${
+        failed > 0 ? `, ${failed} couldn't be fetched` : ""
+      }`,
+    };
+  },
+});
+
+async function watchOne(
+  ctx: ActionCtx,
+  input: { card: FormatCard; apiKey: string; customerId: Doc<"customers">["_id"] }
+): Promise<FormatCard | null> {
+  const handle = handleFrom(input.card.sourceUrl);
+  const videoId = videoIdFrom(input.card.sourceUrl, "tiktok");
+  if (!handle || !videoId) return null;
+
+  const { tiktok } = await import(
+    "../integrations/scrapeCreators/platforms/tiktok"
+  );
+  const post = await tiktok.post(handle, videoId);
+  const videoUrl = post?.videoUrl;
+  if (!videoUrl) {
+    // ⚠️ §5.3.1's whole problem: a TikTok page URL returns HTML, not an mp4.
+    console.warn(`[formats] no playable url for ${input.card.sourceUrl}`);
+    return null;
+  }
+
+  const res = await fetch(videoUrl);
+  if (!res.ok) return null;
+  const bytes = await res.arrayBuffer();
+  if (bytes.byteLength > MAX_VIDEO_BYTES) {
+    console.warn(
+      `[formats] ${input.card.sourceUrl} is ${Math.round(bytes.byteLength / 1e6)}MB — over the cap`
+    );
+    return null;
+  }
+
+  const gem = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${WATCH_MODEL}:generateContent?key=${input.apiKey}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { inlineData: { mimeType: "video/mp4", data: toBase64(bytes) } },
+              { text: WATCH_SYSTEM },
+            ],
+          },
+        ],
+        generationConfig: { responseMimeType: "application/json" },
+      }),
+    }
+  );
+
+  /**
+   * Recorded whether or not it parsed. The video was uploaded and processed by
+   * then, so the spend happened — a ledger counting only usable answers
+   * understates cost exactly when something is failing repeatedly.
+   */
+  try {
+    await ctx.runMutation(internal.maya.cogs.record, {
+      customerId: input.customerId,
+      vendor: "gemini",
+      resource: WATCH_MODEL,
+      purpose: "format_watch",
+    });
+  } catch {
+    // Never let ledger trouble cost the observation.
+  }
+
+  if (!gem.ok) {
+    console.error(`[formats] watch model returned ${gem.status}`);
+    return null;
+  }
+
+  const payload = (await gem.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+  const text = payload.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  return mergeWatch(input.card, text);
+}
+
+/**
+ * Fold what was seen into the card.
+ *
+ * ⚠️ Only promotes to `depth: "watch"` when something was actually seen. A card
+ * stamped "watched" with no visual fields is worse than a read card — it claims
+ * a stronger observation than was made, and §2.7 forbids exactly that.
+ */
+export function mergeWatch(card: FormatCard, raw: string): FormatCard | null {
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(
+      raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/, "").trim()
+    ) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+
+  const visualDevice =
+    typeof parsed.visualDevice === "string" ? parsed.visualDevice.trim() : "";
+  if (!visualDevice) return null;
+
+  const beats = Array.isArray(parsed.beats)
+    ? parsed.beats
+        .filter((b): b is { atSec: number; whatHappens: string } => {
+          if (!b || typeof b !== "object") return false;
+          const e = b as Record<string, unknown>;
+          return typeof e.atSec === "number" && typeof e.whatHappens === "string";
+        })
+        .slice(0, 6)
+    : undefined;
+
+  const overlay = parsed.textOverlay as Record<string, unknown> | undefined;
+  const pacing = parsed.pacing as Record<string, unknown> | undefined;
+
+  return {
+    ...card,
+    depth: "watch",
+    hook: {
+      ...card.hook,
+      visualDevice,
+      onScreenText:
+        typeof parsed.onScreenText === "string" ? parsed.onScreenText.trim() : "",
+    },
+    beats: beats && beats.length > 0 ? beats : undefined,
+    textOverlay:
+      overlay && typeof overlay.style === "string"
+        ? {
+            style: String(overlay.style),
+            placement: String(overlay.placement ?? ""),
+            timing: String(overlay.timing ?? ""),
+          }
+        : undefined,
+    pacing:
+      pacing && typeof pacing.totalLength === "number"
+        ? {
+            cutsPerSecond:
+              typeof pacing.cutsPerSecond === "number" ? pacing.cutsPerSecond : undefined,
+            totalLength: pacing.totalLength,
+          }
+        : undefined,
+  };
+}
+
+export function handleFrom(url: string): string | undefined {
+  return url.match(/@([\w.-]+)/)?.[1];
+}
+
+function toBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
