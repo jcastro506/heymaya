@@ -535,3 +535,124 @@ describe("ONE WRITER — a question is a message, not a row", () => {
     expect(jobs.filter((j) => j.kind === "deliver_message")).toHaveLength(1);
   });
 });
+
+/**
+ * ⭐ THE BUG THAT BROKE THE CADENCE (2026-08-10)
+ *
+ * A question asked on 08-08 — "Do you want to publish the pending draft…?" —
+ * was never answered. `askFounder` refuses a second question while one is
+ * outstanding, so every ask for the next two days returned
+ * `{asked: false, blockedBy}`. She woke, sent her brief, and could offer
+ * nothing. Two zero-placement days, with no signal anywhere.
+ *
+ * `closeOpenQuestion`'s own comment already stated the invariant — *"an open
+ * question is a non-terminal state, so something has to be able to end it other
+ * than an answer that may never come"* — and nothing called it.
+ */
+describe("INVARIANT 8 — an unanswered question cannot block her forever", () => {
+  it("expires a question left open from a previous day", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "expire_prev");
+
+    const asked = await t.mutation(internal.maya.messages.askFounder, {
+      customerId,
+      body: "Do you want to publish this?",
+      dedupeKey: "ask:day-one",
+      surface: "telegram",
+      ts: NOW,
+    });
+    expect(asked.asked).toBe(true);
+
+    // A day later, still unanswered.
+    const nextDay = NOW + 26 * 60 * 60 * 1000;
+    const out = await t.mutation(internal.maya.messages.expireStaleQuestions, {
+      customerId,
+      now: nextDay,
+    });
+    expect(out.expired).toBe(1);
+
+    // ⭐ The point: she can ask again.
+    const again = await t.mutation(internal.maya.messages.askFounder, {
+      customerId,
+      body: "Different question",
+      dedupeKey: "ask:day-two",
+      surface: "telegram",
+      ts: nextDay,
+    });
+    expect(again.asked).toBe(true);
+  });
+
+  it("leaves today's question alone — the answer may still be coming", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "expire_today");
+
+    await t.mutation(internal.maya.messages.askFounder, {
+      customerId,
+      body: "Publish this?",
+      dedupeKey: "ask:today",
+      surface: "telegram",
+      ts: NOW,
+    });
+
+    // Four hours later, same day.
+    const out = await t.mutation(internal.maya.messages.expireStaleQuestions, {
+      customerId,
+      now: NOW + 4 * 60 * 60 * 1000,
+    });
+    expect(out.expired).toBe(0);
+
+    // Still correctly blocked — one open question at a time is the rule.
+    const second = await t.mutation(internal.maya.messages.askFounder, {
+      customerId,
+      body: "Another",
+      dedupeKey: "ask:today-2",
+      surface: "telegram",
+      ts: NOW + 4 * 60 * 60 * 1000,
+    });
+    expect(second.asked).toBe(false);
+  });
+
+  it("is idempotent — a sweep every ten minutes must not thrash", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "expire_idem");
+    await t.mutation(internal.maya.messages.askFounder, {
+      customerId,
+      body: "Publish this?",
+      dedupeKey: "ask:once",
+      surface: "telegram",
+      ts: NOW,
+    });
+    const later = NOW + 26 * 60 * 60 * 1000;
+    expect(
+      (await t.mutation(internal.maya.messages.expireStaleQuestions, { customerId, now: later }))
+        .expired
+    ).toBe(1);
+    expect(
+      (await t.mutation(internal.maya.messages.expireStaleQuestions, { customerId, now: later }))
+        .expired
+    ).toBe(0);
+  });
+
+  it("does not touch another account's open question", async () => {
+    const t = convexTest(schema, modules);
+    const a = await seed(t, "expire_a");
+    const b = await seed(t, "expire_b");
+    await t.mutation(internal.maya.messages.askFounder, {
+      customerId: b,
+      body: "B's question",
+      dedupeKey: "ask:b",
+      surface: "telegram",
+      ts: NOW,
+    });
+
+    const out = await t.mutation(internal.maya.messages.expireStaleQuestions, {
+      customerId: a,
+      now: NOW + 26 * 60 * 60 * 1000,
+    });
+    expect(out.expired).toBe(0);
+
+    // B's is still open, and B is still correctly blocked.
+    const bStill = await t.query(internal.maya.messages.openQuestion, { customerId: b });
+    expect(bStill).not.toBeNull();
+  });
+});
