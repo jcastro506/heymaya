@@ -34,6 +34,7 @@ import type * as billing_webhook from "../billing/webhook.js";
 import type * as creators from "../creators.js";
 import type * as crons from "../crons.js";
 import type * as founder_dashboard from "../founder/dashboard.js";
+import type * as founder_fleetHealth from "../founder/fleetHealth.js";
 import type * as gtmMaya_accountLifecycle from "../gtmMaya/accountLifecycle.js";
 import type * as gtmMaya_agentLifecycle from "../gtmMaya/agentLifecycle.js";
 import type * as gtmMaya_appInspector from "../gtmMaya/appInspector.js";
@@ -299,6 +300,7 @@ declare const fullApi: ApiFromModules<{
   creators: typeof creators;
   crons: typeof crons;
   "founder/dashboard": typeof founder_dashboard;
+  "founder/fleetHealth": typeof founder_fleetHealth;
   "gtmMaya/accountLifecycle": typeof gtmMaya_accountLifecycle;
   "gtmMaya/agentLifecycle": typeof gtmMaya_agentLifecycle;
   "gtmMaya/appInspector": typeof gtmMaya_appInspector;

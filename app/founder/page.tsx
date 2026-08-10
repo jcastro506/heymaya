@@ -167,6 +167,12 @@ function Overview({
   onOpen: (id: Id<"creators">) => void;
 }) {
   const data = useQuery(api.founder.dashboard.overview, { token });
+  /**
+   * ⭐ The CURRENT product. The overview above reads `gtmAgents` and
+   * `mayaMessages` — the deleted product's tables — so without this the ops
+   * view shows a healthy dashboard for something that no longer runs.
+   */
+  const fleet = useQuery(api.founder.fleetHealth.health, { token });
 
   if (data === undefined)
     return <p className="text-paper-faint">Loading…</p>;
@@ -183,6 +189,7 @@ function Overview({
   return (
     <div>
       <h1 className="mb-1 text-xl font-semibold text-paper">Founder view</h1>
+      <FleetHealth fleet={fleet} />
       <p className="mb-5 text-xs text-paper-faint">
         Every Maya · refreshed live · {clock(data.generatedAt)}
       </p>
@@ -339,6 +346,92 @@ function FounderInner() {
     />
   ) : (
     <Overview token={token} onOpen={setOpenAccount} />
+  );
+}
+
+/**
+ * ⭐ Sprint 12's thin version — the Sprint 3 question, answerable on a phone.
+ *
+ * Ordered by what ruins a day: has the cadence stopped · is a vendor about to
+ * fail · what is it costing. Everything sits above the fold at 390px, because
+ * the exit criterion is *"in under a minute and from your phone"* and a number
+ * you have to scroll to is a number you check less often.
+ */
+function FleetHealth({
+  fleet,
+}: {
+  fleet: typeof api.founder.fleetHealth.health._returnType | undefined;
+}) {
+  if (fleet === undefined || !fleet.ok || !fleet.cadence) return null;
+  const c = fleet.cadence;
+  const stuck = c.stuck ?? [];
+  const degraded = fleet.vendorsDegraded ?? [];
+
+  return (
+    <section className="mb-6 rounded-lg border border-white/10 p-3">
+      <h2 className="mb-2 text-sm font-semibold text-paper">Maya · today</h2>
+
+      <div className="grid grid-cols-3 gap-2">
+        <Stat label="Active" value={String(c.activeCustomers)} />
+        <Stat label="Posted today" value={`${c.doneToday}/${c.activeCustomers}`} />
+        <Stat label="Best streak" value={String(c.bestStreak)} />
+      </div>
+
+      {/* ⚠️ The loudest thing on the page, because a stopped account is the
+          failure this whole view exists to catch. */}
+      {stuck.length > 0 && (
+        <div className="mt-3 rounded border border-rose-500/40 bg-rose-500/10 p-2">
+          <p className="text-xs font-semibold text-rose-300">
+            {stuck.length} not posting
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {stuck.slice(0, 5).map((s) => (
+              <li key={s.customerId} className="text-xs text-paper-faint">
+                <code>{String(s.customerId).slice(0, 8)}…</code>{" "}
+                {s.daysSince === null
+                  ? "never posted"
+                  : `${s.daysSince}d since last post`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {degraded.length > 0 && (
+        <div className="mt-2 rounded border border-amber-500/40 bg-amber-500/10 p-2">
+          {degraded.map((v) => (
+            <p key={v.vendor} className="text-xs text-amber-200">
+              {/* `detail` is written to be relayed unchanged. */}
+              {v.detail}
+            </p>
+          ))}
+        </div>
+      )}
+
+      <p className="mt-3 text-xs text-paper-faint">
+        {fleet.traceability
+          ? `${fleet.traceability.traceable} of ${fleet.traceability.posts} posts trace to an idea`
+          : ""}
+        {fleet.spend ? ` · ${usd(fleet.spend.totalUsd)} over ${fleet.spend.windowDays}d` : ""}
+      </p>
+
+      {/* ⭐ Stated, not implied. This screen gets opened when something is
+          already wrong, and a gap read as an answer sends you the wrong way. */}
+      {fleet.notYetAnswered.length > 0 && (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-xs text-paper-faint">
+            What this can&apos;t tell you yet
+          </summary>
+          <ul className="mt-1 space-y-0.5">
+            {fleet.notYetAnswered.map((n) => (
+              <li key={n} className="text-xs text-paper-faint">
+                {n}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </section>
   );
 }
 
