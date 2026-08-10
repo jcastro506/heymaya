@@ -76,3 +76,65 @@ describe("honesty about gaps", () => {
     expect(SOURCE).toMatch(/diagnose|directive aggregation/);
   });
 });
+
+describe("aggregate learning (§16.9.3)", () => {
+  const SOURCE_AGG = readFileSync(
+    join(process.cwd(), "convex", "founder", "fleetHealth.ts"),
+    "utf8"
+  );
+
+  /**
+   * ⭐ §14.2.1: "`unknown` is a real answer" — it means no numbers came back.
+   * Folding it into the fleet picture would make "we can't see" look like a
+   * diagnosis, and at low customer counts it would usually win.
+   */
+  it("excludes `unknown` from the fleet ladder rather than counting it", () => {
+    expect(SOURCE_AGG).toContain('verdict.rung === "unknown"');
+    expect(SOURCE_AGG).toContain("continue");
+  });
+
+  /**
+   * `healthy` is the good outcome. A mostly-healthy fleet would otherwise
+   * report "healthy" as the thing to go and fix.
+   */
+  it("never reports `healthy` as the most common break", () => {
+    expect(SOURCE_AGG).toContain('r.rung !== "healthy"');
+  });
+
+  /**
+   * ⭐ One founder restating a rule five times is one signal, not five —
+   * otherwise the loudest customer sets the roadmap.
+   */
+  it("counts directives per account, not per row", () => {
+    expect(SOURCE_AGG).toContain("Set<string>");
+    expect(SOURCE_AGG).toContain("accounts: accounts.size");
+  });
+
+  /**
+   * The fleet number and every per-customer number must be the same
+   * arithmetic, or the operator view and the founder's own recap disagree
+   * about the same week.
+   */
+  it("uses the same pure verdict the weekly report and nextIdea use", () => {
+    expect(SOURCE_AGG).toContain("diagnoseFrom");
+    /**
+     * ⚠️ Static import — a dynamic one typechecks and dies at runtime.
+     *
+     * Built by concatenation rather than written literally: the sibling-file
+     * scanner in `tests/sprint1Acceptance.test.ts` reads every `from "…"` in
+     * `convex/` and checks it resolves. A literal here looks like an import
+     * from `convex/founder/__tests__/`, which would resolve nowhere — the
+     * scanner was right to flag it, so the assertion is what changes.
+     */
+    const ladderPath = "../maya/" + "ladder";
+    expect(SOURCE_AGG).toContain(`from "${ladderPath}"`);
+    expect(SOURCE_AGG).not.toContain(`await import("${ladderPath}")`);
+  });
+
+  it("keeps `notYetAnswered` as a field even when empty", () => {
+    // The next thing this view can't answer belongs there. A screen that
+    // silently covers three of four questions is how someone concludes the
+    // fourth is fine.
+    expect(SOURCE_AGG).toContain("notYetAnswered: []");
+  });
+});
