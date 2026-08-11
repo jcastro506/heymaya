@@ -2700,7 +2700,23 @@ export default defineSchema({
    *  (e.g. $CONVEX_SITE_URL/r/<token>). Dedupe is by token (unique). */
   gtmLinkWraps: defineTable({
     accountId: v.id("creators"),
-    agentId: v.id("gtmAgents"),
+    /**
+     * ⚠️ OPTIONAL since Sprint 8. The redirect infrastructure — token, click
+     * logging, UTM append, `lc_ref` handoff — is entirely generic and worth
+     * reusing (§18 Sprint 8: "reuse, don't rebuild"). Only the OWNER was tied
+     * to the deleted product's entity.
+     *
+     * A wrap now belongs to a `gtmAgents` row (old) or a `customers` row
+     * (new). Exactly one is set; `maya/attribution.ts` writes the latter.
+     */
+    agentId: v.optional(v.id("gtmAgents")),
+    /** ⭐ The new module's owner. */
+    customerId: v.optional(v.id("customers")),
+    /**
+     * ⭐ Which placement this link went out in — the join that makes
+     * "one signup traced end to end" possible at all.
+     */
+    placementId: v.optional(v.id("placements")),
     token: v.string(),
     destinationUrl: v.string(),
     platform: v.optional(v.string()),
@@ -2719,7 +2735,11 @@ export default defineSchema({
   /** One row per click on a wrapped link (logged by the public redirect). */
   gtmLinkClicks: defineTable({
     accountId: v.id("creators"),
-    agentId: v.id("gtmAgents"),
+    /** ⚠️ Optional since Sprint 8 — see `gtmLinkWraps.agentId`. */
+    agentId: v.optional(v.id("gtmAgents")),
+    /** ⭐ Copied from the wrap, so a click resolves to a placement in one read. */
+    customerId: v.optional(v.id("customers")),
+    placementId: v.optional(v.id("placements")),
     linkWrapId: v.id("gtmLinkWraps"),
     platform: v.optional(v.string()),
     clickedAt: v.number(),
@@ -2736,7 +2756,10 @@ export default defineSchema({
    *  wrapped link for per-post attribution. */
   gtmConversions: defineTable({
     accountId: v.id("creators"),
-    agentId: v.id("gtmAgents"),
+    /** ⚠️ Optional since Sprint 8 — see `gtmLinkWraps.agentId`. */
+    agentId: v.optional(v.id("gtmAgents")),
+    /** ⭐ The new module's owner. */
+    customerId: v.optional(v.id("customers")),
     kind: v.union(
       v.literal("signup"),
       v.literal("demo"),

@@ -120,7 +120,12 @@ export const recordClick = internalMutation({
     if (!wrap) return;
     await ctx.db.insert("gtmLinkClicks", {
       accountId: wrap.accountId,
+      // Whichever owner the wrap carries — a Sprint 8 wrap has customerId and
+      // placementId instead of agentId, and the click must follow it or the
+      // trace breaks at its first hop.
       agentId: wrap.agentId,
+      customerId: wrap.customerId,
+      placementId: wrap.placementId,
       linkWrapId: args.linkWrapId,
       platform: wrap.platform,
       clickedAt: Date.now(),
@@ -270,6 +275,12 @@ export const peekConversionForPing = internalQuery({
   } | null> => {
     const conv = await ctx.db.get(args.conversionId);
     if (!conv) return null;
+    /**
+     * ⚠️ This ping is the FROZEN product's Telegram notification path. A
+     * Sprint 8 conversion belongs to a `customers` row and is announced by
+     * `maya/messages`, so there is nothing for this to peek at.
+     */
+    if (!conv.agentId) return null;
     const agent = await ctx.db.get(conv.agentId);
     // Fail-closed cross-tenant check: agent must exist and own this conversion.
     if (!agent || agent.accountId !== conv.accountId) return null;
@@ -290,7 +301,7 @@ export const peekConversionForPing = internalQuery({
     }
 
     return {
-      agentId: conv.agentId,
+      agentId: conv.agentId as Id<"gtmAgents">,
       accountId: conv.accountId,
       telegramChatId: agent.telegramChatId ?? null,
       kind: conv.kind,
@@ -761,6 +772,16 @@ export const conversionPixelHttp = httpAction(async (ctx, request) => {
     typeof body.idempotencyKey === "string" && body.idempotencyKey.length > 0
       ? body.idempotencyKey
       : `pixel:${token}:${kind}`;
+  /**
+   * ⚠️ The pixel still routes through the frozen agent path. A Sprint 8 wrap
+   * has no `agentId`, so it is refused here rather than silently dropped —
+   * `maya/attribution` owns that half and the two must not half-write a
+   * conversion between them.
+   */
+  if (!wrap.agentId) {
+    return new Response(null, { status: 204, headers: PIXEL_CORS_HEADERS });
+  }
+
   const claim = await ctx.runMutation(
     internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
     {
