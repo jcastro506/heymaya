@@ -255,6 +255,7 @@ import type * as maya_trends from "../maya/trends.js";
 import type * as maya_voice from "../maya/voice.js";
 import type * as maya_voiceCorpus from "../maya/voiceCorpus.js";
 import type * as maya_watchers from "../maya/watchers.js";
+import type * as maya_weeklyReport from "../maya/weeklyReport.js";
 import type * as maya_widerWorld from "../maya/widerWorld.js";
 import type * as maya_zernioCapability from "../maya/zernioCapability.js";
 import type * as migrations_backfillPlacementIdea from "../migrations/backfillPlacementIdea.js";
@@ -525,6 +526,7 @@ declare const fullApi: ApiFromModules<{
   "maya/voice": typeof maya_voice;
   "maya/voiceCorpus": typeof maya_voiceCorpus;
   "maya/watchers": typeof maya_watchers;
+  "maya/weeklyReport": typeof maya_weeklyReport;
   "maya/widerWorld": typeof maya_widerWorld;
   "maya/zernioCapability": typeof maya_zernioCapability;
   "migrations/backfillPlacementIdea": typeof migrations_backfillPlacementIdea;
