@@ -875,6 +875,17 @@ export default defineSchema({
     // createdAt, verdict?}. save_experiment appends; assign_arm reads to allocate;
     // the weekly review concludes. ≤2 'running' dimensions enforced at write.
     experimentsJson: v.optional(v.string()),
+    /**
+     * ⭐ When we last asked for real product media, and how often we've raised
+     * it since. `{askedAt, mentions}`.
+     *
+     * ⚠️ §6.4.2 lists "nagging more than once" as a Never, and `shouldAsk` is
+     * a STATE — it stays true for as long as the library is thin. Without this,
+     * every weekly review re-asks and every file upload appends the same line.
+     * The library being empty is a fact; how many times we mention it is a
+     * decision, and only this row remembers the decision.
+     */
+    assetAskJson: v.optional(v.string()),
     // Sprint 6 — strategic-diagnosis state (JSON-on-row, NO new table). JSON:
     // { current?: {category, tier, reason, observedAt, weeksPersisted},
     //   history:[{category,tier,observedAt}], lastHardTruthPingAt?,
@@ -3517,6 +3528,17 @@ export default defineSchema({
      * instantiation ceiling.
      */
     experimentsJson: v.optional(v.string()),
+    /**
+     * ⭐ When we last asked for real product media, and how often we've raised
+     * it since. `{askedAt, mentions}`.
+     *
+     * ⚠️ §6.4.2 lists "nagging more than once" as a Never, and `shouldAsk` is
+     * a STATE — it stays true for as long as the library is thin. Without this,
+     * every weekly review re-asks and every file upload appends the same line.
+     * The library being empty is a fact; how many times we mention it is a
+     * decision, and only this row remembers the decision.
+     */
+    assetAskJson: v.optional(v.string()),
     /** Where she texts them. Absent until Telegram pairing completes. */
     telegramChatId: v.optional(v.string()),
     /**

@@ -256,12 +256,26 @@ export const requestAssetsHttp = httpAction(async (ctx, request) => {
     customerId: auth.customer._id,
   });
 
-  if (!health.shouldAsk) {
+  /**
+   * ⚠️ `shouldAsk` is a FACT about the library; `askState` is the decision.
+   *
+   * The library being thin stays true for as long as it is thin, so gating on
+   * it alone re-asks forever — §6.4.2 lists nagging more than once as a Never.
+   */
+  const askState = await ctx.runQuery(internal.maya.media.assetAskState, {
+    customerId: auth.customer._id,
+  });
+
+  if (askState === "silent") {
     return respond({
       ok: false,
       data: { asked: false, library: health },
-      why: `no need — ${health.detail}`,
-      next: "don't ask. Use what's already there and get on with the post",
+      why: health.shouldAsk
+        ? `already asked — ${health.detail}`
+        : `no need — ${health.detail}`,
+      next: health.shouldAsk
+        ? "don't ask again. Work with what's there, and use a plain background where there's nothing to show"
+        : "don't ask. Use what's already there and get on with the post",
     });
   }
 

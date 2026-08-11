@@ -263,10 +263,24 @@ export const acknowledgeUpload = internalAction({
       body = `Got all ${images} — saved to your library.`;
     }
 
-    if (health.shouldAsk) {
-      // Still nothing real to work from. Better to say so now than to let them
-      // discover it in a post made of stock illustration.
-      body += " Still short of a real look at the product, though — a quick screen recording would cover it.";
+    /**
+     * Still nothing real to work from. Better to say so now than to let them
+     * discover it in a post made of stock illustration.
+     *
+     * ⚠️ But at most twice. `shouldAsk` stays true while the library is thin,
+     * so appending on it alone repeats this line on every upload forever.
+     */
+    const askState = await ctx.runQuery(internal.maya.media.assetAskState, {
+      customerId: args.customerId,
+    });
+    if (askState !== "silent") {
+      body +=
+        askState === "ask"
+          ? " Still short of a real look at the product, though — a quick screen recording would cover it."
+          : " Still no screen recording, so I'll keep working without one.";
+      await ctx.runMutation(internal.maya.media.recordAssetAsk, {
+        customerId: args.customerId,
+      });
     }
 
     const { sent } = await ctx.runMutation(internal.maya.messages.send, {
