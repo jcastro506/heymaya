@@ -35,7 +35,12 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+  query,
+} from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { dayKeyInZone } from "./cadence";
@@ -426,6 +431,120 @@ export const reviewStrategy = internalAction({
             (feasibility.ask ?? because)
           : `${change}${feasibility.ask ? ` ${feasibility.ask}` : ""}`,
       ask: feasibility.ask,
+    };
+  },
+});
+
+/* -------------------------------------------------------------------------- */
+/* The Plan screen (§16.75)                                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ Everything the Plan screen shows, for the signed-in founder.
+ *
+ * §16.75: *"I trimmed this out when cutting to six screens. **That was wrong**
+ * — the strategy is the most interesting thing she produces, and it's
+ * invisible."*
+ *
+ * Four blocks: who we're targeting · the bet · the current strategy · what
+ * changed and why.
+ *
+ * ⚠️ A PUBLIC query, so it resolves the customer from the Clerk identity and
+ * checks ownership by shape — never by trusting an id in the arguments. Same
+ * pattern as `productTruth.correct`.
+ */
+export const planScreen = query({
+  // ⚠️ No customerId argument, deliberately. Resolving "my" customer from the
+  // identity removes both the client's need to know the id and the chance of
+  // an ownership check being written slightly differently at each call site.
+  args: {},
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    ok: boolean;
+    targeting?: {
+      keywords: string[];
+      accounts: string[];
+      staleDays: number | null;
+      /**
+       * ⚠️ Surfaced, because "the judge approved everything" and "the judge
+       * never ran" produce an identical list. A founder looking at their own
+       * targeting is owed the difference.
+       */
+      relevance: "checked" | "unavailable" | "skipped" | null;
+    };
+    bet?: { channels: string[] };
+    changelog?: Array<{
+      day: string;
+      change: string;
+      because: string;
+      trigger: string;
+      askedFor?: string;
+    }>;
+    error?: string;
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { ok: false, error: "sign in first" };
+
+    const creator = (await ctx.db
+      .query("creators")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .first()) as Doc<"creators"> | null;
+    if (!creator) return { ok: false, error: "no account yet" };
+
+    const customer = (await ctx.db
+      .query("customers")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first()) as Doc<"customers"> | null;
+    if (!customer) return { ok: false, error: "no account yet" };
+
+    const targets = await ctx.runQuery(internal.maya.learnBusiness.targetsFor, {
+      customerId: customer._id,
+    });
+
+    const channels = (await ctx.db
+      .query("channels")
+      .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+      .collect()) as Doc<"channels">[];
+
+    const changelog = (await ctx.db
+      .query("strategyChanges")
+      .withIndex("by_customer_and_created", (q) =>
+        q.eq("customerId", customer._id)
+      )
+      .order("desc")
+      .take(20)) as Doc<"strategyChanges">[];
+
+    /**
+     * ⚠️ §16.75's own warning, surfaced: *"a stale buyer map silently poisons
+     * the idea bank, the format library, and the benchmarks all at once."* The
+     * age is shown so it can be acted on rather than silently trusted.
+     */
+    const updatedAt = targets?.learnedAt ?? null;
+    const staleDays =
+      updatedAt === null
+        ? null
+        : Math.floor((Date.now() - updatedAt) / (24 * 3600_000));
+
+    return {
+      ok: true,
+      targeting: {
+        keywords: targets?.keywords ?? [],
+        accounts: (targets?.trackedAccounts ?? []).map(
+          (a: { handle?: string }) => a.handle ?? ""
+        ).filter(Boolean),
+        staleDays,
+        relevance: targets?.relevance ?? null,
+      },
+      bet: { channels: channels.map((c) => c.channel) },
+      changelog: changelog.map((r) => ({
+        day: r.day,
+        change: r.change,
+        because: r.because,
+        trigger: r.trigger,
+        askedFor: r.askedFor,
+      })),
     };
   },
 });

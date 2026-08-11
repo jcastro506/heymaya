@@ -203,6 +203,11 @@ vi.mock("lucide-react", () => {
 // api object: nested string keys for every query/mutation the tabs reference.
 vi.mock("@/convex/_generated/api", () => ({
   api: {
+    // The new module. Mission Control still reads mostly `gtmMaya`, but the
+    // restored Plan screen (§16.75) reads the live product's strategy.
+    maya: {
+      strategy: { planScreen: "planScreen" },
+    },
     gtmMaya: {
       missionControl: {
         getMyAgentActivity: "getMyAgentActivity",
@@ -267,9 +272,15 @@ const TABS = [
   { name: "Settings", path: "../settings/page" },
 ];
 
-/** Old routes must redirect to their v3 homes — link rot is a product bug. */
+/**
+ * Old routes must redirect to their v3 homes — link rot is a product bug.
+ *
+ * ⚠️ `Plan` was here and is deliberately no longer. §16.75: *"I trimmed this
+ * out when cutting to six screens. **That was wrong** — the strategy is the
+ * most interesting thing she produces, and it's invisible."* The route now
+ * renders the restored screen, asserted separately below.
+ */
 const REDIRECTS = [
-  { name: "Plan", path: "../plan/page", dest: "/clawlaunch/mission" },
   { name: "Drafts", path: "../drafts/page", dest: "/clawlaunch/mission" },
   { name: "Queue", path: "../queue/page", dest: "/clawlaunch/mission" },
   { name: "Research", path: "../research/page", dest: "/clawlaunch/mission/brain" },
@@ -280,6 +291,16 @@ const REDIRECTS = [
 
 beforeEach(() => {
   h.mode = "null";
+});
+
+describe("the Plan screen is back (§16.75)", () => {
+  it("renders rather than redirecting", async () => {
+    // The changelog is "the single strongest trust artifact in the product"
+    // (§16.75.1) and had no surface at all until this route stopped
+    // redirecting.
+    const Page = (await import("../plan/page")).default;
+    expect(() => renderToString(createElement(Page))).not.toThrow();
+  });
 });
 
 describe("Mission Control — SSR render smoke", () => {
