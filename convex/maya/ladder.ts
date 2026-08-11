@@ -30,6 +30,10 @@
 
 import { v } from "convex/values";
 import { internalQuery } from "../_generated/server";
+import { internal } from "../_generated/api";
+// ⚠️ Static. Convex queries and mutations cannot do dynamic imports — it
+// typechecks and dies at runtime with `dynamic module import unsupported`.
+import { compareToNiche } from "./benchmarks";
 import type { Doc } from "../_generated/dataModel";
 
 export type Rung = "L0" | "L1" | "L2" | "L3" | "L4" | "healthy" | "unknown";
@@ -193,3 +197,98 @@ export function diagnoseFrom(
     };
   }
 }
+
+/**
+ * ⭐ The ladder, benchmarked (§16.3) — the Results screen's centerpiece.
+ *
+ * > *"Is 4.1% good? Nobody knows. **Context is the product.**"*
+ *
+ * The rung says which step broke. The benchmark says whether the number under
+ * it is actually bad — and those are different questions. A customer at 400
+ * views has a format problem if the niche median is 3,100 and is doing fine if
+ * it is 160.
+ *
+ * ⚠️ Composed here rather than inside `diagnoseFrom`, which stays pure. The
+ * verdict must be computable from placements alone — `nextIdea` needs it and
+ * has no niche corpus in hand — so the benchmark is an *overlay* on the rung,
+ * never an input to it.
+ */
+export const diagnoseBenchmarked = internalQuery({
+  args: {
+    customerId: v.id("customers"),
+    channel: v.optional(v.string()),
+    sinceDays: v.optional(v.number()),
+    now: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    verdict: LadderVerdict;
+    benchmark: {
+      channel: string;
+      medianViews: number;
+      posts: number;
+      comparison: string;
+    } | null;
+    /** ⚠️ §16.4 — borrowed numbers carry their age, always. */
+    benchmarkComputedAt: number | null;
+    benchmarkStale: boolean;
+  }> => {
+    const now = args.now ?? Date.now();
+    const rows = (await ctx.db
+      .query("placements")
+      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+      .collect()) as Doc<"placements">[];
+
+    const scoped = args.channel
+      ? rows.filter((r) => r.channel === args.channel)
+      : rows;
+    const verdict = diagnoseFrom(scoped, now, args.sinceDays ?? 7);
+
+    const set = await ctx.runQuery(internal.maya.benchmarks.benchmarksFor, {
+      customerId: args.customerId,
+      now,
+    });
+
+    const channel = args.channel ?? scoped[0]?.channel;
+    const match = channel
+      ? set.channels.find(
+          (c: { channel: string; usable: boolean }) => c.channel === channel && c.usable
+        )
+      : undefined;
+
+    if (!match) {
+      /**
+       * ⚠️ No benchmark is reported as no benchmark. Falling back to "you're
+       * doing fine" from an absent median is the dishonesty §14.2's worked
+       * example exists to prevent.
+       */
+      return {
+        verdict,
+        benchmark: null,
+        benchmarkComputedAt: set.computedAt,
+        benchmarkStale: set.stale,
+      };
+    }
+
+    /**
+     * Own views per placement, so the comparison is like-for-like: the niche
+     * median is one post's views, not a week's total.
+     */
+    const perPost = verdict.placements > 0 ? verdict.views / verdict.placements : 0;
+    const cmp = compareToNiche(perPost, match.medianViews);
+
+    return {
+      verdict,
+      benchmark: {
+        channel: match.channel,
+        medianViews: match.medianViews,
+        posts: match.posts,
+        comparison: `${Math.round(perPost)} views a post — ${cmp.detail} (from ${match.posts} niche posts)`,
+      },
+      benchmarkComputedAt: set.computedAt,
+      benchmarkStale: set.stale,
+    };
+  },
+});

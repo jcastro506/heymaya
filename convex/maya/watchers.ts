@@ -173,7 +173,7 @@ export const sweptFor = internalQuery({
  * them weekly — a claim that already exists for this week is skipped, so the
  * cron can fire every day and the work happens once.
  */
-export const WEEKLY_SWEEPS = ["formats", "hashtags", "watch"] as const;
+export const WEEKLY_SWEEPS = ["formats", "hashtags", "watch", "benchmarks"] as const;
 
 export const SWEEPS = [
   "scroll",
@@ -320,6 +320,11 @@ export const sweepDue = internalAction({
          * working and is permanently a week behind.
          */
         watch: internal.maya.formats.watchTopFormats,
+        /**
+         * Weekly, not daily: the medians move slowly, and recomputing them
+         * every morning spends reads to watch a number that barely changes.
+         */
+        benchmarks: internal.maya.benchmarks.refreshBenchmarks,
       } as const;
 
       for (const sweep of WEEKLY_SWEEPS) {
