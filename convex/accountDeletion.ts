@@ -195,7 +195,7 @@ export const cancelMyAccountDeletion = mutation({
     const rows = await ctx.db
       .query("accountDeletionRequests")
       .withIndex("by_creator_and_status", (q) =>
-        q.eq("creatorId", creator._id).eq("status", "requested")
+        q.eq("creatorId", creator._id).eq("status", "requested"),
       )
       .collect();
     for (const row of rows) {
@@ -277,8 +277,12 @@ export const purgeGtmAccountByCreatorId = internalMutation({
 export const sweepOrphanedAccountRows = internalMutation({
   args: {},
   handler: async (
-    ctx
-  ): Promise<{ deleted: Record<string, number>; total: number; done: boolean }> => {
+    ctx,
+  ): Promise<{
+    deleted: Record<string, number>;
+    total: number;
+    done: boolean;
+  }> => {
     const PREVIOUSLY_MISSED: AccountScopedTable[] = [
       "gtmChannelWatermarks",
       "gtmWatchLaneState",
@@ -288,7 +292,7 @@ export const sweepOrphanedAccountRows = internalMutation({
     ];
     const BATCH = 600;
     const liveAccountIds = new Set(
-      (await ctx.db.query("creators").collect()).map((c) => c._id as string)
+      (await ctx.db.query("creators").collect()).map((c) => c._id as string),
     );
     const deleted: Record<string, number> = {};
     let total = 0;
@@ -340,7 +344,7 @@ async function requireCurrentCreator(ctx: QueryCtx | MutationCtx) {
 
 async function creatorByClerkUserId(
   ctx: QueryCtx | MutationCtx,
-  clerkUserId: string
+  clerkUserId: string,
 ) {
   return await ctx.db
     .query("creators")
@@ -351,12 +355,12 @@ async function creatorByClerkUserId(
 async function expirePriorRequests(
   ctx: MutationCtx,
   creatorId: Id<"creators">,
-  now: number
+  now: number,
 ): Promise<void> {
   const rows = await ctx.db
     .query("accountDeletionRequests")
     .withIndex("by_creator_and_status", (q) =>
-      q.eq("creatorId", creatorId).eq("status", "requested")
+      q.eq("creatorId", creatorId).eq("status", "requested"),
     )
     .collect();
   for (const row of rows) {
@@ -369,10 +373,10 @@ async function expirePriorRequests(
 async function purgeCreatorAccount(
   ctx: MutationCtx,
   creator: Doc<"creators">,
-  source: "web" | "imessage"
+  source: "web" | "imessage",
 ) {
   const stripeCustomerIds = [creator.stripeCustomerId].filter(
-    (id): id is string => typeof id === "string" && id.length > 0
+    (id): id is string => typeof id === "string" && id.length > 0,
   );
   const flyAppIds = await flyAppIdsForAccount(ctx, creator);
   const zernioAccountIds = await zernioAccountIdsForAccount(ctx, creator._id);
@@ -385,7 +389,7 @@ async function purgeCreatorAccount(
     await ctx.scheduler.runAfter(
       0,
       internal.accountDeletion.disconnectZernioAccountsInternal,
-      { zernioAccountIds, attempt: 1 }
+      { zernioAccountIds, attempt: 1 },
     );
   }
   // Fly teardown MUST happen Convex-side: FLY_API_TOKEN lives in this
@@ -395,20 +399,28 @@ async function purgeCreatorAccount(
   // Scheduling from the purge makes teardown follow the row delete atomically
   // for every entry point (web route, Clerk webhook, iMessage, retention sweep).
   if (flyAppIds.length > 0) {
-    await ctx.scheduler.runAfter(0, internal.accountDeletion.destroyFlyAppsInternal, {
-      flyAppIds,
-      attempt: 1,
-    });
+    await ctx.scheduler.runAfter(
+      0,
+      internal.accountDeletion.destroyFlyAppsInternal,
+      {
+        flyAppIds,
+        attempt: 1,
+      },
+    );
   }
   // Stripe delete is Convex-side for the same reason (STRIPE_SECRET_KEY lives
   // here, not on Vercel). Deleting the customer cancels every subscription —
   // without this, a web-route deletion kept billing the user (the complete
   // hardDeleteMyGtmAccount action existed but no UI path invoked it).
   if (stripeCustomerIds.length > 0) {
-    await ctx.scheduler.runAfter(0, internal.accountDeletion.deleteStripeCustomersInternal, {
-      stripeCustomerIds,
-      attempt: 1,
-    });
+    await ctx.scheduler.runAfter(
+      0,
+      internal.accountDeletion.deleteStripeCustomersInternal,
+      {
+        stripeCustomerIds,
+        attempt: 1,
+      },
+    );
   }
 
   /**
@@ -424,13 +436,29 @@ async function purgeCreatorAccount(
    * first pass — the machine stops billing immediately rather than waiting for
    * the row-delete to finish.
    */
-  const creatorDeleted = await deleteCreatorScopedRows(ctx, creator._id, DELETE_BUDGET);
+  const creatorDeleted = await deleteCreatorScopedRows(
+    ctx,
+    creator._id,
+    DELETE_BUDGET,
+  );
   const accountDeleted = await deleteAccountScopedRows(
     ctx,
     creator._id,
-    DELETE_BUDGET - creatorDeleted.count
+    DELETE_BUDGET - creatorDeleted.count,
   );
-  const done = !creatorDeleted.exhausted && !accountDeleted.exhausted;
+  /**
+   * ⭐ The live product. Added 2026-08-11 — every table above belongs to the
+   * deleted one, so none of this founder's actual data was being removed.
+   */
+  const mayaDeleted = await deleteMayaCustomerRows(
+    ctx,
+    creator._id,
+    DELETE_BUDGET - creatorDeleted.count - accountDeleted.count,
+  );
+  const done =
+    !creatorDeleted.exhausted &&
+    !accountDeleted.exhausted &&
+    !mayaDeleted.exhausted;
 
   if (done) {
     for (const customerId of stripeCustomerIds) {
@@ -447,6 +475,7 @@ async function purgeCreatorAccount(
     deletedRows: {
       creatorScoped: creatorDeleted.count,
       accountScoped: accountDeleted.count,
+      mayaScoped: mayaDeleted.count,
       creator: done ? 1 : 0,
     },
     flyAppIds,
@@ -469,13 +498,15 @@ export const deleteStripeCustomersInternal = internalAction({
   args: { stripeCustomerIds: v.array(v.string()), attempt: v.number() },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<{ deleted: number; failed: string[] }> => {
     const { getStripeClient } = await import("./billing/stripeClient");
     const stripe = getStripeClient();
     const failed: string[] = [];
     let deleted = 0;
-    for (const customerId of [...new Set(args.stripeCustomerIds.filter(Boolean))]) {
+    for (const customerId of [
+      ...new Set(args.stripeCustomerIds.filter(Boolean)),
+    ]) {
       try {
         if (stripe.customers.del) {
           await stripe.customers.del(customerId);
@@ -488,7 +519,7 @@ export const deleteStripeCustomersInternal = internalAction({
         if (/no such customer|resource_missing/i.test(message)) continue;
         failed.push(customerId);
         console.error(
-          `[accountDeletion] Stripe customer delete failed for ${customerId} (attempt ${args.attempt}): ${message}`
+          `[accountDeletion] Stripe customer delete failed for ${customerId} (attempt ${args.attempt}): ${message}`,
         );
       }
     }
@@ -497,11 +528,11 @@ export const deleteStripeCustomersInternal = internalAction({
         await ctx.scheduler.runAfter(
           FLY_DESTROY_RETRY_MS,
           internal.accountDeletion.deleteStripeCustomersInternal,
-          { stripeCustomerIds: failed, attempt: args.attempt + 1 }
+          { stripeCustomerIds: failed, attempt: args.attempt + 1 },
         );
       } else {
         console.error(
-          `[accountDeletion] STRIPE CUSTOMERS NOT DELETED after ${args.attempt} attempts: ${failed.join(", ")} — the user may still be billed; delete manually in the Stripe dashboard.`
+          `[accountDeletion] STRIPE CUSTOMERS NOT DELETED after ${args.attempt} attempts: ${failed.join(", ")} — the user may still be billed; delete manually in the Stripe dashboard.`,
         );
       }
     }
@@ -521,25 +552,29 @@ export const disconnectZernioAccountsInternal = internalAction({
   args: { zernioAccountIds: v.array(v.string()), attempt: v.number() },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<{ disconnected: number; failed: string[] }> => {
     const failed: string[] = [];
     let disconnected = 0;
     if (!process.env.ZERNIO_API_KEY) {
       // Retrying won't conjure a key; make the miss loud and actionable.
       console.error(
-        `[accountDeletion] ZERNIO_API_KEY missing — cannot disconnect Zernio accounts ${args.zernioAccountIds.join(", ")}; disconnect them manually in the Zernio dashboard.`
+        `[accountDeletion] ZERNIO_API_KEY missing — cannot disconnect Zernio accounts ${args.zernioAccountIds.join(", ")}; disconnect them manually in the Zernio dashboard.`,
       );
       return { disconnected: 0, failed: args.zernioAccountIds };
     }
     const { ZernioClient } = await import("./integrations/zernio/client");
     const { deleteAccount } = await import("./integrations/zernio/endpoints");
     const client = new ZernioClient({ apiKey: process.env.ZERNIO_API_KEY });
-    for (const accountId of [...new Set(args.zernioAccountIds.filter(Boolean))]) {
+    for (const accountId of [
+      ...new Set(args.zernioAccountIds.filter(Boolean)),
+    ]) {
       try {
         await deleteAccount(client, accountId);
         disconnected += 1;
-        console.log(`[accountDeletion] disconnected Zernio account ${accountId}`);
+        console.log(
+          `[accountDeletion] disconnected Zernio account ${accountId}`,
+        );
       } catch (error) {
         const status = (error as { status?: number }).status;
         const message = error instanceof Error ? error.message : String(error);
@@ -551,7 +586,7 @@ export const disconnectZernioAccountsInternal = internalAction({
         }
         failed.push(accountId);
         console.error(
-          `[accountDeletion] Zernio disconnect failed for ${accountId} (attempt ${args.attempt}): ${message}`
+          `[accountDeletion] Zernio disconnect failed for ${accountId} (attempt ${args.attempt}): ${message}`,
         );
       }
     }
@@ -560,11 +595,11 @@ export const disconnectZernioAccountsInternal = internalAction({
         await ctx.scheduler.runAfter(
           FLY_DESTROY_RETRY_MS,
           internal.accountDeletion.disconnectZernioAccountsInternal,
-          { zernioAccountIds: failed, attempt: args.attempt + 1 }
+          { zernioAccountIds: failed, attempt: args.attempt + 1 },
         );
       } else {
         console.error(
-          `[accountDeletion] ZERNIO ACCOUNTS NOT DISCONNECTED after ${args.attempt} attempts: ${failed.join(", ")} — the user's social OAuth grants are still live; disconnect manually in the Zernio dashboard.`
+          `[accountDeletion] ZERNIO ACCOUNTS NOT DISCONNECTED after ${args.attempt} attempts: ${failed.join(", ")} — the user's social OAuth grants are still live; disconnect manually in the Zernio dashboard.`,
         );
       }
     }
@@ -583,7 +618,7 @@ export const destroyFlyAppsInternal = internalAction({
   args: { flyAppIds: v.array(v.string()), attempt: v.number() },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<{ destroyed: number; failed: string[] }> => {
     const fly = new FlyClient();
     const failed: string[] = [];
@@ -599,7 +634,7 @@ export const destroyFlyAppsInternal = internalAction({
         console.error(
           `[accountDeletion] Fly destroy failed for ${appId} (attempt ${args.attempt}): ${
             error instanceof Error ? error.message : String(error)
-          }`
+          }`,
         );
       }
     }
@@ -608,11 +643,11 @@ export const destroyFlyAppsInternal = internalAction({
         await ctx.scheduler.runAfter(
           FLY_DESTROY_RETRY_MS,
           internal.accountDeletion.destroyFlyAppsInternal,
-          { flyAppIds: failed, attempt: args.attempt + 1 }
+          { flyAppIds: failed, attempt: args.attempt + 1 },
         );
       } else {
         console.error(
-          `[accountDeletion] ORPHANED FLY APPS after ${args.attempt} attempts: ${failed.join(", ")} — destroy manually (they burn LLM spend headlessly).`
+          `[accountDeletion] ORPHANED FLY APPS after ${args.attempt} attempts: ${failed.join(", ")} — destroy manually (they burn LLM spend headlessly).`,
         );
       }
     }
@@ -632,7 +667,7 @@ export const destroyFlyAppsInternal = internalAction({
  */
 async function zernioAccountIdsForAccount(
   ctx: QueryCtx | MutationCtx,
-  creatorId: Id<"creators">
+  creatorId: Id<"creators">,
 ): Promise<string[]> {
   const ids = new Set<string>();
   const gtmAgents = await ctx.db
@@ -661,7 +696,7 @@ async function zernioAccountIdsForAccount(
 
 async function flyAppIdsForAccount(
   ctx: QueryCtx | MutationCtx,
-  creator: Doc<"creators">
+  creator: Doc<"creators">,
 ): Promise<string[]> {
   const ids = new Set<string>();
   if (creator.mayaFlyAppId) ids.add(creator.mayaFlyAppId);
@@ -682,7 +717,7 @@ async function flyAppIdsForAccount(
 async function deleteCreatorScopedRows(
   ctx: MutationCtx,
   creatorId: Id<"creators">,
-  budget: number
+  budget: number,
 ): Promise<{ count: number; exhausted: boolean }> {
   let count = 0;
   for (const table of CREATOR_SCOPED_TABLES) {
@@ -693,7 +728,7 @@ async function deleteCreatorScopedRows(
       "by_creator",
       "creatorId",
       creatorId,
-      budget - count
+      budget - count,
     );
     for (const row of rows) {
       await ctx.db.delete(row._id);
@@ -710,7 +745,7 @@ async function deleteCreatorScopedRows(
 async function deleteAccountScopedRows(
   ctx: MutationCtx,
   accountId: Id<"creators">,
-  budget: number
+  budget: number,
 ): Promise<{ count: number; exhausted: boolean }> {
   let count = 0;
   for (const table of ACCOUNT_SCOPED_TABLES) {
@@ -721,7 +756,7 @@ async function deleteAccountScopedRows(
       "by_account",
       "accountId",
       accountId,
-      budget - count
+      budget - count,
     );
     for (const row of rows) {
       await ctx.db.delete(row._id);
@@ -734,9 +769,120 @@ async function deleteAccountScopedRows(
   return { count, exhausted: false };
 }
 
+/**
+ * ⭐ The LIVE product's tables, keyed by `customerId`.
+ *
+ * ⚠️ Every table in the lists above is `gtm*` — the DELETED product — plus
+ * `mayaMessages`, which is also from that era. **None of the live module's
+ * data was purged at all.** "Delete my account" removed the dead product's
+ * rows and left the founder's actual messages, posts, ideas, media and
+ * strategy history in place.
+ *
+ * The same shape as the 2026-07-15 orphan sweep noted above, one product later:
+ * the tables changed and the list didn't. A deletion routine is only as
+ * complete as its list, and nothing fails when the list falls behind.
+ */
+export const MAYA_CUSTOMER_SCOPED: Array<{ table: string; index: string }> = [
+  { table: "messages", index: "by_customer" },
+  { table: "drafts", index: "by_customer" },
+  { table: "placements", index: "by_customer" },
+  { table: "ideas", index: "by_customer" },
+  { table: "observations", index: "by_customer_and_captured" },
+  { table: "targets", index: "by_customer" },
+  { table: "mediaAssets", index: "by_customer" },
+  { table: "directives", index: "by_customer" },
+  { table: "dayPlans", index: "by_customer" },
+  { table: "strategyChanges", index: "by_customer_and_created" },
+  { table: "dashboardState", index: "by_customer" },
+  { table: "costEvents", index: "by_customer_and_at" },
+  { table: "channels", index: "by_customer" },
+  /**
+   * ⭐ Both of these were missing from my own first draft of this list, and the
+   * schema-derived test below is the only reason they are here. Two of fifteen
+   * — on a list I had just written, for a bug that was exactly "the list fell
+   * behind". A list maintained by hand is wrong; the test is the fix.
+   */
+  { table: "inboxItems", index: "by_customer" },
+  /**
+   * ⚠️ Several of these have no plain `by_customer` — only a compound. That is
+   * fine: `customerId` is the first field, so an `.eq` on it alone is a valid
+   * prefix scan. It is NOT fine to guess the name, which is why the test
+   * checks each one against the schema.
+   */
+  { table: "memorySnapshots", index: "by_customer_and_capturedAt" },
+];
+
+/**
+ * Delete the live module's rows for every customer under this account.
+ *
+ * ⚠️ The `customers` row goes LAST, for the same reason the creator does: a
+ * partially-purged account must stay findable and resumable rather than
+ * becoming an orphan nobody can finish deleting.
+ */
+async function deleteMayaCustomerRows(
+  ctx: MutationCtx,
+  accountId: Id<"creators">,
+  budget: number,
+): Promise<{ count: number; exhausted: boolean }> {
+  let count = 0;
+
+  const customers = (await ctx.db
+    .query("customers")
+    .withIndex("by_account", (q) => q.eq("accountId", accountId))
+    .collect()) as Doc<"customers">[];
+
+  for (const customer of customers) {
+    for (const { table, index } of MAYA_CUSTOMER_SCOPED) {
+      if (count >= budget) return { count, exhausted: true };
+
+      const rows = await queryByIndex(
+        ctx,
+        table,
+        index,
+        "customerId",
+        customer._id,
+        budget - count,
+      );
+
+      for (const row of rows) {
+        /**
+         * ⚠️ The FILE, not just the row. A media asset row points at a stored
+         * blob — deleting the row alone leaves the founder's screenshots and
+         * recordings sitting in storage after they asked us to delete
+         * everything, which is the part of "delete my account" that actually
+         * matters.
+         */
+        if (table === "mediaAssets") {
+          const key = (row as unknown as Doc<"mediaAssets">).storageKey;
+          try {
+            await ctx.storage.delete(key as Id<"_storage">);
+          } catch {
+            // An externally-hosted key won't resolve; the row still goes.
+          }
+        }
+        await ctx.db.delete(row._id);
+        count += 1;
+      }
+
+      if (rows.length >= budget - (count - rows.length)) {
+        return { count, exhausted: true };
+      }
+    }
+  }
+
+  // Only once everything beneath them is gone.
+  for (const customer of customers) {
+    if (count >= budget) return { count, exhausted: true };
+    await ctx.db.delete(customer._id);
+    count += 1;
+  }
+
+  return { count, exhausted: false };
+}
+
 async function deleteStripeWebhookRows(
   ctx: MutationCtx,
-  customerId: string
+  customerId: string,
 ): Promise<number> {
   const rows = await ctx.db
     .query("stripeWebhookEvents")
@@ -763,7 +909,7 @@ async function queryByIndex(
   index: string,
   field: string,
   value: unknown,
-  limit: number
+  limit: number,
 ): Promise<Array<{ _id: Parameters<MutationCtx["db"]["delete"]>[0] }>> {
   type UntypedIndexBuilder = {
     eq: (fieldName: string, fieldValue: unknown) => unknown;
@@ -772,11 +918,13 @@ async function queryByIndex(
     query: (tableName: string) => {
       withIndex: (
         indexName: string,
-        builder: (q: UntypedIndexBuilder) => unknown
+        builder: (q: UntypedIndexBuilder) => unknown,
       ) => {
         take: (
-          n: number
-        ) => Promise<Array<{ _id: Parameters<MutationCtx["db"]["delete"]>[0] }>>;
+          n: number,
+        ) => Promise<
+          Array<{ _id: Parameters<MutationCtx["db"]["delete"]>[0] }>
+        >;
       };
     };
   };
