@@ -3508,6 +3508,15 @@ export default defineSchema({
      * instantiation ceiling, and this is a small bounded per-customer map.
      */
     tiktokConsentJson: v.optional(v.string()),
+    /**
+     * ⭐ The experiment registry (§15.3's `run-experiment`), JSON-on-row.
+     *
+     * Follows the Sprint 5 precedent on `gtmAgents.experimentsJson` — no new
+     * table. A customer runs at most one live experiment per channel, so this
+     * is a handful of small objects, and the schema sits near TypeScript's
+     * instantiation ceiling.
+     */
+    experimentsJson: v.optional(v.string()),
     /** Where she texts them. Absent until Telegram pairing completes. */
     telegramChatId: v.optional(v.string()),
     /**

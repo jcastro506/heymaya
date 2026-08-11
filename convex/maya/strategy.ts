@@ -365,7 +365,23 @@ export const reviewStrategy = internalAction({
       ? [stuck.rung, stuck.rung]
       : [null, null];
 
-    const verdict = meetsChangeBar({ rungHistory });
+    /**
+     * ⭐ The experiment trigger, finally supplied.
+     *
+     * `meetsChangeBar` has read `experimentConcluded` since it was written and
+     * nothing produced one — a change trigger that could never fire. An
+     * experiment that concluded in the last week outranks a stuck rung,
+     * because a concluded test is evidence someone deliberately gathered.
+     */
+    const concluded = await ctx.runQuery(
+      internal.maya.experiments.latestConcluded,
+      { customerId: args.customerId, sinceDays: 7, now }
+    );
+
+    const verdict = meetsChangeBar({
+      rungHistory,
+      experimentConcluded: concluded ?? undefined,
+    });
     // Name the channel, not just the rung — "L1" is not actionable, "L1 on X" is.
     const because = stuck
       ? verdict.because.replace(stuck.rung, `${stuck.rung} on ${stuck.channel}`)
