@@ -173,7 +173,7 @@ export const sweptFor = internalQuery({
  * them weekly — a claim that already exists for this week is skipped, so the
  * cron can fire every day and the work happens once.
  */
-export const WEEKLY_SWEEPS = ["formats", "hashtags", "watch", "benchmarks"] as const;
+export const WEEKLY_SWEEPS = ["formats", "hashtags", "watch", "benchmarks", "strategy"] as const;
 
 export const SWEEPS = [
   "scroll",
@@ -325,6 +325,16 @@ export const sweepDue = internalAction({
          * every morning spends reads to watch a number that barely changes.
          */
         benchmarks: internal.maya.benchmarks.refreshBenchmarks,
+        /**
+         * ⚠️ LAST. It reads the ladder and the benchmarks, so running it before
+         * `benchmarks` would review this week against last week's medians —
+         * which looks identical to working.
+         *
+         * It records a changelog entry and sends nothing: §16.75.05 is explicit
+         * that strategy changes never get their own ping. The weekly report
+         * relays it.
+         */
+        strategy: internal.maya.strategy.reviewStrategy,
       } as const;
 
       for (const sweep of WEEKLY_SWEEPS) {

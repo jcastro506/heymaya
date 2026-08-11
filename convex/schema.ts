@@ -4078,6 +4078,46 @@ export default defineSchema({
    * the freehand drafting that made traceability read 1 of 7 — the plan is
    * exactly where the bank should be spent.
    */
+  /**
+   * ⭐ The strategy changelog (§16.75.1) — "the single strongest trust artifact
+   * in the product."
+   *
+   * Every shift is a dated entry tied to the DATA that caused it. It proves
+   * she is adapting rather than merely running, and it is the honest place to
+   * record when something didn't work.
+   *
+   * A table rather than a JSON field on `customers`: this is append-only, read
+   * chronologically, and meant to be long-lived. Stuffing a growing log into a
+   * customer row makes every unrelated read of that row heavier.
+   */
+  strategyChanges: defineTable({
+    customerId: v.id("customers"),
+    /** The founder's day the review ran — see `cadence.dayKeyInZone`. */
+    day: v.string(),
+    /** What changed, in one line. Empty when the answer was "nothing". */
+    change: v.string(),
+    /** ⭐ The number that caused it. A change with no because is a vibe. */
+    because: v.string(),
+    /** Which of §16.75.05's four bars it cleared. */
+    trigger: v.union(
+      v.literal("metric_moved"),
+      v.literal("experiment_concluded"),
+      v.literal("founder_said"),
+      v.literal("rung_stuck"),
+      v.literal("no_change")
+    ),
+    evidenceJson: v.optional(v.string()),
+    /** §16.75.05's gate — a change she can't execute is not announced. */
+    feasibility: v.optional(
+      v.union(v.literal("supported"), v.literal("partial"), v.literal("blocked"))
+    ),
+    /** What she asked for, when the library couldn't carry it. */
+    askedFor: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_customer_and_created", ["customerId", "createdAt"])
+    .index("by_customer_and_day", ["customerId", "day"]),
+
   dayPlans: defineTable({
     customerId: v.id("customers"),
     /** YYYY-MM-DD in the FOUNDER's timezone — never UTC. */
