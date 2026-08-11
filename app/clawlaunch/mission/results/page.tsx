@@ -17,6 +17,7 @@
 import { useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { LadderBlock } from "./LadderBlock";
 import {
   Btn,
   Chip,
@@ -473,6 +474,16 @@ export default function ResultsPage() {
             </div>
           )}
         </Panel>
+      </Rise>
+
+      {/*
+        ⭐ §16.3's centerpiece, added alongside the existing receipts rather
+        than replacing them. The KPI row answers "how much"; this answers
+        "what's wrong and is that number even bad" — which is the question a
+        founder can act on.
+      */}
+      <Rise>
+        <LadderBlock />
       </Rise>
     </Shell>
   );
