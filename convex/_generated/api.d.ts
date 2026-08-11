@@ -236,6 +236,7 @@ import type * as maya_outbound from "../maya/outbound.js";
 import type * as maya_pairing from "../maya/pairing.js";
 import type * as maya_plainLanguage from "../maya/plainLanguage.js";
 import type * as maya_planFeatures from "../maya/planFeatures.js";
+import type * as maya_preSpendGate from "../maya/preSpendGate.js";
 import type * as maya_preflight from "../maya/preflight.js";
 import type * as maya_productTruth from "../maya/productTruth.js";
 import type * as maya_publish from "../maya/publish.js";
@@ -509,6 +510,7 @@ declare const fullApi: ApiFromModules<{
   "maya/pairing": typeof maya_pairing;
   "maya/plainLanguage": typeof maya_plainLanguage;
   "maya/planFeatures": typeof maya_planFeatures;
+  "maya/preSpendGate": typeof maya_preSpendGate;
   "maya/preflight": typeof maya_preflight;
   "maya/productTruth": typeof maya_productTruth;
   "maya/publish": typeof maya_publish;
