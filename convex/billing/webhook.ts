@@ -23,6 +23,7 @@
 
 import { v } from "convex/values";
 import { internalMutation, mutation } from "../_generated/server";
+import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { assertWebhookSecret } from "../lib/webhookSecret";
@@ -529,5 +530,112 @@ export const handleTrialWillEndPublic = mutation({
       createdAt: Date.now(),
     });
     return { logged: true };
+  },
+});
+
+/* -------------------------------------------------------------------------- */
+/* invoice.payment_failed handler                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ Tell the founder their card failed — BEFORE the agent goes quiet.
+ *
+ * ⚠️ This event was not handled at all. Stripe retries a failed payment for
+ * days and then deletes the subscription; `subscription.deleted` downgrades the
+ * plan, and **nothing anywhere told the customer**. Their agent simply stopped,
+ * with no explanation, for a reason they could have fixed in thirty seconds.
+ *
+ * That is the silent-failure class this product exists to eliminate, sitting in
+ * the billing path — and it is what §18 Sprint 10 means by *"without these it is
+ * not handable"*.
+ *
+ * ## ⚠️ It does NOT pause anything
+ *
+ * A first decline is usually a temporary hold, an expired card, or a bank's
+ * fraud check. Pausing a working agent on attempt one would punish the founder
+ * for something Stripe is about to retry successfully — so this only informs.
+ * `subscription.deleted` remains the thing that changes state, and by then the
+ * founder has already been told twice.
+ *
+ * ## Why Telegram works here
+ *
+ * §18 Sprint 10 lists an *"email fallback for billing failure (a paused agent
+ * can't message you)"*. In this architecture the machine is not the sender —
+ * **Convex** delivers through the shared bot, so a paused or cancelled customer
+ * is still reachable. Email remains the true fallback for a founder who has
+ * unpaired Telegram entirely, and needs an email provider that isn't configured
+ * yet. Stated rather than implied.
+ */
+export const handlePaymentFailed = internalMutation({
+  args: {
+    stripeCustomerId: v.string(),
+    /** Stripe's attempt counter, so a fourth retry doesn't read like a first. */
+    attemptCount: v.optional(v.number()),
+    now: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ notified: boolean; reason?: "no_creator" | "no_customer" }> => {
+    const creator = await findCreatorByStripeCustomerId(
+      ctx,
+      args.stripeCustomerId
+    );
+    if (!creator) return { notified: false, reason: "no_creator" };
+
+    const customer = (await ctx.db
+      .query("customers")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first()) as Doc<"customers"> | null;
+    if (!customer) return { notified: false, reason: "no_customer" };
+
+    const attempt = args.attemptCount ?? 1;
+
+    /**
+     * ⚠️ Plain language, and it never says "Stripe". §11 — the founder bought a
+     * social media manager, not an integration. It also does not apologise for
+     * something that is theirs to fix.
+     */
+    const body =
+      attempt <= 1
+        ? "Your card didn't go through for this month. Nothing's changed yet and I'm still working — worth updating it when you get a minute, or things stop in a few days."
+        : "Your card still isn't going through. I'll keep going for now, but this is the one thing that will stop me — worth sorting today.";
+
+    await ctx.runMutation(internal.maya.messages.send, {
+      customerId: customer._id,
+      surface: "telegram",
+      body,
+      /**
+       * One message per attempt, not per webhook. Stripe can deliver the same
+       * event more than once, and four identical warnings would read as
+       * nagging about something they already know.
+       */
+      dedupeKey: `billing:failed:${attempt}`,
+      proactive: true,
+      ts: args.now,
+    });
+
+    return { notified: true };
+  },
+});
+
+export const handlePaymentFailedPublic = mutation({
+  args: {
+    secret: v.string(),
+    stripeCustomerId: v.string(),
+    attemptCount: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ notified: boolean; reason?: string }> => {
+    // Same bridge secret as every other public webhook mutation — the route is
+    // the only caller, and it holds it. `assertWebhookSecret` throws, which is
+    // right: an unauthenticated call here is not a case to handle gracefully.
+    assertWebhookSecret(args.secret);
+    return await ctx.runMutation(internal.billing.webhook.handlePaymentFailed, {
+      stripeCustomerId: args.stripeCustomerId,
+      attemptCount: args.attemptCount,
+    });
   },
 });

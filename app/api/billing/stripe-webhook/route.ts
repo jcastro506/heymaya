@@ -399,6 +399,45 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         return NextResponse.json({ ok: true });
       }
 
+      /**
+       * ⭐ The card failed. Tell them BEFORE the agent goes quiet.
+       *
+       * ⚠️ This event was unhandled. Stripe retries for days and then deletes
+       * the subscription; `subscription.deleted` downgrades the plan, and
+       * nothing told the customer. Their agent simply stopped, for a reason
+       * they could have fixed in thirty seconds.
+       *
+       * It changes no state — a first decline is usually a temporary hold or
+       * an expired card, and pausing a working agent on attempt one punishes
+       * the founder for something Stripe is about to retry successfully.
+       */
+      case "invoice.payment_failed": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const stripeCustomerId =
+          typeof invoice.customer === "string" ? invoice.customer : null;
+
+        await convex.mutation(api.billing.webhook.recordWebhookEventPublic, {
+          secret: bridge,
+          eventId,
+          type: event.type,
+          livemode,
+          status: stripeCustomerId ? "processed" : "errored",
+          customerId: stripeCustomerId ?? undefined,
+          detail: stripeCustomerId ? undefined : "payment_failed missing customer",
+          rawPayload: event as unknown,
+        });
+        if (!stripeCustomerId) {
+          return NextResponse.json({ ok: true, error: "missing-customer" });
+        }
+
+        await convex.mutation(api.billing.webhook.handlePaymentFailedPublic, {
+          secret: bridge,
+          stripeCustomerId,
+          attemptCount: invoice.attempt_count ?? undefined,
+        });
+        return NextResponse.json({ ok: true });
+      }
+
       case "customer.subscription.deleted": {
         const sub = event.data.object as Stripe.Subscription;
         const stripeCustomerId =
