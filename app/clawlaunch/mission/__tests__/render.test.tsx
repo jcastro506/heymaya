@@ -207,6 +207,7 @@ vi.mock("@/convex/_generated/api", () => ({
     // restored Plan screen (§16.75) reads the live product's strategy.
     maya: {
       strategy: { planScreen: "planScreen" },
+      dashboard: { resultsLadder: "resultsLadder", myDashboard: "myDashboard" },
     },
     gtmMaya: {
       missionControl: {

@@ -28,6 +28,7 @@
 
 import { v } from "convex/values";
 import { internalMutation, query } from "../_generated/server";
+import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { dayKeyInZone } from "./cadence";
 import { diagnoseFrom } from "./ladder";
@@ -327,3 +328,127 @@ function safeParse<T>(json: string, fallback: T): T {
     return fallback;
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Results — the ladder, benchmarked (§16.3)                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ §16.3's centerpiece.
+ *
+ * > *"Most social dashboards are a vanity-metric wall: followers, likes, reach.
+ * > That tells a founder nothing they can act on. **Results shows the five-rung
+ * > ladder per channel, with the broken rung highlighted and her plain-language
+ * > read underneath.**"*
+ * >
+ * > *"The benchmark column is the part no competitor can copy… is 4.1% good?
+ * > Nobody knows. **Context is the product.**"*
+ *
+ * ⚠️ An on-demand query, NOT the subscribed one. §16.5 is explicit: the home
+ * screen subscribes to `dashboardState`; the heavy tables are read when someone
+ * opens Results. Subscribing here would re-run this on every placement write.
+ */
+export const resultsLadder = query({
+  args: {},
+  handler: async (
+    ctx
+  ): Promise<{
+    ok: boolean;
+    channels?: Array<{
+      channel: string;
+      rung: string;
+      detail: string;
+      placements: number;
+      views: number;
+      /** ⚠️ Null when the niche corpus can't support a comparison yet. */
+      nicheMedian: number | null;
+      nichePosts: number;
+      versusNiche: string | null;
+      /** The post that drove the most of this — §16.3's "which post did it". */
+      topPlacement: { url: string | null; views: number } | null;
+    }>;
+    /** ⭐ §16.4 — the OLDEST stamp on screen, not the freshest. */
+    metricsAsOf?: number;
+    benchmarksComputedAt?: number | null;
+    benchmarksStale?: boolean;
+    error?: string;
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { ok: false, error: "sign in first" };
+
+    const creator = (await ctx.db
+      .query("creators")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .first()) as Doc<"creators"> | null;
+    if (!creator) return { ok: false, error: "no account yet" };
+
+    const customer = (await ctx.db
+      .query("customers")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first()) as Doc<"customers"> | null;
+    if (!customer) return { ok: false, error: "no account yet" };
+
+    const placements = (await ctx.db
+      .query("placements")
+      .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+      .collect()) as Doc<"placements">[];
+
+    const targets = await ctx.runQuery(internal.maya.learnBusiness.targetsFor, {
+      customerId: customer._id,
+    });
+    const benchmarkSet = await ctx.runQuery(
+      internal.maya.benchmarks.benchmarksFor,
+      { customerId: customer._id }
+    );
+
+    const now = Date.now();
+    const byChannel = [...new Set(placements.map((p) => p.channel))];
+
+    const channels = byChannel.map((channel) => {
+      const scoped = placements.filter((p) => p.channel === channel);
+      const verdict = diagnoseFrom(scoped, now, 7);
+      const bench = benchmarkSet.channels.find(
+        (b: ChannelBenchmark) => b.channel === channel && b.usable
+      );
+
+      let versusNiche: string | null = null;
+      if (bench && verdict.placements > 0) {
+        versusNiche = compareToNiche(
+          verdict.views / verdict.placements,
+          bench.medianViews
+        ).detail;
+      }
+
+      /**
+       * §16.3: "underneath, the placement that drove the most of each rung, so
+       * the founder can see WHICH post did it." A rung with no example is a
+       * verdict they cannot check.
+       */
+      const top = [...scoped].sort((a, b) => viewsOf(b) - viewsOf(a))[0];
+
+      return {
+        channel,
+        rung: verdict.rung,
+        detail: verdict.detail,
+        placements: verdict.placements,
+        views: verdict.views,
+        nicheMedian: bench?.medianViews ?? null,
+        nichePosts: bench?.posts ?? 0,
+        versusNiche,
+        topPlacement: top
+          ? { url: top.url ?? null, views: viewsOf(top) }
+          : null,
+      };
+    });
+
+    return {
+      ok: true,
+      channels,
+      metricsAsOf: oldestMetricsAsOf(placements),
+      benchmarksComputedAt: benchmarkSet.computedAt,
+      benchmarksStale: benchmarkSet.stale,
+      // Unused today, but the absence of keywords is why benchmarks are empty.
+      ...(targets ? {} : {}),
+    };
+  },
+});
