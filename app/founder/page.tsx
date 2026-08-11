@@ -60,7 +60,9 @@ function Flag({ on, label }: { on: boolean; label: string }) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-paper/10 bg-paper/[0.03] px-3 py-2">
-      <div className="text-lg font-semibold tabular-nums text-paper">{value}</div>
+      <div className="text-lg font-semibold tabular-nums text-paper">
+        {value}
+      </div>
       <div className="text-[11px] uppercase tracking-wide text-paper-faint">
         {label}
       </div>
@@ -83,7 +85,8 @@ function Transcript({
   if (data === undefined)
     return <p className="text-paper-faint">Loading transcript…</p>;
   if (!data.ok) return <p className="text-rose-400">Unauthorized.</p>;
-  if (!data.found) return <p className="text-paper-faint">Account not found.</p>;
+  if (!data.found)
+    return <p className="text-paper-faint">Account not found.</p>;
 
   return (
     <div>
@@ -132,22 +135,27 @@ function Transcript({
                     <span>{clock(m.ts)}</span>
                     {m.messageClass && <span>· {m.messageClass}</span>}
                   </div>
-                  <div className="whitespace-pre-wrap break-words">{m.body}</div>
-                  {isMaya && (m.model || m.latencyMs !== null || m.costUsd !== null) && (
-                    <div className="mt-1.5 flex flex-wrap gap-2 text-[10px] opacity-60">
-                      {m.model && <span>{m.model}</span>}
-                      {m.tokensIn !== null && m.tokensOut !== null && (
-                        <span>
-                          {m.tokensIn}→{m.tokensOut} tok
-                        </span>
-                      )}
-                      {m.latencyMs !== null && <span>{m.latencyMs}ms</span>}
-                      {m.costUsd !== null && <span>{usd(m.costUsd)}</span>}
-                      {m.criticPassed !== null && (
-                        <span>{m.criticPassed ? "✓ critic" : "✗ critic"}</span>
-                      )}
-                    </div>
-                  )}
+                  <div className="whitespace-pre-wrap break-words">
+                    {m.body}
+                  </div>
+                  {isMaya &&
+                    (m.model || m.latencyMs !== null || m.costUsd !== null) && (
+                      <div className="mt-1.5 flex flex-wrap gap-2 text-[10px] opacity-60">
+                        {m.model && <span>{m.model}</span>}
+                        {m.tokensIn !== null && m.tokensOut !== null && (
+                          <span>
+                            {m.tokensIn}→{m.tokensOut} tok
+                          </span>
+                        )}
+                        {m.latencyMs !== null && <span>{m.latencyMs}ms</span>}
+                        {m.costUsd !== null && <span>{usd(m.costUsd)}</span>}
+                        {m.criticPassed !== null && (
+                          <span>
+                            {m.criticPassed ? "✓ critic" : "✗ critic"}
+                          </span>
+                        )}
+                      </div>
+                    )}
                 </div>
               </div>
             );
@@ -178,10 +186,11 @@ function Overview({
    * scans every customer's placements, and the "is anything broken" numbers
    * above should not wait on it.
    */
-  const learning = useQuery(api.founder.fleetHealth.aggregateLearning, { token });
+  const learning = useQuery(api.founder.fleetHealth.aggregateLearning, {
+    token,
+  });
 
-  if (data === undefined)
-    return <p className="text-paper-faint">Loading…</p>;
+  if (data === undefined) return <p className="text-paper-faint">Loading…</p>;
   if (!data.ok)
     return (
       <div className="text-rose-400">
@@ -223,8 +232,8 @@ function Overview({
           <>
             <p className="mb-3 text-sm text-paper">
               Reddit bet in{" "}
-              <span className="font-semibold">{ci.redditBetPct}%</span> of agents
-              ({ci.redditBetCount}/{ci.agentsWithBets})
+              <span className="font-semibold">{ci.redditBetPct}%</span> of
+              agents ({ci.redditBetCount}/{ci.agentsWithBets})
             </p>
             <div className="space-y-1.5">
               {ci.histogram.map((h) => {
@@ -293,7 +302,9 @@ function Overview({
                   <Flag on={a.tier.canVideo} label="video" />
                   <Flag on={a.tier.canImage} label="image" />
                   <Flag on={a.tier.canAutoPost} label="autopost" />
-                  <span className="text-paper-faint">{a.tier.maxActiveChannels}ch</span>
+                  <span className="text-paper-faint">
+                    {a.tier.maxActiveChannels}ch
+                  </span>
                 </div>
               </div>
               <div className="shrink-0 text-right">
@@ -307,9 +318,7 @@ function Overview({
             </div>
             <div className="mt-1.5 flex items-center gap-2 text-[10px]">
               <span
-                className={
-                  a.deployed ? "text-lime-400" : "text-paper-faint"
-                }
+                className={a.deployed ? "text-lime-400" : "text-paper-faint"}
               >
                 {a.deployed ? "● live" : "○ not deployed"}
               </span>
@@ -376,6 +385,7 @@ function FleetHealth({
   const c = fleet.cadence;
   const stuck = c.stuck ?? [];
   const degraded = fleet.vendorsDegraded ?? [];
+  const unreachable = fleet.unreachable ?? [];
 
   return (
     <section className="mb-6 rounded-lg border border-white/10 p-3">
@@ -383,7 +393,10 @@ function FleetHealth({
 
       <div className="grid grid-cols-3 gap-2">
         <Stat label="Active" value={String(c.activeCustomers)} />
-        <Stat label="Posted today" value={`${c.doneToday}/${c.activeCustomers}`} />
+        <Stat
+          label="Posted today"
+          value={`${c.doneToday}/${c.activeCustomers}`}
+        />
         <Stat label="Best streak" value={String(c.bestStreak)} />
       </div>
 
@@ -401,6 +414,33 @@ function FleetHealth({
                 {s.daysSince === null
                   ? "never posted"
                   : `${s.daysSince}d since last post`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* ⭐ Louder than a stopped account, and above it in severity for one
+          reason: a customer we cannot message doesn't know anything is wrong.
+          Every other number on this page describes work they'll never hear
+          about — including the warning that their card failed. */}
+      {unreachable.length > 0 && (
+        <div className="mt-3 rounded border border-rose-500/60 bg-rose-500/15 p-2">
+          <p className="text-xs font-semibold text-rose-200">
+            {unreachable.length} can&apos;t be reached
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {unreachable.slice(0, 5).map((u) => (
+              <li key={u.customerId} className="text-xs text-paper-faint">
+                <code>{String(u.customerId).slice(0, 8)}…</code>{" "}
+                {/* The transport's own words — "no Telegram chat paired" and
+                    "bot was blocked" need different responses. */}
+                {u.reason}
+                {u.proactive ? " — including something she started" : ""}{" "}
+                <span className="text-paper-faint/70">
+                  ({u.pending} waiting since{" "}
+                  {new Date(u.since).toLocaleDateString()})
+                </span>
               </li>
             ))}
           </ul>
@@ -431,21 +471,25 @@ function FleetHealth({
 
       {/* Counted per ACCOUNT — one founder restating a rule five times is one
           signal, not five. A rule nine accounts set is a default we got wrong. */}
-      {learning?.ok && learning.directives && learning.directives.byKind.length > 0 && (
-        <p className="mt-1 text-xs text-paper-faint">
-          Most-set rules:{" "}
-          {learning.directives.byKind
-            .slice(0, 3)
-            .map((d) => `${d.kind} (${d.accounts})`)
-            .join(" · ")}
-        </p>
-      )}
+      {learning?.ok &&
+        learning.directives &&
+        learning.directives.byKind.length > 0 && (
+          <p className="mt-1 text-xs text-paper-faint">
+            Most-set rules:{" "}
+            {learning.directives.byKind
+              .slice(0, 3)
+              .map((d) => `${d.kind} (${d.accounts})`)
+              .join(" · ")}
+          </p>
+        )}
 
       <p className="mt-3 text-xs text-paper-faint">
         {fleet.traceability
           ? `${fleet.traceability.traceable} of ${fleet.traceability.posts} posts trace to an idea`
           : ""}
-        {fleet.spend ? ` · ${usd(fleet.spend.totalUsd)} over ${fleet.spend.windowDays}d` : ""}
+        {fleet.spend
+          ? ` · ${usd(fleet.spend.totalUsd)} over ${fleet.spend.windowDays}d`
+          : ""}
       </p>
 
       {/* ⭐ Stated, not implied. This screen gets opened when something is

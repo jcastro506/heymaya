@@ -212,6 +212,7 @@ import type * as maya_dailyReport from "../maya/dailyReport.js";
 import type * as maya_dashboard from "../maya/dashboard.js";
 import type * as maya_dataExport from "../maya/dataExport.js";
 import type * as maya_dayPlan from "../maya/dayPlan.js";
+import type * as maya_delivery from "../maya/delivery.js";
 import type * as maya_demo from "../maya/demo.js";
 import type * as maya_deploy from "../maya/deploy.js";
 import type * as maya_directiveGate from "../maya/directiveGate.js";
@@ -487,6 +488,7 @@ declare const fullApi: ApiFromModules<{
   "maya/dashboard": typeof maya_dashboard;
   "maya/dataExport": typeof maya_dataExport;
   "maya/dayPlan": typeof maya_dayPlan;
+  "maya/delivery": typeof maya_delivery;
   "maya/demo": typeof maya_demo;
   "maya/deploy": typeof maya_deploy;
   "maya/directiveGate": typeof maya_directiveGate;
