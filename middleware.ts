@@ -28,6 +28,21 @@ const isMissionControl = createRouteMatcher(["/clawlaunch/mission(.*)"]);
  * a mechanism. Adding a server-to-server route means adding it here, and the
  * test fails until it is also public.
  */
+/**
+ * ⭐ Browser-called AND unauthenticated — the demo, and only the demo.
+ *
+ * A third category, because the existing two don't describe it. Server-to-
+ * server routes carry their own credential; browser-called routes carry a Clerk
+ * session. This carries neither: Sprint 11's exit is explicitly *"without
+ * signing up"*, so a stranger with no account must reach it.
+ *
+ * ⚠️ Kept separate from `SERVER_TO_SERVER_ROUTES` rather than folded in, so the
+ * list of things reachable by an anonymous stranger is one short, readable
+ * array. Its guards — SSRF, per-IP limit, global spend cap — live in
+ * `convex/maya/demo.ts`, and nothing else belongs here without the same.
+ */
+export const PUBLIC_BROWSER_ROUTES = ["/api/demo/read"] as const;
+
 export const SERVER_TO_SERVER_ROUTES = [
   /** Clerk user lifecycle → Convex. Verifies a Svix signature. */
   "/api/clerk/webhook",
@@ -40,6 +55,13 @@ export const SERVER_TO_SERVER_ROUTES = [
 export const PUBLIC_ROUTES = [
   "/",
   "/vibecoders",
+  /**
+   * ⚠️ The demo block's own page. Public for the same reason the endpoint is:
+   * Sprint 11's exit is "without signing up", and Clerk answers an unlisted
+   * page with 404 — so a marketing surface left off this list is invisible in
+   * exactly the way a broken deploy is.
+   */
+  "/demo",
   "/waitlist",
   "/builders",
   "/clawlaunch(.*)",
@@ -79,6 +101,7 @@ export const PUBLIC_ROUTES = [
    * failed the same way the moment anything tried to render a carousel.
    */
   ...SERVER_TO_SERVER_ROUTES,
+  ...PUBLIC_BROWSER_ROUTES,
 ];
 
 const isPublic = createRouteMatcher(PUBLIC_ROUTES);
