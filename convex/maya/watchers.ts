@@ -37,6 +37,7 @@
  */
 
 import { v } from "convex/values";
+import type { FunctionReference } from "convex/server";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -195,7 +196,7 @@ export const sweepDue = internalAction({
   handler: async (
     ctx,
     args
-  ): Promise<{ due: number; ran: number; skipped: number; failed: number }> => {
+  ): Promise<{ due: number; scheduled: number; skipped: number; failed: number }> => {
     const now = args.now ?? Date.now();
     const customerIds = await ctx.runQuery(
       internal.maya.scheduler.activeV2Customers,
@@ -203,7 +204,8 @@ export const sweepDue = internalAction({
     );
 
     let due = 0;
-    let ran = 0;
+    /** ⚠️ SCHEDULED, not completed — each sweep reports its own outcome. */
+    let scheduled = 0;
     let skipped = 0;
     let failed = 0;
 
@@ -254,7 +256,7 @@ export const sweepDue = internalAction({
           internal.maya.messages.expireStaleQuestions,
           { customerId, now }
         );
-        if (expiry.expired > 0) ran += 1;
+        if (expiry.expired > 0) scheduled += 1;
       } catch (error) {
         console.error(
           `[watchers] question expiry failed for ${customerId}: ${
@@ -285,18 +287,18 @@ export const sweepDue = internalAction({
           skipped += 1;
           continue;
         }
-
-        try {
-          await ctx.runAction(refs[sweep], { customerId, now });
-          ran += 1;
-        } catch (error) {
-          failed += 1;
-          console.error(
-            `[watchers] ${sweep} failed for ${customerId}: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
+        /**
+         * ⚠️ SCHEDULED, not awaited. Awaiting them put every sweep for every
+         * due customer inside this one action — which exceeded Convex's
+         * 300-second limit for a single customer once the weekly work was
+         * included. Each now gets its own action and its own budget.
+         */
+        await ctx.scheduler.runAfter(0, internal.maya.watchers.sweepOne, {
+          customerId,
+          sweep,
+          now,
+        });
+        scheduled += 1;
       }
 
       /**
@@ -330,20 +332,109 @@ export const sweepDue = internalAction({
           skipped += 1;
           continue;
         }
-        try {
-          await ctx.runAction(weeklyRefs[sweep], { customerId, now });
-          ran += 1;
-        } catch (error) {
-          failed += 1;
-          console.error(
-            `[watchers] weekly ${sweep} failed for ${customerId}: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
+        await ctx.scheduler.runAfter(0, internal.maya.watchers.sweepOne, {
+          customerId,
+          sweep,
+          now,
+        });
+        scheduled += 1;
       }
     }
 
-    return { due, ran, skipped, failed };
+    return { due, scheduled, skipped, failed };
+  },
+});
+
+/**
+ * ⚠️ Give a claim back when the work didn't happen.
+ *
+ * `claimSweep` writes the marker BEFORE the sweep runs, which is right for
+ * dedupe and wrong for failure: a sweep that claimed and then died is recorded
+ * as done and never retried. On a timeout that is silent data loss — the day
+ * reports a clean run and collected nothing.
+ */
+export const releaseSweep = internalMutation({
+  args: { customerId: v.id("customers"), sweep: v.string() },
+  handler: async (ctx, args): Promise<{ released: boolean }> => {
+    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    if (!customer) return { released: false };
+    let sweeps: Record<string, string> = {};
+    try {
+      sweeps = customer.sweptJson ? JSON.parse(customer.sweptJson) : {};
+    } catch {
+      return { released: false };
+    }
+    if (!(args.sweep in sweeps)) return { released: false };
+    delete sweeps[args.sweep];
+    await ctx.db.patch(args.customerId, {
+      sweptJson: JSON.stringify(sweeps),
+      updatedAt: Date.now(),
+    });
+    return { released: true };
+  },
+});
+
+/**
+ * ⭐ ONE sweep, for ONE customer, in its own action.
+ *
+ * ⚠️ **Measured 2026-08-10: the old shape exceeded Convex's 300-second action
+ * limit for a SINGLE customer.** `sweepDue` awaited every sweep for every due
+ * customer inside one action — five daily plus three weekly, serially. With the
+ * weekly work included (`watchFormats` reads up to 50 transcripts, each with a
+ * model call; `watchTopFormats` downloads video) one customer ran 301s and the
+ * action was killed.
+ *
+ * That is not a scale problem waiting at 200 customers. It was already broken
+ * at one, and it broke in the way this codebase keeps breaking: the cron
+ * reported nothing, the claims were already written, and the day looked clean.
+ *
+ * Each sweep now gets its own action and its own 300s. They run concurrently
+ * rather than in sequence, so wall-clock is the slowest single sweep instead of
+ * the sum of all of them.
+ */
+export const sweepOne = internalAction({
+  args: {
+    customerId: v.id("customers"),
+    sweep: v.string(),
+    now: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<{ ok: boolean }> => {
+    const now = args.now ?? Date.now();
+    const refs: Record<string, FunctionReference<"action", "internal", { customerId: Id<"customers">; now?: number }>> = {
+      scroll: internal.maya.scroll.scrollNiche,
+      trends: internal.maya.trends.sweepTrends,
+      competitors: internal.maya.competitors.watchCompetitors,
+      complaints: internal.maya.complaints.mineComplaints,
+      widerWorld: internal.maya.widerWorld.sweepWiderWorld,
+      formats: internal.maya.formats.watchFormats,
+      hashtags: internal.maya.formats.mineHashtagSets,
+      watch: internal.maya.formats.watchTopFormats,
+    };
+    const ref = refs[args.sweep];
+    if (!ref) {
+      console.error(`[watchers] no such sweep: ${args.sweep}`);
+      return { ok: false };
+    }
+
+    try {
+      await ctx.runAction(ref, { customerId: args.customerId, now });
+      return { ok: true };
+    } catch (error) {
+      /**
+       * ⚠️ Hand the claim back so tomorrow retries. A sweep that fails and
+       * keeps its claim is recorded as done and never runs again that period —
+       * which is worse than the failure, because it is invisible.
+       */
+      await ctx.runMutation(internal.maya.watchers.releaseSweep, {
+        customerId: args.customerId,
+        sweep: args.sweep,
+      });
+      console.error(
+        `[watchers] ${args.sweep} failed for ${args.customerId}, claim released: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      return { ok: false };
+    }
   },
 });
