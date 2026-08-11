@@ -279,7 +279,15 @@ export async function fetchProductPage(url: string): Promise<PageOutcome> {
 /* Judging — the model, on collected text only                                 */
 /* -------------------------------------------------------------------------- */
 
-const EXTRACTION_SYSTEM = `You read one landing page and report what the product is.
+/**
+ * Exported so the pre-signup demo sends the SAME system prompt.
+ *
+ * ⚠️ The demo first sent only the user message. The model had no schema to
+ * return and answered in prose, so `parseExtraction` produced `{}` — and the
+ * demo reported `ok: true` with an empty read. "Runs the real read" has to mean
+ * both messages, not just the one that carries the page.
+ */
+export const EXTRACTION_SYSTEM = `You read one landing page and report what the product is.
 
 Return STRICT JSON, no prose, no code fence:
 {
