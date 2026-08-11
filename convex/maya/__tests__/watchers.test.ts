@@ -15,6 +15,8 @@ import { convexTest } from "convex-test";
 import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Id } from "../../_generated/dataModel";
 import {
   SWEEPS,
@@ -189,5 +191,65 @@ describe("⚠️ ONCE PER FOUNDER-DAY, however many ticks pass", () => {
       day: "2026-08-08",
     });
     expect(res.claimed).toBe(true);
+  });
+});
+
+/**
+ * ⭐ MEASURED 2026-08-10 — the sweep exceeded Convex's action limit at N=1.
+ *
+ * `sweepDue` awaited every sweep for every due customer inside one action:
+ * five daily plus three weekly, serially. With the weekly work included
+ * (`watchFormats` reads up to 50 transcripts each with a model call;
+ * `watchTopFormats` downloads video) a SINGLE customer ran 301 seconds and the
+ * action was killed at Convex's 300s ceiling.
+ *
+ * Not a problem waiting at 200 customers — already broken at one, and broken
+ * the way this codebase keeps breaking: the cron reported nothing, the claims
+ * were already written, and the day looked clean.
+ *
+ * After fanning out: 301s → 1s, because the dispatcher now schedules and
+ * returns instead of awaiting the work.
+ */
+describe("the sweep cannot exceed one action's budget", () => {
+  const SOURCE = readFileSync(
+    join(process.cwd(), "convex", "maya", "watchers.ts"),
+    "utf8"
+  );
+
+  it("schedules each sweep instead of awaiting it", () => {
+    // ⚠️ Structural, because the failure is a TIMEOUT — there is no assertion
+    // about output that distinguishes "ran serially" from "ran fanned out".
+    expect(SOURCE).toContain("ctx.scheduler.runAfter(0, internal.maya.watchers.sweepOne");
+    // The old shape: awaiting the vendor action inside the dispatcher loop.
+    expect(SOURCE).not.toContain("await ctx.runAction(refs[sweep]");
+  });
+
+  it("calls the count `scheduled`, not `ran`", () => {
+    // `ran` would claim work finished that has only been queued — and the
+    // dispatcher genuinely cannot know the outcome any more.
+    expect(SOURCE).toContain("scheduled: number");
+    expect(SOURCE).not.toMatch(/\bran: number\b/);
+  });
+
+  /**
+   * ⭐ The compounding half of the bug.
+   *
+   * `claimSweep` writes the marker BEFORE the work runs — right for dedupe,
+   * wrong for failure. A sweep that claimed and then died was recorded as done
+   * and never retried, so a timeout became silent data loss: a clean-looking
+   * day that collected nothing.
+   */
+  it("hands the claim back when a sweep fails", () => {
+    expect(SOURCE).toContain("internal.maya.watchers.releaseSweep");
+    /**
+     * The release must be in the CATCH, not the happy path — otherwise a
+     * successful sweep would hand its claim back and run again every tick.
+     */
+    const sweepOne = SOURCE.slice(SOURCE.indexOf("export const sweepOne"));
+    const catchBlock = sweepOne.slice(sweepOne.indexOf("} catch (error) {"));
+    expect(catchBlock).toContain("releaseSweep");
+    // And NOT before it: nothing on the success path may release.
+    const beforeCatch = sweepOne.slice(0, sweepOne.indexOf("} catch (error) {"));
+    expect(beforeCatch).not.toContain("releaseSweep");
   });
 });
