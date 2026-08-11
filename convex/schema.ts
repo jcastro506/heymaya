@@ -4099,6 +4099,43 @@ export default defineSchema({
    * chronologically, and meant to be long-lived. Stuffing a growing log into a
    * customer row makes every unrelated read of that row heavier.
    */
+  /**
+   * ⭐ The one row the home screen subscribes to (§16.5).
+   *
+   * > *"The sweeps write hundreds of `observations` rows a day. A dashboard
+   * > subscribed to that table re-runs its query on every insert — burning
+   * > function calls and re-rendering constantly for data the user doesn't
+   * > care about."*
+   *
+   * ⚠️ A dedicated table, NOT a JSON field on `customers`. That row is written
+   * by every sweep claim, every consent record and every experiment — so
+   * subscribing to it would re-render the dashboard on writes that change
+   * nothing the founder can see, which is the exact cost this exists to avoid.
+   *
+   * Denormalized on purpose. It is a cache of things that live elsewhere, and
+   * `metricsAsOf` is what stops that being dishonest.
+   */
+  dashboardState: defineTable({
+    customerId: v.id("customers"),
+    /** Plain language, current. §16.6 — "is this thing even alive". */
+    statusLine: v.string(),
+    /** ⚠️ Placements only. §2.6 — drafts are inventory, not results. */
+    todayPlacementsJson: v.string(),
+    /** The one open item, or absent. More than one is a queue, not a prompt. */
+    needsYou: v.optional(v.string()),
+    /** Pre-computed per channel, with benchmarks (§16.3). */
+    ladderJson: v.string(),
+    mediaLibraryDepth: v.number(),
+    /** ⭐ §16.4 — borrowed numbers carry their age or they start lying. */
+    metricsAsOf: v.optional(v.number()),
+    livenessState: v.union(
+      v.literal("healthy"),
+      v.literal("degraded"),
+      v.literal("breached")
+    ),
+    updatedAt: v.number(),
+  }).index("by_customer", ["customerId"]),
+
   strategyChanges: defineTable({
     customerId: v.id("customers"),
     /** The founder's day the review ran — see `cadence.dayKeyInZone`. */
