@@ -1,0 +1,118 @@
+/**
+ * The weekly review (§15.3's `report`).
+ *
+ * Its four hard rules are all about what NOT to say: never report inventory as
+ * results · state a zero week plainly with its cause · lead with the rung, not
+ * a number dump. Each one is a way a report can be technically accurate and
+ * still mislead.
+ */
+
+import { describe, expect, it } from "vitest";
+import { composeWeekly, type WeeklyInput } from "../weeklyReport";
+
+const base: WeeklyInput = {
+  placements: 6,
+  views: 6000,
+  rung: "healthy",
+  rungDetail: "reach and engagement are both working",
+  nicheMedian: 1000,
+  nichePosts: 200,
+  tracedPlacements: 4,
+  strategy: { changed: false, detail: "" },
+  conversions: { total: 0, traced: 0 },
+};
+
+describe("a zero week", () => {
+  /**
+   * ⭐ §12: honest silence beats fake activity. A report opening with a
+   * percentage on a week that published nothing is the exact dishonesty this
+   * rule exists to stop.
+   */
+  it("leads with the zero and gives the cause", () => {
+    const out = composeWeekly({
+      ...base,
+      placements: 0,
+      views: 0,
+      rungDetail: "nothing published, so there's nothing to read",
+    });
+    expect(out.startsWith("nothing went out this week")).toBe(true);
+    expect(out).toContain("nothing to read");
+  });
+
+  it("still carries the strategy verdict", () => {
+    const out = composeWeekly({
+      ...base,
+      placements: 0,
+      strategy: { changed: false, detail: "nothing's changing this week" },
+    });
+    expect(out).toContain("nothing's changing");
+  });
+
+  it("never claims views on a week with no posts", () => {
+    const out = composeWeekly({ ...base, placements: 0, views: 0 });
+    expect(out).not.toMatch(/views a post/);
+  });
+});
+
+describe("never report inventory as results", () => {
+  /**
+   * §2.6: "the unit of work is a placement — something live, with a URL.
+   * Drafts and found threads are inventory, not results." The composer is
+   * given placements and has no way to reach a draft, which is the structural
+   * version of the rule.
+   */
+  it("counts placements and has no notion of drafts", () => {
+    const out = composeWeekly(base);
+    expect(out).toContain("of 6 posts");
+    expect(out.toLowerCase()).not.toContain("draft");
+  });
+});
+
+describe("the rung and the benchmark can disagree", () => {
+  /**
+   * ⭐ Found on the first live run. The ladder is arithmetic against ABSOLUTE
+   * floors, so 153 views across 9 posts read as "distribution and interest are
+   * both working" while being 96% under the niche median. Printing both in
+   * sequence congratulates and then contradicts.
+   *
+   * §16.3 resolves it: "context is the product" — the niche wins the headline.
+   */
+  it("lets the niche win when the floor and the niche disagree", () => {
+    const out = composeWeekly({
+      ...base,
+      views: 150, // 25 a post, against a median of 1000
+      rungDetail: "reach and engagement are both working",
+    });
+    expect(out).toContain("clear my floor");
+    expect(out).toContain("well under what your niche does");
+    // ⚠️ The complacent sentence must not also appear.
+    expect(out).not.toContain("both working");
+  });
+
+  it("leads with the rung when they agree", () => {
+    const out = composeWeekly(base); // 1000 a post vs a 1000 median
+    expect(out.startsWith("reach and engagement are both working")).toBe(true);
+  });
+
+  it("says nothing about the niche when there is no benchmark", () => {
+    const out = composeWeekly({ ...base, nicheMedian: null, nichePosts: 0 });
+    expect(out).not.toMatch(/niche/);
+    expect(out.startsWith(base.rungDetail)).toBe(true);
+  });
+});
+
+describe("results", () => {
+  it("separates the signups it can explain from the ones it can't", () => {
+    const out = composeWeekly({
+      ...base,
+      conversions: { total: 3, traced: 1 },
+    });
+    expect(out).toContain("3 signups");
+    expect(out).toMatch(/can't for the other 2/);
+  });
+
+  it("stays quiet when there were none", () => {
+    // Reporting "0 signups" every week trains a founder to stop reading.
+    expect(composeWeekly(base)).not.toMatch(/signup/);
+  });
+});
