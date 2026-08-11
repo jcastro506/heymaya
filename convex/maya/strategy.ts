@@ -413,6 +413,18 @@ export const reviewStrategy = internalAction({
     const library = await ctx.runQuery(internal.maya.media.libraryHealth, {
       customerId: args.customerId,
     });
+    /**
+     * ⚠️ The gate may still BLOCK without asking again.
+     *
+     * A change she can't execute is still a change she shouldn't announce —
+     * but §6.4.2 caps how often the reason gets said out loud. Past the cap the
+     * verdict is recorded and the ask is dropped.
+     */
+    const askState = await ctx.runQuery(internal.maya.media.assetAskState, {
+      customerId: args.customerId,
+      now,
+    });
+
     const feasibility = checkFeasibility({
       needsRealMedia: verdict.trigger === "rung_stuck" && stuck?.rung === "L1",
       productScreenshots: library.productScreenshots,
@@ -433,7 +445,8 @@ export const reviewStrategy = internalAction({
       trigger: verdict.trigger,
       evidenceJson: JSON.stringify({ perChannel }),
       feasibility: feasibility.state,
-      askedFor: feasibility.ask,
+      // Recorded either way; only SAID while the policy allows it.
+      askedFor: askState === "silent" ? undefined : feasibility.ask,
       now,
     });
 

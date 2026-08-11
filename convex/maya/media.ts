@@ -720,3 +720,115 @@ export const forgetGenerated = internalMutation({
     return { forgotten, kept: assets.length - forgotten };
   },
 });
+
+/* -------------------------------------------------------------------------- */
+/* Asking once (§6.4.2)                                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ After this many raisings, stop and work with what's there.
+ *
+ * One ask, then one reminder, then silence. §6.4.2's "never nag more than
+ * once" read literally would be ask-then-silence; a single follow-up is
+ * defensible because the first ask may have arrived on a busy day — but a third
+ * is a system that has stopped listening.
+ */
+export const MAX_ASSET_ASKS = 2;
+
+/**
+ * ⚠️ Circumstances change. A founder who ignored the ask in March may happily
+ * send a recording in June after a redesign, and a permanent silence would
+ * never find out. Long enough not to nag, short enough to re-try once a
+ * quarter.
+ */
+export const ASSET_ASK_COOLDOWN_MS = 90 * 24 * 3600_000;
+
+export type AssetAskState = "ask" | "mention" | "silent";
+
+export interface AssetAsk {
+  askedAt: number;
+  mentions: number;
+}
+
+export function parseAssetAsk(json: string | undefined): AssetAsk | null {
+  if (!json) return null;
+  try {
+    const parsed = JSON.parse(json) as Partial<AssetAsk>;
+    return typeof parsed.askedAt === "number"
+      ? { askedAt: parsed.askedAt, mentions: parsed.mentions ?? 1 }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ⭐ What to DO about a thin library — which is a different question from
+ * whether it is thin.
+ *
+ * `shouldAsk` stays what it always was: a fact about the library. This is the
+ * policy on top, and separating them is what stops a standing fact becoming a
+ * standing nag.
+ */
+export function askStateFor(input: {
+  shouldAsk: boolean;
+  prior: AssetAsk | null;
+  now: number;
+}): AssetAskState {
+  if (!input.shouldAsk) return "silent";
+  if (!input.prior) return "ask";
+
+  // The cooldown resets the whole thing — a fresh ask, not a third mention.
+  if (input.now - input.prior.askedAt > ASSET_ASK_COOLDOWN_MS) return "ask";
+
+  return input.prior.mentions < MAX_ASSET_ASKS ? "mention" : "silent";
+}
+
+/** Stamp that we raised it. Called by whichever surface actually said it. */
+export const recordAssetAsk = internalMutation({
+  args: { customerId: v.id("customers"), now: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<{ mentions: number }> => {
+    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    if (!customer) return { mentions: 0 };
+
+    const now = args.now ?? Date.now();
+    const prior = parseAssetAsk(customer.assetAskJson);
+
+    // Past the cooldown, this is a new conversation rather than a continuation.
+    const stale = prior && now - prior.askedAt > ASSET_ASK_COOLDOWN_MS;
+    const next: AssetAsk =
+      !prior || stale
+        ? { askedAt: now, mentions: 1 }
+        : { askedAt: prior.askedAt, mentions: prior.mentions + 1 };
+
+    await ctx.db.patch(args.customerId, {
+      assetAskJson: JSON.stringify(next),
+      updatedAt: now,
+    });
+    return { mentions: next.mentions };
+  },
+});
+
+/** The policy, for callers that only need the decision. */
+export const assetAskState = internalQuery({
+  args: { customerId: v.id("customers"), now: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<AssetAskState> => {
+    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    if (!customer) return "silent";
+
+    const assets = (await ctx.db
+      .query("mediaAssets")
+      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+      .collect()) as Doc<"mediaAssets">[];
+    const hasRecording = assets.some((a) => a.kind === "screen_recording");
+    const verdict = assessLibrary(
+      assets.map((a) => (a.classifiedAs ?? "other") as AssetKind)
+    );
+
+    return askStateFor({
+      shouldAsk: !hasRecording && verdict.degraded,
+      prior: parseAssetAsk(customer.assetAskJson),
+      now: args.now ?? Date.now(),
+    });
+  },
+});
