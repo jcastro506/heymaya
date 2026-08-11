@@ -413,6 +413,26 @@ export const publishPlacement = internalAction({
     );
 
     /**
+     * ⭐ The home screen's row, immediately.
+     *
+     * The watcher sweep also rebuilds it, but that runs every ten minutes —
+     * and a founder who just approved a post and opens the app to a status
+     * line saying "nothing posted yet today" has been told something false
+     * about the thing they just did. §16.6: the whole point of that line is
+     * answering "is this thing even alive".
+     *
+     * Failure is swallowed: a stale cache must never fail a publish that has
+     * already gone out.
+     */
+    try {
+      await ctx.runMutation(internal.maya.dashboard.refresh, {
+        customerId: args.customerId,
+      });
+    } catch (error) {
+      console.error(`[publish] dashboard refresh failed: ${String(error)}`);
+    }
+
+    /**
      * ⭐ THE DRAFT IS DONE. Marked here, after the placement exists.
      *
      * Publishing never touched the draft, so a published draft stayed

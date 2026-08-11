@@ -209,6 +209,7 @@ import type * as maya_complaints from "../maya/complaints.js";
 import type * as maya_cringeEval from "../maya/cringeEval.js";
 import type * as maya_crosspost from "../maya/crosspost.js";
 import type * as maya_dailyReport from "../maya/dailyReport.js";
+import type * as maya_dashboard from "../maya/dashboard.js";
 import type * as maya_dayPlan from "../maya/dayPlan.js";
 import type * as maya_demo from "../maya/demo.js";
 import type * as maya_deploy from "../maya/deploy.js";
@@ -481,6 +482,7 @@ declare const fullApi: ApiFromModules<{
   "maya/cringeEval": typeof maya_cringeEval;
   "maya/crosspost": typeof maya_crosspost;
   "maya/dailyReport": typeof maya_dailyReport;
+  "maya/dashboard": typeof maya_dashboard;
   "maya/dayPlan": typeof maya_dayPlan;
   "maya/demo": typeof maya_demo;
   "maya/deploy": typeof maya_deploy;

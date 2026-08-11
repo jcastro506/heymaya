@@ -265,6 +265,24 @@ export const sweepDue = internalAction({
         );
       }
 
+      /**
+       * ⭐ Refresh the home screen's one row (§16.5).
+       *
+       * Outside the vendor breaker and before the sweeps, for the same reason
+       * the question expiry is: it needs no vendor, and a customer whose
+       * collection is skipped still deserves a status line that reflects
+       * reality rather than yesterday's.
+       */
+      try {
+        await ctx.runMutation(internal.maya.dashboard.refresh, { customerId, now });
+      } catch (error) {
+        console.error(
+          `[watchers] dashboard refresh failed for ${customerId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+
       const breaker = await ctx.runQuery(internal.maya.breaker.vendorOpen, {
         vendor: "scrapecreators",
         now,
