@@ -30,7 +30,12 @@
 import { v } from "convex/values";
 import { budgetFor } from "./llm";
 import { dayKeyInZone } from "./cadence";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import {
+  action,
+  internalAction,
+  internalMutation,
+  internalQuery,
+} from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import {
@@ -498,5 +503,34 @@ export const cachedRead = internalQuery({
     } catch {
       return null;
     }
+  },
+});
+
+/**
+ * ⭐ The public entry point, and the only one.
+ *
+ * ⚠️ It takes a shared secret, which looks odd on a deliberately public
+ * feature. The reason is `ipKey`: the per-IP limit only means anything if the
+ * key comes from the real client address, and the caller cannot be trusted to
+ * supply it honestly. Only `app/api/demo/read` can see that address, so only it
+ * may call this — otherwise anyone rate-limits themselves by passing a fresh
+ * key each time, and the per-IP guard is decoration.
+ *
+ * The GLOBAL cap still holds regardless, which is what actually protects the
+ * bill. This protects the fairness of the per-visitor share.
+ */
+export const readPublic = action({
+  args: { url: v.string(), ipKey: v.string(), secret: v.string() },
+  handler: async (ctx, args): Promise<DemoRead> => {
+    const expected = process.env.DEMO_SHARED_SECRET;
+    // Fails CLOSED when unset. An open door because a variable is missing is
+    // worse than a closed one.
+    if (!expected || args.secret !== expected) {
+      return { ok: false, detail: "the demo isn't available right now" };
+    }
+    return await ctx.runAction(internal.maya.demo.readForDemo, {
+      url: args.url,
+      ipKey: args.ipKey,
+    });
   },
 });

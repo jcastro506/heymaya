@@ -20,9 +20,27 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { PUBLIC_ROUTES, SERVER_TO_SERVER_ROUTES } from "../middleware";
+import {
+  PUBLIC_BROWSER_ROUTES,
+  PUBLIC_ROUTES,
+  SERVER_TO_SERVER_ROUTES,
+} from "../middleware";
 
 describe("middleware public routes", () => {
+  /**
+   * ⭐ The demo is the only thing an anonymous stranger can reach.
+   *
+   * Sprint 11's exit requires it — "without signing up" — so this asserts the
+   * list stays short. Anything added here needs the same guards the demo has:
+   * SSRF, per-IP limit, global spend cap.
+   */
+  it("keeps the anonymous-reachable surface to the demo alone", () => {
+    expect([...PUBLIC_BROWSER_ROUTES]).toEqual(["/api/demo/read"]);
+    for (const route of PUBLIC_BROWSER_ROUTES) {
+      expect(PUBLIC_ROUTES).toContain(route);
+    }
+  });
+
   it("lists every server-to-server route as public", () => {
     for (const route of SERVER_TO_SERVER_ROUTES) {
       expect(
@@ -78,6 +96,7 @@ describe("middleware public routes", () => {
 
     const classified = new Set<string>([
       ...SERVER_TO_SERVER_ROUTES,
+      ...PUBLIC_BROWSER_ROUTES,
       ...BROWSER_CALLED,
     ]);
     const unclassified = found.filter((r) => !classified.has(r));
