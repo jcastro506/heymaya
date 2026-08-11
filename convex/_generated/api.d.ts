@@ -195,6 +195,7 @@ import type * as maya_assetClassifier from "../maya/assetClassifier.js";
 import type * as maya_assetFloor from "../maya/assetFloor.js";
 import type * as maya_attribution from "../maya/attribution.js";
 import type * as maya_audience from "../maya/audience.js";
+import type * as maya_benchmarks from "../maya/benchmarks.js";
 import type * as maya_brandKit from "../maya/brandKit.js";
 import type * as maya_breaker from "../maya/breaker.js";
 import type * as maya_buyerMap from "../maya/buyerMap.js";
@@ -463,6 +464,7 @@ declare const fullApi: ApiFromModules<{
   "maya/assetFloor": typeof maya_assetFloor;
   "maya/attribution": typeof maya_attribution;
   "maya/audience": typeof maya_audience;
+  "maya/benchmarks": typeof maya_benchmarks;
   "maya/brandKit": typeof maya_brandKit;
   "maya/breaker": typeof maya_breaker;
   "maya/buyerMap": typeof maya_buyerMap;

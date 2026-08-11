@@ -38,6 +38,14 @@ import {
 } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { buildDeepLink, type DeepLink, type DeepLinkPlatform } from "./deepLink";
+/**
+ * ⚠️ Static, and it has to be. `updateDraftedContentVoiceMatch` is an
+ * internalMutation, and Convex mutations cannot do dynamic imports — this was
+ * `await import("./approvalPublishing")` inside the handler, which typechecks
+ * and throws `dynamic module import unsupported` on the first real call. It is
+ * reached from `inboundCallback`, so every voice-match update hit it.
+ */
+import { evaluateApprovalGate } from "./approvalPublishing";
 
 /** Platforms for which we can build a one-tap text deep link (TikTok = video
  *  Brief, no text deep-link). */
@@ -606,7 +614,6 @@ export const updateDraftedContentVoiceMatch = internalMutation({
         // landed this discipline — this is the data-plane guard. The gate
         // passes-with-warning when there's no voice signal (low-signal founder
         // with no handles), so it never permanently blocks a handle-less user.
-        const { evaluateApprovalGate } = await import("./approvalPublishing");
         const gate = evaluateApprovalGate({
           slopCriticPassed: args.slopCriticPassed,
           voiceMatchScore: args.voiceMatchScore,
