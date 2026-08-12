@@ -31,7 +31,12 @@
  */
 
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "../_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 
@@ -52,12 +57,12 @@ const DIRECTIVE_KIND = v.union(
   v.literal("escalation"),
   v.literal("standing_task"),
   v.literal("campaign"),
-  v.literal("other")
+  v.literal("other"),
 );
 
 async function getDirective(
   ctx: QueryCtx,
-  id: Id<"directives">
+  id: Id<"directives">,
 ): Promise<Doc<"directives"> | null> {
   // Schema is at the TS instantiation ceiling; `db.get` no longer narrows.
   return (await ctx.db.get(id)) as Doc<"directives"> | null;
@@ -86,13 +91,18 @@ export const append = internalMutation({
   },
   handler: async (
     ctx,
-    args
-  ): Promise<{ directiveId: Id<"directives">; superseded: Id<"directives"> | null }> => {
+    args,
+  ): Promise<{
+    directiveId: Id<"directives">;
+    superseded: Id<"directives"> | null;
+  }> => {
     const now = args.now ?? Date.now();
 
     let superseded: Id<"directives"> | null = null;
     if (args.supersedesId) {
-      const old = (await ctx.db.get(args.supersedesId)) as Doc<"directives"> | null;
+      const old = (await ctx.db.get(
+        args.supersedesId,
+      )) as Doc<"directives"> | null;
       // Cross-tenant guard: you cannot supersede another account's rule.
       if (old && old.customerId === args.customerId) {
         // ONLY these two fields. `verbatim` is never touched.
@@ -133,7 +143,9 @@ export const forget = internalMutation({
     now: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<{ forgotten: boolean }> => {
-    const row = (await ctx.db.get(args.directiveId)) as Doc<"directives"> | null;
+    const row = (await ctx.db.get(
+      args.directiveId,
+    )) as Doc<"directives"> | null;
     if (!row || row.customerId !== args.customerId) return { forgotten: false };
     if (!row.active) return { forgotten: false };
     await ctx.db.patch(args.directiveId, {
@@ -157,10 +169,12 @@ export const activeRules = internalQuery({
     const rows = (await ctx.db
       .query("directives")
       .withIndex("by_customer_and_active", (q) =>
-        q.eq("customerId", args.customerId).eq("active", true)
+        q.eq("customerId", args.customerId).eq("active", true),
       )
       .collect()) as Doc<"directives">[];
-    const filtered = args.kind ? rows.filter((r) => r.kind === args.kind) : rows;
+    const filtered = args.kind
+      ? rows.filter((r) => r.kind === args.kind)
+      : rows;
     return filtered.sort((a, b) => b.createdAt - a.createdAt);
   },
 });
@@ -177,7 +191,7 @@ export const effectiveRule = internalQuery({
   args: { customerId: v.id("customers"), kind: DIRECTIVE_KIND },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<{
     winning: Doc<"directives"> | null;
     supersededChain: Doc<"directives">[];
@@ -185,7 +199,7 @@ export const effectiveRule = internalQuery({
     const active = (await ctx.db
       .query("directives")
       .withIndex("by_customer_and_active", (q) =>
-        q.eq("customerId", args.customerId).eq("active", true)
+        q.eq("customerId", args.customerId).eq("active", true),
       )
       .collect()) as Doc<"directives">[];
     const ofKind = active
@@ -223,7 +237,132 @@ export const history = internalQuery({
       .query("directives")
       .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
       .collect()) as Doc<"directives">[];
-    const filtered = args.kind ? rows.filter((r) => r.kind === args.kind) : rows;
+    const filtered = args.kind
+      ? rows.filter((r) => r.kind === args.kind)
+      : rows;
     return filtered.sort((a, b) => b.createdAt - a.createdAt);
+  },
+});
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ The House Rules screen (§16.2, §18.9.3 ⑥).
+ *
+ * > *"House Rules earns a top-level slot even though it's not 'data.' Seeing
+ * > your own sentences listed back with dates — "July 3: stop posting on
+ * > Sundays" — is what convinces someone the agent actually remembers. It's the
+ * > single cheapest trust-building screen in the product."*
+ *
+ * ⚠️ Everything above this line is `internal*`, callable only by her runtime.
+ * The screen needs a browser-callable pair, and they are the only two in this
+ * file — read your own rules, revoke one. There is deliberately no "add" and no
+ * "edit": §18.9.3 says *"Nothing else — no editing, no categories, no
+ * explanation."* A rule is something you told her in chat; a form for writing
+ * rules would make it configuration, which is the workbench this product
+ * refuses to be (§2.1).
+ */
+
+/** One rule, as the screen shows it. Nothing the screen doesn't render. */
+export interface HouseRule {
+  id: Id<"directives">;
+  /** ⭐ THEIR sentence. Never our paraphrase — the verbatim IS the feature. */
+  verbatim: string;
+  createdAt: number;
+}
+
+export const myHouseRules = query({
+  args: {},
+  handler: async (
+    ctx,
+  ): Promise<{ ok: boolean; rules?: HouseRule[]; error?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { ok: false, error: "sign in first" };
+
+    const creator = (await ctx.db
+      .query("creators")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .first()) as Doc<"creators"> | null;
+    if (!creator) return { ok: false, error: "no account yet" };
+
+    const customer = (await ctx.db
+      .query("customers")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first()) as Doc<"customers"> | null;
+    if (!customer) return { ok: false, error: "no account yet" };
+
+    const rows = (await ctx.db
+      .query("directives")
+      .withIndex("by_customer_and_active", (q) =>
+        q.eq("customerId", customer._id).eq("active", true),
+      )
+      .collect()) as Doc<"directives">[];
+
+    return {
+      ok: true,
+      /**
+       * Newest first — the same precedence order `activeRules` uses, so the
+       * screen reads top-to-bottom in the order she actually applies them.
+       */
+      rules: rows
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .map((r) => ({
+          id: r._id,
+          verbatim: r.verbatim,
+          createdAt: r.createdAt,
+        })),
+    };
+  },
+});
+
+/**
+ * The ✕.
+ *
+ * ⚠️ Ownership is re-derived from the signed-in identity and compared against
+ * the row — the `directiveId` arrives from the browser and is not trusted. A
+ * revoke that took the client's word for whose rule it was would let anyone
+ * with an id delete another founder's instructions.
+ *
+ * Reuses `forget`'s semantics (deactivate, stamp `supersededAt`) rather than
+ * deleting: her runtime asks "what replaced this?", and a deleted row cannot
+ * answer.
+ */
+export const revokeMyHouseRule = mutation({
+  args: { directiveId: v.id("directives") },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ ok: boolean; revoked: boolean; error?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { ok: false, revoked: false, error: "sign in first" };
+
+    const creator = (await ctx.db
+      .query("creators")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .first()) as Doc<"creators"> | null;
+    if (!creator) return { ok: false, revoked: false, error: "no account yet" };
+
+    const customer = (await ctx.db
+      .query("customers")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first()) as Doc<"customers"> | null;
+    if (!customer)
+      return { ok: false, revoked: false, error: "no account yet" };
+
+    const row = (await ctx.db.get(
+      args.directiveId,
+    )) as Doc<"directives"> | null;
+    // Same answer for "doesn't exist" and "isn't yours": a distinguishable
+    // response would confirm that someone else's directive id is real.
+    if (!row || row.customerId !== customer._id) {
+      return { ok: true, revoked: false };
+    }
+    if (!row.active) return { ok: true, revoked: false };
+
+    await ctx.db.patch(args.directiveId, {
+      active: false,
+      supersededAt: Date.now(),
+    });
+    return { ok: true, revoked: true };
   },
 });
