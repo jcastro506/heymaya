@@ -114,18 +114,15 @@ const GbpLocationsResponseSchema = z
  * endpoint shape varies; live-smoke gate confirms].
  */
 export async function gbpListLocations(
-  ctx: ZernioContext
+  ctx: ZernioContext,
 ): Promise<GbpLocationSummary[]> {
-  const raw = await ctx.client.request<unknown>(
-    "/api/v1/locations",
-    {
-      method: "GET",
-      query: {
-        platform: "googlebusiness",
-        accountId: ctx.zernioAccountId,
-      },
-    }
-  );
+  const raw = await ctx.client.request<unknown>("/api/v1/locations", {
+    method: "GET",
+    query: {
+      platform: "googlebusiness",
+      accountId: ctx.zernioAccountId,
+    },
+  });
   const parsed = GbpLocationsResponseSchema.safeParse(raw);
   if (!parsed.success) {
     // Fall back to interpreting the raw payload as a bare array — Zernio's
@@ -133,13 +130,18 @@ export async function gbpListLocations(
     if (Array.isArray(raw)) {
       return (raw as unknown[])
         .map((row) => GbpLocationSchema.safeParse(row))
-        .filter((p): p is { success: true; data: z.infer<typeof GbpLocationSchema> } => p.success)
+        .filter(
+          (
+            p,
+          ): p is { success: true; data: z.infer<typeof GbpLocationSchema> } =>
+            p.success,
+        )
         .map((p) => normalizeGbpLocation(p.data));
     }
     throw new ZernioApiError(
       200,
       "/api/v1/locations",
-      `Unexpected list-locations payload: ${parsed.error.message}`
+      `Unexpected list-locations payload: ${parsed.error.message}`,
     );
   }
   const rows = parsed.data.locations.length
@@ -149,14 +151,14 @@ export async function gbpListLocations(
 }
 
 function normalizeGbpLocation(
-  row: z.infer<typeof GbpLocationSchema>
+  row: z.infer<typeof GbpLocationSchema>,
 ): GbpLocationSummary {
   const locationId = row.locationId ?? row.id;
   if (!locationId) {
     throw new ZernioApiError(
       200,
       "list-locations",
-      "Zernio returned a location row without an id field."
+      "Zernio returned a location row without an id field.",
     );
   }
   return {
@@ -219,14 +221,14 @@ function toUnixMs(input: string | number | undefined): number {
 }
 
 function normalizeGbpReview(
-  row: z.infer<typeof GbpReviewSchema>
+  row: z.infer<typeof GbpReviewSchema>,
 ): GbpReviewSummary {
   const reviewId = row.reviewId ?? row.id ?? row.externalReviewId;
   if (!reviewId) {
     throw new ZernioApiError(
       200,
       "list-reviews",
-      "Zernio returned a review row without an id field."
+      "Zernio returned a review row without an id field.",
     );
   }
   const reply = row.reviewReply;
@@ -264,7 +266,7 @@ function normalizeGbpReview(
 export async function gbpListReviews(
   ctx: ZernioContext,
   locationId: string,
-  options: { since?: number; limit?: number } = {}
+  options: { since?: number; limit?: number } = {},
 ): Promise<GbpReviewSummary[]> {
   const raw = await ctx.client.request<unknown>("/api/v1/reviews", {
     method: "GET",
@@ -281,13 +283,16 @@ export async function gbpListReviews(
     if (Array.isArray(raw)) {
       return (raw as unknown[])
         .map((row) => GbpReviewSchema.safeParse(row))
-        .filter((p): p is { success: true; data: z.infer<typeof GbpReviewSchema> } => p.success)
+        .filter(
+          (p): p is { success: true; data: z.infer<typeof GbpReviewSchema> } =>
+            p.success,
+        )
         .map((p) => normalizeGbpReview(p.data));
     }
     throw new ZernioApiError(
       200,
       "/api/v1/reviews",
-      `Unexpected list-reviews payload: ${parsed.error.message}`
+      `Unexpected list-reviews payload: ${parsed.error.message}`,
     );
   }
   const rows = parsed.data.reviews.length
@@ -329,13 +334,16 @@ const GbpReplyResponseSchema = z
  */
 export async function gbpReplyToReview(
   ctx: ZernioContext,
-  args: { locationId: string; reviewId: string; replyText: string }
-): Promise<{ replyState: GbpReviewSummary["replyState"]; publishedAt?: number }> {
+  args: { locationId: string; reviewId: string; replyText: string },
+): Promise<{
+  replyState: GbpReviewSummary["replyState"];
+  publishedAt?: number;
+}> {
   if (!args.replyText || args.replyText.length === 0) {
     throw new ZernioApiError(
       0,
       "reply-to-review",
-      "replyText must be a non-empty string."
+      "replyText must be a non-empty string.",
     );
   }
   const raw = await ctx.client.request<unknown>(
@@ -347,31 +355,34 @@ export async function gbpReplyToReview(
         locationId: args.locationId,
         message: args.replyText,
       },
-    }
+    },
   );
   const parsed = GbpReplyResponseSchema.safeParse(raw);
   if (!parsed.success) {
     throw new ZernioApiError(
       200,
       "reply-to-review",
-      `Unexpected reply payload: ${parsed.error.message}`
+      `Unexpected reply payload: ${parsed.error.message}`,
     );
   }
   const replyStateRaw = parsed.data.replyState;
   const successful =
     parsed.data.success ?? parsed.data.successful ?? !parsed.data.error;
-  if (replyStateRaw === "REJECTED" || parsed.data.errorCode === "REVIEW_REPLY_REJECTED") {
+  if (
+    replyStateRaw === "REJECTED" ||
+    parsed.data.errorCode === "REVIEW_REPLY_REJECTED"
+  ) {
     throw new ZernioPlatformError(
       "gbp",
       "REVIEW_REPLY_REJECTED",
-      `Google moderation rejected review reply: ${parsed.data.error ?? "(no detail)"}`
+      `Google moderation rejected review reply: ${parsed.data.error ?? "(no detail)"}`,
     );
   }
   if (!successful) {
     throw new ZernioPlatformError(
       "gbp",
       parsed.data.errorCode ?? "REVIEW_REPLY_FAILED",
-      parsed.data.error ?? "Zernio reported the reply did not publish."
+      parsed.data.error ?? "Zernio reported the reply did not publish.",
     );
   }
   let replyState: GbpReviewSummary["replyState"];
@@ -409,21 +420,21 @@ const GbpLocalPostResponseSchema = z
 
 function normalizeLocalPostResult(
   raw: unknown,
-  contextPath: string
+  contextPath: string,
 ): GbpLocalPostResult {
   const parsed = GbpLocalPostResponseSchema.safeParse(raw);
   if (!parsed.success) {
     throw new ZernioApiError(
       200,
       contextPath,
-      `Unexpected local-post payload: ${parsed.error.message}`
+      `Unexpected local-post payload: ${parsed.error.message}`,
     );
   }
   if (parsed.data.error) {
     throw new ZernioPlatformError(
       "gbp",
       parsed.data.errorCode ?? "GBP_LOCAL_POST_FAILED",
-      parsed.data.error
+      parsed.data.error,
     );
   }
   const postId = parsed.data.postId ?? parsed.data.id;
@@ -431,7 +442,7 @@ function normalizeLocalPostResult(
     throw new ZernioApiError(
       200,
       contextPath,
-      "Zernio did not return a post id."
+      "Zernio did not return a post id.",
     );
   }
   let state: GbpLocalPostResult["state"];
@@ -462,7 +473,7 @@ function normalizeLocalPostResult(
 export async function gbpCreateLocalPost(
   ctx: ZernioContext,
   locationId: string,
-  post: GbpLocalPostInput
+  post: GbpLocalPostInput,
 ): Promise<GbpLocalPostResult> {
   if (!post.text || post.text.length === 0) {
     throw new ZernioApiError(0, "gbpCreateLocalPost", "text is required.");
@@ -488,7 +499,7 @@ export async function gbpUpdateLocalPost(
   ctx: ZernioContext,
   locationId: string,
   postId: string,
-  patch: Partial<GbpLocalPostInput>
+  patch: Partial<GbpLocalPostInput>,
 ): Promise<GbpLocalPostResult> {
   const raw = await ctx.client.request<unknown>(
     `/api/v1/posts/${encodeURIComponent(postId)}`,
@@ -505,7 +516,7 @@ export async function gbpUpdateLocalPost(
         schedule: patch.schedule,
         offer: patch.offer,
       },
-    }
+    },
   );
   return normalizeLocalPostResult(raw, `/api/v1/posts/${postId}`);
 }
@@ -513,7 +524,7 @@ export async function gbpUpdateLocalPost(
 export async function gbpDeleteLocalPost(
   ctx: ZernioContext,
   locationId: string,
-  postId: string
+  postId: string,
 ): Promise<{ deleted: true }> {
   await ctx.client.request<unknown>(
     `/api/v1/posts/${encodeURIComponent(postId)}`,
@@ -524,7 +535,7 @@ export async function gbpDeleteLocalPost(
         accountId: ctx.zernioAccountId,
         locationId,
       },
-    }
+    },
   );
   return { deleted: true };
 }
@@ -542,7 +553,7 @@ const GbpInsightsResponseSchema = z
             name: z.string(),
             value: z.number(),
           })
-          .passthrough()
+          .passthrough(),
       )
       .default([]),
     data: z
@@ -552,7 +563,7 @@ const GbpInsightsResponseSchema = z
             name: z.string(),
             value: z.number(),
           })
-          .passthrough()
+          .passthrough(),
       )
       .optional(),
     startAt: z.union([z.string(), z.number()]).optional(),
@@ -563,28 +574,25 @@ const GbpInsightsResponseSchema = z
 export async function gbpGetInsights(
   ctx: ZernioContext,
   locationId: string,
-  request: GbpInsightsRequest
+  request: GbpInsightsRequest,
 ): Promise<GbpInsightsResult> {
-  const raw = await ctx.client.request<unknown>(
-    "/api/v1/insights",
-    {
-      method: "POST",
-      body: {
-        platform: "googlebusiness",
-        accountId: ctx.zernioAccountId,
-        locationId,
-        startAt: request.startAt,
-        endAt: request.endAt,
-        metrics: request.metrics,
-      },
-    }
-  );
+  const raw = await ctx.client.request<unknown>("/api/v1/insights", {
+    method: "POST",
+    body: {
+      platform: "googlebusiness",
+      accountId: ctx.zernioAccountId,
+      locationId,
+      startAt: request.startAt,
+      endAt: request.endAt,
+      metrics: request.metrics,
+    },
+  });
   const parsed = GbpInsightsResponseSchema.safeParse(raw);
   if (!parsed.success) {
     throw new ZernioApiError(
       200,
       "/api/v1/insights",
-      `Unexpected insights payload: ${parsed.error.message}`
+      `Unexpected insights payload: ${parsed.error.message}`,
     );
   }
   const rows = parsed.data.metrics.length
@@ -626,7 +634,7 @@ const FbPostResponseSchema = z
 export async function fbCreatePost(
   ctx: ZernioContext,
   pageId: string,
-  post: FbPostInput
+  post: FbPostInput,
 ): Promise<{ postId: string; state: "scheduled" | "published" | "failed" }> {
   if (!post.text || post.text.length === 0) {
     throw new ZernioApiError(0, "fbCreatePost", "text is required.");
@@ -635,7 +643,7 @@ export async function fbCreatePost(
     throw new ZernioApiError(
       0,
       "fbCreatePost",
-      "FB Pages supports up to 3 images per post."
+      "FB Pages supports up to 3 images per post.",
     );
   }
   const raw = await ctx.client.request<unknown>("/api/v1/posts", {
@@ -654,19 +662,23 @@ export async function fbCreatePost(
     throw new ZernioApiError(
       200,
       "/api/v1/posts",
-      `Unexpected fb-post payload: ${parsed.error.message}`
+      `Unexpected fb-post payload: ${parsed.error.message}`,
     );
   }
   if (parsed.data.error) {
     throw new ZernioPlatformError(
       "facebook",
       parsed.data.errorCode ?? "FB_POST_FAILED",
-      parsed.data.error
+      parsed.data.error,
     );
   }
   const postId = parsed.data.postId ?? parsed.data.id;
   if (!postId) {
-    throw new ZernioApiError(200, "fbCreatePost", "Zernio returned no post id.");
+    throw new ZernioApiError(
+      200,
+      "fbCreatePost",
+      "Zernio returned no post id.",
+    );
   }
   const state =
     parsed.data.state === "scheduled"
@@ -681,7 +693,7 @@ export async function fbUpdatePost(
   ctx: ZernioContext,
   pageId: string,
   postId: string,
-  patch: Partial<FbPostInput>
+  patch: Partial<FbPostInput>,
 ): Promise<{ postId: string; state: "scheduled" | "published" | "failed" }> {
   const raw = await ctx.client.request<unknown>(
     `/api/v1/posts/${encodeURIComponent(postId)}`,
@@ -695,21 +707,21 @@ export async function fbUpdatePost(
         mediaUrls: patch.imageUrls,
         scheduleAt: patch.scheduleAt,
       },
-    }
+    },
   );
   const parsed = FbPostResponseSchema.safeParse(raw);
   if (!parsed.success) {
     throw new ZernioApiError(
       200,
       `/api/v1/posts/${postId}`,
-      `Unexpected fb-update payload: ${parsed.error.message}`
+      `Unexpected fb-update payload: ${parsed.error.message}`,
     );
   }
   if (parsed.data.error) {
     throw new ZernioPlatformError(
       "facebook",
       parsed.data.errorCode ?? "FB_POST_UPDATE_FAILED",
-      parsed.data.error
+      parsed.data.error,
     );
   }
   const state =
@@ -738,7 +750,7 @@ const FbMessagesResponseSchema = z
             createdAt: z.union([z.string(), z.number()]).optional(),
             hasOperatorReply: z.boolean().optional(),
           })
-          .passthrough()
+          .passthrough(),
       )
       .default([]),
     data: z.array(z.unknown()).optional(),
@@ -748,7 +760,7 @@ const FbMessagesResponseSchema = z
 export async function fbListMessages(
   ctx: ZernioContext,
   pageId: string,
-  options: { since?: number; limit?: number } = {}
+  options: { since?: number; limit?: number } = {},
 ): Promise<FbPageMessageSummary[]> {
   const raw = await ctx.client.request<unknown>("/api/v1/messages", {
     method: "GET",
@@ -765,7 +777,7 @@ export async function fbListMessages(
     throw new ZernioApiError(
       200,
       "/api/v1/messages",
-      `Unexpected fb-messages payload: ${parsed.error.message}`
+      `Unexpected fb-messages payload: ${parsed.error.message}`,
     );
   }
   return parsed.data.messages.map((m) => {
@@ -774,7 +786,7 @@ export async function fbListMessages(
       throw new ZernioApiError(
         200,
         "fbListMessages",
-        "Zernio returned a message row without an id field."
+        "Zernio returned a message row without an id field.",
       );
     }
     return {
@@ -806,7 +818,7 @@ const IgPostResponseSchema = z
 function buildIgPayload(
   ctx: ZernioContext,
   igAccountId: string,
-  post: IgPostInput
+  post: IgPostInput,
 ): Record<string, unknown> {
   if (!post.caption || post.caption.length === 0) {
     throw new ZernioApiError(0, "ig", "caption is required.");
@@ -815,7 +827,11 @@ function buildIgPayload(
     throw new ZernioApiError(0, "ig", "mediaUrls must be non-empty.");
   }
   if (post.postType === "carousel" && post.mediaUrls.length < 2) {
-    throw new ZernioApiError(0, "ig", "carousel requires at least 2 media URLs.");
+    throw new ZernioApiError(
+      0,
+      "ig",
+      "carousel requires at least 2 media URLs.",
+    );
   }
   if (post.postType === "carousel" && post.mediaUrls.length > 10) {
     throw new ZernioApiError(0, "ig", "carousel supports up to 10 media URLs.");
@@ -824,7 +840,7 @@ function buildIgPayload(
     throw new ZernioApiError(
       0,
       "ig",
-      "single-image post requires exactly 1 media URL."
+      "single-image post requires exactly 1 media URL.",
     );
   }
   return {
@@ -840,14 +856,10 @@ function buildIgPayload(
 export async function igCreatePost(
   ctx: ZernioContext,
   igAccountId: string,
-  post: IgPostInput
+  post: IgPostInput,
 ): Promise<{ postId: string; state: "scheduled" | "published" | "failed" }> {
   if (post.postType === "reel") {
-    throw new ZernioApiError(
-      0,
-      "igCreatePost",
-      "Use igCreateReel for reels."
-    );
+    throw new ZernioApiError(0, "igCreatePost", "Use igCreateReel for reels.");
   }
   const raw = await ctx.client.request<unknown>("/api/v1/posts", {
     method: "POST",
@@ -858,19 +870,23 @@ export async function igCreatePost(
     throw new ZernioApiError(
       200,
       "igCreatePost",
-      `Unexpected ig-post payload: ${parsed.error.message}`
+      `Unexpected ig-post payload: ${parsed.error.message}`,
     );
   }
   if (parsed.data.error) {
     throw new ZernioPlatformError(
       "instagram",
       parsed.data.errorCode ?? "IG_POST_FAILED",
-      parsed.data.error
+      parsed.data.error,
     );
   }
   const postId = parsed.data.postId ?? parsed.data.id;
   if (!postId) {
-    throw new ZernioApiError(200, "igCreatePost", "Zernio returned no post id.");
+    throw new ZernioApiError(
+      200,
+      "igCreatePost",
+      "Zernio returned no post id.",
+    );
   }
   return {
     postId,
@@ -886,7 +902,7 @@ export async function igCreatePost(
 export async function igCreateReel(
   ctx: ZernioContext,
   igAccountId: string,
-  video: { caption: string; videoUrl: string; coverUrl?: string }
+  video: { caption: string; videoUrl: string; coverUrl?: string },
 ): Promise<{ postId: string; state: "scheduled" | "published" | "failed" }> {
   if (!video.videoUrl) {
     throw new ZernioApiError(0, "igCreateReel", "videoUrl is required.");
@@ -908,19 +924,23 @@ export async function igCreateReel(
     throw new ZernioApiError(
       200,
       "igCreateReel",
-      `Unexpected ig-reel payload: ${parsed.error.message}`
+      `Unexpected ig-reel payload: ${parsed.error.message}`,
     );
   }
   if (parsed.data.error) {
     throw new ZernioPlatformError(
       "instagram",
       parsed.data.errorCode ?? "IG_REEL_FAILED",
-      parsed.data.error
+      parsed.data.error,
     );
   }
   const postId = parsed.data.postId ?? parsed.data.id;
   if (!postId) {
-    throw new ZernioApiError(200, "igCreateReel", "Zernio returned no post id.");
+    throw new ZernioApiError(
+      200,
+      "igCreateReel",
+      "Zernio returned no post id.",
+    );
   }
   return {
     postId,
@@ -949,7 +969,7 @@ const IgCommentsResponseSchema = z
             createdAt: z.union([z.string(), z.number()]).optional(),
             hasOperatorReply: z.boolean().optional(),
           })
-          .passthrough()
+          .passthrough(),
       )
       .default([]),
   })
@@ -958,7 +978,7 @@ const IgCommentsResponseSchema = z
 export async function igListComments(
   ctx: ZernioContext,
   igAccountId: string,
-  options: { since?: number; limit?: number; mediaId?: string } = {}
+  options: { since?: number; limit?: number; mediaId?: string } = {},
 ): Promise<IgCommentSummary[]> {
   const raw = await ctx.client.request<unknown>("/api/v1/comments", {
     method: "GET",
@@ -976,7 +996,7 @@ export async function igListComments(
     throw new ZernioApiError(
       200,
       "/api/v1/comments",
-      `Unexpected ig-comments payload: ${parsed.error.message}`
+      `Unexpected ig-comments payload: ${parsed.error.message}`,
     );
   }
   return parsed.data.comments.map((c) => {
@@ -985,7 +1005,7 @@ export async function igListComments(
       throw new ZernioApiError(
         200,
         "igListComments",
-        "Zernio returned a comment row without an id field."
+        "Zernio returned a comment row without an id field.",
       );
     }
     return {
@@ -1023,7 +1043,7 @@ const MultiPostResponseSchema = z
             state: z.string().optional(),
             error: z.string().optional(),
           })
-          .passthrough()
+          .passthrough(),
       )
       .optional(),
     // Real Zernio 1.0.4 shape: the created post echoes its targets.
@@ -1039,7 +1059,7 @@ const MultiPostResponseSchema = z
             platformPostId: z.string().nullable().optional(),
             errorMessage: z.string().optional(),
           })
-          .passthrough()
+          .passthrough(),
       )
       .optional(),
     _id: z.string().optional(),
@@ -1064,7 +1084,7 @@ const MultiPostResponseSchema = z
                 platformPostId: z.string().nullable().optional(),
                 errorMessage: z.string().optional(),
               })
-              .passthrough()
+              .passthrough(),
           )
           .optional(),
       })
@@ -1079,7 +1099,7 @@ const MultiPostResponseSchema = z
             error: z.string().optional(),
             platformPostId: z.string().nullable().optional(),
           })
-          .passthrough()
+          .passthrough(),
       )
       .optional(),
     message: z.string().optional(),
@@ -1157,7 +1177,7 @@ function fromWireSlug(wire: string): ZernioPostPlatform | null {
 function buildPlatformTargets(
   ctx: ZernioContext,
   targets: ReadonlyArray<ZernioPostPlatform | MultiPlatformTarget>,
-  post: MultiPlatformPostInput
+  post: MultiPlatformPostInput,
 ): PlatformTarget[] {
   return targets.map((t) => {
     const internal: ZernioPostPlatform = typeof t === "string" ? t : t.platform;
@@ -1165,7 +1185,7 @@ function buildPlatformTargets(
       throw new ZernioApiError(
         0,
         "multiPlatformPost",
-        `Unknown platform: ${String(internal)}`
+        `Unknown platform: ${String(internal)}`,
       );
     }
     const explicit = typeof t === "string" ? undefined : t;
@@ -1209,10 +1229,14 @@ function buildPlatformTargets(
 export async function multiPlatformPost(
   ctx: ZernioContext,
   targets: ReadonlyArray<ZernioPostPlatform | MultiPlatformTarget>,
-  post: MultiPlatformPostInput
+  post: MultiPlatformPostInput,
 ): Promise<MultiPlatformPostResult> {
   if (targets.length === 0) {
-    throw new ZernioApiError(0, "multiPlatformPost", "platforms must be non-empty.");
+    throw new ZernioApiError(
+      0,
+      "multiPlatformPost",
+      "platforms must be non-empty.",
+    );
   }
   const platformTargets = buildPlatformTargets(ctx, targets, post);
   const mediaItems: MediaItem[] | undefined =
@@ -1225,7 +1249,7 @@ export async function multiPlatformPost(
     throw new ZernioApiError(
       0,
       "multiPlatformPost",
-      "content is required when no media is attached."
+      "content is required when no media is attached.",
     );
   }
   const body: Record<string, unknown> = {
@@ -1250,7 +1274,7 @@ export async function multiPlatformPost(
     throw new ZernioApiError(
       200,
       "multiPlatformPost",
-      `Unexpected multi-post payload: ${parsed.error.message}`
+      `Unexpected multi-post payload: ${parsed.error.message}`,
     );
   }
   // LIVE shape first (verified 2026-07-22): `{ post: {...}, platformResults }`
@@ -1269,7 +1293,7 @@ export async function multiPlatformPost(
         throw new ZernioApiError(
           200,
           "multiPlatformPost",
-          `Zernio returned an unknown platform: ${row.platform}`
+          `Zernio returned an unknown platform: ${row.platform}`,
         );
       }
       const echo = echoRows.find((e) => e.platform === row.platform);
@@ -1291,14 +1315,16 @@ export async function multiPlatformPost(
         echo?.platformPostId ??
         null;
       const error =
-        ("error" in row && typeof row.error === "string" ? row.error : undefined) ??
+        ("error" in row && typeof row.error === "string"
+          ? row.error
+          : undefined) ??
         echo?.errorMessage ??
         (state === "failed" ? parsed.data.error : undefined);
       return {
         platform,
         // Never let the post-doc _id stand in for a FAILED publish.
         postId:
-          state === "failed" ? null : platformPostId ?? doc?._id ?? null,
+          state === "failed" ? null : (platformPostId ?? doc?._id ?? null),
         state,
         error,
       };
@@ -1314,7 +1340,7 @@ export async function multiPlatformPost(
         throw new ZernioApiError(
           200,
           "multiPlatformPost",
-          `Zernio returned an unknown platform: ${row.platform}`
+          `Zernio returned an unknown platform: ${row.platform}`,
         );
       }
       let state: MultiPlatformPostResult["perPlatform"][number]["state"];
@@ -1346,7 +1372,7 @@ export async function multiPlatformPost(
       throw new ZernioApiError(
         200,
         "multiPlatformPost",
-        `Zernio returned an unknown platform: ${row.platform}`
+        `Zernio returned an unknown platform: ${row.platform}`,
       );
     }
     let state: MultiPlatformPostResult["perPlatform"][number]["state"];
@@ -1399,7 +1425,7 @@ async function postToPlatform(
   platform: ZernioPlatform,
   destinationKey: string,
   destinationId: string,
-  post: SimpleSocialPostInput
+  post: SimpleSocialPostInput,
 ): Promise<{ postId: string; state: "scheduled" | "published" | "failed" }> {
   if (!post.text || post.text.length === 0) {
     throw new ZernioApiError(0, `${platform}.post`, "text is required.");
@@ -1420,19 +1446,23 @@ async function postToPlatform(
     throw new ZernioApiError(
       200,
       `${platform}.post`,
-      `Unexpected ${platform}-post payload: ${parsed.error.message}`
+      `Unexpected ${platform}-post payload: ${parsed.error.message}`,
     );
   }
   if (parsed.data.error) {
     throw new ZernioPlatformError(
       platform,
       parsed.data.errorCode ?? `${platform.toUpperCase()}_POST_FAILED`,
-      parsed.data.error
+      parsed.data.error,
     );
   }
   const postId = parsed.data.postId ?? parsed.data.id;
   if (!postId) {
-    throw new ZernioApiError(200, `${platform}.post`, "Zernio returned no post id.");
+    throw new ZernioApiError(
+      200,
+      `${platform}.post`,
+      "Zernio returned no post id.",
+    );
   }
   return {
     postId,
@@ -1448,31 +1478,31 @@ async function postToPlatform(
 export const linkedinCreatePost = (
   ctx: ZernioContext,
   organizationId: string,
-  post: SimpleSocialPostInput
+  post: SimpleSocialPostInput,
 ) => postToPlatform(ctx, "linkedin", "organizationId", organizationId, post);
 
 export const xCreatePost = (
   ctx: ZernioContext,
   xAccountId: string,
-  post: SimpleSocialPostInput
+  post: SimpleSocialPostInput,
 ) => postToPlatform(ctx, "x", "xAccountId", xAccountId, post);
 
 export const pinterestCreatePost = (
   ctx: ZernioContext,
   boardId: string,
-  post: SimpleSocialPostInput
+  post: SimpleSocialPostInput,
 ) => postToPlatform(ctx, "pinterest", "boardId", boardId, post);
 
 export const threadsCreatePost = (
   ctx: ZernioContext,
   threadsAccountId: string,
-  post: SimpleSocialPostInput
+  post: SimpleSocialPostInput,
 ) => postToPlatform(ctx, "threads", "threadsAccountId", threadsAccountId, post);
 
 export const tiktokCreatePost = (
   ctx: ZernioContext,
   tiktokAccountId: string,
-  post: SimpleSocialPostInput
+  post: SimpleSocialPostInput,
 ) => postToPlatform(ctx, "tiktok", "tiktokAccountId", tiktokAccountId, post);
 
 /* ========================================================================== */
@@ -1517,7 +1547,7 @@ const ProfileCreateResponseSchema = z
  */
 export async function createProfile(
   client: ZernioClient,
-  args: { name: string; description?: string; color?: string }
+  args: { name: string; description?: string; color?: string },
 ): Promise<ZernioProfile> {
   if (!args.name || args.name.length === 0) {
     throw new ZernioApiError(0, "createProfile", "name is required.");
@@ -1535,7 +1565,7 @@ export async function createProfile(
     throw new ZernioApiError(
       200,
       "/api/v1/profiles",
-      `Unexpected create-profile payload: ${parsed.error.message}`
+      `Unexpected create-profile payload: ${parsed.error.message}`,
     );
   }
   return parsed.data.profile as ZernioProfile;
@@ -1564,7 +1594,7 @@ export async function getConnectUrl(
   client: ZernioClient,
   platform: ZernioPostPlatform,
   profileId: string,
-  redirectUrl?: string
+  redirectUrl?: string,
 ): Promise<ConnectUrlResult> {
   if (!profileId || profileId.length === 0) {
     throw new ZernioApiError(0, "getConnectUrl", "profileId is required.");
@@ -1578,14 +1608,14 @@ export async function getConnectUrl(
         profileId,
         redirect_url: redirectUrl,
       },
-    }
+    },
   );
   const parsed = ConnectUrlResponseSchema.safeParse(raw);
   if (!parsed.success) {
     throw new ZernioApiError(
       200,
       `/api/v1/connect/${slug}`,
-      `Unexpected connect payload: ${parsed.error.message}`
+      `Unexpected connect payload: ${parsed.error.message}`,
     );
   }
   return { authUrl: parsed.data.authUrl, state: parsed.data.state };
@@ -1595,9 +1625,24 @@ export async function getConnectUrl(
 /* Accounts — GET /api/v1/accounts, /accounts/health, DELETE /accounts/{id}    */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * ⚠️ `accounts` is REQUIRED — deliberately no `.default([])`.
+ *
+ * With a default, any object lacking an `accounts` key parses SUCCESSFULLY as
+ * zero accounts, and the `if (!parsed.success)` guard below becomes
+ * unreachable for object payloads. Callers read an empty list as "the founder
+ * disconnected everything", so a vendor contract change would silently mark
+ * every channel gone instead of raising.
+ *
+ * VERIFIED LIVE 2026-08-12: `GET /api/v1/accounts` returns
+ * `{ accounts, hasAnalyticsAccess }`, and `GET /api/v1/inbox/conversations`
+ * with zero results still returns its array key with `[]`. The vendor always
+ * sends the key — so a missing one really does mean "we no longer understand
+ * this response", which is an error, not an empty result.
+ */
 const AccountsListResponseSchema = z
   .object({
-    accounts: z.array(z.record(z.string(), z.unknown())).default([]),
+    accounts: z.array(z.record(z.string(), z.unknown())),
     hasAnalyticsAccess: z.boolean().optional(),
   })
   .passthrough();
@@ -1615,7 +1660,7 @@ export async function listAccounts(
     includeOverLimit?: boolean;
     page?: number;
     limit?: number;
-  } = {}
+  } = {},
 ): Promise<Array<Record<string, unknown>>> {
   const raw = await client.request<unknown>("/api/v1/accounts", {
     method: "GET",
@@ -1633,7 +1678,7 @@ export async function listAccounts(
     throw new ZernioApiError(
       200,
       "/api/v1/accounts",
-      `Unexpected accounts payload: ${parsed.error.message}`
+      `Unexpected accounts payload: ${parsed.error.message}`,
     );
   }
   return parsed.data.accounts;
@@ -1641,6 +1686,13 @@ export async function listAccounts(
 
 const AccountHealthResponseSchema = z
   .object({
+    /**
+     * `summary` keeps its default deliberately: it is a set of COUNTS, and
+     * nothing destructive follows from it being absent. Only `accounts` is
+     * load-bearing — see `AccountsListResponseSchema` — so only `accounts`
+     * is required. Narrow the strictness to the field whose absence actually
+     * causes harm, rather than to everything nearby.
+     */
     summary: z
       .object({
         total: z.number().optional(),
@@ -1651,7 +1703,7 @@ const AccountHealthResponseSchema = z
       })
       .passthrough()
       .default({}),
-    accounts: z.array(z.record(z.string(), z.unknown())).default([]),
+    accounts: z.array(z.record(z.string(), z.unknown())),
   })
   .passthrough();
 
@@ -1662,7 +1714,7 @@ const AccountHealthResponseSchema = z
  */
 export async function getAccountsHealth(
   client: ZernioClient,
-  args: { profileId?: string; platform?: string; status?: string } = {}
+  args: { profileId?: string; platform?: string; status?: string } = {},
 ): Promise<AccountHealth> {
   const raw = await client.request<unknown>("/api/v1/accounts/health", {
     method: "GET",
@@ -1677,7 +1729,7 @@ export async function getAccountsHealth(
     throw new ZernioApiError(
       200,
       "/api/v1/accounts/health",
-      `Unexpected accounts-health payload: ${parsed.error.message}`
+      `Unexpected accounts-health payload: ${parsed.error.message}`,
     );
   }
   return { summary: parsed.data.summary, accounts: parsed.data.accounts };
@@ -1694,15 +1746,21 @@ const ValidatePostResponseSchema = z
     errors: z
       .array(
         z
-          .object({ platform: z.string().optional(), error: z.string().optional() })
-          .passthrough()
+          .object({
+            platform: z.string().optional(),
+            error: z.string().optional(),
+          })
+          .passthrough(),
       )
       .optional(),
     warnings: z
       .array(
         z
-          .object({ platform: z.string().optional(), warning: z.string().optional() })
-          .passthrough()
+          .object({
+            platform: z.string().optional(),
+            warning: z.string().optional(),
+          })
+          .passthrough(),
       )
       .optional(),
   })
@@ -1723,7 +1781,7 @@ export async function validatePost(
     platform: ZernioPostPlatform;
     platformSpecificData?: ChannelPlatformData;
     mediaItems?: MediaItem[];
-  }
+  },
 ): Promise<{ valid: boolean; errors: string[]; warnings: string[] }> {
   const raw = await client.request<unknown>("/api/v1/tools/validate/post", {
     method: "POST",
@@ -1745,16 +1803,22 @@ export async function validatePost(
     throw new ZernioApiError(
       200,
       "validatePost",
-      `Unexpected validate-post payload: ${parsed.error.message}`
+      `Unexpected validate-post payload: ${parsed.error.message}`,
     );
   }
   const errors = (parsed.data.errors ?? [])
     .map((e) => (e.error ? `${e.platform ?? args.platform}: ${e.error}` : null))
     .filter((e): e is string => e !== null);
   const warnings = (parsed.data.warnings ?? [])
-    .map((w) => (w.warning ? `${w.platform ?? args.platform}: ${w.warning}` : null))
+    .map((w) =>
+      w.warning ? `${w.platform ?? args.platform}: ${w.warning}` : null,
+    )
     .filter((w): w is string => w !== null);
-  return { valid: parsed.data.valid !== false && errors.length === 0, errors, warnings };
+  return {
+    valid: parsed.data.valid !== false && errors.length === 0,
+    errors,
+    warnings,
+  };
 }
 
 /**
@@ -1763,14 +1827,14 @@ export async function validatePost(
  */
 export async function deleteAccount(
   client: ZernioClient,
-  accountId: string
+  accountId: string,
 ): Promise<{ deleted: true }> {
   if (!accountId || accountId.length === 0) {
     throw new ZernioApiError(0, "deleteAccount", "accountId is required.");
   }
   await client.request<unknown>(
     `/api/v1/accounts/${encodeURIComponent(accountId)}`,
-    { method: "DELETE" }
+    { method: "DELETE" },
   );
   return { deleted: true };
 }
@@ -1821,7 +1885,7 @@ export async function getPostAnalytics(
     page?: number;
     sortBy?: string;
     order?: string;
-  } = {}
+  } = {},
 ): Promise<PostAnalytics & { raw: unknown }> {
   const raw = await client.request<unknown>("/api/v1/analytics", {
     method: "GET",
@@ -1844,7 +1908,7 @@ export async function getPostAnalytics(
     throw new ZernioApiError(
       200,
       "/api/v1/analytics",
-      `Unexpected analytics payload: ${parsed.error.message}`
+      `Unexpected analytics payload: ${parsed.error.message}`,
     );
   }
   const { analytics: _a, data: _d, ...metrics } = parsed.data;
@@ -1878,18 +1942,22 @@ const TimeSeriesResponseSchema = z
  */
 export async function getPostTimeline(
   client: ZernioClient,
-  args: { postId: string; fromDate?: string; toDate?: string }
+  args: { postId: string; fromDate?: string; toDate?: string },
 ): Promise<{ raw: unknown }> {
   const raw = await client.request<unknown>("/api/v1/analytics/post-timeline", {
     method: "GET",
-    query: { postId: args.postId, fromDate: args.fromDate, toDate: args.toDate },
+    query: {
+      postId: args.postId,
+      fromDate: args.fromDate,
+      toDate: args.toDate,
+    },
   });
   const parsed = TimeSeriesResponseSchema.safeParse(raw);
   if (!parsed.success) {
     throw new ZernioApiError(
       200,
       "/api/v1/analytics/post-timeline",
-      `Unexpected post-timeline payload: ${parsed.error.message}`
+      `Unexpected post-timeline payload: ${parsed.error.message}`,
     );
   }
   return { raw };
@@ -1907,7 +1975,7 @@ export async function getBestTime(
     profileId?: string;
     accountId?: string;
     source?: string;
-  } = {}
+  } = {},
 ): Promise<{ raw: unknown }> {
   const raw = await client.request<unknown>("/api/v1/analytics/best-time", {
     method: "GET",
@@ -1923,7 +1991,7 @@ export async function getBestTime(
     throw new ZernioApiError(
       200,
       "/api/v1/analytics/best-time",
-      `Unexpected best-time payload: ${parsed.error.message}`
+      `Unexpected best-time payload: ${parsed.error.message}`,
     );
   }
   return { raw };
@@ -1935,7 +2003,15 @@ export async function getBestTime(
 
 const FollowerStatsResponseSchema = z
   .object({
-    accounts: z.array(z.record(z.string(), z.unknown())).default([]),
+    /**
+     * ⚠️ Required — no `.default([])`. Verified live 2026-08-12:
+     * `GET /api/v1/accounts/follower-stats` returns
+     * `{ accounts, stats, dateRange, granularity }`. Defaulting this to `[]`
+     * would report every account as having no follower history, which feeds
+     * the ladder — a benchmark computed from a contract change rather than
+     * from the founder's actual numbers.
+     */
+    accounts: z.array(z.record(z.string(), z.unknown())),
     dateRange: z.record(z.string(), z.unknown()).optional(),
     aggregation: z.record(z.string(), z.unknown()).optional(),
   })
@@ -1954,37 +2030,30 @@ export async function getFollowerStats(
     fromDate?: string;
     toDate?: string;
     granularity?: string;
-  }
+  },
 ): Promise<FollowerStats> {
   const accountIds: string = Array.isArray(args.accountIds)
     ? args.accountIds.join(",")
     : (args.accountIds as string);
   if (!accountIds || accountIds.length === 0) {
-    throw new ZernioApiError(
-      0,
-      "getFollowerStats",
-      "accountIds is required."
-    );
+    throw new ZernioApiError(0, "getFollowerStats", "accountIds is required.");
   }
-  const raw = await client.request<unknown>(
-    "/api/v1/accounts/follower-stats",
-    {
-      method: "GET",
-      query: {
-        accountIds,
-        profileId: args.profileId,
-        fromDate: args.fromDate,
-        toDate: args.toDate,
-        granularity: args.granularity,
-      },
-    }
-  );
+  const raw = await client.request<unknown>("/api/v1/accounts/follower-stats", {
+    method: "GET",
+    query: {
+      accountIds,
+      profileId: args.profileId,
+      fromDate: args.fromDate,
+      toDate: args.toDate,
+      granularity: args.granularity,
+    },
+  });
   const parsed = FollowerStatsResponseSchema.safeParse(raw);
   if (!parsed.success) {
     throw new ZernioApiError(
       200,
       "/api/v1/accounts/follower-stats",
-      `Unexpected follower-stats payload: ${parsed.error.message}`
+      `Unexpected follower-stats payload: ${parsed.error.message}`,
     );
   }
   return {
@@ -2034,7 +2103,7 @@ const InboxMetaSchema = z
             accountUsername: z.string().optional(),
             platform: z.string().optional(),
           })
-          .passthrough()
+          .passthrough(),
       )
       .optional(),
   })
@@ -2068,7 +2137,14 @@ export interface InboxPage<T> {
 
 const InboxCommentsResponseSchema = z
   .object({
-    data: z.array(z.record(z.string(), z.unknown())).default([]),
+    /**
+     * ⚠️ Required — no `.default([])`. Verified live 2026-08-12: this family of
+     * endpoints returns `{ data, pagination, meta }`, and a zero-result call
+     * still sends `data: []`. A missing key therefore means the contract moved,
+     * and reporting that as "no comments" would make her silently stop
+     * replying — §2.5, nothing fails silently.
+     */
+    data: z.array(z.record(z.string(), z.unknown())),
     pagination: InboxPaginationSchema.optional(),
     meta: InboxMetaSchema.optional(),
   })
@@ -2091,7 +2167,7 @@ export async function listInboxComments(
     limit?: number;
     cursor?: string;
     accountId?: string;
-  } = {}
+  } = {},
 ): Promise<InboxPage<InboxComment>> {
   const raw = await client.request<unknown>("/api/v1/inbox/comments", {
     method: "GET",
@@ -2112,7 +2188,7 @@ export async function listInboxComments(
     throw new ZernioApiError(
       200,
       "/api/v1/inbox/comments",
-      `Unexpected inbox-comments payload: ${parsed.error.message}`
+      `Unexpected inbox-comments payload: ${parsed.error.message}`,
     );
   }
   return {
@@ -2146,7 +2222,7 @@ export async function listInboxComments(
  */
 export async function listPostComments(
   client: ZernioClient,
-  args: { postId: string; platform: string; accountId: string; limit?: number }
+  args: { postId: string; platform: string; accountId: string; limit?: number },
 ): Promise<{ comments: Array<Record<string, unknown>>; hasMore: boolean }> {
   const raw = await client.request<unknown>(
     `/api/v1/inbox/comments/${encodeURIComponent(args.postId)}`,
@@ -2157,14 +2233,14 @@ export async function listPostComments(
         accountId: args.accountId,
         limit: args.limit,
       },
-    }
+    },
   );
   const parsed = PostCommentsResponseSchema.safeParse(raw);
   if (!parsed.success) {
     throw new ZernioApiError(
       200,
       "/api/v1/inbox/comments/{postId}",
-      `Unexpected post-comments payload: ${parsed.error.message}`
+      `Unexpected post-comments payload: ${parsed.error.message}`,
     );
   }
   return {
@@ -2178,14 +2254,24 @@ const PostCommentsResponseSchema = z
   .object({
     status: z.string().optional(),
     comments: z.array(z.record(z.string(), z.unknown())).default([]),
-    pagination: z.object({ hasMore: z.boolean().optional() }).passthrough().optional(),
+    pagination: z
+      .object({ hasMore: z.boolean().optional() })
+      .passthrough()
+      .optional(),
     meta: z.record(z.string(), z.unknown()).optional(),
   })
   .passthrough();
 
 const ConversationsResponseSchema = z
   .object({
-    data: z.array(z.record(z.string(), z.unknown())).default([]),
+    /**
+     * ⚠️ Required — no `.default([])`. Verified live 2026-08-12: this family of
+     * endpoints returns `{ data, pagination, meta }`, and a zero-result call
+     * still sends `data: []`. A missing key therefore means the contract moved,
+     * and reporting that as "no comments" would make her silently stop
+     * replying — §2.5, nothing fails silently.
+     */
+    data: z.array(z.record(z.string(), z.unknown())),
     pagination: InboxPaginationSchema.optional(),
     meta: InboxMetaSchema.optional(),
   })
@@ -2206,7 +2292,7 @@ export async function listConversations(
     limit?: number;
     cursor?: string;
     accountId?: string;
-  } = {}
+  } = {},
 ): Promise<InboxPage<Conversation>> {
   const raw = await client.request<unknown>("/api/v1/inbox/conversations", {
     method: "GET",
@@ -2225,7 +2311,7 @@ export async function listConversations(
     throw new ZernioApiError(
       200,
       "/api/v1/inbox/conversations",
-      `Unexpected conversations payload: ${parsed.error.message}`
+      `Unexpected conversations payload: ${parsed.error.message}`,
     );
   }
   return {
@@ -2268,7 +2354,7 @@ export async function replyToComment(
     /** Required by Reddit when replying to third-party threads (docs:
      *  "Subreddit parameters are required when replying to comments"). */
     subreddit?: string;
-  }
+  },
 ): Promise<{ success: boolean; id?: string; raw: unknown }> {
   if (!args.postId) {
     throw new ZernioApiError(0, "replyToComment", "postId is required.");
@@ -2289,21 +2375,21 @@ export async function replyToComment(
         commentId: args.commentId,
         subreddit: args.subreddit,
       },
-    }
+    },
   );
   const parsed = InboxActionResponseSchema.safeParse(raw);
   if (!parsed.success) {
     throw new ZernioApiError(
       200,
       "/api/v1/inbox/comments",
-      `Unexpected reply-to-comment payload: ${parsed.error.message}`
+      `Unexpected reply-to-comment payload: ${parsed.error.message}`,
     );
   }
   if (parsed.data.error) {
     throw new ZernioApiError(
       200,
       "replyToComment",
-      `Zernio rejected the comment reply: ${parsed.data.error}`
+      `Zernio rejected the comment reply: ${parsed.data.error}`,
     );
   }
   return {
@@ -2324,7 +2410,7 @@ export async function sendDm(
     conversationId: string;
     accountId: string;
     message: string;
-  }
+  },
 ): Promise<{ success: boolean; id?: string; raw: unknown }> {
   if (!args.conversationId) {
     throw new ZernioApiError(0, "sendDm", "conversationId is required.");
@@ -2337,7 +2423,7 @@ export async function sendDm(
   }
   const raw = await client.request<unknown>(
     `/api/v1/inbox/conversations/${encodeURIComponent(
-      args.conversationId
+      args.conversationId,
     )}/messages`,
     {
       method: "POST",
@@ -2345,21 +2431,21 @@ export async function sendDm(
         accountId: args.accountId,
         message: args.message,
       },
-    }
+    },
   );
   const parsed = InboxActionResponseSchema.safeParse(raw);
   if (!parsed.success) {
     throw new ZernioApiError(
       200,
       "/api/v1/inbox/conversations/messages",
-      `Unexpected send-dm payload: ${parsed.error.message}`
+      `Unexpected send-dm payload: ${parsed.error.message}`,
     );
   }
   if (parsed.data.error) {
     throw new ZernioApiError(
       200,
       "sendDm",
-      `Zernio rejected the DM: ${parsed.data.error}`
+      `Zernio rejected the DM: ${parsed.data.error}`,
     );
   }
   return {
@@ -2402,7 +2488,7 @@ const PresignResponseSchema = z
  */
 export async function presignMedia(
   client: ZernioClient,
-  args: { filename: string; contentType: string; size?: number }
+  args: { filename: string; contentType: string; size?: number },
 ): Promise<PresignResult> {
   if (!args.filename) {
     throw new ZernioApiError(0, "presignMedia", "filename is required.");
@@ -2423,7 +2509,7 @@ export async function presignMedia(
     throw new ZernioApiError(
       200,
       "/api/v1/media/presign",
-      `Unexpected presign payload: ${parsed.error.message}`
+      `Unexpected presign payload: ${parsed.error.message}`,
     );
   }
   return {
@@ -2476,20 +2562,27 @@ const WebhookCreateResponseSchema = z
  * (`{ webhooks: [...] }` vs a bare array) so we accept both. VERIFIED LIVE 2026-08-01: GET /api/v1/webhooks/settings → {webhooks}.
  */
 export async function listWebhooks(
-  client: ZernioClient
+  client: ZernioClient,
 ): Promise<Array<{ id: string; url: string; events: string[]; raw: unknown }>> {
   const raw = await client.request<unknown>("/api/v1/webhooks/settings", {
     method: "GET",
   });
   const rows: Array<Record<string, unknown>> = Array.isArray(raw)
     ? (raw as Array<Record<string, unknown>>)
-    : raw && typeof raw === "object" && Array.isArray((raw as { webhooks?: unknown }).webhooks)
-      ? ((raw as { webhooks: Array<Record<string, unknown>> }).webhooks)
+    : raw &&
+        typeof raw === "object" &&
+        Array.isArray((raw as { webhooks?: unknown }).webhooks)
+      ? (raw as { webhooks: Array<Record<string, unknown>> }).webhooks
       : [];
   return rows.map((r) => ({
-    id: (typeof r._id === "string" && r._id) || (typeof r.id === "string" && r.id) || "",
+    id:
+      (typeof r._id === "string" && r._id) ||
+      (typeof r.id === "string" && r.id) ||
+      "",
     url: typeof r.url === "string" ? r.url : "",
-    events: Array.isArray(r.events) ? (r.events.filter((e) => typeof e === "string") as string[]) : [],
+    events: Array.isArray(r.events)
+      ? (r.events.filter((e) => typeof e === "string") as string[])
+      : [],
     raw: r,
   }));
 }
@@ -2509,7 +2602,7 @@ export async function createWebhook(
     secret?: string;
     isActive?: boolean;
     customHeaders?: Record<string, string>;
-  }
+  },
 ): Promise<{ id: string; raw: unknown }> {
   if (!args.name) {
     throw new ZernioApiError(0, "createWebhook", "name is required.");
@@ -2525,7 +2618,7 @@ export async function createWebhook(
       throw new ZernioApiError(
         0,
         "createWebhook",
-        `Invalid / unsupported webhook event: ${String(ev)}`
+        `Invalid / unsupported webhook event: ${String(ev)}`,
       );
     }
   }
@@ -2545,7 +2638,7 @@ export async function createWebhook(
     throw new ZernioApiError(
       200,
       "/api/v1/webhooks/settings",
-      `Unexpected create-webhook payload: ${parsed.error.message}`
+      `Unexpected create-webhook payload: ${parsed.error.message}`,
     );
   }
   const id = parsed.data._id ?? parsed.data.id ?? "";
@@ -2559,7 +2652,7 @@ export async function createWebhook(
 /** Internal helper for tests — they construct a ZernioClient + pass it. */
 export function makeZernioContext(
   client: ZernioClient,
-  zernioAccountId: string
+  zernioAccountId: string,
 ): ZernioContext {
   return { client, zernioAccountId };
 }
