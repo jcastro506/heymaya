@@ -62,6 +62,17 @@ export const PUBLIC_ROUTES = [
    * exactly the way a broken deploy is.
    */
   "/demo",
+  /**
+   * ⭐ The on-ramp (§18.9.25 ①②③), and it MUST be public.
+   *
+   * §6.0: the live read "delivers value **before** asking for anything — which
+   * is what makes the pairing ask convert." Gate this route and the read moves
+   * behind signup, which inverts the one design decision the whole flow is
+   * built on. The page is public; the mutations it calls
+   * (`onramp.startFromRead`, `pairing.createPairingLink`) each require an
+   * identity of their own, so "public" here means the door, not the safe.
+   */
+  "/start",
   "/waitlist",
   "/builders",
   "/clawlaunch(.*)",
