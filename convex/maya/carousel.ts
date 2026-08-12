@@ -43,6 +43,7 @@ import type { ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { renderSlide, type SlideContent, type SlideLayout } from "./slides";
+import { runGate } from "./preSpendGate";
 import { pickCard } from "./formats";
 import type { BrandKit } from "./brandKit";
 
@@ -104,7 +105,9 @@ export interface CarouselResult {
     | "house_rule"
     | "critic_rejected"
     | "render_unavailable"
-    | "render_failed";
+    | "render_failed"
+    /** ⭐ §7.5.7 stopped it before a penny was spent. */
+    | "pre_spend_gate";
   criticWhy?: string;
 }
 
@@ -214,15 +217,60 @@ export const makeCarousel = internalAction({
     const screenshots = assets.filter(
       (a: Doc<"mediaAssets">) =>
         a.publicUrl &&
-        (a.classifiedAs === "product_screenshot" || a.kind === "screenshot")
+        (a.classifiedAs === "product_screenshot" || a.kind === "screenshot"),
     );
+
+    /**
+     * ⭐ §7.5.7's pre-spend gate, BEFORE any model call or render.
+     *
+     * ⚠️ `runGate` was written with tests and had NO CALLER — so the gate whose
+     * entire purpose is "an approved idea can never fail on budget or assets"
+     * has never run, and `makeCarousel` spent render credits with no ceiling
+     * check of any kind.
+     *
+     * Only the four checks whose inputs are genuinely available here are fed.
+     * The verdict names the rest in `notEvaluated` rather than letting them
+     * silently pass — an invented input makes a gate look active while checking
+     * nothing, which is worse than not calling it at all.
+     */
+    const spend = await ctx.runQuery(internal.maya.spendCeiling.spendToday, {
+      customerId: args.customerId,
+    });
+    const plan = await ctx.runQuery(internal.maya.planFeatures.planFeatures, {
+      customerId: args.customerId,
+    });
+
+    const gate = runGate({
+      rung: "carousel",
+      // `throttled` degrades rather than blocks — §2.10, budgets never
+      // booleans, and the founder gets a static instead of silence.
+      budgetMode: spend.state === "throttled" ? "graceful_degrade" : "full",
+      // The fleet pool is the same ceiling at this tier; a customer-level
+      // throttle already implies it.
+      poolAboveReserve: spend.state !== "throttled",
+      // ⚠️ `videosPerMonth: 0` is a real tier, not a broken one. A plan with no
+      // video allowance still gets carousels.
+      tierMaxRung: plan.videosPerMonth > 0 ? "avatar" : "carousel",
+      assetsNamed: 1,
+      assetsResolved: screenshots.length > 0 ? 1 : 0,
+    });
+
+    if (!gate.proceed) {
+      return {
+        ok: false,
+        slides: [],
+        // Her words, already plain language — relayed unchanged (§11).
+        detail: gate.detail,
+        failure: "pre_spend_gate",
+      };
+    }
 
     const truth = await ctx.runQuery(internal.maya.productTruth.forCustomer, {
       customerId: args.customerId,
     });
     const kit: BrandKit | null = await ctx.runQuery(
       internal.maya.brandKit.brandKitFor,
-      { customerId: args.customerId }
+      { customerId: args.customerId },
     );
 
     /**
@@ -240,7 +288,7 @@ export const makeCarousel = internalAction({
      */
     const excerpts = await ctx.runQuery(
       internal.maya.voiceCorpus.voiceExcerptsFor,
-      { customerId: args.customerId }
+      { customerId: args.customerId },
     );
 
     /**
@@ -270,7 +318,7 @@ export const makeCarousel = internalAction({
     const screenshotList = screenshots
       .map(
         (s: Doc<"mediaAssets">, i: number) =>
-          `${i}. ${s.caption ?? s.classifiedAs ?? "screenshot"}`
+          `${i}. ${s.caption ?? s.classifiedAs ?? "screenshot"}`,
       )
       .join("\n");
 
@@ -350,7 +398,7 @@ export const makeCarousel = internalAction({
         console.error(
           `[carousel] plan failed: ${
             error instanceof Error ? error.message : String(error)
-          }`
+          }`,
         );
         planned = [];
       }
@@ -359,14 +407,16 @@ export const makeCarousel = internalAction({
 
       const house = await ctx.runAction(
         internal.maya.directiveGate.checkDirectives,
-        { customerId: args.customerId, text: slideTextOf(planned) }
+        { customerId: args.customerId, text: slideTextOf(planned) },
       );
       if (house.ok) {
         brokenRule = undefined;
         break;
       }
       brokenRule = house.rule ?? "a rule you set";
-      console.warn(`[carousel] attempt ${attempt + 1} broke a house rule: ${brokenRule}`);
+      console.warn(
+        `[carousel] attempt ${attempt + 1} broke a house rule: ${brokenRule}`,
+      );
     }
 
     if (planned.length < MIN_SLIDES) {
@@ -429,20 +479,25 @@ export const makeCarousel = internalAction({
      * resort, never a substitute for a screenshot that exists.
      */
     if (screenshots.length === 0 && planned[0]?.layout === "title") {
-      const background = await ctx.runAction(internal.maya.imagery.backgroundFor, {
-        customerId: args.customerId,
-        // The headline is the brief. It already describes the slide's subject,
-        // and inventing a separate art direction would be a second thing that
-        // can disagree with the words.
-        brief: planned[0].content.headline,
-        now: args.now,
-      });
+      const background = await ctx.runAction(
+        internal.maya.imagery.backgroundFor,
+        {
+          customerId: args.customerId,
+          // The headline is the brief. It already describes the slide's subject,
+          // and inventing a separate art direction would be a second thing that
+          // can disagree with the words.
+          brief: planned[0].content.headline,
+          now: args.now,
+        },
+      );
       if (background.ok && background.url) {
         planned[0].content.imageUrl = background.url;
       } else {
         // Not fatal — the set still works as type. Named so a repeated failure
         // is visible rather than looking like a stylistic choice.
-        console.warn(`[carousel] no background: ${background.reason ?? "unknown"}`);
+        console.warn(
+          `[carousel] no background: ${background.reason ?? "unknown"}`,
+        );
       }
     }
 
@@ -482,7 +537,9 @@ export const makeCarousel = internalAction({
       slides: rendered.slides,
       formatCardId: card?.cardId,
       detail: `${rendered.slides.length} slides, in your colours${
-        screenshots.length > 0 ? "" : " — no real screenshots on file yet, so this set is all type"
+        screenshots.length > 0
+          ? ""
+          : " — no real screenshots on file yet, so this set is all type"
       }.`,
     };
   },
@@ -496,7 +553,7 @@ async function runCritic(
     customerId: Id<"customers">;
     apiKey: string;
     planned: PlannedSlide[];
-  }
+  },
 ): Promise<{ coherent: boolean; why: string }> {
   const { callModel } = await import("./llm");
   const summary = input.planned
@@ -545,7 +602,7 @@ async function runCritic(
     console.error(
       `[carousel] critic unavailable, passing set through: ${
         error instanceof Error ? error.message : String(error)
-      }`
+      }`,
     );
     return { coherent: true, why: "" };
   }
@@ -560,7 +617,7 @@ async function renderAndStore(
     planned: PlannedSlide[];
     kit: BrandKit | null;
     now?: number;
-  }
+  },
 ): Promise<
   | { slides: RenderedSlide[] }
   | { failure: "render_unavailable" | "render_failed"; detail: string }
@@ -573,7 +630,7 @@ async function renderAndStore(
     console.error(
       `[carousel] cannot render: ${!base ? "no RENDER_BASE_URL/APP_URL" : ""}${
         !base && !secret ? " and " : ""
-      }${!secret ? "no RENDER_SHARED_SECRET" : ""}`
+      }${!secret ? "no RENDER_SHARED_SECRET" : ""}`,
     );
     return {
       failure: "render_unavailable",
@@ -632,7 +689,7 @@ async function renderAndStore(
                 ? " — that's a web page, not an image; the host is probably behind deployment protection"
                 : "";
         console.error(
-          `[carousel] render slide ${i + 1}: HTTP ${res.status}, content-type "${contentType}"${diagnosis}`
+          `[carousel] render slide ${i + 1}: HTTP ${res.status}, content-type "${contentType}"${diagnosis}`,
         );
         return {
           failure: "render_failed",
@@ -644,7 +701,7 @@ async function renderAndStore(
       console.error(
         `[carousel] render slide ${i + 1} threw: ${
           error instanceof Error ? error.message : String(error)
-        }`
+        }`,
       );
       return {
         failure: "render_failed",
@@ -693,9 +750,15 @@ async function renderAndStore(
 export function slideTextOf(planned: PlannedSlide[]): string {
   return planned
     .map((s) =>
-      [s.content.eyebrow, s.content.headline, s.content.body, s.content.left, s.content.right]
+      [
+        s.content.eyebrow,
+        s.content.headline,
+        s.content.body,
+        s.content.left,
+        s.content.right,
+      ]
         .filter(Boolean)
-        .join(" ")
+        .join(" "),
     )
     .join("\n");
 }
@@ -717,7 +780,7 @@ export function stripFence(text: string): string {
  */
 export function parsePlan(
   raw: string,
-  screenshots: Array<{ publicUrl?: string }>
+  screenshots: Array<{ publicUrl?: string }>,
 ): PlannedSlide[] {
   let parsed: { slides?: unknown };
   try {
@@ -743,7 +806,8 @@ export function parsePlan(
     if (typeof e.eyebrow === "string" && e.eyebrow.trim()) {
       content.eyebrow = e.eyebrow.trim();
     }
-    if (typeof e.body === "string" && e.body.trim()) content.body = e.body.trim();
+    if (typeof e.body === "string" && e.body.trim())
+      content.body = e.body.trim();
     if (typeof e.left === "string") content.left = e.left.trim();
     if (typeof e.right === "string") content.right = e.right.trim();
 
@@ -800,7 +864,7 @@ export function describeTruth(truth: {
   if (truth.founderSays && truth.founderSays.length > 0) {
     lines.push(
       `The founder's own words (these outrank everything above):\n` +
-        truth.founderSays.map((s) => `- ${s}`).join("\n")
+        truth.founderSays.map((s) => `- ${s}`).join("\n"),
     );
   }
   return lines.join("\n");

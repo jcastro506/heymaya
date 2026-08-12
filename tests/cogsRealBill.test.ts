@@ -80,3 +80,80 @@ describe("what gets reported as the bill", () => {
     expect(out.detail).toContain("1.50");
   });
 });
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ §7.5.7's pre-spend gate — which had no caller.
+ *
+ * Its own header: *"All of these run before the founder ever sees the idea, so
+ * an approved idea can never fail on budget or assets. Failing after a yes is
+ * the worst possible sequence."*
+ *
+ * ⚠️ It never ran. `runGate` was written with tests and never invoked, and
+ * `makeCarousel` spent render credits with no ceiling check of any kind.
+ */
+describe("the gate reports what it could not check", () => {
+  const FED = {
+    rung: "carousel" as const,
+    budgetMode: "full" as const,
+    poolAboveReserve: true,
+    tierMaxRung: "carousel" as const,
+    assetsNamed: 1,
+    assetsResolved: 1,
+  };
+
+  it("⭐ names the checks it did not evaluate", async () => {
+    const { runGate } = await import("../convex/maya/preSpendGate");
+    const verdict = runGate(FED);
+
+    expect(verdict.proceed).toBe(true);
+    /**
+     * The load-bearing property. A caller that can only feed four of eight
+     * used to have to INVENT the other four — and an invented input makes a
+     * gate look active while checking nothing, which is worse than not calling
+     * it at all.
+     */
+    expect(verdict.notEvaluated).toEqual([
+      "claims",
+      "repeats",
+      "deadline",
+      "credits",
+    ]);
+  });
+
+  it("reports nothing missing when all eight are fed", async () => {
+    const { runGate } = await import("../convex/maya/preSpendGate");
+    const verdict = runGate({
+      ...FED,
+      unverifiedClaims: [],
+      angleRanRecently: false,
+      estimatedRenderSeconds: 1,
+      secondsUntilSlot: 3600,
+      estimatedCredits: 1,
+      remainingCredits: 10,
+    });
+    expect(verdict.notEvaluated).toEqual([]);
+    expect(verdict.proceed).toBe(true);
+  });
+
+  it("⚠️ still blocks on the checks it CAN make", async () => {
+    const { runGate } = await import("../convex/maya/preSpendGate");
+    // A hard budget block stops everything, even with half the inputs absent.
+    const verdict = runGate({ ...FED, budgetMode: "hard_block" });
+    expect(verdict.proceed).toBe(false);
+    expect(verdict.blockedBy).toBe("budget");
+  });
+
+  it("⚠️ an absent optional check never blocks", async () => {
+    const { runGate } = await import("../convex/maya/preSpendGate");
+    /**
+     * The other direction, and the reason these are optional rather than
+     * defaulted: "we couldn't check the deadline" must not become "the
+     * deadline failed". A gate that blocks on missing information stops work
+     * for no reason anyone can act on.
+     */
+    const verdict = runGate(FED);
+    expect(verdict.blockedBy).toBeUndefined();
+  });
+});

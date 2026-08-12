@@ -45,16 +45,25 @@ export interface GateInput {
   /** Check 4 — assets the brief names that the library actually has. */
   assetsNamed: number;
   assetsResolved: number;
+  /**
+   * ⚠️ Checks 5–8 are OPTIONAL, and their absence is reported rather than
+   * treated as a pass.
+   *
+   * A caller that can only feed four of the eight used to have to invent the
+   * other four — and an invented input makes the gate look active while
+   * checking nothing, which is worse than not calling it. `notEvaluated` on the
+   * verdict names exactly what did not run.
+   */
   /** Check 5 — claims with no support in product truth. */
-  unverifiedClaims: string[];
+  unverifiedClaims?: string[];
   /** Check 6 — has this angle run recently. */
-  angleRanRecently: boolean;
+  angleRanRecently?: boolean;
   /** Check 7 — seconds. */
-  estimatedRenderSeconds: number;
-  secondsUntilSlot: number;
+  estimatedRenderSeconds?: number;
+  secondsUntilSlot?: number;
   /** Check 8 */
-  estimatedCredits: number;
-  remainingCredits: number;
+  estimatedCredits?: number;
+  remainingCredits?: number;
 }
 
 export interface GateVerdict {
@@ -68,6 +77,14 @@ export interface GateVerdict {
   blockedBy?: string;
   /** Plain language, for the founder. */
   detail: string;
+  /**
+   * ⚠️ Checks the caller could not feed. Empty means all eight ran.
+   *
+   * Stated so a surface can never present a four-check verdict as the full
+   * gate — §2.5, a partial result reported as complete is the failure this
+   * codebase keeps finding.
+   */
+  notEvaluated: string[];
 }
 
 function lower(rung: Rung): Rung | null {
@@ -90,6 +107,22 @@ export function runGate(input: GateInput): GateVerdict {
   const adjustments: string[] = [];
   let rung = input.rung;
 
+  const notEvaluated: string[] = [];
+  if (input.unverifiedClaims === undefined) notEvaluated.push("claims");
+  if (input.angleRanRecently === undefined) notEvaluated.push("repeats");
+  if (
+    input.estimatedRenderSeconds === undefined ||
+    input.secondsUntilSlot === undefined
+  ) {
+    notEvaluated.push("deadline");
+  }
+  if (
+    input.estimatedCredits === undefined ||
+    input.remainingCredits === undefined
+  ) {
+    notEvaluated.push("credits");
+  }
+
   // 1 — creative budget. "Never render blind."
   if (input.budgetMode === "hard_block") {
     return {
@@ -97,9 +130,11 @@ export function runGate(input: GateInput): GateVerdict {
       rung,
       adjustments,
       blockedBy: "budget",
+      notEvaluated,
       // ⚠️ Said plainly. §2230: a credit shortage costs quality, never
       // availability — and never a silent downgrade either.
-      detail: "no render budget left this month — I'll make something static instead and say so",
+      detail:
+        "no render budget left this month — I'll make something static instead and say so",
     };
   }
   if (input.budgetMode === "graceful_degrade") {
@@ -120,7 +155,9 @@ export function runGate(input: GateInput): GateVerdict {
       rung,
       adjustments,
       blockedBy: "pool",
-      detail: "the render pool is too low to spend safely right now — static instead",
+      notEvaluated,
+      detail:
+        "the render pool is too low to spend safely right now — static instead",
     };
   }
 
@@ -143,28 +180,31 @@ export function runGate(input: GateInput): GateVerdict {
         rung,
         adjustments,
         blockedBy: "assets",
-        detail: "nothing in the library matches what this needs, and I won't make up a shot of your product",
+        notEvaluated,
+        detail:
+          "nothing in the library matches what this needs, and I won't make up a shot of your product",
       };
     }
     adjustments.push(
-      `re-briefed around the ${input.assetsResolved} of ${input.assetsNamed} shots I actually have`
+      `re-briefed around the ${input.assetsResolved} of ${input.assetsNamed} shots I actually have`,
     );
   }
 
   // 5 — claims. Rewrite without it, never soften it.
-  if (input.unverifiedClaims.length > 0) {
+  if (input.unverifiedClaims && input.unverifiedClaims.length > 0) {
     adjustments.push(
-      `cut ${input.unverifiedClaims.length === 1 ? "a claim" : `${input.unverifiedClaims.length} claims`} I can't back from what you've told me`
+      `cut ${input.unverifiedClaims!.length === 1 ? "a claim" : `${input.unverifiedClaims!.length} claims`} I can't back from what you've told me`,
     );
   }
 
   // 6 — repeats.
-  if (input.angleRanRecently) {
+  if (input.angleRanRecently === true) {
     return {
       proceed: false,
       rung,
       adjustments,
       blockedBy: "repeat",
+      notEvaluated,
       detail: "this angle went out recently — I'll take the next idea instead",
     };
   }
@@ -173,7 +213,11 @@ export function runGate(input: GateInput): GateVerdict {
    * 7 — deadline. Render time against time-to-slot at a 1:10 ratio, so a job
    * that would finish at the wire doesn't push the post past its best hour.
    */
-  if (input.estimatedRenderSeconds * DEADLINE_RATIO > input.secondsUntilSlot) {
+  if (
+    input.estimatedRenderSeconds !== undefined &&
+    input.secondsUntilSlot !== undefined &&
+    input.estimatedRenderSeconds * DEADLINE_RATIO > input.secondsUntilSlot
+  ) {
     const next = lower(rung);
     if (!next) {
       return {
@@ -181,15 +225,23 @@ export function runGate(input: GateInput): GateVerdict {
         rung,
         adjustments,
         blockedBy: "deadline",
-        detail: "not enough time before the slot to make this properly — moving it rather than rushing it",
+        notEvaluated,
+        detail:
+          "not enough time before the slot to make this properly — moving it rather than rushing it",
       };
     }
-    adjustments.push(`${next} instead — not enough time before the slot for the longer render`);
+    adjustments.push(
+      `${next} instead — not enough time before the slot for the longer render`,
+    );
     rung = next;
   }
 
   // 8 — the monthly allowance.
-  if (input.estimatedCredits > input.remainingCredits) {
+  if (
+    input.estimatedCredits !== undefined &&
+    input.remainingCredits !== undefined &&
+    input.estimatedCredits > input.remainingCredits
+  ) {
     const next = lower(rung);
     if (!next) {
       return {
@@ -197,7 +249,9 @@ export function runGate(input: GateInput): GateVerdict {
         rung,
         adjustments,
         blockedBy: "credits",
-        detail: "not enough credits left this month for a render — static instead",
+        notEvaluated,
+        detail:
+          "not enough credits left this month for a render — static instead",
       };
     }
     adjustments.push(`${next} to fit what's left of the month's credits`);
@@ -208,6 +262,7 @@ export function runGate(input: GateInput): GateVerdict {
     proceed: true,
     rung,
     adjustments,
+    notEvaluated,
     detail:
       adjustments.length === 0
         ? `making a ${rung}`
@@ -241,7 +296,9 @@ export function authenticityNotes(input: AuthenticityInput): string[] {
 
   if (!input.hasRealFootage) {
     // §6.0.1: founder footage is "the best-performing content there is".
-    notes.push("no real footage in this one — it'll read as made rather than filmed");
+    notes.push(
+      "no real footage in this one — it'll read as made rather than filmed",
+    );
   }
 
   /**
@@ -249,7 +306,11 @@ export function authenticityNotes(input: AuthenticityInput): string[] {
    * sustained rate is the signature of an assembled video; real editing
    * bunches and pauses.
    */
-  if (input.cutsPerSecond !== null && input.cutsPerSecond > 0 && input.cutsPerSecond < 0.15) {
+  if (
+    input.cutsPerSecond !== null &&
+    input.cutsPerSecond > 0 &&
+    input.cutsPerSecond < 0.15
+  ) {
     notes.push("the cuts are very evenly spaced — worth varying the rhythm");
   }
 
