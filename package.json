@@ -12,6 +12,7 @@
     "test:matrix": "vitest run convex/gtmMaya/__tests__/multiProductMatrix.test.ts",
     "convex:dev": "convex dev --once",
     "convex:staging": "CONVEX_DEPLOYMENT=dev:precise-canary-781 convex dev --once",
+    "convex:prod": "bash scripts/convex-deploy-prod.sh",
     "smoke:cron": "tsx scripts/cron-smoke.ts",
     "smoke:cron-fly": "tsx scripts/cron-fly-smoke.ts",
     "smoke:gtm-sprint1": "tsx scripts/gtm-sprint1-smoke.ts",

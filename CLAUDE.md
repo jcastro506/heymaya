@@ -84,6 +84,18 @@ CI (`.github/workflows/ci.yml`) runs typecheck + tests on `staging` and `main`. 
 
 Repo `jcastro506/heymaya` · Vercel project `hey-ava-web`. Pushes to `staging` and `main` deploy; `codex/*` does not. Detail in `docs/DEPLOYMENT_ENVIRONMENTS.md`.
 
+> ### ⚠️ `npx convex deploy` deploys to **PRODUCTION**
+>
+> It ignores `CONVEX_DEPLOYMENT` entirely. Running it after merging a PR — from
+> `staging`, where you already are — ships every unreleased commit to prod.
+> This happened on 2026-08-11: 27 commits reached prod's backend while prod's
+> Vercel was still serving `main`.
+>
+> - **Staging:** `npm run convex:staging`
+> - **Production:** `npm run convex:prod` — refuses unless you are on `main` with a clean tree
+
+
+
 ## Status
 
 **Sprint 0a complete** (branch `codex/sprint0-test-baseline`): test baseline greened, dead products deleted, CI added, orphan scripts and the legacy second dashboard removed. 0 typecheck errors, all tests passing.
