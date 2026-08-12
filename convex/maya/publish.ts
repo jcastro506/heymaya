@@ -212,9 +212,8 @@ export const publishPlacement = internalAction({
      * founder can act on, before anything is spent.
      */
     const { ZernioClient } = await import("../integrations/zernio/client");
-    const { publishText, validatePost } = await import(
-      "../integrations/zernio/publish"
-    );
+    const { publishText, validatePost } =
+      await import("../integrations/zernio/publish");
 
     const mediaItems = parseMediaUrls(args.mediaUrlsJson);
 
@@ -243,16 +242,15 @@ export const publishPlacement = internalAction({
       | { contentPreviewConfirmed: true; expressConsentGiven: true }
       | undefined;
     if (context.channel === "tiktok") {
-      const { previewFingerprint, tiktokSettingsFor } = await import(
-        "./tiktokConsent"
-      );
+      const { previewFingerprint, tiktokSettingsFor } =
+        await import("./tiktokConsent");
       const fingerprint = previewFingerprint({
         assetUrls: (mediaItems ?? []).map((m) => m.url),
         caption: args.snapshotText,
       });
       const consent = await ctx.runQuery(
         internal.maya.tiktokConsent.consentFor,
-        { customerId: args.customerId, fingerprint }
+        { customerId: args.customerId, fingerprint },
       );
       const settings = tiktokSettingsFor({ confirmed: consent.confirmed });
       if (!settings) {
@@ -300,7 +298,7 @@ export const publishPlacement = internalAction({
     {
       const house = await ctx.runAction(
         internal.maya.directiveGate.checkDirectives,
-        { customerId: args.customerId, text: args.snapshotText }
+        { customerId: args.customerId, text: args.snapshotText },
       );
       if (!house.ok) {
         /**
@@ -367,7 +365,7 @@ export const publishPlacement = internalAction({
       console.warn(
         `[publish] drift on ${args.draftId ?? "draft"}: ${check.drift
           .map((d) => d.label ?? d.detail ?? "?")
-          .join(", ")}`
+          .join(", ")}`,
       );
     }
 
@@ -411,6 +409,22 @@ export const publishPlacement = internalAction({
         kind: args.inReplyTo ? "reply" : "post",
       },
     );
+
+    /**
+     * ⭐ §14.45 rung 1 — bind the draft's tracked link to the post it became.
+     *
+     * The wrap was minted at draft time (publish may not alter approved text),
+     * so this is the moment the click data gains a placement to point at.
+     * Without it the link still works and the clicks still land — they just
+     * can't be attributed to a post, which is the entire question.
+     */
+    if (args.draftId) {
+      await ctx.runMutation(internal.maya.attribution.bindWrapToPlacement, {
+        draftId: args.draftId,
+        placementId,
+        customerId: args.customerId,
+      });
+    }
 
     /**
      * ⭐ The home screen's row, immediately.
@@ -511,7 +525,6 @@ export const publishPlacement = internalAction({
   },
 });
 
-
 /**
  * Read the media list off a job payload.
  *
@@ -521,7 +534,7 @@ export const publishPlacement = internalAction({
  * dying on a parse error nobody sees.
  */
 export function parseMediaUrls(
-  json: string | undefined
+  json: string | undefined,
 ): Array<{ type: "image" | "video"; url: string }> | undefined {
   if (!json) return undefined;
   try {
@@ -532,7 +545,7 @@ export function parseMediaUrls(
         (m): m is { type: string; url: string } =>
           typeof m === "object" &&
           m !== null &&
-          typeof (m as { url?: unknown }).url === "string"
+          typeof (m as { url?: unknown }).url === "string",
       )
       .map((m) => ({
         type: m.type === "video" ? ("video" as const) : ("image" as const),

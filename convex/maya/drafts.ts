@@ -30,6 +30,7 @@ import { internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { check as preflightCheck } from "./preflight";
 import type { Doc, Id } from "../_generated/dataModel";
+import type { MutationCtx } from "../_generated/server";
 
 /**
  * How long a pending draft stays offerable.
@@ -46,14 +47,14 @@ export const create = internalMutation({
     channel: v.string(),
     text: v.string(),
     kind: v.optional(
-      v.union(v.literal("post"), v.literal("reply"), v.literal("cold_reply"))
+      v.union(v.literal("post"), v.literal("reply"), v.literal("cold_reply")),
     ),
     ideaId: v.optional(v.id("ideas")),
     now: v.optional(v.number()),
   },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<
     | {
         ok: true;
@@ -79,7 +80,11 @@ export const create = internalMutation({
     if (!verdict.ok) {
       // Named in words a founder could read, because she relays this rather
       // than reporting a code.
-      return { ok: false, message: verdict.message, failure: verdict.failure.kind };
+      return {
+        ok: false,
+        message: verdict.message,
+        failure: verdict.failure.kind,
+      };
     }
 
     const now = args.now ?? Date.now();
@@ -136,6 +141,23 @@ export const create = internalMutation({
       outcome: "pending",
       proposedAt: now,
       expiresAt: now + DRAFT_TTL_MS,
+    });
+
+    /**
+     * ⭐ §14.45 rung 1 — if this draft already links to their product, that
+     * link becomes a tracked one BEFORE they read it.
+     *
+     * ⚠️ Done here, not at publish. `publish.ts` may not alter approved text
+     * ("the founder said yes to a specific string"), so a swap there would
+     * publish something they never saw. And it only ever rewrites a link the
+     * draft already had — adding one would change what she wrote to serve our
+     * metrics.
+     */
+    await maybeTrackProductLink(ctx, {
+      customerId: args.customerId,
+      draftId,
+      channel: args.channel,
+      text: args.text,
     });
 
     /**
@@ -256,7 +278,7 @@ export const decide = internalMutation({
     outcome: v.union(
       v.literal("approved"),
       v.literal("edited"),
-      v.literal("rejected")
+      v.literal("rejected"),
     ),
     editedText: v.optional(v.string()),
     /** Why they said no, in THEIR words — never paraphrased (§7.5.2 layer 2). */
@@ -309,7 +331,7 @@ export const reofferUnshown = internalMutation({
   args: { customerId: v.id("customers"), now: v.optional(v.number()) },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<{ pending: number; unshown: number; shown: number }> => {
     const now = args.now ?? Date.now();
     const drafts = (
@@ -327,17 +349,21 @@ export const reofferUnshown = internalMutation({
     let unshown = 0;
     let shown = 0;
 
-    for (const draft of [...drafts].sort((a, b) => a.proposedAt - b.proposedAt)) {
-      const channelRow = channels.find((c) => c.channel === draft.channel) ?? null;
+    for (const draft of [...drafts].sort(
+      (a, b) => a.proposedAt - b.proposedAt,
+    )) {
+      const channelRow =
+        channels.find((c) => c.channel === draft.channel) ?? null;
       const needsApproval =
-        channelRow?.postingMode === "show_me_first" || draft.channel === "tiktok";
+        channelRow?.postingMode === "show_me_first" ||
+        draft.channel === "tiktok";
       if (!needsApproval) continue;
 
       const key = `draft:${draft._id}`;
       const already = await ctx.db
         .query("messages")
         .withIndex("by_customer_and_dedupe", (q) =>
-          q.eq("customerId", args.customerId).eq("dedupeKey", key)
+          q.eq("customerId", args.customerId).eq("dedupeKey", key),
         )
         .first();
       if (already) continue;
@@ -358,3 +384,76 @@ export const reofferUnshown = internalMutation({
     return { pending: drafts.length, unshown, shown };
   },
 });
+
+/**
+ * Swap a product URL in a draft for its tracked equivalent.
+ *
+ * ⚠️ Silent no-op when anything is missing — no product URL, no link in the
+ * text, no `APP_URL`. A draft is never blocked by attribution: the post going
+ * out matters more than counting it, and a half-formed tracking URL in a
+ * published caption is permanent.
+ */
+/** Escape a host for safe use inside a RegExp. */
+function escapeRe(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function maybeTrackProductLink(
+  ctx: MutationCtx,
+  input: {
+    customerId: Id<"customers">;
+    draftId: Id<"drafts">;
+    channel: string;
+    text: string;
+  },
+): Promise<void> {
+  const customer = (await ctx.db.get(
+    input.customerId,
+  )) as Doc<"customers"> | null;
+  if (!customer?.productTruthJson) return;
+
+  let productUrl = "";
+  try {
+    const truth = JSON.parse(customer.productTruthJson) as { url?: unknown };
+    if (typeof truth.url === "string") productUrl = truth.url;
+  } catch {
+    return;
+  }
+  if (!/^https?:\/\/.+\..+/.test(productUrl)) return;
+
+  /**
+   * Match the product's HOST, not the exact string. She writes
+   * `hey-maya.ai/pricing` as often as the bare root, and a literal comparison
+   * would track the homepage link and miss every deep link.
+   */
+  let host = "";
+  try {
+    host = new URL(productUrl).host.replace(/^www\./, "");
+  } catch {
+    return;
+  }
+  const linkPattern = new RegExp(
+    `https?://(?:www\.)?${escapeRe(host)}[^\s]*`,
+    "i",
+  );
+  const found = input.text.match(linkPattern);
+  if (!found) return;
+
+  const appUrl = (process.env.APP_URL ?? "").replace(/\/+$/, "");
+  if (!/^https?:\/\//.test(appUrl)) return;
+
+  const wrap = await ctx.runMutation(internal.maya.attribution.wrapForDraft, {
+    customerId: input.customerId,
+    draftId: input.draftId,
+    // ⭐ The DEEP link they wrote, not the product root — sending someone to
+    // the homepage when the post promised a pricing page is a worse outcome
+    // than not tracking it.
+    destinationUrl: found[0],
+    channel: input.channel,
+  });
+  if (!wrap.ok || !wrap.token) return;
+
+  await ctx.db.patch(input.draftId, {
+    snapshotText: input.text.replace(found[0], `${appUrl}/r/${wrap.token}`),
+  });
+}

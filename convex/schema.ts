@@ -2733,6 +2733,16 @@ export default defineSchema({
     token: v.string(),
     destinationUrl: v.string(),
     platform: v.optional(v.string()),
+    /**
+     * ⭐ The LIVE module's draft. `draftId` above points at the frozen
+     * product's table.
+     *
+     * The wrap is minted at DRAFT time, not publish time: `publish.ts` may not
+     * alter approved text ("the founder said yes to a specific string"), so
+     * the tracked URL has to already be in the text they approve. This is the
+     * join key that binds it to the placement once the post exists.
+     */
+    mayaDraftId: v.optional(v.id("drafts")),
     draftId: v.optional(v.id("gtmDraftedContent")),
     // UTM appended to the destination on redirect so the user's own
     // analytics also attributes the visit.
@@ -2743,7 +2753,8 @@ export default defineSchema({
   })
     .index("by_account", ["accountId"])
     .index("by_agent", ["agentId"])
-    .index("by_token", ["token"]),
+    .index("by_token", ["token"])
+    .index("by_maya_draft", ["mayaDraftId"]),
 
   /** One row per click on a wrapped link (logged by the public redirect). */
   gtmLinkClicks: defineTable({

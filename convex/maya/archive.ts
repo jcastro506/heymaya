@@ -34,6 +34,7 @@
 
 import { v } from "convex/values";
 import { internalQuery, query } from "../_generated/server";
+import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 
 /* -------------------------------------------------------------------------- */
@@ -296,6 +297,14 @@ export const provenance = internalQuery({
  */
 export interface ActivityEntry extends ArchiveEntry {
   views: number;
+  /**
+   * ⭐ Clicks on this post's tracked product link (§14.45 rung 1).
+   *
+   * `undefined` means the post carried no link at all — a different fact from
+   * `0`, which means it had one and nobody clicked. §16.4's rule applied to
+   * attribution: never let "not measured" render as "measured zero".
+   */
+  clicks?: number;
   /** ⚠️ When those metrics were last true (§16.4). Never implied. */
   metricsAsOf?: number;
 }
@@ -329,11 +338,18 @@ export const myActivity = query({
       .order("desc")
       .take(Math.min(args.limit ?? 50, 100))) as Doc<"placements">[];
 
+    const clicks = await ctx.runQuery(
+      internal.maya.attribution.clicksForPlacements,
+      { customerId: customer._id },
+    );
+
     return {
       ok: true,
       entries: rows.map((p) => ({
         ...toEntry(p),
         views: viewsOfPlacement(p),
+        // Present only when this post actually carried a tracked link.
+        clicks: clicks[String(p._id)],
         metricsAsOf: p.metricsAsOf,
       })),
     };

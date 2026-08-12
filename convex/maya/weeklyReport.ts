@@ -32,6 +32,7 @@ import { v } from "convex/values";
 import { internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { compareToNiche } from "./benchmarks";
+import { bioLinkUrl } from "./attribution";
 import { dayKeyInZone } from "./cadence";
 
 export interface WeeklyInput {
@@ -49,6 +50,11 @@ export interface WeeklyInput {
   strategy: { changed: boolean; detail: string };
   /** Signups we could attribute, and those we couldn't. */
   conversions: { total: number; traced: number };
+  /**
+   * The bio link to ask for, when they haven't been asked yet. Absent once
+   * asked — §14.45: "Ask once, then work with whatever they gave."
+   */
+  bioLink?: { url: string; channel: string };
 }
 
 /**
@@ -78,6 +84,22 @@ export interface WeeklyInput {
  * would systematically miss the tail — which is exactly the founder whose
  * results are compounding.
  */
+/**
+ * ⭐ §14.45 rung 1's ask — the bio link, with its reason attached.
+ *
+ * > *"You got 61 clicks this week. I can't see what happened after — drop this
+ * > one line on your site and I'll be able to tell you which posts actually
+ * > brought signups."*
+ *
+ * Same shape here: the value is demonstrated first, so this reads as a way to
+ * learn something rather than as a setup step. §14.45 — *"That converts far
+ * better than a setup step, because the value is already demonstrated. Ask
+ * once, then work with whatever they gave."*
+ */
+export function bioLinkAsk(url: string, channel: string): string {
+  return `One thing that would help me a lot: put this link in your ${channel} bio — ${url} — and I'll be able to tell you which posts are actually sending people, instead of guessing.`;
+}
+
 export function selfReportAsk(): string {
   // One sentence, no preamble, easy to answer with a number and nothing else.
   return "Roughly how many signups did you get this week? A rough number is fine — it's the only way I can tell whether any of this is landing.";
@@ -160,7 +182,15 @@ export function composeWeekly(input: WeeklyInput): string {
   if (input.strategy.detail) lines.push(input.strategy.detail);
 
   /**
-   * 6. ⭐ Rung 4. Last, because it is a question and the report should inform
+   * 6. ⭐ Rung 1's ask, once. Before the rung-4 question so the report ends on
+   * the thing that is easiest to answer.
+   */
+  if (input.bioLink) {
+    lines.push(bioLinkAsk(input.bioLink.url, input.bioLink.channel));
+  }
+
+  /**
+   * 7. ⭐ Rung 4. Last, because it is a question and the report should inform
    * before it asks — but always present, because §14.45 makes it the floor.
    */
   lines.push(selfReportAsk());
@@ -227,6 +257,41 @@ export const sendWeeklyReview = internalAction({
     });
     const latest = changelog[0];
 
+    /**
+     * ⭐ Rung 1, ensured here rather than at signup so EXISTING accounts get
+     * one too — this runs weekly per customer, so no account can go without.
+     *
+     * ⚠️ Asked once. §14.45: "Ask once, then work with whatever they gave." A
+     * weekly nag for a thing they've already declined is the noise §11 exists
+     * to prevent, so the ask rides only on the first report that has a link.
+     */
+    let bioLink: { url: string; channel: string } | undefined;
+    const primaryChannel = (
+      await ctx.runQuery(internal.maya.channels.forCustomer, {
+        customerId: args.customerId,
+      })
+    ).find((c: { status: string }) => c.status === "connected");
+
+    if (primaryChannel) {
+      const minted = await ctx.runMutation(
+        internal.maya.attribution.ensureBioLink,
+        { customerId: args.customerId, channel: primaryChannel.channel },
+      );
+      if (minted.ok && minted.token) {
+        const url = bioLinkUrl(process.env.APP_URL ?? "", minted.token);
+        // Only ask on the report where it was first minted — `alreadyAsked`
+        // is the previous week's message carrying the same link.
+        const asked = await ctx.runQuery(internal.maya.messages.recentHistory, {
+          customerId: args.customerId,
+          limit: 40,
+        });
+        const seen = asked.some((m: { body: string }) =>
+          m.body.includes(`/r/${minted.token}`),
+        );
+        if (url && !seen) bioLink = { url, channel: primaryChannel.channel };
+      }
+    }
+
     const weekAgo = now - 7 * 86_400_000;
     const recent = conversions.filter(
       (c: { occurredAt: number }) => c.occurredAt >= weekAgo,
@@ -248,6 +313,7 @@ export const sendWeeklyReview = internalAction({
         changed: Boolean(latest && latest.trigger !== "no_change"),
         detail: latest ? (latest.askedFor ?? latest.because) : "",
       },
+      bioLink,
       conversions: {
         total: recent.reduce(
           (sum: number, c: { count: number }) => sum + c.count,

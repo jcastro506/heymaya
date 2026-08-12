@@ -508,3 +508,264 @@ export const myResults = query({
     return { ok: true, total, traced, untraced: total - traced, windowDays };
   },
 });
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ §14.45 rung 1 — the bio link. "None — always on."
+ *
+ * ## Why a bio link and not a link in every post
+ *
+ * §16.3's own worked example names it:
+ *
+ * > *"the gap is the bio link — 310 people looked at your profile and 38
+ * > clicked. I'd rewrite the bio before making more videos."*
+ *
+ * And §14.2's L3 measures *"profile visits, link clicks"* — profile, then bio,
+ * then click. On TikTok and Instagram an in-post link is not clickable at all,
+ * so the bio is the ONLY bridge. Jamming a URL into every caption would also
+ * cost reach on the one channel where it does work, which trades the product's
+ * core job for a metric.
+ *
+ * ## ⚠️ The property that makes this rock solid: it NEVER changes
+ *
+ * The founder pastes this into their profile by hand — we have no bio-write
+ * API and the product never logs in as them (§5). So a token that rotates
+ * silently points every already-pasted bio at nothing, and the clicks simply
+ * stop with no error anywhere.
+ *
+ * Find-or-create, per customer per channel, forever. There is deliberately no
+ * "regenerate".
+ */
+export const ensureBioLink = internalMutation({
+  args: {
+    customerId: v.id("customers"),
+    channel: v.string(),
+    now: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ ok: boolean; token?: string; reason?: string }> => {
+    const customer = (await ctx.db.get(
+      args.customerId,
+    )) as Doc<"customers"> | null;
+    if (!customer) return { ok: false, reason: "no such account" };
+
+    /**
+     * ⚠️ Grounded or silent (§2.7). With no product URL there is nothing to
+     * point at, and a bio link to a placeholder is worse than none — the
+     * founder pastes it once and it is wrong forever.
+     */
+    let destination = "";
+    try {
+      const truth = JSON.parse(customer.productTruthJson ?? "{}") as {
+        url?: unknown;
+      };
+      if (typeof truth.url === "string") destination = truth.url;
+    } catch {
+      destination = "";
+    }
+    if (!/^https?:\/\/.+\..+/.test(destination)) {
+      return { ok: false, reason: "no product URL yet" };
+    }
+
+    const existing = (await ctx.db
+      .query("gtmLinkWraps")
+      .withIndex("by_account", (q) => q.eq("accountId", customer.accountId))
+      .collect()) as Doc<"gtmLinkWraps">[];
+
+    /**
+     * ⭐ The reuse check, and the whole point of this function. A bio wrap is
+     * identified by having no placement and `utmMedium: "bio"` — one per
+     * channel, returned unchanged for the life of the account.
+     */
+    const already = existing.find(
+      (w) =>
+        w.customerId === args.customerId &&
+        w.utmMedium === "bio" &&
+        w.platform === args.channel,
+    );
+    if (already) return { ok: true, token: already.token };
+
+    const taken = new Set(existing.map((w) => w.token));
+    let token = makeToken(Math.random);
+    for (let i = 0; i < 5 && taken.has(token); i += 1) {
+      token = makeToken(Math.random);
+    }
+    if (taken.has(token)) return { ok: false, reason: "couldn't mint a link" };
+
+    await ctx.db.insert("gtmLinkWraps", {
+      accountId: customer.accountId,
+      customerId: args.customerId,
+      // ⚠️ No placementId, deliberately — a bio link belongs to the PROFILE
+      // and outlives every individual post.
+      token,
+      destinationUrl: destination,
+      platform: args.channel,
+      utmSource: args.channel,
+      utmMedium: "bio",
+      utmCampaign: "maya",
+      createdAt: args.now ?? Date.now(),
+    });
+
+    return { ok: true, token };
+  },
+});
+
+/**
+ * The URL the founder actually pastes.
+ *
+ * ⚠️ Absolute, and built from `APP_URL` — a relative path in someone's
+ * Instagram bio is not a link. Returns null rather than a broken string when
+ * the base is unset, because a half-formed URL pasted into a profile is
+ * permanent damage.
+ */
+export function bioLinkUrl(appUrl: string, token: string): string | null {
+  const base = appUrl.replace(/\/+$/, "");
+  if (!/^https?:\/\//.test(base)) return null;
+  return `${base}/r/${token}`;
+}
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ Wrap the product link that a draft already contains — §14.45 rung 1,
+ * in-post.
+ *
+ * ## Why at draft time and not at publish
+ *
+ * `publish.ts` is explicit: *"The text we publish is the text that was
+ * approved. Re-generating or re-formatting here would break the snapshot
+ * guarantee — the founder said yes to a specific string."*
+ *
+ * ⚠️ So swapping a URL at publish would publish something they never read. The
+ * tracked link has to be in the text BEFORE they approve it, which means the
+ * wrap is minted here and bound to the placement afterwards.
+ *
+ * ## ⚠️ It never invents a link
+ *
+ * This only rewrites a product URL the draft already contains. Adding one
+ * would change what she wrote to serve our metrics — and on TikTok and
+ * Instagram an in-post link isn't even clickable, so it would be noise in the
+ * caption for nothing.
+ */
+export const wrapForDraft = internalMutation({
+  args: {
+    customerId: v.id("customers"),
+    draftId: v.id("drafts"),
+    destinationUrl: v.string(),
+    channel: v.string(),
+    now: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ ok: boolean; token?: string; reason?: string }> => {
+    const customer = (await ctx.db.get(
+      args.customerId,
+    )) as Doc<"customers"> | null;
+    if (!customer) return { ok: false, reason: "no such account" };
+
+    const existing = (await ctx.db
+      .query("gtmLinkWraps")
+      .withIndex("by_maya_draft", (q) => q.eq("mayaDraftId", args.draftId))
+      .collect()) as Doc<"gtmLinkWraps">[];
+    // One wrap per draft — a second would split the same post's clicks.
+    if (existing[0]) return { ok: true, token: existing[0].token };
+
+    const all = (await ctx.db
+      .query("gtmLinkWraps")
+      .withIndex("by_account", (q) => q.eq("accountId", customer.accountId))
+      .collect()) as Doc<"gtmLinkWraps">[];
+    const taken = new Set(all.map((w) => w.token));
+
+    let token = makeToken(Math.random);
+    for (let i = 0; i < 5 && taken.has(token); i += 1) {
+      token = makeToken(Math.random);
+    }
+    if (taken.has(token)) return { ok: false, reason: "couldn't mint a link" };
+
+    await ctx.db.insert("gtmLinkWraps", {
+      accountId: customer.accountId,
+      customerId: args.customerId,
+      mayaDraftId: args.draftId,
+      token,
+      destinationUrl: args.destinationUrl,
+      platform: args.channel,
+      utmSource: args.channel,
+      utmMedium: "social",
+      utmCampaign: "maya",
+      createdAt: args.now ?? Date.now(),
+    });
+
+    return { ok: true, token };
+  },
+});
+
+/**
+ * Bind a draft's wrap to the placement it became.
+ *
+ * ⚠️ Called immediately after `recordPlacement`. Clicks are counted through
+ * `by_link_wrap` rather than `placementId`, so a click landing in the
+ * milliseconds before this runs is still attributed — `recordClick` copies
+ * `placementId` off the wrap at click time, and one that arrived early would
+ * otherwise be orphaned forever.
+ */
+export const bindWrapToPlacement = internalMutation({
+  args: {
+    draftId: v.id("drafts"),
+    placementId: v.id("placements"),
+    customerId: v.id("customers"),
+  },
+  handler: async (ctx, args): Promise<{ bound: boolean }> => {
+    const wraps = (await ctx.db
+      .query("gtmLinkWraps")
+      .withIndex("by_maya_draft", (q) => q.eq("mayaDraftId", args.draftId))
+      .collect()) as Doc<"gtmLinkWraps">[];
+
+    let bound = false;
+    for (const wrap of wraps) {
+      // Cross-tenant guard, same as everywhere else a caller supplies an id.
+      if (wrap.customerId !== args.customerId) continue;
+      if (wrap.placementId) continue;
+      await ctx.db.patch(wrap._id, { placementId: args.placementId });
+      bound = true;
+    }
+    return { bound };
+  },
+});
+
+/**
+ * ⭐ Clicks for a placement, counted through its WRAP.
+ *
+ * Not through `gtmLinkClicks.placementId`: that field is stamped at click time
+ * from whatever the wrap knew then, so a click that beat the bind would be
+ * missing. The wrap is the stable identity.
+ */
+export const clicksForPlacements = internalQuery({
+  args: { customerId: v.id("customers") },
+  handler: async (ctx, args): Promise<Record<string, number>> => {
+    const customer = (await ctx.db.get(
+      args.customerId,
+    )) as Doc<"customers"> | null;
+    if (!customer) return {};
+
+    const wraps = (await ctx.db
+      .query("gtmLinkWraps")
+      .withIndex("by_account", (q) => q.eq("accountId", customer.accountId))
+      .collect()) as Doc<"gtmLinkWraps">[];
+
+    const out: Record<string, number> = {};
+    for (const wrap of wraps) {
+      if (wrap.customerId !== args.customerId || !wrap.placementId) continue;
+      const clicks = (await ctx.db
+        .query("gtmLinkClicks")
+        .withIndex("by_link_wrap", (q) => q.eq("linkWrapId", wrap._id))
+        .collect()) as Doc<"gtmLinkClicks">[];
+      const key = String(wrap.placementId);
+      out[key] = (out[key] ?? 0) + clicks.length;
+    }
+    return out;
+  },
+});

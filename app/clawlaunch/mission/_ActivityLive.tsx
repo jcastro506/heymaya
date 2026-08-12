@@ -89,6 +89,17 @@ export function ActivityLive() {
                     <span className="text-paper-faint">{e.linkNote}</span>
                   )}
 
+                  {/* ⭐ Clicks on this post's tracked link. Shown only when
+                      the post carried one — "no link" and "nobody clicked"
+                      are different facts, and collapsing them would credit a
+                      link-free post with a zero it never earned. */}
+                  {e.clicks !== undefined && (
+                    <span className="text-emerald-300">
+                      {e.clicks.toLocaleString()}{" "}
+                      {e.clicks === 1 ? "click" : "clicks"}
+                    </span>
+                  )}
+
                   {/* §16.4 — a number with no age eventually lies. "Not
                       measured yet" and "zero views" are different claims. */}
                   {e.metricsAsOf ? (
