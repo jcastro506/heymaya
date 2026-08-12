@@ -254,6 +254,40 @@ export const forCustomer = internalQuery({
 });
 
 /**
+ * The customer's vendor-side tenant id. Its own query so the action can read
+ * it without a db handle.
+ */
+export const profileIdFor = internalQuery({
+  args: { customerId: v.id("customers") },
+  handler: async (ctx, args): Promise<string | null> => {
+    const customer = (await ctx.db.get(
+      args.customerId,
+    )) as Doc<"customers"> | null;
+    return customer?.zernioProfileId ?? null;
+  },
+});
+
+export const setProfileId = internalMutation({
+  args: { customerId: v.id("customers"), zernioProfileId: v.string() },
+  handler: async (ctx, args): Promise<null> => {
+    const customer = (await ctx.db.get(
+      args.customerId,
+    )) as Doc<"customers"> | null;
+    /**
+     * ⚠️ Never reassigned. A customer whose profile id changed would orphan
+     * every channel row pointing at the old one, and the next sync would find
+     * nothing while the founder's accounts still exist at the vendor.
+     */
+    if (!customer || customer.zernioProfileId) return null;
+    await ctx.db.patch(args.customerId, {
+      zernioProfileId: args.zernioProfileId,
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+/**
  * Ask Zernio what's connected, and make the rows match.
  *
  * Returns what it found so the caller — or a human running it by hand — sees
@@ -269,11 +303,39 @@ export const syncChannels = internalAction({
     if (!apiKey)
       return { ok: false, error: "Zernio isn't configured", channels: [] };
 
+    /**
+     * ⚠️ THE TENANT BOUNDARY. One Zernio API key covers the whole fleet, so an
+     * unfiltered `GET /api/v1/accounts` returns EVERY customer's accounts —
+     * and the loop below attaches whatever comes back to `args.customerId`.
+     *
+     * Until 2026-08-11 this call carried no `profileId`. With a single
+     * customer that is invisible; with two, customer B's Instagram becomes
+     * customer A's channel row and she posts to a stranger's account.
+     *
+     * Fails CLOSED when the customer has no profile yet — an empty channel
+     * list is recoverable, inheriting the fleet's accounts is not.
+     */
+    const profileId = await ctx.runQuery(internal.maya.channels.profileIdFor, {
+      customerId: args.customerId,
+    });
+    if (!profileId) return { ok: true, channels: [] };
+
     const { ZernioClient } = await import("../integrations/zernio/client");
     let raw: unknown;
     try {
+      /**
+       * ⚠️ The raw request, NOT the `listAccounts` helper, and deliberately.
+       *
+       * `AccountsListResponseSchema` declares `accounts: z.array(...).default([])`,
+       * so ANY object without an `accounts` key parses successfully as zero
+       * accounts. Routing through it turns a vendor contract change into
+       * "nothing is connected" — and the loop below would then mark every one
+       * of the founder's channels as gone. That is precisely what the strict
+       * check further down exists to prevent, so this keeps its own parsing.
+       */
       raw = await new ZernioClient({ apiKey }).request<unknown>(
         "/api/v1/accounts",
+        { method: "GET", query: { profileId } },
       );
     } catch (error) {
       return {
