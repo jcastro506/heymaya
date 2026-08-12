@@ -18,6 +18,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "convex/react";
+import { TodayLive } from "./_TodayLive";
 import { api } from "@/convex/_generated/api";
 import {
   Chip,
@@ -51,7 +52,11 @@ function useWallClock(): string | null {
     const fmt = () => {
       const d = new Date();
       const day = d
-        .toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+        .toLocaleDateString("en-US", {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+        })
         .toUpperCase()
         .replace(/,/g, "");
       setS(`${day} · ${clock(d.getTime())}`);
@@ -89,8 +94,13 @@ export default function TodayPage() {
   const connected = useQuery(api.gtmMaya.zernioConnect.getMyConnectedAccounts);
   const events = useQuery(api.gtmMaya.calendarWrite.getMyCalendarEvents);
   const planDoc = useQuery(api.gtmMaya.planDoc.getMyPlanDoc);
-  const activity = useQuery(api.gtmMaya.missionControl.getMyAgentActivity, { limit: 5 });
-  const postResults = useQuery(api.gtmMaya.postResults.getMyRecentPostResults, {});
+  const activity = useQuery(api.gtmMaya.missionControl.getMyAgentActivity, {
+    limit: 5,
+  });
+  const postResults = useQuery(
+    api.gtmMaya.postResults.getMyRecentPostResults,
+    {},
+  );
 
   const when = useWallClock();
   const todayStart = startOfTodayMs();
@@ -104,10 +114,10 @@ export default function TodayPage() {
           (e) =>
             e.startsAtMs >= todayStart &&
             e.startsAtMs < tomorrowStart &&
-            e.status !== "cancelled"
+            e.status !== "cancelled",
         )
         .sort((a, b) => a.startsAtMs - b.startsAtMs),
-    [events, todayStart, tomorrowStart]
+    [events, todayStart, tomorrowStart],
   );
 
   if (snapshot === undefined || drafts === undefined || events === undefined)
@@ -120,20 +130,26 @@ export default function TodayPage() {
       (d) =>
         d.approvalState === "pending_approval" ||
         d.approvalState === "draft" ||
-        d.approvalState === "needs_revision"
+        d.approvalState === "needs_revision",
     )
     .sort((a, b) => {
       const rank = (s: string) =>
         s === "pending_approval" ? 0 : s === "needs_revision" ? 1 : 2;
-      return rank(a.approvalState) - rank(b.approvalState) || b.createdAt - a.createdAt;
+      return (
+        rank(a.approvalState) - rank(b.approvalState) ||
+        b.createdAt - a.createdAt
+      );
     });
   const broken = (health ?? []).filter(
-    (h) => h.status === "reconnect_required" || h.status === "error"
+    (h) => h.status === "reconnect_required" || h.status === "error",
   );
   const planAwaiting = planDoc?.plan?.status === "proposed";
   const noChannels = connected !== undefined && (connected ?? []).length === 0;
   const needsYouCount =
-    decidable.length + broken.length + (planAwaiting ? 1 : 0) + (noChannels ? 1 : 0);
+    decidable.length +
+    broken.length +
+    (planAwaiting ? 1 : 0) +
+    (noChannels ? 1 : 0);
 
   // ── The day she's running ───────────────────────────────────────────────
   const cronBlocks: Array<{ hour: number; what: string; sub: string }> = [
@@ -180,17 +196,23 @@ export default function TodayPage() {
   // ── Pulse ───────────────────────────────────────────────────────────────
   const postsOutToday = (drafts ?? []).filter(
     (d) =>
-      d.approvalState === "published" && (d.publishedAt ?? d.updatedAt) >= todayStart
+      d.approvalState === "published" &&
+      (d.publishedAt ?? d.updatedAt) >= todayStart,
   ).length;
   const gainingSpeed = new Set(
     (postResults ?? [])
       .filter((p) => p.snapshotAtMs >= todayStart && p.surfacedToOperator)
-      .map((p) => String(p.draftId))
+      .map((p) => String(p.draftId)),
   ).size;
   const ticker = (activity ?? []).slice(0, 3);
 
   return (
     <Shell title="Today" when={when}>
+      {/* ⭐ The live module's Today. Renders only for a v2 customer; a
+          gtm-only account sees exactly what it saw before. Placed first
+          because for the accounts that have it, it is the only block on this
+          page reading what she actually did. */}
+      <TodayLive />
       <div className="mc-grid mc-today-grid">
         {/* ── Needs you ─────────────────────────────────────────────────── */}
         <Rise className="mc-a-needs">
@@ -231,7 +253,8 @@ export default function TodayPage() {
                   <div key={h._id} className="mc-action">
                     <div className="mc-action-src">
                       <Chip platform={h.provider}>
-                        {h.provider === "x" ? "X" : h.provider} · needs a reconnect
+                        {h.provider === "x" ? "X" : h.provider} · needs a
+                        reconnect
                       </Chip>
                     </div>
                     {h.failureReason ? (
@@ -264,7 +287,12 @@ export default function TodayPage() {
                 <div className="k">posts out today</div>
               </div>
               <div className="mc-ptile">
-                <div className="v" style={gainingSpeed > 0 ? { color: "var(--mc-good)" } : undefined}>
+                <div
+                  className="v"
+                  style={
+                    gainingSpeed > 0 ? { color: "var(--mc-good)" } : undefined
+                  }
+                >
                   {gainingSpeed}
                 </div>
                 <div className="k">gaining speed</div>
@@ -273,7 +301,9 @@ export default function TodayPage() {
             <div className="mc-nextblock">
               <span className="k">next work block</span>
               <span className="v">
-                {nextSlot ? `${nextSlot.what} · ${nextSlot.time}` : "tomorrow · 7:00 AM"}
+                {nextSlot
+                  ? `${nextSlot.what} · ${nextSlot.time}`
+                  : "tomorrow · 7:00 AM"}
               </span>
             </div>
             {ticker.length > 0 ? (
@@ -294,7 +324,10 @@ export default function TodayPage() {
           <Panel title="The day she's running">
             <div className="mc-timeline">
               {slots.map((s) => (
-                <div key={s.key} className={`mc-tl-slot ${s.state === "now" ? "now" : s.state === "done" ? "done" : ""}`}>
+                <div
+                  key={s.key}
+                  className={`mc-tl-slot ${s.state === "now" ? "now" : s.state === "done" ? "done" : ""}`}
+                >
                   <div className="mc-tl-time">{s.time}</div>
                   <div className="mc-tl-what">{s.what}</div>
                   {s.sub ? <div className="mc-tl-sub">{s.sub}</div> : null}

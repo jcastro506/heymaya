@@ -36,6 +36,11 @@ import { internal } from "../_generated/api";
 import { compareToNiche } from "./benchmarks";
 import type { Doc } from "../_generated/dataModel";
 
+/** "1 post" / "2 posts" — she writes like a person, including the counting. */
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+
 export type Rung = "L0" | "L1" | "L2" | "L3" | "L4" | "healthy" | "unknown";
 
 /**
@@ -74,7 +79,12 @@ function metricsOf(p: Doc<"placements">): {
       // Every channel names these differently; sum what's present rather than
       // insisting on one vocabulary.
       engagements:
-        n("likes") + n("comments") + n("replies") + n("shares") + n("reposts") + n("saves"),
+        n("likes") +
+        n("comments") +
+        n("replies") +
+        n("shares") +
+        n("reposts") +
+        n("saves"),
     };
   } catch {
     return null;
@@ -113,12 +123,12 @@ export const diagnose = internalQuery({
 export function diagnoseFrom(
   rows: Doc<"placements">[],
   now: number,
-  sinceDays: number
+  sinceDays: number,
 ): LadderVerdict {
   {
     const since = now - sinceDays * 86_400_000;
     const window = rows.filter(
-      (p) => p.publishedAt >= since && p.linkStatus === "live"
+      (p) => p.publishedAt >= since && p.linkStatus === "live",
     );
 
     /**
@@ -131,7 +141,8 @@ export function diagnoseFrom(
     if (window.length === 0) {
       return {
         rung: "L0",
-        detail: "nothing went live in that window — that's on me, not on the content",
+        detail:
+          "nothing went live in that window — that's on me, not on the content",
         placements: 0,
         views: 0,
         engagements: 0,
@@ -161,7 +172,13 @@ export function diagnoseFrom(
     if (views < SEEN_FLOOR) {
       return {
         rung: "L1",
-        detail: `${window.length} posts and ${views} views — almost nobody saw them, so this is a format problem, not a topic one`,
+        /**
+         * ⚠️ Pluralised. This sentence is the first thing a founder reads on
+         * the home screen, and "1 posts and 1 views" reads as a machine
+         * talking — which is the one impression §11 spends the whole product
+         * avoiding. Seen live on the dogfood account.
+         */
+        detail: `${plural(window.length, "post")} and ${plural(views, "view")} — almost nobody saw them, so this is a format problem, not a topic one`,
         placements: window.length,
         views,
         engagements,
@@ -222,7 +239,7 @@ export const diagnoseBenchmarked = internalQuery({
   },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<{
     verdict: LadderVerdict;
     benchmark: {
@@ -254,7 +271,8 @@ export const diagnoseBenchmarked = internalQuery({
     const channel = args.channel ?? scoped[0]?.channel;
     const match = channel
       ? set.channels.find(
-          (c: { channel: string; usable: boolean }) => c.channel === channel && c.usable
+          (c: { channel: string; usable: boolean }) =>
+            c.channel === channel && c.usable,
         )
       : undefined;
 
@@ -276,7 +294,8 @@ export const diagnoseBenchmarked = internalQuery({
      * Own views per placement, so the comparison is like-for-like: the niche
      * median is one post's views, not a week's total.
      */
-    const perPost = verdict.placements > 0 ? verdict.views / verdict.placements : 0;
+    const perPost =
+      verdict.placements > 0 ? verdict.views / verdict.placements : 0;
     const cmp = compareToNiche(perPost, match.medianViews);
 
     return {
