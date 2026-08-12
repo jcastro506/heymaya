@@ -20,7 +20,7 @@ export default defineSchema({
       v.literal("whatsapp"),
       v.literal("sms"),
       v.literal("telegram"),
-      v.literal("web")
+      v.literal("web"),
     ),
     timezone: v.string(),
     status: v.union(
@@ -30,12 +30,9 @@ export default defineSchema({
       v.literal("churned"),
       // Mission Control account-delete = reversible soft-delete (set here).
       // Hard purge of all rows is a follow-up background job.
-      v.literal("deleted")
+      v.literal("deleted"),
     ),
-    plan: v.union(
-      v.literal("coach"),
-      v.literal("manager")
-    ),
+    plan: v.union(v.literal("coach"), v.literal("manager")),
     trialEndsAt: v.optional(v.number()),
     mayaFlyAppId: v.optional(v.string()),
     mayaConfigVersion: v.optional(v.number()),
@@ -67,8 +64,8 @@ export default defineSchema({
       v.union(
         v.literal("supportive"),
         v.literal("strategic"),
-        v.literal("tough-love")
-      )
+        v.literal("tough-love"),
+      ),
     ),
     // ─── Sprint 6B (Stripe billing) — added 2026-04-26 ─────────────────────
     // Stripe identifiers + subscription lifecycle state. All optional so
@@ -83,7 +80,7 @@ export default defineSchema({
     /** Unix-ms — end of the current paid (or trial) billing period. */
     currentPlanPeriodEnd: v.optional(v.number()),
     billingInterval: v.optional(
-      v.union(v.literal("monthly"), v.literal("annual"))
+      v.union(v.literal("monthly"), v.literal("annual")),
     ),
     // ─── end Sprint 6B ─────────────────────────────────────────────────────
     // ─── Service product Sprint 0 (heymaya/service-v0) — added 2026-04-27 ─
@@ -106,8 +103,8 @@ export default defineSchema({
         v.literal("creator"),
         v.literal("service-business"),
         v.literal("growth-agent"),
-        v.literal("gtm-agent")
-      )
+        v.literal("gtm-agent"),
+      ),
     ),
     /** Pointer to the operator's business row. Only set when accountType = "service-business". */
     businessId: v.optional(v.id("businesses")),
@@ -190,8 +187,8 @@ export default defineSchema({
             v.union(
               v.literal("supportive"),
               v.literal("strategic"),
-              v.literal("tough-love")
-            )
+              v.literal("tough-love"),
+            ),
           ),
           brandDealFloorUsd: v.optional(v.number()),
           careerStage: v.optional(
@@ -199,8 +196,8 @@ export default defineSchema({
               v.literal("just-starting"),
               v.literal("building"),
               v.literal("monetizing"),
-              v.literal("scaling")
-            )
+              v.literal("scaling"),
+            ),
           ),
           location: v.optional(
             v.object({
@@ -208,7 +205,7 @@ export default defineSchema({
               state: v.optional(v.string()),
               country: v.optional(v.string()),
               timezone: v.optional(v.string()),
-            })
+            }),
           ),
           monthlyRevenueUsd: v.optional(v.number()),
           revenueStreams: v.optional(
@@ -223,15 +220,15 @@ export default defineSchema({
                 v.literal("email-list"),
                 v.literal("live-events"),
                 v.literal("consulting"),
-                v.literal("other")
-              )
-            )
+                v.literal("other"),
+              ),
+            ),
           ),
           longTermGoals: v.optional(
             v.object({
               oneYear: v.optional(v.string()),
               fiveYear: v.optional(v.string()),
-            })
+            }),
           ),
           // ─── Wave 2 (dynamic onboarding + smartAlternatives) — added 2026-04-26 ───
           // Stage-tiered Q's. All optional — different stage paths surface
@@ -251,9 +248,9 @@ export default defineSchema({
                 v.literal("build-community"),
                 v.literal("monetize-existing-audience"),
                 v.literal("personal-brand-for-career"),
-                v.literal("creative-outlet")
-              )
-            )
+                v.literal("creative-outlet"),
+              ),
+            ),
           ),
           biggestBlockers: v.optional(
             v.array(
@@ -266,9 +263,9 @@ export default defineSchema({
                 v.literal("no-time"),
                 v.literal("brand-deals-not-coming"),
                 v.literal("unclear-niche"),
-                v.literal("burnout")
-              )
-            )
+                v.literal("burnout"),
+              ),
+            ),
           ),
           ninetyDayPriority: v.optional(
             v.union(
@@ -280,16 +277,16 @@ export default defineSchema({
               v.literal("build-community"),
               v.literal("monetize-existing-audience"),
               v.literal("personal-brand-for-career"),
-              v.literal("creative-outlet")
-            )
+              v.literal("creative-outlet"),
+            ),
           ),
           howSerious: v.optional(
             v.union(
               v.literal("hobby"),
               v.literal("side-hustle"),
               v.literal("transitioning-full-time"),
-              v.literal("already-full-time")
-            )
+              v.literal("already-full-time"),
+            ),
           ),
           /** Free-form list of brand categories the creator wants to work with. */
           brandTypes: v.optional(v.array(v.string())),
@@ -304,9 +301,9 @@ export default defineSchema({
                 v.literal("focus-monetization-shift"),
                 v.literal("scale-down-deal-volume"),
                 v.literal("raise-rates"),
-                v.literal("less-content-more-strategy")
-              )
-            )
+                v.literal("less-content-more-strategy"),
+              ),
+            ),
           ),
           deprioritizingPlatforms: v.optional(
             v.array(
@@ -315,22 +312,22 @@ export default defineSchema({
                 v.literal("instagram"),
                 v.literal("youtube"),
                 v.literal("linkedin"),
-                v.literal("x")
-              )
-            )
+                v.literal("x"),
+              ),
+            ),
           ),
           hiringReadiness: v.optional(
             v.union(
               v.literal("not-yet"),
               v.literal("considering"),
               v.literal("actively-looking"),
-              v.literal("already-hired")
-            )
+              v.literal("already-hired"),
+            ),
           ),
           // ─── end Wave 2 ──────────────────────────────────────────────────
         }),
         updatedAt: v.number(),
-      })
+      }),
     ),
   })
     .index("by_clerk_user", ["clerkUserId"])
@@ -345,7 +342,7 @@ export default defineSchema({
       v.literal("apollo"),
       v.literal("hunter"),
       v.literal("linkedin"),
-      v.literal("twitter")
+      v.literal("twitter"),
     ),
     /** Encrypted (AES-256-GCM, random IV) — see convex/lib/encryption.ts. */
     composioAccountId: v.string(),
@@ -362,7 +359,7 @@ export default defineSchema({
     scopeStatus: v.union(
       v.literal("active"),
       v.literal("revoked"),
-      v.literal("expired")
+      v.literal("expired"),
     ),
     autoSendThreshold: v.optional(v.number()),
     connectedAt: v.number(),
@@ -379,7 +376,7 @@ export default defineSchema({
       v.literal("none"),
       v.literal("low"),
       v.literal("medium"),
-      v.literal("high")
+      v.literal("high"),
     ),
     inputTokens: v.number(),
     outputTokens: v.number(),
@@ -416,7 +413,7 @@ export default defineSchema({
       v.literal("tiktok"),
       v.literal("instagram"),
       v.literal("youtube"),
-      v.literal("linkedin")
+      v.literal("linkedin"),
     ),
     topic: v.optional(v.string()),
     signals: v.array(
@@ -424,7 +421,7 @@ export default defineSchema({
         signal: v.string(),
         evidence: v.string(),
         dateLearned: v.string(),
-      })
+      }),
     ),
     whatsHotNow: v.string(),
     whatsCoolingOff: v.string(),
@@ -468,7 +465,7 @@ export default defineSchema({
       v.literal("requested"),
       v.literal("confirmed"),
       v.literal("cancelled"),
-      v.literal("expired")
+      v.literal("expired"),
     ),
     requestedAt: v.number(),
     expiresAt: v.number(),
@@ -500,7 +497,7 @@ export default defineSchema({
       v.literal("processed"),
       v.literal("replay_dropped"),
       v.literal("errored"),
-      v.literal("skipped")
+      v.literal("skipped"),
     ),
     detail: v.optional(v.string()),
     customerId: v.optional(v.string()),
@@ -547,7 +544,7 @@ export default defineSchema({
   // nested catalog field which Convex doesn't support directly — replaced
   // with by_business_and_received_at-based filtering at read time + a
   // separate by_service_job index for CRM-linkage lookups).
-// ────────────────────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────
   // ─── Service product Sprint 1 (Zernio integration) — added 2026-04-27 ──
   //
   // Zernio (formerly Late, getlate.dev) is the v0 routing layer for ALL
@@ -653,7 +650,7 @@ export default defineSchema({
       v.literal("reaction_received"),
       v.literal("explicit_feedback"),
       v.literal("action_taken"),
-      v.literal("action_ignored")
+      v.literal("action_ignored"),
     ),
     /**
      * Skill/program/behavior label, e.g. "morning_brief",
@@ -758,13 +755,13 @@ export default defineSchema({
       v.literal("connect-channel"),
       v.literal("researching"),
       v.literal("plan-review"),
-      v.literal("active")
+      v.literal("active"),
     ),
     channelPreference: v.union(
       v.literal("whatsapp"),
       v.literal("imessage"),
       v.literal("web"),
-      v.literal("telegram")
+      v.literal("telegram"),
     ),
     timezone: v.string(),
     // Verification/test-only flag. When true, the generated workspace carries a
@@ -938,8 +935,8 @@ export default defineSchema({
       v.union(
         v.literal("confirm_each"),
         v.literal("confirm_first_week"),
-        v.literal("autonomous")
-      )
+        v.literal("autonomous"),
+      ),
     ),
     autonomousSince: v.optional(v.number()),
     confirmedPostCount: v.optional(v.number()),
@@ -1014,8 +1011,8 @@ export default defineSchema({
         v.literal("fresh"),
         v.literal("researching"),
         v.literal("plan_ready"),
-        v.literal("active")
-      )
+        v.literal("active"),
+      ),
     ),
     // Unix-ms the synthesis plan was GENERATED (the agent composed it and the
     // send_update handler claimed/cached it). This — NOT delivery — is the
@@ -1107,8 +1104,8 @@ export default defineSchema({
     accountId: v.id("creators"),
     provider: v.literal("google"),
     externalAccountId: v.optional(v.string()),
-    oauthAccessToken: v.optional(v.string()),   // encrypted base64(iv||ciphertext+tag)
-    oauthRefreshToken: v.optional(v.string()),  // encrypted
+    oauthAccessToken: v.optional(v.string()), // encrypted base64(iv||ciphertext+tag)
+    oauthRefreshToken: v.optional(v.string()), // encrypted
     oauthExpiresAt: v.optional(v.number()),
     oauthTokenType: v.optional(v.string()),
     oauthScope: v.optional(v.string()),
@@ -1119,10 +1116,9 @@ export default defineSchema({
     status: v.union(
       v.literal("active"),
       v.literal("revoked"),
-      v.literal("expired")
+      v.literal("expired"),
     ),
-  })
-    .index("by_account", ["accountId"]),
+  }).index("by_account", ["accountId"]),
 
   // Sprint 9 — Maya-owned calendar events written by /lc_gtm/
   // calendar_proposal. Tagged with createdBy="maya" so updates/deletes
@@ -1156,8 +1152,8 @@ export default defineSchema({
         v.literal("hard_launch_anchor"),
         v.literal("reply_window"),
         v.literal("weekly_review"),
-        v.literal("first_50_dms")
-      )
+        v.literal("first_50_dms"),
+      ),
     ),
     status: v.union(
       v.literal("draft"),
@@ -1173,7 +1169,7 @@ export default defineSchema({
       v.literal("posting"),
       v.literal("published"),
       v.literal("failed"),
-      v.literal("needs_confirm")
+      v.literal("needs_confirm"),
     ),
     createdBy: v.literal("maya"),
     // ─── Evidence-vault fields — additive, optional for back-compat ─────
@@ -1226,7 +1222,7 @@ export default defineSchema({
       v.literal("research_complete"),
       v.literal("weekly_review"),
       v.literal("operator_manual"),
-      v.literal("memory_append")
+      v.literal("memory_append"),
     ),
     sourceResearchJobId: v.optional(v.id("gtmResearchJobs")),
     /** Newline-delimited list of file paths that changed (e.g. "APP.md"). */
@@ -1322,7 +1318,7 @@ export default defineSchema({
       v.literal("save_steering_directive"),
       // Real-time operator Phase-3 — discovery-pulse channel watermark advance
       // idempotency lane (the advance_watermark tool POSTs with this kind).
-      v.literal("advance_watermark")
+      v.literal("advance_watermark"),
     ),
     idempotencyKey: v.string(),
     receivedAt: v.number(),
@@ -1364,14 +1360,14 @@ export default defineSchema({
       v.literal("idea"),
       v.literal("live-beta"),
       v.literal("paid"),
-      v.literal("unknown")
+      v.literal("unknown"),
     ),
     weekGoal: v.union(
       v.literal("feedback"),
       v.literal("signups"),
       v.literal("demos"),
       v.literal("revenue"),
-      v.literal("unknown")
+      v.literal("unknown"),
     ),
     // Ground-truth traction band — keys Maya's stage-adaptive strategy
     // (pre-launch earns authority first; traction pushes the product).
@@ -1382,8 +1378,8 @@ export default defineSchema({
         v.literal("1-100"),
         v.literal("100-1k"),
         v.literal("1k+"),
-        v.literal("unknown")
-      )
+        v.literal("unknown"),
+      ),
     ),
     canRecordScreen: v.boolean(),
     canShowFace: v.boolean(),
@@ -1403,8 +1399,8 @@ export default defineSchema({
         v.literal("new_needs_warmup"),
         v.literal("warming"),
         v.literal("ready"),
-        v.literal("restricted")
-      )
+        v.literal("restricted"),
+      ),
     ),
     tiktokAccountAgeDays: v.optional(v.number()),
     tiktokAccountStatusChecked: v.optional(v.boolean()),
@@ -1417,9 +1413,7 @@ export default defineSchema({
     // launch theater, ingest existing accounts, open straight into the
     // ongoing daily engine. Optional for back-compat; resolved at onboarding
     // from `stage` + whether ingested accounts show real audience/history.
-    entryMode: v.optional(
-      v.union(v.literal("launch"), v.literal("manager"))
-    ),
+    entryMode: v.optional(v.union(v.literal("launch"), v.literal("manager"))),
     // Sprint B — North Star contract. The one tracked outcome, adaptive to
     // entryMode (launch: "100 signups by Day 30"; manager: a growth/cadence
     // target). Maya proposes it at synthesis; operator approves. Metric is a
@@ -1467,7 +1461,7 @@ export default defineSchema({
         version: v.string(),
         modelUsed: v.string(),
         createdAt: v.number(),
-      })
+      }),
     ),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1489,7 +1483,7 @@ export default defineSchema({
       v.literal("needs_more_evidence"),
       v.literal("ready_for_review"),
       v.literal("failed"),
-      v.literal("cancelled")
+      v.literal("cancelled"),
     ),
     phase: v.union(
       v.literal("app_inspection"),
@@ -1497,7 +1491,7 @@ export default defineSchema({
       v.literal("channel_research"),
       v.literal("strategy_judge"),
       v.literal("calendar_build"),
-      v.literal("complete")
+      v.literal("complete"),
     ),
     budgetUsd: v.number(),
     spentUsd: v.number(),
@@ -1512,8 +1506,8 @@ export default defineSchema({
       v.union(
         v.literal("proposed"),
         v.literal("approved"),
-        v.literal("iterating")
-      )
+        v.literal("iterating"),
+      ),
     ),
     // Sprint 16 — Maya posts /lc_gtm/research_callback with a per-phase
     // note. Surfaced in mission board so the operator can see what Maya
@@ -1557,7 +1551,7 @@ export default defineSchema({
         commentMiner: v.optional(v.number()),
         channelJudge: v.optional(v.number()),
         formatIntel: v.optional(v.number()),
-      })
+      }),
     ),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1577,7 +1571,7 @@ export default defineSchema({
       v.literal("queued"),
       v.literal("analyzing"),
       v.literal("succeeded"),
-      v.literal("failed")
+      v.literal("failed"),
     ),
     diagnosis: v.optional(v.any()),
     failureReason: v.optional(v.string()),
@@ -1601,7 +1595,7 @@ export default defineSchema({
       v.literal("tiktok"),
       v.literal("instagram"),
       v.literal("youtube"),
-      v.literal("competitor")
+      v.literal("competitor"),
     ),
     url: v.string(),
     title: v.optional(v.string()),
@@ -1612,7 +1606,7 @@ export default defineSchema({
       v.literal("fresh"),
       v.literal("recent"),
       v.literal("old"),
-      v.literal("unknown")
+      v.literal("unknown"),
     ),
     engagement: v.optional(
       v.object({
@@ -1620,7 +1614,7 @@ export default defineSchema({
         comments: v.optional(v.number()),
         shares: v.optional(v.number()),
         views: v.optional(v.number()),
-      })
+      }),
     ),
     painMatch: v.number(),
     buyerMatch: v.number(),
@@ -1647,25 +1641,25 @@ export default defineSchema({
             author: v.string(),
             stance: v.string(),
             buyerQuality: v.number(),
-          })
+          }),
         ),
         // One-paragraph summary of the conversation shape
         summary: v.string(),
         commentCount: v.number(),
-      })
+      }),
     ),
     promotionRisk: v.union(
       v.literal("low"),
       v.literal("medium"),
       v.literal("high"),
-      v.literal("unknown")
+      v.literal("unknown"),
     ),
     recommendedUse: v.union(
       v.literal("strategy"),
       v.literal("reply"),
       v.literal("content_format"),
       v.literal("avoid"),
-      v.literal("competitor")
+      v.literal("competitor"),
     ),
     extractedClaims: v.array(v.string()),
     rawRef: v.optional(v.string()),
@@ -1682,19 +1676,15 @@ export default defineSchema({
     // Semantic freshness for vault reads (distinct from the existing
     // bucketed `recency` enum which includes "unknown").
     freshnessStatus: v.optional(
-      v.union(
-        v.literal("fresh"),
-        v.literal("recent"),
-        v.literal("stale")
-      )
+      v.union(v.literal("fresh"), v.literal("recent"), v.literal("stale")),
     ),
     // Cross-job memory — did a prior job keep, reject, or supersede this card?
     previousVerdict: v.optional(
       v.union(
         v.literal("kept"),
         v.literal("rejected"),
-        v.literal("superseded")
-      )
+        v.literal("superseded"),
+      ),
     ),
     // ─── end evidence-vault fields ──────────────────────────────────────
     createdAt: v.number(),
@@ -1703,7 +1693,11 @@ export default defineSchema({
     .index("by_research_job", ["researchJobId"])
     .index("by_account_and_source", ["accountId", "source"])
     .index("by_account_and_use", ["accountId", "recommendedUse"])
-    .index("by_account_platform_canonicalUrl", ["accountId", "source", "canonicalUrl"]),
+    .index("by_account_platform_canonicalUrl", [
+      "accountId",
+      "source",
+      "canonicalUrl",
+    ]),
 
   // Evidence-vault sibling — synthesized buyer-segment summaries derived
   // from a research job's evidence cards. One row per (researchJob, segment).
@@ -1729,7 +1723,7 @@ export default defineSchema({
       v.literal("instagram"),
       v.literal("x"),
       v.literal("reddit"),
-      v.literal("linkedin")
+      v.literal("linkedin"),
     ),
     version: v.number(),
     whatWorksNow: v.array(v.string()),
@@ -1747,7 +1741,7 @@ export default defineSchema({
     confidence: v.union(
       v.literal("low"),
       v.literal("medium"),
-      v.literal("high")
+      v.literal("high"),
     ),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1762,7 +1756,7 @@ export default defineSchema({
       v.literal("instagram"),
       v.literal("x"),
       v.literal("reddit"),
-      v.literal("linkedin")
+      v.literal("linkedin"),
     ),
     claimType: v.union(
       v.literal("what_works_now"),
@@ -1772,7 +1766,7 @@ export default defineSchema({
       v.literal("api_access"),
       v.literal("policy_risk"),
       v.literal("measurement_model"),
-      v.literal("avoid_for")
+      v.literal("avoid_for"),
     ),
     claim: v.string(),
     sourceKind: v.union(
@@ -1780,7 +1774,7 @@ export default defineSchema({
       v.literal("scrapecreators"),
       v.literal("web_search"),
       v.literal("user_account"),
-      v.literal("third_party_analysis")
+      v.literal("third_party_analysis"),
     ),
     sourceUrl: v.string(),
     retrievedAt: v.number(),
@@ -1789,7 +1783,7 @@ export default defineSchema({
     confidence: v.union(
       v.literal("low"),
       v.literal("medium"),
-      v.literal("high")
+      v.literal("high"),
     ),
     createdAt: v.number(),
   })
@@ -1804,20 +1798,20 @@ export default defineSchema({
         v.literal("instagram"),
         v.literal("x"),
         v.literal("reddit"),
-        v.literal("linkedin")
-      )
+        v.literal("linkedin"),
+      ),
     ),
     cadence: v.union(
       v.literal("onboarding"),
       v.literal("weekly"),
-      v.literal("monthly")
+      v.literal("monthly"),
     ),
     status: v.union(
       v.literal("queued"),
       v.literal("running"),
       v.literal("succeeded"),
       v.literal("failed"),
-      v.literal("cancelled")
+      v.literal("cancelled"),
     ),
     sourceBudgetUsd: v.number(),
     scrapeCreatorsCreditBudget: v.number(),
@@ -1850,19 +1844,19 @@ export default defineSchema({
       v.literal("tiktok"),
       v.literal("instagram"),
       v.literal("youtube"),
-      v.literal("product_hunt")
+      v.literal("product_hunt"),
     ),
     score: v.number(),
     decision: v.union(
       v.literal("primary"),
       v.literal("secondary"),
       v.literal("parked"),
-      v.literal("blocked")
+      v.literal("blocked"),
     ),
     confidence: v.union(
       v.literal("low"),
       v.literal("medium"),
-      v.literal("high")
+      v.literal("high"),
     ),
     reasons: v.array(v.string()),
     risks: v.array(v.string()),
@@ -1904,13 +1898,13 @@ export default defineSchema({
       v.literal("instagram_carousel_reuse"),
       v.literal("ugc_creator_test"),
       v.literal("paid_ads_later"),
-      v.literal("influencer_later")
+      v.literal("influencer_later"),
     ),
     status: v.union(
       v.literal("test_now"),
       v.literal("test_later"),
       v.literal("parked"),
-      v.literal("blocked")
+      v.literal("blocked"),
     ),
     rationale: v.array(v.string()),
     risks: v.array(v.string()),
@@ -1940,7 +1934,7 @@ export default defineSchema({
       v.literal("instagram_carousel_reuse"),
       v.literal("ugc_creator_test"),
       v.literal("paid_ads_later"),
-      v.literal("influencer_later")
+      v.literal("influencer_later"),
     ),
     hypothesis: v.string(),
     variants: v.array(
@@ -1949,20 +1943,20 @@ export default defineSchema({
         demoMoment: v.optional(v.string()),
         cta: v.string(),
         formatSkeleton: v.string(),
-      })
+      }),
     ),
     successMetric: v.union(
       v.literal("qualified_replies"),
       v.literal("signups"),
       v.literal("installs"),
       v.literal("trials"),
-      v.literal("creator_applicants")
+      v.literal("creator_applicants"),
     ),
     scaleDecision: v.union(
       v.literal("keep_testing"),
       v.literal("double_down"),
       v.literal("revise"),
-      v.literal("park")
+      v.literal("park"),
     ),
     resultSummary: v.optional(v.string()),
     createdAt: v.number(),
@@ -1981,7 +1975,7 @@ export default defineSchema({
       v.literal("x"),
       v.literal("linkedin"),
       v.literal("tiktok"),
-      v.literal("youtube")
+      v.literal("youtube"),
     ),
     motion: v.union(
       v.literal("reddit_helpful_reply"),
@@ -1994,7 +1988,7 @@ export default defineSchema({
       v.literal("instagram_carousel_reuse"),
       v.literal("ugc_creator_test"),
       v.literal("paid_ads_later"),
-      v.literal("influencer_later")
+      v.literal("influencer_later"),
     ),
     formatSkeleton: v.string(),
     hook: v.string(),
@@ -2003,7 +1997,7 @@ export default defineSchema({
     outcome: v.union(
       v.literal("winner"),
       v.literal("loser"),
-      v.literal("inconclusive")
+      v.literal("inconclusive"),
     ),
     evidence: v.array(v.string()),
     promotedAt: v.optional(v.number()),
@@ -2030,7 +2024,7 @@ export default defineSchema({
       // Studio-tier Creatify video COGS — recorded for visibility, excluded
       // from the operational caps + spend-kill (own videoCreditsMonth budget).
       v.literal("creatify"),
-      v.literal("other")
+      v.literal("other"),
     ),
     operation: v.string(),
     reason: v.string(),
@@ -2041,7 +2035,7 @@ export default defineSchema({
       v.literal("miss"),
       v.literal("called"),
       v.literal("skipped"),
-      v.literal("failed")
+      v.literal("failed"),
     ),
     // Phase 2 ⑤ — discovery-budget tagging. `discovery: true` marks spend from
     // the continuous hunt loop (read-API scans + cheap-model scoring) so the
@@ -2062,9 +2056,17 @@ export default defineSchema({
     .index("by_account_and_provider", ["accountId", "provider"])
     // Phase 2 — time-windowed sums (discovery budget gate, hourly/daily caps).
     .index("by_account_and_created", ["accountId", "createdAt"])
-    .index("by_account_discovery_created", ["accountId", "discovery", "createdAt"])
+    .index("by_account_discovery_created", [
+      "accountId",
+      "discovery",
+      "createdAt",
+    ])
     // Creative budget gate — billing-period-windowed sums of creative spend.
-    .index("by_account_creative_created", ["accountId", "creative", "createdAt"]),
+    .index("by_account_creative_created", [
+      "accountId",
+      "creative",
+      "createdAt",
+    ]),
 
   // Phase 2 ④ — per-channel read watermark. Bounds delta-only reads so the
   // hunt loop never re-pulls history: each (account, channel) records the
@@ -2112,7 +2114,7 @@ export default defineSchema({
       v.literal("x_api"),
       v.literal("openclaw"),
       v.literal("google"),
-      v.literal("other")
+      v.literal("other"),
     ),
     purpose: v.string(),
     status: v.union(
@@ -2120,7 +2122,7 @@ export default defineSchema({
       v.literal("called"),
       v.literal("succeeded"),
       v.literal("failed"),
-      v.literal("skipped")
+      v.literal("skipped"),
     ),
     model: v.optional(v.string()),
     inputTokens: v.optional(v.number()),
@@ -2144,14 +2146,14 @@ export default defineSchema({
       v.literal("x"),
       v.literal("linkedin"),
       v.literal("tiktok"),
-      v.literal("youtube")
+      v.literal("youtube"),
     ),
     status: v.union(
       v.literal("drafted"),
       v.literal("approved"),
       v.literal("published"),
       v.literal("rejected"),
-      v.literal("failed")
+      v.literal("failed"),
     ),
     body: v.string(),
     evidenceCardIds: v.array(v.id("gtmEvidenceCards")),
@@ -2177,7 +2179,7 @@ export default defineSchema({
       v.literal("x"),
       v.literal("linkedin"),
       v.literal("tiktok"),
-      v.literal("youtube")
+      v.literal("youtube"),
     ),
     replies: v.optional(v.number()),
     clicks: v.optional(v.number()),
@@ -2207,7 +2209,7 @@ export default defineSchema({
       v.literal("maya"),
       v.literal("system"),
       v.literal("admin"),
-      v.literal("user")
+      v.literal("user"),
     ),
     eventType: v.string(),
     severity: v.union(v.literal("info"), v.literal("warn"), v.literal("error")),
@@ -2228,13 +2230,13 @@ export default defineSchema({
       v.literal("x"),
       v.literal("linkedin"),
       v.literal("composio"),
-      v.literal("openclaw")
+      v.literal("openclaw"),
     ),
     status: v.union(
       v.literal("connected"),
       v.literal("disconnected"),
       v.literal("reconnect_required"),
-      v.literal("error")
+      v.literal("error"),
     ),
     failureReason: v.optional(v.string()),
     lastCheckedAt: v.number(),
@@ -2250,7 +2252,7 @@ export default defineSchema({
       v.literal("healthy"),
       v.literal("unhealthy"),
       v.literal("restarting"),
-      v.literal("unknown")
+      v.literal("unknown"),
     ),
     lastPingAt: v.optional(v.number()),
     restartCount: v.number(),
@@ -2266,7 +2268,7 @@ export default defineSchema({
     status: v.union(
       v.literal("active"),
       v.literal("completed"),
-      v.literal("removed")
+      v.literal("removed"),
     ),
     requiredAppUrlLive: v.boolean(),
     startedAt: v.number(),
@@ -2276,8 +2278,8 @@ export default defineSchema({
         v.literal("high"),
         v.literal("medium"),
         v.literal("low"),
-        v.literal("unknown")
-      )
+        v.literal("unknown"),
+      ),
     ),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -2304,7 +2306,7 @@ export default defineSchema({
       v.literal("signup"),
       v.literal("demo"),
       v.literal("feedback"),
-      v.literal("retention")
+      v.literal("retention"),
     ),
     message: v.string(),
     retentionIntent: v.optional(
@@ -2312,8 +2314,8 @@ export default defineSchema({
         v.literal("high"),
         v.literal("medium"),
         v.literal("low"),
-        v.literal("unknown")
-      )
+        v.literal("unknown"),
+      ),
     ),
     createdAt: v.number(),
   })
@@ -2326,7 +2328,7 @@ export default defineSchema({
     readiness: v.union(
       v.literal("premature"),
       v.literal("useful_soon"),
-      v.literal("ready")
+      v.literal("ready"),
     ),
     reasons: v.array(v.string()),
     requiredProof: v.array(v.string()),
@@ -2365,7 +2367,7 @@ export default defineSchema({
       v.literal("linkedin"),
       v.literal("instagram"),
       v.literal("tiktok"),
-      v.literal("youtube")
+      v.literal("youtube"),
     ),
     url: v.string(),
     /** Platform's own ID — reddit post ID, tweet ID, HN objectID, etc. Used
@@ -2395,7 +2397,7 @@ export default defineSchema({
       v.literal("reply"),
       v.literal("lurk"),
       v.literal("upvote_only"),
-      v.literal("avoid")
+      v.literal("avoid"),
     ),
     /** Linked draft, if one's been created for this thread. */
     draftedReplyId: v.optional(v.id("gtmDraftedContent")),
@@ -2404,7 +2406,7 @@ export default defineSchema({
       v.literal("queued"),
       v.literal("replied"),
       v.literal("dropped"),
-      v.literal("expired")
+      v.literal("expired"),
     ),
     /** 0-1; subagent's confidence this is a strong target. */
     priorityScore: v.number(),
@@ -2417,7 +2419,7 @@ export default defineSchema({
         reason: v.string(),
         judgedAt: v.number(),
         judgedBy: v.string(),
-      })
+      }),
     ),
     // Sprint 2.17 Phase A — manager-mode depth fields. All optional so
     // existing rows continue to validate. Subagents in 2.17+ are
@@ -2444,7 +2446,7 @@ export default defineSchema({
         followerCount: v.optional(v.number()),
         accountAgeMs: v.optional(v.number()),
         recentPostSummary: v.optional(v.string()),
-      })
+      }),
     ),
     /** Top replies + whether OP is engaging. Drives "alive vs dead"
      *  judgment. Sprint 2.30 enrichment: `mineableComments[]` carries
@@ -2474,16 +2476,16 @@ export default defineSchema({
                 v.literal("pain_restatement"),
                 v.literal("competitor_mention"),
                 v.literal("op_rejection"),
-                v.literal("high_velocity")
+                v.literal("high_velocity"),
               ),
               /** When kind=competitor_mention, the named competitor. */
               competitorName: v.optional(v.string()),
               /** Maya's note on WHY this comment is mineable. */
               whyMineable: v.optional(v.string()),
-            })
-          )
+            }),
+          ),
         ),
-      })
+      }),
     ),
     /** Subreddit subscribers / community member count / followers count. */
     audienceSize: v.optional(v.number()),
@@ -2496,8 +2498,8 @@ export default defineSchema({
         v.literal("T1"),
         v.literal("T2"),
         v.literal("T3"),
-        v.literal("T4")
-      )
+        v.literal("T4"),
+      ),
     ),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -2522,7 +2524,7 @@ export default defineSchema({
       v.literal("linkedin"),
       v.literal("instagram"),
       v.literal("tiktok"),
-      v.literal("youtube")
+      v.literal("youtube"),
     ),
     /** The @ handle or username (no leading @, normalized to lowercase by
      *  the persistence layer for stable dedupe). */
@@ -2541,12 +2543,12 @@ export default defineSchema({
       v.literal("follow_and_engage"),
       v.literal("lurk"),
       v.literal("dm"),
-      v.literal("avoid")
+      v.literal("avoid"),
     ),
     status: v.union(
       v.literal("queued"),
       v.literal("following"),
-      v.literal("dropped")
+      v.literal("dropped"),
     ),
     priorityScore: v.number(),
     createdAt: v.number(),
@@ -2570,7 +2572,7 @@ export default defineSchema({
       v.literal("thread"),
       v.literal("post"),
       v.literal("comment"),
-      v.literal("dm")
+      v.literal("dm"),
     ),
     platform: v.union(
       v.literal("reddit"),
@@ -2579,7 +2581,7 @@ export default defineSchema({
       v.literal("linkedin"),
       v.literal("instagram"),
       v.literal("tiktok"),
-      v.literal("youtube")
+      v.literal("youtube"),
     ),
     /** For reply / comment kinds — links back to the thread this is targeting. */
     targetThreadId: v.optional(v.id("gtmTargetThreads")),
@@ -2610,7 +2612,7 @@ export default defineSchema({
         // join (getAttributeOutcomes / experiment registry) can attribute it.
         experimentId: v.optional(v.string()),
         armLabel: v.optional(v.string()),
-      })
+      }),
     ),
     /** 0-1; how well this matches operator's voice. Sprint 2.4 populates. */
     voiceMatchScore: v.optional(v.number()),
@@ -2625,7 +2627,7 @@ export default defineSchema({
       v.literal("approved"),
       v.literal("rejected"),
       v.literal("published"),
-      v.literal("needs_revision")
+      v.literal("needs_revision"),
     ),
     /** When approvalState is "rejected" or "needs_revision", the operator's
      *  edit instruction. Feeds the rewrite path in Sprint 2.4. */
@@ -2666,7 +2668,7 @@ export default defineSchema({
       v.literal("linkedin"),
       v.literal("instagram"),
       v.literal("tiktok"),
-      v.literal("youtube")
+      v.literal("youtube"),
     ),
     providerPostId: v.string(),
     metrics: v.object({
@@ -2778,7 +2780,7 @@ export default defineSchema({
       v.literal("revenue"),
       // Sprint 3 (top-tier): a signed-up user who came BACK / reached value.
       // Lets Maya own outcomes (a customer who stuck), not just first-touch signups.
-      v.literal("activated")
+      v.literal("activated"),
     ),
     count: v.number(),
     source: v.union(v.literal("self_report"), v.literal("pixel")),
@@ -2841,7 +2843,7 @@ export default defineSchema({
       v.literal("under_review"),
       v.literal("ab_testing"),
       v.literal("merged"),
-      v.literal("rejected")
+      v.literal("rejected"),
     ),
     createdAt: v.number(),
   })
@@ -2865,7 +2867,7 @@ export default defineSchema({
       v.literal("plan_changed"), // regenerated/re-weighted the plan
       v.literal("posted"), // operator posted / result came in
       v.literal("thinking"), // a hunch / strategic note
-      v.literal("status") // generic heartbeat-worthy status
+      v.literal("status"), // generic heartbeat-worthy status
     ),
     /** One operator-facing line — manager voice, no infra leak. */
     summary: v.string(),
@@ -2911,7 +2913,7 @@ export default defineSchema({
       v.literal("publish"), // pushed live / queued (post_to_channel, publish_*)
       v.literal("foundation"), // saved strategy (save_foundation_*, set_*)
       v.literal("read"), // read own state (get_my_*)
-      v.literal("other") // everything else not worth a dedicated lane
+      v.literal("other"), // everything else not worth a dedicated lane
     ),
     /** Compact one-line summary of the call's key args (capped at write). */
     argsSummary: v.optional(v.string()),
@@ -2922,7 +2924,7 @@ export default defineSchema({
       v.literal("ok"),
       v.literal("blocked"),
       v.literal("failed"),
-      v.literal("error")
+      v.literal("error"),
     ),
     /** Wall-clock the call took, plugin-side. */
     latencyMs: v.optional(v.number()),
@@ -2966,7 +2968,7 @@ export default defineSchema({
       v.literal("claw-messenger"),
       v.literal("sms"),
       v.literal("web"),
-      v.literal("unknown")
+      v.literal("unknown"),
     ),
     /** Groups one user turn with the Maya reply(s) it produced. */
     turnId: v.string(),
@@ -3021,7 +3023,7 @@ export default defineSchema({
         // research, so the daily cron can ground drafts in real buyer words.
         nativeStyleExemplars: v.optional(v.array(v.string())),
         complaints: v.optional(v.array(v.string())),
-      })
+      }),
     ),
     /** Search phrases / post titles / DM openers that signal a buyer in-market. */
     intentPhrases: v.array(v.string()),
@@ -3031,7 +3033,7 @@ export default defineSchema({
         handle: v.string(),
         platform: v.string(),
         whyTrusted: v.string(),
-      })
+      }),
     ),
     synthesizedAt: v.number(),
   })
@@ -3052,7 +3054,7 @@ export default defineSchema({
     kind: v.union(
       v.literal("direct"),
       v.literal("adjacent"),
-      v.literal("substitute")
+      v.literal("substitute"),
     ),
     url: v.optional(v.string()),
     pricing: v.optional(v.string()),
@@ -3062,7 +3064,7 @@ export default defineSchema({
       v.object({
         quote: v.string(),
         sourceUrl: v.string(),
-      })
+      }),
     ),
     vulnerabilities: v.array(v.string()),
     synthesizedAt: v.number(),
@@ -3093,7 +3095,7 @@ export default defineSchema({
       v.literal("podcasts"),
       v.literal("newsletters"),
       v.literal("discord"),
-      v.literal("blog")
+      v.literal("blog"),
     ),
     /** 0-1: how well does the buyer live on this channel. */
     audienceFit: v.number(),
@@ -3163,7 +3165,7 @@ export default defineSchema({
       v.literal("instagram"),
       v.literal("tiktok"),
       v.literal("youtube"),
-      v.literal("threads")
+      v.literal("threads"),
     ),
     /** Always lowercased before write. */
     handle: v.string(),
@@ -3176,14 +3178,14 @@ export default defineSchema({
     cadence: v.union(
       v.literal("weekly"),
       v.literal("monthly"),
-      v.literal("as_they_post")
+      v.literal("as_they_post"),
     ),
     status: v.union(
       v.literal("prospect"),
       v.literal("warming"),
       v.literal("engaged"),
       v.literal("reciprocal"),
-      v.literal("dropped")
+      v.literal("dropped"),
     ),
     lastTouchAt: v.optional(v.number()),
     synthesizedAt: v.number(),
@@ -3211,7 +3213,7 @@ export default defineSchema({
       v.literal("milestone"),
       v.literal("pricing_change"),
       v.literal("partnership"),
-      v.literal("incident")
+      v.literal("incident"),
     ),
     summary: v.string(),
     sourceUrl: v.string(),
@@ -3236,7 +3238,7 @@ export default defineSchema({
       v.literal("rising_account"),
       v.literal("rising_keyword"),
       v.literal("rising_topic"),
-      v.literal("declining_signal")
+      v.literal("declining_signal"),
     ),
     name: v.string(),
     platform: v.optional(v.string()),
@@ -3247,7 +3249,7 @@ export default defineSchema({
     relevance: v.union(
       v.literal("act_now"),
       v.literal("monitor"),
-      v.literal("noise")
+      v.literal("noise"),
     ),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -3273,7 +3275,7 @@ export default defineSchema({
       v.literal("foundation_complete"),
       v.literal("competitor_move_alert"),
       v.literal("niche_pulse_alert"),
-      v.literal("other")
+      v.literal("other"),
     ),
     summary: v.string(),
     /** Soft references — we don't enforce FK because rows may be deleted
@@ -3284,8 +3286,8 @@ export default defineSchema({
         v.object({
           entityKind: v.string(),
           entityId: v.string(),
-        })
-      )
+        }),
+      ),
     ),
     sentAt: v.number(),
     /** Maya updates this as feedback arrives — operator replied, did the
@@ -3295,7 +3297,7 @@ export default defineSchema({
       v.literal("acknowledged"),
       v.literal("acted"),
       v.literal("ignored"),
-      v.literal("dismissed")
+      v.literal("dismissed"),
     ),
     outcomeNotes: v.optional(v.string()),
     createdAt: v.number(),
@@ -3320,9 +3322,9 @@ export default defineSchema({
     idempotencyKey: v.string(),
     /** Which file got written. */
     target: v.union(
-      v.literal("daily_memory"),       // memory/YYYY-MM-DD.md
-      v.literal("dreams"),              // DREAMS.md
-      v.literal("memory_index")         // MEMORY.md
+      v.literal("daily_memory"), // memory/YYYY-MM-DD.md
+      v.literal("dreams"), // DREAMS.md
+      v.literal("memory_index"), // MEMORY.md
     ),
     /** ISO-8601 date string YYYY-MM-DD when target is daily_memory; null otherwise. */
     dateSlot: v.optional(v.string()),
@@ -3330,7 +3332,7 @@ export default defineSchema({
     op: v.union(
       v.literal("append"),
       v.literal("replace_section"),
-      v.literal("strike")
+      v.literal("strike"),
     ),
     /** Optional section name within the file. */
     section: v.optional(v.string()),
@@ -3366,7 +3368,7 @@ export default defineSchema({
       v.literal("community_quality"),
       v.literal("format_preference"),
       v.literal("hook_pattern"),
-      v.literal("other")
+      v.literal("other"),
     ),
     learning: v.string(),
     /** Number of data points supporting this learning. */
@@ -3415,14 +3417,11 @@ export default defineSchema({
         v.literal("avoid"),
         v.literal("angle"),
         v.literal("pace"),
-        v.literal("other")
-      )
+        v.literal("other"),
+      ),
     ),
     /** How this row was captured. */
-    source: v.union(
-      v.literal("founder"),
-      v.literal("maya_tool")
-    ),
+    source: v.union(v.literal("founder"), v.literal("maya_tool")),
     /** turnId of the inbound message this came from (if captured inline). */
     turnId: v.optional(v.string()),
     /** Active until explicitly superseded by a later contradicting directive
@@ -3468,11 +3467,24 @@ export default defineSchema({
       v.literal("onboarding"),
       v.literal("active"),
       v.literal("paused"),
-      v.literal("cancelled")
+      v.literal("cancelled"),
     ),
     timezone: v.string(),
     /** What the product actually is and does — the grounding for every claim
      *  she makes. JSON. */
+    /**
+     * ⭐ The Zernio profile that owns this customer's connected accounts.
+     *
+     * ⚠️ This is the TENANT BOUNDARY at the vendor, not a convenience. One
+     * Zernio API key covers the whole fleet, so `GET /api/v1/accounts` without
+     * a `profileId` returns every customer's accounts — and `syncChannels`
+     * used to attach all of them to whichever customer happened to sync. With
+     * one customer that is invisible; with two it means posting to a
+     * stranger's Instagram.
+     *
+     * Created once, on first connect, then reused.
+     */
+    zernioProfileId: v.optional(v.string()),
     productTruthJson: v.optional(v.string()),
     /** Who buys it: segments, the complaint list, where they gather. JSON. */
     buyerJson: v.optional(v.string()),
@@ -3596,7 +3608,7 @@ export default defineSchema({
       v.literal("tiktok"),
       v.literal("instagram"),
       v.literal("youtube"),
-      v.literal("x")
+      v.literal("x"),
     ),
     /** THE switch (§17.85). On `just_go`, exactly one function decides
      *  publish-or-hold, and nothing else may hold a publish — no ramp, no
@@ -3609,7 +3621,7 @@ export default defineSchema({
       v.literal("connected"),
       v.literal("dormant"),
       v.literal("disconnected"),
-      v.literal("error")
+      v.literal("error"),
     ),
     /** Zernio holds the OAuth grant; we hold its id. Raw platform tokens are
      *  never stored here — we never hold a customer's passwords or session. */
@@ -3651,7 +3663,7 @@ export default defineSchema({
       v.literal("escalation"),
       v.literal("standing_task"),
       v.literal("campaign"),
-      v.literal("other")
+      v.literal("other"),
     ),
     /** EXACTLY what they typed. Never cleaned up, never summarized. */
     verbatim: v.string(),
@@ -3705,14 +3717,14 @@ export default defineSchema({
       v.literal("image"),
       v.literal("slide"),
       v.literal("video"),
-      v.literal("logo")
+      v.literal("logo"),
     ),
     /** Where it came from, because a founder-sent asset outranks a scrape. */
     source: v.union(
       v.literal("telegram"),
       v.literal("onboarding"),
       v.literal("scrape"),
-      v.literal("generated")
+      v.literal("generated"),
     ),
     /** R2 key. The bytes are ours; the vendor URL was borrowed. */
     storageKey: v.string(),
@@ -3747,7 +3759,7 @@ export default defineSchema({
       v.literal("post"),
       v.literal("comment"),
       v.literal("trend"),
-      v.literal("metric")
+      v.literal("metric"),
     ),
     text: v.string(),
     /** Vendor time, normalised to ms on the way in. */
@@ -3775,7 +3787,7 @@ export default defineSchema({
     status: v.union(
       v.literal("bank"),
       v.literal("used"),
-      v.literal("discarded")
+      v.literal("discarded"),
     ),
     sourceKind: v.optional(v.string()),
     createdAt: v.number(),
@@ -3793,7 +3805,7 @@ export default defineSchema({
       v.literal("thread"),
       v.literal("post"),
       v.literal("comment"),
-      v.literal("mention")
+      v.literal("mention"),
     ),
     /** Stable across sweeps so the same thread isn't re-surfaced every hour. */
     dedupeKey: v.string(),
@@ -3802,7 +3814,7 @@ export default defineSchema({
       v.literal("open"),
       v.literal("engaged"),
       v.literal("skipped"),
-      v.literal("expired")
+      v.literal("expired"),
     ),
     snippet: v.optional(v.string()),
     seenAt: v.number(),
@@ -3828,7 +3840,7 @@ export default defineSchema({
     kind: v.union(
       v.literal("post"),
       v.literal("reply"),
-      v.literal("cold_reply")
+      v.literal("cold_reply"),
     ),
     /** The exact text shown to the founder. Publishing reads THIS. */
     snapshotText: v.string(),
@@ -3838,7 +3850,7 @@ export default defineSchema({
       v.literal("approved"),
       v.literal("edited"),
       v.literal("rejected"),
-      v.literal("expired")
+      v.literal("expired"),
     ),
     /** What they changed, when they edited rather than approved. */
     editDiff: v.optional(v.string()),
@@ -3876,7 +3888,7 @@ export default defineSchema({
     kind: v.union(
       v.literal("post"),
       v.literal("reply"),
-      v.literal("cold_reply")
+      v.literal("cold_reply"),
     ),
     channel: v.string(),
     /** Invariant 1: a live URL, or an explicit unknown. Never an assumption. */
@@ -3884,7 +3896,7 @@ export default defineSchema({
     linkStatus: v.union(
       v.literal("live"),
       v.literal("gone"),
-      v.literal("unknown")
+      v.literal("unknown"),
     ),
     publishedAt: v.number(),
     snapshotText: v.string(),
@@ -3956,7 +3968,7 @@ export default defineSchema({
     status: v.union(
       v.literal("open"),
       v.literal("answered"),
-      v.literal("skipped")
+      v.literal("skipped"),
     ),
     /**
      * ⭐ What it takes to actually REPLY to this.
@@ -4008,7 +4020,7 @@ export default defineSchema({
     surface: v.union(
       v.literal("telegram"),
       v.literal("web"),
-      v.literal("system")
+      v.literal("system"),
     ),
     body: v.string(),
     /** Invariant 6: every outbound message has one, so a retry or a double
@@ -4153,7 +4165,7 @@ export default defineSchema({
     livenessState: v.union(
       v.literal("healthy"),
       v.literal("degraded"),
-      v.literal("breached")
+      v.literal("breached"),
     ),
     updatedAt: v.number(),
   }).index("by_customer", ["customerId"]),
@@ -4172,12 +4184,16 @@ export default defineSchema({
       v.literal("experiment_concluded"),
       v.literal("founder_said"),
       v.literal("rung_stuck"),
-      v.literal("no_change")
+      v.literal("no_change"),
     ),
     evidenceJson: v.optional(v.string()),
     /** §16.75.05's gate — a change she can't execute is not announced. */
     feasibility: v.optional(
-      v.union(v.literal("supported"), v.literal("partial"), v.literal("blocked"))
+      v.union(
+        v.literal("supported"),
+        v.literal("partial"),
+        v.literal("blocked"),
+      ),
     ),
     /** What she asked for, when the library couldn't carry it. */
     askedFor: v.optional(v.string()),
@@ -4197,7 +4213,7 @@ export default defineSchema({
     status: v.union(
       v.literal("planned"),
       v.literal("done"),
-      v.literal("dropped")
+      v.literal("dropped"),
     ),
     /** Why it didn't happen. Required to drop — silence is not a reason. */
     droppedReason: v.optional(v.string()),
@@ -4249,7 +4265,7 @@ export default defineSchema({
       v.literal("running"),
       v.literal("succeeded"),
       v.literal("failed"),
-      v.literal("dead")
+      v.literal("dead"),
     ),
     attempts: v.number(),
     maxAttempts: v.number(),
@@ -4323,7 +4339,7 @@ export default defineSchema({
       v.literal("creatify"),
       v.literal("openrouter"),
       v.literal("r2"),
-      v.literal("gemini")
+      v.literal("gemini"),
     ),
     /** 1 = reachability (hourly, free) · 2 = shape (daily, cents) ·
      *  3 = round-trip (weekly + pre-deploy, real money). */
@@ -4334,11 +4350,7 @@ export default defineSchema({
     /** `skipped` is first-class and must stay visible: a suite that silently
      *  skips every check because a key is missing is a green suite that
      *  proves nothing. The operator view surfaces skips as unverified. */
-    status: v.union(
-      v.literal("pass"),
-      v.literal("fail"),
-      v.literal("skipped")
-    ),
+    status: v.union(v.literal("pass"), v.literal("fail"), v.literal("skipped")),
     /** Why it failed or was skipped — the alert body. */
     detail: v.optional(v.string()),
     /** Classified drift paths, e.g. `unexpected:platformResults`. Empty on a

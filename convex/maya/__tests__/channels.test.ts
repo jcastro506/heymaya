@@ -164,6 +164,14 @@ async function seedCustomer(
       plan: "mvp",
       state: "active",
       timezone: "UTC",
+      /**
+       * ⚠️ Required since 2026-08-11. `syncChannels` scopes its account list
+       * to this profile — one Zernio API key covers the whole fleet, so an
+       * unscoped list returns every customer's accounts and attaches them
+       * here. A customer with no profile now syncs nothing, deliberately:
+       * failing closed is recoverable, inheriting the fleet is not.
+       */
+      zernioProfileId: "prof_test",
       createdAt: NOW,
       updatedAt: NOW,
     });
@@ -327,6 +335,14 @@ async function seedNewChanCustomer(t: ReturnType<typeof convexTest>) {
       plan: "mvp",
       state: "active",
       timezone: "UTC",
+      /**
+       * ⚠️ Required since 2026-08-11. `syncChannels` scopes its account list
+       * to this profile — one Zernio API key covers the whole fleet, so an
+       * unscoped list returns every customer's accounts and attaches them
+       * here. A customer with no profile now syncs nothing, deliberately:
+       * failing closed is recoverable, inheriting the fleet is not.
+       */
+      zernioProfileId: "prof_test",
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
