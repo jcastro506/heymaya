@@ -33,7 +33,7 @@
  */
 
 import { v } from "convex/values";
-import { internalQuery } from "../_generated/server";
+import { internalQuery, query } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 
 /* -------------------------------------------------------------------------- */
@@ -44,7 +44,7 @@ const CHANNEL = v.union(
   v.literal("tiktok"),
   v.literal("instagram"),
   v.literal("youtube"),
-  v.literal("x")
+  v.literal("x"),
 );
 
 /**
@@ -65,7 +65,7 @@ export const search = internalQuery({
     query: v.string(),
     channel: v.optional(CHANNEL),
     kind: v.optional(
-      v.union(v.literal("post"), v.literal("reply"), v.literal("cold_reply"))
+      v.union(v.literal("post"), v.literal("reply"), v.literal("cold_reply")),
     ),
     since: v.optional(v.number()),
     until: v.optional(v.number()),
@@ -88,8 +88,10 @@ export const search = internalQuery({
     // customer and channel only. Bounded by `take` above, so this stays cheap.
     return rows.filter((row) => {
       if (args.kind && row.kind !== args.kind) return false;
-      if (args.since !== undefined && row.publishedAt < args.since) return false;
-      if (args.until !== undefined && row.publishedAt > args.until) return false;
+      if (args.since !== undefined && row.publishedAt < args.since)
+        return false;
+      if (args.until !== undefined && row.publishedAt > args.until)
+        return false;
       return true;
     });
   },
@@ -108,7 +110,7 @@ export const timeline = internalQuery({
       .withIndex("by_customer_and_publishedAt", (q) =>
         args.since !== undefined
           ? q.eq("customerId", args.customerId).gte("publishedAt", args.since)
-          : q.eq("customerId", args.customerId)
+          : q.eq("customerId", args.customerId),
       )
       .order("desc")
       .take(args.limit ?? 50)) as Doc<"placements">[];
@@ -204,7 +206,7 @@ export const provenance = internalQuery({
   args: { customerId: v.id("customers"), placementId: v.id("placements") },
   handler: async (ctx, args): Promise<Provenance | null> => {
     const placement = (await ctx.db.get(
-      args.placementId
+      args.placementId,
     )) as Doc<"placements"> | null;
     // Cross-tenant guard: another account's placement never resolves.
     if (!placement || placement.customerId !== args.customerId) return null;
@@ -271,3 +273,86 @@ export const provenance = internalQuery({
  * oversight.
  */
 
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ The Activity feed, for the founder's own screen (§16.8.6).
+ *
+ * > *"Every placement, newest first, with the real thumbnail and its live
+ * > metrics, linking out to the actual post… **the trust engine** — they scroll
+ * > it and *see* her being native."*
+ *
+ * ⚠️ Everything above this line is `internalQuery` — reachable by her runtime
+ * and by nothing the founder can open. So the archive existed, was correct, and
+ * had **zero readers**: Mission Control's Activity screen reads
+ * `gtmMaya.missionControl.getMyAgentActivity`, backed by the frozen product's
+ * tables, which the live module never writes.
+ *
+ * ⭐ Reuses `toEntry` rather than re-deriving the link rule. §16.8.1 says a dead
+ * link is *"no longer live"* with the text preserved, never a broken tap — and
+ * a second implementation of that is a second place it can be got wrong. The
+ * `tappable` flag is what stops a surface rendering a 404 as a normal entry,
+ * which is the failure that makes an archive feel like a lie.
+ */
+export interface ActivityEntry extends ArchiveEntry {
+  views: number;
+  /** ⚠️ When those metrics were last true (§16.4). Never implied. */
+  metricsAsOf?: number;
+}
+
+export const myActivity = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ ok: boolean; entries?: ActivityEntry[]; error?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { ok: false, error: "sign in first" };
+
+    const creator = (await ctx.db
+      .query("creators")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .first()) as Doc<"creators"> | null;
+    if (!creator) return { ok: false, error: "no account yet" };
+
+    const customer = (await ctx.db
+      .query("customers")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first()) as Doc<"customers"> | null;
+    if (!customer) return { ok: false, error: "no account yet" };
+
+    const rows = (await ctx.db
+      .query("placements")
+      .withIndex("by_customer_and_publishedAt", (q) =>
+        q.eq("customerId", customer._id),
+      )
+      .order("desc")
+      .take(Math.min(args.limit ?? 50, 100))) as Doc<"placements">[];
+
+    return {
+      ok: true,
+      entries: rows.map((p) => ({
+        ...toEntry(p),
+        views: viewsOfPlacement(p),
+        metricsAsOf: p.metricsAsOf,
+      })),
+    };
+  },
+});
+
+/**
+ * Views off the metrics blob, defensively.
+ *
+ * ⚠️ Returns 0 rather than throwing on a shape we don't recognise — but 0 and
+ * "not measured yet" are different claims, which is why `metricsAsOf` rides
+ * alongside and the screen says which one it is.
+ */
+function viewsOfPlacement(p: Doc<"placements">): number {
+  if (!p.metricsJson) return 0;
+  try {
+    const m = JSON.parse(p.metricsJson) as { views?: unknown };
+    return typeof m.views === "number" ? m.views : 0;
+  } catch {
+    return 0;
+  }
+}
