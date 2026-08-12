@@ -414,7 +414,7 @@ describe("Mission Control v3.1 — board modules render with grounded data", () 
     expect(html).toContain("This week"); // segmented control
   });
 
-  it("Brain: dossier + fit ring + warmth + rules + watch", async () => {
+  it("Brain: dossier + fit ring + warmth + watch", async () => {
     const Page = (await import("../brain/page")).default;
     const html = renderToString(createElement(Page));
     expect(html).toContain("Who she believes is buying");
@@ -423,8 +423,13 @@ describe("Mission Control v3.1 — board modules render with grounded data", () 
     expect(html).toContain("78%"); // fit ring from audienceFit 0.78
     expect(html).toContain("WARMING"); // warmth stepper from channelWarmthJson
     expect(html).toContain("Built it, now what?"); // angle board
-    expect(html).toContain("Standing instructions");
-    expect(html).toContain("Never mention pricing in public replies.");
+    /**
+     * ⚠️ "Standing instructions" was removed 2026-08-12 — it rendered the
+     * FROZEN product's `gtmSteeringDirectives`, so it could never show a rule
+     * the live Maya was given. Asserted absent rather than deleted, so a
+     * revert reintroducing the stale panel fails here.
+     */
+    expect(html).not.toContain("Standing instructions");
     expect(html).toContain("Competitor watch");
     expect(html).toContain("Jasper AI");
     expect(html).toContain("no attribution story");
