@@ -60,10 +60,17 @@ describe("CONNECTED IS NOT THE SAME AS CAN-POST", () => {
     // and without this check it surfaces as a publish failure at the worst
     // moment instead of a connection problem at the obvious one.
     const health = readAccount(
-      account({ permissions: ["tweet.read", "users.read", "offline.access"] })
+      account({ permissions: ["tweet.read", "users.read", "offline.access"] }),
     );
     expect(health?.connected).toBe(false);
-    expect(health?.reason).toMatch(/tweet\.write/);
+    /**
+     * ⚠️ Was `toMatch(/tweet\.write/)` until 2026-08-11. The reason is shown to
+     * the FOUNDER, and §11 says she never leaks our plumbing at them — a scope
+     * name is true and unusable. It now names the fix instead, so this asserts
+     * the fix is named rather than the string that produced it.
+     */
+    expect(health?.reason).toMatch(/didn't grant permission to post/i);
+    expect(health?.reason).not.toMatch(/tweet\.write/);
   });
 
   it("needsReconnection wins over everything else", () => {
@@ -82,7 +89,7 @@ describe("CONNECTED IS NOT THE SAME AS CAN-POST", () => {
       account({
         platformStatus: "suspended",
         platformStatusReason: "policy violation",
-      })
+      }),
     );
     expect(health?.connected).toBe(false);
     expect(health?.reason).toMatch(/suspended/);
@@ -101,17 +108,46 @@ describe("CONNECTED IS NOT THE SAME AS CAN-POST", () => {
     expect(readAccount(account({ _id: undefined }))).toBeNull();
   });
 
-  it("platforms with no write-permission rule aren't blocked by one", () => {
-    // Only X has a documented write scope in our map. Inventing one for the
-    // others would reject healthy connections.
+  /**
+   * ⭐ This test used to assert the OPPOSITE, and its reason was good:
+   *
+   * > *"Only X has a documented write scope in our map. Inventing one for the
+   * > others would reject healthy connections."*
+   *
+   * Refusing to guess was right. What changed on 2026-08-11 is that the scopes
+   * stopped being guesses: `GET /api/v1/accounts` was read live for four real
+   * connected accounts, and every platform returns an explicit publish scope.
+   *
+   * ⚠️ Instagram is the one that mattered. Meta issues
+   * `instagram_business_content_publish` only to Business/Creator accounts —
+   * so a personal account connects cleanly and then never posts, which
+   * §6.0.15 calls the load-bearing case. Under the old rule it read as
+   * healthy.
+   */
+  it("⭐ an Instagram with no publish scope is NOT connected", () => {
     const ig = readAccount(account({ platform: "instagram", permissions: [] }));
+    expect(ig?.connected).toBe(false);
+    expect(ig?.reason).toMatch(/Business or Creator/i);
+  });
+
+  it("still invents no rule for a platform we have not verified", () => {
+    // The old test's caution, kept where it still applies: a channel with no
+    // entry in the map is never blocked by a scope we made up.
+    const ig = readAccount(
+      account({
+        platform: "instagram",
+        permissions: ["instagram_business_content_publish"],
+      }),
+    );
     expect(ig?.connected).toBe(true);
   });
 });
 
 /* -------------------------------------------------------------------------- */
 
-async function seedCustomer(t: ReturnType<typeof convexTest>): Promise<Id<"customers">> {
+async function seedCustomer(
+  t: ReturnType<typeof convexTest>,
+): Promise<Id<"customers">> {
   return await t.run(async (ctx) => {
     const accountId = await ctx.db.insert("creators", {
       clerkUserId: "u_sync",
@@ -149,11 +185,13 @@ describe("THE ROWS ARE DERIVED FROM ZERNIO, NOT ASSERTED", () => {
     vi.stubEnv("ZERNIO_API_KEY", "test-key");
     stubAccounts({ accounts: [account()] });
 
-    const res = await t.action(internal.maya.channels.syncChannels, { customerId });
+    const res = await t.action(internal.maya.channels.syncChannels, {
+      customerId,
+    });
     expect(res.ok).toBe(true);
 
     const rows = (await t.run((ctx) =>
-      ctx.db.query("channels").collect()
+      ctx.db.query("channels").collect(),
     )) as Doc<"channels">[];
     expect(rows).toHaveLength(1);
     expect(rows[0].channel).toBe("x");
@@ -178,7 +216,7 @@ describe("THE ROWS ARE DERIVED FROM ZERNIO, NOT ASSERTED", () => {
     await t.action(internal.maya.channels.syncChannels, { customerId });
 
     const rows = (await t.run((ctx) =>
-      ctx.db.query("channels").collect()
+      ctx.db.query("channels").collect(),
     )) as Doc<"channels">[];
     expect(rows).toHaveLength(1);
     expect(rows[0].status).toBe("error");
@@ -206,7 +244,9 @@ describe("THE ROWS ARE DERIVED FROM ZERNIO, NOT ASSERTED", () => {
     vi.stubEnv("ZERNIO_API_KEY", "test-key");
     stubAccounts({ data: { items: [] } });
 
-    const res = await t.action(internal.maya.channels.syncChannels, { customerId });
+    const res = await t.action(internal.maya.channels.syncChannels, {
+      customerId,
+    });
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/unrecognised/i);
 
@@ -217,7 +257,9 @@ describe("THE ROWS ARE DERIVED FROM ZERNIO, NOT ASSERTED", () => {
   it("an unconfigured vendor is named", async () => {
     const t = convexTest(schema, modules);
     const customerId = await seedCustomer(t);
-    const res = await t.action(internal.maya.channels.syncChannels, { customerId });
+    const res = await t.action(internal.maya.channels.syncChannels, {
+      customerId,
+    });
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/isn't configured/i);
   });
@@ -258,7 +300,9 @@ describe("⭐ A NEW CHANNEL IS NOTICED AND SAID OUT LOUD", () => {
     expect(again.sent).toBe(false);
 
     const out = await t.run(async (ctx) =>
-      (await ctx.db.query("messages").collect()).filter((m) => m.direction === "out")
+      (await ctx.db.query("messages").collect()).filter(
+        (m) => m.direction === "out",
+      ),
     );
     expect(out).toHaveLength(1);
     // ⭐ The wording §17.35 already chose — not "channel sync complete".

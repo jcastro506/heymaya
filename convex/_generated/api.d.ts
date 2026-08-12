@@ -201,6 +201,7 @@ import type * as maya_breaker from "../maya/breaker.js";
 import type * as maya_buyerMap from "../maya/buyerMap.js";
 import type * as maya_cadence from "../maya/cadence.js";
 import type * as maya_carousel from "../maya/carousel.js";
+import type * as maya_channelRequirements from "../maya/channelRequirements.js";
 import type * as maya_channels from "../maya/channels.js";
 import type * as maya_checkpoint from "../maya/checkpoint.js";
 import type * as maya_cogs from "../maya/cogs.js";
@@ -478,6 +479,7 @@ declare const fullApi: ApiFromModules<{
   "maya/buyerMap": typeof maya_buyerMap;
   "maya/cadence": typeof maya_cadence;
   "maya/carousel": typeof maya_carousel;
+  "maya/channelRequirements": typeof maya_channelRequirements;
   "maya/channels": typeof maya_channels;
   "maya/checkpoint": typeof maya_checkpoint;
   "maya/cogs": typeof maya_cogs;
