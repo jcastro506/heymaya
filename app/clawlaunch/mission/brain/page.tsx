@@ -31,7 +31,6 @@ import {
   Shell,
   SrcLink,
 } from "../_components";
-import { StandingInstructions } from "./_StandingInstructions";
 
 /* ── Warmth (channelWarmthJson on the agent row) ───────────────────────── */
 
@@ -50,7 +49,10 @@ function parseWarmth(json: string | undefined): Record<string, WarmthEntry> {
   return {};
 }
 
-const WARMTH_STEPS: Record<string, { hits: number; label: string; blocked?: boolean }> = {
+const WARMTH_STEPS: Record<
+  string,
+  { hits: number; label: string; blocked?: boolean }
+> = {
   new_needs_warmup: { hits: 1, label: "NEW" },
   warming: { hits: 2, label: "WARMING" },
   ready: { hits: 3, label: "READY" },
@@ -62,7 +64,11 @@ function Warmth({ state }: { state: string | undefined }) {
   const w = state ? WARMTH_STEPS[state] : undefined;
   if (!w) return null;
   return (
-    <div className="mc-warmth" role="img" aria-label={`warmth: ${w.label.toLowerCase()}`}>
+    <div
+      className="mc-warmth"
+      role="img"
+      aria-label={`warmth: ${w.label.toLowerCase()}`}
+    >
       {[0, 1, 2].map((i) => (
         <span
           key={i}
@@ -78,7 +84,15 @@ function Warmth({ state }: { state: string | undefined }) {
 
 const RING_C = 2 * Math.PI * 24; // r=24
 
-function FitRing({ value, color, label }: { value: number; color: string; label: string }) {
+function FitRing({
+  value,
+  color,
+  label,
+}: {
+  value: number;
+  color: string;
+  label: string;
+}) {
   const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
   return (
     <svg
@@ -89,7 +103,14 @@ function FitRing({ value, color, label }: { value: number; color: string; label:
       role="img"
       aria-label={`${label} fit ${pct}%`}
     >
-      <circle cx="29" cy="29" r="24" fill="none" stroke="var(--mc-line)" strokeWidth="5" />
+      <circle
+        cx="29"
+        cy="29"
+        r="24"
+        fill="none"
+        stroke="var(--mc-line)"
+        strokeWidth="5"
+      />
       <circle
         cx="29"
         cy="29"
@@ -145,22 +166,34 @@ export default function BrainPage() {
   const insights = useQuery(api.gtmMaya.missionControl.getMyFoundationInsights);
   const competitors = useQuery(api.gtmMaya.missionControl.getMyCompetitiveMap);
 
-  if (snapshot === undefined || insights === undefined || competitors === undefined)
+  if (
+    snapshot === undefined ||
+    insights === undefined ||
+    competitors === undefined
+  )
     return <Loading />;
   if (snapshot === null) return <NeedsOnboarding />;
 
   const buyer = insights.buyer;
   const venues = buyer
-    ? [...new Set(buyer.journeyStages.map((s) => s.whereTheyHangOut).filter(Boolean))].slice(0, 5)
+    ? [
+        ...new Set(
+          buyer.journeyStages.map((s) => s.whereTheyHangOut).filter(Boolean),
+        ),
+      ].slice(0, 5)
     : [];
   const facts: Array<{ k: string; v: string }> = [];
   if (buyer) {
     const firstComplaint = buyer.journeyStages.flatMap((s) => s.complaints)[0];
-    if (firstComplaint) facts.push({ k: "Pain, verbatim", v: `“${firstComplaint}”` });
-    const intent = buyer.journeyStages.map((s) => s.intentLanguage).find(Boolean);
+    if (firstComplaint)
+      facts.push({ k: "Pain, verbatim", v: `“${firstComplaint}”` });
+    const intent = buyer.journeyStages
+      .map((s) => s.intentLanguage)
+      .find(Boolean);
     if (intent) facts.push({ k: "Intent signal", v: `“${intent}”` });
     const trusted = buyer.trustedVoices[0];
-    if (trusted) facts.push({ k: "Trusts", v: `${trusted.handle} · ${trusted.platform}` });
+    if (trusted)
+      facts.push({ k: "Trusts", v: `${trusted.handle} · ${trusted.platform}` });
   }
 
   const warmth = parseWarmth(snapshot.agent.channelWarmthJson);
@@ -168,7 +201,9 @@ export default function BrainPage() {
 
   const quotes = insights.angles
     .filter((a) => a.painQuote)
-    .filter((a, i, arr) => arr.findIndex((b) => b.painQuote === a.painQuote) === i)
+    .filter(
+      (a, i, arr) => arr.findIndex((b) => b.painQuote === a.painQuote) === i,
+    )
     .slice(0, 4);
 
   const angles = insights.angles.slice(0, 8);
@@ -209,7 +244,13 @@ export default function BrainPage() {
             <Panel title="Who she believes is buying" raised className="h-full">
               <div className="mc-persona">
                 <div className="mc-glyph">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" strokeWidth="1.7">
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    strokeWidth="1.7"
+                  >
                     <circle cx="12" cy="8" r="3.4" />
                     <path d="M5 20c1.2-3.4 3.8-5 7-5s5.8 1.6 7 5" />
                   </svg>
@@ -256,7 +297,9 @@ export default function BrainPage() {
                     <Chip platform={c.channel}>
                       {channelLabel(c.channel)} · bet #{i + 1}
                     </Chip>
-                    {c.uniqueUnlock ? <div className="mc-why">{c.uniqueUnlock}</div> : null}
+                    {c.uniqueUnlock ? (
+                      <div className="mc-why">{c.uniqueUnlock}</div>
+                    ) : null}
                     <Warmth state={warmth[c.channel]?.state} />
                   </div>
                 </div>
@@ -324,12 +367,16 @@ export default function BrainPage() {
           </Rise>
         ) : null}
 
-        {/* ── Standing instructions ─────────────────────────────────────── */}
-        <Rise i={5} className="mc-a-rules">
-          <Panel title="Standing instructions" className="h-full">
-            <StandingInstructions />
-          </Panel>
-        </Rise>
+        {/* ⚠️ The "Standing instructions" panel lived here and was REMOVED
+            2026-08-12. It read `gtmMaya.steering.listMySteeringDirectives` —
+            the frozen product's `gtmSteeringDirectives` table — while the live
+            module writes founder directives to `directives`. So a rule given
+            to Maya today was never going to appear in it, and anything it did
+            show came from a system that no longer runs.
+
+            House Rules is now its own top-level screen (§16.2), backed by
+            `maya.directives.myHouseRules`, and it is the only place rules are
+            shown. Two screens, one of them stale, is worse than one. */}
 
         {/* ── Competitor watch ──────────────────────────────────────────── */}
         {comps.length > 0 ? (
