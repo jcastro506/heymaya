@@ -13,6 +13,7 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { useQuery } from "convex/react";
+import { ActivityLive } from "../_ActivityLive";
 import { api } from "@/convex/_generated/api";
 import {
   clock,
@@ -32,7 +33,8 @@ const ICON_PATHS: Record<string, string> = {
   found: "M13 2 5 14h6l-1 8 8-12h-6l1-8z", // bolt
   drafted: "M4 19h16M4 5h16M6 12h12", // lines
   posted: "M20 6 9 17l-5-5", // check
-  thinking: "M12 3v3m0 12v3m9-9h-3M6 12H3m14.5-6.5-2 2m-7 7-2 2m11 0-2-2m-7-7-2-2", // spark
+  thinking:
+    "M12 3v3m0 12v3m9-9h-3M6 12H3m14.5-6.5-2 2m-7 7-2 2m11 0-2-2m-7-7-2-2", // spark
   plan_changed: "M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Zm0 0v14m6-12v14", // map
   status: "M12 20v-6m-5 6v-9m10 9V8", // bars
 };
@@ -40,8 +42,19 @@ const HOT_KINDS = new Set(["found", "drafted", "posted", "plan_changed"]);
 
 function KindIcon({ kind }: { kind: string }) {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" strokeWidth="2" aria-hidden>
-      <path d={ICON_PATHS[kind] ?? ICON_PATHS.status} strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      strokeWidth="2"
+      aria-hidden
+    >
+      <path
+        d={ICON_PATHS[kind] ?? ICON_PATHS.status}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -54,11 +67,15 @@ function dayLabel(ms: number): string {
   today.setHours(0, 0, 0, 0);
   if (ms >= today.getTime()) return "Today";
   if (ms >= today.getTime() - 24 * 60 * 60 * 1000) return "Yesterday";
-  return d.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
+  return d.toLocaleDateString([], {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function groupByDay<T extends { ts: number }>(
-  rows: T[]
+  rows: T[],
 ): Array<{ key: string; label: string; rows: T[] }> {
   const groups: Array<{ key: string; label: string; rows: T[] }> = [];
   const byKey = new Map<string, (typeof groups)[number]>();
@@ -88,10 +105,13 @@ export default function ActivityPage() {
 
   const feedGroups = useMemo(
     () => groupByDay((activity ?? []).map((a) => ({ ...a, ts: a.createdAt }))),
-    [activity]
+    [activity],
   );
   // Phone reads oldest → newest; the query returns newest first.
-  const thread = useMemo(() => [...(messages ?? [])].reverse().slice(-60), [messages]);
+  const thread = useMemo(
+    () => [...(messages ?? [])].reverse().slice(-60),
+    [messages],
+  );
 
   const phoneRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -102,7 +122,8 @@ export default function ActivityPage() {
   if (snapshot === undefined || activity === undefined) return <Loading />;
   if (snapshot === null) return <NeedsOnboarding />;
 
-  const recent = activity[0] && Date.now() - activity[0].createdAt < 30 * 60 * 1000;
+  const recent =
+    activity[0] && Date.now() - activity[0].createdAt < 30 * 60 * 1000;
   const throttled =
     typeof snapshot.agent.spendThrottledUntil === "number" &&
     snapshot.agent.spendThrottledUntil > Date.now();
@@ -126,6 +147,11 @@ export default function ActivityPage() {
         </>
       }
     >
+      {/* ⭐ The live module's archive. Renders only for a v2 customer — the
+          panels below read the frozen product's tables, which she never
+          writes, so for those accounts this is the only real record here. */}
+      <ActivityLive />
+
       <div className="mc-grid mc-act-grid">
         {/* ── Live wire ─────────────────────────────────────────────────── */}
         <Rise>
@@ -153,7 +179,9 @@ export default function ActivityPage() {
                         </div>
                         <div className="min-w-0">
                           <div className="body">{a.summary}</div>
-                          {a.detail ? <div className="sub">{a.detail}</div> : null}
+                          {a.detail ? (
+                            <div className="sub">{a.detail}</div>
+                          ) : null}
                           {sourceUrl ? (
                             <div className="mt-1">
                               <SrcLink href={sourceUrl}>source ↗</SrcLink>
@@ -180,11 +208,17 @@ export default function ActivityPage() {
                 ))}
               </div>
             ) : thread.length === 0 ? (
-              <Empty title="No messages yet" body="Your chat with Maya mirrors here." />
+              <Empty
+                title="No messages yet"
+                body="Your chat with Maya mirrors here."
+              />
             ) : (
               <div className="mc-phone" ref={phoneRef}>
                 {thread.map((m) => (
-                  <div key={m._id} className={`mc-bub ${m.role === "maya" ? "maya" : "me"}`}>
+                  <div
+                    key={m._id}
+                    className={`mc-bub ${m.role === "maya" ? "maya" : "me"}`}
+                  >
                     {m.body}
                     <span className="bt">{clock(m.ts)}</span>
                   </div>
