@@ -38,7 +38,11 @@
 
 import { v } from "convex/values";
 import type { FunctionReference } from "convex/server";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+} from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { dayKeyInZone, weekKeyInZone } from "./cadence";
@@ -72,7 +76,7 @@ export const TICK_MINUTES = 10;
 /** The founder's local hour and minute, right now. */
 export function localHourMinute(
   now: number,
-  timezone: string
+  timezone: string,
 ): { hour: number; minute: number } {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: timezone,
@@ -126,7 +130,9 @@ export const claimSweep = internalMutation({
     day: v.string(),
   },
   handler: async (ctx, args): Promise<{ claimed: boolean }> => {
-    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    const customer = (await ctx.db.get(
+      args.customerId,
+    )) as Doc<"customers"> | null;
     if (!customer) return { claimed: false };
 
     let sweeps: Record<string, string> = {};
@@ -149,7 +155,9 @@ export const claimSweep = internalMutation({
 export const sweptFor = internalQuery({
   args: { customerId: v.id("customers") },
   handler: async (ctx, args): Promise<Record<string, string>> => {
-    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    const customer = (await ctx.db.get(
+      args.customerId,
+    )) as Doc<"customers"> | null;
     try {
       return customer?.sweptJson ? JSON.parse(customer.sweptJson) : {};
     } catch {
@@ -173,7 +181,75 @@ export const sweptFor = internalQuery({
  * them weekly — a claim that already exists for this week is skipped, so the
  * cron can fire every day and the work happens once.
  */
-export const WEEKLY_SWEEPS = ["formats", "hashtags", "watch", "benchmarks", "strategy"] as const;
+/**
+ * ⭐ The ONE table mapping a sweep name to the function that runs it.
+ *
+ * ⚠️ There used to be two: a `weeklyRefs` object inside the scheduling loop
+ * that was declared and NEVER READ, and a separate `refs` inside `sweepOne`
+ * that did the actual dispatch. They disagreed — `refs` was missing
+ * `benchmarks` and `strategy`, so both logged "no such sweep", returned
+ * `ok: false`, and KEPT THEIR CLAIM. Marked done, never retried.
+ *
+ * Net effect: the niche medians never refreshed and the strategy review never
+ * ran, every week, silently. The lists below are now derived from this map's
+ * keys, so a name with no handler cannot exist.
+ */
+/**
+ * ⭐ The ONE table mapping a sweep name to the function that runs it.
+ *
+ * ⚠️ There used to be two: a `weeklyRefs` object inside the scheduling loop
+ * that was declared and NEVER READ, and a separate `refs` inside `sweepOne`
+ * that did the actual dispatch. They disagreed — `refs` was missing
+ * `benchmarks` and `strategy`, so both logged "no such sweep", returned
+ * `ok: false`, and KEPT THEIR CLAIM. Marked done, never retried.
+ *
+ * Net effect: the niche medians never refreshed and the strategy review never
+ * ran, every week, silently.
+ *
+ * ⚠️ A FUNCTION with an explicit return type, not a module-scope `const`. The
+ * const version types itself from `internal`, which includes this module's own
+ * exports — a circular inference that quietly degrades the ENTIRE codebase to
+ * `any`. That is why the original built its map inside the handler.
+ */
+export type SweepRef = FunctionReference<
+  "action",
+  "internal",
+  { customerId: Id<"customers">; now?: number }
+>;
+
+export function sweepRefs(): Record<string, SweepRef> {
+  return {
+    scroll: internal.maya.scroll.scrollNiche,
+    trends: internal.maya.trends.sweepTrends,
+    competitors: internal.maya.competitors.watchCompetitors,
+    complaints: internal.maya.complaints.mineComplaints,
+    widerWorld: internal.maya.widerWorld.sweepWiderWorld,
+    formats: internal.maya.formats.watchFormats,
+    hashtags: internal.maya.formats.mineHashtagSets,
+    /**
+     * ⚠️ After `formats`. The watch tier upgrades cards the read tier
+     * produced — running it first watches last week's top videos every week,
+     * which looks identical to working and is permanently a week behind.
+     */
+    watch: internal.maya.formats.watchTopFormats,
+    /** Weekly: medians move slowly; a daily read watches a number that barely moves. */
+    benchmarks: internal.maya.benchmarks.refreshBenchmarks,
+    /**
+     * ⚠️ Reads the ladder AND the benchmarks, so it must follow `benchmarks`.
+     * Records a changelog entry and sends nothing — §16.75.05. `weeklyReport`
+     * relays it.
+     */
+    strategy: internal.maya.strategy.reviewStrategy,
+  };
+}
+
+export const WEEKLY_SWEEPS = [
+  "formats",
+  "hashtags",
+  "watch",
+  "benchmarks",
+  "strategy",
+] as const;
 
 export const SWEEPS = [
   "scroll",
@@ -195,12 +271,17 @@ export const sweepDue = internalAction({
   args: { now: v.optional(v.number()), force: v.optional(v.boolean()) },
   handler: async (
     ctx,
-    args
-  ): Promise<{ due: number; scheduled: number; skipped: number; failed: number }> => {
+    args,
+  ): Promise<{
+    due: number;
+    scheduled: number;
+    skipped: number;
+    failed: number;
+  }> => {
     const now = args.now ?? Date.now();
     const customerIds = await ctx.runQuery(
       internal.maya.scheduler.activeV2Customers,
-      {}
+      {},
     );
 
     let due = 0;
@@ -254,14 +335,14 @@ export const sweepDue = internalAction({
       try {
         const expiry = await ctx.runMutation(
           internal.maya.messages.expireStaleQuestions,
-          { customerId, now }
+          { customerId, now },
         );
         if (expiry.expired > 0) scheduled += 1;
       } catch (error) {
         console.error(
           `[watchers] question expiry failed for ${customerId}: ${
             error instanceof Error ? error.message : String(error)
-          }`
+          }`,
         );
       }
 
@@ -274,12 +355,15 @@ export const sweepDue = internalAction({
        * reality rather than yesterday's.
        */
       try {
-        await ctx.runMutation(internal.maya.dashboard.refresh, { customerId, now });
+        await ctx.runMutation(internal.maya.dashboard.refresh, {
+          customerId,
+          now,
+        });
       } catch (error) {
         console.error(
           `[watchers] dashboard refresh failed for ${customerId}: ${
             error instanceof Error ? error.message : String(error)
-          }`
+          }`,
         );
       }
 
@@ -290,7 +374,7 @@ export const sweepDue = internalAction({
       if (!breaker.open) {
         skipped += SWEEPS.length;
         console.warn(
-          `[watchers] skipped ${customerId} — ${breaker.reason ?? "vendor unavailable"}`
+          `[watchers] skipped ${customerId} — ${breaker.reason ?? "vendor unavailable"}`,
         );
         continue;
       }
@@ -328,32 +412,7 @@ export const sweepDue = internalAction({
        * completely normal and be quietly a week stale, forever.
        */
       const week = weekKeyInZone(now, timezone);
-      const weeklyRefs = {
-        formats: internal.maya.formats.watchFormats,
-        hashtags: internal.maya.formats.mineHashtagSets,
-        /**
-         * ⚠️ LAST, and that ordering is load-bearing. The watch tier upgrades
-         * cards the read tier produced — running it before `formats` would
-         * watch last week's top videos every week, which looks identical to
-         * working and is permanently a week behind.
-         */
-        watch: internal.maya.formats.watchTopFormats,
-        /**
-         * Weekly, not daily: the medians move slowly, and recomputing them
-         * every morning spends reads to watch a number that barely changes.
-         */
-        benchmarks: internal.maya.benchmarks.refreshBenchmarks,
-        /**
-         * ⚠️ LAST. It reads the ladder and the benchmarks, so running it before
-         * `benchmarks` would review this week against last week's medians —
-         * which looks identical to working.
-         *
-         * It records a changelog entry and sends nothing: §16.75.05 is explicit
-         * that strategy changes never get their own ping. The weekly report
-         * relays it.
-         */
-        strategy: internal.maya.strategy.reviewStrategy,
-      } as const;
+      // (the sweep→function map lives at module scope — see SWEEP_REFS)
 
       for (const sweep of WEEKLY_SWEEPS) {
         const claim = await ctx.runMutation(internal.maya.watchers.claimSweep, {
@@ -389,7 +448,9 @@ export const sweepDue = internalAction({
 export const releaseSweep = internalMutation({
   args: { customerId: v.id("customers"), sweep: v.string() },
   handler: async (ctx, args): Promise<{ released: boolean }> => {
-    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    const customer = (await ctx.db.get(
+      args.customerId,
+    )) as Doc<"customers"> | null;
     if (!customer) return { released: false };
     let sweeps: Record<string, string> = {};
     try {
@@ -433,17 +494,7 @@ export const sweepOne = internalAction({
   },
   handler: async (ctx, args): Promise<{ ok: boolean }> => {
     const now = args.now ?? Date.now();
-    const refs: Record<string, FunctionReference<"action", "internal", { customerId: Id<"customers">; now?: number }>> = {
-      scroll: internal.maya.scroll.scrollNiche,
-      trends: internal.maya.trends.sweepTrends,
-      competitors: internal.maya.competitors.watchCompetitors,
-      complaints: internal.maya.complaints.mineComplaints,
-      widerWorld: internal.maya.widerWorld.sweepWiderWorld,
-      formats: internal.maya.formats.watchFormats,
-      hashtags: internal.maya.formats.mineHashtagSets,
-      watch: internal.maya.formats.watchTopFormats,
-    };
-    const ref = refs[args.sweep];
+    const ref = sweepRefs()[args.sweep];
     if (!ref) {
       console.error(`[watchers] no such sweep: ${args.sweep}`);
       return { ok: false };
@@ -451,6 +502,31 @@ export const sweepOne = internalAction({
 
     try {
       await ctx.runAction(ref, { customerId: args.customerId, now });
+
+      /**
+       * ⭐ The weekly report, chained to `strategy` rather than listed as its
+       * own sweep.
+       *
+       * §16.75.05: the strategy review "records a changelog entry and sends
+       * nothing — the weekly report relays it." The sweeps are scheduled with
+       * `runAfter(0)` in a loop, so they run CONCURRENTLY and list order
+       * guarantees nothing: as a sibling sweep the report could compose before
+       * `strategy` wrote, and relay last week's verdict. Which would look
+       * exactly like working.
+       *
+       * ⚠️ `sendWeeklyReview` had NO caller at all — the report that carries
+       * the ladder, the benchmarks, the traceability line and both attribution
+       * asks has never been sent to anyone. `messages.send` dedupes on the
+       * week key, so a double-fire is a no-op rather than two reports.
+       */
+      if (args.sweep === "strategy") {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.maya.weeklyReport.sendWeeklyReview,
+          { customerId: args.customerId, now },
+        );
+      }
+
       return { ok: true };
     } catch (error) {
       /**
@@ -465,7 +541,7 @@ export const sweepOne = internalAction({
       console.error(
         `[watchers] ${args.sweep} failed for ${args.customerId}, claim released: ${
           error instanceof Error ? error.message : String(error)
-        }`
+        }`,
       );
       return { ok: false };
     }
