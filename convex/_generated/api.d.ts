@@ -234,6 +234,7 @@ import type * as maya_llm from "../maya/llm.js";
 import type * as maya_media from "../maya/media.js";
 import type * as maya_messages from "../maya/messages.js";
 import type * as maya_metrics from "../maya/metrics.js";
+import type * as maya_onramp from "../maya/onramp.js";
 import type * as maya_outbound from "../maya/outbound.js";
 import type * as maya_pairing from "../maya/pairing.js";
 import type * as maya_plainLanguage from "../maya/plainLanguage.js";
@@ -510,6 +511,7 @@ declare const fullApi: ApiFromModules<{
   "maya/media": typeof maya_media;
   "maya/messages": typeof maya_messages;
   "maya/metrics": typeof maya_metrics;
+  "maya/onramp": typeof maya_onramp;
   "maya/outbound": typeof maya_outbound;
   "maya/pairing": typeof maya_pairing;
   "maya/plainLanguage": typeof maya_plainLanguage;
