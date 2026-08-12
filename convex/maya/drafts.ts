@@ -144,6 +144,31 @@ export const create = internalMutation({
     });
 
     /**
+     * ⭐ Today's promise, written down (§12).
+     *
+     * ⚠️ `dayPlan.planPost` had no caller, so `dayPlans` was never written —
+     * while TWO live consumers waited on it: `publish` calls `markDoneByIdea`
+     * and marks nothing, and the evening recap reads `planFor` and finds no
+     * promise to report against.
+     *
+     * That is the 08-08 incident the recap's own comment describes: "the recap
+     * that evening was perfectly accurate about the zero while silent about
+     * the promise." The machinery to fix it was built and never connected.
+     *
+     * Drafting is the moment the idea becomes a commitment, and `planPost` is
+     * idempotent per `{day, ideaId}` — so a redraft of the same idea updates
+     * one promise rather than making a second.
+     */
+    if (args.ideaId) {
+      await ctx.runMutation(internal.maya.dayPlan.planPost, {
+        customerId: args.customerId,
+        ideaId: args.ideaId,
+        channel: args.channel,
+        now,
+      });
+    }
+
+    /**
      * ⭐ §14.45 rung 1 — if this draft already links to their product, that
      * link becomes a tracked one BEFORE they read it.
      *
