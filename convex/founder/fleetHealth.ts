@@ -44,6 +44,7 @@
 import { v } from "convex/values";
 import { query } from "../_generated/server";
 import { internal } from "../_generated/api";
+import type { UnreachableCustomer } from "../maya/delivery";
 import type { Doc, Id } from "../_generated/dataModel";
 // ⚠️ Static. Convex queries and mutations cannot do dynamic imports — the
 // failure is a RUNTIME `dynamic module import unsupported`, not a compile
@@ -85,7 +86,11 @@ export interface FleetHealth {
     totalUsd: number;
     averageUsd: number;
     /** Worst first — the tail is where the pricing risk lives. */
-    outliers: Array<{ customerId: Id<"customers">; usd: number; timesAverage: number }>;
+    outliers: Array<{
+      customerId: Id<"customers">;
+      usd: number;
+      timesAverage: number;
+    }>;
   };
   /**
    * Vendors not at `ok`. Empty is the good case.
@@ -102,6 +107,15 @@ export interface FleetHealth {
     checkedAt: number;
   }>;
   traceability?: { posts: number; traceable: number; share: number | null };
+  /**
+   * ⭐ Customers we can no longer reach at all.
+   *
+   * Listed above traceability in importance and below cadence in order: an
+   * account we cannot message is one where every other number on this screen
+   * is describing work the founder will never hear about. It is also the only
+   * failure here that the operator fixes with a thirty-second email.
+   */
+  unreachable?: UnreachableCustomer[];
   /** What this view deliberately cannot answer yet. Stated, never implied. */
   notYetAnswered: string[];
 }
@@ -125,10 +139,17 @@ export const health = query({
       now,
     });
     const spend = await ctx.runQuery(internal.maya.cogs.fleet, { now });
-    const trace = await ctx.runQuery(internal.maya.traceability.fleetTraceability, {
-      now,
-    });
+    const trace = await ctx.runQuery(
+      internal.maya.traceability.fleetTraceability,
+      {
+        now,
+      },
+    );
     const breakers = await ctx.runQuery(internal.maya.breaker.allVendors, {});
+    const unreachable = await ctx.runQuery(
+      internal.maya.delivery.fleetUnreachable,
+      { now },
+    );
 
     /**
      * ⚠️ Stuck is computed from the LAST PLACEMENT, not from the streak.
@@ -138,7 +159,10 @@ export const health = query({
      * morning. Days-since-last-placement is the thing that distinguishes a
      * quiet morning from an account that has stopped.
      */
-    const stuck: Array<{ customerId: Id<"customers">; daysSince: number | null }> = [];
+    const stuck: Array<{
+      customerId: Id<"customers">;
+      daysSince: number | null;
+    }> = [];
 
     for (const row of cadenceRows) {
       if (row.todayDone) continue;
@@ -164,13 +188,19 @@ export const health = query({
 
     return {
       ok: true,
+      unreachable,
       cadence: {
         activeCustomers: cadenceRows.length,
         doneToday: cadenceRows.filter((r) => r.todayDone).length,
-        bestStreak: cadenceRows.reduce((best, r) => Math.max(best, r.streak), 0),
+        bestStreak: cadenceRows.reduce(
+          (best, r) => Math.max(best, r.streak),
+          0,
+        ),
         // Longest-stopped first: the account that has been silent longest is
         // the one to look at, not the one that happens to sort first.
-        stuck: stuck.sort((a, b) => (b.daysSince ?? 1e9) - (a.daysSince ?? 1e9)),
+        stuck: stuck.sort(
+          (a, b) => (b.daysSince ?? 1e9) - (a.daysSince ?? 1e9),
+        ),
       },
       spend: {
         windowDays: spend.windowDays,
@@ -188,7 +218,11 @@ export const health = query({
           checkedAt: b.checkedAt,
         }))
         // Critical before low — the one already failing outranks the warning.
-        .sort((a, b) => (a.verdict === "critical" ? -1 : 1) - (b.verdict === "critical" ? -1 : 1)),
+        .sort(
+          (a, b) =>
+            (a.verdict === "critical" ? -1 : 1) -
+            (b.verdict === "critical" ? -1 : 1),
+        ),
       traceability: {
         posts: trace.posts,
         traceable: trace.traceable,
@@ -260,7 +294,7 @@ export const aggregateLearning = query({
   args: { token: v.string(), now: v.optional(v.number()) },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<{
     ok: boolean;
     ladder?: FleetLadder;
