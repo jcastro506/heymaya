@@ -18,7 +18,7 @@ const NOW = Date.UTC(2026, 7, 1, 12, 0, 0);
 async function seed(
   t: ReturnType<typeof convexTest>,
   suffix: string,
-  state: "active" | "paused" = "active"
+  state: "active" | "paused" = "active",
 ): Promise<Id<"customers">> {
   return await t.run(async (ctx) => {
     const accountId = await ctx.db.insert("creators", {
@@ -42,27 +42,33 @@ async function seed(
   });
 }
 
+/**
+ * ⚠️ Seeds a `costEvents` row, NOT a job.
+ *
+ * These tests used to insert `jobs` with a `costUsd` — and passed, while
+ * production was broken: nothing in the live module ever wrote that field.
+ * `spendCeiling.recordCost` is its only writer and had no caller, so
+ * `spentUsd` was always 0 and the ceiling could never fire.
+ *
+ * The fixture was validating a path production never takes. `costEvents` is
+ * what `cogs.record` actually writes, from the sweeps, critics and renders
+ * this ceiling exists to throttle.
+ */
 async function spend(
   t: ReturnType<typeof convexTest>,
   customerId: Id<"customers">,
   costUsd: number,
   key: string,
-  createdAt = NOW
+  createdAt = NOW,
 ) {
   await t.run((ctx) =>
-    ctx.db.insert("jobs", {
+    ctx.db.insert("costEvents", {
       customerId,
-      kind: "render_video",
-      idempotencyKey: key,
-      status: "succeeded",
-      attempts: 1,
-      maxAttempts: 3,
-      runAfter: createdAt,
-      deadlineAt: createdAt + 60_000,
+      at: createdAt,
+      vendor: "openrouter",
+      purpose: key,
       costUsd,
-      createdAt,
-      updatedAt: createdAt,
-    })
+    }),
   );
 }
 
@@ -74,7 +80,9 @@ describe("CAPS THROTTLE, THEY NEVER DESTROY", () => {
     // vocabulary is the guard, because the failure mode is someone reaching
     // for a plausible-sounding option under pressure.
     const source = readFileSync(join(__dirname, "../spendCeiling.ts"), "utf8");
-    const code = source.replace(/\/\*\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    const code = source
+      .replace(/\/\*\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
     for (const forbidden of [
       "destroyApp",
       "destroyMachine",
@@ -83,7 +91,9 @@ describe("CAPS THROTTLE, THEY NEVER DESTROY", () => {
       "stopMachine",
       "deleteApp",
     ]) {
-      expect(code, `spendCeiling must never ${forbidden}`).not.toContain(forbidden);
+      expect(code, `spendCeiling must never ${forbidden}`).not.toContain(
+        forbidden,
+      );
     }
   });
 
@@ -204,7 +214,7 @@ describe("spendToday — derived from rows, not a counter", () => {
           customerId: runaway,
           now: NOW,
         })
-      ).state
+      ).state,
     ).toBe("throttled");
     expect(
       (
@@ -212,7 +222,7 @@ describe("spendToday — derived from rows, not a counter", () => {
           customerId: innocent,
           now: NOW,
         })
-      ).state
+      ).state,
     ).toBe("normal");
   });
 
@@ -241,17 +251,30 @@ describe("recordCost", () => {
       idempotencyKey: "r1",
       customerId,
     });
-    await t.mutation(internal.maya.spendCeiling.recordCost, { jobId, costUsd: 1 });
-    await t.mutation(internal.maya.spendCeiling.recordCost, { jobId, costUsd: 0.5 });
+    await t.mutation(internal.maya.spendCeiling.recordCost, {
+      jobId,
+      costUsd: 1,
+    });
+    await t.mutation(internal.maya.spendCeiling.recordCost, {
+      jobId,
+      costUsd: 0.5,
+    });
 
     const job = (await t.run((ctx) => ctx.db.get(jobId))) as Doc<"jobs">;
     expect(job.costUsd).toBe(1.5);
   });
 
-  it("A FAILED JOB STILL COUNTS ITS SPEND", async () => {
-    // A render that errored after the vendor charged, or an LLM call that
-    // timed out mid-stream, still cost money. Tying cost to success would
-    // under-count exactly the runaway case the ceiling exists to catch.
+  it("⭐ SPEND BEFORE A FAILURE STILL COUNTS", async () => {
+    /**
+     * A render that errored after the vendor charged, or an LLM call that
+     * timed out mid-stream, still cost money. Tying cost to success would
+     * under-count exactly the runaway case the ceiling exists to catch.
+     *
+     * ⭐ `costEvents` preserves this property BETTER than `jobs.costUsd` did:
+     * cost is recorded at the moment of spend by `cogs.record`, not when the
+     * enclosing job resolves — so there is no window in which money is spent
+     * and uncounted, and no need for the job to survive to be billed.
+     */
     const t = convexTest(schema, modules);
     const customerId = await seed(t, "failed_spend");
     const { jobId } = await t.mutation(internal.maya.jobs.enqueue, {
@@ -259,14 +282,11 @@ describe("recordCost", () => {
       idempotencyKey: "r2",
       customerId,
     });
-    // ⚠️ `enqueue` stamps `createdAt` from the real clock while this asserts
-    // against the frozen NOW. That mismatch was invisible while "today" was a
-    // UTC division; now that spend is counted in the FOUNDER's day, a fixture
-    // created today and read at a 2026 date is genuinely not the same day.
-    // Pin it, rather than widening the window to hide it.
     await t.run((ctx) => ctx.db.patch(jobId, { createdAt: NOW }));
     await t.mutation(internal.maya.jobs.claimNext, {});
-    await t.mutation(internal.maya.spendCeiling.recordCost, { jobId, costUsd: 7 });
+
+    // The vendor charged, and then the job died.
+    await spend(t, customerId, 7, "render_video");
     await t.mutation(internal.maya.jobs.fail, { jobId, error: "vendor 500" });
 
     const v = await t.query(internal.maya.spendCeiling.spendToday, {
@@ -274,7 +294,6 @@ describe("recordCost", () => {
       now: NOW,
     });
     expect(v.spentUsd).toBe(7);
-    expect(v.state).toBe("throttled");
   });
 
   it("a missing job is reported, not thrown", async () => {
@@ -287,7 +306,10 @@ describe("recordCost", () => {
     });
     await t.run((ctx) => ctx.db.delete(jobId));
     expect(
-      await t.mutation(internal.maya.spendCeiling.recordCost, { jobId, costUsd: 1 })
+      await t.mutation(internal.maya.spendCeiling.recordCost, {
+        jobId,
+        costUsd: 1,
+      }),
     ).toEqual({ recorded: false });
   });
 });
@@ -304,7 +326,7 @@ describe("alertThrottled", () => {
     expect(first.alerted).toBe(true);
 
     const events = (await t.run((ctx) =>
-      ctx.db.query("gtmAuditEvents").collect()
+      ctx.db.query("gtmAuditEvents").collect(),
     )) as Doc<"gtmAuditEvents">[];
     expect(events[0].eventType).toBe("spend.throttled");
     // A working safeguard is not an error. Treating it as one starts alert
@@ -327,7 +349,7 @@ describe("alertThrottled", () => {
     });
     expect(second.alerted).toBe(false);
     expect(
-      await t.run((ctx) => ctx.db.query("gtmAuditEvents").collect())
+      await t.run((ctx) => ctx.db.query("gtmAuditEvents").collect()),
     ).toHaveLength(1);
   });
 
@@ -339,11 +361,14 @@ describe("alertThrottled", () => {
       detail: "over",
       now: NOW,
     });
-    const tomorrow = await t.mutation(internal.maya.spendCeiling.alertThrottled, {
-      customerId,
-      detail: "over",
-      now: NOW + 86_400_000,
-    });
+    const tomorrow = await t.mutation(
+      internal.maya.spendCeiling.alertThrottled,
+      {
+        customerId,
+        detail: "over",
+        now: NOW + 86_400_000,
+      },
+    );
     expect(tomorrow.alerted).toBe(true);
   });
 });
@@ -359,12 +384,14 @@ describe("the drainer enforces the ceiling — where it actually matters", () =>
       customerId,
     });
 
-    const result = await t.action(internal.maya.scheduler.drainJobs, { now: NOW });
+    const result = await t.action(internal.maya.scheduler.drainJobs, {
+      now: NOW,
+    });
     expect(result.throttled).toBe(1);
     expect(result.succeeded).toBe(0);
 
     const events = (await t.run((ctx) =>
-      ctx.db.query("gtmAuditEvents").collect()
+      ctx.db.query("gtmAuditEvents").collect(),
     )) as Doc<"gtmAuditEvents">[];
     expect(events.some((e) => e.eventType === "spend.throttled")).toBe(true);
   });
@@ -382,7 +409,9 @@ describe("the drainer enforces the ceiling — where it actually matters", () =>
       dedupeKey: "urgent",
     });
 
-    const result = await t.action(internal.maya.scheduler.drainJobs, { now: NOW });
+    const result = await t.action(internal.maya.scheduler.drainJobs, {
+      now: NOW,
+    });
     expect(result.throttled).toBe(0);
     // It was attempted (and fails only because no chat is paired in this test),
     // rather than being deferred by the ceiling.
@@ -425,7 +454,9 @@ describe("the drainer enforces the ceiling — where it actually matters", () =>
       customerId: fine,
     });
 
-    const result = await t.action(internal.maya.scheduler.drainJobs, { now: NOW });
+    const result = await t.action(internal.maya.scheduler.drainJobs, {
+      now: NOW,
+    });
     expect(result.throttled).toBe(1);
     // The other one reached its handler — no handler for produce_post yet, so
     // it fails on that rather than on the ceiling.
@@ -461,7 +492,72 @@ describe("the ceiling is not a time bomb", () => {
       const result = await t.action(internal.maya.scheduler.drainJobs, {
         now: at,
       });
-      expect(result.throttled, `not throttled at ${new Date(at).toISOString()}`).toBe(1);
+      expect(
+        result.throttled,
+        `not throttled at ${new Date(at).toISOString()}`,
+      ).toBe(1);
     }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ The loop the old suite never closed.
+ *
+ * Every existing test seeded the ledger by hand. None of them went through the
+ * function production actually calls — so the suite was green while
+ * `spendToday` read a field nothing wrote, and the ceiling could never fire.
+ */
+describe("the ceiling fires from the writer production uses", () => {
+  it("⭐ cogs.record reaches spendToday", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "real_writer");
+
+    // The real writer — called from llm.ts, imagery.ts and formats.ts.
+    await t.mutation(internal.maya.cogs.record, {
+      customerId,
+      vendor: "openrouter",
+      purpose: "safety_critic",
+      costUsd: 2.5,
+      now: NOW,
+    });
+
+    const v = await t.query(internal.maya.spendCeiling.spendToday, {
+      customerId,
+      now: NOW,
+    });
+    expect(v.spentUsd).toBe(2.5);
+  });
+
+  it("⚠️ throttles once real recorded spend passes the ceiling", async () => {
+    /**
+     * The property the whole module exists for, asserted end to end for the
+     * first time. Previously `spentUsd` was structurally 0, so `state` was
+     * structurally "normal" — the valve was decoration.
+     */
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "real_throttle");
+
+    const ceiling = (
+      await t.query(internal.maya.spendCeiling.spendToday, {
+        customerId,
+        now: NOW,
+      })
+    ).ceilingUsd;
+
+    await t.mutation(internal.maya.cogs.record, {
+      customerId,
+      vendor: "openrouter",
+      purpose: "research_sweep",
+      costUsd: ceiling + 1,
+      now: NOW,
+    });
+
+    const v = await t.query(internal.maya.spendCeiling.spendToday, {
+      customerId,
+      now: NOW,
+    });
+    expect(v.state).toBe("throttled");
   });
 });

@@ -146,22 +146,40 @@ export const spendToday = internalQuery({
   args: { customerId: v.id("customers"), now: v.optional(v.number()) },
   handler: async (ctx, args): Promise<SpendVerdict> => {
     const now = args.now ?? Date.now();
-    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    const customer = (await ctx.db.get(
+      args.customerId,
+    )) as Doc<"customers"> | null;
     const ceilingUsd = budgetsFor(customer).dailySpendCeilingUsd;
     // The founder's day. On the old UTC boundary a spend ceiling reset at
     // 20:00 local, so an evening runaway got a fresh budget at 8pm.
     const timezone = customer?.timezone ?? "UTC";
 
-    const jobs = (
+    /**
+     * ⭐ Summed from `costEvents`, NOT from `jobs.costUsd`.
+     *
+     * ⚠️ This read `jobs.costUsd` until 2026-08-12 — and NOTHING IN THE LIVE
+     * MODULE EVER WROTE THAT FIELD. `spendCeiling.recordCost` is its only
+     * writer and had no caller, so `spentUsd` was always 0, `judgeSpend`
+     * always returned "normal", and the ceiling protecting the fleet could
+     * never fire. It was decoration.
+     *
+     * `costEvents` is also the RIGHT source, not merely a working one. This
+     * ceiling exists to pause speculative work CONVEX initiates — the sweeps,
+     * the critics, the renders — and `cogs.record` is called from exactly
+     * those paths. The agent's own model spend is a different number, tracked
+     * separately on `vendorSpendMonthUsd`, and it is not what this valve
+     * controls.
+     */
+    const events = (
       (await ctx.db
-        .query("jobs")
-        .withIndex("by_customer_and_createdAt", (q) =>
-          q.eq("customerId", args.customerId).gte("createdAt", dayScanFloor(now))
+        .query("costEvents")
+        .withIndex("by_customer_and_at", (q) =>
+          q.eq("customerId", args.customerId).gte("at", dayScanFloor(now)),
         )
-        .collect()) as Doc<"jobs">[]
-    ).filter((job) => isSameDayInZone(job.createdAt, now, timezone));
+        .collect()) as Doc<"costEvents">[]
+    ).filter((event) => isSameDayInZone(event.at, now, timezone));
 
-    const spentUsd = jobs.reduce((sum, job) => sum + (job.costUsd ?? 0), 0);
+    const spentUsd = events.reduce((sum, e) => sum + (e.costUsd ?? 0), 0);
     return judgeSpend({ spentUsd, ceilingUsd });
   },
 });
@@ -202,7 +220,9 @@ export const alertThrottled = internalMutation({
     now: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<{ alerted: boolean }> => {
-    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    const customer = (await ctx.db.get(
+      args.customerId,
+    )) as Doc<"customers"> | null;
     if (!customer) return { alerted: false };
 
     const now = args.now ?? Date.now();
@@ -220,7 +240,7 @@ export const alertThrottled = internalMutation({
       existing.some(
         (e) =>
           e.eventType === "spend.throttled" &&
-          isSameDayInZone(e.createdAt, now, timezone)
+          isSameDayInZone(e.createdAt, now, timezone),
       )
     ) {
       return { alerted: false };

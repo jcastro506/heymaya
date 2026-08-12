@@ -4119,8 +4119,13 @@ export default defineSchema({
    *
    * ## Why a table rather than a field on `jobs`
    *
-   * `spendCeiling.recordCost` stamps cost onto a job row, and `spendToday`
-   * sums job costs. But most model calls in `convex/maya` are crons and gates
+   * ⚠️ `spendToday` read `jobs.costUsd` until 2026-08-12 — and NOTHING in the
+   * live module ever wrote that field, so the ceiling could never fire. The
+   * reasoning below was written when this table was created; the consumer was
+   * never switched over to it. It reads `costEvents` now.
+   *
+   * `spendCeiling.recordCost` stamps cost onto a job row, and that ledger is
+   * unread. Most model calls in `convex/maya` are crons and gates
    * — research sweeps, the directive gate, the safety critic, idea scoring —
    * which are not jobs at all. Counting only job-attributed spend reports a
    * fraction of the bill and reads as a working ledger, which is how this
