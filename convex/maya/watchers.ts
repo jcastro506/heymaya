@@ -224,6 +224,11 @@ export function sweepRefs(): Record<string, SweepRef> {
     competitors: internal.maya.competitors.watchCompetitors,
     complaints: internal.maya.complaints.mineComplaints,
     widerWorld: internal.maya.widerWorld.sweepWiderWorld,
+    /**
+     * ⭐ The real LLM bill, from OpenRouter. Daily, because it is one cheap
+     * read per customer and the number it corrects was wrong by ~50x.
+     */
+    spend: internal.maya.cogs.refreshVendorSpend,
     formats: internal.maya.formats.watchFormats,
     hashtags: internal.maya.formats.mineHashtagSets,
     /**
@@ -257,6 +262,7 @@ export const SWEEPS = [
   "competitors",
   "complaints",
   "widerWorld",
+  "spend",
 ] as const;
 
 /**
@@ -296,6 +302,11 @@ export const sweepDue = internalAction({
       competitors: internal.maya.competitors.watchCompetitors,
       complaints: internal.maya.complaints.mineComplaints,
       widerWorld: internal.maya.widerWorld.sweepWiderWorld,
+      /**
+       * ⭐ The real LLM bill, from OpenRouter. Daily, because it is one cheap
+       * read per customer and the number it corrects was wrong by ~50x.
+       */
+      spend: internal.maya.cogs.refreshVendorSpend,
     } as const;
 
     for (const customerId of customerIds) {

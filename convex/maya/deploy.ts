@@ -129,14 +129,20 @@ export interface MachineConfigInput {
 export function deploymentSlug(siteUrl: string | undefined): string {
   // https://precise-canary-781.convex.site -> precisecanary781
   const host = (siteUrl ?? "").replace(/^https?:\/\//, "").split(".")[0] ?? "";
-  const slug = host.replace(/[^a-z0-9]/gi, "").toLowerCase().slice(0, 20);
+  const slug = host
+    .replace(/[^a-z0-9]/gi, "")
+    .toLowerCase()
+    .slice(0, 20);
   // Deliberately no fallback to a shared default: an unknown deployment must
   // not silently share a namespace with a known one.
   return slug || "unknown";
 }
 
 /** Fly app name for one customer, scoped to this Convex deployment. */
-export function flyAppName(customerId: string, siteUrl: string | undefined): string {
+export function flyAppName(
+  customerId: string,
+  siteUrl: string | undefined,
+): string {
   return `maya-${deploymentSlug(siteUrl)}-${customerId.toLowerCase().slice(-10)}`;
 }
 
@@ -237,7 +243,9 @@ export function buildBootScript(): string {
  * revisited, and it has no mechanism in a Fly machine config, so that day needs
  * a plan rather than a flag.
  */
-export function buildMachineConfig(input: MachineConfigInput): FlyMachineConfig {
+export function buildMachineConfig(
+  input: MachineConfigInput,
+): FlyMachineConfig {
   // `publicEnv` is the one hole in "this function is given no secrets": a
   // caller can pass anything. Strip the known secret names rather than trust
   // every future caller to remember — the cost of being wrong here is a
@@ -245,8 +253,8 @@ export function buildMachineConfig(input: MachineConfigInput): FlyMachineConfig 
   // the filter is nothing.
   const publicEnv = Object.fromEntries(
     Object.entries(input.publicEnv ?? {}).filter(
-      ([key]) => !(REQUIRED_SECRET_NAMES as readonly string[]).includes(key)
-    )
+      ([key]) => !(REQUIRED_SECRET_NAMES as readonly string[]).includes(key),
+    ),
   );
 
   return {
@@ -312,7 +320,11 @@ export function buildMachineConfig(input: MachineConfigInput): FlyMachineConfig 
     // Replaces the image CMD. Without this the plugin is never installed and
     // the seed-if-absent copy never happens.
     init: { cmd: ["/bin/sh", "-lc", buildBootScript()] },
-    metadata: { product: "maya", agentVersion: "v2", customerId: input.customerId },
+    metadata: {
+      product: "maya",
+      agentVersion: "v2",
+      customerId: input.customerId,
+    },
   };
 }
 
@@ -344,7 +356,9 @@ export const storeAgentTokenHash = internalMutation({
     machineUrl: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<{ stored: boolean }> => {
-    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    const customer = (await ctx.db.get(
+      args.customerId,
+    )) as Doc<"customers"> | null;
     if (!customer) return { stored: false };
     await ctx.db.patch(args.customerId, {
       agentTokenHash: args.tokenHash,
@@ -373,9 +387,13 @@ export const storeAgentTokenHash = internalMutation({
 export const workspaceInput = internalQuery({
   args: { customerId: v.id("customers") },
   handler: async (ctx, args): Promise<MayaWorkspaceInput | null> => {
-    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    const customer = (await ctx.db.get(
+      args.customerId,
+    )) as Doc<"customers"> | null;
     if (!customer) return null;
-    const account = (await ctx.db.get(customer.accountId)) as Doc<"creators"> | null;
+    const account = (await ctx.db.get(
+      customer.accountId,
+    )) as Doc<"creators"> | null;
 
     const channels = (await ctx.db
       .query("channels")
@@ -405,7 +423,8 @@ export const workspaceInput = internalQuery({
         const parsed = r.interpretationJson
           ? (JSON.parse(r.interpretationJson) as { meaning?: unknown })
           : {};
-        meaning = typeof parsed.meaning === "string" ? parsed.meaning : undefined;
+        meaning =
+          typeof parsed.meaning === "string" ? parsed.meaning : undefined;
       } catch {
         /* the verbatim rule is what matters; a bad interpretation is dropped */
       }
@@ -414,17 +433,20 @@ export const workspaceInput = internalQuery({
 
     const rejections = await ctx.runQuery(
       internal.maya.voiceCorpus.rejectionsFor,
-      { customerId: args.customerId }
+      { customerId: args.customerId },
     );
     const editPairs = await ctx.runQuery(
       internal.maya.voiceCorpus.editPairsFor,
-      { customerId: args.customerId }
+      { customerId: args.customerId },
     );
 
     return {
       founder: {
         email: account?.email ?? "unknown",
-        name: typeof product.founderName === "string" ? product.founderName : undefined,
+        name:
+          typeof product.founderName === "string"
+            ? product.founderName
+            : undefined,
         timezone: customer.timezone,
       },
       /**
@@ -463,7 +485,9 @@ export const workspaceInput = internalQuery({
           : undefined,
         // Outranks everything scraped — a page goes stale, their words don't.
         founderSays: Array.isArray(product.founderSays)
-          ? product.founderSays.filter((f): f is string => typeof f === "string")
+          ? product.founderSays.filter(
+              (f): f is string => typeof f === "string",
+            )
           : undefined,
       },
       channels: live.map((c) => ({
@@ -493,7 +517,9 @@ function safeJson(raw: string | undefined): Record<string, unknown> {
   if (!raw) return {};
   try {
     const parsed = JSON.parse(raw) as unknown;
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+    return typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed)
       ? (parsed as Record<string, unknown>)
       : {};
   } catch {
@@ -544,7 +570,7 @@ export const deployMachine = internalAction({
   },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<
     | { ok: true; appName: string; machineId: string; started: boolean }
     | { ok: false; error: string }
@@ -606,7 +632,7 @@ export const deployMachine = internalAction({
       }
     }
 
-      /**
+    /**
      * ⭐ DESTROY ANY EXISTING MACHINE FIRST. The deploy has to be idempotent.
      *
      * Two reasons, and the second is worse than the first:
@@ -669,13 +695,48 @@ export const deployMachine = internalAction({
           tokenHash: await hashToken(token),
           gatewayToken,
           machineUrl,
-        }
+        },
       );
-      if (!stored.stored) return { ok: false, error: "customer vanished mid-deploy" };
+      if (!stored.stored)
+        return { ok: false, error: "customer vanished mid-deploy" };
+
+      /**
+       * ⭐ This customer's OWN OpenRouter key, so the bill is attributable.
+       *
+       * Measured 2026-08-07: `costEvents` covers **2% of the LLM spend** — it
+       * only sees calls made from Convex. The other 98% is the agent loop on
+       * Fly calling OpenRouter directly, where nothing of ours can see it.
+       * OpenRouter reports usage per key, so one key per machine is the only
+       * thing that makes the number both complete AND per-customer.
+       *
+       * ⚠️ INSTRUMENTATION, NEVER A BLOCKER. If minting fails the deploy
+       * continues on the shared fleet key: a machine that cannot think is a
+       * far worse outcome than a spend figure we cannot split.
+       *
+       * ⚠️ Minted on every deploy rather than once. OpenRouter never shows a
+       * key twice, so a redeploy cannot re-set an existing one — and skipping
+       * the secret would leave a RECREATED app with no key at all, which is an
+       * unbootable machine. Duplicate keys at the vendor are labelled and
+       * harmless; an agent that can't answer is not. (Deleting the superseded
+       * key is worth doing and is not done here.)
+       */
+      let modelKey = openrouterKey;
+      const minted = await ctx.runAction(internal.maya.cogs.provisionKey, {
+        customerId: args.customerId,
+        label: appName,
+      });
+      if (minted.ok) {
+        modelKey = minted.key;
+      } else {
+        console.error(
+          `[deploy] per-customer OpenRouter key unavailable for ${appName}, ` +
+            `falling back to the shared key: ${minted.error}`,
+        );
+      }
 
       await fly.setAppSecrets(appName, {
         MAYA_AGENT_TOKEN: token,
-        OPENROUTER_API_KEY: openrouterKey,
+        OPENROUTER_API_KEY: modelKey,
         OPENCLAW_GATEWAY_TOKEN: gatewayToken,
         // Empty is tolerated — the gateway still boots and everything except
         // semantic recall works. A missing key must not block a deploy.
@@ -713,7 +774,7 @@ export const deployMachine = internalAction({
             // loop, not a misplaced file.
             ...Object.entries(workspace.files).map(([path, body]) => ({
               guest_path: stagedPath(
-                path.startsWith("/") ? path : `${WORKSPACE_DIR}/${path}`
+                path.startsWith("/") ? path : `${WORKSPACE_DIR}/${path}`,
               ),
               raw_value: b64(body),
             })),
@@ -781,7 +842,7 @@ export const workspaceFor = internalAction({
   args: { customerId: v.id("customers") },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<{
     files: Record<string, string>;
     seedFiles: Record<string, string>;

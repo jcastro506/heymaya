@@ -32,7 +32,11 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+} from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internal } from "../_generated/api";
 import { dayKeyInZone, isSameMonthInZone, monthScanFloor } from "./cadence";
@@ -77,6 +81,23 @@ export interface CostProjection {
   projectedMonthUsd: number | null;
   /** Plain language, for the operator surface. */
   detail: string;
+  /**
+   * ⭐ The REAL month-to-date bill from OpenRouter, when we have it.
+   *
+   * ⚠️ `monthToDateUsd` above sums `costEvents`, which only records calls made
+   * from Convex — about 2% of the money. The agent loop on Fly calls the
+   * vendor directly. So this field and that one differ by ~50x, and an
+   * operator surface that shows the wrong one is answering "can we afford this
+   * customer at $99" with a number off by a factor of fifty.
+   */
+  vendorMonthUsd?: number;
+  /** §16.4 — a borrowed number carries its age or it eventually lies. */
+  vendorAsOf?: number;
+  /**
+   * True when `monthToDateUsd` is all we have. Stated, never implied: a
+   * partial figure presented as the bill is worse than no figure.
+   */
+  partialOnly: boolean;
 }
 
 /** Days in the calendar month containing `dayKey` (YYYY-MM-DD). */
@@ -101,8 +122,31 @@ export function project(input: {
   monthToDateUsd: number;
   daysObserved: number;
   daysInMonth: number;
+  /** The vendor's own figure, when the customer has a provisioned key. */
+  vendorMonthUsd?: number;
+  vendorAsOf?: number;
 }): CostProjection {
   const { monthToDateUsd, daysObserved, daysInMonth } = input;
+
+  /**
+   * ⭐ The vendor's number wins whenever we have it.
+   *
+   * `monthToDateUsd` sums `costEvents` — Convex's own calls, ~2% of the money.
+   * Projecting from it produces a confident, precise figure that is wrong by
+   * roughly fifty times, which is worse than saying we don't know.
+   */
+  const spend = input.vendorMonthUsd ?? monthToDateUsd;
+  const partialOnly = input.vendorMonthUsd === undefined;
+  const vendorFields = {
+    vendorMonthUsd: input.vendorMonthUsd,
+    vendorAsOf: input.vendorAsOf,
+    partialOnly,
+  };
+
+  /** ⚠️ Said outright. A partial figure presented as the bill is the failure. */
+  const caveat = partialOnly
+    ? " — this is only what Convex spent, not the agent's own model calls"
+    : "";
 
   if (daysObserved < MIN_DAYS_TO_PROJECT) {
     return {
@@ -110,18 +154,20 @@ export function project(input: {
       daysObserved,
       daysInMonth,
       projectedMonthUsd: null,
-      detail: `${formatUsd(monthToDateUsd)} so far — too early in the month to project`,
+      detail: `${formatUsd(spend)} so far — too early in the month to project${caveat}`,
+      ...vendorFields,
     };
   }
 
-  const perDay = monthToDateUsd / daysObserved;
+  const perDay = spend / daysObserved;
   const projectedMonthUsd = perDay * daysInMonth;
   return {
     monthToDateUsd,
     daysObserved,
     daysInMonth,
     projectedMonthUsd,
-    detail: `${formatUsd(monthToDateUsd)} over ${daysObserved} days — on track for about ${formatUsd(projectedMonthUsd)} this month`,
+    detail: `${formatUsd(spend)} over ${daysObserved} days — on track for about ${formatUsd(projectedMonthUsd)} this month${caveat}`,
+    ...vendorFields,
   };
 }
 
@@ -149,7 +195,7 @@ export const record = internalMutation({
       // Loud, because a vendor that stops reporting cost would otherwise make
       // the whole fleet look free.
       console.warn(
-        `[cogs] ${args.vendor}/${args.purpose} reported no cost — not recorded`
+        `[cogs] ${args.vendor}/${args.purpose} reported no cost — not recorded`,
       );
       return { recorded: false };
     }
@@ -178,9 +224,14 @@ export const forCustomer = internalQuery({
   args: { customerId: v.id("customers"), now: v.optional(v.number()) },
   handler: async (
     ctx,
-    args
-  ): Promise<(CostProjection & { byPurpose: Array<{ purpose: string; usd: number }> }) | null> => {
-    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    args,
+  ): Promise<
+    | (CostProjection & { byPurpose: Array<{ purpose: string; usd: number }> })
+    | null
+  > => {
+    const customer = (await ctx.db.get(
+      args.customerId,
+    )) as Doc<"customers"> | null;
     if (!customer) return null;
 
     const now = args.now ?? Date.now();
@@ -191,7 +242,7 @@ export const forCustomer = internalQuery({
       (await ctx.db
         .query("costEvents")
         .withIndex("by_customer_and_at", (q) =>
-          q.eq("customerId", args.customerId).gte("at", monthScanFloor(now))
+          q.eq("customerId", args.customerId).gte("at", monthScanFloor(now)),
         )
         .collect()) as Doc<"costEvents">[]
     ).filter((e) => isSameMonthInZone(e.at, now, timezone));
@@ -210,7 +261,10 @@ export const forCustomer = internalQuery({
 
     const byPurposeMap = new Map<string, number>();
     for (const e of events) {
-      byPurposeMap.set(e.purpose, (byPurposeMap.get(e.purpose) ?? 0) + e.costUsd);
+      byPurposeMap.set(
+        e.purpose,
+        (byPurposeMap.get(e.purpose) ?? 0) + e.costUsd,
+      );
     }
     const byPurpose = [...byPurposeMap.entries()]
       .map(([purpose, usd]) => ({ purpose, usd }))
@@ -221,6 +275,11 @@ export const forCustomer = internalQuery({
         monthToDateUsd,
         daysObserved,
         daysInMonth: daysInMonthOf(todayKey),
+        // ⭐ The real bill, refreshed daily by the `spend` sweep. Absent for a
+        // customer with no provisioned key yet — and then the caller is told
+        // the figure is partial rather than handed it as the truth.
+        vendorMonthUsd: customer.vendorSpendMonthUsd,
+        vendorAsOf: customer.vendorSpendAsOf,
       }),
       byPurpose,
     };
@@ -239,13 +298,17 @@ export const fleet = internalQuery({
   args: { now: v.optional(v.number()) },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<{
     customers: number;
     totalUsd: number;
     averageUsd: number;
     /** Ranked worst-first. The tail is where the pricing risk actually lives. */
-    outliers: Array<{ customerId: Id<"customers">; usd: number; timesAverage: number }>;
+    outliers: Array<{
+      customerId: Id<"customers">;
+      usd: number;
+      timesAverage: number;
+    }>;
     windowDays: number;
   }> => {
     /**
@@ -269,7 +332,10 @@ export const fleet = internalQuery({
 
     const byCustomer = new Map<Id<"customers">, number>();
     for (const e of events) {
-      byCustomer.set(e.customerId, (byCustomer.get(e.customerId) ?? 0) + e.costUsd);
+      byCustomer.set(
+        e.customerId,
+        (byCustomer.get(e.customerId) ?? 0) + e.costUsd,
+      );
     }
 
     const totalUsd = [...byCustomer.values()].reduce((a, b) => a + b, 0);
@@ -348,7 +414,10 @@ export const accountSpend = internalAction({
         detail: `${formatUsd(d.usage_monthly)} this month, ${formatUsd(d.usage_daily ?? 0)} today`,
       };
     } catch (error) {
-      return { ok: false, detail: `couldn't read OpenRouter usage: ${String(error)}` };
+      return {
+        ok: false,
+        detail: `couldn't read OpenRouter usage: ${String(error)}`,
+      };
     }
   },
 });
@@ -402,7 +471,7 @@ export const provisionKey = internalAction({
   args: { customerId: v.id("customers"), label: v.optional(v.string()) },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<
     { ok: true; key: string; hash: string } | { ok: false; error: string }
   > => {
@@ -412,7 +481,8 @@ export const provisionKey = internalAction({
       // ledger stays incomplete, which is a degradation rather than an outage.
       return {
         ok: false,
-        error: "no OPENROUTER_PROVISIONING_KEY — falling back to the shared key",
+        error:
+          "no OPENROUTER_PROVISIONING_KEY — falling back to the shared key",
       };
     }
     try {
@@ -462,7 +532,7 @@ export const machineSpend = internalAction({
   args: { customerId: v.id("customers") },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<
     | { ok: true; todayUsd: number; monthUsd: number; lifetimeUsd: number }
     | { ok: false; error: string }
@@ -492,7 +562,10 @@ export const machineSpend = internalAction({
       };
       const d = body.data;
       if (!d || typeof d.usage_monthly !== "number") {
-        return { ok: false, error: "OpenRouter did not report usage for that key" };
+        return {
+          ok: false,
+          error: "OpenRouter did not report usage for that key",
+        };
       }
       return {
         ok: true,
@@ -509,7 +582,56 @@ export const machineSpend = internalAction({
 export const keyHashFor = internalQuery({
   args: { customerId: v.id("customers") },
   handler: async (ctx, args): Promise<string | null> => {
-    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    const customer = (await ctx.db.get(
+      args.customerId,
+    )) as Doc<"customers"> | null;
     return customer?.openRouterKeyHash ?? null;
+  },
+});
+
+/* -------------------------------------------------------------------------- */
+
+export const storeVendorSpend = internalMutation({
+  args: {
+    customerId: v.id("customers"),
+    monthUsd: v.number(),
+    now: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<null> => {
+    await ctx.db.patch(args.customerId, {
+      vendorSpendMonthUsd: args.monthUsd,
+      vendorSpendAsOf: args.now ?? Date.now(),
+    });
+    return null;
+  },
+});
+
+/**
+ * ⭐ Refresh the real bill for one customer. Runs daily, per customer.
+ *
+ * `machineSpend` and `accountSpend` were both written and never called, so the
+ * only spend figure anywhere was `forCustomer`'s — which sums `costEvents` and
+ * therefore sees about 2% of the money. Every spend number the operator has
+ * looked at has been wrong by roughly 50x.
+ *
+ * ⚠️ Silent no-op on failure, deliberately. A customer with no provisioned key
+ * yet (every customer created before today) simply has no vendor number, and
+ * the reader states that rather than substituting the 2% figure and calling it
+ * the bill.
+ */
+export const refreshVendorSpend = internalAction({
+  args: { customerId: v.id("customers"), now: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<{ ok: boolean; monthUsd?: number }> => {
+    const spend = await ctx.runAction(internal.maya.cogs.machineSpend, {
+      customerId: args.customerId,
+    });
+    if (!spend.ok) return { ok: false };
+
+    await ctx.runMutation(internal.maya.cogs.storeVendorSpend, {
+      customerId: args.customerId,
+      monthUsd: spend.monthUsd,
+      now: args.now,
+    });
+    return { ok: true, monthUsd: spend.monthUsd };
   },
 });

@@ -3504,6 +3504,17 @@ export default defineSchema({
      *
      * Created once, on first connect, then reused.
      */
+    /**
+     * ⭐ What this customer's machine ACTUALLY spent on the model, read from
+     * OpenRouter rather than from our own bookkeeping.
+     *
+     * ⚠️ `costEvents` covers ~2% of it — only calls made from Convex. The
+     * agent loop on Fly calls OpenRouter directly, and nothing of ours sees
+     * that. Reporting the 2% figure as "what they cost" is wrong by ~50x, on
+     * the number that decides whether the price works.
+     */
+    vendorSpendMonthUsd: v.optional(v.number()),
+    vendorSpendAsOf: v.optional(v.number()),
     zernioProfileId: v.optional(v.string()),
     productTruthJson: v.optional(v.string()),
     /** Who buys it: segments, the complaint list, where they gather. JSON. */
