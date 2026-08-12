@@ -28,7 +28,7 @@
  */
 
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "../_generated/server";
+import { internalMutation, internalQuery, query } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 
 /** Short, unguessable enough for a public redirect, short enough for a caption. */
@@ -66,15 +66,22 @@ export const wrapForPlacement = internalMutation({
   },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<{ ok: boolean; token?: string; reason?: string }> => {
-    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    const customer = (await ctx.db.get(
+      args.customerId,
+    )) as Doc<"customers"> | null;
     if (!customer) return { ok: false, reason: "no such account" };
 
-    const placement = (await ctx.db.get(args.placementId)) as Doc<"placements"> | null;
+    const placement = (await ctx.db.get(
+      args.placementId,
+    )) as Doc<"placements"> | null;
     // Cross-tenant guard: a placement from another account never resolves.
     if (!placement || placement.customerId !== args.customerId) {
-      return { ok: false, reason: "that placement belongs to a different account" };
+      return {
+        ok: false,
+        reason: "that placement belongs to a different account",
+      };
     }
 
     /**
@@ -94,7 +101,8 @@ export const wrapForPlacement = internalMutation({
     let token = makeToken(Math.random);
     // Collisions are vanishingly unlikely and catastrophic — a token pointing
     // at someone else's destination — so check rather than assume.
-    for (let i = 0; i < 5 && taken.has(token); i += 1) token = makeToken(Math.random);
+    for (let i = 0; i < 5 && taken.has(token); i += 1)
+      token = makeToken(Math.random);
     if (taken.has(token)) return { ok: false, reason: "couldn't mint a link" };
 
     await ctx.db.insert("gtmLinkWraps", {
@@ -130,7 +138,7 @@ export const recordConversion = internalMutation({
       v.literal("demo"),
       v.literal("feedback"),
       v.literal("revenue"),
-      v.literal("activated")
+      v.literal("activated"),
     ),
     count: v.number(),
     source: v.union(v.literal("self_report"), v.literal("pixel")),
@@ -141,11 +149,18 @@ export const recordConversion = internalMutation({
   },
   handler: async (
     ctx,
-    args
-  ): Promise<{ ok: boolean; conversionId?: Id<"gtmConversions">; reason?: string }> => {
-    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    args,
+  ): Promise<{
+    ok: boolean;
+    conversionId?: Id<"gtmConversions">;
+    reason?: string;
+  }> => {
+    const customer = (await ctx.db.get(
+      args.customerId,
+    )) as Doc<"customers"> | null;
     if (!customer) return { ok: false, reason: "no such account" };
-    if (args.count <= 0) return { ok: false, reason: "a conversion needs a count" };
+    if (args.count <= 0)
+      return { ok: false, reason: "a conversion needs a count" };
 
     let linkWrapId: Id<"gtmLinkWraps"> | undefined;
     if (args.token) {
@@ -205,7 +220,9 @@ export interface Trace {
 export const traceConversion = internalQuery({
   args: { conversionId: v.id("gtmConversions") },
   handler: async (ctx, args): Promise<Trace> => {
-    const conv = (await ctx.db.get(args.conversionId)) as Doc<"gtmConversions"> | null;
+    const conv = (await ctx.db.get(
+      args.conversionId,
+    )) as Doc<"gtmConversions"> | null;
     if (!conv) return { ok: false, hops: [], detail: "no such conversion" };
 
     const hops: TraceHop[] = [
@@ -230,8 +247,11 @@ export const traceConversion = internalQuery({
       };
     }
 
-    const wrap = (await ctx.db.get(conv.linkWrapId)) as Doc<"gtmLinkWraps"> | null;
-    if (!wrap) return { ok: false, hops, breaksAt: "link", detail: "that link is gone" };
+    const wrap = (await ctx.db.get(
+      conv.linkWrapId,
+    )) as Doc<"gtmLinkWraps"> | null;
+    if (!wrap)
+      return { ok: false, hops, breaksAt: "link", detail: "that link is gone" };
 
     const clicks = (await ctx.db
       .query("gtmLinkClicks")
@@ -241,7 +261,9 @@ export const traceConversion = internalQuery({
     hops.push({
       step: "link",
       detail: `came through a link I made${
-        clicks.length > 0 ? `, clicked ${clicks.length} time${clicks.length === 1 ? "" : "s"}` : ""
+        clicks.length > 0
+          ? `, clicked ${clicks.length} time${clicks.length === 1 ? "" : "s"}`
+          : ""
       }`,
       evidence: true,
     });
@@ -255,9 +277,16 @@ export const traceConversion = internalQuery({
       };
     }
 
-    const placement = (await ctx.db.get(wrap.placementId)) as Doc<"placements"> | null;
+    const placement = (await ctx.db.get(
+      wrap.placementId,
+    )) as Doc<"placements"> | null;
     if (!placement) {
-      return { ok: false, hops, breaksAt: "placement", detail: "that post is gone" };
+      return {
+        ok: false,
+        hops,
+        breaksAt: "placement",
+        detail: "that post is gone",
+      };
     }
 
     hops.push({
@@ -316,24 +345,113 @@ export const recentConversions = internalQuery({
   args: { customerId: v.id("customers"), limit: v.optional(v.number()) },
   handler: async (
     ctx,
-    args
-  ): Promise<Array<{ conversionId: Id<"gtmConversions">; kind: string; count: number; source: string; occurredAt: number; traced: boolean }>> => {
+    args,
+  ): Promise<
+    Array<{
+      conversionId: Id<"gtmConversions">;
+      kind: string;
+      count: number;
+      source: string;
+      occurredAt: number;
+      traced: boolean;
+    }>
+  > => {
+    /**
+     * ⚠️ Scoped by INDEX, not by a post-hoc filter.
+     *
+     * This used to scan `by_account` with no `.eq()`, take the newest 200 rows
+     * fleet-wide, and filter to the customer in JS. It looks scoped and is
+     * not: with more than one customer, a founder's conversions can be pushed
+     * out of that 200 entirely and the screen reports zero signups to someone
+     * who had some. §16.2 calls Results "the reason they don't cancel".
+     */
     const rows = (await ctx.db
       .query("gtmConversions")
-      .withIndex("by_account")
+      .withIndex("by_customer_and_occurredAt", (q) =>
+        q.eq("customerId", args.customerId),
+      )
       .order("desc")
-      .take(200)) as Doc<"gtmConversions">[];
+      .take(args.limit ?? 20)) as Doc<"gtmConversions">[];
 
-    return rows
-      .filter((r) => r.customerId === args.customerId)
-      .slice(0, args.limit ?? 20)
-      .map((r) => ({
-        conversionId: r._id,
-        kind: r.kind,
-        count: r.count,
-        source: r.source,
-        occurredAt: r.occurredAt,
-        traced: Boolean(r.linkWrapId),
-      }));
+    return rows.map((r) => ({
+      conversionId: r._id,
+      kind: r.kind,
+      count: r.count,
+      source: r.source,
+      occurredAt: r.occurredAt,
+      traced: Boolean(r.linkWrapId),
+    }));
+  },
+});
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ Results, for the founder's own screen (§16.2 — "the retention screen. The
+ * reason they don't cancel.")
+ *
+ * ⚠️ Every function above is `internalQuery`/`internalMutation`. So the
+ * attribution chain — the thing §14.45 exists for — was computed and reachable
+ * by nobody the founder could ask. Mission Control's Results screen reads
+ * `gtmMaya.missionControl.getMyConversions` and `gtmPostResults`, both of which
+ * the live module never writes.
+ *
+ * ## What this deliberately reports
+ *
+ * §5.0.0's sentence, stated plainly: how many of the results we can point at a
+ * post for, **and how many we can't**. An attribution number without its
+ * untraced remainder is a number that flatters us — and §14.45's whole design
+ * is that a broken chain is REPORTED, never guessed at.
+ */
+export interface MyResults {
+  ok: boolean;
+  /** Signups, calls, sales — whatever their KPI counts. */
+  total: number;
+  /** ⭐ The ones we can point at a specific post for. */
+  traced: number;
+  /** ⚠️ Stated, not omitted. The gap is the honest part. */
+  untraced: number;
+  windowDays: number;
+  error?: string;
+}
+
+export const myResults = query({
+  args: { windowDays: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<MyResults> => {
+    const empty = { total: 0, traced: 0, untraced: 0, windowDays: 30 };
+
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { ok: false, ...empty, error: "sign in first" };
+
+    const creator = (await ctx.db
+      .query("creators")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .first()) as Doc<"creators"> | null;
+    if (!creator) return { ok: false, ...empty, error: "no account yet" };
+
+    const customer = (await ctx.db
+      .query("customers")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first()) as Doc<"customers"> | null;
+    if (!customer) return { ok: false, ...empty, error: "no account yet" };
+
+    const windowDays = args.windowDays ?? 30;
+    const since = Date.now() - windowDays * 86_400_000;
+
+    const rows = (await ctx.db
+      .query("gtmConversions")
+      .withIndex("by_customer_and_occurredAt", (q) =>
+        q.eq("customerId", customer._id).gte("occurredAt", since),
+      )
+      .collect()) as Doc<"gtmConversions">[];
+
+    // `linkWrapId` is the chain: a conversion carrying one can be walked back
+    // to the placement that produced it (§14.45).
+    const traced = rows
+      .filter((r) => r.linkWrapId)
+      .reduce((sum, r) => sum + r.count, 0);
+    const total = rows.reduce((sum, r) => sum + r.count, 0);
+
+    return { ok: true, total, traced, untraced: total - traced, windowDays };
   },
 });

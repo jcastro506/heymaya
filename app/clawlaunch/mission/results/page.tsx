@@ -18,6 +18,7 @@ import { useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { LadderBlock } from "./LadderBlock";
+import { ResultsLive } from "./_ResultsLive";
 import {
   Btn,
   Chip,
@@ -100,7 +101,11 @@ function LogAWin({ onDone }: { onDone: () => void }) {
           placeholder="where from?"
           className="min-w-0 flex-1 rounded-lg border border-[var(--mc-line)] bg-ink px-2.5 py-1.5 text-sm text-paper outline-none placeholder:text-paper-faint focus:border-lime/50"
         />
-        <Btn tone="primary" busy={state === "busy"} onClick={() => void submit()}>
+        <Btn
+          tone="primary"
+          busy={state === "busy"}
+          onClick={() => void submit()}
+        >
           Log it
         </Btn>
       </div>
@@ -116,7 +121,10 @@ function LogAWin({ onDone }: { onDone: () => void }) {
 export default function ResultsPage() {
   const snapshot = useQuery(api.gtmMaya.researchLifecycle.getMyGtmSnapshot);
   const conversions = useQuery(api.gtmMaya.missionControl.getMyConversions);
-  const attribution = useQuery(api.gtmMaya.missionControl.getMyPostAttribution, {});
+  const attribution = useQuery(
+    api.gtmMaya.missionControl.getMyPostAttribution,
+    {},
+  );
   const drafts = useQuery(api.gtmMaya.missionActions.getMyDraftQueue);
   const postRows = useQuery(api.gtmMaya.postResults.getMyRecentPostResults, {});
 
@@ -150,9 +158,15 @@ export default function ResultsPage() {
     prevStart !== null && t >= prevStart && t < prevEnd;
 
   // ── KPIs ────────────────────────────────────────────────────────────────
-  const signupRows = (conversions ?? []).filter((c) => SIGNUP_KINDS.has(c.kind));
-  const signups = signupRows.filter((c) => inWin(c.occurredAt)).reduce((s, c) => s + c.count, 0);
-  const signupsPrev = signupRows.filter((c) => inPrev(c.occurredAt)).reduce((s, c) => s + c.count, 0);
+  const signupRows = (conversions ?? []).filter((c) =>
+    SIGNUP_KINDS.has(c.kind),
+  );
+  const signups = signupRows
+    .filter((c) => inWin(c.occurredAt))
+    .reduce((s, c) => s + c.count, 0);
+  const signupsPrev = signupRows
+    .filter((c) => inPrev(c.occurredAt))
+    .reduce((s, c) => s + c.count, 0);
 
   const wrapsInWin = (attribution ?? []).filter((a) => inWin(a.createdAt));
   const clicks = wrapsInWin.reduce((s, a) => s + a.clicks, 0);
@@ -162,7 +176,9 @@ export default function ResultsPage() {
 
   const publishedAtOf = (d: { publishedAt?: number; updatedAt: number }) =>
     d.publishedAt ?? d.updatedAt;
-  const published = (drafts ?? []).filter((d) => d.approvalState === "published");
+  const published = (drafts ?? []).filter(
+    (d) => d.approvalState === "published",
+  );
   const posts = published.filter((d) => inWin(publishedAtOf(d))).length;
   const postsPrev = published.filter((d) => inPrev(publishedAtOf(d))).length;
 
@@ -175,8 +191,12 @@ export default function ResultsPage() {
     }
     return out;
   };
-  const signupSpark = daySeries(signupRows.map((c) => ({ t: c.occurredAt, n: c.count })));
-  const postSpark = daySeries(published.map((d) => ({ t: publishedAtOf(d), n: 1 })));
+  const signupSpark = daySeries(
+    signupRows.map((c) => ({ t: c.occurredAt, n: c.count })),
+  );
+  const postSpark = daySeries(
+    published.map((d) => ({ t: publishedAtOf(d), n: 1 })),
+  );
 
   const delta = (cur: number, prev: number): ReactNode => {
     if (range === "all") return null;
@@ -200,12 +220,21 @@ export default function ResultsPage() {
   // ── By channel ──────────────────────────────────────────────────────────
   const byChannel = new Map<
     string,
-    { posts: number; clicks: number; signups: number; best: { text: string; score: number } | null }
+    {
+      posts: number;
+      clicks: number;
+      signups: number;
+      best: { text: string; score: number } | null;
+    }
   >();
   for (const a of wrapsInWin) {
     const key = a.platform ?? "other";
-    const cur =
-      byChannel.get(key) ?? { posts: 0, clicks: 0, signups: 0, best: null };
+    const cur = byChannel.get(key) ?? {
+      posts: 0,
+      clicks: 0,
+      signups: 0,
+      best: null,
+    };
     cur.posts += 1;
     cur.clicks += a.clicks;
     cur.signups += a.conversions;
@@ -222,7 +251,7 @@ export default function ResultsPage() {
 
   // ── Receipts ────────────────────────────────────────────────────────────
   const attributionReceipts = [...wrapsInWin].sort(
-    (a, b) => b.conversions - a.conversions || b.clicks - a.clicks
+    (a, b) => b.conversions - a.conversions || b.clicks - a.clicks,
   );
   // Latest snapshot per draft, joined to its draft text.
   type PostRow = NonNullable<typeof postRows>[number];
@@ -288,7 +317,10 @@ export default function ResultsPage() {
       <Rise>
         <div className="mc-grid mc-kpis mb-3.5">
           <div className="mc-panel mc-raised mc-kpi-hero">
-            <button className="mc-btn mc-btn-ghost mc-logwin" onClick={() => setLogging((v) => !v)}>
+            <button
+              className="mc-btn mc-btn-ghost mc-logwin"
+              onClick={() => setLogging((v) => !v)}
+            >
               + Log a win
             </button>
             <div className="mc-kpi-label">Signups · attributed</div>
@@ -337,7 +369,10 @@ export default function ResultsPage() {
           >
             <div className="mc-funnel-stage">
               <span className="k">Posts</span>
-              <div className="mc-funnel-bar mc-funnel-bar-1" style={{ width: barW(posts) }} />
+              <div
+                className="mc-funnel-bar mc-funnel-bar-1"
+                style={{ width: barW(posts) }}
+              />
               <span className="v">{posts}</span>
             </div>
             {posts > 0 ? (
@@ -347,24 +382,34 @@ export default function ResultsPage() {
             ) : null}
             <div className="mc-funnel-stage">
               <span className="k">Clicks</span>
-              <div className="mc-funnel-bar mc-funnel-bar-2" style={{ width: barW(clicks) }} />
+              <div
+                className="mc-funnel-bar mc-funnel-bar-2"
+                style={{ width: barW(clicks) }}
+              />
               <span className="v">{clicks}</span>
             </div>
             {clicks > 0 ? (
               <div className="mc-funnel-conv">
-                <span>→ {((signups / clicks) * 100).toFixed(1)}% click-to-signup</span>
+                <span>
+                  → {((signups / clicks) * 100).toFixed(1)}% click-to-signup
+                </span>
               </div>
             ) : null}
             <div className="mc-funnel-stage">
               <span className="k">Signups</span>
-              <div className="mc-funnel-bar mc-funnel-bar-3" style={{ width: barW(signups) }} />
+              <div
+                className="mc-funnel-bar mc-funnel-bar-3"
+                style={{ width: barW(signups) }}
+              />
               <span className="v">{signups}</span>
             </div>
           </Panel>
 
           <Panel title="By channel">
             {channelRows.length === 0 ? (
-              <p className="text-xs text-paper-faint">No tracked posts in this window.</p>
+              <p className="text-xs text-paper-faint">
+                No tracked posts in this window.
+              </p>
             ) : (
               <div className="mc-chan-grid">
                 {channelRows.map(([channel, v]) => (
@@ -387,13 +432,22 @@ export default function ResultsPage() {
                         <div className="k">clicks</div>
                       </div>
                       <div>
-                        <div className="v" style={v.signups > 0 ? { color: "var(--mc-good)" } : undefined}>
+                        <div
+                          className="v"
+                          style={
+                            v.signups > 0
+                              ? { color: "var(--mc-good)" }
+                              : undefined
+                          }
+                        >
                           {v.signups}
                         </div>
                         <div className="k">signups</div>
                       </div>
                     </div>
-                    {v.best ? <div className="best">Best: {v.best.text}</div> : null}
+                    {v.best ? (
+                      <div className="best">Best: {v.best.text}</div>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -406,7 +460,9 @@ export default function ResultsPage() {
       <Rise i={2}>
         <Panel title="Every post, with receipts">
           {attributionReceipts.length === 0 && metricReceipts.length === 0 ? (
-            <p className="text-xs text-paper-faint">No receipts in this window yet.</p>
+            <p className="text-xs text-paper-faint">
+              No receipts in this window yet.
+            </p>
           ) : (
             <div className="mc-receipts">
               {attributionReceipts.map((a) => (
@@ -417,7 +473,9 @@ export default function ResultsPage() {
                       {a.draftKind ? ` ${a.draftKind}` : ""}
                     </Chip>
                   </div>
-                  {a.draftText ? <div className="mc-hook">{a.draftText}</div> : null}
+                  {a.draftText ? (
+                    <div className="mc-hook">{a.draftText}</div>
+                  ) : null}
                   <div className="mc-mets">
                     <div>
                       <div className="v">{a.clicks}</div>
@@ -440,15 +498,20 @@ export default function ResultsPage() {
                   ["COMMENTS", m.comments],
                 ];
                 const shown = stats.filter(
-                  (s): s is [string, number] => s[1] !== undefined
+                  (s): s is [string, number] => s[1] !== undefined,
                 );
                 const hook = draftText.get(String(p.draftId));
                 return (
                   <div key={p._id} className="mc-receipt">
                     <div className="flex items-center justify-between gap-2">
-                      <Chip platform={p.platform}>{channelLabel(p.platform)}</Chip>
+                      <Chip platform={p.platform}>
+                        {channelLabel(p.platform)}
+                      </Chip>
                       {p.surfacedToOperator ? (
-                        <span className="mc-when" style={{ color: "var(--mc-good)" }}>
+                        <span
+                          className="mc-when"
+                          style={{ color: "var(--mc-good)" }}
+                        >
                           flagged
                         </span>
                       ) : null}
@@ -462,7 +525,9 @@ export default function ResultsPage() {
                         </div>
                       ))}
                       {shown.length === 0 ? (
-                        <span className="text-[10px] text-paper-faint">no numbers yet</span>
+                        <span className="text-[10px] text-paper-faint">
+                          no numbers yet
+                        </span>
                       ) : null}
                     </div>
                     {/^https?:\/\//.test(p.providerPostId) ? (
@@ -483,6 +548,10 @@ export default function ResultsPage() {
         founder can act on.
       */}
       <Rise>
+        {/* ⭐ Results, live. Sits above the ladder because §2.6 makes the
+            distinction: the ladder diagnoses WHY, but a signup is the result.
+            Renders only for an account with a live customer. */}
+        <ResultsLive />
         <LadderBlock />
       </Rise>
     </Shell>

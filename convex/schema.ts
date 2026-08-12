@@ -2790,7 +2790,16 @@ export default defineSchema({
   })
     .index("by_account", ["accountId"])
     .index("by_agent", ["agentId"])
-    .index("by_agent_and_kind", ["agentId", "kind"]),
+    .index("by_agent_and_kind", ["agentId", "kind"])
+    /**
+     * ⚠️ Added 2026-08-12. `attribution.recentConversions` scanned
+     * `by_account` with NO `.eq()`, took the newest 200 rows FLEET-WIDE, then
+     * filtered to the customer in JS. With more than one customer a founder's
+     * conversions can be crowded out entirely — and the screen that reports
+     * them is §16.2's retention screen, reporting the one number they cancel
+     * over.
+     */
+    .index("by_customer_and_occurredAt", ["customerId", "occurredAt"]),
 
   // ─── Sprint G — the data moat: cross-tenant archetype playbook ─────────
   /** Privacy-safe, outcome-grounded learnings aggregated ACROSS tenants by app

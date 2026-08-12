@@ -226,6 +226,7 @@ vi.mock("@/convex/_generated/api", () => ({
       strategy: { planScreen: "planScreen" },
       dashboard: { resultsLadder: "resultsLadder", myDashboard: "myDashboard" },
       archive: { myActivity: "myActivity" },
+      attribution: { myResults: "myResults" },
     },
     gtmMaya: {
       missionControl: {
