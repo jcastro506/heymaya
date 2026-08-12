@@ -29,6 +29,7 @@
 
 import { v } from "convex/values";
 import { internalMutation, internalQuery, query } from "../_generated/server";
+import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 
 /** Short, unguessable enough for a public redirect, short enough for a caption. */
@@ -767,5 +768,131 @@ export const clicksForPlacements = internalQuery({
       out[key] = (out[key] ?? 0) + clicks.length;
     }
     return out;
+  },
+});
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ §14.45 rung 2 — the conversion pixel, for the live module.
+ *
+ * > *"**Pixel** — one snippet on their site | **Per-signup attribution to a
+ * > specific post** | one paste | **Precise**"*
+ *
+ * The pixel, the redirect's `lc_ref` handoff and the CORS plumbing have all
+ * existed since Sprint 8 — but the public handler refuses any wrap without an
+ * `agentId`, which is every wrap the live module mints. The comment there says
+ * so outright. This is the half that was missing.
+ *
+ * ## ⚠️ The token is PUBLIC
+ *
+ * It sits in a bio and in published posts. Anyone who reads one can POST to an
+ * unauthenticated pixel endpoint, so the token alone cannot be the credential —
+ * and a forged signup is not harmless: it corrupts the one number §16.2 says
+ * they cancel over, and §14.45's honesty rule is the whole point of the layer.
+ *
+ * So the request's `Origin` must match the product it claims to convert for.
+ * A browser sets `Origin` on cross-origin POSTs and a page cannot forge it.
+ */
+export const recordPixelConversion = internalMutation({
+  args: {
+    token: v.string(),
+    kind: v.union(
+      v.literal("signup"),
+      v.literal("demo"),
+      v.literal("feedback"),
+      v.literal("revenue"),
+      v.literal("activated"),
+    ),
+    origin: v.optional(v.string()),
+    note: v.optional(v.string()),
+    now: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ recorded: boolean; reason?: string }> => {
+    const wrap = (await ctx.db
+      .query("gtmLinkWraps")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first()) as Doc<"gtmLinkWraps"> | null;
+    // Unknown token — nothing to attribute, and never an error to a stranger.
+    if (!wrap?.customerId) return { recorded: false, reason: "unknown token" };
+
+    const customer = (await ctx.db.get(
+      wrap.customerId,
+    )) as Doc<"customers"> | null;
+    if (!customer) return { recorded: false, reason: "no such account" };
+
+    /**
+     * ⚠️ Origin must match the product. Checked only when present: a browser
+     * always sends it on a cross-origin POST, and rejecting its ABSENCE would
+     * break `sendBeacon` in the environments that omit it while doing nothing
+     * to stop a determined forger, who would simply omit it too.
+     *
+     * The real protection is that a page on someone else's domain CANNOT set
+     * `Origin` to the founder's.
+     */
+    if (args.origin) {
+      let productHost = "";
+      try {
+        const truth = JSON.parse(customer.productTruthJson ?? "{}") as {
+          url?: unknown;
+        };
+        if (typeof truth.url === "string") {
+          productHost = new URL(truth.url).host.replace(/^www\./, "");
+        }
+      } catch {
+        productHost = "";
+      }
+
+      let originHost = "";
+      try {
+        originHost = new URL(args.origin).host.replace(/^www\./, "");
+      } catch {
+        originHost = "";
+      }
+
+      // Subdomains count: app.theirsite.com converting for theirsite.com is
+      // the normal shape, not an attack.
+      const matches =
+        productHost.length > 0 &&
+        (originHost === productHost || originHost.endsWith(`.${productHost}`));
+      if (!matches) {
+        return { recorded: false, reason: "origin does not match the product" };
+      }
+    }
+
+    /**
+     * ⚠️ Dedupe within a day, per token per kind.
+     *
+     * A signup page that reloads, or a beacon that retries, would otherwise
+     * book the same person twice — and an inflated number is worse than a
+     * missing one here, because it is the number that decides whether they
+     * believe any of the rest.
+     */
+    const now = args.now ?? Date.now();
+    const since = now - 24 * 60 * 60 * 1000;
+    const recent = (await ctx.db
+      .query("gtmConversions")
+      .withIndex("by_customer_and_occurredAt", (q) =>
+        q.eq("customerId", wrap.customerId!).gte("occurredAt", since),
+      )
+      .collect()) as Doc<"gtmConversions">[];
+
+    if (recent.some((c) => c.linkWrapId === wrap._id && c.kind === args.kind)) {
+      return { recorded: false, reason: "already counted today" };
+    }
+
+    await ctx.runMutation(internal.maya.attribution.recordConversion, {
+      customerId: wrap.customerId,
+      kind: args.kind,
+      count: 1,
+      source: "pixel",
+      token: args.token,
+      note: args.note ?? "conversion pixel",
+    });
+
+    return { recorded: true };
   },
 });

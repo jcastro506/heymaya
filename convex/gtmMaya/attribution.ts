@@ -29,10 +29,7 @@ import {
   type Arm,
   type ExperimentVerdict,
 } from "./experimentStats";
-import {
-  composeConversionPing,
-  type ConversionKind,
-} from "./conversionPing";
+import { composeConversionPing, type ConversionKind } from "./conversionPing";
 
 /** The content-attribute dimensions Maya can run an experiment across — the
  *  keys of gtmDraftedContent.attributes. */
@@ -53,7 +50,7 @@ const CONVERSION_KIND = v.union(
   v.literal("revenue"),
   // Sprint 3 (top-tier): a signed-up user who came BACK / reached value. Lets
   // Maya prove a customer who STUCK, not just a first-touch signup.
-  v.literal("activated")
+  v.literal("activated"),
 );
 
 // ───────────────────────── mutations / queries ─────────────────────────
@@ -71,7 +68,7 @@ export const createLinkWrap = internalMutation({
   },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<{ token: string; id: Id<"gtmLinkWraps"> }> => {
     // Collision-checked short token.
     let token = Math.random().toString(36).slice(2, 10);
@@ -213,7 +210,7 @@ export const countConversionsTodayByKind = internalQuery({
       // Local midnight read as UTC, then shifted back by the offset = the true
       // UTC instant of midnight in `tz`.
       const localMidnightAsUtc = Date.parse(
-        `${get("year")}-${get("month")}-${get("day")}T00:00:00Z`
+        `${get("year")}-${get("month")}-${get("day")}T00:00:00Z`,
       );
       dayStart = localMidnightAsUtc - offsetMs;
       if (!Number.isFinite(dayStart)) dayStart = now - (now % 86_400_000);
@@ -230,7 +227,7 @@ export const countConversionsTodayByKind = internalQuery({
         (c) =>
           c.accountId === args.accountId &&
           c.kind === args.kind &&
-          c.occurredAt >= dayStart
+          c.occurredAt >= dayStart,
       )
       .reduce((s, c) => s + c.count, 0);
   },
@@ -253,7 +250,7 @@ function wallClockAsUtc(now: number, tz: string): number {
   // "24" hour can appear at midnight in some engines — normalize to "00".
   const hour = get("hour") === "24" ? "00" : get("hour");
   return Date.parse(
-    `${get("year")}-${get("month")}-${get("day")}T${hour}:${get("minute")}:${get("second")}Z`
+    `${get("year")}-${get("month")}-${get("day")}T${hour}:${get("minute")}:${get("second")}Z`,
   );
 }
 
@@ -263,7 +260,7 @@ export const peekConversionForPing = internalQuery({
   args: { conversionId: v.id("gtmConversions") },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<{
     agentId: Id<"gtmAgents">;
     accountId: Id<"creators">;
@@ -333,15 +330,17 @@ export const notifyConversion = internalAction({
     try {
       const info = await ctx.runQuery(
         internal.gtmMaya.attribution.peekConversionForPing,
-        { conversionId: args.conversionId }
+        { conversionId: args.conversionId },
       );
-      if (!info) return { sent: false, reason: "conversion or agent not found" };
-      if (!info.telegramChatId) return { sent: false, reason: "no telegram chat" };
+      if (!info)
+        return { sent: false, reason: "conversion or agent not found" };
+      if (!info.telegramChatId)
+        return { sent: false, reason: "no telegram chat" };
 
       // Grounded running total for today (incl. the one that just landed).
       const totalToday = await ctx.runQuery(
         internal.gtmMaya.attribution.countConversionsTodayByKind,
-        { agentId: info.agentId, accountId: info.accountId, kind: info.kind }
+        { agentId: info.agentId, accountId: info.accountId, kind: info.kind },
       );
 
       // Build the wrapped redirect link only when we have a grounded channel.
@@ -364,11 +363,10 @@ export const notifyConversion = internalAction({
         {
           sharedToken: process.env.TELEGRAM_BOT_TOKEN,
           sharedUsername: process.env.TELEGRAM_BOT_USERNAME,
-        }
+        },
       );
-      const { sendDirectTelegramMessage } = await import(
-        "../integrations/telegram/sendDirectMessage"
-      );
+      const { sendDirectTelegramMessage } =
+        await import("../integrations/telegram/sendDirectMessage");
       const result = await sendDirectTelegramMessage({
         botToken: bot.token ?? undefined,
         chatId: info.telegramChatId,
@@ -376,14 +374,14 @@ export const notifyConversion = internalAction({
       });
       if (!result.ok) {
         console.warn(
-          `[conversionPing] send failed for ${info.agentId}: ${result.reason}`
+          `[conversionPing] send failed for ${info.agentId}: ${result.reason}`,
         );
         return { sent: false, reason: `send failed: ${result.reason}` };
       }
       return { sent: true, reason: "sent" };
     } catch (err) {
       console.warn(
-        `[conversionPing] notifyConversion error: ${(err as Error)?.message ?? "unknown"}`
+        `[conversionPing] notifyConversion error: ${(err as Error)?.message ?? "unknown"}`,
       );
       return { sent: false, reason: "error" };
     }
@@ -409,7 +407,7 @@ export const getConversionSetupForAgent = internalQuery({
   args: { agentId: v.id("gtmAgents") },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<{
     signupUrl: string | null;
     conversionKind: string | null;
@@ -460,7 +458,7 @@ export const listAgentPostAttribution = internalQuery({
   },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<{
     posts: Array<{
       draftId: Id<"gtmDraftedContent"> | null;
@@ -512,7 +510,7 @@ export const listAgentPostAttribution = internalQuery({
       .collect();
     // Cross-tenant double-check (account must match) + window filter.
     const myConvs = convs.filter(
-      (c) => c.accountId === args.accountId && c.occurredAt >= cutoff
+      (c) => c.accountId === args.accountId && c.occurredAt >= cutoff,
     );
 
     const totals = {
@@ -575,7 +573,7 @@ export const listAgentPostAttribution = internalQuery({
             signups: conversionsByKind.signup,
             createdAt: w.createdAt,
           };
-        })
+        }),
     );
 
     // Only surface posts with real activity in the window — a zero-activity wrap
@@ -587,7 +585,7 @@ export const listAgentPostAttribution = internalQuery({
         p.conversionsByKind.demo > 0 ||
         p.conversionsByKind.feedback > 0 ||
         p.conversionsByKind.revenue > 0 ||
-        p.conversionsByKind.activated > 0
+        p.conversionsByKind.activated > 0,
     );
 
     for (const p of posts) {
@@ -600,7 +598,7 @@ export const listAgentPostAttribution = internalQuery({
     }
 
     posts.sort((a, b) =>
-      b.signups !== a.signups ? b.signups - a.signups : b.clicks - a.clicks
+      b.signups !== a.signups ? b.signups - a.signups : b.clicks - a.clicks,
     );
 
     return { posts, totals, windowDays };
@@ -648,12 +646,12 @@ export const wrapLinkHttp = httpAction(async (ctx, request) => {
       utmSource: body.utmSource,
       utmMedium: body.utmMedium,
       utmCampaign: body.utmCampaign,
-    }
+    },
   );
   const base = process.env.CONVEX_SITE_URL ?? "";
   return new Response(
     JSON.stringify({ ok: true, token, url: `${base}/r/${token}` }),
-    { status: 200, headers: { "content-type": "application/json" } }
+    { status: 200, headers: { "content-type": "application/json" } },
   );
 });
 
@@ -666,7 +664,7 @@ export const redirectHttp = httpAction(async (ctx, request) => {
 
   const wrap = await ctx.runQuery(
     internal.gtmMaya.attribution.getLinkWrapByToken,
-    { token }
+    { token },
   );
   if (!wrap) return new Response("not found", { status: 404 });
 
@@ -761,7 +759,7 @@ export const conversionPixelHttp = httpAction(async (ctx, request) => {
 
   const wrap = await ctx.runQuery(
     internal.gtmMaya.attribution.getLinkWrapByToken,
-    { token }
+    { token },
   );
   if (!wrap) {
     // Unknown token — nothing to attribute. 204, never error.
@@ -778,7 +776,29 @@ export const conversionPixelHttp = httpAction(async (ctx, request) => {
    * `maya/attribution` owns that half and the two must not half-write a
    * conversion between them.
    */
+  /**
+   * ⭐ v2 wraps are handled by `maya/attribution`, which owns per-customer
+   * conversions. Until 2026-08-12 they were REFUSED here — so every live
+   * customer's pixel silently did nothing, and §14.45 rung 2 ("precise") was
+   * off for the only accounts that exist.
+   *
+   * ⚠️ The `Origin` header is forwarded, and that module rejects a mismatch.
+   * The token is public — it sits in a bio and in published posts — so it
+   * cannot be the credential on its own.
+   */
   if (!wrap.agentId) {
+    if (!wrap.customerId) {
+      return new Response(null, { status: 204, headers: PIXEL_CORS_HEADERS });
+    }
+    await ctx.runMutation(internal.maya.attribution.recordPixelConversion, {
+      token,
+      kind,
+      origin: request.headers.get("origin") ?? undefined,
+      note: selfSource
+        ? `conversion pixel · heard via: ${selfSource}`
+        : "conversion pixel",
+    });
+    // Always 204 — a stranger learns nothing about whether it counted.
     return new Response(null, { status: 204, headers: PIXEL_CORS_HEADERS });
   }
 
@@ -789,7 +809,7 @@ export const conversionPixelHttp = httpAction(async (ctx, request) => {
       accountId: wrap.accountId,
       kind: "record_conversion",
       idempotencyKey,
-    }
+    },
   );
   if (claim === "duplicate") {
     return new Response(null, { status: 204, headers: PIXEL_CORS_HEADERS });
@@ -807,7 +827,7 @@ export const conversionPixelHttp = httpAction(async (ctx, request) => {
       note: selfSource
         ? `conversion pixel · heard via: ${selfSource}`
         : "conversion pixel",
-    }
+    },
   );
   // Event-driven conversion ping (best-effort; notifyConversion swallows its
   // own errors and no-ops without a telegramChatId). Fired from this action
@@ -816,10 +836,9 @@ export const conversionPixelHttp = httpAction(async (ctx, request) => {
     conversionId: pixelConversionId,
   });
   // Mark the automatic path live so Maya can stop asking for self-reports.
-  await ctx.runMutation(
-    internal.gtmMaya.attribution.markPixelInstalled,
-    { agentId: wrap.agentId }
-  );
+  await ctx.runMutation(internal.gtmMaya.attribution.markPixelInstalled, {
+    agentId: wrap.agentId,
+  });
   return new Response(null, { status: 204, headers: PIXEL_CORS_HEADERS });
 });
 
@@ -860,9 +879,10 @@ export const recordConversionHttp = httpAction(async (ctx, request) => {
       accountId: auth.accountId,
       kind: "record_conversion",
       idempotencyKey: body.idempotencyKey,
-    }
+    },
   );
-  if (claim === "duplicate") return new Response("ok (replay)", { status: 200 });
+  if (claim === "duplicate")
+    return new Response("ok (replay)", { status: 200 });
 
   const conversionId = await ctx.runMutation(
     internal.gtmMaya.attribution.recordConversion,
@@ -874,7 +894,7 @@ export const recordConversionHttp = httpAction(async (ctx, request) => {
       source,
       linkWrapToken: body.linkWrapToken,
       note: body.note,
-    }
+    },
   );
   // Event-driven conversion ping (best-effort; see pixel path above).
   await ctx.runAction(internal.gtmMaya.attribution.notifyConversion, {
@@ -906,7 +926,7 @@ export const getMyAttributionHttp = httpAction(async (ctx, request) => {
       accountId: auth.accountId,
       limit: Number.isFinite(limit) ? limit : undefined,
       windowDays: Number.isFinite(windowDays) ? windowDays : undefined,
-    }
+    },
   );
   return new Response(JSON.stringify({ attribution }), {
     status: 200,
@@ -928,7 +948,7 @@ export const getConversionSetupHttp = httpAction(async (ctx, request) => {
 
   const setup = await ctx.runQuery(
     internal.gtmMaya.attribution.getConversionSetupForAgent,
-    { agentId: auth.agentId }
+    { agentId: auth.agentId },
   );
   const site = (process.env.CONVEX_SITE_URL ?? "").replace(/\/+$/, "");
   const endpoint = `${site}/p/conversion`;
@@ -966,7 +986,7 @@ export const getConversionSetupHttp = httpAction(async (ctx, request) => {
         "Just tell me when someone signs up (and roughly how many came back) and " +
         "I'll log it and tie it to the post that drove it. No code, no setup.",
     }),
-    { status: 200, headers: { "content-type": "application/json" } }
+    { status: 200, headers: { "content-type": "application/json" } },
   );
 });
 
@@ -991,14 +1011,14 @@ export const getAttributeOutcomes = internalQuery({
   },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<{
     dimension: string;
     arms: Arm[];
     verdict: ExperimentVerdict;
   }> => {
     const dimension = ATTRIBUTE_DIMENSIONS.includes(
-      args.dimension as AttributeDimension
+      args.dimension as AttributeDimension,
     )
       ? (args.dimension as AttributeDimension)
       : null;
@@ -1024,7 +1044,7 @@ export const getAttributeOutcomes = internalQuery({
       .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
       .collect();
     const myConvs = convs.filter(
-      (c) => c.accountId === args.accountId && c.occurredAt >= cutoff
+      (c) => c.accountId === args.accountId && c.occurredAt >= cutoff,
     );
 
     // value → { trials (clicks), conversions (signups) }
@@ -1053,7 +1073,11 @@ export const getAttributeOutcomes = internalQuery({
     }
 
     const arms: Arm[] = [...byValue.entries()]
-      .map(([label, t]) => ({ label, trials: t.trials, conversions: t.conversions }))
+      .map(([label, t]) => ({
+        label,
+        trials: t.trials,
+        conversions: t.conversions,
+      }))
       .filter((a) => a.trials > 0)
       .sort((a, b) => b.conversions - a.conversions || b.trials - a.trials);
 
@@ -1079,7 +1103,7 @@ export const getAttributeOutcomesHttp = httpAction(async (ctx, request) => {
       accountId: auth.accountId,
       dimension,
       windowDays: Number.isFinite(windowDays) ? windowDays : undefined,
-    }
+    },
   );
   return new Response(JSON.stringify(outcomes), {
     status: 200,
