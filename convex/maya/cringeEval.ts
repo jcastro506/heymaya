@@ -28,7 +28,11 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalQuery } from "../_generated/server";
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+} from "../_generated/server";
 import { internal } from "../_generated/api";
 import { similarity } from "./quality";
 import type { Doc } from "../_generated/dataModel";
@@ -134,7 +138,7 @@ export const NEAR_DUPLICATE_AT = 0.5;
 
 function contentWords(text: string): Set<string> {
   return new Set(
-    (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((w) => w.length > 3)
+    (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((w) => w.length > 3),
   );
 }
 
@@ -169,8 +173,9 @@ export function scoreVariety(posts: string[]): VarietyResult {
       freq.set(word, (freq.get(word) ?? 0) + 1);
     }
   }
-  const [dominantTerm, hits] =
-    [...freq.entries()].sort((a, b) => b[1] - a[1])[0] ?? ["", 0];
+  const [dominantTerm, hits] = [...freq.entries()].sort(
+    (a, b) => b[1] - a[1],
+  )[0] ?? ["", 0];
   const topicCoverage = hits / posts.length;
 
   // Worst pair FIRST. A single duplicate fails variety however varied the rest
@@ -273,7 +278,7 @@ export function parseJudgement(content: string): "A" | "B" | null {
  */
 export function scoreRun(
   judgements: Array<{ correct: boolean }>,
-  controlCaught: boolean
+  controlCaught: boolean,
 ): Omit<EvalResult, "perPair" | "variety"> {
   const pairs = judgements.length;
   if (!controlCaught) {
@@ -303,7 +308,8 @@ export function scoreRun(
   return {
     pairs,
     accuracy,
-    verdict: distance >= DETECTABLE_AT - 0.5 ? "detectable" : "indistinguishable",
+    verdict:
+      distance >= DETECTABLE_AT - 0.5 ? "detectable" : "indistinguishable",
     detail:
       distance >= DETECTABLE_AT - 0.5
         ? `the judge sorted ${Math.round(accuracy * 100)}% of pairs correctly — it can tell, and so will a reader`
@@ -328,25 +334,27 @@ export const humanSamples = internalQuery({
     const rows = (await ctx.db
       .query("observations")
       .withIndex("by_customer_and_captured", (q) =>
-        q.eq("customerId", args.customerId)
+        q.eq("customerId", args.customerId),
       )
       .order("desc")
       .take(200)) as Doc<"observations">[];
 
     const seen = new Set<string>();
-    return rows
-      .map((r) => r.text.trim())
-      // Long enough to have a voice, short enough to be one post.
-      .filter((t) => t.length >= 60 && t.length <= 400)
-      // Hashtag soup is not writing, and pairing against it flatters her.
-      .filter((t) => (t.match(/#/g) ?? []).length <= 4)
-      .filter((t) => {
-        const key = t.toLowerCase().slice(0, 60);
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .slice(0, args.limit ?? 10);
+    return (
+      rows
+        .map((r) => r.text.trim())
+        // Long enough to have a voice, short enough to be one post.
+        .filter((t) => t.length >= 60 && t.length <= 400)
+        // Hashtag soup is not writing, and pairing against it flatters her.
+        .filter((t) => (t.match(/#/g) ?? []).length <= 4)
+        .filter((t) => {
+          const key = t.toLowerCase().slice(0, 60);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .slice(0, args.limit ?? 10)
+    );
   },
 });
 
@@ -378,8 +386,8 @@ export const runEval = internalAction({
 
     const judge = async (a: string, b: string): Promise<"A" | "B" | null> => {
       const completion = await callModel(ctx, {
-      customerId: args.customerId,
-      purpose: "cringe_eval",
+        customerId: args.customerId,
+        purpose: "cringe_eval",
         apiKey,
         model: JUDGE_MODEL,
         temperature: 0,
@@ -393,7 +401,9 @@ export const runEval = internalAction({
     };
 
     // The control first. If this fails, nothing after it means anything.
-    const controlHuman = humans[0] ?? "just shipped the thing. took way longer than i thought it would.";
+    const controlHuman =
+      humans[0] ??
+      "just shipped the thing. took way longer than i thought it would.";
     const controlPick = await judge(SYNTHETIC_CONTROL, controlHuman);
     const controlCaught = controlPick === "A";
 
@@ -450,7 +460,7 @@ export const runEvalOnPublished = internalAction({
   },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<{ ok: boolean; result?: EvalResult; detail: string }> => {
     const now = args.now ?? Date.now();
     const since = now - (args.sinceDays ?? 60) * 86_400_000;
@@ -550,7 +560,9 @@ export const herWriting = internalQuery({
 
     // Newest first: the eval should measure what she writes NOW, not what she
     // wrote before the last prompt change.
-    for (const p of [...placements].sort((a, b) => b.publishedAt - a.publishedAt)) {
+    for (const p of [...placements].sort(
+      (a, b) => b.publishedAt - a.publishedAt,
+    )) {
       push(p.snapshotText);
     }
     for (const d of [...drafts].sort((a, b) => b.proposedAt - a.proposedAt)) {
@@ -572,7 +584,7 @@ export const runEvalForCustomer = internalAction({
   args: { customerId: v.id("customers") },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<EvalResult | { ok: false; error: string }> => {
     const herPosts = await ctx.runQuery(internal.maya.cringeEval.herWriting, {
       customerId: args.customerId,
@@ -587,5 +599,67 @@ export const runEvalForCustomer = internalAction({
       customerId: args.customerId,
       herPosts,
     });
+  },
+});
+
+/* -------------------------------------------------------------------------- */
+
+export const storeEvalResult = internalMutation({
+  args: {
+    customerId: v.id("customers"),
+    resultJson: v.string(),
+    now: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<null> => {
+    await ctx.db.patch(args.customerId, {
+      voiceEvalJson: args.resultJson,
+      voiceEvalAt: args.now ?? Date.now(),
+    });
+    return null;
+  },
+});
+
+/**
+ * ⭐ Run the eval and KEEP the answer. Weekly, per customer.
+ *
+ * ⚠️ `runEvalForCustomer` computed a verdict and returned it to nobody — it had
+ * no caller, and no caller could have stored it because nothing persisted the
+ * result. So Sprint 4's exit criterion ("a stranger can't tell it isn't the
+ * founder writing") has never been measured, and the six anti-slop layers
+ * beneath it were graded on a vibe.
+ *
+ * ⚠️ A VOID run is stored too. §12 — a run whose control slipped past the judge
+ * proves the instrument was broken that week, and overwriting it with silence
+ * would leave the last real verdict standing as if it were current.
+ */
+export const runWeeklyEval = internalAction({
+  args: { customerId: v.id("customers"), now: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ ok: boolean; verdict?: string; reason?: string }> => {
+    const result = await ctx.runAction(
+      internal.maya.cringeEval.runEvalForCustomer,
+      { customerId: args.customerId },
+    );
+
+    if ("ok" in result && result.ok === false) {
+      /**
+       * Not enough of her writing yet. Deliberately NOT stored: §4.5 sets
+       * `MIN_PAIRS` because an accuracy from three pairs swings 33% on one
+       * judgement, and a number that noisy is worse than no number.
+       */
+      return { ok: false, reason: result.error };
+    }
+
+    const verdict = result as EvalResult;
+    await ctx.runMutation(internal.maya.cringeEval.storeEvalResult, {
+      customerId: args.customerId,
+      // The whole verdict, so a later reader can see the per-pair detail
+      // rather than a score with no way to check it.
+      resultJson: JSON.stringify(verdict),
+      now: args.now,
+    });
+    return { ok: true, verdict: verdict.verdict };
   },
 });

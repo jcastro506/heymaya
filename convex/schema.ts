@@ -3513,6 +3513,19 @@ export default defineSchema({
      * that. Reporting the 2% figure as "what they cost" is wrong by ~50x, on
      * the number that decides whether the price works.
      */
+    /**
+     * ⭐ The cringe eval's last verdict — Sprint 4's exit criterion, measured.
+     *
+     * > *"a stranger can't tell it isn't the founder writing."*
+     *
+     * ⚠️ Six anti-slop layers are built and NOTHING measured whether they
+     * work, because the eval computed a result and discarded it. A vibe drifts
+     * silently across prompt edits, model swaps and corpus changes; a stored
+     * number does not. JSON on the row rather than a table — the schema is at
+     * TypeScript's instantiation ceiling and this is one verdict per customer.
+     */
+    voiceEvalJson: v.optional(v.string()),
+    voiceEvalAt: v.optional(v.number()),
     vendorSpendMonthUsd: v.optional(v.number()),
     vendorSpendAsOf: v.optional(v.number()),
     zernioProfileId: v.optional(v.string()),

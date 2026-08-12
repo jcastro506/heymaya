@@ -116,6 +116,23 @@ export interface FleetHealth {
    * failure here that the operator fixes with a thirty-second email.
    */
   unreachable?: UnreachableCustomer[];
+  /**
+   * ⭐ Sprint 4's exit criterion across the fleet — "a stranger can't tell it
+   * isn't the founder writing", measured rather than assumed.
+   *
+   * ⚠️ `void` is reported separately from `detectable`. A void run means the
+   * judge failed to catch the deliberately-synthetic control, so the
+   * INSTRUMENT was broken that week — counting it as a pass would bless
+   * whatever shipped, and counting it as a failure would send someone chasing
+   * a voice problem that was never measured.
+   */
+  voice?: {
+    measured: number;
+    indistinguishable: number;
+    detectable: number;
+    voided: number;
+    oldestAsOf?: number;
+  };
   /** What this view deliberately cannot answer yet. Stated, never implied. */
   notYetAnswered: string[];
 }
@@ -186,9 +203,50 @@ export const health = query({
       }
     }
 
+    /**
+     * Read off the customer rows the weekly `voice` sweep writes. A customer
+     * with too little writing has no verdict and is simply not counted — a
+     * missing measurement must never dilute the ones that exist.
+     */
+    const voiceRows = (await ctx.db
+      .query("customers")
+      .collect()) as Doc<"customers">[];
+    const verdicts = voiceRows
+      .map((c) => {
+        if (!c.voiceEvalJson) return null;
+        try {
+          const parsed = JSON.parse(c.voiceEvalJson) as { verdict?: string };
+          return { verdict: parsed.verdict, at: c.voiceEvalAt };
+        } catch {
+          return null;
+        }
+      })
+      .filter(
+        (v): v is { verdict: string | undefined; at: number | undefined } =>
+          v !== null,
+      );
+
+    const voice = verdicts.length
+      ? {
+          measured: verdicts.length,
+          indistinguishable: verdicts.filter(
+            (v) => v.verdict === "indistinguishable",
+          ).length,
+          detectable: verdicts.filter((v) => v.verdict === "detectable").length,
+          voided: verdicts.filter((v) => v.verdict === "void").length,
+          // ⚠️ OLDEST, not newest — §16.4. The freshest stamp hides a customer
+          // whose voice hasn't been measured in a month.
+          oldestAsOf: verdicts
+            .map((v) => v.at)
+            .filter((t): t is number => typeof t === "number")
+            .sort((a, b) => a - b)[0],
+        }
+      : undefined;
+
     return {
       ok: true,
       unreachable,
+      voice,
       cadence: {
         activeCustomers: cadenceRows.length,
         doneToday: cadenceRows.filter((r) => r.todayDone).length,

@@ -245,6 +245,12 @@ export function sweepRefs(): Record<string, SweepRef> {
      * relays it.
      */
     strategy: internal.maya.strategy.reviewStrategy,
+    /**
+     * ⭐ Sprint 4's exit criterion, measured. Weekly, because a voice drifts
+     * across prompt edits and model swaps rather than day to day — and each
+     * run costs ~9 judge calls on a cheap model.
+     */
+    voice: internal.maya.cringeEval.runWeeklyEval,
   };
 }
 
@@ -254,6 +260,7 @@ export const WEEKLY_SWEEPS = [
   "watch",
   "benchmarks",
   "strategy",
+  "voice",
 ] as const;
 
 export const SWEEPS = [
