@@ -34,7 +34,7 @@
  */
 
 import { v } from "convex/values";
-import { mutation } from "../_generated/server";
+import { internalMutation, mutation } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 
@@ -75,6 +75,26 @@ function clamp(value: string | undefined, limit = MAX_FIELD): string {
  * Idempotent on the customer, same as `saveProduct`: refreshing the page must
  * never mint a second agent billing in parallel.
  */
+export interface StartResult {
+  ok: boolean;
+  customerId?: Id<"customers">;
+  directiveId?: Id<"directives">;
+  error?: string;
+}
+
+/**
+ * ⭐ The public entry point: resolve who is asking, then delegate.
+ *
+ * ⚠️ It does NOTHING else. Every line of the actual work lives in
+ * `applyRead` below, keyed by `creatorId` rather than by a Clerk session.
+ *
+ * That split is deliberate and it is the difference between a chain that can
+ * be demonstrated on a live deploy and one that can only be asserted in a
+ * harness (§18.0). Welded to `ctx.auth`, this mutation is unreachable without
+ * a browser and a real sign-in — so the one loop that crosses the on-ramp,
+ * directives and the House Rules screen could never be exercised against the
+ * deployed functions, only against a mocked identity.
+ */
 export const startFromRead = mutation({
   args: {
     url: v.string(),
@@ -83,18 +103,43 @@ export const startFromRead = mutation({
     correction: v.optional(v.string()),
     timezone: v.string(),
   },
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{
-    ok: boolean;
-    customerId?: Id<"customers">;
-    directiveId?: Id<"directives">;
-    error?: string;
-  }> => {
+  handler: async (ctx, args): Promise<StartResult> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return { ok: false, error: "sign in first" };
 
+    const creator = await ctx.db
+      .query("creators")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .first();
+    if (!creator) return { ok: false, error: "no account yet" };
+
+    return await ctx.runMutation(internal.maya.onramp.applyRead, {
+      creatorId: creator._id,
+      url: args.url,
+      read: args.read,
+      correction: args.correction,
+      timezone: args.timezone,
+    });
+  },
+});
+
+/**
+ * The work, keyed by account rather than by session.
+ *
+ * ⚠️ Internal — the only public caller is the wrapper above, which resolves
+ * `creatorId` from the signed-in identity. Taking it as an argument here is
+ * safe for exactly that reason and unsafe anywhere else, which is why this is
+ * not exported publicly.
+ */
+export const applyRead = internalMutation({
+  args: {
+    creatorId: v.id("creators"),
+    url: v.string(),
+    read: READ,
+    correction: v.optional(v.string()),
+    timezone: v.string(),
+  },
+  handler: async (ctx, args): Promise<StartResult> => {
     const url = args.url.trim();
     // Same check `saveProduct` makes: a URL she can't fetch is a product she
     // can't ground anything in, and every claim traces back to it.
@@ -107,10 +152,9 @@ export const startFromRead = mutation({
 
     const now = Date.now();
 
-    const creator = (await ctx.db
-      .query("creators")
-      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
-      .first()) as Doc<"creators"> | null;
+    const creator = (await ctx.db.get(
+      args.creatorId,
+    )) as Doc<"creators"> | null;
     if (!creator) return { ok: false, error: "no account yet" };
 
     const productTruth = {
