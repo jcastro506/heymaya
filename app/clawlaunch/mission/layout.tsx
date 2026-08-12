@@ -21,6 +21,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import {
   Activity,
+  ScrollText,
   Brain,
   Settings,
   Sun,
@@ -34,6 +35,12 @@ const NAV = [
   { href: `${BASE}/results`, label: "Results", icon: TrendingUp },
   { href: `${BASE}/brain`, label: "Brain", icon: Brain },
   { href: `${BASE}/activity`, label: "Activity", icon: Activity },
+  /**
+   * ⭐ §16.2 gives House Rules a top-level slot even though it isn't data:
+   * seeing your own sentences listed back with dates is "the single cheapest
+   * trust-building screen in the product."
+   */
+  { href: `${BASE}/house-rules`, label: "Rules", icon: ScrollText },
 ] as const;
 
 const SETTINGS_HREF = `${BASE}/settings`;
@@ -81,7 +88,9 @@ export default function MissionLayout({ children }: { children: ReactNode }) {
                 />
                 <Icon
                   className={`size-4 transition-colors ${
-                    active ? "text-lime" : "text-paper-faint group-hover:text-paper-dim"
+                    active
+                      ? "text-lime"
+                      : "text-paper-faint group-hover:text-paper-dim"
                   }`}
                 />
                 {item.label}

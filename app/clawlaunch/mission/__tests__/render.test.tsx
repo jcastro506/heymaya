@@ -34,7 +34,8 @@ const h = vi.hoisted(() => {
         _id: "d1",
         platform: "reddit",
         kind: "reply",
-        draftText: "This hits hard. I shipped three products before I understood.",
+        draftText:
+          "This hits hard. I shipped three products before I understood.",
         approvalState: "pending_approval",
         createdAt: now - 3600_000,
         updatedAt: now - 3600_000,
@@ -96,7 +97,9 @@ const h = vi.hoisted(() => {
           },
         ],
         intentPhrases: ["how do I get users"],
-        trustedVoices: [{ handle: "@levelsio", platform: "x", whyTrusted: "peer" }],
+        trustedVoices: [
+          { handle: "@levelsio", platform: "x", whyTrusted: "peer" },
+        ],
       },
       competitors: [],
       channels: [
@@ -112,7 +115,8 @@ const h = vi.hoisted(() => {
       angles: [
         {
           angle: "Built it, now what?",
-          painQuote: "We can build SaaS products. But who's going to sell them?",
+          painQuote:
+            "We can build SaaS products. But who's going to sell them?",
           painSourceUrl: "https://reddit.com/r/SaaS/1",
           hookVariants: ["h1", "h2", "h3"],
         },
@@ -136,8 +140,20 @@ const h = vi.hoisted(() => {
       },
     ],
     getMyMayaMessages: [
-      { _id: "m1", role: "maya", body: "Foundation's done.", channel: "telegram", ts: now },
-      { _id: "m2", role: "user", body: "Why Reddit", channel: "telegram", ts: now },
+      {
+        _id: "m1",
+        role: "maya",
+        body: "Foundation's done.",
+        channel: "telegram",
+        ts: now,
+      },
+      {
+        _id: "m2",
+        role: "user",
+        body: "Why Reddit",
+        channel: "telegram",
+        ts: now,
+      },
     ],
     listMySteeringDirectives: [
       {
@@ -191,6 +207,7 @@ vi.mock("lucide-react", () => {
     Map: Stub,
     MessageCircle: Stub,
     PenLine: Stub,
+    ScrollText: Stub,
     Search: Stub,
     Send: Stub,
     Settings: Stub,
@@ -284,10 +301,26 @@ const TABS = [
 const REDIRECTS = [
   { name: "Drafts", path: "../drafts/page", dest: "/clawlaunch/mission" },
   { name: "Queue", path: "../queue/page", dest: "/clawlaunch/mission" },
-  { name: "Research", path: "../research/page", dest: "/clawlaunch/mission/brain" },
-  { name: "Thinking", path: "../thinking/page", dest: "/clawlaunch/mission/activity" },
-  { name: "Account", path: "../account/page", dest: "/clawlaunch/mission/settings" },
-  { name: "Assets", path: "../assets/page", dest: "/clawlaunch/mission/results" },
+  {
+    name: "Research",
+    path: "../research/page",
+    dest: "/clawlaunch/mission/brain",
+  },
+  {
+    name: "Thinking",
+    path: "../thinking/page",
+    dest: "/clawlaunch/mission/activity",
+  },
+  {
+    name: "Account",
+    path: "../account/page",
+    dest: "/clawlaunch/mission/settings",
+  },
+  {
+    name: "Assets",
+    path: "../assets/page",
+    dest: "/clawlaunch/mission/results",
+  },
 ];
 
 beforeEach(() => {
@@ -305,12 +338,20 @@ describe("the Plan screen is back (§16.75)", () => {
 });
 
 describe("Mission Control — SSR render smoke", () => {
-  it("the layout renders the 4 tabs + the settings gear", async () => {
+  it("the layout renders the 5 tabs + the settings gear", async () => {
     const Layout = (await import("../layout")).default;
     const html = renderToString(
-      createElement(Layout, null, createElement("div", null, "content"))
+      createElement(Layout, null, createElement("div", null, "content")),
     );
-    for (const label of ["Today", "Results", "Brain", "Activity", "Settings"]) {
+    for (const label of [
+      "Today",
+      "Results",
+      "Brain",
+      "Activity",
+      // §16.2 gives House Rules a top-level slot — the proof she remembers.
+      "Rules",
+      "Settings",
+    ]) {
       expect(html).toContain(label);
     }
     expect(html).toContain("Mission Control");
@@ -331,7 +372,7 @@ describe("Mission Control — SSR render smoke", () => {
     it(`old ${r.name} route redirects to ${r.dest}`, async () => {
       const Page = (await import(r.path)).default;
       expect(() => renderToString(createElement(Page))).toThrowError(
-        `NEXT_REDIRECT:${r.dest}`
+        `NEXT_REDIRECT:${r.dest}`,
       );
     });
   }
