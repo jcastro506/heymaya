@@ -20,12 +20,25 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+  query,
+} from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
+import {
+  CHANNEL_REQUIREMENTS,
+  noticesFor,
+  type Channel,
+} from "./channelRequirements";
 
 /** Zernio's platform slug → our channel key. `twitter` is X. */
-const CHANNEL_BY_SLUG: Record<string, "x" | "instagram" | "tiktok" | "youtube"> = {
+const CHANNEL_BY_SLUG: Record<
+  string,
+  "x" | "instagram" | "tiktok" | "youtube"
+> = {
   twitter: "x",
   instagram: "instagram",
   tiktok: "tiktok",
@@ -38,8 +51,47 @@ const CHANNEL_BY_SLUG: Record<string, "x" | "instagram" | "tiktok" | "youtube"> 
  * Checked because its absence is silent: everything else about the connection
  * looks healthy.
  */
+/**
+ * ⭐ The permission that means "this connection can actually publish" (§6.0.15).
+ *
+ * > *"Some platforms accept a connection that can never post. The connection
+ * > succeeds, the account appears in every listing, health looks fine — and the
+ * > first evidence of a problem is a publish failing weeks later, which reads as
+ * > our bug rather than an account setting."*
+ *
+ * ⚠️ This map used to contain **X only**, so three of four channels could
+ * connect cleanly and never post with nothing to show for it. Instagram is the
+ * case §6.0.15 calls load-bearing.
+ *
+ * ⭐ And Instagram needs no special case. Meta issues
+ * `instagram_business_content_publish` only to Business/Creator accounts, so
+ * "is this a personal account?" arrives as a missing scope — the same shape as
+ * every other platform. A lookup, not a branch.
+ *
+ * VERIFIED LIVE 2026-08-11 against `GET /api/v1/accounts` for four real
+ * connected accounts. Every value below was read off that response rather than
+ * taken from a doc, because the platform slug for X is `twitter` and two of
+ * these scope names are not what their docs call them.
+ */
 const WRITE_PERMISSION: Record<string, string> = {
+  instagram: "instagram_business_content_publish",
+  tiktok: "video.publish",
   x: "tweet.write",
+  youtube: "https://www.googleapis.com/auth/youtube.upload",
+};
+
+/**
+ * What to tell them when the publish permission is absent — per channel, in
+ * their terms. Keyed rather than branched, same as the map above.
+ */
+const CANNOT_POST_REASON: Record<string, string> = {
+  instagram:
+    "this looks like a personal Instagram — it needs to be a Business or Creator account before anything can be posted",
+  tiktok:
+    "TikTok didn't grant permission to publish — reconnecting should fix it",
+  x: "X didn't grant permission to post — reconnecting should fix it",
+  youtube:
+    "YouTube didn't grant permission to upload — reconnecting should fix it",
 };
 
 export interface ChannelHealth {
@@ -79,20 +131,40 @@ export function readAccount(raw: {
   const handle =
     typeof profile?.username === "string" ? profile.username : undefined;
 
-  const base: ChannelHealth = { channel, zernioAccountId, handle, connected: true };
+  const base: ChannelHealth = {
+    channel,
+    zernioAccountId,
+    handle,
+    connected: true,
+  };
 
   if (raw.needsReconnection === true) {
-    return { ...base, connected: false, reason: "the connection needs to be re-authorised" };
+    return {
+      ...base,
+      connected: false,
+      reason: "the connection needs to be re-authorised",
+    };
   }
   if (raw.isActive === false || raw.enabled === false) {
-    return { ...base, connected: false, reason: "the connection is switched off in Zernio" };
+    return {
+      ...base,
+      connected: false,
+      reason: "the connection is switched off in Zernio",
+    };
   }
-  if (typeof raw.platformStatus === "string" && raw.platformStatus !== "active") {
+  if (
+    typeof raw.platformStatus === "string" &&
+    raw.platformStatus !== "active"
+  ) {
     const detail =
       typeof raw.platformStatusReason === "string" && raw.platformStatusReason
         ? ` — ${raw.platformStatusReason}`
         : "";
-    return { ...base, connected: false, reason: `the platform reports "${raw.platformStatus}"${detail}` };
+    return {
+      ...base,
+      connected: false,
+      reason: `the platform reports "${raw.platformStatus}"${detail}`,
+    };
   }
 
   const needed = WRITE_PERMISSION[channel];
@@ -103,10 +175,19 @@ export function readAccount(raw: {
     if (!granted.includes(needed)) {
       // Authenticates fine, lists fine, cannot post. Caught here rather than at
       // publish time, where it would read as a publishing bug.
+      /**
+       * ⚠️ Named in terms of what the FOUNDER has to change, not the scope
+       * string. "missing instagram_business_content_publish" is true and
+       * useless; "your Instagram is a personal account" is the same fact
+       * expressed as the two-minute fix it actually is (§11 — never leak our
+       * plumbing at them).
+       */
       return {
         ...base,
         connected: false,
-        reason: `the connection can't post — it's missing the ${needed} permission`,
+        reason:
+          CANNOT_POST_REASON[channel] ??
+          "the connection can't post — it needs to be re-authorised",
       };
     }
   }
@@ -121,7 +202,7 @@ export const upsertChannel = internalMutation({
       v.literal("x"),
       v.literal("instagram"),
       v.literal("tiktok"),
-      v.literal("youtube")
+      v.literal("youtube"),
     ),
     zernioAccountId: v.string(),
     handle: v.optional(v.string()),
@@ -182,15 +263,18 @@ export const syncChannels = internalAction({
   args: { customerId: v.id("customers") },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<{ ok: boolean; error?: string; channels: ChannelHealth[] }> => {
     const apiKey = process.env.ZERNIO_API_KEY;
-    if (!apiKey) return { ok: false, error: "Zernio isn't configured", channels: [] };
+    if (!apiKey)
+      return { ok: false, error: "Zernio isn't configured", channels: [] };
 
     const { ZernioClient } = await import("../integrations/zernio/client");
     let raw: unknown;
     try {
-      raw = await new ZernioClient({ apiKey }).request<unknown>("/api/v1/accounts");
+      raw = await new ZernioClient({ apiKey }).request<unknown>(
+        "/api/v1/accounts",
+      );
     } catch (error) {
       return {
         ok: false,
@@ -280,11 +364,11 @@ export const syncAllChannels = internalAction({
   args: { now: v.optional(v.number()) },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<{ customers: number; announced: number }> => {
     const customerIds = await ctx.runQuery(
       internal.maya.scheduler.activeV2Customers,
-      {}
+      {},
     );
     let announced = 0;
 
@@ -293,7 +377,7 @@ export const syncAllChannels = internalAction({
         customerId,
       });
       const known = new Set<string>(
-        before.filter((c) => c.status === "connected").map((c) => c.channel)
+        before.filter((c) => c.status === "connected").map((c) => c.channel),
       );
 
       const result = await ctx.runAction(internal.maya.channels.syncChannels, {
@@ -327,5 +411,114 @@ export const syncAllChannels = internalAction({
     }
 
     return { customers: customerIds.length, announced };
+  },
+});
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ Every channel, and what is actually true about it (§6.0.15 point 3).
+ *
+ * > *"**Mission Control never renders a connected-but-unpostable channel as
+ * > simply 'connected'**. Instagram-must-be-Business is the load-bearing case:
+ * > it connects cleanly and then never posts."*
+ *
+ * ⚠️ The shape is the enforcement. There is no `connected` boolean for a
+ * surface to render on its own — a caller gets `state`, and
+ * `connected_cant_post` is a value it must handle. A screen cannot accidentally
+ * show "connected" for an account that can't publish, because that word is
+ * never returned for one.
+ *
+ * All four channels are listed whether connected or not, each carrying the
+ * notices §6.0.15 requires **before** the OAuth redirect. A card that hasn't
+ * been connected yet still knows what to say.
+ */
+export type ChannelState =
+  | "not_connected"
+  | "connected"
+  | "connected_cant_post"
+  | "needs_attention";
+
+export interface MyChannel {
+  channel: Channel;
+  state: ChannelState;
+  handle?: string;
+  /** Her words for what is wrong, when something is. Never a scope name. */
+  reason?: string;
+  /** Said BEFORE they connect — prevention beats diagnosis. */
+  notices: string[];
+  /** ⚠️ Permanent platform limits, not a problem with their setup. */
+  permanentLimit?: string;
+  lastCheckedAt?: number;
+}
+
+const ALL_CHANNELS: Channel[] = ["tiktok", "instagram", "youtube", "x"];
+
+export const myChannels = query({
+  args: {},
+  handler: async (
+    ctx,
+  ): Promise<{ ok: boolean; channels?: MyChannel[]; error?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { ok: false, error: "sign in first" };
+
+    const creator = (await ctx.db
+      .query("creators")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .first()) as Doc<"creators"> | null;
+    if (!creator) return { ok: false, error: "no account yet" };
+
+    const customer = (await ctx.db
+      .query("customers")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first()) as Doc<"customers"> | null;
+    if (!customer) return { ok: false, error: "no account yet" };
+
+    const rows = (await ctx.db
+      .query("channels")
+      .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+      .collect()) as Doc<"channels">[];
+
+    return {
+      ok: true,
+      channels: ALL_CHANNELS.map((channel) => {
+        const row = rows.find((r) => r.channel === channel);
+        const notices = noticesFor(channel);
+        const permanentLimit = CHANNEL_REQUIREMENTS[channel].permanentLimit;
+
+        if (!row) {
+          return {
+            channel,
+            state: "not_connected" as const,
+            notices,
+            permanentLimit,
+          };
+        }
+
+        /**
+         * ⚠️ `status` is written by `upsertChannel` from `readAccount`, which
+         * sets it false with a reason when the publish scope is missing. So a
+         * row that exists but isn't `connected` is precisely the
+         * connected-but-unpostable case §6.0.15 is about — and it is reported
+         * as its own state rather than folded into "connected".
+         */
+        const state: ChannelState =
+          row.status === "connected"
+            ? "connected"
+            : row.failureReason
+              ? "connected_cant_post"
+              : "needs_attention";
+
+        return {
+          channel,
+          state,
+          handle: row.handle,
+          reason: row.failureReason,
+          notices,
+          permanentLimit,
+          lastCheckedAt: row.lastCheckedAt,
+        };
+      }),
+    };
   },
 });
