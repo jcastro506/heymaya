@@ -112,7 +112,37 @@ describe("results", () => {
   });
 
   it("stays quiet when there were none", () => {
-    // Reporting "0 signups" every week trains a founder to stop reading.
-    expect(composeWeekly(base)).not.toMatch(/signup/);
+    /**
+     * The intent, unchanged: reporting "0 signups" every week trains a founder
+     * to stop reading.
+     *
+     * ⚠️ The assertion was `not.toMatch(/signup/)` until 2026-08-12, which also
+     * forbade ASKING — a different act, and one §14.45 makes mandatory ("rung 4
+     * is the floor, and it runs forever"). Narrowed to what the rule is
+     * actually about: no CLAIMED count.
+     */
+    const out = composeWeekly(base);
+    expect(out).not.toMatch(/\d+ signups?\b/);
+    expect(out).not.toMatch(/0 signups/);
+  });
+
+  it("⭐ asks the weekly question every time — §14.45 rung 4", () => {
+    /**
+     * The floor of the attribution ladder, and it was never asked. Of the five
+     * rungs, none were running: no post carries a wrapped link, there is no
+     * pixel, and this question had no code anywhere.
+     */
+    expect(composeWeekly(base)).toMatch(/how many signups/i);
+    expect(
+      composeWeekly({ ...base, conversions: { total: 3, traced: 1 } }),
+    ).toMatch(/how many signups/i);
+  });
+
+  it("asks even on a week with nothing published", () => {
+    // Signups arrive from posts that went out earlier; skipping the question on
+    // a quiet week loses exactly the tail that proves the work compounds.
+    expect(composeWeekly({ ...base, placements: 0 })).toMatch(
+      /how many signups/i,
+    );
   });
 });

@@ -59,6 +59,30 @@ export interface WeeklyInput {
  * and the reason is that a founder reading a list of numbers has to work out
  * what's wrong themselves — which is the job they hired her for.
  */
+/**
+ * ⭐ §14.45 rung 4 — the weekly self-report ask.
+ *
+ * > *"Rung 4 is the floor, and it runs forever. **Even with a pixel installed,
+ * > ask the weekly question.** One line in the recap. It catches signups the
+ * > pixel missed, it validates the pixel against reality, and it works for the
+ * > founder who'll never paste a snippet."*
+ *
+ * ⚠️ It was never asked. Of the five rungs, **none were running**: no post
+ * carries a wrapped link (0 of 10 published, verified 2026-08-12), there is no
+ * pixel, and this question — the one described as universal and frictionless —
+ * had no code anywhere. §14.45 calls attribution "the one the whole wedge
+ * rests on".
+ *
+ * ⭐ Asked EVERY week, including a week with nothing published. Signups arrive
+ * from posts that went out earlier, and a report that only asks on busy weeks
+ * would systematically miss the tail — which is exactly the founder whose
+ * results are compounding.
+ */
+export function selfReportAsk(): string {
+  // One sentence, no preamble, easy to answer with a number and nothing else.
+  return "Roughly how many signups did you get this week? A rough number is fine — it's the only way I can tell whether any of this is landing.";
+}
+
 export function composeWeekly(input: WeeklyInput): string {
   const lines: string[] = [];
 
@@ -70,6 +94,10 @@ export function composeWeekly(input: WeeklyInput): string {
   if (input.placements === 0) {
     lines.push(`nothing went out this week. ${input.rungDetail}`);
     if (input.strategy.detail) lines.push(input.strategy.detail);
+    // ⚠️ Asked even here. Last week's posts can still be producing signups,
+    // and skipping the question on a quiet week loses exactly the tail that
+    // proves the work compounds.
+    lines.push(selfReportAsk());
     return lines.join("\n\n");
   }
 
@@ -94,7 +122,7 @@ export function composeWeekly(input: WeeklyInput): string {
    */
   if (cmp?.verdict === "below") {
     lines.push(
-      `the numbers clear my floor, but they're well under what your niche does — ${Math.round(perPost)} views a post against a median of ${input.nicheMedian}, from ${input.nichePosts} posts.`
+      `the numbers clear my floor, but they're well under what your niche does — ${Math.round(perPost)} views a post against a median of ${input.nicheMedian}, from ${input.nichePosts} posts.`,
     );
   } else {
     // 1. The rung, in her words. Not a number.
@@ -102,7 +130,7 @@ export function composeWeekly(input: WeeklyInput): string {
     // 2. The benchmark — what makes the number readable at all (§16.3).
     if (cmp) {
       lines.push(
-        `${Math.round(perPost)} views a post — ${cmp.detail}, from ${input.nichePosts} posts in your niche.`
+        `${Math.round(perPost)} views a post — ${cmp.detail}, from ${input.nichePosts} posts in your niche.`,
       );
     }
   }
@@ -113,7 +141,7 @@ export function composeWeekly(input: WeeklyInput): string {
    * between posting and doing the homework.
    */
   lines.push(
-    `${input.tracedPlacements} of ${input.placements} posts came from something a real person said.`
+    `${input.tracedPlacements} of ${input.placements} posts came from something a real person said.`,
   );
 
   // 4. Results, and only results.
@@ -124,12 +152,18 @@ export function composeWeekly(input: WeeklyInput): string {
         ? `${input.conversions.total} signups — I can point to the post for ${input.conversions.traced}${
             untraced > 0 ? `, and can't for the other ${untraced}` : ""
           }.`
-        : `${input.conversions.total} signups, and I can point to the post for each one.`
+        : `${input.conversions.total} signups, and I can point to the post for each one.`,
     );
   }
 
   // 5. The strategy verdict, relayed — never its own ping.
   if (input.strategy.detail) lines.push(input.strategy.detail);
+
+  /**
+   * 6. ⭐ Rung 4. Last, because it is a question and the report should inform
+   * before it asks — but always present, because §14.45 makes it the floor.
+   */
+  lines.push(selfReportAsk());
 
   return lines.join("\n\n");
 }
@@ -147,8 +181,13 @@ export const sendWeeklyReview = internalAction({
   args: { customerId: v.id("customers"), now: v.optional(v.number()) },
   handler: async (
     ctx,
-    args
-  ): Promise<{ ok: boolean; sent: boolean; body?: string; reason?: string }> => {
+    args,
+  ): Promise<{
+    ok: boolean;
+    sent: boolean;
+    body?: string;
+    reason?: string;
+  }> => {
     const now = args.now ?? Date.now();
     const timezone = await ctx.runQuery(internal.maya.liveness.timezoneFor, {
       customerId: args.customerId,
@@ -159,10 +198,13 @@ export const sendWeeklyReview = internalAction({
       sinceDays: 7,
       now,
     });
-    const benchmarks = await ctx.runQuery(internal.maya.benchmarks.benchmarksFor, {
-      customerId: args.customerId,
-      now,
-    });
+    const benchmarks = await ctx.runQuery(
+      internal.maya.benchmarks.benchmarksFor,
+      {
+        customerId: args.customerId,
+        now,
+      },
+    );
     const trace = await ctx.runQuery(internal.maya.traceability.traceability, {
       customerId: args.customerId,
       now,
@@ -170,7 +212,7 @@ export const sendWeeklyReview = internalAction({
     });
     const conversions = await ctx.runQuery(
       internal.maya.attribution.recentConversions,
-      { customerId: args.customerId, limit: 50 }
+      { customerId: args.customerId, limit: 50 },
     );
 
     /**
@@ -187,7 +229,7 @@ export const sendWeeklyReview = internalAction({
 
     const weekAgo = now - 7 * 86_400_000;
     const recent = conversions.filter(
-      (c: { occurredAt: number }) => c.occurredAt >= weekAgo
+      (c: { occurredAt: number }) => c.occurredAt >= weekAgo,
     );
 
     // Pick the channel with the most placements — the week's main surface.
@@ -209,7 +251,7 @@ export const sendWeeklyReview = internalAction({
       conversions: {
         total: recent.reduce(
           (sum: number, c: { count: number }) => sum + c.count,
-          0
+          0,
         ),
         traced: recent
           .filter((c: { traced: boolean }) => c.traced)
@@ -230,6 +272,13 @@ export const sendWeeklyReview = internalAction({
        */
       dedupeKey: `weekly:${dayKeyInZone(now, timezone)}`,
       proactive: true,
+      /**
+       * ⭐ This report ends with a question (§14.45 rung 4), so it IS the open
+       * one. `telegram.receiveInbound` closes it on their next message and
+       * reads the number out of their answer — which is what turns the ask
+       * from a polite noise into a recorded result.
+       */
+      awaitingAnswer: true,
       ts: now,
     });
 

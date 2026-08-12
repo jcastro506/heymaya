@@ -33,12 +33,12 @@ import { dayScanFloor, isSameDayInZone } from "./cadence";
 const SURFACE = v.union(
   v.literal("telegram"),
   v.literal("web"),
-  v.literal("system")
+  v.literal("system"),
 );
 
 async function getMessage(
   ctx: QueryCtx | MutationCtx,
-  id: Id<"messages">
+  id: Id<"messages">,
 ): Promise<Doc<"messages"> | null> {
   // The schema is at TypeScript's instantiation ceiling, so `db.get` returns a
   // union of every table's doc type instead of narrowing.
@@ -112,12 +112,12 @@ async function writeOutbound(
     awaitingAnswer?: boolean;
     turnId?: string;
     ts: number;
-  }
+  },
 ): Promise<Id<"messages">> {
   const plain = checkPlainLanguage(row.body);
   if (!plain.ok) {
     console.error(
-      `[messages] redacted ${plain.redacted.join(", ")} from ${row.dedupeKey}: ${row.body}`
+      `[messages] redacted ${plain.redacted.join(", ")} from ${row.dedupeKey}: ${row.body}`,
     );
   }
 
@@ -152,12 +152,18 @@ export const send = internalMutation({
     body: v.string(),
     dedupeKey: v.string(),
     proactive: v.optional(v.boolean()),
+    /**
+     * ⭐ Marks this as the one outstanding question. `receiveInbound` closes it
+     * on the founder's next message — and, for the weekly report, reads their
+     * answer as a self-reported signup count (§14.45 rung 4).
+     */
+    awaitingAnswer: v.optional(v.boolean()),
     turnId: v.optional(v.string()),
     ts: v.optional(v.number()),
   },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<{ messageId: Id<"messages">; sent: boolean }> => {
     // Scoped to the customer. `brief:2026-07-31` is the same string for every
     // customer in the fleet, so a global dedupe lookup silently suppressed
@@ -166,7 +172,7 @@ export const send = internalMutation({
     const existing = await ctx.db
       .query("messages")
       .withIndex("by_customer_and_dedupe", (q) =>
-        q.eq("customerId", args.customerId).eq("dedupeKey", args.dedupeKey)
+        q.eq("customerId", args.customerId).eq("dedupeKey", args.dedupeKey),
       )
       .first();
     if (existing) return { messageId: existing._id, sent: false };
@@ -223,7 +229,7 @@ export const askFounder = internalMutation({
   },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<{
     messageId: Id<"messages"> | null;
     asked: boolean;
@@ -232,7 +238,7 @@ export const askFounder = internalMutation({
     const open = await ctx.db
       .query("messages")
       .withIndex("by_customer_and_awaiting", (q) =>
-        q.eq("customerId", args.customerId).eq("awaitingAnswer", true)
+        q.eq("customerId", args.customerId).eq("awaitingAnswer", true),
       )
       .first();
 
@@ -248,7 +254,7 @@ export const askFounder = internalMutation({
     const existing = await ctx.db
       .query("messages")
       .withIndex("by_customer_and_dedupe", (q) =>
-        q.eq("customerId", args.customerId).eq("dedupeKey", args.dedupeKey)
+        q.eq("customerId", args.customerId).eq("dedupeKey", args.dedupeKey),
       )
       .first();
     if (existing) return { messageId: existing._id, asked: false };
@@ -302,7 +308,7 @@ export const closeQuestionFor = internalMutation({
     const row = (await ctx.db
       .query("messages")
       .withIndex("by_customer_and_dedupe", (q) =>
-        q.eq("customerId", args.customerId).eq("dedupeKey", args.dedupeKey)
+        q.eq("customerId", args.customerId).eq("dedupeKey", args.dedupeKey),
       )
       .first()) as Doc<"messages"> | null;
     if (!row?.awaitingAnswer) return { closed: false };
@@ -324,7 +330,7 @@ export const closeOpenQuestion = internalMutation({
     const open = await ctx.db
       .query("messages")
       .withIndex("by_customer_and_awaiting", (q) =>
-        q.eq("customerId", args.customerId).eq("awaitingAnswer", true)
+        q.eq("customerId", args.customerId).eq("awaitingAnswer", true),
       )
       .collect();
     for (const row of open) {
@@ -341,7 +347,7 @@ export const openQuestion = internalQuery({
     await ctx.db
       .query("messages")
       .withIndex("by_customer_and_awaiting", (q) =>
-        q.eq("customerId", args.customerId).eq("awaitingAnswer", true)
+        q.eq("customerId", args.customerId).eq("awaitingAnswer", true),
       )
       .first(),
 });
@@ -357,7 +363,9 @@ export const recentHistory = internalQuery({
   handler: async (ctx, args): Promise<Doc<"messages">[]> => {
     const rows = await ctx.db
       .query("messages")
-      .withIndex("by_customer_and_ts", (q) => q.eq("customerId", args.customerId))
+      .withIndex("by_customer_and_ts", (q) =>
+        q.eq("customerId", args.customerId),
+      )
       .order("desc")
       .take(args.limit ?? 50);
     return rows.reverse();
@@ -379,19 +387,21 @@ export const proactiveSentToday = internalQuery({
     // reset at 20:00 local, so she could spend it during the evening and then
     // spend it again two hours later — the budget silently doubled on exactly
     // the evenings she is most active.
-    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    const customer = (await ctx.db.get(
+      args.customerId,
+    )) as Doc<"customers"> | null;
     const timezone = customer?.timezone ?? "UTC";
     const rows = await ctx.db
       .query("messages")
       .withIndex("by_customer_and_ts", (q) =>
-        q.eq("customerId", args.customerId).gte("ts", dayScanFloor(now))
+        q.eq("customerId", args.customerId).gte("ts", dayScanFloor(now)),
       )
       .collect();
     return rows.filter(
       (row) =>
         row.direction === "out" &&
         row.proactive === true &&
-        isSameDayInZone(row.ts, now, timezone)
+        isSameDayInZone(row.ts, now, timezone),
     ).length;
   },
 });
@@ -429,9 +439,11 @@ export const expireStaleQuestions = internalMutation({
   args: { customerId: v.id("customers"), now: v.optional(v.number()) },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<{ expired: number; question?: string }> => {
-    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    const customer = (await ctx.db.get(
+      args.customerId,
+    )) as Doc<"customers"> | null;
     if (!customer) return { expired: 0 };
 
     const now = args.now ?? Date.now();
@@ -440,7 +452,7 @@ export const expireStaleQuestions = internalMutation({
     const open = (await ctx.db
       .query("messages")
       .withIndex("by_customer_and_awaiting", (q) =>
-        q.eq("customerId", args.customerId).eq("awaitingAnswer", true)
+        q.eq("customerId", args.customerId).eq("awaitingAnswer", true),
       )
       .collect()) as Doc<"messages">[];
 
@@ -462,8 +474,8 @@ export const expireStaleQuestions = internalMutation({
       console.warn(
         `[messages] expired an unanswered question from ${dayKeyInZone(
           row.ts,
-          customer.timezone ?? "UTC"
-        )} for ${args.customerId} — she was blocked from asking anything else`
+          customer.timezone ?? "UTC",
+        )} for ${args.customerId} — she was blocked from asking anything else`,
       );
     }
 

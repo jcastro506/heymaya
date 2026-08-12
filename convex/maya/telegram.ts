@@ -31,6 +31,7 @@ import {
   internalQuery,
 } from "../_generated/server";
 import { internal } from "../_generated/api";
+import { parseSignupCount } from "./attribution";
 import type { Doc, Id } from "../_generated/dataModel";
 
 /* -------------------------------------------------------------------------- */
@@ -56,16 +57,18 @@ export const deliveryTarget = internalQuery({
   args: { messageId: v.id("messages") },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<{
     chatId: string | null;
     body: string;
     alreadyDelivered: boolean;
   } | null> => {
-    const message = (await ctx.db.get(args.messageId)) as Doc<"messages"> | null;
+    const message = (await ctx.db.get(
+      args.messageId,
+    )) as Doc<"messages"> | null;
     if (!message) return null;
     const customer = (await ctx.db.get(
-      message.customerId
+      message.customerId,
     )) as Doc<"customers"> | null;
     return {
       chatId: customer?.telegramChatId ?? null,
@@ -88,7 +91,7 @@ export const deliverMessage = internalAction({
   args: { messageId: v.id("messages") },
   handler: async (
     ctx,
-    args
+    args,
   ): Promise<{ delivered: boolean; reason?: string }> => {
     const target = await ctx.runQuery(internal.maya.telegram.deliveryTarget, {
       messageId: args.messageId,
@@ -105,9 +108,8 @@ export const deliverMessage = internalAction({
       return { delivered: false, reason };
     }
 
-    const { resolveTelegramBotIdentity, sendTelegramMessage } = await import(
-      "../integrations/telegram/client"
-    );
+    const { resolveTelegramBotIdentity, sendTelegramMessage } =
+      await import("../integrations/telegram/client");
     const identity = resolveTelegramBotIdentity();
     if (!identity) {
       const reason = "the Telegram bot isn't configured";
@@ -155,7 +157,7 @@ export const undelivered = internalQuery({
     const rows = (await ctx.db
       .query("messages")
       .withIndex("by_delivery", (q) =>
-        q.eq("direction", "out").eq("deliveredAt", undefined)
+        q.eq("direction", "out").eq("deliveredAt", undefined),
       )
       .take(args.limit ?? 100)) as Doc<"messages">[];
     return rows;
@@ -196,9 +198,8 @@ const TYPING_REFRESH_MS = 4_000;
 
 async function sendOneChatAction(chatId: string): Promise<boolean> {
   try {
-    const { resolveTelegramBotIdentity, sendTelegramChatAction } = await import(
-      "../integrations/telegram/client"
-    );
+    const { resolveTelegramBotIdentity, sendTelegramChatAction } =
+      await import("../integrations/telegram/client");
     const identity = resolveTelegramBotIdentity();
     if (!identity) return false;
     return (await sendTelegramChatAction(identity, { chatId })).ok;
@@ -259,11 +260,15 @@ export const handleInbound = internalAction({
   args: { chatId: v.string(), text: v.string(), ts: v.optional(v.number()) },
   handler: async (
     ctx,
-    args
-  ): Promise<{ recorded: boolean; reason?: string }> => {
+    args,
+  ): Promise<{
+    recorded: boolean;
+    reason?: string;
+    selfReported?: number | null;
+  }> => {
     const recorded = await ctx.runMutation(
       internal.maya.telegram.receiveInbound,
-      { chatId: args.chatId, text: args.text, ts: args.ts }
+      { chatId: args.chatId, text: args.text, ts: args.ts },
     );
     if (!recorded.recorded) return recorded;
 
@@ -280,13 +285,14 @@ export const handleInbound = internalAction({
      */
     const customerId = await ctx.runQuery(
       internal.maya.telegram.customerByChatId,
-      { chatId: args.chatId }
+      { chatId: args.chatId },
     );
-    if (!customerId) return { recorded: true, reason: "no customer to forward to" };
+    if (!customerId)
+      return { recorded: true, reason: "no customer to forward to" };
 
     const routed = await ctx.runAction(
       internal.maya.handoff.routeInboundToMachine,
-      { customerId, text: args.text }
+      { customerId, text: args.text },
     );
     if (!routed.delivered) {
       // Named, never silent. An undelivered message is the one failure this
@@ -324,8 +330,12 @@ export const receiveInbound = internalMutation({
   },
   handler: async (
     ctx,
-    args
-  ): Promise<{ recorded: boolean; reason?: string }> => {
+    args,
+  ): Promise<{
+    recorded: boolean;
+    reason?: string;
+    selfReported?: number | null;
+  }> => {
     const customer = (await ctx.db
       .query("customers")
       .withIndex("by_telegram_chat", (q) => q.eq("telegramChatId", args.chatId))
@@ -351,13 +361,40 @@ export const receiveInbound = internalMutation({
     const open = (await ctx.db
       .query("messages")
       .withIndex("by_customer_and_awaiting", (q) =>
-        q.eq("customerId", customer._id).eq("awaitingAnswer", true)
+        q.eq("customerId", customer._id).eq("awaitingAnswer", true),
       )
       .collect()) as Doc<"messages">[];
+    let selfReported: number | null = null;
     for (const row of open) {
       await ctx.db.patch(row._id, { awaitingAnswer: false });
+
+      /**
+       * ⭐ §14.45 rung 4 — "the floor, and it runs forever".
+       *
+       * The weekly report ends by asking roughly how many signups they got.
+       * This is where the answer becomes a number instead of a nice moment.
+       *
+       * ⚠️ Keyed off `dedupeKey`, NOT the message text. The wording of the ask
+       * will change; `weekly:` is the stable identifier, and matching prose
+       * would silently stop working the first time someone edits a sentence.
+       */
+      if (!row.dedupeKey?.startsWith("weekly:")) continue;
+
+      const count = parseSignupCount(args.text);
+      // ⚠️ `null` means they didn't give a number — "not sure yet" is NOT
+      // zero, and recording one would fabricate a data point on the screen
+      // §16.2 says they cancel over.
+      if (count === null) continue;
+
+      await ctx.runMutation(internal.maya.attribution.recordConversion, {
+        customerId: customer._id,
+        kind: "signup",
+        count,
+        source: "self_report",
+      });
+      selfReported = count;
     }
 
-    return { recorded: true };
+    return { recorded: true, selfReported };
   },
 });

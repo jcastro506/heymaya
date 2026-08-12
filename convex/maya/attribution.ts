@@ -387,6 +387,59 @@ export const recentConversions = internalQuery({
 /* -------------------------------------------------------------------------- */
 
 /**
+ * ⭐ Read a signup count out of a founder's reply — §14.45 rung 4.
+ *
+ * > *"Weekly self-report — 'roughly how many signups this week?' | A total,
+ * > unattributed | one sentence | **Lossy, but universal**."*
+ *
+ * ⚠️ Returns `null` when there is no number, and null means RECORD NOTHING.
+ * "not sure yet" is not zero, and writing a 0 for it would put a fabricated
+ * data point on the one screen §16.2 says they cancel over.
+ *
+ * Deliberately simple: the first plain number wins. "like 4 or 5" reads as 4,
+ * which the spec already accepts as lossy — a model call to split that hair
+ * would cost more than the answer is worth and could hallucinate a figure the
+ * founder never said.
+ */
+export function parseSignupCount(text: string): number | null {
+  const t = text.toLowerCase().trim();
+
+  // Words for nothing, which people use far more often than "0".
+  if (/^(none|nope|no|zero|nothing|not one|nada)\b/.test(t)) return 0;
+
+  /**
+   * ⚠️ They answered about a DIFFERENT metric.
+   *
+   * "got 2000 impressions" would otherwise book 2000 signups and make every
+   * later number meaningless. Magnitude alone can't catch this — 2000 is
+   * absurd for signups and ordinary for views, but a genuinely great week is
+   * also a big number, and rejecting it would punish the customer we most want
+   * to keep. The NOUN is the signal, so that is what's checked.
+   */
+  /**
+   * ⚠️ "like" is NOT in this list, deliberately. It is the commonest filler
+   * word in English — "like 4 or 5" is a normal answer, and treating it as
+   * Instagram likes rejected a perfectly good number. A signal that fires on
+   * ordinary speech is worse than no signal.
+   */
+  if (/\b(impression|view|click|follower|reply|comment|visit)/.test(t)) {
+    // Unless they named signups too, in which case the number is probably ours.
+    if (!/\b(signup|sign-up|sign up|customer|user|trial)/.test(t)) return null;
+  }
+
+  const m = t.match(/\d[\d,]*/);
+  if (!m) return null;
+
+  const n = Number(m[0].replace(/,/g, ""));
+  // A generous ceiling — high enough never to reject a real week for this
+  // ICP, low enough that a pasted timestamp or id is not read as a result.
+  if (!Number.isFinite(n) || n < 0 || n > 100_000) return null;
+  return n;
+}
+
+/* -------------------------------------------------------------------------- */
+
+/**
  * ⭐ Results, for the founder's own screen (§16.2 — "the retention screen. The
  * reason they don't cancel.")
  *
