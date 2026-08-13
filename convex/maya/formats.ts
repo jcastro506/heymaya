@@ -628,6 +628,36 @@ export function pickCard(
   return [...pool].sort((a, b) => b.metrics.views - a.metrics.views)[0];
 }
 
+/**
+ * ⭐ The few shapes worth putting in front of her while she decides what to say.
+ *
+ * ⚠️ This exists because the library had exactly one reader. `pickCard` returns
+ * a single card for `make_carousel`, which asks for `channel: "tiktok"` and
+ * needs media assets — so with an empty asset library **every watched card went
+ * unread**, including the seven the watch tier paid Gemini to actually look at.
+ *
+ * Watched before read, then by reach. A `read` card gives the spoken hook; a
+ * `watch` card gives the visual hook, the overlay timing and the cut rhythm,
+ * and those are most of what makes a short video work — so a watched card with
+ * fewer views still outranks a read one.
+ */
+export function topShapes(cards: FormatCard[], limit = 3): FormatCard[] {
+  return (
+    [...cards]
+      /**
+       * ⚠️ `reusableAs` is the whole point — it is the shape written so it
+       * applies to a different product. A card without one is an observation
+       * about someone else's video and cannot be borrowed from.
+       */
+      .filter((c) => c.reusableAs.trim().length > 0)
+      .sort((a, b) => {
+        if (a.depth !== b.depth) return a.depth === "watch" ? -1 : 1;
+        return b.metrics.views - a.metrics.views;
+      })
+      .slice(0, limit)
+  );
+}
+
 /** One card by id, for rendering provenance back to the founder. */
 export const cardById = internalQuery({
   args: { customerId: v.id("customers"), cardId: v.string() },

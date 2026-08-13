@@ -16,6 +16,7 @@ import {
   parseMetrics,
   mineHashtags,
   mergeWatch,
+  topShapes,
   handleFrom,
   MAX_TAGS_PER_CHANNEL,
   pickCard,
@@ -354,5 +355,77 @@ describe("handleFrom", () => {
   it("returns undefined when there's no handle to find", () => {
     // A card with no handle can't be watched — `post()` needs both parts.
     expect(handleFrom("https://example.com/video/1")).toBeUndefined();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ The shapes she watched, finally readable.
+ *
+ * ⚠️ The bug this closes: `formatCardsFor` had ONE reader — `carousel.ts`,
+ * which asks for `channel: "tiktok"` and needs media assets. The live asset
+ * library is empty, so it never ran, and the word "format" appeared **zero
+ * times** in her tool surface. Seven live cards carry beats and overlay timing
+ * that Gemini was paid to produce by watching the video, and nothing she wrote
+ * could see any of it.
+ */
+describe("topShapes", () => {
+  it("⭐ puts a watched card above a read one with far more reach", () => {
+    /**
+     * The load-bearing property, and the one a views-only sort gets wrong.
+     * A read card knows the spoken hook. A watched card knows the visual hook,
+     * when text appears, and the cut rhythm — most of what makes a short video
+     * work. That is worth more than an order of magnitude of views.
+     */
+    const out = topShapes([
+      card({ cardId: "read_huge", depth: "read", metrics: { views: 9_000_000, likes: 1, comments: 1 } }),
+      card({ cardId: "watched_small", depth: "watch", metrics: { views: 1_000, likes: 1, comments: 1 } }),
+    ]);
+
+    expect(out.map((c) => c.cardId)).toEqual(["watched_small", "read_huge"]);
+  });
+
+  it("ranks by reach within the same tier", () => {
+    const out = topShapes([
+      card({ cardId: "w_small", depth: "watch", metrics: { views: 10, likes: 1, comments: 1 } }),
+      card({ cardId: "w_big", depth: "watch", metrics: { views: 500, likes: 1, comments: 1 } }),
+    ]);
+
+    expect(out.map((c) => c.cardId)).toEqual(["w_big", "w_small"]);
+  });
+
+  it("⚠️ drops a card with no reusable shape", () => {
+    /**
+     * `reusableAs` is what makes a card borrowable rather than copyable — it
+     * describes the shape so it applies to a DIFFERENT product. A card without
+     * one is an observation about someone else's video, and handing it to her
+     * as a shape invites copying the words instead of the structure.
+     */
+    const out = topShapes([
+      card({ cardId: "empty", reusableAs: "   " }),
+      card({ cardId: "real", reusableAs: "opens on the objection, answers it in one line" }),
+    ]);
+
+    expect(out.map((c) => c.cardId)).toEqual(["real"]);
+  });
+
+  it("caps the list so it can't crowd out the observations", () => {
+    // The full card carries per-second beats. Twelve of them would bury the
+    // niche read this rides along with.
+    const many = Array.from({ length: 12 }, (_, i) =>
+      card({ cardId: `c${i}`, metrics: { views: i, likes: 1, comments: 1 } }),
+    );
+    expect(topShapes(many)).toHaveLength(3);
+    expect(topShapes(many, 5)).toHaveLength(5);
+  });
+
+  it("⚠️ returns nothing rather than a filler shape when the library is empty", () => {
+    /**
+     * Same rule `pickCard` follows and for the same reason: a default card
+     * would mean every post claims a shape that worked and none of them does.
+     * §2.7 — grounded or silent.
+     */
+    expect(topShapes([])).toEqual([]);
   });
 });

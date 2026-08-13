@@ -41,6 +41,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
 import { dayKeyInZone } from "./cadence";
+import { topShapes } from "./formats";
 
 /* -------------------------------------------------------------------------- */
 /* The envelope                                                                */
@@ -774,6 +775,50 @@ export const scrollHttp = httpAction(async (ctx, request) => {
     customerId: auth.customer._id,
   });
 
+  /**
+   * ⭐ THE SHAPES SHE WATCHED. The most expensive thing she does, and until now
+   * nothing she wrote could see it.
+   *
+   * `watchTopFormats` downloads the video and sends the bytes to Gemini — it
+   * works, and 7 of 12 live cards carry real beats, overlay timing and pacing.
+   * But `formatCardsFor` had exactly ONE reader, `carousel.ts`, which asks for
+   * `channel: "tiktok"` and needs media assets to run. With an empty asset
+   * library it never ran, so **every watched card went unread**.
+   *
+   * ⚠️ The word "format" appeared ZERO times in her tool surface. She was
+   * paying to watch videos and then writing without them — the exact shape of
+   * §13.5.2's complaint about product truth alone, one level up.
+   *
+   * Attached to `scroll` for the reason the bank and the complaints are: a tool
+   * she has to remember is a tool she forgets, and she is already making this
+   * call at the moment she decides what to say.
+   */
+  const library = await ctx.runQuery(internal.maya.formats.formatCardsFor, {
+    customerId: auth.customer._id,
+  });
+
+  /**
+   * Watched cards first — a `read` card has the spoken hook, a `watch` card has
+   * the visual hook, the overlay timing and the cut rhythm, and those are most
+   * of what makes a short video work. Then by reach within each tier.
+   *
+   * ⚠️ Three, not twelve. The full card carries per-second beats; twelve of
+   * them would crowd out the observations she is supposed to be reading. She
+   * can pull the whole card by id when she has chosen one.
+   */
+  const shapes = topShapes(library.cards).map((c) => ({
+      cardId: c.cardId,
+      channel: c.channel,
+      /** "watch" means she actually saw it; "read" means transcript only. */
+      depth: c.depth,
+      reusableAs: c.reusableAs,
+      visualDevice: c.hook.visualDevice,
+      onScreenText: c.hook.onScreenText,
+      textOverlay: c.textOverlay,
+      pacing: c.pacing,
+      views: c.metrics.views,
+    }));
+
   if (!result.ok) {
     return respond({
       ok: false,
@@ -809,6 +854,13 @@ export const scrollHttp = httpAction(async (ctx, request) => {
       bankDepth: bank.depth,
       complaintsFound: complaints.complaints?.length ?? 0,
       /**
+       * ⭐ Shapes that already worked in this niche, watched rather than
+       * guessed. `depth: "watch"` means she saw the video; `reusableAs` is the
+       * shape written so it applies to a DIFFERENT product, which is what makes
+       * it borrowable rather than copyable.
+       */
+      shapes,
+      /**
        * Accounts she watches that just pulled far above their own usual. The
        * multiple is against THEIR baseline, so it means something for a small
        * account as much as a large one.
@@ -819,7 +871,18 @@ export const scrollHttp = httpAction(async (ctx, request) => {
       ? `${observations.length} things moving, and the strongest banked idea is "${idea.angle}". ${competition.detail}`
       : `${observations.length} things moving, but the idea bank is empty. ${competition.detail}`,
     next: idea
-      ? "draft against data.todaysIdea.ideaId — its evidence is what you cite, and its quote is what a real person actually said"
+      ? /**
+         * ⭐ Two different questions, and she needs both. The idea is WHAT to
+         * say — the evidence, the quote, the person. The shape is HOW to build
+         * it. Answering only the first is how a post ends up true and shapeless.
+         *
+         * ⚠️ Borrow the shape, never the words: `reusableAs` is deliberately
+         * written to apply to a different product, and a card copied verbatim
+         * is someone else's post with the nouns swapped.
+         */
+        shapes.length > 0
+        ? `draft against data.todaysIdea.ideaId — its evidence is what you cite, and its quote is what a real person actually said. For HOW to build it, data.shapes carries ${shapes.length} shape(s) that already worked in this niche — borrow the structure in reusableAs, never the words`
+        : "draft against data.todaysIdea.ideaId — its evidence is what you cite, and its quote is what a real person actually said"
       : "no banked idea means nothing has earned a post yet. Say that to the founder rather than inventing one",
   });
 });
