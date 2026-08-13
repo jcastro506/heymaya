@@ -55,52 +55,6 @@ export function previewFingerprint(input: {
   return `pv_${hash.toString(36)}_${material.length.toString(36)}`;
 }
 
-/**
- * Record that the founder confirmed a specific preview.
- *
- * Written only from a real answer to a real question. There is deliberately no
- * argument here that lets a caller assert consent for a fingerprint nobody was
- * shown — the fingerprint is computed from the same assets that were sent.
- */
-export const recordConfirmation = internalMutation({
-  args: {
-    customerId: v.id("customers"),
-    draftId: v.optional(v.id("drafts")),
-    fingerprint: v.string(),
-    now: v.optional(v.number()),
-  },
-  handler: async (ctx, args): Promise<{ recorded: boolean }> => {
-    const now = args.now ?? Date.now();
-    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
-    if (!customer) return { recorded: false };
-
-    let confirmations: Record<string, number> = {};
-    try {
-      confirmations = customer.tiktokConsentJson
-        ? (JSON.parse(customer.tiktokConsentJson) as Record<string, number>)
-        : {};
-    } catch {
-      confirmations = {};
-    }
-
-    confirmations[args.fingerprint] = now;
-
-    /**
-     * Keep the last 50. Consent is per-post and doesn't accumulate value —
-     * an unbounded map on a customer row is a slow leak, and a fingerprint
-     * nobody will publish again is dead weight.
-     */
-    const trimmed = Object.entries(confirmations)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 50);
-
-    await ctx.db.patch(args.customerId, {
-      tiktokConsentJson: JSON.stringify(Object.fromEntries(trimmed)),
-      updatedAt: now,
-    });
-    return { recorded: true };
-  },
-});
 
 /**
  * ⚠️ Consent expires.
