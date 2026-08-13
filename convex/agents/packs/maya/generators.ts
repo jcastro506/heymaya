@@ -280,7 +280,49 @@ export const CRITIC_MODEL = "qwen/qwen3.7-flash";
  * $0.50/day versus $0.03/day, per customer. Anything a tick surfaces that needs
  * real judgment ends up in a main-model turn anyway.
  */
-export const WORKER_MODEL = "openai/gpt-oss-120b";
+/**
+ * ⚠️ NOT a reasoning model, deliberately — that is what broke her.
+ *
+ * This was `openai/gpt-oss-120b` until 2026-08-13. Live logs from her machine
+ * showed it failing two ways, both from the same cause:
+ *
+ *   reasoning-only assistant turn detected ... retrying 2/2
+ *   reasoning-only retries exhausted ... surfacing incomplete-turn error
+ *   model fallback decision: candidate_failed reason=format next=none
+ *   [hooks] before_prompt_build handler from active-memory failed:
+ *     timed out after 15000ms
+ *
+ * A reasoning-capable model asked for fast structured recall spends its budget
+ * thinking: it returns reasoning with no visible answer (the turn dies, and
+ * `next=none` meant nothing caught it), and it blows the 15s active-memory
+ * budget. Six days of byte-identical memory checkpoints and a founder told
+ * "I don't yet know why" both trace back here.
+ *
+ * An INSTRUCT-tuned model cannot produce a reasoning-only turn. Verified
+ * present with live pricing 2026-08-13 via `/api/v1/models`:
+ *
+ *   qwen3-30b-a3b-instruct  $0.048 in / $0.193 out   262k ctx
+ *   gpt-oss-120b (was)      $0.030 in / $0.170 out   131k ctx
+ *
+ * ⚠️ 13% more per output token, chosen anyway. `mistral-small-24b-instruct` is
+ * cheaper still ($0.080 out) but caps at 32k context — and a worker that
+ * silently truncates a sweep haul degrades every downstream judgment without
+ * erroring, which is this codebase's signature failure mode. $0.13/customer/
+ * month is not worth reintroducing it.
+ */
+export const WORKER_MODEL = "qwen/qwen3-30b-a3b-instruct-2507";
+
+/**
+ * ⭐ Something must catch a malformed turn. `next=none` in her logs meant one
+ * bad response format cost the entire turn — including the turn where the
+ * founder approved a draft.
+ *
+ * A DIFFERENT vendor family on purpose: a format failure in Qwen is unlikely to
+ * repeat identically in Mistral, which is the only property that makes a
+ * fallback worth having.
+ */
+export const WORKER_FALLBACK_MODEL =
+  "mistralai/mistral-small-24b-instruct-2501";
 
 /**
  * ⭐ NAME THE PROVIDER. A BARE SLUG SILENTLY MEANS SOMETHING ELSE.
@@ -308,7 +350,7 @@ export function openclawModelRef(openRouterSlug: string): string {
 }
 
 export function buildMayaWorkspace(
-  input: MayaWorkspaceInput
+  input: MayaWorkspaceInput,
 ): MayaWorkspaceBundle {
   const files = new Map<string, string>([
     ["IDENTITY.md", renderIdentity()],
@@ -339,7 +381,9 @@ export function buildMayaWorkspace(
    * dreaming's Deep phase appends promoted memories. A deploy that rewrote it
    * would erase all of that, every time, silently.
    */
-  const seedFiles = new Map<string, string>([["MEMORY.md", renderMemorySeed()]]);
+  const seedFiles = new Map<string, string>([
+    ["MEMORY.md", renderMemorySeed()],
+  ]);
 
   // Only this customer's channels. A founder on X alone should never carry
   // TikTok, Instagram, and YouTube norms in context (§15.1.2).
@@ -355,7 +399,7 @@ export function buildMayaWorkspace(
 
   const alwaysLoadedChars = ALWAYS_LOADED.reduce(
     (sum, name) => sum + (files.get(name)?.length ?? 0),
-    0
+    0,
   );
 
   return {
@@ -557,12 +601,16 @@ inventing the answer instead.
 
 function renderSoul(input: MayaWorkspaceInput): string {
   const excerpts = input.voiceExcerpts?.length
-    ? input.voiceExcerpts.map((e) => `> ${e.replace(/\n/g, "\n> ")}`).join("\n\n")
+    ? input.voiceExcerpts
+        .map((e) => `> ${e.replace(/\n/g, "\n> ")}`)
+        .join("\n\n")
     : "_No writing samples yet. I ask for one, once, and use the niche's own\nregister meanwhile. I never invent a personality._";
 
   const modes = input.channels.length
     ? input.channels
-        .map(({ channel, postingMode }) => `| ${channel} | \`${postingMode}\` |`)
+        .map(
+          ({ channel, postingMode }) => `| ${channel} | \`${postingMode}\` |`,
+        )
         .join("\n")
     : "| _none connected_ | — |";
 
@@ -574,8 +622,8 @@ Let their form dominate and it's a lecture nobody watches. Let the niche's
 substance dominate and it's content that could be any product in the category.
 
 ${
-    input.houseRules?.length
-      ? `## Rules they have given me
+  input.houseRules?.length
+    ? `## Rules they have given me
 
 ${input.houseRules.map((r) => `- "${r.verbatim}"${r.meaning ? `\n  (${r.meaning})` : ""}`).join("\n")}
 
@@ -587,14 +635,14 @@ is to write something else, not to write it more carefully.
 The server checks these at publish too, so breaking one costs a held post and a
 message explaining why. That check is a backstop, not my memory.
 `
-      : ""
-  }## Their actual writing
+    : ""
+}## Their actual writing
 
 ${excerpts}
 
 ${
-    input.editPairs?.length
-      ? `## What they changed about my drafts
+  input.editPairs?.length
+    ? `## What they changed about my drafts
 
 ${input.editPairs
   .map((p) => `**I wrote:** ${p.before}\n**They made it:** ${p.after}`)
@@ -604,8 +652,8 @@ ${input.editPairs
 an edit shows me what I got WRONG. When these disagree with anything above,
 these win.
 `
-      : ""
-  }${
+    : ""
+}${
     input.rejections?.length
       ? `## What they turned down, and why
 
@@ -708,15 +756,15 @@ function renderApp(input: MayaWorkspaceInput): string {
 **${input.product.name}** — ${input.product.url}
 
 ${
-    input.product.founderSays?.length
-      ? `## What the founder told me directly
+  input.product.founderSays?.length
+    ? `## What the founder told me directly
 
 ${input.product.founderSays.map((f) => `> ${f}`).join("\n\n")}
 
 **These outrank anything below.** A page goes stale; what they told me doesn't.
 `
-      : ""
-  }
+    : ""
+}
 ${input.product.truth ?? "_Product truth not captured yet. Until it is, I ask rather than assume — every claim has to trace back to something here._"}
 
 ${input.product.differentiator ? `**What makes it different:** ${input.product.differentiator}` : ""}
@@ -724,15 +772,15 @@ ${input.product.differentiator ? `**What makes it different:** ${input.product.d
 ${input.product.audience ? `**Who it's for:** ${input.product.audience}` : ""}
 
 ${
-    input.product.gaps && input.product.gaps.length > 0
-      ? `## What I DON'T know yet
+  input.product.gaps && input.product.gaps.length > 0
+    ? `## What I DON'T know yet
 
 ${input.product.gaps.map((gap) => `- ${gap}`).join("\n")}
 
 These are open questions, not blanks to fill in. I ask about them; I never
 guess at them and I never write around them.`
-      : ""
-  }
+    : ""
+}
 
 **This file is the grounding for every claim I make.** If something isn't here
 or in the founder's own words, I don't say it.
@@ -981,7 +1029,7 @@ function renderCronJobs(input: MayaWorkspaceInput): string {
       })),
     },
     null,
-    2
+    2,
   );
 }
 
@@ -1098,7 +1146,6 @@ function renderOpenClawConfig(tz: string): string {
           typingIntervalSeconds: 5,
 
           model: { primary: openclawModelRef(MAIN_MODEL) },
-
 
           /**
            * Memory search — absent entirely from the first version of this
@@ -1322,14 +1369,23 @@ function renderOpenClawConfig(tz: string): string {
               agents: ["main"],
               allowedChatTypes: ["direct"],
               model: openclawModelRef(WORKER_MODEL),
+              /**
+               * ⚠️ Used when the pinned model does not resolve, per the shipped
+               * docs (`concepts/active-memory.md`: "config.modelFallback is
+               * used only when no explicit or inherited model resolves").
+               *
+               * Her logs showed `next=none` — nothing caught a failed recall,
+               * so the hook timed out and the turn surfaced an error instead of
+               * a reply.
+               */
+              modelFallback: openclawModelRef(WORKER_FALLBACK_MODEL),
             },
           },
         },
       },
-
     },
     null,
-    2
+    2,
   );
 }
 
