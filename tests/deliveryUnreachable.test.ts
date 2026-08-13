@@ -156,3 +156,68 @@ describe("fleet-wide unreachable customers", () => {
     expect(rows.map((r) => r.since)).toEqual([100, 9_000]);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ The founder not being heard — the more serious direction.
+ *
+ * `handleInbound` forwards the founder's message to her machine and gets back a
+ * precise reason when that fails: `gateway 502`, `non-JSON`, `timed out`. It is
+ * scheduled with `runAfter(0)`, so that return value went NOWHERE.
+ *
+ * ⚠️ On 2026-08-12 a founder approved a draft, nothing published, and she said
+ * "I don't yet know why" — with the answer, if there was one, already
+ * discarded. From their side an undelivered message is indistinguishable from
+ * being ignored; from ours it was indistinguishable from working.
+ */
+describe("a founder who isn't heard", () => {
+  it("⭐ shows up as unreachable, flagged as the founder's direction", async () => {
+    const t = convexTest(schema, modules);
+
+    const customerId = await t.run(async (ctx) => {
+      const customerId = await seedCustomer(ctx, "user_unheard");
+      await ctx.db.insert("messages", {
+        customerId: customerId as never,
+        direction: "in",
+        surface: "telegram",
+        body: "Yes",
+        deliveryError: "gateway 502",
+        ts: 4_000,
+      });
+      return customerId;
+    });
+
+    const rows = await t.query(internal.maya.delivery.fleetUnreachable, {});
+    expect(rows).toHaveLength(1);
+    expect(rows[0].customerId).toBe(customerId);
+    /**
+     * The distinction that decides what the operator does. An undelivered
+     * brief means she couldn't speak; this means the founder said something
+     * and is waiting on a reply that will never come.
+     */
+    expect(rows[0].founderUnheard).toBe(true);
+    expect(rows[0].reason).toBe("gateway 502");
+  });
+
+  it("⚠️ a normal inbound message is not reported", async () => {
+    // Every inbound message has no `deliveredAt` — it was never "delivered"
+    // anywhere. Only a recorded FAILURE counts, or the screen would list every
+    // word the founder has ever typed.
+    const t = convexTest(schema, modules);
+    await t.run(async (ctx) => {
+      const customerId = await seedCustomer(ctx, "user_normal_in");
+      await ctx.db.insert("messages", {
+        customerId: customerId as never,
+        direction: "in",
+        surface: "telegram",
+        body: "morning",
+        ts: 1_000,
+      });
+    });
+
+    expect(await t.query(internal.maya.delivery.fleetUnreachable, {})).toEqual(
+      [],
+    );
+  });
+});

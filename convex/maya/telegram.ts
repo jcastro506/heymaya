@@ -274,12 +274,59 @@ export const handleInbound = internalAction({
       { customerId, text: args.text },
     );
     if (!routed.delivered) {
-      // Named, never silent. An undelivered message is the one failure this
-      // product cannot have — from the founder's side it is indistinguishable
-      // from being ignored.
+      /**
+       * ⭐ Named AND RECORDED. This used to return the reason to a caller that
+       * discards it — `handleInbound` is scheduled with `runAfter(0)`, so the
+       * return value goes nowhere.
+       *
+       * ⚠️ So when the founder's message failed to reach her, the reason was
+       * computed and thrown away. From their side that is indistinguishable
+       * from being ignored, and from ours it was indistinguishable from
+       * working. On 2026-08-12 a founder said "Yes" to a draft, nothing
+       * published, and she said "I don't yet know why" — with the answer, if
+       * there was one, already discarded.
+       */
+      await ctx.runMutation(internal.maya.telegram.markInboundUndelivered, {
+        customerId,
+        ts: args.ts,
+        reason: routed.reason ?? "she never received it",
+      });
       return { recorded: true, reason: routed.reason };
     }
     return { recorded: true };
+  },
+});
+
+/**
+ * Mark an inbound message as never having reached her.
+ *
+ * ⚠️ Written on the INBOUND row. `deliveryError` has always meant "this message
+ * did not arrive"; the direction it was travelling doesn't change what the
+ * field records, and the founder not being heard is the more serious of the
+ * two.
+ */
+export const markInboundUndelivered = internalMutation({
+  args: {
+    customerId: v.id("customers"),
+    ts: v.optional(v.number()),
+    reason: v.string(),
+  },
+  handler: async (ctx, args): Promise<{ marked: boolean }> => {
+    const recent = (await ctx.db
+      .query("messages")
+      .withIndex("by_customer_and_ts", (q) =>
+        q.eq("customerId", args.customerId),
+      )
+      .order("desc")
+      .take(5)) as Doc<"messages">[];
+
+    // The row `receiveInbound` just wrote — matched by direction and recency
+    // rather than by an id we were never handed.
+    const row = recent.find((m) => m.direction === "in" && !m.deliveryError);
+    if (!row) return { marked: false };
+
+    await ctx.db.patch(row._id, { deliveryError: args.reason });
+    return { marked: true };
   },
 });
 

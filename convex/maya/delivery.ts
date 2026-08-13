@@ -59,6 +59,11 @@ export interface UnreachableCustomer {
   /** The oldest one, which is how long we have actually been mute. */
   since: number;
   /**
+   * ⚠️ True when the founder is the one not being heard. Ranked above an
+   * undelivered brief: they are waiting on a reply that will never come.
+   */
+  founderUnheard?: boolean;
+  /**
    * ⭐ True when any of them was proactive — she was reaching out unprompted,
    * which is the class that carries card failures and daily recaps. An
    * undelivered reply is bad; an undelivered warning is the one that costs the
@@ -85,9 +90,25 @@ export const fleetUnreachable = internalQuery({
       )
       .take(SCAN_LIMIT)) as Doc<"messages">[];
 
+    /**
+     * ⭐ And the other direction — the founder's messages that never reached
+     * HER.
+     *
+     * ⚠️ Worse than the outbound case, not lesser. A founder who is not heard
+     * concludes she is ignoring them; on 2026-08-12 one approved a draft, got
+     * silence, and she reported "I don't yet know why" because the failure
+     * reason was computed and discarded.
+     */
+    const inbound = (await ctx.db
+      .query("messages")
+      .withIndex("by_delivery", (q) =>
+        q.eq("direction", "in").eq("deliveredAt", undefined),
+      )
+      .take(SCAN_LIMIT)) as Doc<"messages">[];
+
     const byCustomer = new Map<Id<"customers">, UnreachableCustomer>();
 
-    for (const message of pending) {
+    for (const message of [...pending, ...inbound]) {
       /**
        * ⚠️ Only messages that actually FAILED. An outbound message with no
        * `deliveredAt` and no error is simply queued and about to send —
@@ -104,12 +125,15 @@ export const fleetUnreachable = internalQuery({
           reason: message.deliveryError,
           since: message.ts,
           proactive: Boolean(message.proactive),
+          founderUnheard: message.direction === "in",
         });
         continue;
       }
 
       existing.pending += 1;
       existing.proactive = existing.proactive || Boolean(message.proactive);
+      existing.founderUnheard =
+        existing.founderUnheard || message.direction === "in";
       if (message.ts < existing.since) {
         existing.since = message.ts;
         // The oldest failure's reason: the one that started it, rather than
