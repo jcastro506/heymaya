@@ -185,27 +185,6 @@ export const spendToday = internalQuery({
 });
 
 /**
- * Record what a job cost.
- *
- * Separate from `succeed`/`fail` because a job that FAILED may still have
- * spent money — a render that errored after the vendor charged, an LLM call
- * that timed out mid-stream. Tying cost to success would under-count exactly
- * the runaway case the ceiling exists to catch.
- */
-export const recordCost = internalMutation({
-  args: { jobId: v.id("jobs"), costUsd: v.number() },
-  handler: async (ctx, args): Promise<{ recorded: boolean }> => {
-    const job = (await ctx.db.get(args.jobId)) as Doc<"jobs"> | null;
-    if (!job) return { recorded: false };
-    await ctx.db.patch(args.jobId, {
-      costUsd: (job.costUsd ?? 0) + args.costUsd,
-      updatedAt: Date.now(),
-    });
-    return { recorded: true };
-  },
-});
-
-/**
  * Alert the operator that a machine is throttled.
  *
  * Per customer, never fleet-wide — one runaway must not degrade the other 199.

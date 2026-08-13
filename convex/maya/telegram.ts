@@ -143,27 +143,6 @@ export const deliverMessage = internalAction({
   },
 });
 
-/**
- * Outbound messages that never reached anyone.
- *
- * The honest answer to "did she actually say that?" — and the thing the
- * liveness sweep should eventually read, because a brief that was written and
- * never delivered is indistinguishable from a brief that was never written,
- * from the founder's side.
- */
-export const undelivered = internalQuery({
-  args: { limit: v.optional(v.number()) },
-  handler: async (ctx, args): Promise<Doc<"messages">[]> => {
-    const rows = (await ctx.db
-      .query("messages")
-      .withIndex("by_delivery", (q) =>
-        q.eq("direction", "out").eq("deliveredAt", undefined),
-      )
-      .take(args.limit ?? 100)) as Doc<"messages">[];
-    return rows;
-  },
-});
-
 /* -------------------------------------------------------------------------- */
 /* Inbound                                                                     */
 /* -------------------------------------------------------------------------- */

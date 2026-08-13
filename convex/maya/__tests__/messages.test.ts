@@ -32,7 +32,7 @@ async function seed(t: ReturnType<typeof convexTest>, suffix: string) {
 
 async function getMsg(
   t: ReturnType<typeof convexTest>,
-  id: Id<"messages">
+  id: Id<"messages">,
 ): Promise<Doc<"messages"> | null> {
   return (await t.run((ctx) => ctx.db.get(id))) as Doc<"messages"> | null;
 }
@@ -89,14 +89,11 @@ describe("INVARIANT 6 — every outbound message has a dedupe key", () => {
     const t = convexTest(schema, modules);
     const customerId = await seed(t, "required");
     await expect(
-      t.mutation(
-        internal.maya.messages.send,
-        {
-          customerId,
-          surface: "telegram",
-          body: "no key",
-        } as unknown as Parameters<typeof t.mutation>[1]
-      )
+      t.mutation(internal.maya.messages.send, {
+        customerId,
+        surface: "telegram",
+        body: "no key",
+      } as unknown as Parameters<typeof t.mutation>[1]),
     ).rejects.toThrow();
   });
 
@@ -156,7 +153,23 @@ describe("INVARIANT 5 — at most one open question at a time", () => {
       body: "first?",
       dedupeKey: "q:1",
     });
-    await t.mutation(internal.maya.messages.closeOpenQuestion, { customerId });
+    /**
+     * ⚠️ Closed by patching the row. `closeOpenQuestion` was deleted
+     * 2026-08-12 (no production caller — `expireStaleQuestions` is the wired
+     * path). This test is about the SLOT freeing up, so the close is fixture
+     * setup rather than the behaviour under test.
+     */
+    await t.run(async (ctx) => {
+      const open = await ctx.db
+        .query("messages")
+        .withIndex("by_customer_and_awaiting", (q) =>
+          q.eq("customerId", customerId).eq("awaitingAnswer", true),
+        )
+        .collect();
+      for (const row of open) {
+        await ctx.db.patch(row._id, { awaitingAnswer: false });
+      }
+    });
 
     const next = await t.mutation(internal.maya.messages.askFounder, {
       customerId,
@@ -235,13 +248,12 @@ describe("INVARIANT 5 — at most one open question at a time", () => {
     expect(other.asked).toBe(true);
   });
 
-  it("closing when nothing is open is a no-op, not an error", async () => {
-    const t = convexTest(schema, modules);
-    const customerId = await seed(t, "noop");
-    expect(
-      await t.mutation(internal.maya.messages.closeOpenQuestion, { customerId })
-    ).toEqual({ closed: 0 });
-  });
+  /**
+   * ⚠️ `closeOpenQuestion` was deleted 2026-08-12 — it had no production
+   * caller, which is exactly what the INVARIANT 8 suite below records: its own
+   * comment stated the rule and nothing invoked it. `expireStaleQuestions` is
+   * the wired path and is covered there.
+   */
 });
 
 describe("recentHistory — what both surfaces read", () => {
@@ -355,7 +367,7 @@ describe("proactiveSentToday — the counter behind proactiveMessagesPerDay", ()
       await t.query(internal.maya.messages.proactiveSentToday, {
         customerId,
         now: NOW,
-      })
+      }),
     ).toBe(1);
   });
 
@@ -372,7 +384,7 @@ describe("proactiveSentToday — the counter behind proactiveMessagesPerDay", ()
       await t.query(internal.maya.messages.proactiveSentToday, {
         customerId,
         now: NOW,
-      })
+      }),
     ).toBe(0);
   });
 });
@@ -401,7 +413,9 @@ describe("⭐ THE QUEUE IS DURABLE, NOT SLOW", () => {
       body: "anything",
       dedupeKey: "queue-1",
     });
-    const jobs = await t.run(async (ctx) => await ctx.db.query("jobs").collect());
+    const jobs = await t.run(
+      async (ctx) => await ctx.db.query("jobs").collect(),
+    );
     const deliver = jobs.filter((j) => j.kind === "deliver_message");
     expect(deliver).toHaveLength(1);
     expect(deliver[0].status).toBe("queued");
@@ -419,9 +433,9 @@ describe("⭐ THE QUEUE IS DURABLE, NOT SLOW", () => {
       dedupeKey: "brief-no-nudge",
     });
     const scheduled = await t.run(async (ctx) =>
-      (await ctx.db.system.query("_scheduled_functions").collect()).filter((f) =>
-        f.name.includes("drainJobs")
-      )
+      (await ctx.db.system.query("_scheduled_functions").collect()).filter(
+        (f) => f.name.includes("drainJobs"),
+      ),
     );
     expect(scheduled).toHaveLength(0);
   });
@@ -437,7 +451,9 @@ describe("⭐ THE QUEUE IS DURABLE, NOT SLOW", () => {
         dedupeKey: "queue-2",
       });
     }
-    const jobs = await t.run(async (ctx) => await ctx.db.query("jobs").collect());
+    const jobs = await t.run(
+      async (ctx) => await ctx.db.query("jobs").collect(),
+    );
     expect(jobs.filter((j) => j.kind === "deliver_message")).toHaveLength(1);
   });
 });
@@ -462,12 +478,14 @@ describe("⭐ THE QUEUE IS DURABLE, NOT SLOW", () => {
 describe("ONE WRITER — a question is a message, not a row", () => {
   async function jobsFor(
     t: ReturnType<typeof convexTest>,
-    customerId: Id<"customers">
+    customerId: Id<"customers">,
   ) {
     // The schema sits at TypeScript's instantiation ceiling, so the query
     // builder stops narrowing indexes on this table — collect and filter in
     // JS, as the sibling tests above do.
-    const all = (await t.run((ctx) => ctx.db.query("jobs").collect())) as Array<{
+    const all = (await t.run((ctx) =>
+      ctx.db.query("jobs").collect(),
+    )) as Array<{
       kind: string;
       customerId: Id<"customers">;
     }>;
@@ -507,9 +525,9 @@ describe("ONE WRITER — a question is a message, not a row", () => {
       ctx.db
         .query("messages")
         .withIndex("by_customer_and_dedupe", (q) =>
-          q.eq("customerId", customerId).eq("dedupeKey", "q:leak")
+          q.eq("customerId", customerId).eq("dedupeKey", "q:leak"),
         )
-        .first()
+        .first(),
     );
     // The point of this test is that askFounder RUNS the guard at all — it
     // previously ran none. Note the guard replaces the whole body rather than
@@ -624,12 +642,20 @@ describe("INVARIANT 8 — an unanswered question cannot block her forever", () =
     });
     const later = NOW + 26 * 60 * 60 * 1000;
     expect(
-      (await t.mutation(internal.maya.messages.expireStaleQuestions, { customerId, now: later }))
-        .expired
+      (
+        await t.mutation(internal.maya.messages.expireStaleQuestions, {
+          customerId,
+          now: later,
+        })
+      ).expired,
     ).toBe(1);
     expect(
-      (await t.mutation(internal.maya.messages.expireStaleQuestions, { customerId, now: later }))
-        .expired
+      (
+        await t.mutation(internal.maya.messages.expireStaleQuestions, {
+          customerId,
+          now: later,
+        })
+      ).expired,
     ).toBe(0);
   });
 
@@ -652,7 +678,9 @@ describe("INVARIANT 8 — an unanswered question cannot block her forever", () =
     expect(out.expired).toBe(0);
 
     // B's is still open, and B is still correctly blocked.
-    const bStill = await t.query(internal.maya.messages.openQuestion, { customerId: b });
+    const bStill = await t.query(internal.maya.messages.openQuestion, {
+      customerId: b,
+    });
     expect(bStill).not.toBeNull();
   });
 });

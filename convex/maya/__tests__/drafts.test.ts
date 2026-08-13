@@ -20,7 +20,7 @@ const NOW = Date.UTC(2026, 7, 4, 12, 0, 0);
 async function seed(
   t: ReturnType<typeof convexTest>,
   suffix: string,
-  channel: Partial<Doc<"channels">> = {}
+  channel: Partial<Doc<"channels">> = {},
 ): Promise<Id<"customers">> {
   return await t.run(async (ctx) => {
     const accountId = await ctx.db.insert("creators", {
@@ -69,7 +69,9 @@ describe("WRITING IT DOWN IS WHAT MAKES IT POSTABLE", () => {
     expect(res.ok).toBe(true);
     if (!res.ok) return;
 
-    const draft = (await t.run((ctx) => ctx.db.get(res.draftId))) as Doc<"drafts">;
+    const draft = (await t.run((ctx) =>
+      ctx.db.get(res.draftId),
+    )) as Doc<"drafts">;
     expect(draft.snapshotText).toBe("CSV in. Dashboard out. One paste.");
     expect(draft.outcome).toBe("pending");
     expect(draft.kind).toBe("post");
@@ -150,7 +152,7 @@ describe("THE FOUNDER'S EDIT IS THE POST", () => {
     });
 
     const draft = (await t.run((ctx) =>
-      ctx.db.get(created.draftId)
+      ctx.db.get(created.draftId),
     )) as Doc<"drafts">;
     expect(draft.snapshotText).toBe("CSV in. Dashboard out.");
     expect(draft.outcome).toBe("edited");
@@ -178,9 +180,12 @@ describe("THE FOUNDER'S EDIT IS THE POST", () => {
     });
 
     const draft = (await t.run((ctx) =>
-      ctx.db.get(created.draftId)
+      ctx.db.get(created.draftId),
     )) as Doc<"drafts">;
-    const diff = JSON.parse(draft.editDiff!) as { before: string; after: string };
+    const diff = JSON.parse(draft.editDiff!) as {
+      before: string;
+      after: string;
+    };
     expect(diff.before).toBe("Widgetly is a game changer.");
     expect(diff.after).toBe("csv in, dashboard out");
   });
@@ -203,7 +208,7 @@ describe("THE FOUNDER'S EDIT IS THE POST", () => {
     });
 
     const draft = (await t.run((ctx) =>
-      ctx.db.get(created.draftId)
+      ctx.db.get(created.draftId),
     )) as Doc<"drafts">;
     expect(draft.snapshotText).toBe("CSV in. Dashboard out.");
     expect(draft.editDiff).toBeUndefined();
@@ -296,7 +301,7 @@ describe("⭐ A POST TRACES TO AN IDEA, A REPLY DOES NOT", () => {
         sourceKind: "complaint",
         createdAt: NOW,
         updatedAt: NOW,
-      })
+      }),
     );
 
     const res = await t.mutation(internal.maya.drafts.create, {
@@ -309,7 +314,9 @@ describe("⭐ A POST TRACES TO AN IDEA, A REPLY DOES NOT", () => {
     expect(res.ok).toBe(true);
     if (!res.ok) return;
 
-    const draft = (await t.run((ctx) => ctx.db.get(res.draftId))) as Doc<"drafts">;
+    const draft = (await t.run((ctx) =>
+      ctx.db.get(res.draftId),
+    )) as Doc<"drafts">;
     expect(draft.ideaId).toBe(ideaId);
   });
 
@@ -336,9 +343,8 @@ describe("⭐ MOST POSTS DO NOT MENTION THE PRODUCT", () => {
     // paste" stapled underneath. The first half is a real point; the footer
     // turns the whole thing into an ad. A pitch bolted onto an observation
     // loses both halves.
-    const { BUNDLED_MAYA_SKILLS } = await import(
-      "../../agents/packs/maya/bundledSkills"
-    );
+    const { BUNDLED_MAYA_SKILLS } =
+      await import("../../agents/packs/maya/bundledSkills");
     const writePost = BUNDLED_MAYA_SKILLS.find((s) => s.slug === "write-post");
     expect(writePost).toBeDefined();
     // Whitespace-normalised: this is prose that reflows, and a test that breaks
@@ -366,7 +372,9 @@ describe("⭐ MOST POSTS DO NOT MENTION THE PRODUCT", () => {
 describe("SHOWING IT IS PART OF CREATING IT", () => {
   it("show_me_first sends the draft to the founder in the same call", async () => {
     const t = convexTest(schema, modules);
-    const customerId = await seed(t, "showsend", { postingMode: "show_me_first" });
+    const customerId = await seed(t, "showsend", {
+      postingMode: "show_me_first",
+    });
 
     const res = await t.mutation(internal.maya.drafts.create, {
       customerId,
@@ -382,9 +390,11 @@ describe("SHOWING IT IS PART OF CREATING IT", () => {
       ctx.db
         .query("messages")
         .withIndex("by_customer_and_dedupe", (q) =>
-          q.eq("customerId", customerId).eq("dedupeKey", `draft:${res.draftId}`)
+          q
+            .eq("customerId", customerId)
+            .eq("dedupeKey", `draft:${res.draftId}`),
         )
-        .collect()
+        .collect(),
     );
     expect(messages).toHaveLength(1);
     // The POST, not a description of it — "showing you this one" is not showing it.
@@ -408,7 +418,7 @@ describe("SHOWING IT IS PART OF CREATING IT", () => {
       ctx.db
         .query("messages")
         .withIndex("by_customer_and_ts", (q) => q.eq("customerId", customerId))
-        .collect()
+        .collect(),
     );
     expect(all).toHaveLength(0);
   });
@@ -424,19 +434,24 @@ describe("SHOWING IT IS PART OF CREATING IT", () => {
     });
     if (!res.ok) return;
     // Same draft, re-offered by the sweep — must not ask twice.
-    await t.mutation(internal.maya.drafts.reofferUnshown, { customerId, now: NOW });
+    await t.mutation(internal.maya.drafts.reofferUnshown, {
+      customerId,
+      now: NOW,
+    });
     const all = await t.run((ctx) =>
       ctx.db
         .query("messages")
         .withIndex("by_customer_and_ts", (q) => q.eq("customerId", customerId))
-        .collect()
+        .collect(),
     );
     expect(all).toHaveLength(1);
   });
 
   it("a draft written during an open question is re-offered, not lost", async () => {
     const t = convexTest(schema, modules);
-    const customerId = await seed(t, "blocked", { postingMode: "show_me_first" });
+    const customerId = await seed(t, "blocked", {
+      postingMode: "show_me_first",
+    });
 
     // Something else is already awaiting an answer (invariant 5).
     await t.mutation(internal.maya.messages.askFounder, {
@@ -467,7 +482,20 @@ describe("SHOWING IT IS PART OF CREATING IT", () => {
     expect(swept.shown).toBe(0);
 
     // ...but the moment it closes, the draft is offered rather than expiring.
-    await t.mutation(internal.maya.messages.closeOpenQuestion, { customerId });
+    await t.run(async (ctx) => {
+      // ⚠️ `closeOpenQuestion` was deleted 2026-08-12 (no production caller;
+      // `expireStaleQuestions` is the wired path). These tests are about
+      // draft re-offering, so closing is fixture setup.
+      const open = await ctx.db
+        .query("messages")
+        .withIndex("by_customer_and_awaiting", (q) =>
+          q.eq("customerId", customerId).eq("awaitingAnswer", true),
+        )
+        .collect();
+      for (const row of open) {
+        await ctx.db.patch(row._id, { awaitingAnswer: false });
+      }
+    });
     swept = await t.mutation(internal.maya.drafts.reofferUnshown, {
       customerId,
       now: NOW,
@@ -478,16 +506,20 @@ describe("SHOWING IT IS PART OF CREATING IT", () => {
       ctx.db
         .query("messages")
         .withIndex("by_customer_and_dedupe", (q) =>
-          q.eq("customerId", customerId).eq("dedupeKey", `draft:${res.draftId}`)
+          q
+            .eq("customerId", customerId)
+            .eq("dedupeKey", `draft:${res.draftId}`),
         )
-        .first()
+        .first(),
     );
     expect(shownMsg?.body).toContain("written while blocked");
   });
 
   it("an expired draft is never re-offered — the moment has passed", async () => {
     const t = convexTest(schema, modules);
-    const customerId = await seed(t, "expired", { postingMode: "show_me_first" });
+    const customerId = await seed(t, "expired", {
+      postingMode: "show_me_first",
+    });
     await t.mutation(internal.maya.messages.askFounder, {
       customerId,
       surface: "telegram",
@@ -501,7 +533,20 @@ describe("SHOWING IT IS PART OF CREATING IT", () => {
       text: "stale by tomorrow",
       now: NOW,
     });
-    await t.mutation(internal.maya.messages.closeOpenQuestion, { customerId });
+    await t.run(async (ctx) => {
+      // ⚠️ `closeOpenQuestion` was deleted 2026-08-12 (no production caller;
+      // `expireStaleQuestions` is the wired path). These tests are about
+      // draft re-offering, so closing is fixture setup.
+      const open = await ctx.db
+        .query("messages")
+        .withIndex("by_customer_and_awaiting", (q) =>
+          q.eq("customerId", customerId).eq("awaitingAnswer", true),
+        )
+        .collect();
+      for (const row of open) {
+        await ctx.db.patch(row._id, { awaitingAnswer: false });
+      }
+    });
 
     const swept = await t.mutation(internal.maya.drafts.reofferUnshown, {
       customerId,
@@ -529,7 +574,10 @@ describe("SHOWING IT IS PART OF CREATING IT", () => {
  * at the join**, which is why no single unit test could have caught it.
  */
 describe("publishing resolves the draft it published", () => {
-  async function publishedDraft(t: ReturnType<typeof convexTest>, suffix: string) {
+  async function publishedDraft(
+    t: ReturnType<typeof convexTest>,
+    suffix: string,
+  ) {
     const customerId = await seed(t, suffix, { postingMode: "just_go" });
     const res = await t.mutation(internal.maya.drafts.create, {
       customerId,
@@ -545,7 +593,10 @@ describe("publishing resolves the draft it published", () => {
     const t = convexTest(schema, modules);
     const { customerId, draftId } = await publishedDraft(t, "resolved");
 
-    await t.mutation(internal.maya.drafts.decide, { draftId, outcome: "approved" });
+    await t.mutation(internal.maya.drafts.decide, {
+      draftId,
+      outcome: "approved",
+    });
 
     const pending = await t.query(internal.maya.drafts.pending, { customerId });
     expect(pending.map((d) => d._id)).not.toContain(draftId);
@@ -554,7 +605,9 @@ describe("publishing resolves the draft it published", () => {
   it("its question closes, so the NEXT draft can reach the founder", async () => {
     // The link that actually stalled the run.
     const t = convexTest(schema, modules);
-    const customerId = await seed(t, "unblock", { postingMode: "show_me_first" });
+    const customerId = await seed(t, "unblock", {
+      postingMode: "show_me_first",
+    });
 
     const first = await t.mutation(internal.maya.drafts.create, {
       customerId,
@@ -604,7 +657,9 @@ describe("publishing resolves the draft it published", () => {
 
   it("it closes only ITS question, never someone else's", async () => {
     const t = convexTest(schema, modules);
-    const customerId = await seed(t, "onlymine", { postingMode: "show_me_first" });
+    const customerId = await seed(t, "onlymine", {
+      postingMode: "show_me_first",
+    });
     const asked = await t.mutation(internal.maya.messages.askFounder, {
       customerId,
       surface: "telegram",
@@ -616,7 +671,9 @@ describe("publishing resolves the draft it published", () => {
       customerId,
       dedupeKey: "draft:unrelated",
     });
-    const still = await t.query(internal.maya.messages.openQuestion, { customerId });
+    const still = await t.query(internal.maya.messages.openQuestion, {
+      customerId,
+    });
     expect(still?._id).toBe(asked.messageId);
   });
 
@@ -648,7 +705,7 @@ describe("AN IDEA IS SPENT WHEN IT BECOMES A DRAFT", () => {
   async function bankAnIdea(
     t: ReturnType<typeof convexTest>,
     customerId: Id<"customers">,
-    angle: string
+    angle: string,
   ) {
     return await t.run((ctx) =>
       ctx.db.insert("ideas", {
@@ -662,14 +719,18 @@ describe("AN IDEA IS SPENT WHEN IT BECOMES A DRAFT", () => {
         }),
         createdAt: NOW,
         updatedAt: NOW,
-      })
+      }),
     );
   }
 
   it("drafting an idea takes it out of the bank", async () => {
     const t = convexTest(schema, modules);
     const customerId = await seed(t, "spent", { postingMode: "just_go" });
-    const ideaId = await bankAnIdea(t, customerId, "csv to dashboard in one paste");
+    const ideaId = await bankAnIdea(
+      t,
+      customerId,
+      "csv to dashboard in one paste",
+    );
 
     await t.mutation(internal.maya.drafts.create, {
       customerId,
@@ -686,10 +747,21 @@ describe("AN IDEA IS SPENT WHEN IT BECOMES A DRAFT", () => {
   it("⭐ the SAME idea is never served twice — the actual regression", async () => {
     const t = convexTest(schema, modules);
     const customerId = await seed(t, "notwice", { postingMode: "just_go" });
-    const first = await bankAnIdea(t, customerId, "csv to dashboard in one paste");
-    await bankAnIdea(t, customerId, "nobody warns you shipping is the easy part");
+    const first = await bankAnIdea(
+      t,
+      customerId,
+      "csv to dashboard in one paste",
+    );
+    await bankAnIdea(
+      t,
+      customerId,
+      "nobody warns you shipping is the easy part",
+    );
 
-    const one = await t.query(internal.maya.ideas.nextIdea, { customerId, now: NOW });
+    const one = await t.query(internal.maya.ideas.nextIdea, {
+      customerId,
+      now: NOW,
+    });
     expect(one?.ideaId).toBe(first);
 
     await t.mutation(internal.maya.drafts.create, {
@@ -701,7 +773,10 @@ describe("AN IDEA IS SPENT WHEN IT BECOMES A DRAFT", () => {
     });
 
     // Before the fix this returned the same idea, forever.
-    const two = await t.query(internal.maya.ideas.nextIdea, { customerId, now: NOW });
+    const two = await t.query(internal.maya.ideas.nextIdea, {
+      customerId,
+      now: NOW,
+    });
     expect(two?.ideaId).not.toBe(first);
   });
 
@@ -730,7 +805,10 @@ describe("AN IDEA IS SPENT WHEN IT BECOMES A DRAFT", () => {
     for (const angle of ["a", "b", "c"]) await bankAnIdea(t, customerId, angle);
 
     const before = await t.query(internal.maya.ideas.bankDepth, { customerId });
-    const idea = await t.query(internal.maya.ideas.nextIdea, { customerId, now: NOW });
+    const idea = await t.query(internal.maya.ideas.nextIdea, {
+      customerId,
+      now: NOW,
+    });
     await t.mutation(internal.maya.drafts.create, {
       customerId,
       channel: "x",
@@ -760,7 +838,9 @@ describe("AN IDEA IS SPENT WHEN IT BECOMES A DRAFT", () => {
 describe("recording a no, and the reason that makes it useful", () => {
   it("stores the founder's reason verbatim", async () => {
     const t = convexTest(schema, modules);
-    const customerId = await seed(t, "rejreason", { postingMode: "show_me_first" });
+    const customerId = await seed(t, "rejreason", {
+      postingMode: "show_me_first",
+    });
     const res = await t.mutation(internal.maya.drafts.create, {
       customerId,
       channel: "x",
@@ -775,14 +855,20 @@ describe("recording a no, and the reason that makes it useful", () => {
       reason: "we don't talk about competitors like that",
     });
 
-    const draft = await t.query(internal.maya.drafts.byId, { draftId: res.draftId });
+    const draft = await t.query(internal.maya.drafts.byId, {
+      draftId: res.draftId,
+    });
     expect(draft?.outcome).toBe("rejected");
-    expect(draft?.rejectionReason).toBe("we don't talk about competitors like that");
+    expect(draft?.rejectionReason).toBe(
+      "we don't talk about competitors like that",
+    );
   });
 
   it("a rejected draft stops being offered", async () => {
     const t = convexTest(schema, modules);
-    const customerId = await seed(t, "rejgone", { postingMode: "show_me_first" });
+    const customerId = await seed(t, "rejgone", {
+      postingMode: "show_me_first",
+    });
     const res = await t.mutation(internal.maya.drafts.create, {
       customerId,
       channel: "x",
@@ -804,7 +890,9 @@ describe("recording a no, and the reason that makes it useful", () => {
   it("⭐ it reaches the workspace as a standing lesson", async () => {
     // The whole point: a no she can't read again is a no she repeats.
     const t = convexTest(schema, modules);
-    const customerId = await seed(t, "rejworkspace", { postingMode: "show_me_first" });
+    const customerId = await seed(t, "rejworkspace", {
+      postingMode: "show_me_first",
+    });
     const res = await t.mutation(internal.maya.drafts.create, {
       customerId,
       channel: "x",
@@ -830,7 +918,9 @@ describe("recording a no, and the reason that makes it useful", () => {
     // Folding them together would teach "these words were wrong" when the
     // founder actually said "this idea was wrong".
     const t = convexTest(schema, modules);
-    const customerId = await seed(t, "rejvsedit", { postingMode: "show_me_first" });
+    const customerId = await seed(t, "rejvsedit", {
+      postingMode: "show_me_first",
+    });
 
     const edited = await t.mutation(internal.maya.drafts.create, {
       customerId,
@@ -857,8 +947,12 @@ describe("recording a no, and the reason that makes it useful", () => {
       reason: "wrong week for pricing talk",
     });
 
-    const pairs = await t.query(internal.maya.voiceCorpus.editPairsFor, { customerId });
-    const nos = await t.query(internal.maya.voiceCorpus.rejectionsFor, { customerId });
+    const pairs = await t.query(internal.maya.voiceCorpus.editPairsFor, {
+      customerId,
+    });
+    const nos = await t.query(internal.maya.voiceCorpus.rejectionsFor, {
+      customerId,
+    });
     expect(pairs).toHaveLength(1);
     expect(nos).toHaveLength(1);
     expect(nos[0].reason).toBe("wrong week for pricing talk");
@@ -868,7 +962,9 @@ describe("recording a no, and the reason that makes it useful", () => {
     // The hook refuses these outright; this pins the storage side, so a caller
     // that skips the hook still can't create a reasonless rejection lesson.
     const t = convexTest(schema, modules);
-    const customerId = await seed(t, "rejnoreason", { postingMode: "show_me_first" });
+    const customerId = await seed(t, "rejnoreason", {
+      postingMode: "show_me_first",
+    });
     const res = await t.mutation(internal.maya.drafts.create, {
       customerId,
       channel: "x",
@@ -907,7 +1003,7 @@ describe("EVERY POST TRACES BACK TO SOMETHING SOMEONE SAID", () => {
   async function bank(
     t: ReturnType<typeof convexTest>,
     customerId: Id<"customers">,
-    angle: string
+    angle: string,
   ) {
     return await t.run((ctx) =>
       ctx.db.insert("ideas", {
@@ -921,7 +1017,7 @@ describe("EVERY POST TRACES BACK TO SOMETHING SOMEONE SAID", () => {
         }),
         createdAt: NOW,
         updatedAt: NOW,
-      })
+      }),
     );
   }
 

@@ -52,6 +52,37 @@ async function seed(t: ReturnType<typeof convexTest>, suffix: string) {
   });
 }
 
+/**
+ * Insert a placement-bound wrap directly.
+ *
+ * ⚠️ `attribution.wrapForPlacement` was deleted 2026-08-12 — it had no
+ * production caller. The live path mints at DRAFT time (`wrapForDraft`) and
+ * binds after publish (`bindWrapToPlacement`), because `publish.ts` may not
+ * alter approved text. These tests are about `traceConversion`, so the wrap is
+ * fixture setup and a direct insert says so plainly.
+ */
+async function wrapFor(
+  t: ReturnType<typeof convexTest>,
+  customerId: Id<"customers">,
+  placementId: Id<"placements">,
+  token: string,
+): Promise<{ token: string }> {
+  await t.run(async (ctx) => {
+    const customer = await ctx.db.get(customerId);
+    await ctx.db.insert("gtmLinkWraps", {
+      accountId: (customer as { accountId: Id<"creators"> }).accountId,
+      customerId,
+      placementId,
+      token,
+      destinationUrl: "https://example.com",
+      platform: "x",
+      utmMedium: "social",
+      createdAt: NOW,
+    });
+  });
+  return { token };
+}
+
 describe("makeToken", () => {
   it("is the right length", () => {
     expect(makeToken(() => 0.5)).toHaveLength(TOKEN_LENGTH);
@@ -63,50 +94,12 @@ describe("makeToken", () => {
    * resolves to nothing.
    */
   it("omits the characters people misread", () => {
-    const all = Array.from({ length: 200 }, (_, i) => makeToken(() => i / 200)).join("");
+    const all = Array.from({ length: 200 }, (_, i) =>
+      makeToken(() => i / 200),
+    ).join("");
     for (const ch of ["l", "o", "0", "1"]) {
       expect(all, `token alphabet must not contain "${ch}"`).not.toContain(ch);
     }
-  });
-});
-
-describe("wrapForPlacement", () => {
-  it("mints one wrap and reuses it", async () => {
-    const t = convexTest(schema, modules);
-    const { customerId, placementId } = await seed(t, "wrap_reuse");
-
-    const first = await t.mutation(internal.maya.attribution.wrapForPlacement, {
-      customerId,
-      placementId,
-      destinationUrl: "https://example.com",
-      now: NOW,
-    });
-    const second = await t.mutation(internal.maya.attribution.wrapForPlacement, {
-      customerId,
-      placementId,
-      destinationUrl: "https://example.com",
-      now: NOW,
-    });
-    expect(first.ok).toBe(true);
-    /**
-     * ⭐ A second wrap would split one post's clicks across two tokens and make
-     * the totals quietly wrong — the kind of error that survives because both
-     * halves look plausible.
-     */
-    expect(second.token).toBe(first.token);
-  });
-
-  it("refuses a placement from another account", async () => {
-    const t = convexTest(schema, modules);
-    const a = await seed(t, "wrap_a");
-    const b = await seed(t, "wrap_b");
-    const out = await t.mutation(internal.maya.attribution.wrapForPlacement, {
-      customerId: a.customerId,
-      placementId: b.placementId,
-      destinationUrl: "https://example.com",
-      now: NOW,
-    });
-    expect(out.ok).toBe(false);
   });
 });
 
@@ -120,23 +113,27 @@ describe("traceConversion", () => {
       ctx.db.insert("ideas", {
         customerId,
         angle: "people keep asking how to export",
-        evidenceJson: JSON.stringify({ sourceUrls: ["https://reddit.com/r/x/1"] }),
+        evidenceJson: JSON.stringify({
+          sourceUrls: ["https://reddit.com/r/x/1"],
+        }),
         status: "used",
         createdAt: NOW,
         updatedAt: NOW,
-      })
+      }),
     );
     await t.run(async (ctx) => ctx.db.patch(placementId, { ideaId }));
 
-    const { token } = await t.mutation(internal.maya.attribution.wrapForPlacement, {
-      customerId,
-      placementId,
-      destinationUrl: "https://example.com",
-      now: NOW,
-    });
+    const { token } = await wrapFor(t, customerId, placementId, "tok_trace");
     const { conversionId } = await t.mutation(
       internal.maya.attribution.recordConversion,
-      { customerId, kind: "signup", count: 1, source: "pixel", token, now: NOW }
+      {
+        customerId,
+        kind: "signup",
+        count: 1,
+        source: "pixel",
+        token,
+        now: NOW,
+      },
     );
 
     const trace = await t.query(internal.maya.attribution.traceConversion, {
@@ -167,7 +164,7 @@ describe("traceConversion", () => {
 
     const { conversionId } = await t.mutation(
       internal.maya.attribution.recordConversion,
-      { customerId, kind: "signup", count: 2, source: "self_report", now: NOW }
+      { customerId, kind: "signup", count: 2, source: "self_report", now: NOW },
     );
     const trace = await t.query(internal.maya.attribution.traceConversion, {
       conversionId: conversionId as Id<"gtmConversions">,
@@ -186,15 +183,22 @@ describe("traceConversion", () => {
     const t = convexTest(schema, modules);
     const a = await seed(t, "tok_a");
     const b = await seed(t, "tok_b");
-    const { token } = await t.mutation(internal.maya.attribution.wrapForPlacement, {
-      customerId: b.customerId,
-      placementId: b.placementId,
-      destinationUrl: "https://example.com",
-      now: NOW,
-    });
+    const { token } = await wrapFor(
+      t,
+      b.customerId,
+      b.placementId,
+      "tok_other",
+    );
     const { conversionId } = await t.mutation(
       internal.maya.attribution.recordConversion,
-      { customerId: a.customerId, kind: "signup", count: 1, source: "pixel", token, now: NOW }
+      {
+        customerId: a.customerId,
+        kind: "signup",
+        count: 1,
+        source: "pixel",
+        token,
+        now: NOW,
+      },
     );
     const trace = await t.query(internal.maya.attribution.traceConversion, {
       conversionId: conversionId as Id<"gtmConversions">,

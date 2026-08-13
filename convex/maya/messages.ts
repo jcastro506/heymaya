@@ -317,29 +317,6 @@ export const closeQuestionFor = internalMutation({
   },
 });
 
-/**
- * Close the open question.
- *
- * Called when the founder answers — or when the question stops mattering.
- * Invariant 8: an open question is a non-terminal state, so something has to
- * be able to end it other than an answer that may never come.
- */
-export const closeOpenQuestion = internalMutation({
-  args: { customerId: v.id("customers") },
-  handler: async (ctx, args): Promise<{ closed: number }> => {
-    const open = await ctx.db
-      .query("messages")
-      .withIndex("by_customer_and_awaiting", (q) =>
-        q.eq("customerId", args.customerId).eq("awaitingAnswer", true),
-      )
-      .collect();
-    for (const row of open) {
-      await ctx.db.patch(row._id, { awaitingAnswer: false });
-    }
-    return { closed: open.length };
-  },
-});
-
 /** The one open question, if there is one. */
 export const openQuestion = internalQuery({
   args: { customerId: v.id("customers") },

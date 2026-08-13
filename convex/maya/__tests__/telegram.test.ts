@@ -10,7 +10,7 @@ const NOW = Date.UTC(2026, 7, 1, 9, 0, 0);
 async function seed(
   t: ReturnType<typeof convexTest>,
   suffix: string,
-  telegramChatId?: string
+  telegramChatId?: string,
 ): Promise<Id<"customers">> {
   return await t.run(async (ctx) => {
     const accountId = await ctx.db.insert("creators", {
@@ -37,7 +37,7 @@ async function seed(
 
 async function getMsg(
   t: ReturnType<typeof convexTest>,
-  id: Id<"messages">
+  id: Id<"messages">,
 ): Promise<Doc<"messages"> | null> {
   return (await t.run((ctx) => ctx.db.get(id))) as Doc<"messages"> | null;
 }
@@ -73,7 +73,9 @@ describe("WRITTEN IS NOT DELIVERED", () => {
       dedupeKey: "k1",
     });
 
-    const jobs = (await t.run((ctx) => ctx.db.query("jobs").collect())) as Doc<"jobs">[];
+    const jobs = (await t.run((ctx) =>
+      ctx.db.query("jobs").collect(),
+    )) as Doc<"jobs">[];
     expect(jobs).toHaveLength(1);
     expect(jobs[0].kind).toBe("deliver_message");
     expect(jobs[0].idempotencyKey).toBe(`deliver:${messageId}`);
@@ -91,19 +93,15 @@ describe("WRITTEN IS NOT DELIVERED", () => {
     expect(await t.run((ctx) => ctx.db.query("jobs").collect())).toEqual([]);
   });
 
-  it("`undelivered` is the honest answer to 'did she actually say that?'", async () => {
-    const t = convexTest(schema, modules);
-    const customerId = await seed(t, "audit", "chat_1");
-    await t.mutation(internal.maya.messages.send, {
-      customerId,
-      surface: "telegram",
-      body: "never landed",
-      dedupeKey: "k3",
-    });
-    const stuck = await t.query(internal.maya.telegram.undelivered, {});
-    expect(stuck).toHaveLength(1);
-    expect(stuck[0].body).toBe("never landed");
-  });
+  /**
+   * ⚠️ `telegram.undelivered` was deleted 2026-08-12 — no production caller.
+   *
+   * Its intent, "the honest answer to 'did she actually say that?'", is kept
+   * and improved by `maya/delivery.fleetUnreachable` (#347): it filters to
+   * sends that actually FAILED rather than listing merely-queued ones, groups
+   * by customer, and is rendered on /founder. Covered by
+   * `tests/deliveryUnreachable.test.ts`.
+   */
 });
 
 describe("deliverMessage", () => {
@@ -201,7 +199,9 @@ describe("the drainer routes delivery jobs", () => {
     expect(result.claimed).toBe(1);
     expect(result.failed).toBe(1);
 
-    const jobs = (await t.run((ctx) => ctx.db.query("jobs").collect())) as Doc<"jobs">[];
+    const jobs = (await t.run((ctx) =>
+      ctx.db.query("jobs").collect(),
+    )) as Doc<"jobs">[];
     expect(jobs[0].lastError).toMatch(/no Telegram chat paired/);
   });
 
@@ -263,8 +263,12 @@ describe("inbound", () => {
     });
     expect(result.recorded).toBe(false);
     expect(result.reason).toBe("unpaired chat");
-    expect(await t.run((ctx) => ctx.db.query("messages").collect())).toEqual([]);
-    expect(await t.run((ctx) => ctx.db.query("customers").collect())).toHaveLength(1);
+    expect(await t.run((ctx) => ctx.db.query("messages").collect())).toEqual(
+      [],
+    );
+    expect(
+      await t.run((ctx) => ctx.db.query("customers").collect()),
+    ).toHaveLength(1);
   });
 
   it("an empty message is ignored", async () => {
@@ -289,7 +293,7 @@ describe("inbound", () => {
       dedupeKey: "q1",
     });
     expect(
-      await t.query(internal.maya.messages.openQuestion, { customerId })
+      await t.query(internal.maya.messages.openQuestion, { customerId }),
     ).not.toBeNull();
 
     await t.mutation(internal.maya.telegram.receiveInbound, {
@@ -298,7 +302,7 @@ describe("inbound", () => {
     });
 
     expect(
-      await t.query(internal.maya.messages.openQuestion, { customerId })
+      await t.query(internal.maya.messages.openQuestion, { customerId }),
     ).toBeNull();
     // And she can ask again.
     const next = await t.mutation(internal.maya.messages.askFounder, {

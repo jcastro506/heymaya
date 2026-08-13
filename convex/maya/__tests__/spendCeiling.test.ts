@@ -242,77 +242,19 @@ describe("spendToday — derived from rows, not a counter", () => {
   });
 });
 
-describe("recordCost", () => {
-  it("accumulates rather than overwrites", async () => {
-    const t = convexTest(schema, modules);
-    const customerId = await seed(t, "accum");
-    const { jobId } = await t.mutation(internal.maya.jobs.enqueue, {
-      kind: "render_video",
-      idempotencyKey: "r1",
-      customerId,
-    });
-    await t.mutation(internal.maya.spendCeiling.recordCost, {
-      jobId,
-      costUsd: 1,
-    });
-    await t.mutation(internal.maya.spendCeiling.recordCost, {
-      jobId,
-      costUsd: 0.5,
-    });
-
-    const job = (await t.run((ctx) => ctx.db.get(jobId))) as Doc<"jobs">;
-    expect(job.costUsd).toBe(1.5);
-  });
-
-  it("⭐ SPEND BEFORE A FAILURE STILL COUNTS", async () => {
-    /**
-     * A render that errored after the vendor charged, or an LLM call that
-     * timed out mid-stream, still cost money. Tying cost to success would
-     * under-count exactly the runaway case the ceiling exists to catch.
-     *
-     * ⭐ `costEvents` preserves this property BETTER than `jobs.costUsd` did:
-     * cost is recorded at the moment of spend by `cogs.record`, not when the
-     * enclosing job resolves — so there is no window in which money is spent
-     * and uncounted, and no need for the job to survive to be billed.
-     */
-    const t = convexTest(schema, modules);
-    const customerId = await seed(t, "failed_spend");
-    const { jobId } = await t.mutation(internal.maya.jobs.enqueue, {
-      kind: "render_video",
-      idempotencyKey: "r2",
-      customerId,
-    });
-    await t.run((ctx) => ctx.db.patch(jobId, { createdAt: NOW }));
-    await t.mutation(internal.maya.jobs.claimNext, {});
-
-    // The vendor charged, and then the job died.
-    await spend(t, customerId, 7, "render_video");
-    await t.mutation(internal.maya.jobs.fail, { jobId, error: "vendor 500" });
-
-    const v = await t.query(internal.maya.spendCeiling.spendToday, {
-      customerId,
-      now: NOW,
-    });
-    expect(v.spentUsd).toBe(7);
-  });
-
-  it("a missing job is reported, not thrown", async () => {
-    const t = convexTest(schema, modules);
-    const customerId = await seed(t, "gone_job");
-    const { jobId } = await t.mutation(internal.maya.jobs.enqueue, {
-      kind: "x",
-      idempotencyKey: "g",
-      customerId,
-    });
-    await t.run((ctx) => ctx.db.delete(jobId));
-    expect(
-      await t.mutation(internal.maya.spendCeiling.recordCost, {
-        jobId,
-        costUsd: 1,
-      }),
-    ).toEqual({ recorded: false });
-  });
-});
+/**
+ * ⚠️ The `recordCost` suite was removed 2026-08-12 along with the function.
+ *
+ * It stamped cost onto `jobs.costUsd` — a ledger NOTHING reads since
+ * `spendToday` was repointed at `costEvents`, which is what `cogs.record`
+ * actually writes. These tests passed for months while the ceiling they
+ * belonged to could never fire, because the fixture wrote a field production
+ * never wrote.
+ *
+ * The property they protected — spend before a failure still counts — is kept
+ * in "SPEND BEFORE A FAILURE STILL COUNTS" above, asserted through the real
+ * ledger.
+ */
 
 describe("alertThrottled", () => {
   it("alerts the operator once", async () => {
