@@ -134,13 +134,15 @@ export function runGate(input: GateInput): GateVerdict {
       // ⚠️ Said plainly. §2230: a credit shortage costs quality, never
       // availability — and never a silent downgrade either.
       detail:
-        "no render budget left this month — I'll make something static instead and say so",
+        "I've used up what I can spend on making videos this month — I'll do a simple image post instead, and I'm telling you rather than quietly downgrading",
     };
   }
   if (input.budgetMode === "graceful_degrade") {
     const next = lower(rung);
     if (next) {
-      adjustments.push(`dropped to ${next} to stay inside the month's budget`);
+      adjustments.push(
+        `made a simpler version to stay inside the month's budget`,
+      );
       rung = next;
     }
   }
@@ -156,8 +158,7 @@ export function runGate(input: GateInput): GateVerdict {
       adjustments,
       blockedBy: "pool",
       notEvaluated,
-      detail:
-        "the render pool is too low to spend safely right now — static instead",
+      detail: "I can't make a video safely right now — an image post instead",
     };
   }
 
@@ -182,11 +183,11 @@ export function runGate(input: GateInput): GateVerdict {
         blockedBy: "assets",
         notEvaluated,
         detail:
-          "nothing in the library matches what this needs, and I won't make up a shot of your product",
+          "nothing you've sent me matches what this needs, and I won't invent a picture of your product",
       };
     }
     adjustments.push(
-      `re-briefed around the ${input.assetsResolved} of ${input.assetsNamed} shots I actually have`,
+      `built it around the ${input.assetsResolved} of ${input.assetsNamed} pictures I actually have`,
     );
   }
 
@@ -227,11 +228,11 @@ export function runGate(input: GateInput): GateVerdict {
         blockedBy: "deadline",
         notEvaluated,
         detail:
-          "not enough time before the slot to make this properly — moving it rather than rushing it",
+          "not enough time before I meant to post this to make it properly — I'd rather move it than rush it",
       };
     }
     adjustments.push(
-      `${next} instead — not enough time before the slot for the longer render`,
+      `a simpler version — not enough time before I meant to post for the longer one`,
     );
     rung = next;
   }
@@ -251,10 +252,10 @@ export function runGate(input: GateInput): GateVerdict {
         blockedBy: "credits",
         notEvaluated,
         detail:
-          "not enough credits left this month for a render — static instead",
+          "I've used up this month's video allowance — an image post instead",
       };
     }
-    adjustments.push(`${next} to fit what's left of the month's credits`);
+    adjustments.push(`a simpler version, to fit what's left of this month`);
     rung = next;
   }
 

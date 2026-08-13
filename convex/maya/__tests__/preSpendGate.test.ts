@@ -76,7 +76,11 @@ describe("it resolves rather than refusing", () => {
 
   it("drops a rung rather than missing the slot", () => {
     // Render time × 10 must fit before the post's best hour.
-    const out = runGate({ ...ok, estimatedRenderSeconds: 500, secondsUntilSlot: 3600 });
+    const out = runGate({
+      ...ok,
+      estimatedRenderSeconds: 500,
+      secondsUntilSlot: 3600,
+    });
     expect(out.proceed).toBe(true);
     expect(out.rung).not.toBe("avatar");
     expect(DEADLINE_RATIO).toBe(10);
@@ -85,7 +89,13 @@ describe("it resolves rather than refusing", () => {
   it("drops a rung to fit the remaining credits", () => {
     const out = runGate({ ...ok, estimatedCredits: 200, remainingCredits: 5 });
     expect(out.proceed).toBe(true);
-    expect(out.adjustments.join(" ")).toContain("credits");
+    /**
+     * ⚠️ Asserts that an adjustment was MADE, not the words it used. The old
+     * assertion required the literal "credits" — our vocabulary — so it pinned
+     * a §11 leak in place and would have failed the fix. CLAUDE.md: assert on
+     * structure and stable identifiers, never on generated prose.
+     */
+    expect(out.adjustments.length).toBeGreaterThan(0);
   });
 });
 
@@ -96,7 +106,10 @@ describe("the cases where proceeding would be dishonest", () => {
     expect(out.blockedBy).toBe("budget");
     // §2230 — a credit shortage costs quality, never availability, and never
     // silently.
-    expect(out.detail).toMatch(/static/i);
+    // The refusal is real and reasoned; the wording is free to change.
+    expect(out.proceed).toBe(false);
+    expect(out.blockedBy).toBe("budget");
+    expect(out.detail.length).toBeGreaterThan(20);
   });
 
   /**
@@ -117,7 +130,12 @@ describe("the cases where proceeding would be dishonest", () => {
     const out = runGate({ ...ok, assetsNamed: 2, assetsResolved: 0 });
     expect(out.proceed).toBe(false);
     expect(out.blockedBy).toBe("assets");
-    expect(out.detail).toMatch(/won't make up a shot/i);
+    /**
+     * The PROMISE, not the phrasing: she refuses, and the reason is assets.
+     * §2.7's floor is enforced by `blockedBy`, not by a sentence.
+     */
+    expect(out.proceed).toBe(false);
+    expect(out.blockedBy).toBe("assets");
   });
 
   it("skips a repeated angle rather than posting it twice", () => {
@@ -172,7 +190,11 @@ describe("authenticityNotes", () => {
 
   it("says nothing when there's nothing to say", () => {
     expect(
-      authenticityNotes({ hasRealFootage: true, cutsPerSecond: 0.6, hookIsShown: true })
+      authenticityNotes({
+        hasRealFootage: true,
+        cutsPerSecond: 0.6,
+        hookIsShown: true,
+      }),
     ).toEqual([]);
   });
 
