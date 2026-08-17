@@ -51,6 +51,18 @@ export interface WeeklyInput {
   /** Signups we could attribute, and those we couldn't. */
   conversions: { total: number; traced: number };
   /**
+   * ⭐ ONE signup, followed all the way back — Sprint 8's exit criterion
+   * verbatim: *"one signup traced end to end, with links."*
+   *
+   * ⚠️ `traceConversion` has built this chain since Sprint 8 and had NO CALLER,
+   * so the report could say "I can point to the post for 3" and never actually
+   * point. Counting traceable signups and showing the trace are different
+   * claims, and only the second is the thing they don't cancel over (§16.2).
+   *
+   * Absent when nothing traced this week, which is a real answer.
+   */
+  tracedExample?: { detail: string; hops: string[] };
+  /**
    * The bio link to ask for, when they haven't been asked yet. Absent once
    * asked — §14.45: "Ask once, then work with whatever they gave."
    */
@@ -176,6 +188,19 @@ export function composeWeekly(input: WeeklyInput): string {
           }.`
         : `${input.conversions.total} signups, and I can point to the post for each one.`,
     );
+
+    /**
+     * ⭐ And then actually point. One example, followed hop by hop, because a
+     * founder who can see the chain once believes the number every week after.
+     *
+     * ⚠️ One, not all of them. A report that traces six signups is a wall of
+     * URLs nobody reads — §16.75.05's rule that the report leads with the
+     * finding rather than a number dump applies to evidence too.
+     */
+    if (input.tracedExample) {
+      lines.push(input.tracedExample.detail);
+      for (const hop of input.tracedExample.hops) lines.push(`  ${hop}`);
+    }
   }
 
   // 5. The strategy verdict, relayed — never its own ping.
@@ -297,6 +322,40 @@ export const sendWeeklyReview = internalAction({
       (c: { occurredAt: number }) => c.occurredAt >= weekAgo,
     );
 
+    /**
+     * ⭐ Follow ONE signup all the way back — Sprint 8's exit criterion.
+     *
+     * ⚠️ `traceConversion` has existed since Sprint 8 with no caller, so the
+     * report could claim "I can point to the post for 3" and never point.
+     * Newest traced conversion, because the freshest one is the one they still
+     * remember the context of.
+     */
+    const traceable = recent.find((c: { traced: boolean }) => c.traced);
+    let tracedExample:
+      | { detail: string; hops: string[] }
+      | undefined;
+    if (traceable) {
+      const chain = await ctx.runQuery(
+        internal.maya.attribution.traceConversion,
+        { conversionId: traceable.conversionId },
+      );
+      /**
+       * ⚠️ Only when the chain actually holds. A broken trace shown as if it
+       * were whole is worse than no trace — §14.45's honesty rule is that a
+       * partial figure is never presented as the whole, and `breaksAt` exists
+       * precisely so a gap can be named rather than smoothed over.
+       */
+      if (chain.ok && chain.hops.length > 1) {
+        tracedExample = {
+          detail: "Here's one of them, all the way back:",
+          hops: chain.hops.map(
+            (h: { detail: string; url?: string }) =>
+              `${h.detail}${h.url ? ` — ${h.url}` : ""}`,
+          ),
+        };
+      }
+    }
+
     // Pick the channel with the most placements — the week's main surface.
     const usable = benchmarks.channels.filter((c) => c.usable);
     const primary = usable[0] ?? null;
@@ -314,6 +373,7 @@ export const sendWeeklyReview = internalAction({
         detail: latest ? (latest.askedFor ?? latest.because) : "",
       },
       bioLink,
+      tracedExample,
       conversions: {
         total: recent.reduce(
           (sum: number, c: { count: number }) => sum + c.count,

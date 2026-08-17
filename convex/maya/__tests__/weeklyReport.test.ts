@@ -146,3 +146,72 @@ describe("results", () => {
     );
   });
 });
+
+/* -------------------------------------------------------------------------- */
+
+describe("one signup, traced end to end — Sprint 8's exit criterion", () => {
+  /**
+   * ⭐ §18 Sprint 8: **Exit: one signup traced end to end, with links.**
+   *
+   * ⚠️ `attribution.traceConversion` builds that chain and had NO CALLER, so
+   * the report could say "I can point to the post for 3" and then never point.
+   * Counting traceable signups and showing the trace are different claims, and
+   * §16.2 calls Results "the reason they don't cancel".
+   */
+  const base = {
+    placements: 4,
+    views: 900,
+    rung: "L1",
+    rungDetail: "",
+    nicheMedian: null,
+    nichePosts: 0,
+    tracedPlacements: 3,
+    strategy: { changed: false, detail: "" },
+    bioLink: undefined,
+    conversions: { total: 2, traced: 1 },
+  };
+
+  it("⭐ shows the chain, with openable links", () => {
+    const body = composeWeekly({
+      ...base,
+      tracedExample: {
+        detail: "Here's one of them, all the way back:",
+        hops: [
+          "1 signup, reported by your site",
+          "they clicked your link — https://hey-maya.ai/r/abc",
+          "from this post — https://x.com/status/1",
+          "which came from a complaint someone posted",
+        ],
+      },
+    } as Parameters<typeof composeWeekly>[0]);
+
+    expect(body).toContain("all the way back");
+    // §6: a source you can't open isn't a source.
+    expect(body).toContain("https://x.com/status/1");
+  });
+
+  it("⚠️ says nothing extra when nothing traced", () => {
+    /**
+     * The honest-silence case. A week with untraceable signups still reports
+     * the count — it just doesn't manufacture a chain to go with it.
+     */
+    const body = composeWeekly(
+      base as Parameters<typeof composeWeekly>[0]
+    );
+    expect(body).toContain("2 signups");
+    expect(body).not.toContain("all the way back");
+  });
+
+  it("⚠️ traces exactly one, not all of them", () => {
+    // A report that traces six signups is a wall of URLs nobody reads.
+    // §16.75.05: lead with the finding, not a number dump.
+    const body = composeWeekly({
+      ...base,
+      tracedExample: {
+        detail: "Here's one of them, all the way back:",
+        hops: ["a", "b"],
+      },
+    } as Parameters<typeof composeWeekly>[0]);
+    expect(body.match(/all the way back/g)?.length).toBe(1);
+  });
+});
