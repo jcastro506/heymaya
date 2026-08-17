@@ -229,6 +229,29 @@ export function sweepRefs(): Record<string, SweepRef> {
      * read per customer and the number it corrects was wrong by ~50x.
      */
     spend: internal.maya.cogs.refreshVendorSpend,
+    /**
+     * ⭐ SEED THE MEDIA LIBRARY FROM THE FOUNDER'S OWN SITE.
+     *
+     * ⚠️ `fillFromProductPage` was written, tested, and had **no caller** —
+     * and `extractFromUrl`/`classifyImages` beneath it were built for the
+     * §6.4.6 spike and never called in production either. Three finished
+     * functions, one on top of the other, and nothing at the top.
+     *
+     * ⚠️ What it cost, measured 2026-08-17: `mediaAssets` was **empty**, and
+     * Instagram, TikTok and YouTube cannot take a text-only post. All four
+     * channels were connected and healthy; 14 of 16 placements went to X
+     * because X was the only one she could physically reach. The library's
+     * only other inbound path is asking the founder for a screen recording —
+     * she asked, and it never came.
+     *
+     * Weekly rather than daily: a product page does not change overnight, and
+     * `media.record` dedupes on `storageKey`, so a re-run costs the scrape and
+     * writes nothing new. Only real product screenshots are kept — §6.4.6b
+     * measured a site returning 12 images and zero screenshots, and filling
+     * the library with illustration would satisfy every presence check while
+     * suppressing the asset ask for exactly the founders who most need it.
+     */
+    assets: internal.maya.media.fillFromProductPage,
     formats: internal.maya.formats.watchFormats,
     hashtags: internal.maya.formats.mineHashtagSets,
     /**
@@ -255,6 +278,7 @@ export function sweepRefs(): Record<string, SweepRef> {
 }
 
 export const WEEKLY_SWEEPS = [
+  "assets",
   "formats",
   "hashtags",
   "watch",

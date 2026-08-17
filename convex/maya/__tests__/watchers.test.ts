@@ -20,6 +20,8 @@ import { join } from "node:path";
 import type { Id } from "../../_generated/dataModel";
 import {
   SWEEPS,
+  WEEKLY_SWEEPS,
+  sweepRefs,
   SWEEP_HOUR_LOCAL,
   TICK_MINUTES,
   isDue,
@@ -251,5 +253,44 @@ describe("the sweep cannot exceed one action's budget", () => {
     // And NOT before it: nothing on the success path may release.
     const beforeCatch = sweepOne.slice(0, sweepOne.indexOf("} catch (error) {"));
     expect(beforeCatch).not.toContain("releaseSweep");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+
+describe("the media library has a producer", () => {
+  /**
+   * ⭐ `fillFromProductPage` was written, tested, and had NO CALLER — and
+   * `extractFromUrl`/`classifyImages` beneath it were built for the §6.4.6
+   * spike and never called in production either. Three finished functions
+   * stacked on each other with nothing at the top.
+   *
+   * ⚠️ Measured 2026-08-17: `mediaAssets` was empty, and Instagram, TikTok and
+   * YouTube cannot take a text-only post. All four channels were connected;
+   * 14 of 16 placements went to X because it was the only one she could
+   * physically reach.
+   */
+  it("⭐ the assets sweep is registered and runnable", () => {
+    expect(Object.keys(sweepRefs())).toContain("assets");
+    expect(sweepRefs().assets).toBeDefined();
+  });
+
+  it("runs weekly, not daily", () => {
+    /**
+     * A product page does not change overnight. `media.record` dedupes on
+     * `storageKey`, so a daily re-run would pay for the scrape and write
+     * nothing — the cost with none of the benefit.
+     */
+    expect(WEEKLY_SWEEPS).toContain("assets");
+    expect(SWEEPS).not.toContain("assets");
+  });
+
+  it("⚠️ every scheduled sweep has a reference — none can be named and missing", () => {
+    // The coherence check that matters: a sweep listed but unregistered is a
+    // job that silently never runs, which is this codebase's signature defect.
+    const refs = sweepRefs();
+    for (const name of [...SWEEPS, ...WEEKLY_SWEEPS]) {
+      expect(refs[name], `${name} has no ref`).toBeDefined();
+    }
   });
 });

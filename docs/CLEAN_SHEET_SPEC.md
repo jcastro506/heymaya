@@ -4896,6 +4896,37 @@ gate authorised a rung nothing can build**. A gate that says yes to impossible
 work turns a budget into a promise the founder never receives. Capped by
 `MAX_BUILDABLE_RUNG`; one constant flips when Sprint 9 lands.
 
+#### §6.4.6 — one URL of the scrape spike, run 2026-08-17
+
+`fillFromProductPage` now has a producer (weekly `assets` sweep). Run live
+against the account's own product URL, `https://hey-maya.ai/`:
+
+```
+{ ok: true, status: 200, images: [], kept: 0,
+  detail: "nothing usable on the page" }
+```
+
+⭐ **The extractor is not at fault, and this is worth recording precisely.** It
+already reads `og:image`, `twitter:image`, `srcset`, `src` and `data-src`. The
+page has **none of them** — zero `<img>` tags, no `og:image`, no
+`twitter:image`, only inline `<svg>` chrome. A client-rendered Next.js page
+yields nothing to a static fetch.
+
+Two consequences:
+
+1. ⚠️ **The media library cannot self-seed for this account.** Instagram,
+   TikTok and YouTube stay unreachable until either an `og:image` exists on the
+   landing page or the founder sends a screenshot. The wire is correct; the
+   input is empty.
+2. §6.4.6's estimate that *"~80% have an og:image"* is the assumption the
+   asset path leans on. **Our own landing page is in the other 20%** — which is
+   also a social-sharing defect independent of Maya, since every link to
+   `hey-maya.ai` currently previews with no image.
+
+This is one URL, not the twenty-URL spike CLAUDE.md asks for. It does not
+settle the headless-browser question. It does settle it for SPA landing pages:
+static fetch returns nothing, and `og:image` is the only cheap path.
+
 #### Two things that are structural, not bugs
 
 - ⚠️ **All four channels are `postingMode: "show_me_first"`.** Nothing
