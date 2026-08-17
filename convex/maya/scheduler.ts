@@ -44,6 +44,7 @@
 import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
+import { RENDER_JOB_KIND } from "./video";
 import type { Doc, Id } from "../_generated/dataModel";
 import { correlateFleet, evaluate, type Breach } from "./liveness";
 import { allowsKind } from "./spendCeiling";
@@ -152,6 +153,19 @@ export interface DayPlan {
 export const HANDLED_KINDS = new Set<string>([
   "deliver_message",
   "publish_placement",
+  /**
+   * ⭐ Sprint 9's render. ⚠️ ADDED 2026-08-17 AFTER the render path shipped
+   * without it — `runRender` existed, `approveRender` made the job claimable,
+   * and this set did not list the kind. The founder's "go" would have set the
+   * job runnable, the queue would have claimed it, and it would have failed
+   * with `no handler for job kind "render_video" in this build`.
+   *
+   * The worst possible shape: everything up to the yes worked perfectly, and
+   * the yes was the step that broke. §7.5.7's whole argument is that failing
+   * after a yes is the worst sequence, and this was a way to do exactly that
+   * with no vendor involved at all.
+   */
+  RENDER_JOB_KIND,
 ]);
 
 /** Route a claimed job to its handler. */
@@ -188,6 +202,34 @@ async function runHandler(
     return result.delivered
       ? { ok: true }
       : { ok: false, error: result.reason ?? "delivery failed" };
+  }
+  if (job.kind === RENDER_JOB_KIND) {
+    /**
+     * ⭐ The founder already said go — `approveRender` is the only thing that
+     * makes this job claimable, and a staged render sits at
+     * `Number.MAX_SAFE_INTEGER` until it does. Nothing here re-asks.
+     */
+    if (!job.customerId) {
+      return { ok: false, error: "render job has no customer" };
+    }
+    if (!job.payloadJson) {
+      return { ok: false, error: "render job carried no brief" };
+    }
+    const result = (await (
+      ctx as unknown as {
+        runAction: (
+          ref: typeof internal.maya.video.runRender,
+          args: { customerId: Id<"customers">; briefJson: string }
+        ) => Promise<{ ok: boolean; detail: string }>;
+      }
+    ).runAction(internal.maya.video.runRender, {
+      customerId: job.customerId,
+      briefJson: job.payloadJson,
+    })) as { ok: boolean; detail: string };
+
+    // ⚠️ The vendor's reason, relayed rather than flattened to "render failed".
+    // `jobs.fail` writes it where the founder-facing failure path can read it.
+    return result.ok ? { ok: true } : { ok: false, error: result.detail };
   }
   if (job.kind === "publish_placement") {
     // The decision was made by the iron rule (§9.1) BEFORE this was enqueued.

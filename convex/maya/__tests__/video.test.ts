@@ -177,3 +177,35 @@ describe("the job kind the budget can actually see", () => {
     expect(RENDER_JOB_KIND).toBe("render_video");
   });
 });
+
+/* -------------------------------------------------------------------------- */
+
+describe("the founder's yes actually starts the render", () => {
+  /**
+   * ⚠️ SHIPPED BROKEN AND CAUGHT BY THE OPERATOR ASKING. `runRender` existed,
+   * `approveRender` made the job claimable, and `HANDLED_KINDS` did not list
+   * the kind — so a "go" would set the job runnable, the queue would claim it,
+   * and it would fail with `no handler for job kind "render_video" in this
+   * build`.
+   *
+   * The worst possible shape: every free step worked perfectly and the paid
+   * step died. §7.5.7's argument is that failing after a yes is the worst
+   * sequence, and this managed it without a vendor being involved at all.
+   */
+  it("⭐ the queue knows how to run a render", async () => {
+    const { HANDLED_KINDS } = await import("../scheduler");
+    expect(HANDLED_KINDS.has(RENDER_JOB_KIND)).toBe(true);
+  });
+
+  it("⚠️ every kind the product enqueues has a handler", async () => {
+    /**
+     * The general form of the same bug. A kind that is enqueued but unhandled
+     * fails on claim, which looks like a vendor problem and isn't — the
+     * sibling-file coherence category, one layer out.
+     */
+    const { HANDLED_KINDS } = await import("../scheduler");
+    for (const kind of ["deliver_message", "publish_placement", RENDER_JOB_KIND]) {
+      expect(HANDLED_KINDS.has(kind), `${kind} has no handler`).toBe(true);
+    }
+  });
+});
