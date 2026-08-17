@@ -116,12 +116,54 @@ export const claimNext = internalMutation({
       .withIndex("by_status_and_runAfter", (q) =>
         q.eq("status", "queued").lte("runAfter", now)
       )
-      .take(50);
+      .take(200);
 
-    const job = candidates.find(
+    const eligible = candidates.filter(
       (row) => !args.kinds || args.kinds.includes(row.kind)
     );
-    if (!job) return null;
+    if (eligible.length === 0) return null;
+
+    /**
+     * ⭐ FAIR-SHARE, then deadline. §18 Sprint 9 asks the render queue for
+     * *"fair-share, deadline priority"*, and until now this took whatever sorted
+     * first by `runAfter` — plain first-come-first-served.
+     *
+     * ⚠️ The failure that matters is not slowness, it is starvation. One
+     * founder approving twenty videos in a burst would occupy the queue in
+     * arrival order, and the other 199 would wait behind them. Nothing would
+     * look broken: every job succeeds, the log is clean, and the only symptom
+     * is that everyone else's placement is late — on the one day the queue is
+     * under load, which is exactly when a missed slot costs the most.
+     *
+     * So the customer with the FEWEST jobs already running goes next. A burst
+     * from one account interleaves with everyone else instead of blocking them,
+     * and an idle customer is never behind a busy one.
+     */
+    const running = (await ctx.db
+      .query("jobs")
+      .withIndex("by_status_and_runAfter", (q) => q.eq("status", "running"))
+      .take(200)) as Doc<"jobs">[];
+
+    const load = new Map<string, number>();
+    for (const row of running) {
+      const key = row.customerId ?? "fleet";
+      load.set(key, (load.get(key) ?? 0) + 1);
+    }
+
+    const job = [...eligible].sort((a, b) => {
+      const la = load.get(a.customerId ?? "fleet") ?? 0;
+      const lb = load.get(b.customerId ?? "fleet") ?? 0;
+      // 1. Whoever has least in flight.
+      if (la !== lb) return la - lb;
+      /**
+       * 2. Then the tightest deadline. A render due in thirty minutes beats one
+       * due in six hours — §7.5.7 check 7 already refuses work that cannot
+       * land before its slot, and this is the same clock seen from the queue.
+       */
+      if (a.deadlineAt !== b.deadlineAt) return a.deadlineAt - b.deadlineAt;
+      // 3. Then arrival, so the ordering is total and a tie cannot flap.
+      return a.runAfter - b.runAfter;
+    })[0];
 
     await ctx.db.patch(job._id, {
       status: "running",

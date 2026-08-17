@@ -5,6 +5,7 @@ import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import type { Doc, Id } from "../../_generated/dataModel";
 import { backoffMs, DEFAULT_MAX_ATTEMPTS } from "../jobs";
+import { minimalRow, type InsertCtx } from "../../../tests/lib/minimalRow";
 
 const NOW = Date.UTC(2026, 6, 31, 9, 0, 0);
 
@@ -352,5 +353,137 @@ describe("backoff", () => {
   it("the default attempt cap is sane", () => {
     expect(DEFAULT_MAX_ATTEMPTS).toBeGreaterThan(1);
     expect(DEFAULT_MAX_ATTEMPTS).toBeLessThan(10);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ Sprint 9's render queue: *"fair-share, deadline priority"*.
+ *
+ * ⚠️ The failure this prevents is starvation, not slowness. Until now
+ * `claimNext` took whatever sorted first by `runAfter` — first-come-first-
+ * served — so one founder approving twenty videos in a burst would occupy the
+ * queue in arrival order and the other 199 would wait behind them. Nothing
+ * looks broken: every job succeeds and the log is clean. The only symptom is
+ * that everyone else's placement is late, on the one day the queue is under
+ * load, which is when a missed slot costs the most.
+ */
+describe("the queue is fair before it is fast", () => {
+  const seedJob = async (
+    t: ReturnType<typeof convexTest>,
+    customerId: string,
+    over: Record<string, unknown>
+  ) =>
+    await t.run(async (ctx) => {
+      const c = ctx as unknown as {
+        db: { insert: (table: string, value: unknown) => Promise<string> };
+      };
+      return await c.db.insert("jobs", {
+        customerId,
+        kind: "render_video",
+        idempotencyKey: `k_${Math.round(Number(over.runAfter ?? 0))}_${customerId}`,
+        status: "queued",
+        attempts: 0,
+        maxAttempts: 3,
+        runAfter: 0,
+        deadlineAt: 10_000_000,
+        createdAt: 0,
+        updatedAt: 0,
+        ...over,
+      });
+    });
+
+  it("⭐ a busy customer does not starve an idle one", async () => {
+    const t = convexTest(schema, modules);
+    const { busy, idle } = await t.run(async (ctx) => {
+      const c = ctx as unknown as {
+        db: { insert: (table: string, value: unknown) => Promise<string> };
+      };
+      const mk = async (who: string) => {
+        const creator = await c.db.insert(
+          "creators",
+          await minimalRow(ctx as InsertCtx, "creators", {
+            clerkUserId: who,
+            email: `${who}@e.com`,
+            accountType: "gtm-agent",
+          })
+        );
+        return await c.db.insert(
+          "customers",
+          await minimalRow(ctx as InsertCtx, "customers", { accountId: creator })
+        );
+      };
+      return { busy: await mk("busy"), idle: await mk("idle") };
+    });
+
+    // The busy account already has one in flight, and queued FIRST.
+    await seedJob(t, busy, { status: "running", runAfter: 0 });
+    await seedJob(t, busy, { runAfter: 1 });
+    // The idle account queued later — and should still go next.
+    await seedJob(t, idle, { runAfter: 2 });
+
+    const claimed = await t.mutation(internal.maya.jobs.claimNext, {});
+    expect(claimed?.customerId).toBe(idle);
+  });
+
+  it("⭐ within one customer, the tightest deadline goes first", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await t.run(async (ctx) => {
+      const c = ctx as unknown as {
+        db: { insert: (table: string, value: unknown) => Promise<string> };
+      };
+      const creator = await c.db.insert(
+        "creators",
+        await minimalRow(ctx as InsertCtx, "creators", {
+          clerkUserId: "solo",
+          email: "solo@e.com",
+          accountType: "gtm-agent",
+        })
+      );
+      return await c.db.insert(
+        "customers",
+        await minimalRow(ctx as InsertCtx, "customers", { accountId: creator })
+      );
+    });
+
+    // Queued first, but due in six hours.
+    await seedJob(t, customerId, { runAfter: 0, deadlineAt: 9_000_000 });
+    // Queued second, due in thirty minutes — this one is about to miss its slot.
+    const urgent = await seedJob(t, customerId, {
+      runAfter: 1,
+      deadlineAt: 1_000,
+    });
+
+    const claimed = await t.mutation(internal.maya.jobs.claimNext, {});
+    expect(claimed?._id).toBe(urgent);
+  });
+
+  it("⚠️ still refuses work that isn't due yet", async () => {
+    // Fair-share must not reach past `runAfter`. A staged render sits at
+    // MAX_SAFE_INTEGER precisely so no worker can claim it before the founder
+    // approves — an ordering change that ignored that would render unapproved
+    // videos, which is the one failure §7.5.36 exists to prevent.
+    const t = convexTest(schema, modules);
+    const customerId = await t.run(async (ctx) => {
+      const c = ctx as unknown as {
+        db: { insert: (table: string, value: unknown) => Promise<string> };
+      };
+      const creator = await c.db.insert(
+        "creators",
+        await minimalRow(ctx as InsertCtx, "creators", {
+          clerkUserId: "staged",
+          email: "staged@e.com",
+          accountType: "gtm-agent",
+        })
+      );
+      return await c.db.insert(
+        "customers",
+        await minimalRow(ctx as InsertCtx, "customers", { accountId: creator })
+      );
+    });
+
+    await seedJob(t, customerId, { runAfter: Number.MAX_SAFE_INTEGER });
+    expect(await t.mutation(internal.maya.jobs.claimNext, {})).toBeNull();
   });
 });
