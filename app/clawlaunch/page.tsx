@@ -7,6 +7,7 @@ import { FaLinkedin, FaXTwitter } from "react-icons/fa6";
 import { SiInstagram, SiReddit, SiTiktok, SiYoutube } from "react-icons/si";
 
 import { primaryCtaHref, primaryCtaLabel } from "../_components/landingMode";
+import { DemoRead } from "../_components/DemoRead";
 
 /**
  * Landing redesign — "a portfolio of one week of Maya's work."
@@ -50,6 +51,22 @@ export default function ClawLaunchLandingPage() {
       <Masthead />
       <StickyCTA />
       <Hero />
+      {/* ⭐ §18.9.2 block ② — the live URL-read demo, and Sprint 11's exit
+          criterion verbatim: "a visitor can paste a URL on the landing page and
+          watch her be specifically right about their company, in under 20
+          seconds, without signing up."
+
+          ⚠️ The component, the API route and all four guardrails (IP limit, URL
+          cache, daily spend cap, graceful degrade) were built and live on
+          /start — and the landing page never imported it. The one block that
+          demonstrates the product instead of describing it was the one block
+          missing from the page whose whole job is to acquire users.
+
+          Placed directly after the hero on purpose: every competitor CLAIMS to
+          understand your business, and this proves it on the visitor's own site
+          before they give us anything. Below the fold it is a feature; here it
+          is the argument. */}
+      <DemoSection />
       <ProblemQuotes />
       <DayOne />
       <WeekBubbles />
@@ -63,6 +80,30 @@ export default function ClawLaunchLandingPage() {
       <Closer />
       <Footer />
     </main>
+  );
+}
+
+/* -----------------------------------------------------------------
+ * The live read — §18.9.2 block ②.
+ * ----------------------------------------------------------------- */
+
+function DemoSection() {
+  return (
+    <section className="relative px-6 py-16 sm:px-10 sm:py-24">
+      <div className="mx-auto max-w-3xl">
+        {/* ⚠️ Eyebrow only. `DemoRead` carries its own headline and its own
+            "no signup" promise — caught by rendering the page rather than by
+            reading the diff, which showed the visitor the same sentence twice
+            in slightly different words. The component is shared with /start, so
+            the wrapper defers to it rather than the other way round. */}
+        <p className="font-mono text-xs uppercase tracking-[0.2em] text-[#0a0a0a]/50">
+          Try it on your own site
+        </p>
+        <div className="mt-6">
+          <DemoRead />
+        </div>
+      </div>
+    </section>
   );
 }
 
