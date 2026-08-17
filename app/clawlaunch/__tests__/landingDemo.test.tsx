@@ -59,12 +59,12 @@ describe("the landing page demonstrates rather than claims", () => {
      * claimed anything.
      */
     const hero = LANDING.indexOf("<Hero />");
-    const demo = LANDING.indexOf("<DemoRead />");
-    const feed = LANDING.indexOf("<Feed />");
-    const card = LANDING.indexOf("<FormatCard />");
+    const demo = LANDING.indexOf("<TryIt />");
+    const watches = LANDING.indexOf("<SheWatches />");
+    const work = LANDING.indexOf("<WorkGallery />");
     expect(demo).toBeGreaterThan(hero);
-    expect(demo).toBeLessThan(feed);
-    expect(demo).toBeLessThan(card);
+    expect(demo).toBeLessThan(watches);
+    expect(demo).toBeLessThan(work);
   });
 
   it("⚠️ promises no signup, because the exit criterion says without one", () => {
