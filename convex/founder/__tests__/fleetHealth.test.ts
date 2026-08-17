@@ -5,10 +5,19 @@
  * property and the one judgment call, because both fail quietly.
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { STUCK_AFTER_DAYS } from "../fleetHealth";
+import { convexTest } from "convex-test";
+import schema from "../../schema";
+import { api } from "../../_generated/api";
+import { modules } from "../../../tests/_modules";
+import { minimalRow, type InsertCtx } from "../../../tests/lib/minimalRow";
+
+/** The ops token the view is gated on — fail-closed without it. */
+const TOKEN = process.env.ADMIN_DASH_TOKEN ?? "test-ops-token";
+const NOW = 1_786_900_000_000;
 
 const SOURCE = readFileSync(
   join(process.cwd(), "convex", "founder", "fleetHealth.ts"),
@@ -136,5 +145,141 @@ describe("aggregate learning (§16.9.3)", () => {
     // silently covers three of four questions is how someone concludes the
     // fourth is fine.
     expect(SOURCE_AGG).toContain("notYetAnswered: []");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+
+describe("the activation funnel — §16.9.2's headline metric", () => {
+  /**
+   * ⚠️ Scoped to this block. `authorized` fails CLOSED when `ADMIN_DASH_TOKEN`
+   * is unset, and a test above pins exactly that — setting it globally would
+   * quietly delete the fail-closed assertion.
+   */
+  beforeEach(() => {
+    process.env.ADMIN_DASH_TOKEN = TOKEN;
+  });
+  afterEach(() => {
+    delete process.env.ADMIN_DASH_TOKEN;
+  });
+
+  /**
+   * ⭐ *"signup → connected → approved → first placement → first click → first
+   * signup → month 2. **Time-to-first-placement is the headline metric.**"*
+   *
+   * ⚠️ It was absent entirely. Every other number on this screen describes
+   * customers who are already working; this is the only one that describes the
+   * ones who never started — and a founder who signs up, connects a channel and
+   * never gets a post is invisible on a view built from placements and spend.
+   */
+  const seed = async (
+    t: ReturnType<typeof convexTest>,
+    who: string,
+    opts: { connected?: boolean; placedAfterHours?: number; signedUpDaysAgo?: number },
+  ) =>
+    await t.run(async (ctx) => {
+      const c = ctx as unknown as {
+        db: { insert: (table: string, value: unknown) => Promise<string> };
+      };
+      const creator = await c.db.insert(
+        "creators",
+        await minimalRow(ctx as InsertCtx, "creators", {
+          clerkUserId: who,
+          email: `${who}@e.com`,
+          accountType: "gtm-agent",
+        }),
+      );
+      const signedUpAt = NOW - (opts.signedUpDaysAgo ?? 1) * 86_400_000;
+      const customerId = await c.db.insert(
+        "customers",
+        await minimalRow(ctx as InsertCtx, "customers", {
+          accountId: creator,
+          // The funnel counts the live product only — a v1 row is the frozen
+          // product and would inflate every number on this screen.
+          agentVersion: "v2",
+          createdAt: signedUpAt,
+        }),
+      );
+      if (opts.connected) {
+        await c.db.insert("channels", {
+          customerId,
+          channel: "x",
+          handle: who,
+          status: "connected",
+          postingMode: "show_me_first",
+          createdAt: signedUpAt,
+          updatedAt: signedUpAt,
+        });
+      }
+      if (opts.placedAfterHours !== undefined) {
+        await c.db.insert("placements", {
+          customerId,
+          kind: "post",
+          channel: "x",
+          linkStatus: "live",
+          url: `https://x.com/${who}/1`,
+          publishedAt: signedUpAt + opts.placedAfterHours * 3_600_000,
+          snapshotText: "shipped",
+          idempotencyKey: `k_${who}`,
+        });
+      }
+      return customerId;
+    });
+
+  it("⭐ reports median hours from signup to first live placement", async () => {
+    const t = convexTest(schema, modules);
+    await seed(t, "fast", { connected: true, placedAfterHours: 2 });
+    await seed(t, "slow", { connected: true, placedAfterHours: 10 });
+
+    const out = await t.query(api.founder.fleetHealth.health, {
+      token: TOKEN,
+      now: NOW,
+    });
+    expect(out.activation?.placed).toBe(2);
+    expect(out.activation?.medianHours).toBeGreaterThan(0);
+  });
+
+  it("⭐ names the connected accounts that never placed", async () => {
+    const t = convexTest(schema, modules);
+    const stuck = await seed(t, "stalled", {
+      connected: true,
+      signedUpDaysAgo: 9,
+    });
+
+    const out = await t.query(api.founder.fleetHealth.health, {
+      token: TOKEN,
+      now: NOW,
+    });
+    // Named, not counted — a count cannot be opened.
+    expect(out.activation?.stalled.map((s) => s.customerId)).toContain(stuck);
+    expect(out.activation?.stalled[0].daysSinceSignup).toBe(9);
+  });
+
+  it("⚠️ someone mid-onboarding is not 'stalled'", async () => {
+    /**
+     * Signed up, hasn't connected anything. Flagging them would bury the
+     * accounts that genuinely are stuck behind everyone who joined this week.
+     */
+    const t = convexTest(schema, modules);
+    await seed(t, "fresh", { connected: false, signedUpDaysAgo: 0 });
+
+    const out = await t.query(api.founder.fleetHealth.health, {
+      token: TOKEN,
+      now: NOW,
+    });
+    expect(out.activation?.stalled).toEqual([]);
+    expect(out.activation?.connected).toBe(0);
+  });
+
+  it("⚠️ reports null rather than zero when nobody has placed", async () => {
+    // A zero here would read as "instant" — the exact opposite of the truth.
+    const t = convexTest(schema, modules);
+    await seed(t, "none", { connected: true, signedUpDaysAgo: 3 });
+
+    const out = await t.query(api.founder.fleetHealth.health, {
+      token: TOKEN,
+      now: NOW,
+    });
+    expect(out.activation?.medianHours).toBeNull();
   });
 });

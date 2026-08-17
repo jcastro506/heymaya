@@ -133,6 +133,34 @@ export interface FleetHealth {
     voided: number;
     oldestAsOf?: number;
   };
+  /**
+   * ⭐ §16.9.2's ACTIVATION FUNNEL, and the metric the spec calls the headline:
+   * **time to first placement**.
+   *
+   * > *"signup → connected → approved → **first placement** → first click →
+   * > first signup → month 2. Time-to-first-placement is the headline metric."*
+   *
+   * ⚠️ It was absent entirely. Every other number here describes customers who
+   * are already working; this is the only one that describes the ones who never
+   * started — and a founder who signs up, connects nothing and leaves is
+   * invisible on a screen built from placements and spend.
+   *
+   * `medianHours` is null when nobody has placed yet, which is a real answer
+   * rather than a zero. A zero here would read as "instant", the opposite of
+   * the truth.
+   */
+  activation?: {
+    signedUp: number;
+    connected: number;
+    placed: number;
+    /** Hours from account creation to first live placement. */
+    medianHours: number | null;
+    /**
+     * ⚠️ Named, not counted. Connected days ago and still nothing published is
+     * the exact account the operator should open, and a count cannot be opened.
+     */
+    stalled: Array<{ customerId: Id<"customers">; daysSinceSignup: number }>;
+  };
   /** What this view deliberately cannot answer yet. Stated, never implied. */
   notYetAnswered: string[];
 }
@@ -167,6 +195,73 @@ export const health = query({
       internal.maya.delivery.fleetUnreachable,
       { now },
     );
+
+    /**
+     * ⭐ §16.9.2's activation funnel. Every other number on this screen
+     * describes customers who are already working; this is the only one that
+     * describes the ones who never started.
+     *
+     * ⚠️ Computed from rows already in hand — `customers` for signup and
+     * connection, `cadenceRows` for whether anything has ever gone live — so it
+     * costs no extra read on a screen the operator opens when something is
+     * already wrong.
+     */
+    const allCustomers = (await ctx.db
+      .query("customers")
+      .collect()) as Doc<"customers">[];
+    const live = allCustomers.filter(
+      (c) => c.state !== "cancelled" && c.agentVersion === "v2",
+    );
+
+    const channels = (await ctx.db.query("channels").collect()) as Doc<"channels">[];
+    const connectedIds = new Set(
+      channels
+        .filter((ch) => ch.status === "connected")
+        .map((ch) => String(ch.customerId)),
+    );
+
+    const placements = (await ctx.db
+      .query("placements")
+      .collect()) as Doc<"placements">[];
+    /** First live placement per customer — the funnel's fourth step. */
+    const firstPlacementAt = new Map<string, number>();
+    for (const p of placements) {
+      if (p.linkStatus !== "live") continue;
+      const key = String(p.customerId);
+      const at = p.publishedAt ?? p._creationTime;
+      const seen = firstPlacementAt.get(key);
+      if (seen === undefined || at < seen) firstPlacementAt.set(key, at);
+    }
+
+    const hoursToFirst: number[] = [];
+    const stalled: Array<{ customerId: Id<"customers">; daysSinceSignup: number }> = [];
+    for (const c of live) {
+      const key = String(c._id);
+      const first = firstPlacementAt.get(key);
+      const signedUpAt = c.createdAt ?? c._creationTime;
+      if (first !== undefined) {
+        hoursToFirst.push(Math.max(0, (first - signedUpAt) / 3_600_000));
+        continue;
+      }
+      /**
+       * ⚠️ Only CONNECTED accounts count as stalled. Someone who signed up an
+       * hour ago and hasn't connected a channel is mid-onboarding, not stuck,
+       * and flagging them would bury the accounts that genuinely are.
+       */
+      if (connectedIds.has(key)) {
+        stalled.push({
+          customerId: c._id,
+          daysSinceSignup: Math.floor((now - signedUpAt) / 86_400_000),
+        });
+      }
+    }
+    hoursToFirst.sort((a, b) => a - b);
+    const medianHours =
+      hoursToFirst.length === 0
+        ? null
+        : hoursToFirst[Math.floor(hoursToFirst.length / 2)];
+    // Longest-waiting first — that is the one to open.
+    stalled.sort((a, b) => b.daysSinceSignup - a.daysSinceSignup);
 
     /**
      * ⚠️ Stuck is computed from the LAST PLACEMENT, not from the streak.
@@ -281,6 +376,13 @@ export const health = query({
             (a.verdict === "critical" ? -1 : 1) -
             (b.verdict === "critical" ? -1 : 1),
         ),
+      activation: {
+        signedUp: live.length,
+        connected: live.filter((c) => connectedIds.has(String(c._id))).length,
+        placed: hoursToFirst.length,
+        medianHours,
+        stalled: stalled.slice(0, 10),
+      },
       traceability: {
         posts: trace.posts,
         traceable: trace.traceable,

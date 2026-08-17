@@ -483,6 +483,25 @@ function FleetHealth({
           </p>
         )}
 
+      {/* ⭐ §16.9.2's activation funnel. Every other line on this screen
+          describes customers who are already working; this is the only one
+          that describes the ones who never started — and the spec calls
+          time-to-first-placement the headline metric. */}
+      {fleet.activation && (
+        <p className="mt-3 text-xs text-paper-faint">
+          {fleet.activation.signedUp} signed up · {fleet.activation.connected}{" "}
+          connected · {fleet.activation.placed} placed
+          {fleet.activation.medianHours !== null
+            ? ` · ${Math.round(fleet.activation.medianHours)}h to first post`
+            : /* ⚠️ Never "0h". A zero would read as instant — the opposite
+                 of the truth, which is that nobody has posted at all. */
+              " · nobody's posted yet"}
+          {fleet.activation.stalled.length > 0
+            ? ` · ⚠️ ${fleet.activation.stalled.length} connected and stuck (longest ${fleet.activation.stalled[0].daysSinceSignup}d)`
+            : ""}
+        </p>
+      )}
+
       <p className="mt-3 text-xs text-paper-faint">
         {fleet.traceability
           ? `${fleet.traceability.traceable} of ${fleet.traceability.posts} posts trace to an idea`
