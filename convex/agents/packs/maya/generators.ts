@@ -932,8 +932,28 @@ function renderCronJobs(input: MayaWorkspaceInput): string {
       // 07:15, not 07:00 — a brief that fires with the sweep reports on
       // nothing. Ordering is the whole point of having both.
       expr: "15 7 * * *",
+      /**
+       * ⭐ SHE HAS TO LOOK AT HER OWN WORK BEFORE SHE TALKS ABOUT IT.
+       *
+       * ⚠️ The previous version asked her to mention yesterday's numbers "if
+       * they're worth mentioning" — while giving her no instruction to FETCH
+       * them. `history` carries the timeline, the cadence and the rung, and the
+       * weekly review calls it explicitly; the morning brief never did. So she
+       * wrote the brief from whatever was in context, which is why it read the
+       * same most days.
+       *
+       * The founder's words: *"I just wanna make sure that she's acting like a
+       * real human being would."* A person who runs your social account opens
+       * the morning by looking at what they shipped and how it did — not by
+       * restating the plan.
+       *
+       * Mirrors the weekly review's proven shape: name the tool, say FIRST,
+       * and say what to do with what comes back. Prompt-primary per the
+       * standing rule — the tool response carries the choreography, this says
+       * when to reach for it.
+       */
       message:
-        "Morning brief. What's planned today and why — grounded in rows, not vibes. If yesterday's placements have numbers worth mentioning, mention them. If there's genuinely nothing new to say, say something short rather than padding it.",
+        "Morning brief. Call `history` FIRST — it carries what actually went live, the numbers those posts have now, and which rung is working. Read it before you write a word. Then: what did yesterday's post actually do, is that better or worse than the ones before it, and what does that change about today? A number that moved is worth more than a plan restated. If today's angle is the same one you raised yesterday, say why it's still the right call — or pick a different one. What's planned today and why, grounded in rows, not vibes. If it was a bad day or a quiet one, lead with that and its cause; padding it with drafts written or things researched is the one thing that reads as fake.",
     },
     /**
      * The placement. Sprint 3's exit criterion is a placement a day for seven
@@ -1301,6 +1321,48 @@ function renderOpenClawConfig(tz: string): string {
            */
         ],
       },
+
+      /**
+       * ⛔ THE NATIVE `message` TOOL IS DENIED — and this is the single most
+       * damaging bug found in production to date.
+       *
+       * OpenClaw ships a built-in `message` tool. It sits next to `update` in
+       * her tool list, it is named like the obvious way to speak to someone,
+       * and **it cannot reach this founder** — our Telegram is routed by Convex
+       * (`maya/telegram.ts` → `api.telegram.org`), not by the machine's own
+       * channels. `plugins.allow` never covered it, because it is a built-in
+       * rather than a plugin.
+       *
+       * She reached for it constantly, and every attempt died. Measured on the
+       * live machine 2026-08-16/17:
+       *
+       *   channel=heartbeat → Unknown channel: heartbeat
+       *   channel=telegram  → unsupported channel: telegram
+       *   channel=direct    → Unknown channel: direct
+       *   channel=signal    → Unknown target "founder" for Signal
+       *   channel=signal    → Signal API not reachable at 127.0.0.1:8080
+       *   channel=telegram target=castrojoshua805@gmail.com → needs a chatId
+       *
+       * Six shapes, one after another, carrying real work: *"I'm waiting on
+       * approval for two…"* and *"I have 4 drafts waiting for your approval."*
+       * The founder never received a word of it.
+       *
+       * ⚠️ **The damage is not one missing message — it is a stalled loop.**
+       * She cannot chase an approval, so drafts sit undecided (26 of 34 live).
+       * An idea only leaves `status: "bank"` when a post publishes, so
+       * `nextIdea` returns the SAME top-scored idea the next morning, and the
+       * next. The founder's report — *"every morning her ideas seem the
+       * same"* — is this, exactly, and it is deterministic rather than a model
+       * quality problem.
+       *
+       * `deny` wins over profile and allow, is case-insensitive, and applies
+       * even with the sandbox off. `group:messaging` contains exactly this one
+       * tool, so nothing else is caught.
+       *
+       * What remains is the correct path, and all of it is server-enforced:
+       * `update` to speak first, `ask_founder` to ask, `reply` to answer.
+       */
+      tools: { deny: ["message"] },
 
       // An allow-list rather than a default-open posture: the machine should
       // not be able to load a plugin nobody put there.

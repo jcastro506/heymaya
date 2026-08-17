@@ -305,8 +305,38 @@ export const nextIdea = internalQuery({
       .collect()) as Doc<"placements">[];
     const { rung } = diagnoseFrom(placements, now, 7);
 
+    /**
+     * ⭐ AN IDEA ALREADY WAITING ON THE FOUNDER IS NOT A NEW IDEA.
+     *
+     * ⚠️ The measured bug behind *"every morning her ideas for a post seem the
+     * same"* — and it is arithmetic, not model drift.
+     *
+     * An idea leaves `status: "bank"` only when a post PUBLISHES (`markUsed`,
+     * called from the draft's publish path). So a draft that is written and
+     * never approved leaves its idea banked at its original score — and this
+     * query returns the single highest-scored banked idea. The same one.
+     * Tomorrow, and the day after.
+     *
+     * Live when found: 26 of 34 drafts undecided, 182 ideas banked against 11
+     * used, and she had no way to chase an approval because the tool she was
+     * reaching for could not reach the founder at all.
+     *
+     * ⚠️ Deliberately NOT `status: "drafted"`. An unapproved draft expires
+     * (`expiresAt`), and when it does the idea genuinely is available again —
+     * a third status would need a sweep to clear it, which is one more thing
+     * that can quietly stop running. Reading the drafts is the fact itself.
+     */
+    const held = new Set<string>(
+      ((await ctx.db
+        .query("drafts")
+        .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+        .collect()) as Doc<"drafts">[])
+        .filter((d) => d.outcome === "pending" && d.expiresAt > now && d.ideaId)
+        .map((d) => String(d.ideaId)),
+    );
+
     const live = rows
-      .filter((r) => r.status === "bank")
+      .filter((r) => r.status === "bank" && !held.has(String(r._id)))
       .map((r) => {
         let evidence: Evidence = { quote: "", sourceUrls: [] };
         try {

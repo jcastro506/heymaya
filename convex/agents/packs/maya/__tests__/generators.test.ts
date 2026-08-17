@@ -633,3 +633,41 @@ describe("rules they have given me", () => {
     expect(soul).not.toMatch(/Rules they have given me/);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+
+describe("SHE CANNOT REACH FOR A TOOL THAT CANNOT REACH THE FOUNDER", () => {
+  const config = JSON.parse(
+    buildMayaWorkspace(INPUT).files.get(OPENCLAW_CONFIG_PATH)!
+  );
+
+  /**
+   * ⭐ The most damaging production bug found to date, pinned so it cannot
+   * come back the next time this config is edited.
+   *
+   * OpenClaw's built-in `message` tool sits next to `update` in her tool list
+   * and cannot reach this founder — Telegram is routed by Convex, not by the
+   * machine's channels. `plugins.allow` never covered it, because it is a
+   * built-in rather than a plugin.
+   *
+   * ⚠️ Measured live 2026-08-16/17: six consecutive failures across
+   * `heartbeat`, `telegram`, `direct` and `signal`, carrying "I have 4 drafts
+   * waiting for your approval". None of it arrived. The founder read the
+   * silence as her doing nothing.
+   */
+  it("⭐ denies the native message tool", () => {
+    expect(config.tools.deny).toContain("message");
+  });
+
+  it("⚠️ still lets her speak through the server-enforced path", () => {
+    /**
+     * The denial must not take the real paths with it. `update`, `ask_founder`
+     * and `reply` are `maya-tools` tools, so they survive a built-in denial —
+     * this asserts the plugin is still allowed, because denying messaging and
+     * dropping the plugin would leave her mute in a way that looks identical
+     * from the founder's side.
+     */
+    expect(config.plugins.allow).toContain("maya-tools");
+    expect(config.tools.deny).not.toContain("group:plugins");
+  });
+});

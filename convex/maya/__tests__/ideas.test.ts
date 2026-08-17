@@ -337,6 +337,81 @@ describe("PICKING TODAY'S IDEA", () => {
     ).toBeNull();
   });
 
+  /**
+   * ⭐ THE REPETITION BUG, pinned.
+   *
+   * ⚠️ Reported by the founder as *"every morning, her ideas for a post seem
+   * the same"* — and it was arithmetic, not the model. An idea leaves the bank
+   * only when a post PUBLISHES, so a draft written and never approved left its
+   * idea banked at its top score, and this query returns the top-scored banked
+   * idea. Live: 26 of 34 drafts undecided, 182 banked against 11 used.
+   */
+  it("⭐ does not re-offer an idea that already has a draft waiting on the founder", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t);
+    await t.mutation(internal.maya.ideas.bankIdeas, {
+      customerId,
+      ideasJson: JSON.stringify([idea("the only angle in the bank right now")]),
+      now: NOW,
+    });
+
+    const first = await t.query(internal.maya.ideas.nextIdea, { customerId, now: NOW });
+    expect(first).not.toBeNull();
+
+    await t.run(async (ctx) => {
+      await ctx.db.insert("drafts", {
+        customerId,
+        ideaId: first!.ideaId,
+        channel: "x",
+        kind: "post",
+        snapshotText: "written, and waiting on a yes",
+        outcome: "pending",
+        proposedAt: NOW,
+        expiresAt: NOW + 60_000,
+      } as never);
+    });
+
+    // Not a second copy of the same idea — nothing, which is the honest answer
+    // when the only banked angle is already sitting in front of the founder.
+    expect(
+      await t.query(internal.maya.ideas.nextIdea, { customerId, now: NOW })
+    ).toBeNull();
+  });
+
+  it("⚠️ offers it again once the unapproved draft has expired", async () => {
+    /**
+     * The other direction, and why this reads the drafts rather than adding a
+     * third status. An expired draft is a decision that never came — the idea
+     * genuinely is available again, and a status field would need a sweep to
+     * clear it. One more thing that can quietly stop running.
+     */
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t);
+    await t.mutation(internal.maya.ideas.bankIdeas, {
+      customerId,
+      ideasJson: JSON.stringify([idea("the only angle in the bank right now")]),
+      now: NOW,
+    });
+    const first = await t.query(internal.maya.ideas.nextIdea, { customerId, now: NOW });
+
+    await t.run(async (ctx) => {
+      await ctx.db.insert("drafts", {
+        customerId,
+        ideaId: first!.ideaId,
+        channel: "x",
+        kind: "post",
+        snapshotText: "written, never answered",
+        outcome: "pending",
+        proposedAt: NOW - 60_000,
+        expiresAt: NOW - 1,
+      } as never);
+    });
+
+    expect(
+      (await t.query(internal.maya.ideas.nextIdea, { customerId, now: NOW }))?.ideaId
+    ).toBe(first!.ideaId);
+  });
+
   it("the evidence comes back with it — a draft can always cite", async () => {
     const t = convexTest(schema, modules);
     const customerId = await seed(t);
