@@ -30,7 +30,7 @@ const DEMO = readFileSync(
 describe("the landing page demonstrates rather than claims", () => {
   it("⭐ renders the live URL read", () => {
     expect(LANDING).toContain("DemoRead");
-    expect(LANDING).toContain("<TryIt />");
+    expect(LANDING).toContain("<LearnsBusiness />");
   });
 
   it("⭐ puts it early — after the proof, before the explanation", () => {
@@ -46,13 +46,20 @@ describe("the landing page demonstrates rather than claims", () => {
      * What must stay true is that it is EARLY — before `SheWatches` explains
      * anything. A demo below the explanation is a demo nobody reaches.
      */
+    /**
+     * ⚠️ It moved again on the twelve-capability rebuild, and further forward:
+     * the live read is now the FIRST thing after the hero, opening act one.
+     * §19's "she does the homework" is the argument, and the read is the
+     * cheapest possible proof of it — a visitor sees her be right about their
+     * own company before she has claimed anything.
+     */
     const hero = LANDING.indexOf("<Hero />");
-    const work = LANDING.indexOf("<Work />");
-    const demo = LANDING.indexOf("<TryIt />");
-    const watches = LANDING.indexOf("<SheWatches />");
-    expect(work).toBeGreaterThan(hero);
-    expect(demo).toBeGreaterThan(work);
-    expect(demo).toBeLessThan(watches);
+    const demo = LANDING.indexOf("<LearnsBusiness />");
+    const market = LANDING.indexOf("<WatchesMarket />");
+    const work = LANDING.indexOf("<TheWork />");
+    expect(demo).toBeGreaterThan(hero);
+    expect(demo).toBeLessThan(market);
+    expect(demo).toBeLessThan(work);
   });
 
   it("⚠️ promises no signup, because the exit criterion says without one", () => {
