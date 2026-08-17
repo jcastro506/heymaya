@@ -30,6 +30,30 @@
 export const RUNGS = ["static", "carousel", "avatar", "ad_clone"] as const;
 export type Rung = (typeof RUNGS)[number];
 
+/**
+ * ⭐ THE HIGHEST RUNG ANYTHING IN THIS CODEBASE CAN ACTUALLY BUILD.
+ *
+ * ⚠️ Not a tier, not a budget, not a preference — a statement about what code
+ * exists. `avatar` and `ad_clone` are video rungs, and **`convex/maya` has no
+ * video path at all**: no `make_video`, no `enqueue_render`, no caller for
+ * `videoSynthWorker`, and no Creatify call. Her only media tool is
+ * `make_carousel`. The video implementation lives in `gtmMaya/`, the frozen
+ * product, and was never carried across.
+ *
+ * ⚠️ The bug this closes is the opposite of the obvious one. The live customer
+ * is on `mvp`, which grants `videosPerMonth: 4`, so `tierMaxRung` computed to
+ * `avatar` and the gate said **yes** to a rung nothing can produce. A gate that
+ * authorises impossible work is worse than one that blocks it: the founder is
+ * told a video is coming, and §2.7 is broken by a promise rather than a
+ * sentence.
+ *
+ * Deliberately a named constant and not a removed rung. The ladder is the
+ * product's shape and `videosPerMonth: 4` is a real commercial promise — both
+ * stay, and this is the one line that flips when the video path lands and its
+ * commercial terms are settled (CLAUDE.md operator blocker 1).
+ */
+export const MAX_BUILDABLE_RUNG: Rung = "carousel";
+
 /** §7.5.7 check 7 — render time against post time. */
 export const DEADLINE_RATIO = 10;
 
@@ -94,6 +118,17 @@ function lower(rung: Rung): Rung | null {
 
 function capTo(rung: Rung, max: Rung): Rung {
   return RUNGS.indexOf(rung) > RUNGS.indexOf(max) ? max : rung;
+}
+
+/**
+ * Cap a tier ceiling to what the pipeline can actually produce.
+ *
+ * Exported so a caller computing `tierMaxRung` from a plan cannot forget it —
+ * `carousel.ts` computed `avatar` from `videosPerMonth: 4` and handed the gate
+ * a rung nothing implements.
+ */
+export function capToBuildable(rung: Rung): Rung {
+  return capTo(rung, MAX_BUILDABLE_RUNG);
 }
 
 /**

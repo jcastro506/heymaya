@@ -43,7 +43,7 @@ import type { ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { renderSlide, type SlideContent, type SlideLayout } from "./slides";
-import { runGate } from "./preSpendGate";
+import { runGate, capToBuildable } from "./preSpendGate";
 import { pickCard } from "./formats";
 import type { BrandKit } from "./brandKit";
 
@@ -248,9 +248,19 @@ export const makeCarousel = internalAction({
       // The fleet pool is the same ceiling at this tier; a customer-level
       // throttle already implies it.
       poolAboveReserve: spend.state !== "throttled",
-      // ⚠️ `videosPerMonth: 0` is a real tier, not a broken one. A plan with no
-      // video allowance still gets carousels.
-      tierMaxRung: plan.videosPerMonth > 0 ? "avatar" : "carousel",
+      /**
+       * ⚠️ `videosPerMonth: 0` is a real tier, not a broken one. A plan with no
+       * video allowance still gets carousels.
+       *
+       * ⭐ Capped by what can actually be BUILT, not only by what was bought.
+       * `mvp` grants 4 videos a month, so this computed to `avatar` — a video
+       * rung with no implementation anywhere in `convex/maya`. The gate said
+       * yes to work nothing could do, which turns a budget into a promise the
+       * founder never gets. See `MAX_BUILDABLE_RUNG`.
+       */
+      tierMaxRung: capToBuildable(
+        plan.videosPerMonth > 0 ? "avatar" : "carousel",
+      ),
       assetsNamed: 1,
       assetsResolved: screenshots.length > 0 ? 1 : 0,
     });

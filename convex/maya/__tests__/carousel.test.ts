@@ -169,3 +169,42 @@ describe("describeTruth", () => {
     expect(text).toBe("Product: Thing");
   });
 });
+
+/* -------------------------------------------------------------------------- */
+
+describe("the gate cannot authorise work nothing can build", () => {
+  /**
+   * ⭐ The live customer is on `mvp`, which grants `videosPerMonth: 4`. That
+   * made `tierMaxRung` compute to `avatar` — and `convex/maya` has NO video
+   * path: no `make_video`, no `enqueue_render`, no Creatify call. Her only
+   * media tool is `make_carousel`.
+   *
+   * ⚠️ A gate that says yes to impossible work is worse than one that says no.
+   * The founder gets told a video is coming, and §2.7 is broken by a promise
+   * instead of a sentence.
+   */
+  it("⭐ caps a paid video allowance to what the pipeline can produce", async () => {
+    const { capToBuildable } = await import("../preSpendGate");
+    expect(capToBuildable("avatar")).toBe("carousel");
+    expect(capToBuildable("ad_clone")).toBe("carousel");
+  });
+
+  it("leaves a rung that IS buildable alone", async () => {
+    const { capToBuildable } = await import("../preSpendGate");
+    expect(capToBuildable("carousel")).toBe("carousel");
+    // ⚠️ Never promotes. A plan with no video allowance still gets carousels,
+    // but a static stays static.
+    expect(capToBuildable("static")).toBe("static");
+  });
+
+  it("⚠️ the ladder itself is unchanged — this is a build limit, not a redesign", async () => {
+    /**
+     * `videosPerMonth: 4` is a real commercial promise and the video rungs are
+     * the product's shape. Both stay; one constant flips when the video path
+     * lands. Deleting the rungs would make the eventual restore a redesign.
+     */
+    const { RUNGS } = await import("../preSpendGate");
+    expect(RUNGS).toContain("avatar");
+    expect(RUNGS).toContain("ad_clone");
+  });
+});
