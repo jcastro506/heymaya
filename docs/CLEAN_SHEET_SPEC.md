@@ -4743,7 +4743,7 @@ A sprint is not complete until **all seven** hold:
 >
 > **The blast radius is now much smaller than it was**, because everything that *only* read those tables has already been removed.
 
-### 18.0.6 STATUS — 2026-08-01
+### 18.0.6 STATUS — 2026-08-17 *(audited against the live deploy, not the repo)*
 
 Honest per-sprint state. The pattern to notice: **the deterministic half of
 almost every sprint is built and the agent half of none of them is.** That
@@ -4763,12 +4763,12 @@ new until Sprint 3's gate holds.
 | **2 Spine** | ✅ **exit criterion MET** — asked in a fresh turn straight after a MACHINE RECREATE, she quoted two live X URLs from `placements`. That is the criterion verbatim: *you can text her and she answers from rows, across a redeploy* | data model · job queue · planFeatures · message log · agentVersion routing · **the watchers layer (Convex crons)** · Telegram transport · spend ceiling · the archive (§16.8) | persistent session + volume · runtime shape — **both need a live machine** |
 | **2.5 Luna** | ✅ shipped | main brain + judges on gpt-5.6-luna | the week-long watch hasn't run |
 | **2.9 Harness correction** | 🟢 **code complete** | always-on · heartbeat + cron store · memorySearch + temporal decay + MMR · dreaming · memory-wiki · active-memory · `MEMORY.md` seed-not-clobber · the boot script that actually installs the plugin · `scheduler.ts` shrunk to delivery + publish · anti-drift + handler-coverage tests · daily memory checkpoint | **only the exit criteria** — every one needs a deployed machine |
-| **3 X — the gamble** | 🟡 ~80% | ⭐ **the chain runs end to end, live** — scroll → idea → draft → safety critic → approval → publish → placement → metrics. Two bugs were holding it: the safety critic had NO CALLER, and the prompt still demanded a critique subagent that had been deleted, so the 11:00 job drafted and held every day. `cadence.ts` measures the run | ⭐ **`cadence.ts` — the streak instrument the exit criterion needs** · **the iron rule** · preflight (token, 280, duplicate) · **the tool surface** (`publish`/`reply`/`ask_founder`, tenant-safe by shape) · **the three skills + CONVENTIONS** · **the `maya-tools` plugin** | ⚠️ **brief + recap were counted as done and are not** — they were Convex crons feeding a `wake_agent` job with no handler · rate limits · **the 7-day exit** |
+| **3 X — the gamble** | 🟡 ~80% · ⛔ **exit criterion STILL 2 of 7 on 2026-08-17, unmoved in twelve days** (§18.0.7) | ⭐ **the chain runs end to end, live** — scroll → idea → draft → safety critic → approval → publish → placement → metrics. Two bugs were holding it: the safety critic had NO CALLER, and the prompt still demanded a critique subagent that had been deleted, so the 11:00 job drafted and held every day. `cadence.ts` measures the run | ⭐ **`cadence.ts` — the streak instrument the exit criterion needs** · **the iron rule** · preflight (token, 280, duplicate) · **the tool surface** (`publish`/`reply`/`ask_founder`, tenant-safe by shape) · **the three skills + CONVENTIONS** · **the `maya-tools` plugin** | ⚠️ **brief + recap were counted as done and are not** — they were Convex crons feeding a `wake_agent` job with no handler · rate limits · **the 7-day exit** |
 | **4 Brand** | 🟡 ~60% | media library + the asset ask (live: she asked for a screen recording unprompted, naming §7's no-fabricated-UI rule) · inbound Telegram files · ⭐ the plain-language guard — **8 of 39 real messages were leaking** (`"No response from OpenClaw."` ×4, a raw tool envelope, a draft id) | buyer map · voice-from-edits · asset classifier · **the §6.4.6 spike, run** | learn-business/voice/brand · brand kit · media library |
 | **5 Perception live** | 🟡 ~55% | scroll across **4 channels** (X was scrollable all along — its wrapper's only callers were in v1) · idea bank · complaint→content · quality gates · **the inbox** (`reply` had refused without an `inReplyTo` since Sprint 3 and nothing could produce one) · ⭐ **metrics read-back on every channel** | complaint→content · quality gates | the six sweeps · Screen model · idea bank · plan-day |
 | **6 Memory + liveness** | 🟡 ~65% | directive ledger · three commands · **liveness contract + sweep + fleet correlation** | directive compiler → server gates · balance circuit breakers |
 | **5.5 Zernio, every channel** | 🟡 ~50% | ⭐ **all four channels published live through our own pipeline** · capability grid probed, not doc-read · X analytics/inbox priced and deliberately left OFF (33× twitterapi.io) · `validatePost` preflight | the write cells beyond `post` · smoke coverage per verified cell |
-| **7–12** | 🔴 — | ⭐ §14.2's **diagnostic ladder is built** (Sprint 8's spine) — computed from rows, live verdict `L1` on the real account | ⚠️ **§14.2.2 — the loop is open**: `ideas.ts`/`drafts.ts` never read performance, so she diagnoses on Sunday and Monday is unchanged. Sprint 7's media *generation* stays blocked on Creatify |
+| **7–12** | 🔴 — | ⭐ §14.2's **diagnostic ladder is built** (Sprint 8's spine) — computed from rows, live verdict `L1` on the real account · Sprint 7's carousel, format library, crosspost and hashtag mining shipped · ⭐ **the watch tier is live and verified** (§18.0.7) | ⚠️ **§14.2.2 — the loop is now HALF closed** (§18.0.7): `nextIdea` no longer re-offers a held idea and the morning brief reads `history` first, but performance still does not weight the bank. **Sprint 9 is unstarted — there is no video path in `convex/maya` at all**, so Creatify is blocked *behind* the pipeline rather than blocking it |
 
 **Three exit criteria are the real gates, and all three need a running agent:**
 
@@ -4803,6 +4803,114 @@ green.*
 **Operator-blocked, precisely:** Creatify and R2 keys (two vendors unverifiable)
 · one throwaway social account (tier-3 smoke + the 4 Zernio write wrappers) ·
 one deployed machine (persistent session, cold-start latency, redeploy tests).
+
+### 18.0.7 ⭐ The live audit — 2026-08-17
+
+**Everything below was read off the running agent and the production tables, not
+inferred from code.** The previous status was twelve days stale and wrong in the
+direction that matters: it read as progress.
+
+#### The gate has not moved in twelve days
+
+`cadence.ts`, the instrument §18.1 item 1 is measured by:
+
+```
+"detail": "2 of 7 days, today still open"
+"exitCriterionMet": false
+"streak": 2 · "longestStreak": 4 · "postDays": 2
+```
+
+**It said 2 of 7 on 2026-08-05. It says 2 of 7 on 2026-08-17.** Sixteen
+placements exist, fourteen live — but four dark days in the last thirteen, and
+Sprint 3 asks for seven consecutive.
+
+#### Why it did not move — three crons were failing, silently to the founder
+
+Read from `openclaw cron list` on the machine:
+
+| job | status | diagnostic |
+|---|---|---|
+| `0009_checkpoint` | error | ⚠️ Agent couldn't generate a response |
+| `0010_morning_brief` | error | ⚠️ Agent couldn't generate a response |
+| `0011_daily_placement` | error | ⚠️ ✉️ Message failed |
+
+⭐ **The job that makes the placement was in `error`.** The plan's central
+criterion was being measured against a job that was not completing.
+
+Two distinct causes, both now fixed:
+
+1. **`model: { primary }` with no fallback** — the logs said `next=none`. A
+   `thinking: "medium"` turn that returns reasoning and no visible answer dies
+   with nothing behind it. The founder's morning brief did not arrive late or
+   thin; it did not arrive. Fixed by adding an ordered `fallbacks` on a model
+   verified `reasoning: false` against the live catalogue.
+2. **OpenClaw's built-in `message` tool** — six consecutive failures per turn
+   across `heartbeat`/`telegram`/`direct`/`signal`, carrying real work
+   (*"I have 4 drafts waiting for your approval"*). `plugins.allow` never
+   covered it because it is a built-in, not a plugin. Now `tools.deny`.
+
+#### §14.2.2 — the open loop, measured
+
+The previous status named it: *"`ideas.ts`/`drafts.ts` never read performance,
+so she diagnoses on Sunday and Monday is unchanged."* The live shape of it:
+
+| | |
+|---|---|
+| ideas | **182 banked · 11 used** |
+| drafts | **34, of which 26 undecided** |
+| duplicate angles | **1 in 201** — the bank is NOT repetitive |
+
+⚠️ **The repetition the founder reported was arithmetic, not model drift.** An
+idea leaves `bank` only when a post publishes, and `nextIdea` returns the single
+highest-scored banked idea — so an unapproved draft left its idea winning again
+the next morning, deterministically. Fixed.
+
+The morning brief also asked her to mention yesterday's numbers *"if worth
+mentioning"* while never telling her to fetch them. It now calls `history`
+first, the same shape the weekly review already proved.
+
+#### Perception works. Nothing downstream could see it.
+
+The watch tier is **real and verified live** — `watchTopFormats` downloads the
+mp4 and sends bytes to Gemini. Seven of twelve cards carry timestamped beats,
+overlay timing and measured cut rhythm (`cutsPerSecond` spread 0–0.4, not a
+stuck default).
+
+⚠️ And `formatCardsFor` had **one reader** — `carousel.ts`, which requires
+`channel: "tiktok"` and media assets. With an empty asset library it never ran,
+and the word "format" appeared **zero times** in her tool surface. The most
+expensive thing she does fed nothing. Now rides on `scroll`.
+
+#### The three quiet channels — the blocker is not what it looks like
+
+All four channels are **connected and healthy** (`x`, `instagram`, `tiktok`,
+`youtube`). The signal is `mediaAssets`: **zero rows**. Three of the four cannot
+take a text-only post, so X is the only channel she can act on unaided — 14 of
+16 placements.
+
+⭐ **There is no video path in `convex/maya` at all**: no `make_video`, no
+`enqueue_render`, no `videoSynthWorker` caller, no Creatify call. That is Sprint
+9 work and correctly unbuilt. ⚠️ But the live plan `mvp` grants
+`videosPerMonth: 4`, so `tierMaxRung` computed to `avatar` and **the pre-spend
+gate authorised a rung nothing can build**. A gate that says yes to impossible
+work turns a budget into a promise the founder never receives. Capped by
+`MAX_BUILDABLE_RUNG`; one constant flips when Sprint 9 lands.
+
+#### Two things that are structural, not bugs
+
+- ⚠️ **All four channels are `postingMode: "show_me_first"`.** Nothing
+  auto-publishes, which is why 26 drafts sit undecided and why days go dark. A
+  placement a day is not reachable while every placement needs an answer. **This
+  is a product decision, and it blocks Sprint 3's exit criterion.**
+- ⚠️ **Every cron runs in a fresh isolated session** (`agent:main:cron:<job>:run:<uuid>`),
+  so the Maya who writes the morning brief is not the Maya who answers the reply
+  to it. The only bridges are `MEMORY.md` and the checkpoint — **and the
+  checkpoint was one of the failing jobs.** Reported by the founder as her not
+  knowing what post he was referring to.
+
+**Sequencing verdict.** §18.0.6's rule stands and now has evidence: nothing past
+Sprint 3 ships until the gate holds. The five fixes above are Sprint 3 work, not
+a detour. The next measurement is seven consecutive days of `cadence.ts`.
 
 ### Sprint 0 — Reclaim · *no features, nothing user-visible*
 
