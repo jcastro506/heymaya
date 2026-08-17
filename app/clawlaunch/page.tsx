@@ -723,6 +723,25 @@ function PlatformVideo({
 }
 
 
+/**
+ * ⭐ Scroll reveal, as PROGRESSIVE ENHANCEMENT — never as a precondition.
+ *
+ * ⚠️ The previous version hid every block at `opacity: 0` in the base CSS and
+ * relied on an IntersectionObserver to reveal it. That means any failure of
+ * that observer — slow hydration, a blocked script, a browser quirk, a
+ * viewport the thresholds don't suit — leaves the entire page below the hero
+ * INVISIBLE. Reported as "the landing page is way too short": it wasn't short,
+ * eleven blocks were transparent.
+ *
+ * A landing page must never depend on JavaScript to be readable. So:
+ *
+ * 1. Content renders VISIBLE. The hidden state is applied by a flag this
+ *    component sets on the document after it mounts, so a page whose JS never
+ *    runs simply shows everything.
+ * 2. A failsafe reveals everything after 2.5s regardless of the observer, so
+ *    even an armed-but-broken observer cannot leave the page blank.
+ * 3. `prefers-reduced-motion` skips the whole mechanism.
+ */
 function RevealOnView({
   children,
   delay = 0,
@@ -730,14 +749,24 @@ function RevealOnView({
 }: {
   children: React.ReactNode;
   delay?: number;
-  /** Extra classes (e.g. grid col-span) so the reveal wrapper can BE the item. */
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
+
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+
+    // Arming happens here, so pre-JS paint and no-JS both show the content.
+    document.documentElement.dataset.reveal = "on";
+
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) {
+      setVisible(true);
+      return;
+    }
+
     const io = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -747,15 +776,25 @@ function RevealOnView({
           }
         }
       },
-      // Fire early and easy: tall artifact blocks (quote grids, galleries)
-      // never satisfy a high threshold on short viewports and sat invisible —
-      // a scroller met blank paper (live finding, 2026-07-16). 8% visible with
-      // a light bottom margin reveals just before the eye arrives.
-      { threshold: 0.08, rootMargin: "0px 0px -40px 0px" }
+      // Fire early: a tall block never satisfies a high threshold on a short
+      // viewport and sits invisible while the reader is looking straight at it.
+      { threshold: 0.01, rootMargin: "0px 0px -10% 0px" },
     );
     io.observe(el);
-    return () => io.disconnect();
+
+    /**
+     * ⚠️ The failsafe. If the observer never fires — and there are more reasons
+     * for that than are worth enumerating — the block reveals itself anyway.
+     * A late animation is a cosmetic bug; a permanently blank section is not.
+     */
+    const failsafe = window.setTimeout(() => setVisible(true), 2500);
+
+    return () => {
+      io.disconnect();
+      window.clearTimeout(failsafe);
+    };
   }, []);
+
   return (
     <div
       ref={ref}
@@ -774,16 +813,19 @@ function PageStyles() {
       [data-page="clawlaunch-landing"] .font-display {
         font-family: var(--font-instrument-serif), Georgia, serif;
       }
+      /* ⚠️ Visible by default. The hidden state below requires BOTH the
+         JS-set [data-reveal="on"] flag and an explicit not-yet-seen marker, so
+         a page whose script never runs still renders every word. */
       [data-page="clawlaunch-landing"] .reveal-on-view {
-        opacity: 0;
-        transform: translateY(24px);
         transition:
           opacity 0.85s cubic-bezier(0.16, 1, 0.3, 1),
           transform 0.85s cubic-bezier(0.16, 1, 0.3, 1);
       }
-      [data-page="clawlaunch-landing"] .reveal-on-view[data-visible="true"] {
-        opacity: 1;
-        transform: none;
+      [data-reveal="on"]
+        [data-page="clawlaunch-landing"]
+        .reveal-on-view[data-visible="false"] {
+        opacity: 0;
+        transform: translateY(24px);
       }
       @media (prefers-reduced-motion: reduce) {
         [data-page="clawlaunch-landing"] .reveal-on-view {
