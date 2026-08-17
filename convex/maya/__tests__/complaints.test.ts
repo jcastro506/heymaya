@@ -248,3 +248,48 @@ describe("the buyer map accumulates across weeks", () => {
     expect(COMPLAINT_SYSTEM).toMatch(/carry forward/i);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+
+describe("a complaint has to belong to this buyer", () => {
+  /**
+   * ⭐ Measured live 2026-08-17, the first two complaints ever banked:
+   * "It doesn't work for me." and "How do I get an invisible username?" — the
+   * second a question about TikTok itself, mined for a founder selling a
+   * CSV-to-dashboard tool.
+   *
+   * ⚠️ It scored **0.79** against a previous top of 0.175, because
+   * `SOURCE_WEIGHT.complaint` is the ceiling of the scoring function. It would
+   * have won the next morning's post outright. A niche is not a buyer.
+   */
+  it("⭐ the prompt states what the founder sells and who buys it", () => {
+    const out = buildComplaintPrompt("solo founder, saas", [], [], {
+      whatItIs: "turns a CSV into a dashboard in one paste",
+      whoItsFor: "indie founders drowning in spreadsheets",
+    });
+    expect(out).toContain("turns a CSV into a dashboard");
+    expect(out).toContain("indie founders drowning in spreadsheets");
+  });
+
+  it("⚠️ still clusters when no product has been read yet", () => {
+    /**
+     * The degrade-gracefully case. A customer mid-onboarding has no product
+     * truth, and returning nothing would be worse than clustering without the
+     * relevance judgement — §2.10, budgets never booleans.
+     */
+    const out = buildComplaintPrompt("solo founder, saas", [], [], null);
+    expect(out).toContain("NICHE: solo founder, saas");
+    expect(out).not.toContain("THE FOUNDER SELLS");
+  });
+
+  it("⚠️ the relevance rule is judged by the model, not pattern-matched here", () => {
+    /**
+     * The standing rule: no regex enforcement, prompt-primary. There is no
+     * keyword denylist for "username" or "followers" — a list like that fails
+     * on the next phrasing and trains the miner toward whatever it misses.
+     * The instruction asks the model to decide.
+     */
+    expect(COMPLAINT_SYSTEM).toMatch(/would the person who buys this product/i);
+    expect(COMPLAINT_SYSTEM).toMatch(/not evidence about this buyer/i);
+  });
+});

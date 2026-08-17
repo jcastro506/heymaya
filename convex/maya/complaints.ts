@@ -116,6 +116,12 @@ A complaint people have raised for three weeks is stronger evidence than one rai
 
 Ignore: praise, tagging friends, spam, off-topic chatter, and anything about the creator rather than the subject.
 
+⭐ WHOSE COMPLAINT IT HAS TO BE. When you are told what the founder sells and who buys it, every complaint you return must be one THAT BUYER would recognise as their own problem. You are not cataloguing the comment section — you are finding the problems a person who might pay for this product actually has.
+
+So a question about the platform itself, about how to make content, or about someone's follower count is NOT a complaint here, however often it is asked. It is a real thing real people want; it is just not evidence about this buyer. Drop it.
+
+Ask yourself, for each one: would the person who buys this product read this and think "yes, that's me"? If not, it does not go in the list. Returning two complaints that pass this is far better than eight that do not — a wrong complaint becomes a post about the wrong thing, aimed at people who will never buy.
+
 If there is no repeated complaint in here, return an empty array. That is a real answer.`;
 
 export function buildComplaintPrompt(
@@ -136,9 +142,35 @@ export function buildComplaintPrompt(
    * never surfaced. The model reads them as the same sentence because they
    * are.
    */
-  known: ReadonlyArray<Complaint> = []
+  known: ReadonlyArray<Complaint> = [],
+  /**
+   * ⭐ Who the buyer is, so relevance can be JUDGED rather than assumed.
+   *
+   * ⚠️ Without it the model only knows the niche keywords, and a niche is not a
+   * buyer. Measured live 2026-08-17, the first two complaints ever banked were
+   * "It doesn't work for me." and "How do I get an invisible username?" — the
+   * second a question about TikTok, mined for a founder selling a CSV-to-
+   * dashboard tool. Scored 0.79 against a previous top of 0.175, because
+   * `SOURCE_WEIGHT.complaint` is the ceiling, so it would have won the next
+   * morning's post outright.
+   *
+   * Optional, and absent means the relevance instruction simply does not apply
+   * — a customer with no product read yet should still get clustering rather
+   * than nothing.
+   */
+  product?: { whatItIs?: string; whoItsFor?: string } | null
 ): string {
   const lines = [`NICHE: ${niche}`, ""];
+
+  if (product?.whatItIs || product?.whoItsFor) {
+    lines.push("THE FOUNDER SELLS:");
+    if (product.whatItIs) lines.push(`- what it is: ${product.whatItIs}`);
+    if (product.whoItsFor) lines.push(`- who buys it: ${product.whoItsFor}`);
+    lines.push(
+      "Every complaint you return must be one THAT BUYER would call their own problem."
+    );
+    lines.push("");
+  }
 
   if (known.length > 0) {
     lines.push(
@@ -396,6 +428,21 @@ export const mineComplaints = internalAction({
     // What we already knew. Stale entries are dropped BEFORE the model sees
     // them, so a complaint the niche moved on from isn't carried forward
     // forever by its own history.
+    /**
+     * ⭐ Read BEFORE the model call, so relevance is part of the clustering
+     * rather than a filter bolted on afterwards. A complaint dropped here is
+     * never scored, never banked, and never becomes a post about the wrong
+     * thing.
+     *
+     * Failure is not fatal: a customer whose product page has not been read yet
+     * still gets clustering, just without the relevance judgement.
+     */
+    const productForRelevance = await ctx
+      .runQuery(internal.maya.productTruth.forCustomer, {
+        customerId: args.customerId,
+      })
+      .catch(() => null);
+
     const known = (
       await ctx.runQuery(internal.maya.complaints.complaintsFor, {
         customerId: args.customerId,
@@ -417,7 +464,13 @@ export const mineComplaints = internalAction({
           content: buildComplaintPrompt(
             targets.keywords.join(", "),
             prepared,
-            known
+            known,
+            /**
+             * ⭐ Who actually buys this. Without it the model only knows the
+             * niche keywords, and a niche is not a buyer — see the parameter's
+             * own note for the two junk complaints that proved it.
+             */
+            productForRelevance
           ),
         },
       ],

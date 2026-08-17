@@ -25,6 +25,8 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { SWEEPS, WEEKLY_SWEEPS, sweepRefs } from "../convex/maya/watchers";
 
 describe("sweep dispatch covers every scheduled sweep", () => {
@@ -101,5 +103,59 @@ describe("sweep dispatch covers every scheduled sweep", () => {
       "utf8",
     );
     expect(source).not.toMatch(/const weeklyRefs/);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐⭐ THE MOAT HAD NO PRODUCER.
+ *
+ * CLAUDE.md's pitch, verbatim: *"she watches what's actually working in the
+ * niche, MINES WHAT BUYERS ARE COMPLAINING ABOUT, and then writes."*
+ *
+ * ⚠️ `mineComplaints` ran daily and stored what it found. `bankFromComplaints`
+ * turns those into ideas and had **no caller**, so complaints accumulated in a
+ * table and never became a post. Measured live 2026-08-17 across 193 ideas:
+ * `observation` 101, `format_card` 92, **`complaint` 0** — while
+ * `SOURCE_WEIGHT.complaint` is 1.0, the ceiling of the scoring function.
+ */
+describe("the scroll banks complaints as well as observations", () => {
+  it("⭐ scroll calls bankFromComplaints", () => {
+    const src = readFileSync(
+      join(process.cwd(), "convex/maya/hooks.ts"),
+      "utf8",
+    );
+    expect(src).toContain("ideas.bankFromComplaints");
+  });
+
+  it("⚠️ and still banks observations — this is an addition, not a swap", () => {
+    // Both sources or the bank narrows instead of widening. The standing rule
+    // for the daily niche cron is ADD, never replace.
+    const src = readFileSync(
+      join(process.cwd(), "convex/maya/hooks.ts"),
+      "utf8",
+    );
+    expect(src).toContain("ideas.bankFromObservations");
+  });
+
+  it("⚠️ complaint outranks every other source in scoring", async () => {
+    /**
+     * Why the missing wire mattered so much. A complaint is not one input among
+     * several — it is the ceiling, because someone typed it about a real problem
+     * they actually have.
+     */
+    const { scoreIdea } = await import("../convex/maya/ideas");
+    const now = 1_800_000_000_000;
+    const evidence = {
+      quote: "nobody explains what it actually costs",
+      sourceUrls: ["https://example.com/thread"],
+      observedAt: now,
+    };
+    const complaint = scoreIdea({ source: "complaint", evidence }, now).score;
+    const observation = scoreIdea({ source: "observation", evidence }, now).score;
+    const card = scoreIdea({ source: "format_card", evidence }, now).score;
+    expect(complaint).toBeGreaterThan(observation);
+    expect(complaint).toBeGreaterThan(card);
   });
 });

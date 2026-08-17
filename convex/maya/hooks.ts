@@ -761,6 +761,37 @@ export const scrollHttp = httpAction(async (ctx, request) => {
   });
 
   /**
+   * ⭐⭐ AND THE COMPLAINTS — THE MOAT, WHICH HAD NEVER PRODUCED A SINGLE POST.
+   *
+   * CLAUDE.md states the whole pitch in one sentence: *"she watches what's
+   * actually working in the niche, **mines what buyers are complaining about**,
+   * and then writes."* The middle clause was not connected to anything.
+   *
+   * `mineComplaints` runs directly above and stores what it finds.
+   * `bankFromComplaints` turns those into ideas — and had **no caller**, so
+   * complaints were mined daily and left sitting in a table.
+   *
+   * ⚠️ Measured on the live account 2026-08-17. Idea sources across 193 rows:
+   *
+   *   observation   101
+   *   format_card    92
+   *   complaint       0
+   *
+   * Zero. While `SOURCE_WEIGHT.complaint` is **1.0** — the ceiling of the
+   * scoring function, set there because someone typed it about a real problem
+   * they actually have. The single highest-signal input in the product produced
+   * nothing, and the symptom was a founder reporting that her ideas felt the
+   * same every morning: she was choosing from two sources instead of three.
+   *
+   * Deliberately AFTER `bankFromComplaints`'s own input is mined and BEFORE
+   * `nextIdea` reads below, so a complaint found this morning can be posted
+   * this morning rather than tomorrow.
+   */
+  await ctx.runAction(internal.maya.ideas.bankFromComplaints, {
+    customerId: auth.customer._id,
+  });
+
+  /**
    * ⭐ The bank rides along with the scroll.
    *
    * She needs an idea to draft a post, and a tool she has to remember to call
