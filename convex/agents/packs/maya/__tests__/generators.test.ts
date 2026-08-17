@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAIN_MODEL,
   buildMayaWorkspace,
   ALWAYS_LOADED_TARGET_CHARS,
   BOOTSTRAP_MAX_CHARS_PER_FILE,
@@ -669,5 +670,45 @@ describe("SHE CANNOT REACH FOR A TOOL THAT CANNOT REACH THE FOUNDER", () => {
      */
     expect(config.plugins.allow).toContain("maya-tools");
     expect(config.tools.deny).not.toContain("group:plugins");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+
+describe("A DEAD TURN HAS SOMETHING BEHIND IT", () => {
+  const config = JSON.parse(
+    buildMayaWorkspace(INPUT).files.get(OPENCLAW_CONFIG_PATH)!
+  );
+
+  /**
+   * ⭐ Measured live 2026-08-17: `0009_checkpoint` and `0010_morning_brief`
+   * both sat in `error` with *"Agent couldn't generate a response"*. The
+   * founder's morning brief did not arrive at all, and the logs named the
+   * cause in three words — `next=none`.
+   */
+  it("⭐ the main agent has an ordered fallback, not a bare primary", () => {
+    const main = config.agents.list.find((a: { id: string }) => a.id === "main");
+    expect(main.model.primary).toContain(MAIN_MODEL);
+    expect(main.model.fallbacks?.length ?? 0).toBeGreaterThan(0);
+  });
+
+  it("⚠️ agents.defaults carries one too", () => {
+    // `agents.list` overrides the defaults, so both have to be right — a
+    // correct default under a string-form override is the shape that reads as
+    // fixed and isn't.
+    expect(
+      config.agents.defaults.model.fallbacks?.length ?? 0
+    ).toBeGreaterThan(0);
+  });
+
+  it("⚠️ the fallback is a DIFFERENT vendor family from the primary", () => {
+    /**
+     * The load-bearing property. A fallback that fails the same way as the
+     * primary is not a fallback — and the failure being caught here is
+     * reasoning-only turns, which is a model-family behaviour.
+     */
+    const main = config.agents.list.find((a: { id: string }) => a.id === "main");
+    const vendor = (ref: string) => ref.split("/").slice(-2)[0];
+    expect(vendor(main.model.fallbacks[0])).not.toBe(vendor(main.model.primary));
   });
 });

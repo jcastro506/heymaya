@@ -236,6 +236,41 @@ export const ALWAYS_LOADED_TARGET_CHARS = 60_000;
 export const MAIN_MODEL = "openai/gpt-5.6-luna-pro";
 
 /**
+ * ⭐ WHAT CATCHES A DEAD TURN. The main model had NO fallback, and the logs
+ * said so in three words: `next=none`.
+ *
+ * ⚠️ Measured on the live machine 2026-08-17. Three of her six crons were in
+ * `error`, and two carried the same diagnostic:
+ *
+ *   0009_checkpoint    ⚠️ Agent couldn't generate a response
+ *   0010_morning_brief ⚠️ Agent couldn't generate a response
+ *
+ * `gpt-5.6-luna-pro` runs `thinking: "medium"`. A reasoning turn that spends
+ * its budget thinking returns no visible answer, the turn dies, and with
+ * `model: { primary }` alone there is nothing behind it. **The founder's
+ * morning brief failed outright** — not late, not thin, absent. From their
+ * side that is indistinguishable from her having nothing to say, which is
+ * exactly how it was reported: the same mornings, over and over.
+ *
+ * This is the same failure that took `active-memory` down, one layer up. There
+ * the fix was to stop using a reasoning model; here the primary has to stay —
+ * it is her voice — so the fix is to put something behind it.
+ *
+ * ⚠️ `reasoning: false` is the whole selection criterion, and it is checked
+ * rather than assumed. Verified live against `/api/v1/models` 2026-08-17:
+ *
+ *   qwen3-235b-a22b-2507   tools ✓  reasoning ✗   262k   $0.090 / $0.550
+ *   deepseek-v3.2          tools ✓  reasoning ✓   164k   — REJECTED
+ *
+ * A fallback that can fail the same way as the primary is not a fallback, and
+ * deepseek was the obvious cheap pick until the catalog said it reasons too.
+ * The chosen model is the non-thinking sibling of `qwen3-235b-a22b-thinking`,
+ * so it is structurally incapable of the failure it exists to catch — and a
+ * different vendor family from the primary, which is the other half.
+ */
+export const MAIN_FALLBACK_MODEL = "qwen/qwen3-235b-a22b-2507";
+
+/**
  * The critic — a **different family**, at judge-tier price.
  *
  * ## Different family is the hard requirement
@@ -1165,7 +1200,12 @@ function renderOpenClawConfig(tz: string): string {
           typingMode: "instant",
           typingIntervalSeconds: 5,
 
-          model: { primary: openclawModelRef(MAIN_MODEL) },
+          model: {
+            primary: openclawModelRef(MAIN_MODEL),
+            // `fallbacks` (plural, ordered) per config-agents.md — the object
+            // form is what turns `next=none` into something that answers.
+            fallbacks: [openclawModelRef(MAIN_FALLBACK_MODEL)],
+          },
 
           /**
            * Memory search — absent entirely from the first version of this
@@ -1282,7 +1322,16 @@ function renderOpenClawConfig(tz: string): string {
             default: true,
             name: "Maya",
             workspace: WORKSPACE_DIR,
-            model: openclawModelRef(MAIN_MODEL),
+            /**
+             * ⚠️ The object form here too. `agents.list` OVERRIDES
+             * `agents.defaults`, so leaving the string form would have given
+             * `main` — the only agent that talks to the founder — a primary
+             * with nothing behind it, while the defaults looked correct.
+             */
+            model: {
+              primary: openclawModelRef(MAIN_MODEL),
+              fallbacks: [openclawModelRef(MAIN_FALLBACK_MODEL)],
+            },
             subagents: { allowAgents: [] },
           },
           /**
