@@ -574,6 +574,73 @@ const zernioAnalytics: SmokeCheck = {
   },
 };
 
+/* -------------------------------------------------------------------------- */
+/* Tier 3 — round-trip. Real money, and the only tier that proves a WRITE works */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ THE ONLY CHECK THAT SPENDS. §18.0.5 gives Creatify's tier 3 in six words:
+ * *"one cheap render weekly — not a video."*
+ *
+ * ⚠️ `runTier3` has been on a weekly cron since the suite was built and
+ * `checksForTier(3)` returned an EMPTY ARRAY. A job that fires every Sunday and
+ * tests nothing — and it is the tier that would catch the failure that actually
+ * costs money: credits accepted, job queued, and nothing ever completing.
+ *
+ * Tier 2 proves the shape of a read. Only a write proves the account can still
+ * DO anything, and §18.0.5's whole argument is that the Zernio incident returned
+ * 200s for six days while publishing nothing.
+ *
+ * ## Why a Link and not a render
+ *
+ * A Link costs **1 credit** (§3.1) and exercises the call the render path
+ * depends on absolutely: §7.6.2 says we ALWAYS use `link_with_params` and never
+ * let Creatify scrape, so if this call breaks, every video breaks — and the
+ * storyboard the founder approved would be describing frames the vendor never
+ * received.
+ *
+ * A full render is 5–12 credits, takes minutes, and would prove the same
+ * contract plus an assembly step we do not control. Weekly × 200 customers, the
+ * cheap call is the one that can actually run forever.
+ */
+const creatifyLinkRoundTrip: SmokeCheck = {
+  vendor: "creatify",
+  tier: 3,
+  check: "creatify.links.link_with_params",
+  requiredEnv: ["CREATIFY_API_ID", "CREATIFY_API_KEY"],
+  /** 1 credit at the Pro rate (§2 of the API reference). */
+  estCostUsd: 0.1495,
+  /**
+   * ⚠️ STRICT on `id`, because the id is the entire point — every downstream
+   * call takes it. Loose elsewhere: a Link carries scraped presentation fields
+   * Creatify extends on its own schedule, and pinning those would cry wolf on a
+   * cosmetic addition. §18.0.5's rule is that the suite fails loudly on a
+   * changed field WE READ.
+   */
+  schema: z.looseObject({ id: z.string() }),
+  laxReason:
+    "A Link echoes back scraped metadata (ai_summary, ai_industry, " +
+    "target_audiences) that Creatify extends independently. We consume the id " +
+    "and the images we ourselves supplied; pinning their enrichment fields " +
+    "would fail on a cosmetic change.",
+  run: async () => {
+    const { createLinkWithParams } = await import(
+      "../integrations/creatify/endpoints"
+    );
+    /**
+     * ⚠️ Supplies its own image, deliberately — never a scrape of a real
+     * customer's site. This runs fleet-wide and unattended; pointing it at a
+     * founder's URL would spend their vendor's time on our health check and
+     * make a smoke run indistinguishable from real work in the vendor's logs.
+     */
+    return await createLinkWithParams({
+      title: "smoke",
+      description: "vendor smoke round-trip — not a customer render",
+      image_urls: ["https://placehold.co/1080x1920.png"],
+    });
+  },
+};
+
 export const SMOKE_CHECKS: SmokeCheck[] = [
   zernioPresign,
   zernioValidatePost,
@@ -589,6 +656,7 @@ export const SMOKE_CHECKS: SmokeCheck[] = [
   geminiKeyValid,
   twitterApiIoReachable,
   ...perceptionChecks,
+  creatifyLinkRoundTrip,
 ];
 
 export function checksForTier(tier: 1 | 2 | 3): SmokeCheck[] {
