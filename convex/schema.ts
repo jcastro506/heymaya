@@ -3945,6 +3945,20 @@ export default defineSchema({
     publishedAt: v.number(),
     snapshotText: v.string(),
     mediaAssetIdsJson: v.optional(v.string()),
+    /**
+     * ⭐ Which arm of the live experiment this post belongs to (§15.3).
+     *
+     * ⚠️ Without it an experiment could be DECLARED and never CONCLUDED.
+     * `declare`, `dueForVerdict`, `callVerdict` and `recordVerdict` all existed
+     * and `strategy.ts` read `latestConcluded` — but nothing connected a
+     * placement to an arm, so the verdict had no rows to read and the change
+     * trigger could never fire.
+     *
+     * ⚠️ Deliberately just the ARM, with no experiment id. `liveOn` guarantees
+     * one live experiment per channel, so channel plus the window identifies
+     * it — and a second field would be a second thing that can disagree.
+     */
+    experimentArm: v.optional(v.string()),
     metricsJson: v.optional(v.string()),
     /** Freshness stamp — metrics without one are a number with no date, which
      *  is how dashboards start lying. */

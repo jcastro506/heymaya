@@ -66,7 +66,15 @@ export interface LadderVerdict {
   unmeasured: number;
 }
 
-function metricsOf(p: Doc<"placements">): {
+/**
+ * ⭐ Exported so the experiment verdict reads the SAME numbers the ladder does.
+ *
+ * "Every channel names these differently; sum what's present" is real knowledge
+ * about six vendors, and a second copy of it would eventually disagree with
+ * this one — which would show up as an experiment and a rung telling the
+ * founder two different stories about the same week.
+ */
+export function metricsOf(p: Doc<"placements">): {
   views: number;
   engagements: number;
 } | null {

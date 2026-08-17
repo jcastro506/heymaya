@@ -30,7 +30,15 @@
 
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
+import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
+/**
+ * ⚠️ STATIC, not `await import`. `concludeDue` is a mutation, and a mutation
+ * runs in Convex's sync runtime where a dynamic import throws "dynamic module
+ * import unsupported" on the first REAL call — typecheck cannot see it, and
+ * `tests/noDynamicImportInQueries.test.ts` is what caught it here.
+ */
+import { metricsOf } from "./ladder";
 import {
   MIN_CONVERSIONS,
   summarizeExperiment,
@@ -203,6 +211,54 @@ export const declare = internalMutation({
   },
 });
 
+/**
+ * ⭐ Turn the arm's placements into the numbers a verdict can be called from.
+ *
+ * ⚠️ The declared metric decides what counts as a success, and the two are
+ * genuinely different questions:
+ *
+ * | metric | trial | conversion | the question |
+ * |---|---|---|---|
+ * | `engagements` | a view | an engagement | did it turn reach into interaction? |
+ * | `views` | a post | a post at or above the pooled median | did it travel further? |
+ *
+ * ⚠️ `views` has no natural denominator — a view is the metric, so it cannot
+ * also be the trial without being circular. A median split across BOTH arms is
+ * the honest nonparametric alternative: each post either beat the week's middle
+ * or it didn't, and the comparison stays a rate the shared summariser can read.
+ *
+ * ⚠️ It is deliberately coarse, and §14.3 is why: *"any system claiming to
+ * optimize hooks off 40 data points is fitting noise and will produce confident
+ * nonsense."* `callVerdict` already raises its own floor to `MIN_CONVERSIONS`
+ * and says "inconclusive" below it, which is what protects this from itself.
+ */
+export function armsFromPlacements(
+  experiment: Experiment,
+  placements: ReadonlyArray<{ arm: string; views: number; engagements: number }>
+): Arm[] {
+  const median = (() => {
+    if (experiment.metric !== "views") return 0;
+    const all = placements.map((p) => p.views).sort((a, b) => a - b);
+    return all.length === 0 ? 0 : all[Math.floor(all.length / 2)];
+  })();
+
+  return experiment.arms.map((label) => {
+    const mine = placements.filter((p) => p.arm === label);
+    if (experiment.metric === "engagements") {
+      return {
+        label,
+        trials: mine.reduce((sum, p) => sum + p.views, 0),
+        conversions: mine.reduce((sum, p) => sum + p.engagements, 0),
+      };
+    }
+    return {
+      label,
+      trials: mine.length,
+      conversions: mine.filter((p) => p.views >= median).length,
+    };
+  });
+}
+
 export const recordVerdict = internalMutation({
   args: {
     customerId: v.id("customers"),
@@ -256,5 +312,92 @@ export const latestConcluded = internalQuery({
     const latest = concluded[0];
     if (!latest?.verdict) return null;
     return { name: latest.channel, verdict: latest.verdict.detail };
+  },
+});
+
+/* -------------------------------------------------------------------------- */
+/* Concluding — the step that was missing entirely                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ Call the verdict on every experiment whose window has closed.
+ *
+ * ⚠️ THE MISSING STEP. `declare`, `dueForVerdict`, `callVerdict` and
+ * `recordVerdict` all existed, and `strategy.ts` has read `latestConcluded`
+ * since it was written — with nothing in between. An experiment could be
+ * declared and never concluded, so the change trigger `meetsChangeBar` depends
+ * on could never fire. The strategy review's own comment says exactly that.
+ *
+ * Runs from the weekly strategy sweep, BEFORE the review reads the verdict, so
+ * a window that closed this week is reflected in this week's decision rather
+ * than next week's.
+ */
+export const concludeDue = internalMutation({
+  args: { customerId: v.id("customers"), now: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ concluded: number; kinds: string[] }> => {
+    const now = args.now ?? Date.now();
+    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    if (!customer) return { concluded: 0, kinds: [] };
+
+    const due = dueForVerdict(parseExperiments(customer.experimentsJson), now);
+    if (due.length === 0) return { concluded: 0, kinds: [] };
+
+    const kinds: string[] = [];
+
+    for (const experiment of due) {
+      /**
+       * ⚠️ Scoped by index and by the experiment's OWN window. A placement from
+       * before it started never belonged to an arm, and one after it ended
+       * belongs to whatever came next — counting either would let a verdict
+       * read rows the experiment never covered.
+       */
+      const rows = (await ctx.db
+        .query("placements")
+        .withIndex("by_customer_and_publishedAt", (q) =>
+          q
+            .eq("customerId", args.customerId)
+            .gte("publishedAt", experiment.startedAt)
+            .lte("publishedAt", experiment.endsAt)
+        )
+        .collect()) as Doc<"placements">[];
+
+      const tagged = rows
+        .filter(
+          (p) =>
+            p.channel === experiment.channel &&
+            typeof p.experimentArm === "string" &&
+            experiment.arms.includes(p.experimentArm)
+        )
+        .map((p) => {
+          const m = metricsOf(p);
+          return {
+            arm: p.experimentArm as string,
+            views: m?.views ?? 0,
+            engagements: m?.engagements ?? 0,
+          };
+        });
+
+      const verdict = callVerdict(experiment, armsFromPlacements(experiment, tagged));
+
+      /**
+       * Written through `recordVerdict` rather than patched here, so there is
+       * one writer — and it already refuses to overwrite a verdict that was
+       * called, because the first answer is the one that was true at the
+       * window's close.
+       */
+      const out = await ctx.runMutation(internal.maya.experiments.recordVerdict, {
+        customerId: args.customerId,
+        id: experiment.id,
+        kind: verdict.kind,
+        detail: verdict.detail,
+        now,
+      });
+      if (out.ok) kinds.push(verdict.kind);
+    }
+
+    return { concluded: kinds.length, kinds };
   },
 });

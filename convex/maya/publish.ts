@@ -27,6 +27,11 @@ import {
 } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
+/**
+ * ⚠️ STATIC. `recordPlacement` is a mutation — Convex's sync runtime throws on
+ * a dynamic import at the first real call, and typecheck cannot catch it.
+ */
+import { liveOn, parseExperiments } from "./experiments";
 
 /** Everything the vendor call needs, resolved in one read. */
 export const publishContext = internalQuery({
@@ -130,14 +135,61 @@ export const recordPlacement = internalMutation({
       ? ((await ctx.db.get(args.draftId)) as Doc<"drafts"> | null)
       : null;
 
+    /**
+     * ⭐ Assign the post to an arm, if an experiment is running on this channel.
+     *
+     * ⚠️ Without this an experiment could be DECLARED and never CONCLUDED —
+     * `declare`, `dueForVerdict`, `callVerdict` and `recordVerdict` all existed
+     * and `strategy.ts` read `latestConcluded`, with nothing connecting a
+     * placement to an arm. The verdict had no rows to read, so the change
+     * trigger `meetsChangeBar` depends on could never fire.
+     *
+     * ⚠️ Assigned at PUBLISH, not at draft. A draft can expire unapproved, and
+     * an arm counted against a post that never went out would put the
+     * experiment's denominator out of step with reality.
+     *
+     * Balanced by count rather than at random: at two weeks and a handful of
+     * posts per arm, a coin flip can hand one arm most of the window, and §14.3
+     * already warns this volume is where confident nonsense comes from. Fewest
+     * posts so far goes next.
+     */
+    const publishedAt = args.publishedAt ?? Date.now();
+    let experimentArm: string | undefined;
+    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    if (customer?.experimentsJson) {
+      const live = liveOn(
+        parseExperiments(customer.experimentsJson),
+        args.channel,
+        publishedAt,
+      );
+      if (live && live.arms.length > 0) {
+        const sofar = (await ctx.db
+          .query("placements")
+          .withIndex("by_customer_and_publishedAt", (q) =>
+            q
+              .eq("customerId", args.customerId)
+              .gte("publishedAt", live.startedAt),
+          )
+          .collect()) as Doc<"placements">[];
+        const counts = new Map<string, number>(live.arms.map((a) => [a, 0]));
+        for (const row of sofar) {
+          if (row.channel !== args.channel) continue;
+          const arm = row.experimentArm;
+          if (arm && counts.has(arm)) counts.set(arm, (counts.get(arm) ?? 0) + 1);
+        }
+        experimentArm = [...counts.entries()].sort((a, b) => a[1] - b[1])[0][0];
+      }
+    }
+
     const placementId = await ctx.db.insert("placements", {
       customerId: args.customerId,
       kind: args.kind ?? "post",
       channel: args.channel,
+      experimentArm,
       url: args.url,
       zernioPostId: args.zernioPostId,
       linkStatus: args.url ? "live" : "unknown",
-      publishedAt: args.publishedAt ?? Date.now(),
+      publishedAt,
       snapshotText: args.snapshotText,
       draftId: args.draftId,
       ideaId: draft?.ideaId,

@@ -373,6 +373,20 @@ export const reviewStrategy = internalAction({
      * experiment that concluded in the last week outranks a stuck rung,
      * because a concluded test is evidence someone deliberately gathered.
      */
+    /**
+     * ⭐ Call any verdict that is due BEFORE reading one.
+     *
+     * ⚠️ This was the missing step. The comment above has been true since it was
+     * written — nothing produced a concluded experiment — because `concludeDue`
+     * did not exist and no placement carried an arm. Running it here, ahead of
+     * the read, means a window that closed this week reaches THIS week's
+     * decision rather than sitting until the next review.
+     */
+    await ctx.runMutation(internal.maya.experiments.concludeDue, {
+      customerId: args.customerId,
+      now,
+    });
+
     const concluded = await ctx.runQuery(
       internal.maya.experiments.latestConcluded,
       { customerId: args.customerId, sinceDays: 7, now }
