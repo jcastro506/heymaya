@@ -310,7 +310,29 @@ export const complaintsFor = internalQuery({
     if (!customer?.buyerJson) return [];
     try {
       const parsed = JSON.parse(customer.buyerJson) as { complaints?: Complaint[] };
-      return parsed.complaints ?? [];
+      /**
+       * ⭐ RANKED. §5.0.0: *"The ranked complaint list IS the content plan. If
+       * 11 people in this niche asked about pricing confusion this month,
+       * that's not an insight to file — it's next week's post."*
+       *
+       * ⚠️ Returned in the model's arbitrary order until 2026-08-17, which made
+       * "ranked" a claim the spec made and nothing kept. It matters now that
+       * `bankFromComplaints` is wired: the order decides which complaint the
+       * founder is shown first as justification for what gets written.
+       *
+       * ⚠️ Sorted, deliberately NOT re-clustered. `buyerMap.rankComplaints`
+       * clusters by word overlap and this module already recorded why that was
+       * abandoned: *"'pricing is confusing' against 'I can't work out what this
+       * would cost me' at 0.07 — the same complaint, counted twice, therefore
+       * never surfaced."* The model merges across weeks and returns the
+       * frequency; re-clustering here would reintroduce the bug that replaced.
+       *
+       * Frequency first, then recency — thirteen people this month outranks
+       * three people this week, and a tie goes to the fresher one.
+       */
+      return [...(parsed.complaints ?? [])].sort(
+        (a, b) => b.frequency - a.frequency || b.lastSeen - a.lastSeen
+      );
     } catch {
       return [];
     }

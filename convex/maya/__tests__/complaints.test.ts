@@ -8,6 +8,13 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { minimalRow, type InsertCtx } from "../../../tests/lib/minimalRow";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { convexTest } from "convex-test";
+import schema from "../../schema";
+import { internal } from "../../_generated/api";
+import { modules } from "../../../tests/_modules";
 import {
   worthReading,
   prepareComments,
@@ -291,5 +298,115 @@ describe("a complaint has to belong to this buyer", () => {
      */
     expect(COMPLAINT_SYSTEM).toMatch(/would the person who buys this product/i);
     expect(COMPLAINT_SYSTEM).toMatch(/not evidence about this buyer/i);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+
+describe("the complaint list is actually ranked", () => {
+  /**
+   * ⭐ §5.0.0: *"The ranked complaint list IS the content plan. If 11 people in
+   * this niche asked about pricing confusion this month, that's not an insight
+   * to file — it's next week's post."*
+   *
+   * ⚠️ Returned in the model's arbitrary order until 2026-08-17, which made
+   * "ranked" a claim the spec made and nothing kept. It matters now that
+   * `bankFromComplaints` is wired — the order decides which complaint the
+   * founder is shown first as justification for what gets written.
+   */
+  it("⭐ puts the most-said complaint first", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await t.run(async (ctx) => {
+      const c = ctx as unknown as {
+        db: { insert: (table: string, value: unknown) => Promise<string> };
+      };
+      const creator = await c.db.insert(
+        "creators",
+        await minimalRow(ctx as InsertCtx, "creators", {
+          clerkUserId: "ranked",
+          email: "ranked@e.com",
+          accountType: "gtm-agent",
+        })
+      );
+      const customerId = await c.db.insert(
+        "customers",
+        await minimalRow(ctx as InsertCtx, "customers", { accountId: creator })
+      );
+      await (
+        ctx as unknown as { db: { patch: (id: string, v: unknown) => Promise<void> } }
+      ).db.patch(customerId, {
+        buyerJson: JSON.stringify({
+          complaints: [
+            { text: "said once", frequency: 1, sourceUrls: ["https://e/1"], lastSeen: 900 },
+            { text: "said eleven times", frequency: 11, sourceUrls: ["https://e/2"], lastSeen: 100 },
+            { text: "said three times", frequency: 3, sourceUrls: ["https://e/3"], lastSeen: 500 },
+          ],
+        }),
+      });
+      return customerId;
+    });
+
+    const out = await t.query(internal.maya.complaints.complaintsFor, {
+      customerId: customerId as never,
+    });
+    expect(out.map((c) => c.frequency)).toEqual([11, 3, 1]);
+  });
+
+  it("⚠️ breaks a tie on recency, not on insertion order", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await t.run(async (ctx) => {
+      const c = ctx as unknown as {
+        db: { insert: (table: string, value: unknown) => Promise<string> };
+      };
+      const creator = await c.db.insert(
+        "creators",
+        await minimalRow(ctx as InsertCtx, "creators", {
+          clerkUserId: "tie",
+          email: "tie@e.com",
+          accountType: "gtm-agent",
+        })
+      );
+      const customerId = await c.db.insert(
+        "customers",
+        await minimalRow(ctx as InsertCtx, "customers", { accountId: creator })
+      );
+      await (
+        ctx as unknown as { db: { patch: (id: string, v: unknown) => Promise<void> } }
+      ).db.patch(customerId, {
+        buyerJson: JSON.stringify({
+          complaints: [
+            { text: "older", frequency: 4, sourceUrls: ["https://e/1"], lastSeen: 100 },
+            { text: "fresher", frequency: 4, sourceUrls: ["https://e/2"], lastSeen: 900 },
+          ],
+        }),
+      });
+      return customerId;
+    });
+
+    const out = await t.query(internal.maya.complaints.complaintsFor, {
+      customerId: customerId as never,
+    });
+    expect(out[0].text).toBe("fresher");
+  });
+
+  it("⚠️ does NOT re-cluster — that approach was already abandoned", () => {
+    /**
+     * `buyerMap.rankComplaints` clusters by word overlap, and this module
+     * recorded why that was replaced: "'pricing is confusing' against 'I can't
+     * work out what this would cost me' at 0.07 — the same complaint, counted
+     * twice, therefore never surfaced." The model merges across weeks and
+     * returns the frequency. Re-clustering here would reintroduce the bug it
+     * replaced, so this asserts the sort reads the model's number rather than
+     * recomputing one.
+     */
+    const src = readFileSync(
+      join(process.cwd(), "convex/maya/complaints.ts"),
+      "utf8"
+    );
+    const block = src.slice(src.indexOf("export const complaintsFor"));
+    // The CALL forms, not the words — the comment above the sort names the
+    // abandoned approach on purpose, and matching prose fails on documentation.
+    expect(block.slice(0, 1800)).not.toContain("rankComplaints(");
+    expect(block.slice(0, 1800)).not.toContain("similarity(");
   });
 });
