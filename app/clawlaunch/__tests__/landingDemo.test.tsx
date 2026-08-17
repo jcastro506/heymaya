@@ -30,7 +30,7 @@ const DEMO = readFileSync(
 describe("the landing page demonstrates rather than claims", () => {
   it("⭐ renders the live URL read", () => {
     expect(LANDING).toContain("DemoRead");
-    expect(LANDING).toContain("<LearnsBusiness />");
+    expect(LANDING).toContain("<DemoRead />");
   });
 
   it("⭐ puts it early — after the proof, before the explanation", () => {
@@ -47,19 +47,24 @@ describe("the landing page demonstrates rather than claims", () => {
      * anything. A demo below the explanation is a demo nobody reaches.
      */
     /**
-     * ⚠️ It moved again on the twelve-capability rebuild, and further forward:
-     * the live read is now the FIRST thing after the hero, opening act one.
-     * §19's "she does the homework" is the argument, and the read is the
-     * cheapest possible proof of it — a visitor sees her be right about their
-     * own company before she has claimed anything.
+     * ⚠️ Asserted on the ARTIFACTS, not on component names. Three redesigns in
+     * one afternoon each renamed the wrapper and broke this test without
+     * anything about the page actually regressing — the assertion was pinned to
+     * scaffolding rather than to the property that matters.
+     *
+     * What must stay true: the live read is the first proof a visitor meets
+     * after the hero, before the market feed and before the format card. §19 —
+     * "she does the homework" is the argument, and the read is the cheapest
+     * possible demonstration of it, on their own company, before she has
+     * claimed anything.
      */
     const hero = LANDING.indexOf("<Hero />");
-    const demo = LANDING.indexOf("<LearnsBusiness />");
-    const market = LANDING.indexOf("<WatchesMarket />");
-    const work = LANDING.indexOf("<TheWork />");
+    const demo = LANDING.indexOf("<DemoRead />");
+    const feed = LANDING.indexOf("<Feed />");
+    const card = LANDING.indexOf("<FormatCard />");
     expect(demo).toBeGreaterThan(hero);
-    expect(demo).toBeLessThan(market);
-    expect(demo).toBeLessThan(work);
+    expect(demo).toBeLessThan(feed);
+    expect(demo).toBeLessThan(card);
   });
 
   it("⚠️ promises no signup, because the exit criterion says without one", () => {

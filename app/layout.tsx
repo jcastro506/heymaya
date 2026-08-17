@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Instrument_Serif } from "next/font/google";
+import { Geist, Instrument_Serif, Bodoni_Moda, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
@@ -8,6 +8,34 @@ const geistSans = Geist({
   subsets: ["latin"],
 });
 
+
+/**
+ * ⭐ The landing page's voice — a high-contrast didone.
+ *
+ * Cream-paper-plus-Instrument-Serif is the default editorial look every
+ * Substack and design studio already uses, and it made the page read like a
+ * newsletter about software rather than software. Bodoni's extreme
+ * thick/thin contrast holds up at display size on near-black, where a
+ * low-contrast face turns to mush.
+ */
+const bodoni = Bodoni_Moda({
+  variable: "--font-display",
+  weight: ["400", "500", "700"],
+  style: ["normal", "italic"],
+  subsets: ["latin"],
+});
+
+/**
+ * ⭐ Timecodes, metrics, labels. The product's most differentiated capability
+ * is watching a video and writing down what happens at 0:12 — so the timecode
+ * is the page's structural motif rather than decoration, and it needs a mono
+ * with real tabular figures.
+ */
+const jetbrains = JetBrains_Mono({
+  variable: "--font-mono-tech",
+  weight: ["400", "500"],
+  subsets: ["latin"],
+});
 
 const instrumentSerif = Instrument_Serif({
   variable: "--font-instrument-serif",
@@ -51,7 +79,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${instrumentSerif.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${instrumentSerif.variable} ${bodoni.variable} ${jetbrains.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>
