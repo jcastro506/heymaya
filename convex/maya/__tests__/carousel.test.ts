@@ -183,10 +183,19 @@ describe("the gate cannot authorise work nothing can build", () => {
    * The founder gets told a video is coming, and §2.7 is broken by a promise
    * instead of a sentence.
    */
-  it("⭐ caps a paid video allowance to what the pipeline can produce", async () => {
+  it("⭐ caps a rung to what the pipeline can actually produce", async () => {
+    /**
+     * ⭐ Moved to `avatar` on 2026-08-17 when Sprint 9's `make_video` landed.
+     *
+     * ⚠️ `ad_clone` is still capped, and NOT for a technical reason — it is
+     * built and tested in the same file. It recreates a proven ad's structure,
+     * which is the rung whose COMMERCIAL terms are unsettled (CLAUDE.md
+     * operator blocker 1 asks for written resale rights). Shipping it before
+     * the paperwork is a legal exposure, not an engineering one.
+     */
     const { capToBuildable } = await import("../preSpendGate");
-    expect(capToBuildable("avatar")).toBe("carousel");
-    expect(capToBuildable("ad_clone")).toBe("carousel");
+    expect(capToBuildable("ad_clone")).toBe("avatar");
+    expect(capToBuildable("avatar")).toBe("avatar");
   });
 
   it("leaves a rung that IS buildable alone", async () => {

@@ -150,6 +150,45 @@ export default defineToolPlugin({
     }),
 
     tool({
+      name: "make_video",
+      label: "Make video",
+      description:
+        "Propose a vertical video for a banked idea and STOP at the storyboard. Nothing is rendered and nothing is spent by this call. You get back data.storyboard — the exact frames, each with the line that plays over it. SEND IT VERBATIM AND WAIT. The founder is being asked to check the actual shots, so summarising it defeats the point: a wrong screenshot caught here costs nothing and caught after the render costs the render. Needs an ideaId, because every post traces back to something a real person said. If there aren't enough real shots of the product you get ok:false saying so — that is a real answer, and the fix is to ask them for a screen recording, never to invent a shot of a product you have not seen.",
+      parameters: Type.Object({
+        ideaId: Type.String({
+          description:
+            "The idea this video is built from. From scroll's data.todaysIdea.ideaId, or the bank.",
+        }),
+        rung: Type.Optional(
+          Type.String({
+            description:
+              "avatar (our script, their assembly) or ad_clone (recreate a proven shape with this product — far more expensive, worth it about once a month). Leave it out for avatar.",
+          })
+        ),
+        referenceVideoUrl: Type.Optional(
+          Type.String({
+            description:
+              "Only for ad_clone: the proven video whose STRUCTURE is being recreated. Never its claims — a clone that repeats someone else's numbers is a defect.",
+          })
+        ),
+      }),
+      execute: async (p, _cfg, ctx) => call("make_video", p, ctx.signal),
+    }),
+
+    tool({
+      name: "approve_video",
+      label: "Approve video",
+      description:
+        "The founder said go, so start the render. THIS IS THE ONLY CALL THAT SPENDS A CREDIT. Call it only after they have actually seen the storyboard and said yes — not because it seems fine to you, and not to save them a step. Takes the jobId from make_video.",
+      parameters: Type.Object({
+        jobId: Type.String({
+          description: "From make_video's data.jobId.",
+        }),
+      }),
+      execute: async (p, _cfg, ctx) => call("approve_video", p, ctx.signal),
+    }),
+
+    tool({
       name: "adapt_crosspost",
       label: "Adapt crosspost",
       description:

@@ -2125,3 +2125,123 @@ export const forgetAssetHttp = httpAction(async (ctx, request) => {
     next: "it's gone for good — if that was a mistake, ask them to send it again",
   });
 });
+
+/**
+ * `make_video` — propose a video and STOP at the storyboard (§7.5.36, Sprint 9).
+ *
+ * ⚠️ The stopping is the feature. Everything this does is free: the eight-check
+ * gate, the script, the brief, the storyboard. The credits are spent only after
+ * the founder answers, by `approveRender`. A tool that proposed and rendered in
+ * one call would be a more expensive way of not asking.
+ *
+ * ⭐ And the storyboard shows the EXACT frames, because §7.6.2 makes us always
+ * ground the link with our own media-library images rather than letting the
+ * vendor scrape. The approval step and the grounding rule are one mechanism.
+ */
+export const makeVideoHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if ("error" in auth) return auth.error;
+  const parsed = await readJson(request);
+  if ("error" in parsed) return parsed.error;
+
+  const ideaId = str(parsed.body, "ideaId");
+  if (!ideaId) {
+    // Same standard as the carousel and the draft: §6, every post traces back
+    // to something a real person actually said.
+    return respond(
+      {
+        ok: false,
+        why: "a video has to come from a banked idea, not a prompt",
+        next: "pick an idea from the bank — `scroll` returns today's, and the bank has the rest",
+      },
+      400
+    );
+  }
+
+  const result = await ctx.runAction(internal.maya.video.proposeVideo, {
+    customerId: auth.customer._id,
+    ideaId: ideaId as Id<"ideas">,
+    rung: str(parsed.body, "rung") || undefined,
+    referenceVideoUrl: str(parsed.body, "referenceVideoUrl") || undefined,
+  });
+
+  if (!result.ok) {
+    /**
+     * ⭐ `next` differs by failure, because the right move genuinely differs —
+     * and two of these must NOT be retried.
+     */
+    const next =
+      result.failure === "no_brief"
+        ? "do not retry. This needs something from the founder — ask for what the message says is missing, in your own words, and wait"
+        : result.failure === "anti_slop"
+          ? "do not re-render the same cut. Change what's wrong with it or take a different angle"
+          : result.failure === "vendor_unconfigured"
+            ? "video isn't available yet. Say so plainly and offer them a photo set instead — do not retry, and do not promise a video later"
+            : result.failure === "pre_spend_gate"
+              ? "the gate already decided. Relay its reason and take the cheaper option it named rather than retrying"
+              : "stop and tell the founder you couldn't start the video. Do not retry more than once";
+
+    return respond({
+      ok: false,
+      data: { failure: result.failure ?? "unknown" },
+      why: result.detail,
+      next,
+    });
+  }
+
+  return respond({
+    ok: true,
+    data: {
+      jobId: result.jobId,
+      /** ⭐ The storyboard, verbatim. Send it AS IS — it is already their words. */
+      storyboard: result.message,
+      estimatedCredits: result.estimatedCredits,
+    },
+    why: `${result.detail} — nothing has been made yet`,
+    /**
+     * ⚠️ The whole point, stated as choreography. She must send the storyboard
+     * and wait; approving on her own behalf is the one thing that turns a free
+     * check into a wasted render.
+     */
+    next: "send data.storyboard to the founder EXACTLY as it is, then WAIT. Do not render, do not approve it yourself, and do not summarise it — they are being asked to check the actual frames. When they say go, call `approve_video` with data.jobId",
+  });
+});
+
+/**
+ * `approve_video` — the founder said go. The only thing that releases a render.
+ *
+ * Separate from `make_video` on purpose: one call proposes and one releases, so
+ * "did anyone actually approve this?" is answered by finding this call rather
+ * than by reasoning about a flag.
+ */
+export const approveVideoHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if ("error" in auth) return auth.error;
+  const parsed = await readJson(request);
+  if ("error" in parsed) return parsed.error;
+
+  const jobId = str(parsed.body, "jobId");
+  if (!jobId) {
+    return respond(
+      {
+        ok: false,
+        why: "I need to know which video they said yes to",
+        next: "use the jobId `make_video` gave you",
+      },
+      400
+    );
+  }
+
+  const out = await ctx.runMutation(internal.maya.video.approveRender, {
+    jobId: jobId as Id<"jobs">,
+  });
+
+  return respond({
+    ok: out.ok,
+    data: {},
+    why: out.detail,
+    next: out.ok
+      ? "tell them it's being made and roughly how long, then leave it — it will publish when it's ready"
+      : "tell the founder it couldn't be started and why, in your own words",
+  });
+});

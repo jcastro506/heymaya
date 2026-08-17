@@ -149,6 +149,14 @@ describe("the install contract", () => {
     // approved at 13:03, and the only reply she could give was a thumbs-up.
     expect([...BUNDLED_MAYA_PLUGIN_TOOLS].sort()).toEqual([
       "adapt_crosspost",
+      /**
+       * ⭐ Joined 2026-08-17 with Sprint 9. `approve_video` is deliberately a
+       * SEPARATE tool from `make_video` rather than a flag on it: it is the
+       * only call in the product that spends a render credit, and "did anyone
+       * actually approve this?" should be answerable by finding one call site
+       * rather than by reasoning about a boolean.
+       */
+      "approve_video",
   "ask_founder",
       "checkpoint",
   "confirm_preview",
@@ -160,6 +168,12 @@ describe("the install contract", () => {
       // tested, verified live by hand, and unreachable by the agent, which is
       // this codebase's dominant defect class.
       "make_carousel",
+      /**
+       * ⭐ Joined 2026-08-17. Proposes a video and STOPS at the storyboard —
+       * the gate, the script, the brief and the frames all cost nothing, so a
+       * founder who says "wrong screenshot" has cost us nothing (§7.5.36).
+       */
+      "make_video",
       "pending",
       "publish",
       "remember",

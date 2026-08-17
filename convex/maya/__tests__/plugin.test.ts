@@ -62,6 +62,9 @@ describe("the manifest and the code agree", () => {
     // never be published.
     expect(manifest.contracts.tools.sort()).toEqual([
       "adapt_crosspost",
+      // ⭐ Sprint 9. The only call that spends a render credit, kept separate
+      // from `make_video` so the approval has exactly one call site.
+      "approve_video",
   "ask_founder",
       "checkpoint",
   "confirm_preview",
@@ -73,6 +76,8 @@ describe("the manifest and the code agree", () => {
       // tested, verified live by hand, and unreachable by the agent, which is
       // this codebase's dominant defect class.
       "make_carousel",
+      // ⭐ Sprint 9. Proposes and stops at the storyboard — nothing spent.
+      "make_video",
       "pending",
       "publish",
       "remember",

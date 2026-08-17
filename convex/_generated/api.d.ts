@@ -261,6 +261,8 @@ import type * as maya_tells from "../maya/tells.js";
 import type * as maya_tiktokConsent from "../maya/tiktokConsent.js";
 import type * as maya_traceability from "../maya/traceability.js";
 import type * as maya_trends from "../maya/trends.js";
+import type * as maya_video from "../maya/video.js";
+import type * as maya_videoBrief from "../maya/videoBrief.js";
 import type * as maya_voice from "../maya/voice.js";
 import type * as maya_voiceCorpus from "../maya/voiceCorpus.js";
 import type * as maya_watchers from "../maya/watchers.js";
@@ -541,6 +543,8 @@ declare const fullApi: ApiFromModules<{
   "maya/tiktokConsent": typeof maya_tiktokConsent;
   "maya/traceability": typeof maya_traceability;
   "maya/trends": typeof maya_trends;
+  "maya/video": typeof maya_video;
+  "maya/videoBrief": typeof maya_videoBrief;
   "maya/voice": typeof maya_voice;
   "maya/voiceCorpus": typeof maya_voiceCorpus;
   "maya/watchers": typeof maya_watchers;

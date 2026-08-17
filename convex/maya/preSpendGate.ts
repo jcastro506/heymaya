@@ -49,10 +49,20 @@ export type Rung = (typeof RUNGS)[number];
  *
  * Deliberately a named constant and not a removed rung. The ladder is the
  * product's shape and `videosPerMonth: 4` is a real commercial promise — both
- * stay, and this is the one line that flips when the video path lands and its
- * commercial terms are settled (CLAUDE.md operator blocker 1).
+ * stay, and this is the one line that flips as rungs become buildable.
+ *
+ * ⭐ MOVED TO `avatar` 2026-08-17 — Sprint 9's `make_video` landed. The
+ * `link_to_videos` HYBRID flow is wired end to end against the published
+ * contract (`convex/maya/video.ts`), gated, storyboarded and queued.
+ *
+ * ⚠️ `ad_clone` stays out of reach, and not for a technical reason: it is built
+ * and tested in the same file. It recreates a proven ad's structure, which is
+ * the rung whose COMMERCIAL terms are unsettled — CLAUDE.md operator blocker 1
+ * asks for written resale rights, and shipping a clone before those exist is a
+ * legal exposure rather than an engineering one. It flips when the paperwork
+ * does, not when the code does.
  */
-export const MAX_BUILDABLE_RUNG: Rung = "carousel";
+export const MAX_BUILDABLE_RUNG: Rung = "avatar";
 
 /** §7.5.7 check 7 — render time against post time. */
 export const DEADLINE_RATIO = 10;

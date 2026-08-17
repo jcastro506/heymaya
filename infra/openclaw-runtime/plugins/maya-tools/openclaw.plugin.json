@@ -14,6 +14,8 @@
   "contracts": {
     "tools": [
       "scroll",
+      "make_video",
+      "approve_video",
       "adapt_crosspost",
       "confirm_preview",
       "forget_asset",

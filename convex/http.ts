@@ -36,6 +36,8 @@ import {
   rulesHttp,
   requestAssetsHttp,
   pendingHttp,
+  makeVideoHttp,
+  approveVideoHttp,
 } from "./maya/hooks";
 import {
   approvalDecisionHttp,
@@ -1069,5 +1071,9 @@ http.route({ path: "/maya/publish", method: "POST", handler: publishHttp });
 http.route({ path: "/maya/reply", method: "POST", handler: replyHttp });
 http.route({ path: "/maya/ask_founder", method: "POST", handler: askFounderHttp });
 http.route({ path: "/maya/checkpoint", method: "POST", handler: checkpointHttp });
+// Sprint 9 — video. `make_video` proposes and stops at the storyboard;
+// `approve_video` is the only path that spends a credit.
+http.route({ path: "/maya/make_video", method: "POST", handler: makeVideoHttp });
+http.route({ path: "/maya/approve_video", method: "POST", handler: approveVideoHttp });
 
 export default http;
