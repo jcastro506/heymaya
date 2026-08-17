@@ -10,6 +10,8 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { intersectsNiche, parseShape, TREND_SAMPLE, SHAPES_JUDGED } from "../trends";
 
 const NICHE = ["organic social", "indie founder", "draft reply", "dashboard"];
@@ -141,5 +143,59 @@ describe("⭐ A SHAPE WORTH STEALING", () => {
   it("the judged sample is bounded — this runs weekly, not per post", () => {
     expect(SHAPES_JUDGED).toBeGreaterThan(0);
     expect(SHAPES_JUDGED).toBeLessThanOrEqual(25);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ A SHAPE IS NOT AN IDEA.
+ *
+ * ⚠️ `sweepTrends` used to bank each judged shape via `ideas.bankIdeas` with
+ * `angle: verdict.shape` — putting a camera direction in the field that means
+ * "what to post about". Measured live 2026-08-17, the bank held 161
+ * `observation` and 155 `format_card`, and they read nothing alike:
+ *
+ *   observation   "After shipping ten apps, this founder discovered their App
+ *                  Store subtitle was empty in both languages."
+ *   format_card   "Show a person reacting with fear to an oversized version of
+ *                  an object"
+ *
+ * Because a fresh shape beats an older observation on recency decay, the
+ * shapes kept winning `nextIdea` — the top idea when this was found was "A
+ * direct competition between a human and an AI in a simple game or challenge",
+ * queued to become that day's post for a spreadsheet-to-dashboard product.
+ */
+describe("trend shapes go to the format library, not the idea bank", () => {
+  it("⭐ sweepTrends no longer banks ideas", () => {
+    const src = readFileSync(join(process.cwd(), "convex/maya/trends.ts"), "utf8");
+    // The CALL form, not the words — the comment above the fix names the old
+    // behaviour on purpose, and matching prose would fail on documentation.
+    expect(src).not.toContain("internal.maya.ideas.bankIdeas");
+  });
+
+  it("⭐ it stores them as format cards instead", () => {
+    const src = readFileSync(join(process.cwd(), "convex/maya/trends.ts"), "utf8");
+    expect(src).toContain("internal.maya.formats.storeCards");
+  });
+
+  it("⚠️ merges rather than overwriting the watched cards", () => {
+    /**
+     * `storeCards` replaces the whole payload for a fingerprint. Writing only
+     * the trend shapes would delete the `watch`-tier cards — the ones that cost
+     * a Gemini video call each.
+     */
+    const src = readFileSync(join(process.cwd(), "convex/maya/trends.ts"), "utf8");
+    expect(src).toContain("internal.maya.formats.formatCardsFor");
+  });
+
+  it("⚠️ a caption-judged card is never marked as watched", () => {
+    // Nothing here looked at a frame. A card claiming visual detail off a
+    // caption is a fabricated observation (§2.7), and downstream it would be
+    // indistinguishable from one Gemini actually watched.
+    const src = readFileSync(join(process.cwd(), "convex/maya/trends.ts"), "utf8");
+    const block = src.slice(src.indexOf("trendCards.push("));
+    expect(block.slice(0, 900)).toContain('depth: "read"');
+    expect(block.slice(0, 900)).not.toContain('depth: "watch"');
   });
 });

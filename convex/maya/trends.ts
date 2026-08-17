@@ -48,6 +48,12 @@
 import { v } from "convex/values";
 import { internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
+import {
+  cardIdFor,
+  nicheFingerprint,
+  MAX_CARDS,
+  type FormatCard,
+} from "./formats";
 import type { Observation } from "./scroll";
 import { velocity, toMillis } from "./learnBusiness";
 
@@ -339,6 +345,35 @@ export const sweepTrends = internalAction({
      * naming what the post was about.
      */
     let shapes = 0;
+    /**
+     * ⭐ Collected here, stored as CARDS below — never as ideas.
+     *
+     * ⚠️ This used to call `ideas.bankIdeas` with `angle: verdict.shape`, which
+     * put a *shape* in the field that means *what to post about*. The intent
+     * above is right and unchanged — the shape is worth stealing. The
+     * destination was wrong.
+     *
+     * Measured live 2026-08-17. The idea bank held 161 `observation` and **155
+     * `format_card`**, and the two read nothing alike:
+     *
+     *   observation  "After shipping ten apps, this founder discovered their
+     *                 App Store subtitle was empty in both languages."
+     *   format_card  "Show a person reacting with fear to an oversized version
+     *                 of an object"
+     *
+     * The first is a post. The second is a camera direction. Roughly half the
+     * bank was the second kind, and because a fresh shape beats an older
+     * observation on recency decay, they kept winning `nextIdea` — the top
+     * idea when this was found was *"A direct competition between a human and
+     * an AI in a simple game or challenge"*, first in line to become that day's
+     * post for a product that turns spreadsheets into dashboards.
+     *
+     * §7.4's own framing is the rule this broke: an idea is WHAT to say, a
+     * shape is HOW to build it. `scroll` already hands her the shapes
+     * separately as `data.shapes`, so this loses nothing and stops the two
+     * competing for one slot.
+     */
+    const trendCards: FormatCard[] = [];
     if (foreign.length > 0 && process.env.OPENROUTER_API_KEY) {
       const sample = foreign.slice(0, SHAPES_JUDGED);
       const { callModel } = await import("./llm");
@@ -360,27 +395,69 @@ export const sweepTrends = internalAction({
           const verdict = parseShape(completion.content);
           if (!verdict?.keep) continue;
 
-          await ctx.runMutation(internal.maya.ideas.bankIdeas, {
-            customerId: args.customerId,
-            ideasJson: JSON.stringify([
-              {
-                angle: verdict.shape,
-                source: "format_card",
-                evidence: {
-                  // The trending post is the evidence that the shape travels.
-                  quote: verdict.why || verdict.shape,
-                  sourceUrls: [item.sourceUrl],
-                  frequency: 1,
-                  observedAt: now,
-                },
-              },
-            ]),
-            now,
+          trendCards.push({
+            cardId: cardIdFor(item.sourceUrl),
+            sourceUrl: item.sourceUrl,
+            channel: item.channel,
+            /**
+             * ⚠️ `read`, never `watch`. Nothing here looked at a frame — this
+             * is a caption judged as a structure. A card claiming `visualDevice`
+             * off a caption is a fabricated observation (§2.7), and downstream
+             * it would be indistinguishable from one Gemini actually watched.
+             */
+            depth: "read",
+            /**
+             * ⚠️ Zeros, not invented numbers. The out-of-niche list carries
+             * text and a URL only — we never collected reach for these. §2.7:
+             * a fabricated metric is worse than an absent one, and `topShapes`
+             * sorts on views, so a guess here would rank a caption above a card
+             * Gemini actually watched.
+             */
+            metrics: { views: 0, likes: 0, comments: 0 },
+            hook: { spokenLine: item.text.slice(0, 200) },
+            // The trending post is the evidence that the shape travels.
+            hypothesis: verdict.why || verdict.shape,
+            /** ⭐ The shape itself, in the field that means "shape". */
+            reusableAs: verdict.shape,
+            observedAt: now,
           });
           shapes += 1;
         } catch (error) {
           console.error(`[trends] shape judge failed: ${String(error)}`);
         }
+      }
+    }
+
+    /**
+     * ⭐ Into the shared format library, MERGED rather than overwritten.
+     *
+     * ⚠️ `storeCards` replaces the whole payload for a fingerprint, so writing
+     * only the trend shapes would delete the watched cards — the seven that
+     * cost a Gemini video call each. Read, merge by `cardId`, write back.
+     *
+     * Existing cards win a collision: a `watch` card carries beats and overlay
+     * timing that a caption-judged card cannot, and the whole point of `depth`
+     * is that the richer one is worth more.
+     */
+    if (trendCards.length > 0) {
+      try {
+        const existing = await ctx.runQuery(
+          internal.maya.formats.formatCardsFor,
+          { customerId: args.customerId }
+        );
+        const byId = new Map<string, FormatCard>();
+        for (const c of trendCards) byId.set(c.cardId, c);
+        for (const c of existing.cards) byId.set(c.cardId, c);
+
+        await ctx.runMutation(internal.maya.formats.storeCards, {
+          fingerprint: nicheFingerprint(keywords),
+          // Newest first, capped — a library is a shortlist, not an archive.
+          cardsJson: JSON.stringify([...byId.values()].slice(0, MAX_CARDS)),
+          now,
+        });
+      } catch (error) {
+        // A failed library write must not lose the observations recorded above.
+        console.error(`[trends] storing trend shapes failed: ${String(error)}`);
       }
     }
 

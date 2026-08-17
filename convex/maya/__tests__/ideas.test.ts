@@ -412,6 +412,93 @@ describe("PICKING TODAY'S IDEA", () => {
     ).toBe(first!.ideaId);
   });
 
+  /**
+   * ⭐ Retiring the shape-ideas — the historical half of the category error.
+   *
+   * ⚠️ Fixing `sweepTrends` stops NEW shapes reaching the bank; it does nothing
+   * about the 155 already there, and those were the rows winning `nextIdea`.
+   */
+  it("⭐ retires banked shape-ideas and leaves everything else alone", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t);
+
+    await t.run(async (ctx) => {
+      const c = ctx as unknown as {
+        db: { insert: (t: string, v: unknown) => Promise<string> };
+      };
+      for (const [kind, angle] of [
+        ["format_card", "Show a person reacting to an oversized object"],
+        ["format_card", "Rank a collection of humorous mishaps"],
+        ["observation", "Founders are hiring marketers before they can describe the buyer"],
+        ["complaint", "nobody explains what it actually costs"],
+      ] as const) {
+        await c.db.insert("ideas", {
+          customerId,
+          angle,
+          sourceKind: kind,
+          status: "bank",
+          evidenceJson: JSON.stringify({
+            quote: angle,
+            sourceUrls: ["https://example.com/x"],
+            observedAt: NOW,
+          }),
+          score: 0.5,
+          createdAt: NOW,
+          updatedAt: NOW,
+        });
+      }
+    });
+
+    const out = await t.mutation(internal.maya.ideas.retireShapeIdeas, {
+      customerId,
+    });
+    expect(out.retired).toBe(2);
+    expect(out.remaining).toBe(0);
+
+    await t.run(async (ctx) => {
+      const rows = await ctx.db.query("ideas").collect();
+      const banked = rows.filter((r) => r.status === "bank");
+      // The two real ideas survive; neither shape does.
+      expect(banked.map((r) => r.sourceKind).sort()).toEqual([
+        "complaint",
+        "observation",
+      ]);
+      // ⚠️ Discarded, never deleted — the evidence stays readable (§16.8).
+      const gone = rows.filter((r) => r.status === "discarded");
+      expect(gone).toHaveLength(2);
+      expect(gone[0].evidenceJson).toBeTruthy();
+    });
+  });
+
+  it("⚠️ is bounded, so a huge bank cannot break the mutation", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t);
+    await t.run(async (ctx) => {
+      const c = ctx as unknown as {
+        db: { insert: (t: string, v: unknown) => Promise<string> };
+      };
+      for (let i = 0; i < 5; i += 1) {
+        await c.db.insert("ideas", {
+          customerId,
+          angle: `shape ${i}`,
+          sourceKind: "format_card",
+          status: "bank",
+          evidenceJson: JSON.stringify({ quote: "x", sourceUrls: ["https://e.com"] }),
+          score: 0.5,
+          createdAt: NOW,
+          updatedAt: NOW,
+        });
+      }
+    });
+
+    const first = await t.mutation(internal.maya.ideas.retireShapeIdeas, {
+      customerId,
+      limit: 2,
+    });
+    expect(first.retired).toBe(2);
+    expect(first.remaining).toBe(3);
+  });
+
   it("the evidence comes back with it — a draft can always cite", async () => {
     const t = convexTest(schema, modules);
     const customerId = await seed(t);

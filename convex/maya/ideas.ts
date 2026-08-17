@@ -368,6 +368,53 @@ export const nextIdea = internalQuery({
   },
 });
 
+/**
+ * ⭐ Retire the shape-ideas — a one-way cleanup for a category error.
+ *
+ * ⚠️ `sweepTrends` used to bank each borrowable shape as an idea, putting a
+ * camera direction in the field that means "what to post about". That is fixed
+ * at the source, but the rows it already wrote do not go away, and they are the
+ * ones that keep winning: measured live 2026-08-17, **155 of 322 banked ideas**
+ * were shapes, and the top of the bank was *"A parent and child take on a
+ * challenge together"* — queued to become that day's post for a product that
+ * turns spreadsheets into dashboards.
+ *
+ * `discarded` rather than deleted. The evidence and the source URL stay
+ * readable, and §16.8's archive rule is that we do not destroy what we acted
+ * on — we record that we stopped acting on it.
+ *
+ * ⚠️ Bounded per call. A mutation that scans an unbounded table is the one that
+ * breaks at the size where it matters; the caller repeats until `remaining` is
+ * zero.
+ */
+export const retireShapeIdeas = internalMutation({
+  args: {
+    customerId: v.id("customers"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ retired: number; remaining: number }> => {
+    const rows = (await ctx.db
+      .query("ideas")
+      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+      .collect()) as Doc<"ideas">[];
+
+    const stale = rows.filter(
+      (r) => r.sourceKind === "format_card" && r.status === "bank"
+    );
+    const batch = stale.slice(0, args.limit ?? 200);
+    for (const row of batch) {
+      await ctx.db.patch(row._id, {
+        status: "discarded",
+        updatedAt: Date.now(),
+      });
+    }
+    return { retired: batch.length, remaining: stale.length - batch.length };
+  },
+});
+
 export const markUsed = internalMutation({
   args: {
     ideaId: v.id("ideas"),
