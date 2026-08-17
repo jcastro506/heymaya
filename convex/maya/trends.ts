@@ -449,10 +449,29 @@ export const sweepTrends = internalAction({
         for (const c of trendCards) byId.set(c.cardId, c);
         for (const c of existing.cards) byId.set(c.cardId, c);
 
+        /**
+         * ⚠️ RANKED BEFORE CAPPING, and this cost real work to learn.
+         *
+         * The first version inserted the trend cards first and sliced to
+         * `MAX_CARDS`. Map iteration is insertion-ordered, so nine
+         * caption-judged shapes took the first nine slots and evicted every
+         * `watch`-tier card — the seven that had each cost a Gemini video call
+         * to produce. Measured the same afternoon: 12 cards, all `read`, nine
+         * of them with zero views.
+         *
+         * A collision already preferred the existing card. What was missing is
+         * that the CAP is also a choice: watched before read, then by reach, so
+         * the expensive knowledge survives a cheap sweep. Same ordering
+         * `topShapes` uses, for the same reason.
+         */
+        const ranked = [...byId.values()].sort((a, b) => {
+          if (a.depth !== b.depth) return a.depth === "watch" ? -1 : 1;
+          return b.metrics.views - a.metrics.views;
+        });
+
         await ctx.runMutation(internal.maya.formats.storeCards, {
           fingerprint: nicheFingerprint(keywords),
-          // Newest first, capped — a library is a shortlist, not an archive.
-          cardsJson: JSON.stringify([...byId.values()].slice(0, MAX_CARDS)),
+          cardsJson: JSON.stringify(ranked.slice(0, MAX_CARDS)),
           now,
         });
       } catch (error) {

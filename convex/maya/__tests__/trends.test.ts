@@ -199,3 +199,42 @@ describe("trend shapes go to the format library, not the idea bank", () => {
     expect(block.slice(0, 900)).not.toContain('depth: "watch"');
   });
 });
+
+/* -------------------------------------------------------------------------- */
+
+describe("the cap is a choice, not an accident", () => {
+  /**
+   * ⚠️ A REGRESSION I SHIPPED THE SAME AFTERNOON. The first merge inserted the
+   * trend cards first and sliced to MAX_CARDS. Map iteration is
+   * insertion-ordered, so nine caption-judged shapes took the first nine slots
+   * and evicted every `watch`-tier card — the seven that had each cost a Gemini
+   * video call.
+   *
+   * Measured on the live account: 12 cards, ALL `read`, nine of them with zero
+   * views. Handling the collision was not enough; the CAP is also a choice.
+   */
+  it("⭐ ranks before slicing, so watched cards survive a cheap sweep", () => {
+    const src = readFileSync(join(process.cwd(), "convex/maya/trends.ts"), "utf8");
+    const block = src.slice(src.indexOf("const byId = new Map"));
+    const ranked = block.indexOf("ranked");
+    const slice = block.indexOf(".slice(0, MAX_CARDS)");
+    expect(ranked).toBeGreaterThan(-1);
+    // The sort must happen BEFORE the cap, or the cap decides for us.
+    expect(ranked).toBeLessThan(slice);
+  });
+
+  it("⚠️ sorts on depth first, then reach", () => {
+    // Same ordering `topShapes` uses. A watched card carries beats, overlay
+    // timing and cut rhythm that a caption cannot, so it outranks reach.
+    const src = readFileSync(join(process.cwd(), "convex/maya/trends.ts"), "utf8");
+    /**
+     * ⚠️ Sliced FORWARD by length, not between two markers. `storeCards`
+     * appears earlier in the file than `const ranked`, so an indexOf-to-indexOf
+     * slice ran backwards and matched an empty string — a test that passed on
+     * nothing rather than on the code.
+     */
+    const block = src.slice(src.indexOf("const ranked ="), src.indexOf("const ranked =") + 400);
+    expect(block).toContain('a.depth === "watch"');
+    expect(block).toContain("metrics.views");
+  });
+});
