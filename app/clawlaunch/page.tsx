@@ -68,10 +68,13 @@ export default function ClawLaunchLandingPage() {
 
       <Phase>She ships</Phase>
       <PostsIt />
+      <AnswersEveryone />
+      <RemembersIt />
 
       <Phase>She proves it</Phase>
       <WhatsBroken />
       <TracesIt />
+      <OneExperiment />
 
       <TheMath />
       <Closer />
@@ -369,6 +372,85 @@ function PostsIt() {
   );
 }
 
+/**
+ * ⚠️ The real channel matrix, not an invented reply thread. TikTok exposes no
+ * comment API to anyone, and §12's rule is that a limit is told before it is
+ * discovered — a visitor who reads a real ❌ believes the ✅s.
+ */
+const REPLY_MATRIX: Array<[string, string, boolean]> = [
+  ["instagram", "Comments, mentions, DMs", true],
+  ["youtube", "Comments, and other people's videos", true],
+  ["x", "Replies, mentions, DMs", true],
+  ["tiktok", "No reply API exists — she'll tell you what came in", false],
+];
+
+function AnswersEveryone() {
+  return (
+    <Cap
+      flip
+      title="She answers everyone who replies"
+      line="In your voice, while it's still warm."
+      art={
+        <Panel pad={false}>
+          {REPLY_MATRIX.map(([ch, what, can], i) => (
+            <div
+              key={ch}
+              className={`flex items-center gap-4 px-6 py-4 ${
+                i === 0 ? "" : "border-t border-[#0a0a0a]/10"
+              }`}
+            >
+              <Mark channel={ch} />
+              <span
+                className={`flex-1 text-[15px] leading-[1.4] ${
+                  can ? "" : "text-[#0a0a0a]/65"
+                }`}
+              >
+                {what}
+              </span>
+              <span className="shrink-0 font-mono text-[13px] text-[#0a0a0a]/60">
+                {can ? "yes" : "no"}
+              </span>
+            </div>
+          ))}
+        </Panel>
+      }
+    />
+  );
+}
+
+/**
+ * ⚠️ The three commands, which are real product surface. The account's own
+ * stored rules can't be shown — every one names Reddit, which we no longer run,
+ * or "AI", which `tests/marketingCopy.test.ts` forbids in rendered copy.
+ */
+function RemembersIt() {
+  return (
+    <Cap
+      title="Tell her once"
+      line="Stored word for word. Still true a month later."
+      art={
+        <Panel>
+          {[
+            ["rules", "everything you've told her, in your words"],
+            ["forget that", "drops one, immediately"],
+            ["why", "what she was going on when she made that call"],
+          ].map(([cmd, what], i) => (
+            <div
+              key={cmd}
+              className={`py-3.5 ${i === 0 ? "pt-0" : "border-t border-[#0a0a0a]/10"}`}
+            >
+              <p className="font-mono text-[14px]">{cmd}</p>
+              <p className="mt-1 text-[15px] leading-[1.45] text-[#0a0a0a]/65">
+                {what}
+              </p>
+            </div>
+          ))}
+        </Panel>
+      }
+    />
+  );
+}
+
 /* ===== SHE PROVES IT =============================================== */
 
 /** ⚠️ The live verdict from the dogfood account. */
@@ -444,6 +526,43 @@ function TracesIt() {
               </li>
             ))}
           </ol>
+        </Panel>
+      }
+    />
+  );
+}
+
+/**
+ * ⚠️ The shape, not a result. Nothing has concluded on a real account yet, and
+ * an invented verdict on the page that sells her honesty would be the product
+ * contradicting itself. The honest non-answer is itself the selling point.
+ */
+function OneExperiment() {
+  return (
+    <Cap
+      flip
+      title="One experiment at a time"
+      line="Two weeks, one question, then a straight answer."
+      art={
+        <Panel>
+          <p className="font-display italic text-[19px] leading-[1.4] sm:text-[21px]">
+            &ldquo;Do short hooks travel further than long ones here?&rdquo;
+          </p>
+          <div className="mt-5 flex gap-3 border-t border-[#0a0a0a]/12 pt-5">
+            <span className="rounded-full border border-[#0a0a0a]/15 px-4 py-1.5 text-[14px]">
+              short
+            </span>
+            <span className="rounded-full border border-[#0a0a0a]/15 px-4 py-1.5 text-[14px]">
+              long
+            </span>
+            <span className="ml-auto self-center font-mono text-[12.5px] text-[#0a0a0a]/60">
+              14 days
+            </span>
+          </div>
+          <p className="mt-5 text-[15px] leading-[1.5] text-[#0a0a0a]/65">
+            And if two weeks wasn&rsquo;t enough to tell, she says that — an open
+            question, not a no.
+          </p>
         </Panel>
       }
     />
@@ -543,11 +662,23 @@ function Cap({
   flip?: boolean;
 }) {
   return (
-    <section className="px-6 py-12 sm:px-8 sm:py-16">
+    <section className="px-6 py-16 sm:px-8 sm:py-24">
       <RevealOnView>
-        <div className="mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-2 lg:gap-16">
-          <div className={flip ? "lg:order-2" : ""}>{art}</div>
-          <div className={flip ? "lg:order-1" : ""}>
+        {/**
+         * ⭐ The artifact PINS while its words scroll past, then releases as the
+         * next block takes over. Division by motion rather than by a rule —
+         * the operator's "can it be a scrolling thing", and it is also just
+         * better: a hairline between sections is a line the eye has to cross,
+         * where a held image is a beat the eye rests on.
+         *
+         * ⚠️ `lg:` only. Sticky on a phone would pin an image over the very
+         * words explaining it, in the one viewport with no room to spare.
+         */}
+        <div className="mx-auto grid max-w-6xl items-start gap-10 lg:grid-cols-2 lg:gap-16">
+          <div className={`lg:sticky lg:top-[18vh] ${flip ? "lg:order-2" : ""}`}>
+            {art}
+          </div>
+          <div className={`lg:py-[12vh] ${flip ? "lg:order-1" : ""}`}>
             <h2 className="max-w-[18ch] font-display italic text-[clamp(1.75rem,3.4vw,2.6rem)] leading-[1.12] tracking-[-0.01em]">
               {title}
             </h2>
@@ -568,7 +699,10 @@ function Cap({
 function Phase({ children }: { children: React.ReactNode }) {
   return (
     <div className="px-6 pt-16 sm:px-8 sm:pt-24">
-      <div className="mx-auto max-w-6xl border-t border-[#0a0a0a]/15 pt-6">
+      {/* ⚠️ No rule. The operator asked for division without "a direct line",
+          and the sticky artifacts already do the separating — a border here
+          would be a second, competing signal. */}
+      <div className="mx-auto max-w-6xl">
         <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/60">
           {children}
         </p>
