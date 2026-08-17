@@ -30,25 +30,39 @@ const DEMO = readFileSync(
 describe("the landing page demonstrates rather than claims", () => {
   it("⭐ renders the live URL read", () => {
     expect(LANDING).toContain("DemoRead");
-    expect(LANDING).toContain("<DemoSection />");
+    expect(LANDING).toContain("<TryIt />");
   });
 
-  it("⭐ puts it above the fold, right after the hero", () => {
+  it("⭐ puts it early — after the proof, before the explanation", () => {
     /**
-     * Ordering as argument, not decoration. Every competitor CLAIMS to
-     * understand your business; this proves it on the visitor's own site before
-     * they give us anything. Below the fold it is a feature — here it is the
-     * reason to keep reading.
+     * Ordering as argument, not decoration.
+     *
+     * ⚠️ It moved on the 2026-08-17 rebuild, deliberately. It used to sit
+     * immediately after the hero; now the three real videos come first.
+     * §19: *"founders don't doubt that software can write. They doubt that it
+     * knows anything."* The videos settle the easy doubt in three seconds,
+     * which buys the attention that the live read and the format card need.
+     *
+     * What must stay true is that it is EARLY — before `SheWatches` explains
+     * anything. A demo below the explanation is a demo nobody reaches.
      */
     const hero = LANDING.indexOf("<Hero />");
-    const demo = LANDING.indexOf("<DemoSection />");
-    const problems = LANDING.indexOf("<ProblemQuotes />");
-    expect(demo).toBeGreaterThan(hero);
-    expect(demo).toBeLessThan(problems);
+    const work = LANDING.indexOf("<Work />");
+    const demo = LANDING.indexOf("<TryIt />");
+    const watches = LANDING.indexOf("<SheWatches />");
+    expect(work).toBeGreaterThan(hero);
+    expect(demo).toBeGreaterThan(work);
+    expect(demo).toBeLessThan(watches);
   });
 
   it("⚠️ promises no signup, because the exit criterion says without one", () => {
-    expect(LANDING).toMatch(/no signup/i);
+    /**
+     * ⚠️ Asserted on the COMPONENT, not the page. The page used to repeat the
+     * promise in a caption and the component already carried it — the visitor
+     * read the same sentence twice. The caption was cut, so this now checks
+     * where the promise actually lives.
+     */
+    expect(DEMO).toMatch(/no signup/i);
   });
 
   it("⚠️ the read is guarded before it is public", () => {
