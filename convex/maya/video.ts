@@ -60,19 +60,67 @@ import { pickCard } from "./formats";
 export const SCRIPT_MODEL = "openai/gpt-5.6-luna-pro";
 
 /**
- * §3.1 of the API reference: 12 credits per 5 seconds for a clone, ~5 per 30
- * for the URL path. Used by the gate's check 8 before anything is spent.
+ * ⭐ Which assembly model, and what it costs. Verified against
+ * `docs.creatify.ai/billing.md` on 2026-08-17.
+ *
+ * | model | credits | 30s | $ at API Pro |
+ * |---|---|---|---|
+ * | `standard` | 5 cr / 30s | 5 | $0.75 |
+ * | `aurora_v1_fast` | 0.5 cr / sec | 15 | $2.24 |
+ * | `aurora_v1` | 1 cr / sec | 30 | $4.49 |
+ *
+ * ⚠️ This was NOT SET. `createLinkToVideo` accepts `model_version` and we never
+ * passed it, so the per-render cost — a 6× spread — was decided by whatever the
+ * vendor happens to default to. A cost that moves when someone else changes a
+ * default is not a cost anyone is managing.
+ *
+ * ⭐ `standard` on purpose, and the reason is authenticity rather than money.
+ * §7.5.3's ladder is founder footage → real screen recording → **avatar last**,
+ * and Aurora buys avatar REALISM. Paying 6× to make the least authentic rung
+ * more convincing is spending more to move DOWN the ladder. The upgrade worth
+ * buying is a founder's screen recording, which costs nothing.
+ *
+ * When that argument doesn't apply — a founder who genuinely wants a presenter
+ * — `aurora_v1_fast` is the sweet spot at 3×, not `aurora_v1` at 6×.
  */
+export const MODEL_VERSIONS = {
+  standard: { name: "standard", creditsPerSecond: 5 / 30 },
+  aurora_fast: { name: "aurora_v1_fast", creditsPerSecond: 0.5 },
+  aurora: { name: "aurora_v1", creditsPerSecond: 1 },
+} as const;
+
+export type ModelChoice = keyof typeof MODEL_VERSIONS;
+
+/** The default, per the authenticity argument above. */
+export const DEFAULT_MODEL: ModelChoice = "standard";
+
+/** §3.1: a clone is 12 credits per 5 seconds — 14× the standard path. */
 export const CREDITS_PER_CLONE_SECOND = 12 / 5;
-export const CREDITS_PER_LINK_VIDEO_SECOND = 5 / 30;
+export const CREDITS_PER_LINK_VIDEO_SECOND = MODEL_VERSIONS.standard.creditsPerSecond;
+
+/** Every render grounds a Link first, and a Link is 1 credit (§3.1). */
+export const CREDITS_PER_LINK = 1;
 
 /** §7.5.7 check 7 — a render that lands after the slot is a missed post. */
 export const ESTIMATED_RENDER_SECONDS = 180;
 
-export function estimateCredits(rung: Rung, lengthSeconds: number): number {
+export function estimateCredits(
+  rung: Rung,
+  lengthSeconds: number,
+  model: ModelChoice = DEFAULT_MODEL
+): number {
   const rate =
-    rung === "ad_clone" ? CREDITS_PER_CLONE_SECOND : CREDITS_PER_LINK_VIDEO_SECOND;
-  return Math.ceil(rate * lengthSeconds);
+    rung === "ad_clone"
+      ? CREDITS_PER_CLONE_SECOND
+      : MODEL_VERSIONS[model].creditsPerSecond;
+  /**
+   * ⚠️ The Link is counted. It is only 1 credit, but it is spent on EVERY
+   * render, and a gate that checks the render against the allowance while
+   * quietly spending a credit outside it drifts by exactly one per video —
+   * which at the boundary is the difference between the last video of the month
+   * working and failing after the founder said yes.
+   */
+  return Math.ceil(rate * lengthSeconds) + CREDITS_PER_LINK;
 }
 
 export type VideoFailure =
@@ -442,9 +490,12 @@ export async function submitRender(
       aspect_ratio?: string;
       video_length?: number;
       override_script?: string;
+      model_version?: string;
       target_platform?: string;
       webhook_url?: string;
     }) => Promise<{ id: string }>;
+    /** Explicit, never the vendor's default — see MODEL_VERSIONS. */
+    model?: ModelChoice;
     webhookUrl?: string;
     productTitle?: string;
     productDescription?: string;
@@ -498,6 +549,11 @@ export async function submitRender(
       aspect_ratio: ASPECT_RATIO,
       video_length: brief.length,
       override_script: brief.script,
+      /**
+       * ⚠️ Always stated. Leaving it out hands a 6× cost decision to a vendor
+       * default that can change without us noticing.
+       */
+      model_version: MODEL_VERSIONS[deps.model ?? DEFAULT_MODEL].name,
       target_platform: TARGET_PLATFORM,
       webhook_url: deps.webhookUrl,
     });

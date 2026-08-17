@@ -15,6 +15,9 @@ import {
   estimateCredits,
   RENDER_JOB_KIND,
   CREDITS_PER_CLONE_SECOND,
+  CREDITS_PER_LINK,
+  DEFAULT_MODEL,
+  MODEL_VERSIONS,
 } from "../video";
 import type { VideoBrief } from "../videoBrief";
 import type { Id } from "../../_generated/dataModel";
@@ -147,11 +150,19 @@ describe("the vendor contract, per docs/CREATIFY_API_REFERENCE.md §3", () => {
 
 describe("what a render is estimated to cost", () => {
   it("prices the clone rung far above the URL path", () => {
-    // §3.1 vs §3.2: 12 cr/5s against 5 cr/30s — 14x, and the reason the doc
-    // says a clone is affordable "once a month" rather than daily.
-    expect(estimateCredits("ad_clone", 15)).toBeGreaterThan(
-      estimateCredits("avatar", 15) * 10
-    );
+    /**
+     * §3.1 vs §3.2: 12 cr/5s against 5 cr/30s — 14x, and the reason the doc
+     * says a clone is affordable "once a month" rather than daily.
+     *
+     * ⚠️ Compared on the RENDER portion. Both paths also spend 1 credit on the
+     * Link, and that flat add dilutes the ratio at short lengths — an earlier
+     * version of this test compared totals and started failing the moment the
+     * Link was counted, which is the test noticing a real change in the
+     * arithmetic rather than a regression.
+     */
+    const clone = estimateCredits("ad_clone", 15) - CREDITS_PER_LINK;
+    const url = estimateCredits("avatar", 15) - CREDITS_PER_LINK;
+    expect(clone).toBeGreaterThan(url * 10);
     expect(CREDITS_PER_CLONE_SECOND).toBeCloseTo(2.4, 5);
   });
 
@@ -162,6 +173,59 @@ describe("what a render is estimated to cost", () => {
       expect(Number.isInteger(estimateCredits("avatar", len))).toBe(true);
       expect(Number.isInteger(estimateCredits("ad_clone", len))).toBe(true);
     }
+  });
+});
+
+describe("which model, and what it costs", () => {
+  /**
+   * ⭐ Verified against docs.creatify.ai/billing.md on 2026-08-17:
+   * standard 5cr/30s · aurora_v1_fast 0.5cr/s · aurora_v1 1cr/s. At API Pro
+   * ($299 / 2,000 cr = $0.1495) a 30-second video is $0.75 · $2.24 · $4.49.
+   *
+   * ⚠️ `model_version` was never passed, so a 6× cost spread was decided by
+   * whatever the vendor defaults to. A cost that moves when someone else
+   * changes a default is not a cost anyone is managing.
+   */
+  it("⭐ always states the model — never the vendor's default", async () => {
+    const d = deps();
+    await submitRender(brief(), d);
+    expect(d.createLinkToVideo.mock.calls[0][0].model_version).toBe("standard");
+  });
+
+  it("⭐ defaults to standard, and the reason is authenticity not money", () => {
+    /**
+     * §7.5.3's ladder is founder footage → real screen recording → AVATAR LAST,
+     * and Aurora buys avatar realism. Paying 6× to make the least authentic
+     * rung more convincing is spending more to move DOWN the ladder.
+     */
+    expect(DEFAULT_MODEL).toBe("standard");
+    expect(MODEL_VERSIONS[DEFAULT_MODEL].name).toBe("standard");
+  });
+
+  it("⭐ prices the three models at their documented rates", () => {
+    // 30s: 5cr + 1 link · 15cr + 1 · 30cr + 1
+    expect(estimateCredits("avatar", 30, "standard")).toBe(6);
+    expect(estimateCredits("avatar", 30, "aurora_fast")).toBe(16);
+    expect(estimateCredits("avatar", 30, "aurora")).toBe(31);
+  });
+
+  it("⚠️ counts the Link, which every render spends", () => {
+    /**
+     * Only 1 credit, but spent on EVERY render. A gate that checks the render
+     * against the allowance while quietly spending outside it drifts by one per
+     * video — and at the boundary that is the difference between the month's
+     * last video working and failing AFTER the founder said yes, which §7.5.7
+     * calls the worst possible sequence.
+     */
+    expect(estimateCredits("avatar", 30, "standard")).toBe(
+      Math.ceil((5 / 30) * 30) + CREDITS_PER_LINK
+    );
+  });
+
+  it("⚠️ aurora is 6x standard, so the choice is a real one", () => {
+    const std = estimateCredits("avatar", 30, "standard") - CREDITS_PER_LINK;
+    const aurora = estimateCredits("avatar", 30, "aurora") - CREDITS_PER_LINK;
+    expect(aurora / std).toBe(6);
   });
 });
 
