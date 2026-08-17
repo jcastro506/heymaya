@@ -4,10 +4,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { FaLinkedin, FaXTwitter } from "react-icons/fa6";
-import { SiInstagram, SiReddit, SiTiktok, SiYoutube } from "react-icons/si";
+import { SiInstagram, SiTiktok, SiYoutube } from "react-icons/si";
 
 import { primaryCtaHref, primaryCtaLabel } from "../_components/landingMode";
-import { DemoRead } from "../_components/DemoRead";
 
 /**
  * Landing redesign — "a portfolio of one week of Maya's work."
@@ -52,14 +51,12 @@ export default function ClawLaunchLandingPage() {
       <StickyCTA />
       <Hero />
       <ProblemQuotes />
-      <TryIt />
       <DayOne />
       <WeekBubbles />
       <SheWatches />
       <WorkGallery />
       <Receipts />
       <TheLadder />
-      <HouseRules />
       <InlineCTA
         kicker="This was one week"
         line="Yours starts in four minutes."
@@ -170,7 +167,7 @@ function InlineCTA({ kicker, line }: { kicker: string; line: string }) {
         <RevealOnView>
           <div className="flex flex-col items-start gap-6 border-y border-[#0a0a0a]/15 py-12 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/50">
+              <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/65">
                 {kicker}
               </p>
               <p className="font-display italic text-[clamp(1.6rem,3.2vw,2.6rem)] leading-[1.1] tracking-tight">
@@ -220,7 +217,7 @@ const HERO_NOTIFICATIONS: Array<{
   },
   {
     time: "8:01 PM",
-    text: "2 signups today. Both from the Reddit reply.",
+    text: "2 signups today. Both from the TikTok post.",
     tilt: "-rotate-[0.75deg]",
     offset: "sm:mr-1",
     delay: "2.8s",
@@ -244,10 +241,10 @@ function NotificationStack() {
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline justify-between gap-3">
-                <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#0a0a0a]/55">
+                <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#0a0a0a]/65">
                   Maya
                 </span>
-                <span className="font-mono text-[10px] tabular-nums text-[#0a0a0a]/40">
+                <span className="font-mono text-[10px] tabular-nums text-[#0a0a0a]/60">
                   {n.time}
                 </span>
               </div>
@@ -322,7 +319,7 @@ function Hero() {
 
 /* -----------------------------------------------------------------
  * Beat 2 — THE PROBLEM, IN THEIR WORDS [paper]. Three pull-quote
- * cards, cited with a subreddit chip. One caption line under them.
+ * cards, cited with a source chip. One caption line under them.
  * ----------------------------------------------------------------- */
 const PROBLEM_QUOTES: Array<{ quote: string; source: string; lift: string }> = [
   {
@@ -349,7 +346,7 @@ function ProblemQuotes() {
     <section className="relative px-6 py-20 sm:px-10 sm:py-28">
       <div className="mx-auto max-w-7xl">
         <RevealOnView>
-          <p className="mb-10 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/50">
+          <p className="mb-10 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/65">
             You&rsquo;ve typed one of these
           </p>
         </RevealOnView>
@@ -362,7 +359,7 @@ function ProblemQuotes() {
                 </blockquote>
                 <figcaption className="mt-6">
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-[#0a0a0a]/12 bg-[#fbfaf6] px-2.5 py-1 font-mono text-[10px] tracking-[0.1em] text-[#0a0a0a]/60">
-                    <RedditLogo className="size-3" />
+                    <XLogo className="size-3" />
                     {q.source}
                   </span>
                 </figcaption>
@@ -393,7 +390,7 @@ function DayOne() {
           <div className="rounded-[2rem] border border-[#1B2434] bg-[#0B0F15] px-6 py-14 shadow-[0_48px_120px_-48px_rgba(10,15,25,0.6)] sm:rounded-[2.5rem] sm:px-12 sm:py-20 lg:px-16">
             <div className="grid grid-cols-12 gap-y-10 lg:items-center lg:gap-x-10">
               <div className="col-span-12 lg:col-span-5">
-                <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#5D6E85]">
+                <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#94A6BD]">
                   Day one
                 </p>
                 <h2 className="font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight text-[#E9EEF6]">
@@ -401,17 +398,16 @@ function DayOne() {
                 </h2>
               </div>
               <div className="col-span-12 lg:col-span-7">
-                <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[#5D6E85]">
+                <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[#94A6BD]">
                   Maya · her first text
                 </p>
                 <div className="max-w-xl rounded-2xl rounded-bl-md bg-[#26303F] px-5 py-4 shadow-[0_1px_2px_rgba(0,0,0,0.3)]">
                   <p className="text-[14.5px] leading-[1.6] text-[#E9EEF6] sm:text-[15px]">
                     Foundation&rsquo;s done. Your buyer: solo devs who shipped
-                    and heard crickets. Your channels: Reddit first (they vent
-                    in exact problem language — three live threads match you
-                    today), X second (build-in-public is their feed). Six
-                    angles locked. First move: a reply to &lsquo;who&rsquo;s
-                    going to sell them?&rsquo; — drafted, waiting on your tap.
+                    and heard crickets. Your channels: TikTok and Reels first
+                    (that&rsquo;s where they scroll), YouTube for the searches
+                    that keep converting, X for the conversation. Six angles
+                    locked. First one&rsquo;s drafted, waiting on your tap.
                   </p>
                 </div>
               </div>
@@ -440,7 +436,7 @@ const WEEK_BUBBLES: Array<{ stamp: string; text: string; shift: string }> = [
   },
   {
     stamp: "Tue · 8:00p",
-    text: "Both posts out. The Reddit one’s pulling comments — one asked ‘where can I try this?’ The X one flopped. Wrong hook, my fault. Fixed for next time.",
+    text: "Both posts out. The TikTok one’s pulling comments — one asked ‘where can I try this?’ The X one flopped. Wrong hook, my fault. Fixed for next time.",
     shift: "",
   },
   {
@@ -455,7 +451,7 @@ const WEEK_BUBBLES: Array<{ stamp: string; text: string; shift: string }> = [
   },
   {
     stamp: "Sun · 6:00p",
-    text: "Week review: 7 signups, 5 from Reddit. Reddit converts. X doesn’t yet. Doubling Reddit.",
+    text: "Week review: 7 signups, 5 from TikTok. TikTok converts. X doesn’t yet. Doubling TikTok.",
     shift: "sm:ml-12",
   },
 ];
@@ -465,7 +461,7 @@ function WeekBubbles() {
     <section id="week" className="relative px-6 py-24 sm:px-10 sm:py-32">
       <div className="mx-auto max-w-7xl">
         <RevealOnView>
-          <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/50">
+          <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/65">
             A week with her
           </p>
           <h2 className="mb-14 font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight max-w-3xl sm:mb-20">
@@ -476,7 +472,7 @@ function WeekBubbles() {
           {WEEK_BUBBLES.map((b, i) => (
             <RevealOnView key={b.stamp} delay={0.05 + (i % 2) * 0.08}>
               <div className={b.shift}>
-                <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#0a0a0a]/45">
+                <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#0a0a0a]/60">
                   {b.stamp}
                 </p>
                 <div className="inline-block max-w-full rounded-2xl rounded-bl-md border border-[#0a0a0a]/8 bg-white px-5 py-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_30px_-16px_rgba(0,0,0,0.14)]">
@@ -493,13 +489,6 @@ function WeekBubbles() {
   );
 }
 
-/* -----------------------------------------------------------------
- * Platform logos — Simple Icons via react-icons, canonical brand
- * colors. TikTok gets the chromatic-aberration treatment.
- * ----------------------------------------------------------------- */
-function RedditLogo({ className }: { className?: string }) {
-  return <SiReddit className={className} color="#FF4500" aria-label="Reddit" />;
-}
 
 function TikTokLogo({ className }: { className?: string }) {
   return (
@@ -615,58 +604,6 @@ function PlatformVideo({
   );
 }
 
-/* -----------------------------------------------------------------
- * Post mockups — the written work, rendered native.
- * ----------------------------------------------------------------- */
-function RedditMockup() {
-  return (
-    <div className="overflow-hidden rounded-2xl border border-[#0a0a0a]/10 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_36px_-16px_rgba(0,0,0,0.16)]">
-      {/* OP post */}
-      <div className="border-b border-[#0a0a0a]/8 px-5 py-4">
-        <div className="flex items-center gap-2 text-[11px]">
-          <SiReddit className="size-4" color="#FF4500" />
-          <span className="font-semibold">r/getdisciplined</span>
-          <span className="opacity-40">·</span>
-          <span className="opacity-50">posted by u/winterhabits · 3h</span>
-        </div>
-        <h4 className="mt-2.5 text-[16px] font-semibold leading-snug">
-          How do you actually remember to check your habit tracker at the end
-          of the day?
-        </h4>
-        <p className="mt-2 text-[13px] leading-relaxed opacity-65">
-          Tried 4 different ones. None of them stick because I forget to open
-          them at night. Anyone solved this?
-        </p>
-        <div className="mt-3.5 flex items-center gap-5 text-[11px] opacity-50">
-          <span className="font-semibold">↑ 89</span>
-          <span>24 comments</span>
-          <span>share</span>
-        </div>
-      </div>
-
-      {/* Her drafted reply */}
-      <div className="relative bg-[#fbfaf6] px-5 py-4 pl-7">
-        <div className="absolute bottom-4 left-4 top-4 w-[2px] bg-[#FF4500]/35" />
-        <div className="flex items-center gap-2 text-[11px]">
-          <span className="font-semibold">u/yourname</span>
-          <span className="opacity-40">· just now</span>
-        </div>
-        <p className="mt-2 text-[13px] leading-relaxed">
-          had this exact problem with mine. what worked was switching the
-          evening check-in from a generic &ldquo;log your habits&rdquo;
-          notification to one specific question, like &ldquo;did you do the
-          thing today.&rdquo; built a small app last month that does this if
-          you want to try it. happy to share what i learned either way.
-        </p>
-        <div className="mt-3 flex items-center gap-4 text-[11px] opacity-50">
-          <span className="font-semibold">↑ 12</span>
-          <span>↓</span>
-          <span>reply</span>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function XMockup() {
   return (
@@ -720,7 +657,7 @@ function BanSafetyMockup() {
       <div className="flex items-center justify-between border-b border-[#0a0a0a]/8 px-5 py-3.5">
         <div className="flex items-center gap-2">
           <span className="inline-block size-2 rounded-full bg-[#16a34a]" />
-          <span className="text-[11px] uppercase tracking-[0.2em] text-[#0a0a0a]/50">
+          <span className="text-[11px] uppercase tracking-[0.2em] text-[#0a0a0a]/65">
             Pre-post check · r/SaaS reply
           </span>
         </div>
@@ -749,7 +686,7 @@ function BanSafetyMockup() {
 
 /* -----------------------------------------------------------------
  * Beat 5 — THE WORK [gallery]. Mixed artifacts: the three videos she
- * films (Studio), the Reddit reply, the X post, the pre-post check.
+ * films (Studio), the X post, the pre-post check.
  * ----------------------------------------------------------------- */
 function StudioVideo({
   platform,
@@ -776,7 +713,7 @@ function GalleryLabel({
   text: string;
 }) {
   return (
-    <p className="mb-4 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#0a0a0a]/50">
+    <p className="mb-4 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#0a0a0a]/65">
       {icon}
       {text}
     </p>
@@ -788,7 +725,7 @@ function WorkGallery() {
     <section id="work" className="relative px-6 py-24 sm:px-10 sm:py-32">
       <div className="mx-auto max-w-7xl">
         <RevealOnView>
-          <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/50">
+          <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/65">
             The work
           </p>
           <h2 className="mb-14 font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight max-w-3xl sm:mb-20">
@@ -816,13 +753,6 @@ function WorkGallery() {
 
         {/* The posts she writes */}
         <div className="mt-16 grid gap-12 sm:mt-20 lg:grid-cols-2 lg:gap-10">
-          <RevealOnView delay={0.05}>
-            <GalleryLabel
-              icon={<RedditLogo className="size-3.5" />}
-              text="Reddit · her drafted reply"
-            />
-            <RedditMockup />
-          </RevealOnView>
           <div className="flex flex-col gap-12">
             <RevealOnView delay={0.12}>
               <GalleryLabel
@@ -845,7 +775,7 @@ function WorkGallery() {
 
         <RevealOnView delay={0.1}>
           <p className="mt-14 max-w-2xl text-[15px] leading-[1.6] text-[#0a0a0a]/60">
-            Reddit &amp; TikTok always wait for your one tap. That tap is why
+            TikTok always waits for your one tap. That tap is why
             your accounts never get flagged.
           </p>
         </RevealOnView>
@@ -864,16 +794,16 @@ function AttributionMockup() {
     <div className="overflow-hidden rounded-2xl border border-[#243044] bg-[#0B0F15] shadow-[0_1px_2px_rgba(0,0,0,0.2),0_32px_80px_-24px_rgba(10,15,25,0.55)]">
       {/* App chrome */}
       <div className="flex items-center justify-between border-b border-[#1B2434] px-5 py-3">
-        <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#5D6E85]">
+        <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#94A6BD]">
           Mission Control · Results
         </span>
-        <span className="font-mono text-[10px] text-[#5D6E85]">This week</span>
+        <span className="font-mono text-[10px] text-[#94A6BD]">This week</span>
       </div>
 
       <div className="grid grid-cols-5 gap-3 p-4">
         {/* Hero KPI */}
         <div className="col-span-3 rounded-xl border border-[#1B2434] bg-gradient-to-b from-[#18212F] to-[#111823] p-4">
-          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#5D6E85]">
+          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#94A6BD]">
             Signups · attributed
           </p>
           <p className="mt-1 text-[38px] font-extrabold leading-none tracking-tight text-[#E9EEF6] tabular-nums">
@@ -890,7 +820,7 @@ function AttributionMockup() {
         </div>
         {/* Funnel */}
         <div className="col-span-2 rounded-xl border border-[#1B2434] bg-[#111823] p-4">
-          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#5D6E85]">Funnel</p>
+          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#94A6BD]">Funnel</p>
           <div className="mt-2.5 space-y-2">
             {[
               { k: "Posts", w: "100%", v: "11" },
@@ -913,7 +843,7 @@ function AttributionMockup() {
         <div className="col-span-5 divide-y divide-[#1B2434] rounded-xl border border-[#1B2434] bg-[#111823]">
           <div className="flex items-center justify-between gap-4 px-4 py-3">
             <div className="flex min-w-0 items-center gap-2">
-              <SiReddit className="size-3.5 shrink-0" color="#D95F27" />
+              <SiTiktok className="size-3.5 shrink-0" color="#E9EEF6" />
               <p className="truncate text-[12px] text-[#E9EEF6]">
                 &ldquo;Most indie apps die from zero distribution&rdquo;
               </p>
@@ -948,8 +878,8 @@ function AttributionMockup() {
       {/* Insight bar */}
       <div className="border-t border-[#1B2434] bg-[#0d1420] px-5 py-3">
         <p className="text-[12px] leading-snug text-[#8FA0B5]">
-          <span className="font-semibold text-[#E9EEF6]">Reddit converts. X doesn&apos;t yet.</span>{" "}
-          Doubling Reddit this week.
+          <span className="font-semibold text-[#E9EEF6]">TikTok converts. X doesn&apos;t yet.</span>{" "}
+          Doubling TikTok this week.
         </p>
       </div>
     </div>
@@ -962,7 +892,7 @@ function Receipts() {
       <div className="mx-auto max-w-7xl">
         <RevealOnView>
           <div className="rounded-[2rem] border border-[#1B2434] bg-[#0B0F15] px-6 py-14 shadow-[0_48px_120px_-48px_rgba(10,15,25,0.6)] sm:rounded-[2.5rem] sm:px-12 sm:py-20 lg:px-16">
-            <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#5D6E85]">
+            <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#94A6BD]">
               The receipts
             </p>
             <h2 className="mb-12 font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight text-[#E9EEF6] sm:mb-14">
@@ -986,39 +916,6 @@ function Receipts() {
  * Beat 7 — GUARDRAILS [paper]. One strip, three chips. No section
  * weight — it reads on the way to pricing.
  * ----------------------------------------------------------------- */
-/* -----------------------------------------------------------------
- * ⭐ Beat 2.5 — THE LIVE READ [paper]. §18.9.2 block ②, and Sprint 11's
- * exit criterion: *"a visitor can paste a URL on the landing page and
- * watch her be specifically right about their company, in under 20
- * seconds, without signing up."*
- *
- * Placed after the problem, before the day: they have just read their
- * own frustration quoted back at them, which is the moment a demo lands.
- *
- * ⚠️ No caption. `DemoRead` carries its own headline and its own
- * "no signup" promise — an earlier version repeated both and the visitor
- * read the same sentence twice.
- * ----------------------------------------------------------------- */
-function TryIt() {
-  return (
-    <section className="relative px-6 py-16 sm:px-10 sm:py-24">
-      <div className="mx-auto max-w-7xl">
-        <RevealOnView>
-          <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/50">
-            Try it now
-          </p>
-          <h2 className="mb-12 max-w-3xl font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight">
-            She&rsquo;ll tell you what you sell.
-          </h2>
-          <div className="max-w-2xl">
-            <DemoRead />
-          </div>
-        </RevealOnView>
-      </div>
-    </section>
-  );
-}
-
 /* -----------------------------------------------------------------
  * ⭐ Beat 4.5 — SHE WATCHES [dark]. §5.3: "the single most
  * differentiated capability in the product."
@@ -1052,7 +949,7 @@ function SheWatches() {
       <div className="mx-auto max-w-7xl">
         <RevealOnView>
           <div className="rounded-[2rem] border border-[#1B2434] bg-[#0B0F15] px-6 py-14 shadow-[0_48px_120px_-48px_rgba(10,15,25,0.6)] sm:rounded-[2.5rem] sm:px-12 sm:py-20 lg:px-16">
-            <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#5D6E85]">
+            <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#94A6BD]">
               Before she writes a word
             </p>
             <h2 className="mb-12 max-w-3xl font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight text-[#E9EEF6] sm:mb-14">
@@ -1062,10 +959,10 @@ function SheWatches() {
             <div className="grid gap-10 lg:grid-cols-[1fr_1.1fr] lg:gap-14">
               <div>
                 <div className="flex items-center justify-between gap-4 border-b border-[#1B2434] pb-4">
-                  <span className="flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.18em] text-[#5D6E85]">
+                  <span className="flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.18em] text-[#94A6BD]">
                     <SiTiktok className="size-3.5" /> watched in full
                   </span>
-                  <span className="font-mono text-[12px] tabular-nums text-[#5D6E85]">
+                  <span className="font-mono text-[12px] tabular-nums text-[#94A6BD]">
                     17,385 views
                   </span>
                 </div>
@@ -1086,7 +983,7 @@ function SheWatches() {
                       i === 0 ? "" : "border-t border-[#1B2434]/70"
                     }`}
                   >
-                    <span className="font-mono text-[12.5px] tabular-nums text-[#5D6E85]">
+                    <span className="font-mono text-[12.5px] tabular-nums text-[#94A6BD]">
                       {at}
                     </span>
                     <span className="text-[15px] leading-[1.45] text-[#C9D4E2]">
@@ -1098,9 +995,7 @@ function SheWatches() {
             </div>
 
             <p className="mt-12 max-w-2xl border-t border-[#1B2434] pt-8 text-[15px] leading-[1.6] text-[#8FA0B5]">
-              <span className="text-[#5D6E85]">So yours can — </span>
-              open by rejecting the shortcut everyone&rsquo;s selling, then show
-              the slower thing that works. About twenty of these a week.
+              About twenty of these a week, before she writes anything.
             </p>
           </div>
         </RevealOnView>
@@ -1133,7 +1028,7 @@ function TheLadder() {
     <section className="relative px-6 py-16 sm:px-10 sm:py-24">
       <div className="mx-auto max-w-7xl">
         <RevealOnView>
-          <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/50">
+          <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/65">
             When it isn&rsquo;t working
           </p>
           <h2 className="mb-12 max-w-3xl font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight">
@@ -1150,14 +1045,14 @@ function TheLadder() {
                   className={
                     broken
                       ? "font-display italic text-[1.35rem] leading-tight"
-                      : "text-[16px] text-[#0a0a0a]/45"
+                      : "text-[16px] text-[#0a0a0a]/60"
                   }
                 >
                   {q}
                 </span>
                 <span
                   className={`font-mono text-[12px] ${
-                    broken ? "text-[#0a0a0a]" : "text-[#0a0a0a]/25"
+                    broken ? "text-[#0a0a0a]" : "text-[#0a0a0a]/60"
                   }`}
                 >
                   {a || "—"}
@@ -1170,11 +1065,7 @@ function TheLadder() {
             &ldquo;Almost nobody saw them, so this is a format problem, not a
             topic one.&rdquo;
           </p>
-          <p className="mt-5 max-w-xl text-[15px] leading-[1.6] text-[#0a0a0a]/55">
-            Five questions in order. The first one that fails is the thing to
-            fix — and if it&rsquo;s the last one, she says it isn&rsquo;t a
-            social problem.
-          </p>
+
         </RevealOnView>
       </div>
     </section>
@@ -1182,56 +1073,25 @@ function TheLadder() {
 }
 
 /* -----------------------------------------------------------------
- * ⭐ Beat 6.75 — HOUSE RULES [paper].
+ * ⛔ HOUSE RULES — built, and OFF the page for now.
  *
- * ⚠️ Real rules, verbatim from the dogfood account. The account's other
- * rules are about not calling her an AI — true, and unquotable here:
- * `tests/marketingCopy.test.ts` forbids the word in rendered copy, and
- * quotation marks don't help a skimming reader.
+ * The capability is real and one of the strongest: tell her once, stored
+ * verbatim and dated, still enforced after a redeploy and a deliberate
+ * model swap (twelve of twelve across four model families, §18 Sprint 6).
  *
- * ⭐ These are better artifacts anyway. "One more time so it sticks" is a
- * founder repeating himself, which is the entire reason House Rules exist.
+ * ⚠️ It has no showable artifact today. The dogfood account holds exactly
+ * four rules, and every one of them names either Reddit — which we no
+ * longer run, so printing it would tell a visitor the opposite of the
+ * truth — or "AI", which `tests/marketingCopy.test.ts` forbids in
+ * rendered copy and which is itself one of the founder's own rules.
+ *
+ * ⚠️ Writing a plausible-looking rule instead is the one thing not
+ * available. §18.9.2 asks for "a real artifact, not a mockup", and an
+ * invented quote on the page that sells her honesty would be the product
+ * contradicting itself in public.
+ *
+ * Restore this the moment the account has a rule that names neither.
  * ----------------------------------------------------------------- */
-const RULES = [
-  "important correction: we don't do Reddit or LinkedIn anymore. HeyMaya runs TikTok, Instagram, YouTube and X only.",
-  "one more time so it sticks: we do NOT use Reddit or LinkedIn. Only TikTok, Instagram, YouTube and X.",
-];
-
-function HouseRules() {
-  return (
-    <section className="relative px-6 py-16 sm:px-10 sm:py-24">
-      <div className="mx-auto max-w-7xl">
-        <RevealOnView>
-          <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/50">
-            House rules
-          </p>
-          <h2 className="mb-12 max-w-3xl font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight">
-            Tell her once.
-          </h2>
-          <div className="max-w-3xl border-t border-[#0a0a0a]/15">
-            {RULES.map((rule, i) => (
-              <div
-                key={rule}
-                className="flex items-start gap-5 border-b border-[#0a0a0a]/12 py-6"
-              >
-                <span className="mt-1.5 font-mono text-[11px] tabular-nums text-[#0a0a0a]/30">
-                  0{i + 1}
-                </span>
-                <p className="font-display italic text-[1.3rem] leading-[1.35] tracking-tight sm:text-[1.45rem]">
-                  &ldquo;{rule}&rdquo;
-                </p>
-              </div>
-            ))}
-          </div>
-          <p className="mt-8 max-w-xl text-[15px] leading-[1.6] text-[#0a0a0a]/55">
-            Stored word for word, dated, and still true after a redeploy — or a
-            change of model.
-          </p>
-        </RevealOnView>
-      </div>
-    </section>
-  );
-}
 
 /* -----------------------------------------------------------------
  * ⭐ Beat 7.5 — THE MATH [paper]. §18.9.2 block ⑫.
@@ -1251,25 +1111,25 @@ function TheMath() {
         <RevealOnView>
           <div className="grid gap-12 border-y border-[#0a0a0a]/15 py-14 sm:grid-cols-2 sm:gap-8 sm:py-20">
             <div>
-              <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/45">
+              <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/60">
                 A creator, per drop
               </p>
-              <p className="font-display text-[clamp(3rem,8vw,5.5rem)] leading-[0.85] tracking-tight text-[#0a0a0a]/25 line-through decoration-[2px]">
+              <p className="font-display text-[clamp(3rem,8vw,5.5rem)] leading-[0.85] tracking-tight text-[#0a0a0a]/45 line-through decoration-[2px]">
                 $300
               </p>
-              <p className="mt-6 max-w-[26ch] text-[15px] leading-[1.6] text-[#0a0a0a]/50">
+              <p className="mt-6 max-w-[26ch] text-[15px] leading-[1.6] text-[#0a0a0a]/65">
                 For a couple of posts. Then you brief them again next week.
               </p>
             </div>
             <div className="sm:border-l sm:border-[#0a0a0a]/15 sm:pl-12">
-              <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/45">
+              <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/60">
                 Maya, per month
               </p>
               <p className="font-display italic text-[clamp(3rem,8vw,5.5rem)] leading-[0.85] tracking-tight">
                 $99
               </p>
               <p className="mt-6 max-w-[26ch] text-[15px] leading-[1.6] text-[#0a0a0a]/70">
-                She watches, writes, posts, answers, and tells you what worked.
+                Every day. She briefs herself.
               </p>
             </div>
           </div>
@@ -1312,14 +1172,14 @@ function PriceColumn({
         <span className="font-display italic text-[clamp(2.6rem,5vw,4rem)] leading-[0.9] tracking-tight">
           {price}
         </span>
-        <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#0a0a0a]/45">
+        <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#0a0a0a]/60">
           {cadence}
         </span>
       </div>
-      <p className="mt-2 font-mono text-[11px] tracking-[0.05em] text-[#0a0a0a]/40">
+      <p className="mt-2 font-mono text-[11px] tracking-[0.05em] text-[#0a0a0a]/60">
         {annual}
       </p>
-      <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/55">
+      <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/65">
         {name}
       </p>
       <p className="mt-2 max-w-sm font-display italic text-[1.35rem] leading-[1.15] tracking-tight">
@@ -1344,7 +1204,7 @@ function PriceColumn({
           {primaryCtaLabel("Start free")}
           <span>→</span>
         </Link>
-        <p className="mt-5 text-[13px] text-[#0a0a0a]/45">{footnote}</p>
+        <p className="mt-5 text-[13px] text-[#0a0a0a]/60">{footnote}</p>
       </div>
     </div>
   );
@@ -1355,7 +1215,7 @@ function Pricing() {
     <section id="pricing" className="relative px-6 py-24 sm:px-10 sm:py-36">
       <div className="mx-auto max-w-7xl">
         <RevealOnView>
-          <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/50">
+          <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/65">
             Pricing
           </p>
           <h2 className="mb-16 font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.15] tracking-tight max-w-3xl sm:mb-20">
@@ -1363,7 +1223,7 @@ function Pricing() {
           </h2>
         </RevealOnView>
         <RevealOnView delay={0.05}>
-          <p className="mb-14 font-mono text-[11px] uppercase tracking-[0.18em] text-[#0a0a0a]/45">
+          <p className="mb-14 font-mono text-[11px] uppercase tracking-[0.18em] text-[#0a0a0a]/60">
             Every plan · ban-safe by design · your voice, always · you approve
             everything
           </p>
@@ -1671,12 +1531,23 @@ function PageStyles() {
       }
 
       /* IntersectionObserver-driven reveals. */
+      /**
+       * ⚠️ 0.85s, not 1.8s. At nearly two seconds the section was still
+       * arriving after the reader had started reading it, which reads as lag
+       * rather than as motion — and on a fast scroll several sections were
+       * animating at once. Short enough to feel immediate, long enough to
+       * feel deliberate.
+       *
+       * 24px, not 36px: a large travel distance means the text is still
+       * moving while it is legible, which is the thing that makes a page feel
+       * unsettled.
+       */
       [data-page="clawlaunch-landing"] .reveal-on-view {
         opacity: 0;
-        transform: translateY(36px);
+        transform: translateY(24px);
         transition:
-          opacity 1.8s cubic-bezier(0.16, 1, 0.3, 1),
-          transform 1.8s cubic-bezier(0.16, 1, 0.3, 1);
+          opacity 0.85s cubic-bezier(0.16, 1, 0.3, 1),
+          transform 0.85s cubic-bezier(0.16, 1, 0.3, 1);
         will-change: opacity, transform;
       }
       [data-page="clawlaunch-landing"] .reveal-on-view[data-visible="true"] {
