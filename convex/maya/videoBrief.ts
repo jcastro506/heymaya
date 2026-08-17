@@ -269,15 +269,58 @@ export function storyboard(brief: VideoBrief): StoryboardFrame[] {
  * ⚠️ No vendor name, no rung, no scene-kind enum — §11 and acceptance item 7.
  * The founder is being asked one question: are these the right frames?
  */
-export function storyboardMessage(frames: StoryboardFrame[]): string {
-  const lines = [
-    "Here's what I'd make, frame by frame. Nothing's been rendered yet — say go and I'll build it, or tell me which shot is wrong.",
-    "",
-  ];
+export interface Inspiration {
+  /** The shape she's borrowing, in her words. A format card's `reusableAs`. */
+  shape: string;
+  /** Where she saw it work. §6 — a source you can't open isn't a source. */
+  sourceUrl?: string;
+  channel?: string;
+}
+
+export function storyboardMessage(
+  frames: StoryboardFrame[],
+  inspiration?: Inspiration | null
+): string {
+  const lines: string[] = [];
+
+  /**
+   * ⭐ LEAD WITH WHY, not with the frames.
+   *
+   * ⚠️ The first version opened on "here's what I'd make, frame by frame" —
+   * accurate, and it read like a form. A colleague pitching an idea says what
+   * gave them the idea first, and the founder's own words for what they wanted
+   * were: *"I just had an idea. I saw something on TikTok that inspired me. I
+   * want to make this for you, and it's going to go like this."*
+   *
+   * It is also the honest thing to lead with. The whole product is that she
+   * does the homework and borrows shapes that demonstrably travelled in this
+   * niche — a storyboard that hides its source is asking for a yes on taste
+   * rather than on evidence.
+   */
+  if (inspiration?.shape) {
+    const where = inspiration.channel ? ` on ${inspiration.channel}` : "";
+    lines.push(
+      `Had an idea. Something${where} caught my eye and I think the shape works for you — ${inspiration.shape}.`
+    );
+    if (inspiration.sourceUrl) lines.push(`That's the one: ${inspiration.sourceUrl}`);
+    lines.push("");
+    lines.push("Here's how yours would go:");
+  } else {
+    // ⚠️ No invented inspiration. When she's building from the idea bank alone,
+    // claiming something "caught her eye" would be a fabricated observation.
+    lines.push("Had an idea. Here's how it would go:");
+  }
+  lines.push("");
+
   for (const f of frames) {
     lines.push(`${f.index}. ${f.what} — "${f.line}"`);
     lines.push(`   ${f.still}`);
   }
+
+  lines.push("");
+  lines.push(
+    "Nothing's been made yet — say go and I'll build it, or tell me which shot is wrong."
+  );
   return lines.join("\n");
 }
 

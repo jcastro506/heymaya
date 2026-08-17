@@ -54,6 +54,7 @@ import {
   type VideoBrief,
 } from "./videoBrief";
 import { runGate, capToBuildable, type Rung } from "./preSpendGate";
+import { pickCard } from "./formats";
 
 /** Writes the script. The voice tier — this is what the founder's buyers read. */
 export const SCRIPT_MODEL = "openai/gpt-5.6-luna-pro";
@@ -134,7 +135,8 @@ export const proposeVideo = internalAction({
     const requested = capToBuildable((args.rung as Rung) ?? "avatar");
     const length = args.lengthSeconds ?? 30;
 
-    const [plan, videoBudget, spend, assets, truth, idea] = await Promise.all([
+    const [plan, videoBudget, spend, assets, truth, idea, library] =
+      await Promise.all([
       ctx.runQuery(internal.maya.planFeatures.planFeatures, {
         customerId: args.customerId,
       }),
@@ -158,6 +160,18 @@ export const proposeVideo = internalAction({
         customerId: args.customerId,
       }),
       ctx.runQuery(internal.maya.ideas.byId, { ideaId: args.ideaId }),
+      /**
+       * ⭐ What she's borrowing, so the storyboard can say WHY.
+       *
+       * The whole product is that she does the homework — watches what
+       * travelled in this niche and reuses the shape. A storyboard that hides
+       * its source asks for a yes on taste instead of on evidence, and the
+       * founder's own framing for what he wanted was "I saw something on TikTok
+       * that inspired me".
+       */
+      ctx.runQuery(internal.maya.formats.formatCardsFor, {
+        customerId: args.customerId,
+      }),
     ]);
 
     /**
@@ -287,6 +301,21 @@ export const proposeVideo = internalAction({
     }
 
     /**
+     * ⚠️ Prefers a WATCHED card. A `read` card knows the spoken hook; a `watch`
+     * card knows the visual shape, which is the half a video borrows. And null
+     * is a real answer — with no card she says "had an idea" rather than
+     * inventing something that caught her eye (§2.7).
+     */
+    const card = pickCard(library.cards, { channel: TARGET_PLATFORM });
+    const inspiration = card
+      ? {
+          shape: card.reusableAs,
+          sourceUrl: card.sourceUrl,
+          channel: card.channel,
+        }
+      : null;
+
+    /**
      * ⭐ Queued as `pending_approval`, NOT started. The founder's yes is what
      * moves it, and until then no credit is committed.
      */
@@ -302,7 +331,7 @@ export const proposeVideo = internalAction({
       jobId,
       rung: gate.rung,
       estimatedCredits: estimateCredits(gate.rung, built.brief.length),
-      message: storyboardMessage(storyboard(built.brief)),
+      message: storyboardMessage(storyboard(built.brief), inspiration),
       detail: built.detail,
     };
   },

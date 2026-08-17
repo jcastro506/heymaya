@@ -109,7 +109,11 @@ describe("the storyboard the founder reads", () => {
     expect(msg).not.toMatch(/creatify|persona|broll|b-roll|rung|render queue|credits?/i);
     // And it makes the "nothing spent yet" promise explicit, because that is
     // the whole reason the founder should feel free to reject a frame.
-    expect(msg).toMatch(/nothing's been rendered yet/i);
+    //
+    // ⚠️ "made", not "rendered" — §11. "Rendered" is our word for it, and the
+    // founder is being asked a question about their own product, not about our
+    // pipeline.
+    expect(msg).toMatch(/nothing's been made yet/i);
   });
 
   it("names the avatar frame in the founder's language", () => {
@@ -120,6 +124,63 @@ describe("the storyboard the founder reads", () => {
     const frames = storyboard(out.brief!);
     expect(frames[0].what).toBe("the presenter");
     expect(frames[1].what).toBe("your screenshot");
+  });
+});
+
+describe("the pitch leads with why, not with the frames", () => {
+  /**
+   * ⭐ The operator's own words for what he wanted: *"I just had an idea. I saw
+   * something on TikTok that inspired me. I want to make this for you, and it's
+   * going to go like this. Here's the idea, and here are some images. What do
+   * you think?"*
+   *
+   * ⚠️ The first version opened on "here's what I'd make, frame by frame" —
+   * accurate, and it read like a form. It is also the honest thing to lead
+   * with: the whole product is that she borrows shapes that demonstrably
+   * travelled in this niche, and a storyboard that hides its source asks for a
+   * yes on taste rather than on evidence.
+   */
+  it("⭐ names what inspired it, and links it", () => {
+    const out = buildBrief(base);
+    const msg = storyboardMessage(storyboard(out.brief!), {
+      shape: "opens on the objection and answers it in one line",
+      sourceUrl: "https://www.tiktok.com/@someone/video/123",
+      channel: "tiktok",
+    });
+    expect(msg).toMatch(/had an idea/i);
+    expect(msg).toContain("opens on the objection");
+    // §6 — a source you can't open isn't a source.
+    expect(msg).toContain("https://www.tiktok.com/@someone/video/123");
+    expect(msg).toContain("tiktok");
+  });
+
+  it("⚠️ invents no inspiration when there is none", () => {
+    /**
+     * With an empty format library she is building from the idea bank alone.
+     * Claiming something "caught her eye" would be a fabricated observation —
+     * §2.7, and the exact failure mode the whole storyboard exists to avoid.
+     */
+    const out = buildBrief(base);
+    const msg = storyboardMessage(storyboard(out.brief!), null);
+    expect(msg).toMatch(/had an idea/i);
+    expect(msg).not.toMatch(/caught my eye|inspired/i);
+  });
+
+  it("⚠️ still promises nothing has been made yet", () => {
+    // The whole reason the founder should feel free to reject a frame.
+    const out = buildBrief(base);
+    const msg = storyboardMessage(storyboard(out.brief!), null);
+    expect(msg).toMatch(/nothing's been made yet/i);
+  });
+
+  it("⚠️ and still leaks nothing technical", () => {
+    const out = buildBrief(base);
+    const msg = storyboardMessage(storyboard(out.brief!), {
+      shape: "a shape",
+      sourceUrl: "https://x.com/1",
+      channel: "tiktok",
+    });
+    expect(msg).not.toMatch(/creatify|persona|rung|format card|credits?|render queue/i);
   });
 });
 
