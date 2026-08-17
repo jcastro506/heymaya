@@ -227,6 +227,10 @@ vi.mock("@/convex/_generated/api", () => ({
       dashboard: { resultsLadder: "resultsLadder", myDashboard: "myDashboard" },
       archive: { myActivity: "myActivity" },
       attribution: { myResults: "myResults" },
+      // §18 Sprint 10's "account deletion + data export". Settings offers the
+      // export above the danger zone, so the founder passes "get your data out"
+      // on the way to "delete everything".
+      dataExport: { requestMyDataExport: "requestMyDataExport" },
     },
     gtmMaya: {
       missionControl: {

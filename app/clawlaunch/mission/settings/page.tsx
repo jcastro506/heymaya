@@ -46,6 +46,17 @@ export default function SettingsPage() {
     api.gtmMaya.accountLifecycle.resumeMyGtmSubscription
   );
   const startCheckout = useAction(api.billing.gtmBilling.createGtmCheckoutSession);
+  /**
+   * ⭐ §18 Sprint 10 lists "account deletion + data export" under the
+   * operational essentials — "without these it is not handable".
+   *
+   * ⚠️ Deletion had a page and export had NOTHING. `requestMyDataExport` was
+   * built, tested, and had no caller anywhere in `app/`, so a founder could
+   * delete everything and never get a copy of it first. That ordering is the
+   * wrong way round: the irreversible action shipped and the reversible one
+   * didn't.
+   */
+  const requestExport = useAction(api.maya.dataExport.requestMyDataExport);
   const { signOut } = useClerk();
   const [confirming, setConfirming] = useState(false);
   const [confirmText, setConfirmText] = useState("");
@@ -55,6 +66,35 @@ export default function SettingsPage() {
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportUrl, setExportUrl] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportTruncated, setExportTruncated] = useState<string[]>([]);
+
+  async function handleExport() {
+    setExporting(true);
+    setExportError(null);
+    setExportUrl(null);
+    try {
+      const out = await requestExport({});
+      if (!out.ok || !out.url) {
+        setExportError("Couldn't build the file. Try again in a minute.");
+        return;
+      }
+      setExportUrl(out.url);
+      /**
+       * ⚠️ Surfaced, never swallowed. An export that silently dropped the tail
+       * of a table is a file the founder would reasonably believe is complete —
+       * §14.45's rule that a partial figure is never presented as the whole
+       * applies to their data as much as to their results.
+       */
+      setExportTruncated(out.truncated ?? []);
+    } catch {
+      setExportError("Couldn't build the file. Try again in a minute.");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   async function handleSignOut() {
     // Plain log out — ends the Clerk session and returns to the public landing.
@@ -321,6 +361,46 @@ export default function SettingsPage() {
               Log out
             </button>
           </div>
+        </Card>
+      </Section>
+
+      <Section title="Your data">
+        <Card>
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm text-paper-dim">
+              Download everything Maya holds for you — your posts, drafts, ideas,
+              messages and results — as one file.
+            </p>
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              className="shrink-0 rounded-full border border-paper/40 px-3.5 py-1.5 font-mono text-xs uppercase tracking-wide text-paper transition-colors hover:bg-paper/10 disabled:opacity-50"
+            >
+              {exporting ? "Building…" : "Export"}
+            </button>
+          </div>
+          {exportUrl ? (
+            <p className="mt-3 text-sm text-paper">
+              <a
+                href={exportUrl}
+                className="underline underline-offset-4"
+                download
+              >
+                Download your data
+              </a>
+              {exportTruncated.length > 0 ? (
+                <span className="text-paper-dim">
+                  {" "}
+                  — the longest histories are capped, so {exportTruncated.join(", ")}{" "}
+                  {exportTruncated.length === 1 ? "is" : "are"} the most recent
+                  rather than everything.
+                </span>
+              ) : null}
+            </p>
+          ) : null}
+          {exportError ? (
+            <p className="mt-3 text-sm text-paper-dim">{exportError}</p>
+          ) : null}
         </Card>
       </Section>
 
