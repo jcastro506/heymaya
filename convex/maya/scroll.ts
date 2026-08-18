@@ -447,6 +447,7 @@ export function normalizeInstagramReels(
   /** Reels received but dropped, by reason — see `instagramDropReasons`. */
   let unparseableDate = 0;
   let tooOld = 0;
+  let unidentifiable = 0;
 
   for (const reel of reels) {
     const postedAt = epochMs(reel.taken_at);
@@ -465,12 +466,35 @@ export function normalizeInstagramReels(
       comments: num(reel.comment_count),
       views: num(reel.video_play_count) || num(reel.video_view_count),
     };
+    /**
+     * ⚠️ A NON-UNIQUE sourceUrl IS WORSE THAN A MISSING ROW. The fallback was
+     * `.../reel/${shortcode ?? ""}/`, so a payload without `url` OR `shortcode`
+     * gave EVERY reel the identical key `https://www.instagram.com/reel//`.
+     *
+     * `sourceUrl` is the identity everything downstream keys on: the niche
+     * screen keeps/drops by it (`inNiche.has(o.sourceUrl)`), so all Instagram
+     * rows would survive or die as one unit on a single judgement, and any
+     * dedupe would collapse them to one post.
+     *
+     * A reel we cannot identify is skipped and counted, not given a shared
+     * name.
+     */
+    const shortcode =
+      typeof reel.shortcode === "string" ? reel.shortcode.trim() : "";
+    const sourceUrl =
+      typeof reel.url === "string" && reel.url.trim()
+        ? reel.url.trim()
+        : shortcode
+          ? `https://www.instagram.com/reel/${shortcode}/`
+          : null;
+    if (!sourceUrl) {
+      unidentifiable += 1;
+      continue;
+    }
+
     out.push({
       channel: "instagram",
-      sourceUrl:
-        typeof reel.url === "string"
-          ? reel.url
-          : `https://www.instagram.com/reel/${String(reel.shortcode ?? "")}/`,
+      sourceUrl,
       authorHandle: owner.username ?? null,
       text: typeof reel.caption === "string" ? reel.caption : "",
       postedAt,
@@ -479,7 +503,12 @@ export function normalizeInstagramReels(
       keyword,
     });
   }
-  instagramDropReasons = { received: reels.length, unparseableDate, tooOld };
+  instagramDropReasons = {
+    received: reels.length,
+    unparseableDate,
+    tooOld,
+    unidentifiable,
+  };
   return out;
 }
 
@@ -495,7 +524,9 @@ export let instagramDropReasons: {
   received: number;
   unparseableDate: number;
   tooOld: number;
-} = { received: 0, unparseableDate: 0, tooOld: 0 };
+  /** No `url` and no `shortcode` — cannot be keyed, so cannot be kept. */
+  unidentifiable: number;
+} = { received: 0, unparseableDate: 0, tooOld: 0, unidentifiable: 0 };
 
 /**
  * ⭐ A timestamp, whatever shape the vendor sends.

@@ -559,15 +559,66 @@ describe("Instagram: nothing returned vs everything dropped", () => {
    */
   it("⭐ counts what arrived, not just what survived", () => {
     const now = Date.UTC(2026, 7, 18);
+    // ⚠️ Each carries a shortcode. A reel with no `url` and no `shortcode` is
+    // now dropped as unidentifiable — see "every observation needs its own
+    // name" below — so fixtures without one measure that rule, not this one.
     const reels = [
-      { taken_at: Math.floor(now / 1000) - 86_400, caption: "fresh", owner: { username: "a" } },
-      { taken_at: Math.floor(now / 1000) - 60 * 86_400, caption: "stale", owner: { username: "b" } },
-      { taken_at: "gibberish", caption: "broken", owner: { username: "c" } },
+      { taken_at: Math.floor(now / 1000) - 86_400, caption: "fresh", shortcode: "AAA", owner: { username: "a" } },
+      { taken_at: Math.floor(now / 1000) - 60 * 86_400, caption: "stale", shortcode: "BBB", owner: { username: "b" } },
+      { taken_at: "gibberish", caption: "broken", shortcode: "CCC", owner: { username: "c" } },
     ];
     const out = normalizeInstagramReels(reels as never, "kw", now);
     expect(out).toHaveLength(1);
     expect(instagramDropReasons.received).toBe(3);
     expect(instagramDropReasons.tooOld).toBe(1);
     expect(instagramDropReasons.unparseableDate).toBe(1);
+  });
+});
+
+describe("every observation needs its own name", () => {
+  /**
+   * ⚠️ `sourceUrl` is the identity everything downstream keys on. The niche
+   * screen keeps or drops by it (`inNiche.has(o.sourceUrl)`), so rows sharing a
+   * key survive or die together on ONE judgement, and dedupe collapses them to
+   * a single post.
+   *
+   * The Instagram fallback was `.../reel/${shortcode ?? ""}/`, which gave every
+   * reel in a payload lacking both `url` and `shortcode` the identical key
+   * `https://www.instagram.com/reel//`.
+   */
+  const fresh = (now: number) => Math.floor(now / 1000) - 3600;
+
+  it("⭐ never gives two reels the same sourceUrl", () => {
+    const now = Date.UTC(2026, 7, 18);
+    const reels = [
+      { taken_at: fresh(now), caption: "one", shortcode: "AAA" },
+      { taken_at: fresh(now), caption: "two", shortcode: "BBB" },
+    ];
+    const out = normalizeInstagramReels(reels as never, "kw", now);
+    expect(new Set(out.map((o) => o.sourceUrl)).size).toBe(out.length);
+  });
+
+  it("⚠️ skips an unidentifiable reel instead of naming it after the others", () => {
+    const now = Date.UTC(2026, 7, 18);
+    const reels = [
+      { taken_at: fresh(now), caption: "keeps", shortcode: "AAA" },
+      { taken_at: fresh(now), caption: "no id at all" },
+      { taken_at: fresh(now), caption: "also no id" },
+    ];
+    const out = normalizeInstagramReels(reels as never, "kw", now);
+    expect(out).toHaveLength(1);
+    expect(instagramDropReasons.unidentifiable).toBe(2);
+    // The failure this prevents: three rows, one shared key, one verdict.
+    expect(out.every((o) => !o.sourceUrl.endsWith("/reel//"))).toBe(true);
+  });
+
+  it("⭐ prefers the vendor's own url when it sends one", () => {
+    const now = Date.UTC(2026, 7, 18);
+    const out = normalizeInstagramReels(
+      [{ taken_at: fresh(now), caption: "x", url: "https://instagram.com/reel/ZZZ/" }] as never,
+      "kw",
+      now
+    );
+    expect(out[0].sourceUrl).toBe("https://instagram.com/reel/ZZZ/");
   });
 });
