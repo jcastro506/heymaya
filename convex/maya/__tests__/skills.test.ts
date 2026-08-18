@@ -49,7 +49,15 @@ function frontmatter(source: string): Record<string, string> {
   return out;
 }
 
-const EXPECTED = ["write-post", "critique", "answer-people"];
+const EXPECTED = ["write-post", "critique", "answer-people",
+  /**
+   * ⭐ Added 2026-08-18 with the UGC-video pivot. Her tools could already make
+   * video (`make_video`, `approve_video` are live routes) and NOTHING told her
+   * when or how — her three skills were all about text. The machinery was
+   * pivoted and the instructions were not.
+   */
+  "make-video",
+];
 
 describe("the pack is shaped the way the loader expects", () => {
   it("ships exactly the Sprint 3 skills", () => {
