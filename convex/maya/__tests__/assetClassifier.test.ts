@@ -158,3 +158,40 @@ describe("assessLibrary — the production trigger", () => {
     }
   });
 });
+
+describe("a page with no <img> is not an empty page", () => {
+  /**
+   * ⚠️ MEASURED AGAINST OUR OWN SITE, 2026-08-18. `extractFromUrl` returned
+   * `{images: [], ok: true, status: 200}` for hey-maya.ai and that was CORRECT
+   * — the page has no <img> tag, no og:image and no twitter:image. It is
+   * <video> elements and inline SVG.
+   *
+   * It also has three `poster` attributes pointing at real images, and the
+   * parser could not see one of them. Any page built the modern way reads as
+   * empty to an <img>-only extractor, and the caller then reports "nothing
+   * usable on the page" — which sounds like a verdict about the page rather
+   * than a limit of the reader.
+   */
+  it("⭐ reads a video poster frame", () => {
+    const html = `<video src="/a.mp4" poster="/demos/tiktok.jpg"></video>`;
+    const out = extractCandidateImages(html, "https://example.com");
+    expect(out.map((i) => i.url)).toContain("https://example.com/demos/tiktok.jpg");
+  });
+
+  it("⭐ reads several, in page order", () => {
+    const html = `
+      <video poster="/demos/tiktok.jpg"></video>
+      <video poster="/demos/instagram.jpg"></video>
+      <video poster="/demos/youtube.jpg"></video>`;
+    const out = extractCandidateImages(html, "https://example.com");
+    expect(out).toHaveLength(3);
+  });
+
+  it("⚠️ still prefers a real <img> — posters are an addition, not a replacement", () => {
+    const html = `
+      <img src="/screenshot.png">
+      <video poster="/poster.jpg"></video>`;
+    const out = extractCandidateImages(html, "https://example.com");
+    expect(out[0].url).toBe("https://example.com/screenshot.png");
+  });
+});

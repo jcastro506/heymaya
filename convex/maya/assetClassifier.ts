@@ -135,6 +135,23 @@ export function extractCandidateImages(
     push(/data-src=["']([^"']+)["']/i.exec(tag)?.[1], "img");
   }
 
+  /**
+   * ⭐ VIDEO POSTERS. A `poster` frame is a still the site owner CHOSE to
+   * represent a video — on a product page that is almost always the product on
+   * screen, which is exactly the rung §7.5.3 wants above a generated
+   * background.
+   *
+   * ⚠️ Found by running this against our own site: hey-maya.ai returned ZERO
+   * candidates, and the reason was not a bug — the page has no <img> at all,
+   * no og:image and no twitter:image. It has three `poster` attributes, all
+   * real images, and this parser could not see any of them. A page built the
+   * modern way (video + inline SVG) reads as empty to an <img>-only extractor.
+   */
+  const videoPattern = /<video[^>]+>/gi;
+  for (const tag of html.match(videoPattern) ?? []) {
+    push(/poster=["']([^"']+)["']/i.exec(tag)?.[1], "img");
+  }
+
   return found.slice(0, limit);
 }
 
