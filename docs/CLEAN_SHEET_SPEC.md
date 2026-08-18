@@ -6116,9 +6116,50 @@ One QR, one button, one line. *"She'll take it from here."* No explanation of wh
 
 **④–⑤ happen in Telegram**, not on the web: hello, the first draft, the channel recommendation, the plan, the go.
 
+**④a The assets ask — the highest-leverage message in onboarding**
+*(added 2026-08-18 by the operator)*
+
+Before the first draft, in Telegram, she asks for four things and says why:
+
+> *"Two things and I can make videos of your actual app instead of a stock
+> avatar talking over clipart: a screen recording of you using it for 20-30
+> seconds, and 3-5 screenshots of the screens that matter. Send whatever you
+> have — I'll work with less, it'll just look less like yours."*
+
+| Asked for | Becomes |
+|---|---|
+| **Screen recording, 20–30s** | b-roll and extracted frames — the thing that makes it look like the real product being used |
+| **3–5 app screenshots** | the `image_urls` that ground every render, plus carousel slides |
+| **Any founder footage** | rung 1 of §7.5.3's ladder — the only rung that is unmistakably not AI |
+| **Logo** | brand-kit surface, thumbnails |
+
+⭐ **WHY THIS IS NOT A NICE-TO-HAVE.** `link_with_params` is called with
+`image_urls` on **every** render — §7.6.2 forbids letting Creatify scrape, and
+a test pins it. So the images we pass **are** the video's visual content. Stock
+images in, stock-looking video out; real screens in, a video of their actual
+app. There is no third path. Asset collection is not onboarding polish, it is
+the single input that decides whether the output looks like the founder's
+product or like everyone else's AI UGC.
+
+⚠️ **Asked for, never demanded.** Onboarding's §6.0.2 rule is that we ask for
+almost nothing, and a hard gate here would break the one-week promise for a
+founder who has no footage on hand. So this blocks nothing: with zero assets
+she still ships, degraded down the ladder, **and she says so plainly** rather
+than quietly producing avatar slop. The ask repeats once, later, when there is
+a real result to point at ("the one with your actual home screen did 3x the
+others — got any more like that?"). That is a better moment than onboarding.
+
+⚠️ **Three things must already work or this ask is a lie.** (1) `assetFloor.planAssets`
+has ZERO CALLERS today — the ladder it enforces is enforced nowhere. (2)
+`video.ts:317` filters assets on `Boolean(a.publicUrl)` and never reads `kind`,
+so a screen recording and a stock illustration are interchangeable to the
+brief. (3) Nothing in `setup.ts` / `onramp.ts` / `connect.ts` asks for media at
+all. Wire 1 and 2 **before** shipping the ask, or the first founder who sends a
+screen recording gets a video that ignores it.
+
 **⑥ Connect** *(returned to from chat, one link)*
 
-Four cards — TikTok, Instagram, YouTube, X. Each: logo, **one-line role** (*"reach engine"* / *"full loop"*), connect button. The two she recommended are visually forward; the others are available, **not locked** — one tier means nothing is gated.
+Three cards — TikTok, Instagram, YouTube *(X dropped 2026-08-18 — it is the one channel that is not UGC video, and dropping it makes the 3x multiplier clean: one 9:16 asset, three placements, no text-only special case)*. Each: logo, **one-line role** (*"reach engine"* / *"full loop"*), connect button. The two she recommended are visually forward; the others are available, **not locked** — one tier means nothing is gated.
 
 States per card: not connected · connecting · connected · needs attention. **Instagram surfaces the Business/Creator requirement inline** the moment it's detected, not at first post.
 
