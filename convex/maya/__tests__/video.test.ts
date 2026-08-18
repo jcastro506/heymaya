@@ -23,6 +23,10 @@ import {
   COLLECT_MAX_POLLS,
   COLLECT_INTERVAL_MS,
 } from "../video";
+import {
+  isDoneStatus,
+  isFailedStatus,
+} from "../../integrations/creatify/types";
 import type { VideoBrief } from "../videoBrief";
 import type { Id } from "../../_generated/dataModel";
 
@@ -288,8 +292,19 @@ describe("the render actually comes back", () => {
    * suite proved the expensive half started and never that it finished — which
    * is the exact shape of every failure in this product's history.
    */
-  const done = (s?: string | null) => /^(done|completed|succeeded)$/i.test(s ?? "");
-  const failed = (s?: string | null) => /^(failed|error)$/i.test(s ?? "");
+  /**
+   * ⚠️ THIS TEST USED TO STUB ITS OWN MATCHERS, and stubbed them with statuses
+   * the vendor never emits — `completed`, `succeeded`, `error`. It therefore
+   * validated the verdict logic against a fantasy vendor and would have passed
+   * even if the real helpers were broken. It now calls the REAL ones.
+   *
+   * Canonical lifecycle, per docs/CREATIFY_API_REFERENCE.md line 27:
+   *   pending → in_queue → running → done | failed   (+ `rejected` on Aurora)
+   * The doc is explicit that there is NO `rendering` / `completed` / `error`
+   * string, so those must never appear in a fixture here again.
+   */
+  const done = isDoneStatus;
+  const failed = isFailedStatus;
 
   it("⭐ a finished job yields the video URL", () => {
     const v = collectVerdict(
@@ -305,8 +320,10 @@ describe("the render actually comes back", () => {
   });
 
   it("⭐ an unfinished job keeps polling rather than declaring anything", () => {
-    expect(collectVerdict({ status: "in_queue" }, done, failed).state).toBe("pending");
-    expect(collectVerdict({ status: "running" }, done, failed).state).toBe("pending");
+    // The three documented non-terminal states, verbatim from the reference.
+    for (const status of ["pending", "in_queue", "running"]) {
+      expect(collectVerdict({ status }, done, failed).state).toBe("pending");
+    }
   });
 
   it("⚠️ done-with-no-video is a FAILURE, not pending", () => {
@@ -359,5 +376,42 @@ describe("what came back is actually a video", () => {
     const json = new Uint8Array([...'{"error":"nope"}'].map((c) => c.charCodeAt(0)));
     expect(looksLikeVideo(json)).toBeNull();
     expect(looksLikeVideo(new Uint8Array([1, 2]))).toBeNull();
+  });
+});
+
+describe("the vendor's real status lifecycle", () => {
+  /**
+   * ⭐ Pinned against docs/CREATIFY_API_REFERENCE.md line 27, which is the
+   * source of truth for `convex/integrations/creatify/`. If the vendor changes
+   * its lifecycle, this is where it should hurt — not in production, hours
+   * later, with a job stuck `running` until the deadline sweep reaps it.
+   */
+  it("⭐ treats every documented terminal status as terminal", () => {
+    expect(isDoneStatus("done")).toBe(true);
+    expect(isFailedStatus("failed")).toBe(true);
+    // Aurora and custom-avatar jobs also emit this one.
+    expect(isFailedStatus("rejected")).toBe(true);
+  });
+
+  it("⚠️ never treats an in-flight status as finished", () => {
+    /**
+     * The expensive direction of the bug: calling a running job "done" reads
+     * `video_output` while it is still null, which `collectVerdict` turns into
+     * a failure — so a render that was going to succeed is abandoned after
+     * being paid for.
+     */
+    for (const status of ["pending", "in_queue", "running"]) {
+      expect(isDoneStatus(status)).toBe(false);
+      expect(isFailedStatus(status)).toBe(false);
+    }
+  });
+
+  it("⚠️ a rejected job fails rather than polling to the budget", () => {
+    const v = collectVerdict(
+      { status: "rejected", failed_reason: "avatar not approved" },
+      isDoneStatus,
+      isFailedStatus
+    );
+    expect(v.state).toBe("failed");
   });
 });

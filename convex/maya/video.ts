@@ -644,6 +644,20 @@ export const COLLECT_MAX_POLLS = 40;
 export const COLLECT_INTERVAL_MS = 15_000;
 
 /**
+ * ⚠️ 15s IS A GUESS, AND THE REFERENCE SAYS SO. docs/CREATIFY_API_REFERENCE.md
+ * line 35: rate and concurrency limits are UNDOCUMENTED — only a generic 429
+ * exists, and the old "5 QPM" figure is gone from current docs. It tells us to
+ * confirm real QPM and max concurrent renders by live test before scale.
+ *
+ * At 4 polls/minute per in-flight render, a customer with three renders going
+ * is 12 QPM on its own, and the queue runs many customers. The client already
+ * retries 429, and a 429 here lands in the transient-error branch and retries
+ * inside the same attempt budget rather than killing a paid render — so the
+ * failure mode is slow, not destructive. But this interval should be tuned
+ * against a measured limit, not left at a number someone picked.
+ */
+
+/**
  * ⚠️ Video bytes are re-hosted, never linked. Vendor URLs expire, and a
  * placement pointing at an expired vendor URL is a post that breaks weeks
  * later, off in the founder's feed where nobody is watching. Convex stores
