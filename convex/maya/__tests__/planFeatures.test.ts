@@ -7,7 +7,9 @@ import type { Id } from "../../_generated/dataModel";
 import {
   budgetsFor,
   MVP_BUDGETS,
+  RUNG_WEIGHT,
   verdictFor,
+  weightOfRender,
   ZERO_BUDGETS,
   type Budgets,
 } from "../planFeatures";
@@ -124,9 +126,13 @@ describe("verdictFor", () => {
   });
 
   it("video exhaustion degrades rather than blocks — a cheaper rung exists", () => {
-    expect(verdictFor("videosPerMonth", 4, MVP_BUDGETS).verdict).toBe(
-      "graceful_degrade"
-    );
+    // ⚠️ Read from the budget, not hardcoded. This test asserted `4` and broke
+    // the moment the allowance moved — which told us nothing about exhaustion,
+    // only that a number changed. The behaviour under test is the VERDICT.
+    expect(
+      verdictFor("videosPerMonth", MVP_BUDGETS.videosPerMonth, MVP_BUDGETS)
+        .verdict
+    ).toBe("graceful_degrade");
   });
 
   it("the spend ceiling throttles rather than stopping dead", () => {
@@ -338,7 +344,7 @@ describe("checkVideoBudget", () => {
   it("degrades once the monthly allowance is spent", async () => {
     const t = convexTest(schema, modules);
     const customerId = await seed(t, "video");
-    for (let i = 0; i < 4; i += 1) {
+    for (let i = 0; i < MVP_BUDGETS.videosPerMonth; i += 1) {
       await renderJob(t, customerId, "succeeded", NOW, `v${i}`);
     }
     const check = await t.query(internal.maya.planFeatures.checkVideoBudget, {
@@ -363,7 +369,7 @@ describe("checkVideoBudget", () => {
   it("last month's renders don't count against this month", async () => {
     const t = convexTest(schema, modules);
     const customerId = await seed(t, "video_month");
-    for (let i = 0; i < 4; i += 1) {
+    for (let i = 0; i < MVP_BUDGETS.videosPerMonth; i += 1) {
       await renderJob(t, customerId, "succeeded", Date.UTC(2026, 5, 15), `p${i}`);
     }
     const check = await t.query(internal.maya.planFeatures.checkVideoBudget, {
@@ -372,5 +378,55 @@ describe("checkVideoBudget", () => {
     });
     expect(check.used).toBe(0);
     expect(check.verdict).toBe("full");
+  });
+});
+
+describe("what a render costs the budget", () => {
+  /**
+   * ⚠️ THE BUDGET COUNTED ROWS. An ad clone is 37 credits ($5.53 at API Pro)
+   * against an avatar video's 6 ($0.90), and both drew down `videosPerMonth`
+   * by 1 — so three ad clones outspent fifteen avatar videos while reporting
+   * 3/15 used. The weight concept existed in `convex/gtmMaya` (the FROZEN
+   * product) and was never carried into the live one.
+   */
+  it("⭐ prices an ad clone above an avatar video", () => {
+    expect(RUNG_WEIGHT.ad_clone).toBeGreaterThan(RUNG_WEIGHT.avatar);
+  });
+
+  it("⭐ reads the rung off the brief on the job row", () => {
+    expect(weightOfRender(JSON.stringify({ rung: "avatar" }))).toBe(
+      RUNG_WEIGHT.avatar
+    );
+    expect(weightOfRender(JSON.stringify({ rung: "ad_clone" }))).toBe(
+      RUNG_WEIGHT.ad_clone
+    );
+  });
+
+  it("⭐ the weight tracks the real credit ratio, not a guess", () => {
+    // §3.1/§3.2: ad clone 12cr/5s vs URL path 5cr/30s, both +1 for the Link.
+    // 15s clone = 37cr; 30s avatar = 6cr. The weight should be within one of
+    // that ratio — close enough to bound spend, round enough to explain.
+    const realRatio = (Math.ceil(2.4 * 15) + 1) / 6;
+    expect(
+      Math.abs(RUNG_WEIGHT.ad_clone / RUNG_WEIGHT.avatar - realRatio)
+    ).toBeLessThan(2.5);
+  });
+
+  it("⚠️ an unreadable brief falls back to 1 — and that UNDER-counts", () => {
+    /**
+     * Honest about the direction of the failure. 1 is correct today because
+     * `preSpendGate.MAX_BUILDABLE_RUNG` is "avatar", so no other weight can
+     * occur. If the ad-clone rung ships, this default must become a named
+     * failure — otherwise a corrupted payload buys $5.53 of render for $0.90
+     * of budget, and nothing reports it.
+     */
+    expect(weightOfRender(undefined)).toBe(1);
+    expect(weightOfRender("not json")).toBe(1);
+    expect(weightOfRender(JSON.stringify({}))).toBe(1);
+    expect(weightOfRender(JSON.stringify({ rung: 42 }))).toBe(1);
+  });
+
+  it("⚠️ an unknown rung never silently costs zero", () => {
+    expect(weightOfRender(JSON.stringify({ rung: "holodeck" }))).toBe(1);
   });
 });

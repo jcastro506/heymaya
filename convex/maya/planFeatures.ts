@@ -53,7 +53,17 @@ export const MVP_BUDGETS: Budgets = {
   maxChannels: 4,
   postsPerDayPerChannel: 2,
   /** Then she degrades to photo sets, and says so plainly (§7.6.5). */
-  videosPerMonth: 4,
+  /**
+   * ⭐ 15/month — a post every other day, which is what a UGC-video product
+   * has to sustain. It was 4, sized for the old product where video was a
+   * garnish on a social manager; on a video-first product 4 means she runs
+   * for four days and then silently becomes a photo-set product, because
+   * `ON_EXHAUSTION.videosPerMonth` is `graceful_degrade`.
+   *
+   * ⚠️ This is a WEIGHTED count, not a row count — see `RUNG_WEIGHT`. 15 is
+   * 15 avatar videos (~$13.50 at API Pro) or 3 ad clones, not 15 of either.
+   */
+  videosPerMonth: 15,
   coldRepliesPerDay: 8,
   /** Morning brief + evening recap + headroom for genuine alerts. Above this
    *  she is interrupting rather than reporting. */
@@ -231,6 +241,46 @@ export const checkPostBudget = internalQuery({
  * Exhaustion degrades rather than blocks — she still plans the video, still
  * asks for footage, and ships a photo set instead, saying so.
  */
+/**
+ * ⭐ What one render costs the budget, by rung.
+ *
+ * ⚠️ THE BUDGET WAS COUNTING ROWS. An ad clone is 37 credits ($5.53 at API
+ * Pro) against an avatar video's 6 ($0.90) — 6.1x — and both drew down
+ * `videosPerMonth` by exactly 1. A budget that prices a $5.53 render the same
+ * as a $0.90 one is not measuring the thing it exists to protect: three ad
+ * clones cost more than fifteen avatar videos while reporting 3/15 used.
+ *
+ * ⚠️ This concept already existed as `AD_CLONE_CAP_WEIGHT` in
+ * `convex/gtmMaya/creatifyVideo.ts` — the FROZEN product. It was never carried
+ * across to `convex/maya`, so the live budget shipped without it. Ported here
+ * rather than imported: gtmMaya is frozen and must not gain a new dependant.
+ */
+export const RUNG_WEIGHT: Record<string, number> = {
+  avatar: 1,
+  ad_clone: 4,
+};
+
+/**
+ * The weight of a staged render, read from the brief on the job row.
+ *
+ * ⚠️ Defaults to 1 on anything unreadable. That is the honest default TODAY
+ * because `preSpendGate.MAX_BUILDABLE_RUNG` is `"avatar"`, so 1 is the only
+ * weight a job can currently have — but it means a malformed payload
+ * UNDER-counts. If the ad-clone rung ever ships, this default has to become a
+ * named failure instead, or a corrupted brief buys a $5.53 render for $0.90 of
+ * budget. Pure and exported so that is testable without a database.
+ */
+export function weightOfRender(payloadJson: string | undefined): number {
+  if (!payloadJson) return 1;
+  try {
+    const rung = (JSON.parse(payloadJson) as { rung?: unknown }).rung;
+    if (typeof rung !== "string") return 1;
+    return RUNG_WEIGHT[rung] ?? 1;
+  } catch {
+    return 1;
+  }
+}
+
 export const checkVideoBudget = internalQuery({
   args: { customerId: v.id("customers"), now: v.optional(v.number()) },
   handler: async (ctx, args): Promise<BudgetCheck> => {
@@ -250,12 +300,14 @@ export const checkVideoBudget = internalQuery({
       .query("jobs")
       .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
       .collect();
-    const used = rows.filter(
-      (row) =>
-        row.kind === "render_video" &&
-        row.status === "succeeded" &&
-        isSameMonthInZone(row.createdAt, now, customer.timezone ?? "UTC")
-    ).length;
+    const used = rows
+      .filter(
+        (row) =>
+          row.kind === "render_video" &&
+          row.status === "succeeded" &&
+          isSameMonthInZone(row.createdAt, now, customer.timezone ?? "UTC")
+      )
+      .reduce((sum, row) => sum + weightOfRender(row.payloadJson), 0);
     return verdictFor("videosPerMonth", used, budgets);
   },
 });

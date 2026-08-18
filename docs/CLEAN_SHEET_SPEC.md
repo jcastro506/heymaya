@@ -1104,7 +1104,7 @@ Onboarding ends but the ramp doesn't. What happens between "go" and steady state
 
 ### 6.0.2 What we never ask
 
-No follower counts (we scrape them) · no content calendar · no brand-guidelines document · no "describe your voice" (we extract it) · no competitor list (we research it) · no persona worksheet · no goals questionnaire beyond the one line above.
+No follower counts (we scrape them) · no content calendar · no brand-guidelines document · no "describe your voice" (we extract it) · **no competitor list typed from memory — we research it and he confirms it** · no persona worksheet · no goals questionnaire beyond the one line above.
 
 ### 6.0.3 Failure paths
 
@@ -3049,11 +3049,37 @@ Only one is needed for Instagram to work.
 *Added 2026-08-05 on the operator's suggestion, while weighing a different
 product idea. It survived that comparison as a feature rather than a pivot.*
 
-**Nobody is ever asked to name their competitors.** `rankAccounts` already
+**Nobody is ever asked to name their competitors from a blank field**
+*(revised 2026-08-18 by the operator — see the note below)*. `rankAccounts` already
 ranks accounts by how many **different validated keywords** they appear under,
 so an account showing up beneath two separate niche terms lives in this world,
 and one that appeared once was passing traffic. Live, that is **3 of 30**
 tracked accounts.
+
+> ### ⭐ Revised 2026-08-18 — research, then CONFIRM
+>
+> The original rule was right about the failure it prevented and wrong about the
+> remedy. A blank *"who are your competitors?"* field produces one of two bad
+> answers: nothing, or an aspirational one — founders name who they wish they
+> were compared to, not who they actually lose to. So: **never ask cold.**
+>
+> But silent inference is worse than either, because it has no correction path.
+> `rankAccounts` ranks TikTok handles by validated-keyword overlap and is live
+> at **3 of 30** tracked accounts — thin, and nothing tells us when it is wrong.
+> Under the ad-intelligence design a wrong competitor set poisons every
+> subsequent week's shape, silently and forever.
+>
+> **The rule is now: she researches candidates, presents a ranked list, and he
+> ticks the real ones.** Recognition, not recall — he corrects a list in seconds
+> and stalls on an empty box, and the confirmed set beats what either of them
+> produces alone. "She does the homework" is preserved: she still arrives with
+> an answer rather than a question.
+>
+> ⚠️ **`ProductTruth.competitors` is write-only today.** It is populated at
+> `productTruth.ts:384` from the founder's own page and read by nothing — and
+> `demo.ts` extracts competitors in its parse, then discards them. A
+> confirmation step is worthless until that field has a reader, so wiring the
+> reader is part of this change, not a follow-up to it.
 
 ⭐ **What earns a message is not "they posted."** They post constantly, and a
 feed of that is a notification setting, not an employee.
