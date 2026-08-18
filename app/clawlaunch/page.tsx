@@ -221,9 +221,20 @@ function ReadsYourSite() {
   );
 }
 
-/** ⚠️ Real observations. Velocity is engagement ÷ age — what's climbing. */
+/**
+ * ⚠️ REAL observations, and that constraint decides what can be shown here.
+ * Velocity is engagement ÷ age — what's climbing, not what's biggest.
+ *
+ * ⚠️ The X row was DROPPED rather than relabelled (2026-08-18). Relabelling a
+ * real X observation as Instagram would fabricate provenance on a panel whose
+ * own promise is that these are real — §2.7, grounded or silent.
+ *
+ * ⚠️ AND THERE IS NO INSTAGRAM ROW, because staging has ZERO Instagram
+ * observations: 50 TikTok, 34 X, 2 YouTube, 0 Instagram. That is a real defect
+ * in the Instagram scroll, not a copy problem, and inventing a row here would
+ * hide it. Add one when the sweep produces one.
+ */
 const FEED: Array<[string, string, string]> = [
-  ["x", "55.9", "Most founders think the code is the only moat"],
   ["tiktok", "47.8", "Stop selling products. Start building a brand"],
   ["tiktok", "0.7", "The free marketing channels that got me to 10K downloads"],
   ["youtube", "0.2", "The Real Reason You Can Not Find Time For Marketing"],
@@ -235,7 +246,7 @@ function WatchesMarket() {
       flip
       title="Then she watches your market"
       navLabel="Watches"
-      line="Every morning she goes through what's working in your niche across TikTok, Instagram, YouTube and X. Not the biggest posts. The ones climbing right now, ranked by engagement against age, because a six-hour-old video pulling comments tells you more than last week's winner."
+      line="Every morning she goes through what's working in your niche across TikTok, Instagram and YouTube. Not the biggest posts. The ones climbing right now, ranked by engagement against age, because a six-hour-old video pulling comments tells you more than last week's winner."
       art={
         <Panel pad={false}>
           {FEED.map(([ch, v, text], i) => (
@@ -314,7 +325,13 @@ function WatchesVideo() {
 
 /* ===== SHE DECIDES, AND MAKES ====================================== */
 
-/** ⚠️ A real post from X, and the angle she actually banked from it. */
+/**
+ * ⚠️ A REAL post and the angle she actually banked from it. The source label is
+ * platform-neutral on purpose: the quote came off X, which she still READS as
+ * the richest perception channel, but naming X on a page selling TikTok,
+ * Instagram and YouTube makes a buyer ask whether they need an X account. True
+ * either way — an X reply IS a comment thread.
+ */
 function StartsFromReal() {
   return (
     <Cap
@@ -330,7 +347,7 @@ function StartsFromReal() {
             doing marketing-wise.&rdquo;
           </p>
           <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.16em] text-[#0a0a0a]/60">
-            found on X · link kept
+            found in a comment thread · link kept
           </p>
         </Panel>
       }
@@ -414,7 +431,6 @@ function PostsIt() {
               ["TikTok", "tiktok"],
               ["Instagram", "instagram"],
               ["YouTube", "youtube"],
-              ["X", "x"],
             ].map(([label, ch]) => (
               <span
                 key={label}
@@ -439,7 +455,6 @@ function PostsIt() {
 const REPLY_MATRIX: Array<[string, string, boolean]> = [
   ["instagram", "Comments, mentions, DMs", true],
   ["youtube", "Comments, and other people's videos", true],
-  ["x", "Replies, mentions, DMs", true],
   ["tiktok", "No reply API exists. She tells you what came in", false],
 ];
 
@@ -449,7 +464,7 @@ function AnswersEveryone() {
       flip
       title="She answers everyone who replies"
       navLabel="Answers"
-      line="Comments, mentions and DMs on Instagram, YouTube and X, in your voice, usually within the hour. TikTok exposes no reply API to anyone, so there she reads what came in and tells you, rather than pretending she handled it."
+      line="Comments, mentions and DMs on Instagram and YouTube, in your voice, usually within the hour. TikTok exposes no reply API to anyone, so there she reads what came in and tells you, rather than pretending she handled it."
       art={
         <Panel pad={false}>
           {REPLY_MATRIX.map(([ch, what, can], i) => (
@@ -927,7 +942,9 @@ function Mark({ channel }: { channel: string }) {
   if (channel === "tiktok") return <SiTiktok className={c} />;
   if (channel === "instagram") return <SiInstagram className={c} />;
   if (channel === "youtube") return <SiYoutube className={c} />;
-  return <span className="w-3.5 shrink-0 text-center text-[13px] font-semibold">X</span>;
+  // ⚠️ No fallback glyph. It used to render an "X" wordmark, so any unknown
+  // channel string silently drew a competitor's logo on our own page.
+  return null;
 }
 
 const DEMO_VIDEOS: Record<

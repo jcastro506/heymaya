@@ -104,3 +104,67 @@ describe("the price on the page is the price in the spec", () => {
     expect([...figures].sort()).toEqual([price, "300"].sort());
   });
 });
+
+describe("the page sells three channels, not four", () => {
+  /**
+   * ⚠️ Eight X references survived the pivot and the OPERATOR found them in a
+   * browser, not a test: a tweet card captioned "found on X", an X row in the
+   * "real observations" feed, an X chip in the channel list, an X row in the
+   * answering matrix, X named in two body-copy sentences, and a `Mark` fallback
+   * that rendered an "X" wordmark for ANY unrecognised channel string.
+   *
+   * The page's whole promise is UGC video on TikTok, Instagram and YouTube.
+   * Naming X makes a buyer ask whether they need an X account to get value, and
+   * the answer is no — so this is a positioning defect, not a typo.
+   *
+   * ⚠️ She still READS X. It is the richest perception channel (the only
+   * non-TikTok one returning both likes and reply counts), and this test does
+   * not forbid that — it forbids SELLING it.
+   */
+  const CHANNEL_WORDS = /\b(twitter|tweet|tweets|tweeted)\b/i;
+
+  it("⭐ never names Twitter or a tweet", () => {
+    const offending = LANDING.split("\n")
+      .map((line, i) => [i + 1, line] as const)
+      .filter(([, line]) => CHANNEL_WORDS.test(line));
+    expect(
+      offending.map(([n, l]) => `${n}: ${l.trim()}`),
+      "the page sells TikTok, Instagram and YouTube"
+    ).toEqual([]);
+  });
+
+  it("⭐ never offers X as a channel a founder connects", () => {
+    // The chip list and the answering matrix are the two places it appeared as
+    // a first-class channel. Both are `"x"` string literals in data arrays.
+    const asChannel = /\[\s*"x"\s*,|\[\s*"X"\s*,\s*"x"\s*\]/g;
+    expect(LANDING.match(asChannel) ?? []).toEqual([]);
+  });
+
+  it("⚠️ has no fallback glyph that could draw a channel we do not sell", () => {
+    /**
+     * `Mark` ended with an unconditional X wordmark, so a typo'd or unknown
+     * channel string rendered a competitor's logo. The fallback must be null:
+     * a missing icon is a papercut, the wrong icon is a claim.
+     */
+    const mark = /function Mark\([\s\S]*?\n\}/.exec(LANDING);
+    expect(mark, "Mark component not found — renamed?").toBeTruthy();
+    expect(mark![0]).toContain("return null");
+  });
+
+  it("⚠️ the observation feed stays REAL — no invented Instagram row", () => {
+    /**
+     * Staging has 50 TikTok, 34 X, 2 YouTube and ZERO Instagram observations.
+     * The operator asked for more Instagram logos; adding one here would
+     * fabricate provenance on a panel whose own comment says these are real
+     * (§2.7, grounded or silent). The honest fix was to drop X and leave the
+     * gap visible — it is a defect in the Instagram sweep, not in this file.
+     *
+     * This pins the REASON, so the next person to "just add Instagram" reads it
+     * first. Delete this test the day the sweep produces a real one.
+     */
+    const feed = /const FEED[\s\S]*?\n\];/.exec(LANDING);
+    expect(feed).toBeTruthy();
+    expect(feed![0]).not.toContain('"instagram"');
+    expect(feed![0]).not.toContain('"x"');
+  });
+});
