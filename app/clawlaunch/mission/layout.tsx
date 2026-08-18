@@ -21,6 +21,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import {
   Activity,
+  CalendarDays,
   ScrollText,
   Brain,
   Settings,
@@ -41,6 +42,15 @@ const NAV = [
    * trust-building screen in the product."
    */
   { href: `${BASE}/house-rules`, label: "Rules", icon: ScrollText },
+  /**
+   * ⚠️ PLAN WAS BUILT AND UNREACHABLE. §16.75 restored the screen with the
+   * argument that cutting it "was wrong: the strategy is the most interesting
+   * thing she produces, and it's invisible" — and then it was left out of this
+   * array, so it stayed invisible. A route with no link is a screen nobody
+   * sees, and unlike the other five off-nav routes (which are deliberate v3-IA
+   * redirects) this one renders real content.
+   */
+  { href: `${BASE}/plan`, label: "Plan", icon: CalendarDays },
 ] as const;
 
 const SETTINGS_HREF = `${BASE}/settings`;

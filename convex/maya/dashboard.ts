@@ -28,11 +28,13 @@
 
 import { v } from "convex/values";
 import { internalMutation, query } from "../_generated/server";
+import type { QueryCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { dayKeyInZone } from "./cadence";
 import { diagnoseFrom } from "./ladder";
 import { compareToNiche, type ChannelBenchmark } from "./benchmarks";
+import { availableFrom, ladderKindFor, planAssets } from "./assetFloor";
 
 export type LivenessState = "healthy" | "degraded" | "breached";
 
@@ -263,6 +265,162 @@ export function oldestMetricsAsOf(
  * Resolves "my" customer from the identity — no id argument, so there is no
  * ownership check to write slightly differently at each call site.
  */
+/**
+ * ⭐ The signed-in founder's customer row, resolved once.
+ *
+ * ⚠️ This three-hop walk (identity → creators.by_clerk_user →
+ * customers.by_account) is hand-copied in eight modules. Factored here rather
+ * than a ninth time; worth hoisting to convex/lib/ when something touches all
+ * of them, but a drive-by refactor of every authed query is not this change.
+ */
+async function currentCustomer(ctx: {
+  auth: { getUserIdentity: () => Promise<{ subject: string } | null> };
+  db: QueryCtx["db"];
+}): Promise<Doc<"customers"> | null> {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) return null;
+  const creator = (await ctx.db
+    .query("creators")
+    .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+    .first()) as Doc<"creators"> | null;
+  if (!creator) return null;
+  return (await ctx.db
+    .query("customers")
+    .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+    .first()) as Doc<"customers"> | null;
+}
+
+/**
+ * ⭐ THE IDEA BANK, VISIBLE. Every export in `ideas.ts` is an `internalQuery`,
+ * so nothing on the web could show what she is planning to make — the bank was
+ * unobservable from outside the agent.
+ *
+ * §16.75's argument for restoring the Plan screen applies here verbatim: "the
+ * strategy is the most interesting thing she produces, and it's invisible."
+ * Ideas are the raw form of that, and a founder who cannot see the bank cannot
+ * tell a thin week from a broken sweep.
+ *
+ * ⚠️ Read-only, and deliberately NOT a workbench (principle 1). No edit, no
+ * reorder, no delete — seeing what is queued is a receipt; rearranging it is
+ * the dashboard becoming the product.
+ */
+export const myIdeaBank = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    ok: boolean;
+    ideas: Array<{
+      id: string;
+      angle: string;
+      /** Where the idea came from — the provenance §6 requires. */
+      sourceKind?: string;
+      /**
+       * ⭐ Whether this idea carries EVIDENCE. `ideas.evidenceJson` already
+       * exists on the table, which is the field the competitor-ad ranking will
+       * hang off. Surfaced as a boolean rather than the blob: a founder wants
+       * "she has a reason for this", not our JSON.
+       */
+      hasEvidence: boolean;
+      status: string;
+      score?: number;
+      bankedAt: number;
+    }>;
+    banked: number;
+    error?: string;
+  }> => {
+    const customer = await currentCustomer(ctx);
+    if (!customer) {
+      return { ok: false, ideas: [], banked: 0, error: "sign in first" };
+    }
+
+    const rows = (await ctx.db
+      .query("ideas")
+      .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+      .collect()) as Doc<"ideas">[];
+
+    const banked = rows.filter((r) => r.status === "bank");
+    return {
+      ok: true,
+      banked: banked.length,
+      ideas: [...banked]
+        // Newest first: a founder checking the bank wants this week's thinking.
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, args.limit ?? 25)
+        .map((r) => ({
+          id: r._id,
+          angle: r.angle,
+          sourceKind: r.sourceKind,
+          hasEvidence: Boolean(r.evidenceJson),
+          status: r.status,
+          score: r.score,
+          bankedAt: r.createdAt,
+        })),
+    };
+  },
+});
+
+/**
+ * ⭐ THE MEDIA LIBRARY, VISIBLE — and this is the half that makes §18.9.25's
+ * assets ask honest. `media.forCustomer` and `media.libraryHealth` are both
+ * `internalQuery`, so a founder who sent a screen recording had no way to
+ * confirm it arrived, and no way to see that the library was EMPTY — which is
+ * the measured cause of 14 of 16 placements going to X.
+ *
+ * ⚠️ Reports the LADDER RUNG, not just the row kind. "You have 6 assets" is
+ * not the useful sentence; "everything here is generated, so your videos use a
+ * presenter" is. That is the same reason `assetFloor` exists, surfaced.
+ */
+export const myMediaLibrary = query({
+  args: {},
+  handler: async (
+    ctx
+  ): Promise<{
+    ok: boolean;
+    assets: Array<{
+      id: string;
+      kind: string;
+      source: string;
+      rung: string | null;
+      url?: string;
+      caption?: string;
+      capturedAt: number;
+    }>;
+    /** Plain language for the founder, straight from the ladder. */
+    note?: string;
+    usesAvatar?: boolean;
+    error?: string;
+  }> => {
+    const customer = await currentCustomer(ctx);
+    if (!customer) return { ok: false, assets: [], error: "sign in first" };
+
+    const rows = (await ctx.db
+      .query("mediaAssets")
+      .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+      .collect()) as Doc<"mediaAssets">[];
+
+    const plan = planAssets(availableFrom(rows));
+
+    return {
+      ok: true,
+      note: plan.detail,
+      usesAvatar: plan.usesAvatar,
+      assets: [...rows]
+        .sort((a, b) => (b.capturedAt ?? 0) - (a.capturedAt ?? 0))
+        .map((a) => ({
+          id: a._id,
+          kind: a.kind,
+          source: a.source,
+          rung: ladderKindFor(a.kind, a.source),
+          url: a.publicUrl,
+          caption: a.caption,
+          capturedAt: a.capturedAt ?? 0,
+        })),
+    };
+  },
+});
+
 export const myDashboard = query({
   args: {},
   handler: async (

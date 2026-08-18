@@ -203,6 +203,7 @@ vi.mock("lucide-react", () => {
   return {
     Activity: Stub,
     Brain: Stub,
+    CalendarDays: Stub,
     Lightbulb: Stub,
     Map: Stub,
     MessageCircle: Stub,
@@ -344,7 +345,7 @@ describe("the Plan screen is back (§16.75)", () => {
 });
 
 describe("Mission Control — SSR render smoke", () => {
-  it("the layout renders the 5 tabs + the settings gear", async () => {
+  it("the layout renders the 6 tabs + the settings gear", async () => {
     const Layout = (await import("../layout")).default;
     const html = renderToString(
       createElement(Layout, null, createElement("div", null, "content")),
@@ -356,6 +357,14 @@ describe("Mission Control — SSR render smoke", () => {
       "Activity",
       // §16.2 gives House Rules a top-level slot — the proof she remembers.
       "Rules",
+      /**
+       * ⚠️ Plan was BUILT AND UNREACHABLE. §16.75 restored the screen because
+       * "the strategy is the most interesting thing she produces, and it's
+       * invisible" — then it was left out of NAV, so it stayed invisible. This
+       * test passed the whole time, because it only asserted the tabs that
+       * existed rather than the screens that do.
+       */
+      "Plan",
       "Settings",
     ]) {
       expect(html).toContain(label);
