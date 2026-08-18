@@ -336,7 +336,27 @@ export const scrollNiche = internalAction({
       now,
     });
 
-    return { ok: true, keywordsSwept: swept, channelsSwept: channels, observations: ranked };
+    /**
+     * ⚠️ SILENT CHANNELS ARE REPORTED HERE TOO — and leaving them off this
+     * branch was the same defect this whole change exists to fix. The first
+     * version surfaced them only when the sweep returned NOTHING, which is the
+     * rare case. The real failure mode is PARTIAL silence: three channels
+     * produce rows, one produces none, the total looks healthy, `ok: true` goes
+     * back, and the dead channel is invisible.
+     *
+     * Measured live on staging 2026-08-18, which is exactly this shape:
+     * tiktok 11, x 8, youtube 1, **instagram 0** — no exception thrown, no
+     * failure recorded, `ok: true`. `readInstagram` did not fail; it returned
+     * an empty list. That is now visible instead of inferred.
+     */
+    return {
+      ok: true,
+      keywordsSwept: swept,
+      channelsSwept: channels,
+      observations: ranked,
+      silentChannels: silent,
+      failures,
+    };
   },
 });
 

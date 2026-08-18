@@ -355,23 +355,39 @@ function StartsFromReal() {
   );
 }
 
-/** ⚠️ A real post she published. */
+/**
+ * ⚠️ REAL words she wrote, and the @-handle reply framing is GONE.
+ *
+ * The panel used to open with "@nitprashant's line about..." — a real post, but
+ * a short text reply on a platform this page no longer sells, and it read that
+ * way — an @-handle and a paragraph, on a page about vertical video. The
+ * operator spotted it immediately: "we're at some handle, and we're writing
+ * something — what does that mean?"
+ *
+ * ⚠️ WHAT IT IS NOT is a video script, because there is no real one to show.
+ * All 16 placements on the live account are on X; nothing has published to the
+ * three channels this page sells, and no render has run (Creatify is
+ * operator-blocked). Writing a fake voiceover here would be the exact
+ * fabrication §2.7 forbids — so this shows the surviving half: the sentence
+ * itself, which is genuinely hers and carries no platform.
+ *
+ * Replace with a real hook the day one exists.
+ */
 function MakesIt() {
   return (
     <Cap
       title="Then she writes it, in your voice"
       navLabel="Writes"
-      line="Grounded in the thing that started it, in the words you'd actually use. Every edit you make teaches her, so the next one needs fewer."
+      line="The hook, the line under each frame, the caption. Grounded in the thing that started it, in the words you'd actually use. Every edit you make teaches her, so the next one needs fewer."
       art={
         <Panel>
-          <p className="text-[16px] leading-[1.6]">
-            @nitprashant&rsquo;s line about going from &ldquo;a great product
-            nobody knows&rdquo; to something people use hit the real problem.
+          <p className="font-display italic text-[19px] leading-[1.45] sm:text-[21px]">
+            &ldquo;for a solo founder, marketing isn&rsquo;t one task. it&rsquo;s
+            the second job that keeps showing up while you&rsquo;re trying to
+            build the first one.&rdquo;
           </p>
-          <p className="mt-4 text-[16px] leading-[1.6]">
-            for a solo founder, marketing isn&rsquo;t one task. it&rsquo;s the
-            second job that keeps showing up while you&rsquo;re trying to build
-            the first one.
+          <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.16em] text-[#0a0a0a]/60">
+            her words · your voice
           </p>
         </Panel>
       }
