@@ -1110,15 +1110,27 @@ function RevealOnView({
     io.observe(el);
 
     /**
-     * ⚠️ The failsafe. If the observer never fires — and there are more reasons
-     * for that than are worth enumerating — the block reveals itself anyway.
-     * A late animation is a cosmetic bug; a permanently blank section is not.
+     * ⚠️ THE FAILSAFE ATE THE FEATURE. It fired unconditionally at 2.5s for
+     * EVERY block on the page, so all twelve sections revealed themselves two
+     * and a half seconds after load — long before the reader scrolled to any of
+     * them. The animation was wired correctly the whole time and never had a
+     * chance to run, because everything was already visible on arrival.
+     *
+     * It still exists, because a permanently blank section is far worse than a
+     * missing animation. But it now only covers the case it was written for:
+     * an element the reader can ALREADY SEE that the observer failed to reveal.
+     * Anything further than one screen below the fold is left to the observer,
+     * which is the thing that makes the effect an effect.
      */
-    const failsafe = window.setTimeout(() => setVisible(true), 2500);
+    const nearViewport =
+      el.getBoundingClientRect().top < window.innerHeight * 2;
+    const failsafe = nearViewport
+      ? window.setTimeout(() => setVisible(true), 2500)
+      : undefined;
 
     return () => {
       io.disconnect();
-      window.clearTimeout(failsafe);
+      if (failsafe !== undefined) window.clearTimeout(failsafe);
     };
   }, []);
 
@@ -1207,7 +1219,9 @@ function PageStyles() {
         [data-page="clawlaunch-landing"]
         .reveal-on-view[data-visible="false"] {
         opacity: 0;
-        transform: translateY(24px);
+        /* 24px was barely perceptible against a full-screen snap section —
+           the block arrives already in place. 40px reads as arrival. */
+        transform: translateY(40px);
       }
       html { scroll-behavior: smooth; }
 
