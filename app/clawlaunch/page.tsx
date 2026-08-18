@@ -54,7 +54,9 @@ export default function ClawLaunchLandingPage() {
     >
       <PageStyles />
       <Masthead />
+      <DotNav />
       <Hero />
+      <Reel />
 
       <Phase>She learns</Phase>
       <ReadsYourSite />
@@ -107,45 +109,48 @@ function Masthead() {
  * ⭐ The videos sit above the fold and play on load. The headline starts the
  * argument; three vertical videos finish it before anyone reads a second line.
  */
+/**
+ * ⭐ The hero is a SCREEN, not a stack. It holds the headline, the sub and the
+ * button and nothing else, sized to the viewport, so the first thing a visitor
+ * meets is one clear claim rather than a claim competing with three videos.
+ *
+ * ⚠️ The load sequence is staggered and runs ONCE: headline, then sub, then
+ * button. `.rise` animates from a CSS class rather than an observer, so it
+ * cannot leave the hero blank if anything about scroll detection goes wrong —
+ * the failure mode that made eleven sections invisible earlier today.
+ */
 function Hero() {
   return (
-    <section className="px-6 pt-32 pb-20 sm:px-8 sm:pt-40 sm:pb-24">
-      <div className="mx-auto max-w-6xl">
+    <section
+      id="top"
+      data-nav="Start"
+      className="flex min-h-[92vh] items-center px-6 py-24 sm:px-8"
+    >
+      <div className="mx-auto w-full max-w-6xl">
         {/**
           * ⭐ Names the CATEGORY they already shop for. The $99-vs-$300 block
           * only works if the thing being compared has a name, and you cannot
-          * pay $300 for a category you cannot name — if they have hired a UGC
+          * pay $300 for a category you cannot name: if they have hired a UGC
           * creator, that is the word that was on the invoice.
           *
           * ⚠️ Names it without CLAIMING it. `tests/marketingCopy.test.ts` bans a
           * creation verb within 40 characters of "UGC", and the phrase "UGC
-          * creator" outright, because she has never rendered a video. The guard
-          * is protecting the first customer from a disappointment that is
-          * currently guaranteed, so the noun is used and the verb is not.
+          * creator" outright, because she has never rendered a video.
           */}
-        <h1 className="max-w-[15ch] font-display italic text-[clamp(2.75rem,7.5vw,5.5rem)] leading-[1.02] tracking-[-0.02em]">
+        <h1 className="rise max-w-[15ch] font-display italic text-[clamp(3rem,8vw,6.5rem)] leading-[0.98] tracking-[-0.025em]">
           The UGC your app needs. Without you filming any of it.
         </h1>
-        <p className="mt-8 max-w-xl text-[18px] leading-[1.55] text-[#0a0a0a]/70 sm:text-[20px]">
+        <p
+          className="rise mt-10 max-w-xl text-[19px] leading-[1.55] text-[#0a0a0a]/70 sm:text-[21px]"
+          style={{ animationDelay: "0.5s" }}
+        >
           Maya watches what&rsquo;s working in your niche, creates your TikToks,
           Reels and Shorts, and posts them for you.
         </p>
-
-        <div className="mt-14 grid gap-6 sm:grid-cols-3 sm:gap-5">
-          {[
-            ["tiktok", "POV: you finally cleared your camera roll in one sitting"],
-            ["instagram", "3 apps tried to fix my camera roll. only one actually did."],
-            ["youtube", "Built by hand. Marketed by Maya."],
-          ].map(([platform, label]) => (
-            <PlatformVideo
-              key={platform}
-              platform={platform as "tiktok" | "instagram" | "youtube"}
-              label={label}
-            />
-          ))}
-        </div>
-
-        <div className="mt-12 flex flex-wrap items-center gap-6">
+        <div
+          className="rise mt-12 flex flex-wrap items-center gap-6"
+          style={{ animationDelay: "0.85s" }}
+        >
           <Link
             href={primaryCtaHref(CTA_HREF)}
             className="rounded-full bg-[#0a0a0a] px-8 py-4 text-[15px] text-[#fbfaf6] transition-opacity hover:opacity-85"
@@ -159,6 +164,42 @@ function Hero() {
   );
 }
 
+/**
+ * The reel, on its own, revealed on scroll. Three real videos she cut.
+ */
+function Reel() {
+  return (
+    <section data-nav="The work" className="px-6 py-20 sm:px-8 sm:py-28">
+      <div className="mx-auto max-w-6xl">
+        <RevealOnView>
+          <h2 className="max-w-2xl font-display italic text-[clamp(1.9rem,3.8vw,2.9rem)] leading-[1.1] tracking-[-0.015em]">
+            This is what she makes.
+          </h2>
+          <p className="mt-4 max-w-xl text-[16.5px] leading-[1.6] text-[#0a0a0a]/65">
+            Vertical video for TikTok, Reels and Shorts. One asset, three
+            channels, built on a shape that already worked in your niche.
+          </p>
+        </RevealOnView>
+        <RevealOnView delay={0.12}>
+          <div className="mt-12 grid gap-6 sm:grid-cols-3 sm:gap-5">
+            {[
+              ["tiktok", "POV: you finally cleared your camera roll in one sitting"],
+              ["instagram", "3 apps tried to fix my camera roll. only one actually did."],
+              ["youtube", "Built by hand. Marketed by Maya."],
+            ].map(([platform, label]) => (
+              <PlatformVideo
+                key={platform}
+                platform={platform as "tiktok" | "instagram" | "youtube"}
+                label={label}
+              />
+            ))}
+          </div>
+        </RevealOnView>
+      </div>
+    </section>
+  );
+}
+
 /* ===== SHE LEARNS ================================================== */
 
 /** ⚠️ A real read, run against basecamp.com on 2026-08-17. */
@@ -166,7 +207,8 @@ function ReadsYourSite() {
   return (
     <Cap
       title="She reads your site first"
-      line="And says what she couldn't work out."
+      navLabel="Her first day"
+      line="Paste your URL and she reads it the way a new hire would: what you sell, who buys it, and what actually makes you different. Then she tells you what she couldn't work out, so you know exactly what she's missing before she writes a word."
       art={
         <Panel>
           <Field k="What you do" v="A project management and team collaboration tool." />
@@ -195,7 +237,8 @@ function WatchesMarket() {
     <Cap
       flip
       title="Then she watches your market"
-      line="Competitors, keywords, trends, comment sections. Ranked by what's climbing."
+      navLabel="Watches"
+      line="Every morning she goes through what's working in your niche across TikTok, Instagram, YouTube and X. Not the biggest posts. The ones climbing right now, ranked by engagement against age, because a six-hour-old video pulling comments tells you more than last week's winner."
       art={
         <Panel pad={false}>
           {FEED.map(([ch, v, text], i) => (
@@ -234,7 +277,8 @@ function WatchesVideo() {
   return (
     <Cap
       title="And she watches the video"
-      line="Not the caption. Beat by beat, about twenty a week."
+      navLabel="The homework"
+      line="A caption never tells you why a video worked. So she watches the best ones in full and writes down the visual hook, when the text appears, how fast it cuts, and what happens at every beat. About twenty a week, before she writes anything."
       art={
         <div className="rounded-2xl border border-[#1B2434] bg-[#0B0F15] p-7 sm:p-8">
           <div className="flex items-center justify-between gap-4 border-b border-[#1B2434] pb-4">
@@ -279,7 +323,8 @@ function StartsFromReal() {
     <Cap
       flip
       title="Every post starts with something someone said"
-      line="No evidence, no post."
+      navLabel="Real evidence"
+      line="She reads the comment sections under the posts your buyers already watch. When eleven people ask the same question, that isn't an insight to file away. It's next week's video, with the receipts attached."
       art={
         <Panel>
           <p className="font-display italic text-[19px] leading-[1.45] sm:text-[21px]">
@@ -300,7 +345,8 @@ function MakesIt() {
   return (
     <Cap
       title="Then she writes it, in your voice"
-      line="Grounded in the thing that started it."
+      navLabel="Writes"
+      line="Grounded in the thing that started it, in the words you'd actually use. Every edit you make teaches her, so the next one needs fewer."
       art={
         <Panel>
           <p className="text-[16px] leading-[1.6]">
@@ -323,7 +369,8 @@ function ShowsYouFirst() {
     <Cap
       flip
       title="You see it before a penny is spent"
-      line="Wrong shot? Costs nothing to fix here."
+      navLabel="You approve"
+      line="Before anything is made she sends you the exact frames and the line that plays over each one. Wrong screenshot? Say so. It costs nothing to fix at that point and the whole render to fix after."
       art={
         <Panel>
           <p className="text-[16px] leading-[1.6] text-[#0a0a0a]/85">
@@ -359,7 +406,8 @@ function PostsIt() {
   return (
     <Cap
       title="She posts it"
-      line="Show me first, or just go. Your switch, per channel."
+      navLabel="Posts"
+      line="Show me first, or just go. One switch per channel and it's yours. On just go she posts and tells you in the evening. On show me first, one word from you publishes the exact text you saw, never a regeneration."
       art={
         <Panel>
           <div className="flex flex-wrap gap-2.5">
@@ -401,7 +449,8 @@ function AnswersEveryone() {
     <Cap
       flip
       title="She answers everyone who replies"
-      line="In your voice, while it's still warm."
+      navLabel="Answers"
+      line="Comments, mentions and DMs on Instagram, YouTube and X, in your voice, usually within the hour. TikTok exposes no reply API to anyone, so there she reads what came in and tells you, rather than pretending she handled it."
       art={
         <Panel pad={false}>
           {REPLY_MATRIX.map(([ch, what, can], i) => (
@@ -439,7 +488,8 @@ function RemembersIt() {
   return (
     <Cap
       title="Tell her once"
-      line="Stored word for word. Still true a month later."
+      navLabel="Remembers"
+      line="Say stop using that phrase, or we don't do that channel anymore, and it's stored word for word and dated. Not until the conversation scrolls away. Ask her rules any time and she'll read back everything she's holding."
       art={
         <Panel>
           {[
@@ -479,7 +529,8 @@ function WhatsBroken() {
     <Cap
       flip
       title="She tells you what's broken"
-      line="Five questions. The first one that fails is the thing to fix."
+      navLabel="Diagnoses"
+      line="Five questions in order: did we post, did anyone see it, did anyone care, did anyone come, did anyone convert. The first one that fails is the thing to fix, and if it's the last one she'll tell you the content is fine and the problem is your landing page."
       art={
         <Panel pad={false}>
           {RUNGS.map(([q, a, broken], i) => (
@@ -517,7 +568,8 @@ function TracesIt() {
   return (
     <Cap
       title="And traces a signup back to the post"
-      line="What she can't account for, she says."
+      navLabel="Proves it"
+      line="One line on your site and she can point at the post behind each signup. When she can only account for some of them she says so, because an honest gap is worth more than a confident number you can't check."
       art={
         <Panel>
           <ol>
@@ -554,7 +606,8 @@ function OneExperiment() {
     <Cap
       flip
       title="One experiment at a time"
-      line="Two weeks, one question, then a straight answer."
+      navLabel="Tests"
+      line="One question, two versions, two weeks. Then a straight answer, including that wasn't enough to tell when it wasn't. Everything here is built to avoid confident nonsense off forty data points."
       art={
         <Panel>
           <p className="font-display italic text-[19px] leading-[1.4] sm:text-[21px]">
@@ -589,7 +642,7 @@ function OneExperiment() {
  */
 function TheMath() {
   return (
-    <section className="px-6 py-24 sm:px-8 sm:py-32">
+    <section data-nav="The math" className="px-6 py-24 sm:px-8 sm:py-32">
       <div className="mx-auto max-w-6xl">
         <RevealOnView>
           <div className="grid gap-12 border-y border-[#0a0a0a]/15 py-14 sm:grid-cols-2 sm:gap-10 sm:py-20">
@@ -618,7 +671,7 @@ function TheMath() {
 
 function Closer() {
   return (
-    <section className="px-6 py-24 sm:px-8 sm:py-36">
+    <section data-nav="Start now" className="px-6 py-24 sm:px-8 sm:py-36">
       <div className="mx-auto max-w-6xl">
         <RevealOnView>
           <h2 className="max-w-[13ch] font-display italic text-[clamp(2.25rem,6vw,4.5rem)] leading-[1.02] tracking-[-0.02em]">
@@ -651,6 +704,118 @@ function SiteFooter() {
   );
 }
 
+/**
+ * ⭐ The section dots, down the right edge.
+ *
+ * Shows where you are, jumps you where you want, and gives the page a spine you
+ * can feel without a single divider line. Every section that carries a
+ * `data-nav` attribute gets one, so the rail can never drift out of step with
+ * the page — it is built FROM the sections rather than from a list somebody has
+ * to remember to update.
+ *
+ * ⚠️ No library. This is an IntersectionObserver and a fixed list; pulling in a
+ * scroll framework for it would be more code, not less, and one more thing that
+ * can fail between the reader and the words.
+ *
+ * ⚠️ Hidden below `lg`. On a phone it would sit on top of the content it is
+ * meant to be navigating.
+ */
+function DotNav() {
+  const [items, setItems] = useState<Array<{ id: string; label: string }>>([]);
+  const [active, setActive] = useState(0);
+
+  useEffect(() => {
+    const sections = [...document.querySelectorAll<HTMLElement>("[data-nav]")];
+    sections.forEach((el, i) => {
+      if (!el.id) el.id = `s${i}`;
+    });
+    setItems(
+      sections.map((el) => ({ id: el.id, label: el.dataset.nav ?? "" })),
+    );
+
+    /**
+     * ⚠️ SCROLL POSITION, not IntersectionObserver.
+     *
+     * The obvious implementation here is an observer with a middle-of-viewport
+     * band, and that is what this was. It never fired once — verified against a
+     * section sitting squarely across the band, with a freshly constructed
+     * observer, which returned nothing.
+     *
+     * That is the second time today an observer has silently done nothing (the
+     * first left every section on the page invisible). Whatever the cause, a
+     * landing page's navigation should not be the place to find out: this is
+     * arithmetic on `getBoundingClientRect`, it works in every browser, and it
+     * is easier to reason about than the callback it replaces.
+     *
+     * The section whose top is nearest the middle of the viewport wins, which
+     * gives exactly one answer at every scroll position and cannot flicker
+     * between two neighbours the way an edge test does.
+     */
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const mid = window.innerHeight / 2;
+      let best = 0;
+      let bestDistance = Infinity;
+      sections.forEach((el, i) => {
+        const { top, height } = el.getBoundingClientRect();
+        // Distance from the viewport's middle to this section's span.
+        const distance =
+          top > mid ? top - mid : top + height < mid ? mid - (top + height) : 0;
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = i;
+        }
+      });
+      setActive(best);
+    };
+
+    const onScroll = () => {
+      // One measurement per frame, however fast the wheel spins.
+      if (!frame) frame = window.requestAnimationFrame(measure);
+    };
+
+    measure();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  if (items.length === 0) return null;
+
+  return (
+    <nav
+      aria-label="Sections"
+      className="fixed right-6 top-1/2 z-40 hidden -translate-y-1/2 lg:block"
+    >
+      <ul className="flex flex-col items-end gap-3.5">
+        {items.map((item, i) => (
+          <li key={item.id}>
+            <a
+              href={`#${item.id}`}
+              aria-label={item.label}
+              aria-current={i === active ? "true" : undefined}
+              className="dot group flex items-center gap-3 focus-visible:outline-none"
+            >
+              {/* The label rides in on hover and focus, so the rail stays quiet
+                  until someone actually wants to navigate with it. */}
+              <span className="dot-label">{item.label}</span>
+              <span
+                className="dot-mark"
+                data-active={i === active ? "true" : "false"}
+              />
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
+
 /* ===== THE RHYTHM ================================================== */
 
 /**
@@ -667,14 +832,17 @@ function Cap({
   line,
   art,
   flip = false,
+  navLabel,
 }: {
   title: string;
   line: string;
   art: React.ReactNode;
   flip?: boolean;
+  /** Short label for the dot rail. Falls back to the headline. */
+  navLabel?: string;
 }) {
   return (
-    <section className="px-6 py-16 sm:px-8 sm:py-24">
+    <section data-nav={navLabel ?? title} className="px-6 py-16 sm:px-8 sm:py-24">
       <RevealOnView>
         {/**
          * ⭐ The artifact PINS while its words scroll past, then releases as the
@@ -959,6 +1127,56 @@ function PageStyles() {
       [data-page="clawlaunch-landing"] .font-display {
         font-family: var(--font-instrument-serif), Georgia, serif;
       }
+      /**
+       * ⭐ The hero's staged entrance. A CSS animation, NOT an observer — the
+       * hero must never depend on scroll detection to appear, which is exactly
+       * the failure that made eleven sections invisible earlier.
+       */
+      [data-page="clawlaunch-landing"] .rise {
+        opacity: 0;
+        transform: translateY(16px);
+        animation: rise 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+      @keyframes rise {
+        to { opacity: 1; transform: none; }
+      }
+
+      /* The section rail. Quiet until you look at it. */
+      [data-page="clawlaunch-landing"] .dot-mark {
+        display: block;
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: rgba(10, 10, 10, 0.22);
+        transition: background 0.3s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      [data-page="clawlaunch-landing"] .dot-mark[data-active="true"] {
+        background: #0a0a0a;
+        transform: scale(1.55);
+      }
+      [data-page="clawlaunch-landing"] .dot:hover .dot-mark,
+      [data-page="clawlaunch-landing"] .dot:focus-visible .dot-mark {
+        background: #0a0a0a;
+      }
+      [data-page="clawlaunch-landing"] .dot-label {
+        font-size: 12.5px;
+        color: rgba(10, 10, 10, 0.7);
+        opacity: 0;
+        transform: translateX(6px);
+        transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        white-space: nowrap;
+      }
+      [data-page="clawlaunch-landing"] .dot:hover .dot-label,
+      [data-page="clawlaunch-landing"] .dot:focus-visible .dot-label {
+        opacity: 1;
+        transform: none;
+      }
+      /* Keyboard users get a visible target, not just a colour change. */
+      [data-page="clawlaunch-landing"] .dot:focus-visible .dot-mark {
+        outline: 2px solid #0a0a0a;
+        outline-offset: 3px;
+      }
+
       /* ⚠️ Visible by default. The hidden state below requires BOTH the
          JS-set [data-reveal="on"] flag and an explicit not-yet-seen marker, so
          a page whose script never runs still renders every word. */
@@ -973,9 +1191,19 @@ function PageStyles() {
         opacity: 0;
         transform: translateY(24px);
       }
+      html { scroll-behavior: smooth; }
+
       @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
         [data-page="clawlaunch-landing"] .reveal-on-view {
           opacity: 1; transform: none; transition: none;
+        }
+        [data-page="clawlaunch-landing"] .rise {
+          opacity: 1; transform: none; animation: none;
+        }
+        [data-page="clawlaunch-landing"] .dot-mark,
+        [data-page="clawlaunch-landing"] .dot-label {
+          transition: none;
         }
       }
     `}</style>
