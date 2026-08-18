@@ -444,10 +444,20 @@ export function normalizeInstagramReels(
   now: number
 ): Observation[] {
   const out: Observation[] = [];
+  /** Reels received but dropped, by reason — see `instagramDropReasons`. */
+  let unparseableDate = 0;
+  let tooOld = 0;
+
   for (const reel of reels) {
-    const takenAt = typeof reel.taken_at === "string" ? Date.parse(reel.taken_at) : NaN;
-    const postedAt = Number.isFinite(takenAt) ? takenAt : null;
-    if (postedAt === null || now - postedAt > NEWS_WINDOW_MS) continue;
+    const postedAt = epochMs(reel.taken_at);
+    if (postedAt === null) {
+      unparseableDate += 1;
+      continue;
+    }
+    if (now - postedAt > NEWS_WINDOW_MS) {
+      tooOld += 1;
+      continue;
+    }
 
     const owner = (reel.owner ?? {}) as { username?: string };
     const metrics = {
@@ -469,7 +479,52 @@ export function normalizeInstagramReels(
       keyword,
     });
   }
+  instagramDropReasons = { received: reels.length, unparseableDate, tooOld };
   return out;
+}
+
+/**
+ * ⚠️ WHY THE LAST INSTAGRAM PARSE KEPT NOTHING.
+ *
+ * `found: 0` conflated two completely different failures: the API returned
+ * nothing, and the API returned reels of which we dropped every one. They need
+ * opposite fixes and looked identical — which is how Instagram sat at ZERO
+ * observations while TikTok had 50, with no error anywhere.
+ */
+export let instagramDropReasons: {
+  received: number;
+  unparseableDate: number;
+  tooOld: number;
+} = { received: 0, unparseableDate: 0, tooOld: 0 };
+
+/**
+ * ⭐ A timestamp, whatever shape the vendor sends.
+ *
+ * ⚠️ THIS IS THE PRIME SUSPECT FOR INSTAGRAM'S SILENCE. The old check was
+ * `typeof reel.taken_at === "string"`, and Instagram APIs classically send
+ * `taken_at` as a Unix INTEGER — in which case every reel failed the type test,
+ * produced NaN, and was skipped. Zero observations, no exception, ok:true.
+ *
+ * The codebase already proves per-platform shapes differ: `normalizeXSearch`
+ * reads a NUMBER (`createdAtMs`), `normalizeYouTube` reads a STRING
+ * (`publishedTime`). Instagram accepting only one of the two was the outlier.
+ *
+ * ⚠️ Seconds vs milliseconds decided by magnitude, not by trust: anything below
+ * 1e12 is seconds (1e12 ms is 2001, and no reel predates Instagram).
+ */
+export function epochMs(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value < 1e12 ? value * 1000 : value;
+  }
+  if (typeof value === "string") {
+    const asNumber = Number(value);
+    if (value.trim() !== "" && Number.isFinite(asNumber)) {
+      return asNumber < 1e12 ? asNumber * 1000 : asNumber;
+    }
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 /**

@@ -23,6 +23,8 @@ import {
   normalizeYouTubeVideos,
   normalizeXSearch,
   type Observation,
+  epochMs,
+  instagramDropReasons,
 } from "../scroll";
 import { rawResult } from "../../integrations/scrapeCreators/deps";
 import type { Doc, Id } from "../../_generated/dataModel";
@@ -503,3 +505,69 @@ function ranked(channel: string, velocity: number) {
     keyword: "k",
   };
 }
+
+describe("a timestamp, whatever shape the vendor sends", () => {
+  /**
+   * ⚠️ THE PRIME SUSPECT FOR INSTAGRAM'S SILENCE. `normalizeInstagramReels`
+   * required `typeof taken_at === "string"`. Instagram APIs classically send
+   * `taken_at` as a Unix INTEGER — every reel would fail the type test, yield
+   * NaN, and be skipped. Result: zero observations, no exception, ok:true, for
+   * as long as nobody counted rows per channel.
+   *
+   * The codebase already proved shapes differ per platform: `normalizeXSearch`
+   * reads a NUMBER, `normalizeYouTube` reads a STRING. Instagram accepting only
+   * one of the two was the outlier, not the rule.
+   */
+  it("⭐ accepts Unix seconds — the shape that was being dropped", () => {
+    expect(epochMs(1787000000)).toBe(1787000000_000);
+  });
+
+  it("⭐ accepts milliseconds unchanged", () => {
+    expect(epochMs(1787000000000)).toBe(1787000000000);
+  });
+
+  it("⭐ still accepts an ISO string", () => {
+    expect(epochMs("2026-08-18T00:00:00.000Z")).toBe(
+      Date.parse("2026-08-18T00:00:00.000Z")
+    );
+  });
+
+  it("⭐ accepts a numeric string, which JSON APIs send for big ints", () => {
+    expect(epochMs("1787000000")).toBe(1787000000_000);
+  });
+
+  it("⚠️ seconds vs ms is decided by magnitude, not by trust", () => {
+    // 1e12 ms is 2001, and no reel predates Instagram — so anything smaller is
+    // seconds. Guessing wrong by 1000x puts every post outside the 14-day
+    // window, which drops them just as silently as a NaN did.
+    expect(epochMs(999_999_999_999)).toBe(999_999_999_999 * 1000);
+    expect(epochMs(1_000_000_000_000)).toBe(1_000_000_000_000);
+  });
+
+  it("⚠️ returns null rather than a plausible-looking wrong date", () => {
+    for (const bad of [undefined, null, "", "not a date", {}, []]) {
+      expect(epochMs(bad)).toBeNull();
+    }
+  });
+});
+
+describe("Instagram: nothing returned vs everything dropped", () => {
+  /**
+   * ⚠️ `found: 0` conflated two failures needing opposite fixes — the API
+   * returned nothing, and the API returned reels of which we dropped every one.
+   * Indistinguishable, which is how Instagram sat at ZERO while TikTok had 50.
+   */
+  it("⭐ counts what arrived, not just what survived", () => {
+    const now = Date.UTC(2026, 7, 18);
+    const reels = [
+      { taken_at: Math.floor(now / 1000) - 86_400, caption: "fresh", owner: { username: "a" } },
+      { taken_at: Math.floor(now / 1000) - 60 * 86_400, caption: "stale", owner: { username: "b" } },
+      { taken_at: "gibberish", caption: "broken", owner: { username: "c" } },
+    ];
+    const out = normalizeInstagramReels(reels as never, "kw", now);
+    expect(out).toHaveLength(1);
+    expect(instagramDropReasons.received).toBe(3);
+    expect(instagramDropReasons.tooOld).toBe(1);
+    expect(instagramDropReasons.unparseableDate).toBe(1);
+  });
+});
