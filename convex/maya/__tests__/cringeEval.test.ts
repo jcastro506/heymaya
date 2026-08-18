@@ -268,67 +268,78 @@ describe("⭐ SOUNDING HUMAN IS NOT THE SAME AS BEING WORTH POSTING", () => {
  * thing that can answer it — six anti-slop layers built, and the number saying
  * whether they work had never existed.
  */
-describe("⭐ RUN IT ON WHAT SHE ACTUALLY PUBLISHED", () => {
-  it("⭐ REFUSES TO REPORT A NUMBER BELOW THE FLOOR", async () => {
-    /**
-     * Below `MIN_PAIRS` this is not a weak signal, it is noise: an accuracy
-     * from three pairs swings on one judge call. A number that moves at random
-     * is worse than no number, because someone will act on it.
-     */
+/**
+ * ⚠️ The `runEvalOnPublished` suite was removed with the function
+ * (2026-08-18). Its concern — grade what a stranger SAW, not what she proposed,
+ * and never what the founder rejected — is asserted where it now lives, in the
+ * `herWriting` tests: placements first, and `outcome === "rejected"` drafts
+ * skipped. The property survived; the third door onto it did not.
+ */
+
+describe("herWriting — what a stranger could actually have seen", () => {
+  /**
+   * ⭐ THIS IS THE PROPERTY `runEvalOnPublished` EXISTED FOR, and when that
+   * function was deleted (2026-08-18) nothing pinned it. The comment above
+   * claimed it was "asserted in the herWriting tests"; it was not, which is the
+   * same false-documentation pattern this file's other warnings are about.
+   *
+   * Why it matters: §18 Sprint 4's exit is "a stranger can't tell it isn't the
+   * founder writing". Grading text the founder REJECTED measures writing that
+   * never reached anyone — it is precisely the sample we want excluded, and
+   * including it would make a failing voice look passable or vice versa, with
+   * no way to tell which.
+   */
+  const LONG = (s: string) => s.padEnd(120, " ").slice(0, 120).trim() + " and that is the whole point of it.";
+
+  it("⭐ excludes drafts the founder rejected", async () => {
     const t = convexTest(schema, modules);
     const customerId = await seedEvalCustomer(t);
     await t.run(async (ctx) => {
-      for (let i = 0; i < 3; i += 1) {
-        await ctx.db.insert("placements", {
-          customerId,
-          kind: "post",
-          channel: "x",
-          url: `https://x.com/a/status/e${i}`,
-          linkStatus: "live",
-          publishedAt: Date.now(),
-          snapshotText: `a real post ${i}`,
-          idempotencyKey: `eval-${i}`,
-        });
-      }
+      await ctx.db.insert("drafts", {
+        customerId,
+        channel: "instagram",
+        kind: "post",
+        snapshotText: LONG("REJECTED — a sentence the founder threw out"),
+        outcome: "rejected",
+        proposedAt: Date.now(),
+        expiresAt: Date.now() + 86_400_000,
+      } as never);
+      await ctx.db.insert("drafts", {
+        customerId,
+        channel: "instagram",
+        kind: "post",
+        snapshotText: LONG("APPROVED — a sentence the founder kept"),
+        outcome: "approved",
+        proposedAt: Date.now(),
+        expiresAt: Date.now() + 86_400_000,
+      } as never);
     });
 
-    const res = await t.action(internal.maya.cringeEval.runEvalOnPublished, {
+    const writing = await t.query(internal.maya.cringeEval.herWriting, {
       customerId,
     });
-    expect(res.ok).toBe(false);
-    expect(res.detail).toMatch(/needs \d+ before the number means anything/);
+    expect(writing.join(" ")).toContain("APPROVED");
+    expect(writing.join(" ")).not.toContain("REJECTED");
   });
 
-  it("⭐ MEASURES PLACEMENTS, NOT DRAFTS", async () => {
-    /**
-     * A draft is what she proposed; a placement is what a stranger actually
-     * saw. Grading drafts measures the work rather than the product — and
-     * includes everything the founder rejected, which is exactly the writing
-     * we want excluded.
-     */
+  it("⭐ counts what was actually published", async () => {
     const t = convexTest(schema, modules);
     const customerId = await seedEvalCustomer(t);
     await t.run(async (ctx) => {
-      for (let i = 0; i < 12; i += 1) {
-        await ctx.db.insert("drafts", {
-          customerId,
-          channel: "x",
-          kind: "post",
-          snapshotText: `a rejected draft ${i}`,
-          outcome: "rejected",
-          proposedAt: Date.now(),
-          expiresAt: Date.now() + 86_400_000,
-        });
-      }
+      await ctx.db.insert("placements", {
+        customerId,
+        channel: "instagram",
+        kind: "post",
+        linkStatus: "live",
+        idempotencyKey: `p_${Math.random()}`,
+        publishedAt: Date.now(),
+        snapshotText: LONG("PUBLISHED — what a stranger saw"),
+      } as never);
     });
-
-    // Twelve drafts, zero placements — still below the floor, because drafts
-    // are not what anyone read.
-    const res = await t.action(internal.maya.cringeEval.runEvalOnPublished, {
+    const writing = await t.query(internal.maya.cringeEval.herWriting, {
       customerId,
     });
-    expect(res.ok).toBe(false);
-    expect(res.detail).toMatch(/only 0 published posts/);
+    expect(writing.join(" ")).toContain("PUBLISHED");
   });
 });
 
