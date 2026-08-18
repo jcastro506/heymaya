@@ -74,7 +74,7 @@ export function MarketingNav() {
                 Sign in
               </Link>
               <Link
-                href="/sign-up?redirect_url=/onboarding/gtm"
+                href="/sign-up?redirect_url=/start"
                 className="inline-flex min-h-10 items-center rounded-md bg-paper px-4 text-sm font-medium text-black transition hover:bg-white"
               >
                 Sign up

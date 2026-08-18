@@ -43,7 +43,24 @@ import { SiInstagram, SiTiktok, SiYoutube } from "react-icons/si";
 
 import { primaryCtaHref, primaryCtaLabel } from "../_components/landingMode";
 
-const CTA_HREF = "/sign-up?redirect_url=/onboarding/gtm";
+/**
+ * ⚠️ THE FRONT DOOR OPENED ONTO THE WRONG PRODUCT. This pointed at
+ * `/onboarding/gtm`, which drives `convex/gtmMaya/` — the FROZEN product —
+ * and ends in `deployMayaGtm.runMyGtmDeploy`. Anyone signing up got the old
+ * agent: none of the `convex/maya/` rebuild, none of the seven skills, no
+ * render loop, no asset ladder.
+ *
+ * `/start` is the v2 flow (`maya.onramp.startFromRead` →
+ * `maya.pairing.createPairingLink` → `maya.setup.deployMine`) and NOTHING
+ * linked to it. The Convex layer was rebuilt underneath the site and the front
+ * door was never moved.
+ *
+ * Verified before flipping: `applyRead` runs green against the live staging
+ * deploy — customer resolved, the founder's correction stored verbatim as a
+ * directive, and the first-learn guard correctly declining to re-spend twelve
+ * searches on an already-learned customer.
+ */
+const CTA_HREF = "/sign-up?redirect_url=/start";
 const CTA_LABEL = "Put her to work";
 
 export default function ClawLaunchLandingPage() {

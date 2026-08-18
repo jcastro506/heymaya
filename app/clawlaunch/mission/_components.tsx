@@ -390,7 +390,7 @@ export function NeedsOnboarding() {
       <Empty
         title="No agent yet"
         body="Finish setting up HeyMaya and your manager will start working — everything she finds shows up here."
-        cta={{ href: "/onboarding/gtm", label: "Set up HeyMaya" }}
+        cta={{ href: "/start", label: "Set up HeyMaya" }}
       />
     </div>
   );
