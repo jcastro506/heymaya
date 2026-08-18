@@ -4771,6 +4771,49 @@ A sprint is not complete until **all seven** hold:
 
 ### 18.0.6 STATUS — 2026-08-17 *(audited against the live deploy, not the repo)*
 
+> ### ⭐ UPDATE — 2026-08-18 · the UGC-video pivot's first day
+>
+> Nine commits. Every one closed a gap where something *looked* built:
+>
+> | Was | Now |
+> |---|---|
+> | **"Sprint 9 is unstarted — no video path in `convex/maya` at all"** | ⚠️ **STALE.** `video.ts` + `videoBrief.ts` exist, the render loop is CLOSED (submit → poll → re-host to Convex storage → asset row), and the whole path runs with no Creatify key because the vendor calls are dependency-injected |
+> | `videosPerMonth: 4`, counted as rows | **15, weighted by rung.** An ad clone is 37 credits ($5.53) against an avatar video's 6 ($0.90) and both drew down the budget by 1 — three clones outspent fifteen videos while reporting 3/15 |
+> | `assetFloor.planAssets` — ZERO CALLERS while four comments claimed it enforced §7.5.3 | **Wired.** The missing piece was a vocabulary bridge: `mediaAssets.kind` stores what a file IS, `ASSET_RANK` ranks what it is WORTH. `ladderKindFor` translates, and `source` decides — founder-sent beats found beats generated |
+> | Onboarding never asked for a single image | §18.9.25 ④a — and the reason is now written down: `link_with_params` takes `image_urls` on every render, so **the images we pass ARE the video's visual content** |
+> | Nobody owned the customer's first `learnBusiness` | **Scheduled from `applyRead`.** `relearnIfStale` skipped unlearned customers because "onboarding owns that", and onboarding did not. Ten `targetsFor` readers took their null branch permanently |
+> | Two sweep maps, one never read | Deleted, and pinned singular. The divergent entry was `fillFromProductPage` — the one whose absence left `mediaAssets` empty |
+> | X offered on three surfaces | **Offer removed.** Schema deliberately untouched — see below |
+> | Idea bank and media library invisible to the web | `myIdeaBank` + `myMediaLibrary`, read-only (principle 1) |
+> | `/mission/plan` built and unreachable | In `NAV`. §16.75 restored the screen and then left it out of the nav, so "the strategy is invisible" stayed true |
+>
+> **⛔ Sprint 3's gate is UNCHANGED at 2 of 7.** Nothing above moves it. It is
+> seven consecutive days of a real placement, measured in the founder's
+> timezone — a calendar cost, not a code one, and it cannot start until video
+> can render.
+>
+> **⚠️ The Twitter decommission now has a precondition, and it is not optional.**
+> Live `channels` rows carry `channel: "x"`, so narrowing the schema union makes
+> `convex:staging` refuse until they are migrated on BOTH deployments. And 14 of
+> 16 recent placements went to X because `mediaAssets` was empty and the other
+> three channels cannot take text-only — so removing the read paths *before*
+> video publishes drives the placement count toward zero while `cadence.ts`
+> reports it as a clean failing run. **Offer first (done), schema after video
+> publishes.**
+>
+> **⚠️ Newly surfaced, and bigger than a commit: Mission Control has not been
+> migrated to v2.** The **Brain** screen reads entirely from `convex/gtmMaya/` —
+> the FROZEN product (`getMyCompetitiveMap`, `getMyFoundationInsights`,
+> `getMyGtmSnapshot`). **Results** is a hybrid: four frozen queries against two
+> live ones. No test asserts which product the dashboard reads from.
+>
+> **⚠️ And a promise with no implementation:** `inbox.replyOnChannel` has zero
+> callers, and the only live `replyToComment` calls are in `convex/gtmMaya/`. In
+> the shipping product, **nothing replies to an Instagram or YouTube comment** —
+> while "she answers everyone who replies" is on the landing page and in the
+> architecture principles. TikTok is impossible by platform (no comment API), so
+> the honest claim covers two channels, and no code tells the founder that.
+
 Honest per-sprint state. The pattern to notice: **the deterministic half of
 almost every sprint is built and the agent half of none of them is.** That
 happened because each time the work reached the agent layer it couldn't be
