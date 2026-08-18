@@ -101,6 +101,19 @@ export interface VideoBrief {
    * defect, not a feature (§7.5.3).
    */
   referenceVideoUrl?: string;
+  /**
+   * ⭐ What this video is actually being built from, in the founder's words —
+   * `assetFloor.planAssets().detail`. §7.5.3 requires that an avatar is never
+   * a silent default, and the only way that rule is real is if the sentence
+   * reaches him BEFORE he says yes.
+   */
+  assetNote?: string;
+  /**
+   * ⚠️ True when nothing better than a generated presenter was available.
+   * Carried as a FLAG as well as prose so a gate can act on it — prose can be
+   * rewritten by a prompt change, a boolean cannot.
+   */
+  usesAvatar?: boolean;
 }
 
 export type BriefFailure =
@@ -231,6 +244,8 @@ export function buildBrief(input: {
       length: input.length ?? 30,
       imageUrls: usable.map((a) => a.url),
       referenceVideoUrl: input.referenceVideoUrl,
+      assetNote: input.assetNote,
+      usesAvatar: input.usesAvatar,
     },
   };
 }

@@ -43,6 +43,7 @@ import { v } from "convex/values";
 import { internalAction, internalMutation } from "../_generated/server";
 import type { ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
+import { availableFrom, planAssets, ASSET_RANK, ladderKindFor } from "./assetFloor";
 import type { Doc, Id } from "../_generated/dataModel";
 import {
   buildBrief,
@@ -223,6 +224,27 @@ export const proposeVideo = internalAction({
     ]);
 
     /**
+     * ⭐ THE LADDER, APPLIED. `assetFloor.planAssets` had ZERO CALLERS while
+     * four production comments — including `preSpendGate.ts:331`, "that is
+     * enforced separately in assetFloor" — claimed it was enforcing §7.5.3.
+     * It enforced nothing. This is that wiring.
+     *
+     * ⚠️ The order matters more than it looks. These rows become `image_urls`
+     * on `link_with_params`, and §7.6.2 forbids letting Creatify scrape — so
+     * the images we pass ARE the video's visual content. Insertion order meant
+     * a stock illustration could lead a video about a real product.
+     */
+    const rows = assets as Doc<"mediaAssets">[];
+    const assetPlan = planAssets(availableFrom(rows));
+    const rankedAssets = [...rows]
+      .filter((a) => Boolean(a.publicUrl) && ladderKindFor(a.kind, a.source))
+      .sort(
+        (a, b) =>
+          ASSET_RANK.indexOf(ladderKindFor(a.kind, a.source)!) -
+          ASSET_RANK.indexOf(ladderKindFor(b.kind, b.source)!)
+      );
+
+    /**
      * ⭐ THE GATE, BEFORE THE FOUNDER IS ASKED. All eight checks, and every one
      * it cannot evaluate is NAMED rather than assumed — an invented input makes
      * a gate look active while checking nothing.
@@ -282,11 +304,16 @@ export const proposeVideo = internalAction({
             `WHO IT'S FOR: ${truth?.whoItsFor ?? ""}`,
             "",
             "SHOTS, IN ORDER:",
-            ...(assets as Doc<"mediaAssets">[])
-              .filter((a) => Boolean(a.publicUrl))
-              .map(
-                (a, i) => `${i + 1}. ${a.caption ?? "a screenshot of the product"}`
-              ),
+            ...rankedAssets.map(
+              (a, i) =>
+                /**
+                 * ⚠️ The fallback caption used to be "a screenshot of the
+                 * product" for EVERY asset — a lie whenever the row was a
+                 * screen recording, and the model wrote the shot list from it.
+                 * It now names what the thing actually is.
+                 */
+                `${i + 1}. ${a.caption ?? labelForShot(a)}`
+            ),
           ].join("\n"),
         },
       ],
@@ -314,20 +341,31 @@ export const proposeVideo = internalAction({
       ideaId: args.ideaId,
       script,
       lines,
-      assets: (assets as Doc<"mediaAssets">[])
-        /**
-         * ⚠️ An asset with no public URL cannot be rendered against, whatever
-         * else is true of it — `assetFloor.ts` makes the same point: "an asset
-         * with no URL cannot be used, whatever its rank."
-         */
-        .filter((a) => Boolean(a.publicUrl))
-        .map((a) => ({
-          assetId: a._id,
-          url: a.publicUrl ?? "",
-          caption: a.caption,
-        })),
+      /**
+       * ⭐ RANKED BY THE LADDER, not by insertion order. These become
+       * `image_urls` on `link_with_params`, which IS the video's visual
+       * content — so this ordering is the difference between a video that
+       * shows the founder's real app and one that shows stock clipart.
+       *
+       * ⚠️ An asset with no public URL cannot be rendered against, whatever
+       * else is true of it — `assetFloor.ts` makes the same point: "an asset
+       * with no URL cannot be used, whatever its rank."
+       */
+      assets: rankedAssets.map((a) => ({
+        assetId: a._id,
+        url: a.publicUrl ?? "",
+        caption: a.caption,
+      })),
       hasProductTruth: Boolean(truth?.whatItIs),
       referenceVideoUrl: args.referenceVideoUrl,
+      /**
+       * ⭐ The sentence §7.5.3 exists to force. `planAssets` says plainly when
+       * a video would lean on a generated presenter — "this one would use a
+       * generated presenter — the least convincing option" — and that has to
+       * reach the founder BEFORE he approves, not after he sees it.
+       */
+      assetNote: assetPlan.detail,
+      usesAvatar: assetPlan.usesAvatar,
       length: (length as 15 | 30 | 45 | 60) ?? 30,
     });
 
@@ -678,6 +716,26 @@ export function looksLikeVideo(bytes: Uint8Array): string | null {
   if (bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3)
     return "video/webm";
   return null;
+}
+
+/**
+ * What a shot actually is, for the script prompt.
+ *
+ * ⚠️ Every asset used to be captioned "a screenshot of the product" when it had
+ * no caption of its own — so the model wrote lines for stills over footage of
+ * the app in motion, and over the founder's own face.
+ */
+function labelForShot(a: { kind: string; source: string }): string {
+  switch (ladderKindFor(a.kind, a.source)) {
+    case "founder_footage":
+      return "footage the founder sent";
+    case "screen_recording":
+      return "a screen recording of the app in use";
+    case "product_screenshot":
+      return "a screenshot of the product";
+    default:
+      return "a background image";
+  }
 }
 
 export const runRender = internalAction({

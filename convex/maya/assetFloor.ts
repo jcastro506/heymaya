@@ -85,6 +85,73 @@ const WHY_MISSING: Record<AssetKind, string> = {
  * Pure: the ordering is the product decision, and it should be checkable
  * without a vendor, a render, or a database.
  */
+/**
+ * ⭐ THE BRIDGE THAT WAS MISSING — and the reason this whole file had zero
+ * callers while four production comments claimed it was enforcing the ladder.
+ *
+ * `mediaAssets.kind` and `ASSET_RANK` are DIFFERENT VOCABULARIES. The table
+ * stores what a file IS (screenshot · screen_recording · image · slide · video
+ * · logo); the ladder ranks what a file is WORTH for authenticity
+ * (founder_footage → screen_recording → product_screenshot →
+ * generated_background → avatar). Nobody wrote the translation, so nobody
+ * could call `planAssets`, so §7.5.3's central rule — an avatar is never a
+ * silent default — was enforced nowhere.
+ *
+ * ⚠️ `source` is load-bearing, not decoration. The same `image` row is a
+ * product screenshot when the founder sent it and a generated background when
+ * we made it, and treating those alike is how a stock illustration outranks
+ * real footage. Founder-sent beats found beats generated, always.
+ *
+ * Returns null for rows that are not ladder inputs at all — a logo is brand
+ * furniture, and our own rendered `video` is an OUTPUT. Feeding a previous
+ * render back in as source footage is a copy of a copy.
+ */
+export function ladderKindFor(
+  kind: string,
+  source: string
+): AssetKind | null {
+  const founderSent = source === "telegram" || source === "onboarding";
+  switch (kind) {
+    case "screen_recording":
+      return "screen_recording";
+    case "video":
+      // Founder-sent video is the top rung. Our own render is not an input.
+      return founderSent ? "founder_footage" : null;
+    case "screenshot":
+      return "product_screenshot";
+    case "image":
+      return founderSent ? "product_screenshot" : "generated_background";
+    case "slide":
+      return "generated_background";
+    case "logo":
+    default:
+      return null;
+  }
+}
+
+/**
+ * ⭐ Turn library rows into a ranked plan.
+ *
+ * ⚠️ An `avatar` entry is ALWAYS appended. Creatify can always generate a
+ * presenter, so the avatar rung is never actually unavailable — and if it were
+ * absent from the list, `planAssets` would report "nothing to build this from
+ * yet" instead of "this one would use a generated presenter". The second
+ * sentence is the one §7.5.3 exists to force the founder to hear. Its rank
+ * puts it last, so it only ever wins when nothing real exists.
+ */
+export function availableFrom(
+  rows: ReadonlyArray<{ kind: string; source: string; publicUrl?: string; caption?: string }>
+): AvailableAsset[] {
+  const mapped: AvailableAsset[] = [];
+  for (const row of rows) {
+    const kind = ladderKindFor(row.kind, row.source);
+    if (!kind) continue;
+    mapped.push({ kind, url: row.publicUrl, note: row.caption });
+  }
+  mapped.push({ kind: "avatar", url: "creatify:avatar" });
+  return mapped;
+}
+
 export function planAssets(available: AvailableAsset[]): AssetPlan {
   // An asset with no URL is a claim, not an asset.
   const usable = available.filter((a) => a.url && a.url.trim().length > 0);

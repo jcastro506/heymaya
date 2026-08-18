@@ -15,7 +15,10 @@
  * The avatar is not the defect. The SILENCE is.
  */
 import { describe, expect, it } from "vitest";
-import { ASSET_RANK, needsStating, planAssets } from "../assetFloor";
+import { ASSET_RANK, needsStating, planAssets,
+  ladderKindFor,
+  availableFrom,
+} from "../assetFloor";
 
 const url = (n: string) => `https://cdn.test/${n}`;
 
@@ -106,5 +109,56 @@ describe("what it reports missing", () => {
     expect(plan.using).toEqual([]);
     expect(plan.usesAvatar).toBe(false);
     expect(plan.detail).toBe("nothing to build this from yet");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+
+describe("the bridge from the library to the ladder", () => {
+  /**
+   * ⚠️ THIS IS WHY `planAssets` HAD ZERO CALLERS. `mediaAssets.kind` and
+   * `ASSET_RANK` are different vocabularies — the table stores what a file IS,
+   * the ladder ranks what it is WORTH for authenticity — and nobody wrote the
+   * translation. Four production comments claimed §7.5.3 was "enforced
+   * separately in assetFloor" while nothing could call it.
+   */
+  it("⭐ founder-sent video is the top rung; our own render is not an input", () => {
+    expect(ladderKindFor("video", "telegram")).toBe("founder_footage");
+    // A previous render fed back in as source footage is a copy of a copy.
+    expect(ladderKindFor("video", "generated")).toBeNull();
+  });
+
+  it("⭐ source decides, not just kind", () => {
+    // The same `image` row: founder-sent is real product, ours is background.
+    expect(ladderKindFor("image", "telegram")).toBe("product_screenshot");
+    expect(ladderKindFor("image", "generated")).toBe("generated_background");
+    expect(ladderKindFor("image", "scrape")).toBe("generated_background");
+  });
+
+  it("⚠️ a logo is brand furniture, never a shot", () => {
+    expect(ladderKindFor("logo", "telegram")).toBeNull();
+  });
+
+  it("⭐ an avatar is ALWAYS available, so the warning can fire", () => {
+    /**
+     * Creatify can always generate a presenter, so the avatar rung is never
+     * genuinely absent. Leaving it out made `planAssets` say "nothing to build
+     * this from yet" instead of "this one would use a generated presenter" —
+     * and the second sentence is the one §7.5.3 exists to force.
+     */
+    const plan = planAssets(availableFrom([]));
+    expect(plan.usesAvatar).toBe(true);
+    expect(plan.detail).toMatch(/generated presenter/i);
+  });
+
+  it("⭐ real footage beats a generated background, whatever order it arrived in", () => {
+    const plan = planAssets(
+      availableFrom([
+        { kind: "slide", source: "generated", publicUrl: "https://cdn/bg.png" },
+        { kind: "screen_recording", source: "telegram", publicUrl: "https://cdn/rec.mp4" },
+      ])
+    );
+    expect(plan.using[0].kind).toBe("screen_recording");
+    expect(plan.usesAvatar).toBe(false);
   });
 });
