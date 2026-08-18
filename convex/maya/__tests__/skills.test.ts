@@ -57,6 +57,25 @@ const EXPECTED = ["write-post", "critique", "answer-people",
    * pivoted and the instructions were not.
    */
   "make-video",
+  /**
+   * ⭐ The UGC pivot, at the instruction layer (2026-08-18).
+   *
+   * `pick-the-week` replaces deciding daily with deciding once — seven separate
+   * daily choices produce seven unrelated posts and seven approval asks, and
+   * `askFounder` allows one open question at a time.
+   *
+   * `comment-relay` turns a platform wall into a habit: TikTok exposes no
+   * comment API to ANYONE, so the choice was never automated-versus-relayed,
+   * it was relayed-versus-nothing. `cold_reply` was already a first-class draft
+   * kind with no skill telling her to produce one.
+   *
+   * `watch-content` covers organic posts and paid ads as one job, because they
+   * are — the difference is how much someone else risked, which is a ranking
+   * rule rather than a second activity.
+   */
+  "pick-the-week",
+  "comment-relay",
+  "watch-content"
 ];
 
 describe("the pack is shaped the way the loader expects", () => {
