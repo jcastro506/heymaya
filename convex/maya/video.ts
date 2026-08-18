@@ -575,6 +575,97 @@ export async function submitRender(
  * means a placement whose media evaporates. The slide render chain already
  * proved Convex storage handles this natively with no R2 dependency.
  */
+/* -------------------------------------------------------------------------- */
+/* Collecting the render — the other half of the loop                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⚠️ THE RENDER LOOP WAS OPEN. `submitRender` handed a job to Creatify and
+ * NOTHING EVER COLLECTED IT. `getLinkToVideo` and `getAdClone` existed in the
+ * vendor layer and were called from nowhere; `vendorJobId` was returned and
+ * read by nothing outside a test. `runRender`'s own docblock claimed
+ * "Re-hosts on done" and no such code existed. A UGC-video agent whose renders
+ * are submitted and never come back has no product — every free step worked
+ * and the paid one produced silence.
+ */
+export type CollectVerdict =
+  | { state: "pending"; detail: string }
+  | { state: "done"; videoUrl: string; creditsUsed?: number }
+  | { state: "failed"; failure: VideoFailure; detail: string };
+
+/**
+ * ⭐ What the vendor's job row means. Pure, so the whole decision is testable
+ * with no key and no network — which is how the rest of this file was built.
+ *
+ * ⚠️ Terminal-but-no-URL is treated as FAILURE, not as pending. The vendor
+ * reporting "done" with nothing to fetch would otherwise poll until the
+ * attempt budget ran out and then report a timeout, which sends whoever
+ * debugs it looking at latency instead of at the empty field.
+ */
+export function collectVerdict(
+  job: { status?: string | null; video_output?: string | null; credits_used?: number | null; failed_reason?: string | null },
+  isDone: (s: string | null | undefined) => boolean,
+  isFailed: (s: string | null | undefined) => boolean
+): CollectVerdict {
+  if (isFailed(job.status)) {
+    return {
+      state: "failed",
+      failure: "vendor_failed",
+      // §11 — no vendor name reaches the founder; the reason still reaches us.
+      detail: job.failed_reason?.trim() || "the render didn't come back",
+    };
+  }
+  if (isDone(job.status)) {
+    const url = job.video_output?.trim();
+    if (!url) {
+      return {
+        state: "failed",
+        failure: "vendor_failed",
+        detail: "finished with no video attached",
+      };
+    }
+    return {
+      state: "done",
+      videoUrl: url,
+      creditsUsed: typeof job.credits_used === "number" ? job.credits_used : undefined,
+    };
+  }
+  return { state: "pending", detail: job.status?.trim() || "still rendering" };
+}
+
+/**
+ * How long we keep asking before calling it. Creatify's own docs put a render
+ * at ~2.5 minutes; 40 polls at 15s is 10 minutes, which is 4x the expected
+ * time and still bounded. Past it the job takes a NAMED failure (§2.5) rather
+ * than sitting `running` forever and being reaped by the deadline sweep, which
+ * would surface as an infrastructure fault rather than a vendor one.
+ */
+export const COLLECT_MAX_POLLS = 40;
+export const COLLECT_INTERVAL_MS = 15_000;
+
+/**
+ * ⚠️ Video bytes are re-hosted, never linked. Vendor URLs expire, and a
+ * placement pointing at an expired vendor URL is a post that breaks weeks
+ * later, off in the founder's feed where nobody is watching. Convex stores
+ * files natively — R2 was never needed for this (verified 2026-08-09).
+ *
+ * ⚠️ The magic-byte check is the same lesson `media.ts` learned on images: an
+ * SSO redirect or a JSON error page stored as `.mp4` publishes as a broken
+ * video, and the failure then surfaces on the platform hours later instead of
+ * here where it is still cheap.
+ */
+export function looksLikeVideo(bytes: Uint8Array): string | null {
+  if (bytes.length < 12) return null;
+  const ascii = (i: number, n: number) =>
+    String.fromCharCode(...bytes.slice(i, i + n));
+  // ISO-BMFF (mp4/m4v/mov): a 'ftyp' box at offset 4.
+  if (ascii(4, 4) === "ftyp") return "video/mp4";
+  // WebM / Matroska: EBML magic.
+  if (bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3)
+    return "video/webm";
+  return null;
+}
+
 export const runRender = internalAction({
   args: {
     customerId: v.id("customers"),
@@ -602,7 +693,7 @@ export const runRender = internalAction({
       customerId: args.customerId,
     });
 
-    return await submitRender(brief, {
+    const outcome = await submitRender(brief, {
       isConfigured: isCreatifyConfigured,
       createLinkWithParams: (f) =>
         endpoints.createLinkWithParams(f) as Promise<{ id: string }>,
@@ -617,5 +708,135 @@ export const runRender = internalAction({
       productTitle: truth?.name,
       productDescription: truth?.whatItIs,
     });
+
+    /**
+     * ⭐ THE HANDOFF THAT WAS MISSING. A submit with no collection scheduled is
+     * a paid job we never look at again. Scheduled rather than awaited so the
+     * action returns while the vendor renders — a ~2.5 minute await would sit
+     * inside the queue's claim and hold a worker slot for the whole render.
+     */
+    if (outcome.ok && outcome.vendorJobId) {
+      await ctx.scheduler.runAfter(
+        COLLECT_INTERVAL_MS,
+        internal.maya.video.collectRender,
+        {
+          customerId: args.customerId,
+          vendorJobId: outcome.vendorJobId,
+          rung: brief.rung,
+          poll: 1,
+        }
+      );
+    }
+    return outcome;
+  },
+});
+
+/**
+ * ⭐ Ask the vendor whether it's done, and bring the bytes home if it is.
+ *
+ * Polling rather than the `webhook_url` the endpoints accept: a webhook needs a
+ * public route, a shared secret, and Creatify able to reach us — three things
+ * that fail independently and silently. Polling reuses the queue that already
+ * exists and is exercisable with no credential. Webhooks are the optimisation
+ * once volume justifies it, not the thing to depend on first.
+ */
+export const collectRender = internalAction({
+  args: {
+    customerId: v.id("customers"),
+    vendorJobId: v.string(),
+    rung: v.string(),
+    poll: v.number(),
+  },
+  handler: async (
+    ctx: ActionCtx,
+    args
+  ): Promise<{ ok: boolean; detail: string; assetId?: Id<"mediaAssets"> }> => {
+    const [{ isCreatifyConfigured }, endpoints, types] = await Promise.all([
+      import("../integrations/creatify/client"),
+      import("../integrations/creatify/endpoints"),
+      import("../integrations/creatify/types"),
+    ]);
+    if (!isCreatifyConfigured()) {
+      return { ok: false, detail: "that part isn't switched on" };
+    }
+
+    let job;
+    try {
+      job =
+        args.rung === "ad_clone"
+          ? await endpoints.getAdClone(args.vendorJobId)
+          : await endpoints.getLinkToVideo(args.vendorJobId);
+    } catch (err) {
+      /**
+       * ⚠️ A transient read failure must not destroy a render that is still
+       * running and already paid for. Retry within the same attempt budget;
+       * only exhausting it is terminal.
+       */
+      if (args.poll < COLLECT_MAX_POLLS) {
+        await ctx.scheduler.runAfter(
+          COLLECT_INTERVAL_MS,
+          internal.maya.video.collectRender,
+          { ...args, poll: args.poll + 1 }
+        );
+        return { ok: false, detail: "couldn't reach it, trying again" };
+      }
+      return { ok: false, detail: `gave up asking: ${String(err)}` };
+    }
+
+    const verdict = collectVerdict(
+      job,
+      types.isDoneStatus,
+      types.isFailedStatus
+    );
+
+    if (verdict.state === "pending") {
+      if (args.poll >= COLLECT_MAX_POLLS) {
+        // §2.5 — a named failure, never silence.
+        return { ok: false, detail: "the video didn't finish in time" };
+      }
+      await ctx.scheduler.runAfter(
+        COLLECT_INTERVAL_MS,
+        internal.maya.video.collectRender,
+        { ...args, poll: args.poll + 1 }
+      );
+      return { ok: false, detail: verdict.detail };
+    }
+
+    if (verdict.state === "failed") {
+      return { ok: false, detail: verdict.detail };
+    }
+
+    // ── done: bring the bytes home ──────────────────────────────────────────
+    const res = await fetch(verdict.videoUrl);
+    if (!res.ok) {
+      return { ok: false, detail: `couldn't download it (${res.status})` };
+    }
+    const buffer = await res.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    const contentType = looksLikeVideo(bytes);
+    if (!contentType) {
+      return { ok: false, detail: "what came back wasn't a video" };
+    }
+
+    const storageId = await ctx.storage.store(
+      new Blob([buffer], { type: contentType })
+    );
+    const url = await ctx.storage.getUrl(storageId);
+    if (!url) {
+      return { ok: false, detail: "stored it but couldn't get a link" };
+    }
+
+    const { assetId } = await ctx.runMutation(internal.maya.media.record, {
+      customerId: args.customerId,
+      kind: "video",
+      source: "generated",
+      storageKey: storageId,
+      publicUrl: url,
+      contentType,
+      bytes: bytes.length,
+      caption: "made for you",
+    });
+
+    return { ok: true, detail: "the video is ready", assetId };
   },
 });

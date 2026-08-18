@@ -18,6 +18,10 @@ import {
   CREDITS_PER_LINK,
   DEFAULT_MODEL,
   MODEL_VERSIONS,
+  collectVerdict,
+  looksLikeVideo,
+  COLLECT_MAX_POLLS,
+  COLLECT_INTERVAL_MS,
 } from "../video";
 import type { VideoBrief } from "../videoBrief";
 import type { Id } from "../../_generated/dataModel";
@@ -271,5 +275,89 @@ describe("the founder's yes actually starts the render", () => {
     for (const kind of ["deliver_message", "publish_placement", RENDER_JOB_KIND]) {
       expect(HANDLED_KINDS.has(kind), `${kind} has no handler`).toBe(true);
     }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+
+describe("the render actually comes back", () => {
+  /**
+   * ⚠️ THE LOOP WAS OPEN AND EVERY TEST PASSED. `submitRender` was covered end
+   * to end, `getLinkToVideo`/`getAdClone` were written and called from nowhere,
+   * and `vendorJobId` was returned and read by nothing outside this file. The
+   * suite proved the expensive half started and never that it finished — which
+   * is the exact shape of every failure in this product's history.
+   */
+  const done = (s?: string | null) => /^(done|completed|succeeded)$/i.test(s ?? "");
+  const failed = (s?: string | null) => /^(failed|error)$/i.test(s ?? "");
+
+  it("⭐ a finished job yields the video URL", () => {
+    const v = collectVerdict(
+      { status: "done", video_output: "https://cdn/v.mp4", credits_used: 6 },
+      done,
+      failed
+    );
+    expect(v.state).toBe("done");
+    if (v.state === "done") {
+      expect(v.videoUrl).toBe("https://cdn/v.mp4");
+      expect(v.creditsUsed).toBe(6);
+    }
+  });
+
+  it("⭐ an unfinished job keeps polling rather than declaring anything", () => {
+    expect(collectVerdict({ status: "in_queue" }, done, failed).state).toBe("pending");
+    expect(collectVerdict({ status: "running" }, done, failed).state).toBe("pending");
+  });
+
+  it("⚠️ done-with-no-video is a FAILURE, not pending", () => {
+    /**
+     * Otherwise it polls until the attempt budget runs out and reports a
+     * timeout — sending whoever debugs it at latency instead of at the empty
+     * field the vendor actually returned.
+     */
+    const v = collectVerdict({ status: "done", video_output: "" }, done, failed);
+    expect(v.state).toBe("failed");
+    if (v.state === "failed") expect(v.detail).toMatch(/no video/i);
+  });
+
+  it("⚠️ a vendor failure reaches us with its reason, and no vendor name", () => {
+    const v = collectVerdict(
+      { status: "failed", failed_reason: "source video too short" },
+      done,
+      failed
+    );
+    expect(v.state).toBe("failed");
+    if (v.state === "failed") {
+      expect(v.detail).toContain("too short");
+      expect(v.detail).not.toMatch(/creatify|api key|credential/i);
+    }
+  });
+
+  it("⚠️ the poll budget is bounded — it never asks forever", () => {
+    // 40 x 15s = 10 min, ~4x the vendor's ~2.5 min render. Past it the job
+    // takes a named failure rather than being reaped as an infra fault.
+    expect(COLLECT_MAX_POLLS).toBeGreaterThan(10);
+    expect(COLLECT_MAX_POLLS * COLLECT_INTERVAL_MS).toBeLessThanOrEqual(15 * 60_000);
+  });
+});
+
+describe("what came back is actually a video", () => {
+  /**
+   * ⚠️ Same lesson media.ts learned on images: an SSO redirect or a JSON error
+   * page stored as .mp4 publishes as a broken video, and that surfaces on the
+   * platform hours later in the founder's feed rather than here.
+   */
+  const mp4 = new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]);
+  const webm = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 1, 2, 3, 4, 5, 6, 7, 8]);
+
+  it("⭐ accepts mp4 and webm by magic bytes", () => {
+    expect(looksLikeVideo(mp4)).toBe("video/mp4");
+    expect(looksLikeVideo(webm)).toBe("video/webm");
+  });
+
+  it("⚠️ rejects an error page dressed as a video", () => {
+    const json = new Uint8Array([...'{"error":"nope"}'].map((c) => c.charCodeAt(0)));
+    expect(looksLikeVideo(json)).toBeNull();
+    expect(looksLikeVideo(new Uint8Array([1, 2]))).toBeNull();
   });
 });
