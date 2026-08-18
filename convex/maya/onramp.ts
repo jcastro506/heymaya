@@ -131,6 +131,27 @@ export const startFromRead = mutation({
  * safe for exactly that reason and unsafe anywhere else, which is why this is
  * not exported publicly.
  */
+/**
+ * ⭐ Whether this customer still needs their first learn.
+ *
+ * Pure and exported so the DECISION is testable without a scheduler. The
+ * scheduling itself races in `convex-test` — `runAfter(0)` fires before a
+ * separate read-then-cancel can catch it — and a test that fights the harness
+ * ends up asserting the harness rather than the rule.
+ *
+ * ⚠️ An unparseable map counts as UNLEARNED. Treating it as learned would lock
+ * a customer out of the perception layer permanently and silently, with all ten
+ * `targetsFor` readers reporting a clean null forever.
+ */
+export function needsFirstLearn(buyerJson: string | undefined): boolean {
+  if (!buyerJson) return true;
+  try {
+    return !(JSON.parse(buyerJson) as { targets?: unknown }).targets;
+  } catch {
+    return true;
+  }
+}
+
 export const applyRead = internalMutation({
   args: {
     creatorId: v.id("creators"),
@@ -219,6 +240,37 @@ export const applyRead = internalMutation({
      * audience note would file the first thing they ever told her in the wrong
      * drawer.
      */
+    /**
+     * ⭐ THE FIRST LEARN. Nothing scheduled this, and the gap was an OWNERSHIP
+     * one rather than a missing function: `relearnIfStale` skips customers who
+     * have no map at all, with the comment "onboarding owns that" — and
+     * onboarding did not own it. Each side assumed the other did.
+     *
+     * The cost of that: `targetsFor` is read by ten production modules
+     * (trends, formats x5, competitors, scroll, complaints, benchmarks,
+     * dashboard, strategy, audience) and every one takes its null branch
+     * permanently for every customer onboarded this way. The perception layer
+     * — the thing the whole product claims as its moat — was dark for exactly
+     * the people we had just onboarded.
+     *
+     * ⚠️ Guarded on an existing map, not on the insert/patch branch above. A
+     * re-run of `applyRead` (a retried submit, a corrected URL) would otherwise
+     * spend twelve searches again on a customer who already has targets, and
+     * `learnBusiness` is the most expensive single call in onboarding.
+     *
+     * ⚠️ Scheduled, never awaited. This is a mutation on the signup path; the
+     * founder should reach the pairing screen while she reads the niche, not
+     * after.
+     */
+    const row = (await ctx.db.get(customerId)) as { buyerJson?: string } | null;
+    if (needsFirstLearn(row?.buyerJson)) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.maya.learnBusiness.learnBusiness,
+        { customerId }
+      );
+    }
+
     const correction = (args.correction ?? "").trim().slice(0, MAX_CORRECTION);
     if (!correction) return { ok: true, customerId };
 

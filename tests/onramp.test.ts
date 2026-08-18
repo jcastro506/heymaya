@@ -45,6 +45,26 @@ async function seedCreator(ctx: unknown, clerkUserId: string): Promise<void> {
   );
 }
 
+/**
+ * ⚠️ Onboarding now schedules the customer's FIRST `learnBusiness` — the gap
+ * that left ten `targetsFor` readers permanently null. That is correct in
+ * production and hostile in a unit test: `learnBusiness` is an ACTION making
+ * twelve live searches, and convex-test drains the scheduler at teardown, so
+ * leaving it queued fires real network calls from the suite (and surfaces as
+ * "Write outside of transaction", which reads like a harness bug rather than
+ * an un-cancelled job).
+ *
+ * Cancel it. The scheduling itself is asserted where it belongs — as the pure
+ * `needsFirstLearn` decision in convex/maya/__tests__/onramp.test.ts.
+ */
+async function cancelScheduled(t: ReturnType<typeof convexTest>) {
+  await t.run(async (ctx) => {
+    for (const f of await ctx.db.system.query("_scheduled_functions").collect()) {
+      await ctx.scheduler.cancel(f._id);
+    }
+  });
+}
+
 describe("on-ramp", () => {
   it("⭐ provisions a v2 customer, not the frozen agent", async () => {
     const t = convexTest(schema, modules);
@@ -72,6 +92,7 @@ describe("on-ramp", () => {
       expect(rows[0].agentVersion).toBe("v2");
       expect(rows[0].timezone).toBe("America/Los_Angeles");
     });
+    await cancelScheduled(t);
   });
 
   it("stores the read the founder confirmed, with its provenance", async () => {
@@ -97,6 +118,7 @@ describe("on-ramp", () => {
       expect(truth.source).toBe("onboarding_read");
       expect(truth.confirmedAt).toBeGreaterThan(0);
     });
+    await cancelScheduled(t);
   });
 
   it("⭐ turns a correction into a permanent, verbatim rule", async () => {
@@ -124,6 +146,7 @@ describe("on-ramp", () => {
      */
     const rules = await asUser.query(api.maya.directives.myHouseRules, {});
     expect(rules.rules?.map((r) => r.verbatim)).toEqual([correction]);
+    await cancelScheduled(t);
   });
 
   it("writes no rule when they simply agree", async () => {
@@ -142,6 +165,7 @@ describe("on-ramp", () => {
 
     const rules = await asUser.query(api.maya.directives.myHouseRules, {});
     expect(rules.rules).toEqual([]);
+    await cancelScheduled(t);
   });
 
   it("is idempotent — a refresh does not mint a second agent", async () => {
@@ -165,6 +189,7 @@ describe("on-ramp", () => {
     await t.run(async (ctx) => {
       expect(await ctx.db.query("customers").collect()).toHaveLength(1);
     });
+    await cancelScheduled(t);
   });
 
   it("rejects a URL she could never fetch", async () => {
@@ -182,6 +207,7 @@ describe("on-ramp", () => {
     // Every claim she makes traces back to this URL. Grounded or silent (§2.7).
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/URL/i);
+    await cancelScheduled(t);
   });
 
   it("caps browser-supplied text", async () => {
@@ -206,6 +232,7 @@ describe("on-ramp", () => {
        */
       expect(truth.whatItIs.length).toBe(2_000);
     });
+    await cancelScheduled(t);
   });
 
   it("refuses when nobody is signed in", async () => {
@@ -216,5 +243,6 @@ describe("on-ramp", () => {
       timezone: "UTC",
     });
     expect(res.ok).toBe(false);
+    await cancelScheduled(t);
   });
 });
