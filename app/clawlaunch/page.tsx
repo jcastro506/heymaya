@@ -58,22 +58,18 @@ export default function ClawLaunchLandingPage() {
       <Hero />
       <Reel />
 
-      <Phase>She learns</Phase>
       <ReadsYourSite />
       <WatchesMarket />
       <WatchesVideo />
 
-      <Phase>She decides, and makes</Phase>
       <StartsFromReal />
       <MakesIt />
       <ShowsYouFirst />
 
-      <Phase>She ships</Phase>
       <PostsIt />
       <AnswersEveryone />
       <RemembersIt />
 
-      <Phase>She proves it</Phase>
       <WhatsBroken />
       <TracesIt />
       <OneExperiment />
@@ -124,7 +120,7 @@ function Hero() {
     <section
       id="top"
       data-nav="Start"
-      className="flex min-h-[92vh] items-center px-6 py-24 sm:px-8"
+      className="snap-section flex min-h-screen items-center px-6 py-24 sm:px-8"
     >
       <div className="mx-auto w-full max-w-6xl">
         {/**
@@ -142,14 +138,14 @@ function Hero() {
         </h1>
         <p
           className="rise mt-10 max-w-xl text-[19px] leading-[1.55] text-[#0a0a0a]/70 sm:text-[21px]"
-          style={{ animationDelay: "0.5s" }}
+          style={{ animationDelay: "0.9s" }}
         >
           Maya watches what&rsquo;s working in your niche, creates your TikToks,
           Reels and Shorts, and posts them for you.
         </p>
         <div
           className="rise mt-12 flex flex-wrap items-center gap-6"
-          style={{ animationDelay: "0.85s" }}
+          style={{ animationDelay: "1.7s" }}
         >
           <Link
             href={primaryCtaHref(CTA_HREF)}
@@ -169,7 +165,7 @@ function Hero() {
  */
 function Reel() {
   return (
-    <section data-nav="The work" className="px-6 py-20 sm:px-8 sm:py-28">
+    <section data-nav="The work" className="snap-section flex min-h-screen items-center px-6 py-20 sm:px-8">
       <div className="mx-auto max-w-6xl">
         <RevealOnView>
           <h2 className="max-w-2xl font-display italic text-[clamp(1.9rem,3.8vw,2.9rem)] leading-[1.1] tracking-[-0.015em]">
@@ -207,6 +203,7 @@ function ReadsYourSite() {
   return (
     <Cap
       title="She reads your site first"
+      phase="She learns"
       navLabel="Her first day"
       line="Paste your URL and she reads it the way a new hire would: what you sell, who buys it, and what actually makes you different. Then she tells you what she couldn't work out, so you know exactly what she's missing before she writes a word."
       art={
@@ -323,6 +320,7 @@ function StartsFromReal() {
     <Cap
       flip
       title="Every post starts with something someone said"
+      phase="She decides, and makes"
       navLabel="Real evidence"
       line="She reads the comment sections under the posts your buyers already watch. When eleven people ask the same question, that isn't an insight to file away. It's next week's video, with the receipts attached."
       art={
@@ -406,6 +404,7 @@ function PostsIt() {
   return (
     <Cap
       title="She posts it"
+      phase="She ships"
       navLabel="Posts"
       line="Show me first, or just go. One switch per channel and it's yours. On just go she posts and tells you in the evening. On show me first, one word from you publishes the exact text you saw, never a regeneration."
       art={
@@ -529,6 +528,7 @@ function WhatsBroken() {
     <Cap
       flip
       title="She tells you what's broken"
+      phase="She proves it"
       navLabel="Diagnoses"
       line="Five questions in order: did we post, did anyone see it, did anyone care, did anyone come, did anyone convert. The first one that fails is the thing to fix, and if it's the last one she'll tell you the content is fine and the problem is your landing page."
       art={
@@ -642,7 +642,7 @@ function OneExperiment() {
  */
 function TheMath() {
   return (
-    <section data-nav="The math" className="px-6 py-24 sm:px-8 sm:py-32">
+    <section data-nav="The math" className="snap-section flex min-h-screen items-center px-6 py-24 sm:px-8">
       <div className="mx-auto max-w-6xl">
         <RevealOnView>
           <div className="grid gap-12 border-y border-[#0a0a0a]/15 py-14 sm:grid-cols-2 sm:gap-10 sm:py-20">
@@ -671,7 +671,7 @@ function TheMath() {
 
 function Closer() {
   return (
-    <section data-nav="Start now" className="px-6 py-24 sm:px-8 sm:py-36">
+    <section data-nav="Start now" className="snap-section flex min-h-screen items-center px-6 py-24 sm:px-8">
       <div className="mx-auto max-w-6xl">
         <RevealOnView>
           <h2 className="max-w-[13ch] font-display italic text-[clamp(2.25rem,6vw,4.5rem)] leading-[1.02] tracking-[-0.02em]">
@@ -833,6 +833,7 @@ function Cap({
   art,
   flip = false,
   navLabel,
+  phase,
 }: {
   title: string;
   line: string;
@@ -840,25 +841,38 @@ function Cap({
   flip?: boolean;
   /** Short label for the dot rail. Falls back to the headline. */
   navLabel?: string;
+  /**
+   * ⚠️ The act label, folded INTO the first block of each act rather than
+   * standing between them. A separate marker element would be its own snap
+   * point — a screen holding four words — or would sit unreachable in the gap
+   * between two snaps.
+   */
+  phase?: string;
 }) {
   return (
-    <section data-nav={navLabel ?? title} className="px-6 py-16 sm:px-8 sm:py-24">
-      <RevealOnView>
+    <section
+      data-nav={navLabel ?? title}
+      className="snap-section flex min-h-screen items-center px-6 py-20 sm:px-8"
+    >
+      <RevealOnView className="w-full">
         {/**
-         * ⭐ The artifact PINS while its words scroll past, then releases as the
-         * next block takes over. Division by motion rather than by a rule —
-         * the operator's "can it be a scrolling thing", and it is also just
-         * better: a hairline between sections is a line the eye has to cross,
-         * where a held image is a beat the eye rests on.
+         * ⭐ One section, one screen. The reader settles on a block, takes it
+         * in, and scrolls once to reach the next.
          *
-         * ⚠️ `lg:` only. Sticky on a phone would pin an image over the very
-         * words explaining it, in the one viewport with no room to spare.
+         * ⚠️ The sticky artifact that used to live here is GONE, deliberately.
+         * Sticky and scroll-snap are two answers to the same question — how do
+         * sections separate — and running both means each fights the other for
+         * control of the same gesture. Snapping won because it is the one the
+         * operator asked for and the one that survives on a phone.
          */}
-        <div className="mx-auto grid max-w-6xl items-start gap-10 lg:grid-cols-2 lg:gap-16">
-          <div className={`lg:sticky lg:top-[18vh] ${flip ? "lg:order-2" : ""}`}>
-            {art}
-          </div>
-          <div className={`lg:py-[12vh] ${flip ? "lg:order-1" : ""}`}>
+        <div className="mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-2 lg:gap-16">
+          <div className={flip ? "lg:order-2" : ""}>{art}</div>
+          <div className={flip ? "lg:order-1" : ""}>
+            {phase ? (
+              <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/60">
+                {phase}
+              </p>
+            ) : null}
             <h2 className="max-w-[18ch] font-display italic text-[clamp(1.75rem,3.4vw,2.6rem)] leading-[1.12] tracking-[-0.01em]">
               {title}
             </h2>
@@ -872,24 +886,6 @@ function Cap({
   );
 }
 
-/**
- * ⚠️ A phase marker, NOT a number. Numbering implied a sequence the content
- * does not have — she is not doing these in order, she does all of them.
- */
-function Phase({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="px-6 pt-16 sm:px-8 sm:pt-24">
-      {/* ⚠️ No rule. The operator asked for division without "a direct line",
-          and the sticky artifacts already do the separating — a border here
-          would be a second, competing signal. */}
-      <div className="mx-auto max-w-6xl">
-        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/60">
-          {children}
-        </p>
-      </div>
-    </div>
-  );
-}
 
 function Panel({
   children,
@@ -1134,8 +1130,10 @@ function PageStyles() {
        */
       [data-page="clawlaunch-landing"] .rise {
         opacity: 0;
-        transform: translateY(16px);
-        animation: rise 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        transform: translateY(20px);
+        /* Slower on purpose. At 0.9s the three lines arrived almost together
+           and read as one flicker; at 1.4s each has time to land. */
+        animation: rise 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
       }
       @keyframes rise {
         to { opacity: 1; transform: none; }
@@ -1193,8 +1191,33 @@ function PageStyles() {
       }
       html { scroll-behavior: smooth; }
 
+      /**
+       * ⭐ One section per screen. The reader settles, reads, and scrolls once
+       * to the next.
+       *
+       * ⚠️ proximity, NOT mandatory. Mandatory fights the reader whenever a
+       * section is taller than their viewport — it drags them off content they
+       * are still reading, and on a short laptop screen or with text scaled up
+       * that is most of them. Proximity gives the same settling feel and always
+       * lets go when someone wants to keep scrolling.
+       *
+       * ⚠️ Height-gated. Below 640px tall there is not room for a screen-sized
+       * section, so snapping there would trap the reader between two blocks
+       * neither of which fits.
+       */
+      @media (min-height: 640px) {
+        html {
+          scroll-snap-type: y proximity;
+        }
+        [data-page="clawlaunch-landing"] .snap-section {
+          scroll-snap-align: start;
+          scroll-snap-stop: normal;
+        }
+      }
+
       @media (prefers-reduced-motion: reduce) {
-        html { scroll-behavior: auto; }
+        /* Snapping is motion the reader did not ask for. */
+        html { scroll-behavior: auto; scroll-snap-type: none; }
         [data-page="clawlaunch-landing"] .reveal-on-view {
           opacity: 1; transform: none; transition: none;
         }
