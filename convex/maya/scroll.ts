@@ -116,6 +116,14 @@ export const scrollNiche = internalAction({
     observations?: Observation[];
     keywordsSwept?: string[];
     channelsSwept?: string[];
+    /**
+     * ⚠️ Channels that were searched and returned nothing. Distinguishing a
+     * quiet channel from a broken one is the whole point — 0 Instagram
+     * observations looked identical to a quiet Instagram for weeks.
+     */
+    silentChannels?: string[];
+    /** Named per-search failures, so principle 5 holds inside the sweep too. */
+    failures?: Array<{ channel: string; keyword: string; why: string }>;
   }> => {
     const targets = await ctx.runQuery(internal.maya.learnBusiness.targetsFor, {
       customerId: args.customerId,
@@ -159,6 +167,8 @@ export const scrollNiche = internalAction({
     const keywords = targets.keywords.slice(0, KEYWORDS_PER_SCROLL);
     const byChannel = new Map<string, Observation[]>();
     const swept: string[] = [];
+    /** Per-channel search failures, so a broken channel is not read as a quiet one. */
+    const failures: Array<{ channel: string; keyword: string; why: string }> = [];
     let searches = 0;
 
     /**
@@ -212,21 +222,53 @@ export const scrollNiche = internalAction({
           if (!swept.includes(keyword)) swept.push(keyword);
           const existing = byChannel.get(channel) ?? [];
           byChannel.set(channel, [...existing, ...found]);
-        } catch {
-          // A dead search loses one keyword on one channel, never the morning.
+        } catch (error) {
+          /**
+           * A dead search loses one keyword on one channel, never the morning —
+           * that part was right and is unchanged.
+           *
+           * ⚠️ BUT IT SWALLOWED THE REASON. This catch was bare, so a channel
+           * that threw on EVERY keyword, every day, forever, was
+           * indistinguishable from a channel with nothing to report. Measured
+           * on staging 2026-08-18: 50 TikTok observations, 34 X, 2 YouTube and
+           * ZERO Instagram — with Instagram connected, in the rotation, and its
+           * endpoint passing the vendor smoke suite. Nothing anywhere said why,
+           * because this line discarded it.
+           *
+           * That is principle 5 exactly: "nothing fails silently. Every job
+           * produces a result or a named failure." A per-channel failure is now
+           * counted and named, and `scrollNiche` returns it, so a channel that
+           * is quiet and a channel that is broken stop looking the same.
+           */
+          const why = error instanceof Error ? error.message : String(error);
+          failures.push({ channel, keyword, why });
+          console.error(`[scroll] ${channel}/${keyword}: ${why}`);
           continue;
         }
       }
     }
 
     const observations = [...byChannel.values()].flat();
+    /**
+     * ⚠️ Channels that were searched and returned NOTHING AT ALL. A channel in
+     * this list is either genuinely quiet or quietly broken, and the difference
+     * matters: "she watches your market across TikTok, Instagram and YouTube"
+     * is an overclaim for any channel that has never produced a row.
+     */
+    const silent = channels.filter((c) => (byChannel.get(c) ?? []).length === 0);
+
     if (observations.length === 0) {
       return {
         ok: true,
         observations: [],
         keywordsSwept: swept,
         channelsSwept: channels,
-        error: "nothing new in the niche today",
+        silentChannels: silent,
+        failures,
+        error:
+          failures.length > 0
+            ? `every search failed — ${failures[0].channel}: ${failures[0].why}`
+            : "nothing new in the niche today",
       };
     }
 
