@@ -22,10 +22,22 @@ const instrumentSerif = Instrument_Serif({
  * the deleted creator product, the other the deleted trades product.
  */
 export const metadata: Metadata = {
-  // No "AI" in marketing copy, per the standing voice rule.
-  title: "HeyMaya, the marketing hire for builders Cursor unlocked.",
+  /**
+   * ⚠️ No "AI", per the standing voice rule and `tests/marketingCopy.test.ts`.
+   *
+   * Rewritten 2026-08-17 to match the page. It still described her as a
+   * marketing hire that "finds people looking for what you built" — the old
+   * positioning — while the landing page had moved to UGC. The tab title and
+   * the link preview are the first words most people read, and they were
+   * selling a different product.
+   *
+   * ⚠️ Names UGC without claiming she creates it: the guard bans a creation
+   * verb within 40 characters of the word, because she has never rendered a
+   * video.
+   */
+  title: "HeyMaya, the UGC your app needs.",
   description:
-    "Maya finds the people already looking for what you built, posts from your accounts without getting them banned, and shows you which post got the signup.",
+    "Maya watches what's working in your niche, creates your TikToks, Reels and Shorts, and posts them for you. You never film a thing.",
 };
 
 /**

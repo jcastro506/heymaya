@@ -111,12 +111,24 @@ function Hero() {
   return (
     <section className="px-6 pt-32 pb-20 sm:px-8 sm:pt-40 sm:pb-24">
       <div className="mx-auto max-w-6xl">
-        <h1 className="max-w-[13ch] font-display italic text-[clamp(2.75rem,7.5vw,5.5rem)] leading-[1.02] tracking-[-0.02em]">
-          Your app is good. Nobody knows it exists.
+        {/**
+          * ⭐ Names the CATEGORY they already shop for. The $99-vs-$300 block
+          * only works if the thing being compared has a name, and you cannot
+          * pay $300 for a category you cannot name — if they have hired a UGC
+          * creator, that is the word that was on the invoice.
+          *
+          * ⚠️ Names it without CLAIMING it. `tests/marketingCopy.test.ts` bans a
+          * creation verb within 40 characters of "UGC", and the phrase "UGC
+          * creator" outright, because she has never rendered a video. The guard
+          * is protecting the first customer from a disappointment that is
+          * currently guaranteed, so the noun is used and the verb is not.
+          */}
+        <h1 className="max-w-[15ch] font-display italic text-[clamp(2.75rem,7.5vw,5.5rem)] leading-[1.02] tracking-[-0.02em]">
+          The UGC your app needs. Without you filming any of it.
         </h1>
-        <p className="mt-8 max-w-lg text-[18px] leading-[1.55] text-[#0a0a0a]/70 sm:text-[20px]">
-          Maya is your content hire. She watches your market, makes the posts,
-          and puts them out.
+        <p className="mt-8 max-w-xl text-[18px] leading-[1.55] text-[#0a0a0a]/70 sm:text-[20px]">
+          Maya watches what&rsquo;s working in your niche, creates your TikToks,
+          Reels and Shorts, and posts them for you.
         </p>
 
         <div className="mt-14 grid gap-6 sm:grid-cols-3 sm:gap-5">
@@ -183,7 +195,7 @@ function WatchesMarket() {
     <Cap
       flip
       title="Then she watches your market"
-      line="Competitors, keywords, trends, comment sections — ranked by what's climbing."
+      line="Competitors, keywords, trends, comment sections. Ranked by what's climbing."
       art={
         <Panel pad={false}>
           {FEED.map(([ch, v, text], i) => (
@@ -212,9 +224,9 @@ function WatchesMarket() {
 
 const BEATS: Array<[string, string]> = [
   ["0:00", "Dismisses the idea of a magic formula"],
-  ["0:12", "Reframes it — time, intent, market fit"],
+  ["0:12", "Reframes it around time, intent and market fit"],
   ["0:32", "Warns against chasing the shortcut"],
-  ["0:50", "Lands it — people still value the real thing"],
+  ["0:50", "Lands it. People still value the real thing"],
 ];
 
 /** ⭐ The one dark block. §5.3's "single most differentiated capability". */
@@ -329,7 +341,7 @@ function ShowsYouFirst() {
                   0{i + 1}
                 </span>
                 <span>
-                  <span className="text-[#0a0a0a]/60">{what} — </span>
+                  <span className="text-[#0a0a0a]/60">{what}: </span>
                   &ldquo;{line}&rdquo;
                 </span>
               </li>
@@ -381,7 +393,7 @@ const REPLY_MATRIX: Array<[string, string, boolean]> = [
   ["instagram", "Comments, mentions, DMs", true],
   ["youtube", "Comments, and other people's videos", true],
   ["x", "Replies, mentions, DMs", true],
-  ["tiktok", "No reply API exists — she'll tell you what came in", false],
+  ["tiktok", "No reply API exists. She tells you what came in", false],
 ];
 
 function AnswersEveryone() {
@@ -491,7 +503,7 @@ function WhatsBroken() {
                   broken ? "text-[#0a0a0a]" : "text-[#0a0a0a]/60"
                 }`}
               >
-                {a || "—"}
+                {a || "not yet"}
               </span>
             </div>
           ))}
@@ -560,7 +572,7 @@ function OneExperiment() {
             </span>
           </div>
           <p className="mt-5 text-[15px] leading-[1.5] text-[#0a0a0a]/65">
-            And if two weeks wasn&rsquo;t enough to tell, she says that — an open
+            And if two weeks wasn&rsquo;t enough to tell, she says so. An open
             question, not a no.
           </p>
         </Panel>
