@@ -124,7 +124,7 @@ function Hero() {
     >
       <div className="mx-auto w-full max-w-6xl">
         {/**
-          * ⭐ Names the CATEGORY they already shop for. The $99-vs-$300 block
+          * ⭐ Names the CATEGORY they already shop for. The $149-vs-$300 block
           * only works if the thing being compared has a name, and you cannot
           * pay $300 for a category you cannot name: if they have hired a UGC
           * creator, that is the word that was on the invoice.
@@ -138,14 +138,14 @@ function Hero() {
         </h1>
         <p
           className="rise mt-10 max-w-xl text-[19px] leading-[1.55] text-[#0a0a0a]/70 sm:text-[21px]"
-          style={{ animationDelay: "0.9s" }}
+          style={{ animationDelay: "1.5s" }}
         >
           Maya watches what&rsquo;s working in your niche, creates your TikToks,
           Reels and Shorts, and posts them for you.
         </p>
         <div
           className="rise mt-12 flex flex-wrap items-center gap-6"
-          style={{ animationDelay: "1.7s" }}
+          style={{ animationDelay: "2.3s" }}
         >
           <Link
             href={primaryCtaHref(CTA_HREF)}
@@ -153,7 +153,7 @@ function Hero() {
           >
             {primaryCtaLabel(CTA_LABEL)}
           </Link>
-          <span className="text-[15px] text-[#0a0a0a]/60">$99 a month</span>
+          <span className="text-[15px] text-[#0a0a0a]/60">$149 a month</span>
         </div>
       </div>
     </section>
@@ -656,7 +656,7 @@ function TheMath() {
             </div>
             <div className="sm:border-l sm:border-[#0a0a0a]/15 sm:pl-12">
               <p className="font-display italic text-[clamp(3rem,8vw,5rem)] leading-[0.85] tracking-tight">
-                $99
+                $149
               </p>
               <p className="mt-6 max-w-[24ch] text-[16px] leading-[1.55] text-[#0a0a0a]/75">
                 Maya, every month.
@@ -1131,9 +1131,12 @@ function PageStyles() {
       [data-page="clawlaunch-landing"] .rise {
         opacity: 0;
         transform: translateY(20px);
-        /* Slower on purpose. At 0.9s the three lines arrived almost together
-           and read as one flicker; at 1.4s each has time to land. */
-        animation: rise 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        /* Slow, and staggered wide. Each line gets a full second of air after
+           the one before it, so they read as three arrivals rather than one
+           flicker. Fill mode BOTH keeps the element hidden through the delay;
+           with forwards alone a delayed line flashes at full opacity first. */
+        animation: rise 1.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+        animation-delay: 0.5s;
       }
       @keyframes rise {
         to { opacity: 1; transform: none; }
@@ -1195,11 +1198,19 @@ function PageStyles() {
        * ⭐ One section per screen. The reader settles, reads, and scrolls once
        * to the next.
        *
-       * ⚠️ proximity, NOT mandatory. Mandatory fights the reader whenever a
-       * section is taller than their viewport — it drags them off content they
-       * are still reading, and on a short laptop screen or with text scaled up
-       * that is most of them. Proximity gives the same settling feel and always
-       * lets go when someone wants to keep scrolling.
+       * ⚠️ mandatory, NOT proximity — and this was shipped wrong once.
+       * Proximity only engages when a scroll happens to COME TO REST near a
+       * snap point, which under trackpad momentum is almost never. Every
+       * computed value was already correct (root scroller carrying
+       * scroll-snap-type, every section carrying scroll-snap-align: start) and
+       * it still felt like nothing, because strictness was the only variable
+       * left. Proximity is not a gentler snap; it is usually no snap.
+       *
+       * The reason proximity was chosen — that mandatory drags a reader off a
+       * section taller than their viewport — no longer applies the same way:
+       * every section is now exactly min-h-screen and the sticky artifacts are
+       * gone. Where a section does overflow, the snap spec requires the browser
+       * to let you scroll freely inside it, so the reader is never trapped.
        *
        * ⚠️ Height-gated. Below 640px tall there is not room for a screen-sized
        * section, so snapping there would trap the reader between two blocks
@@ -1207,7 +1218,7 @@ function PageStyles() {
        */
       @media (min-height: 640px) {
         html {
-          scroll-snap-type: y proximity;
+          scroll-snap-type: y mandatory;
         }
         [data-page="clawlaunch-landing"] .snap-section {
           scroll-snap-align: start;
