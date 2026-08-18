@@ -33,7 +33,7 @@ import { api } from "@/convex/_generated/api";
  * boundary, not a menu — `connectedChannelsMatchSpec.test.ts` pins it.
  */
 const OFFERED: ReadonlyArray<{ key: string; label: string; auto: boolean }> = [
-  { key: "x", label: "X", auto: true },
+  // X removed 2026-08-18 — the one channel that is not UGC video.
   { key: "instagram", label: "Instagram", auto: true },
   { key: "youtube", label: "YouTube", auto: true },
   // TikTok's rendered-preview confirmation is a PLATFORM consent requirement,

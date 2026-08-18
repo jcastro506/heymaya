@@ -3,12 +3,16 @@
  *
  * A channel offered there is a channel a founder can connect, and a connected
  * channel is one Maya will eventually post to under their name. So the offered
- * set has to match the four channels the spec actually ships — and it has to
- * keep matching, which is what this test is for.
+ * set has to match the channels the spec actually ships — and it has to keep
+ * matching, which is what this test is for.
+ *
+ * ⭐ Three, not four, since 2026-08-18. X was dropped: it is the one channel
+ * that is not UGC video, and removing it makes the 3x multiplier clean — one
+ * 9:16 asset, three placements, no text-only special case.
  *
  * Reads the component source rather than importing it: the file is a React
  * client component with Convex hooks, and standing up that environment to read
- * one constant would be a lot of machinery for a list of four strings.
+ * one constant would be a lot of machinery for a list of three strings.
  */
 
 import { readFileSync } from "node:fs";
@@ -27,14 +31,26 @@ function offeredChannels(): string[] {
   return [...block![0].matchAll(/key:\s*"([a-z]+)"/g)].map((m) => m[1]);
 }
 
-describe("the connect panel offers exactly the four shipped channels", () => {
-  it("offers X, Instagram, YouTube and TikTok", () => {
+describe("the connect panel offers exactly the three shipped channels", () => {
+  it("offers Instagram, YouTube and TikTok", () => {
     expect(offeredChannels().sort()).toEqual([
       "instagram",
       "tiktok",
-      "x",
       "youtube",
     ]);
+  });
+
+  it("⭐ NEVER offers X — dropped as the one non-UGC-video channel", () => {
+    /**
+     * ⚠️ Asserted as an ABSENCE, deliberately, so re-adding it is a decision
+     * someone has to make here rather than a card someone quietly adds. The
+     * schema and live `channels` rows still carry "x" — narrowing those needs
+     * a migration on both deployments and must wait until video is publishing
+     * (14 of 16 recent placements went to X, so removing it early would drive
+     * the cadence gate toward zero). This pins the OFFER, which is the half
+     * that is safe to remove now.
+     */
+    expect(offeredChannels()).not.toContain("x");
   });
 
   it("NEVER offers Reddit — dropped on ban risk, not capability", () => {
@@ -60,9 +76,9 @@ describe("the connect panel offers exactly the four shipped channels", () => {
     expect(tiktokLine).toContain("auto: false");
   });
 
-  it("the other three auto-post once connected", () => {
+  it("the other two auto-post once connected", () => {
     const block = /const OFFERED[\s\S]*?\n\];/.exec(SOURCE)![0];
-    for (const channel of ["x", "instagram", "youtube"]) {
+    for (const channel of ["instagram", "youtube"]) {
       const line = block
         .split("\n")
         .find((l) => l.includes(`key: "${channel}"`));

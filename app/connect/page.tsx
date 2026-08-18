@@ -37,14 +37,12 @@ const ROLE: Record<string, string> = {
   tiktok: "reach engine",
   instagram: "reach + proof",
   youtube: "the long tail",
-  x: "the full loop — post and conversation",
 };
 
 const LABEL: Record<string, string> = {
   tiktok: "TikTok",
   instagram: "Instagram",
   youtube: "YouTube",
-  x: "X",
 };
 
 export default function ConnectPage() {
@@ -69,7 +67,10 @@ export default function ConnectPage() {
     });
   }, [refresh]);
 
-  async function connect(channel: "tiktok" | "instagram" | "youtube" | "x") {
+  // ⚠️ One change with convex/maya/connect.ts's CHANNEL validator — this
+  // literal union is what a public action is called with, so narrowing one
+  // side alone is a runtime rejection the type checker cannot see.
+  async function connect(channel: "tiktok" | "instagram" | "youtube") {
     setBusy(channel);
     setError(null);
     try {
@@ -105,7 +106,22 @@ export default function ConnectPage() {
       {error && <p className="mt-4 text-sm text-rose-300">{error}</p>}
 
       <div className="mt-6 space-y-3">
-        {(data.channels ?? []).map((c) => {
+        {/**
+          * ⚠️ Filtered, not just unlabelled. `myChannels` still returns X —
+          * the schema and live rows keep it until video is publishing — so
+          * without this the card renders with an undefined label and a button
+          * that calls a public action the server now rejects. Dropping the
+          * OFFER has to drop the CARD.
+          */}
+        {(data.channels ?? [])
+          .filter(
+            // A type PREDICATE, not a plain filter — otherwise the compiler
+            // still believes `c.channel` can be "x" at the call site below and
+            // the guarantee lives only in a comment.
+            (c): c is typeof c & { channel: "tiktok" | "instagram" | "youtube" } =>
+              c.channel !== "x"
+          )
+          .map((c) => {
           const connected = c.state === "connected";
           const cantPost = c.state === "connected_cant_post";
 

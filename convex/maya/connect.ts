@@ -32,12 +32,28 @@ import {
   type Channel,
 } from "./channelRequirements";
 
-/** Our channel names → Zernio's wire slugs. X is `twitter` on the wire. */
+/**
+ * ⭐ The channels we OFFER. X removed 2026-08-18 — it is the one channel that
+ * is not UGC video, and dropping it makes the 3x multiplier clean: one 9:16
+ * asset, three placements, no text-only special case.
+ *
+ * ⚠️ This is the OFFER, not the schema. `channels.channel` still accepts "x"
+ * and live rows still carry it — narrowing the schema needs a migration on
+ * both deployments, and it must wait until video is publishing: 14 of 16
+ * recent placements went to X because `mediaAssets` was empty and the other
+ * three cannot take text-only. Removing it from the schema first would drive
+ * the placement count toward zero and `cadence.ts` would report that as a
+ * clean failing run.
+ *
+ * ⚠️ `startConnect` is a PUBLIC action called with a client-side literal
+ * union (`app/connect/page.tsx`). This validator and that union are one
+ * change — narrowing either alone is a runtime rejection the type checker
+ * cannot see.
+ */
 const CHANNEL = v.union(
   v.literal("tiktok"),
   v.literal("instagram"),
   v.literal("youtube"),
-  v.literal("x"),
 );
 
 /**

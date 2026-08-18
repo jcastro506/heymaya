@@ -154,6 +154,9 @@ export function buildBrief(input: {
   persona?: { id: string; previewImage: string } | null;
   referenceVideoUrl?: string;
   hasProductTruth: boolean;
+  /** From `assetFloor.planAssets` — see `VideoBrief.assetNote`. */
+  assetNote?: string;
+  usesAvatar?: boolean;
 }): BriefResult {
   if (!input.hasProductTruth) {
     return {
