@@ -327,18 +327,19 @@ export const sweepDue = internalAction({
     let skipped = 0;
     let failed = 0;
 
-    const refs = {
-      scroll: internal.maya.scroll.scrollNiche,
-      trends: internal.maya.trends.sweepTrends,
-      competitors: internal.maya.competitors.watchCompetitors,
-      complaints: internal.maya.complaints.mineComplaints,
-      widerWorld: internal.maya.widerWorld.sweepWiderWorld,
-      /**
-       * ⭐ The real LLM bill, from OpenRouter. Daily, because it is one cheap
-       * read per customer and the number it corrects was wrong by ~50x.
-       */
-      spend: internal.maya.cogs.refreshVendorSpend,
-    } as const;
+    /**
+     * ⚠️ A SECOND SWEEP MAP LIVED HERE, declared and never read, while
+     * `sweepRefs()` (above) did the actual dispatch via
+     * `sweepRefs()[args.sweep]`. It had 6 entries against the live map's 13 —
+     * missing `fillFromProductPage`, the one whose absence left `mediaAssets`
+     * empty and sent 14 of 16 placements to X.
+     *
+     * This file's own header documents that exact two-divergent-maps defect as
+     * FIXED. It was not: the dead half was left behind, so anyone adding a
+     * sweep would update the map they could see, and it would compile, review
+     * clean, and never run. `sweepMapIsSingular.test.ts` now pins that there is
+     * exactly one.
+     */
 
     for (const customerId of customerIds) {
       const timezone = await ctx.runQuery(internal.maya.liveness.timezoneFor, {
