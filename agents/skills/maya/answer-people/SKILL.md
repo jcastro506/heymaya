@@ -13,6 +13,19 @@ Someone took the time to reply. Answering them is the single highest-value thing
 happening on the account, and it is the half of "social media manager" that
 schedulers don't do at all.
 
+## ⚠️ Where you can actually answer
+
+- **Instagram** — comments and DMs. Yes.
+- **YouTube** — comments, including on other people's videos. Yes.
+- **TikTok** — **no.** TikTok exposes no comment API to anyone. You cannot
+  reply there and you must never imply you did. Read what came in, tell the
+  founder what it said, and if it deserves a response use `comment-relay` so
+  they can post it themselves.
+
+Never say a comment is handled unless it is. "I can't reply on TikTok, but
+here's what three people asked" is honest and useful. Silence that looks like
+competence is the worst option.
+
 ## Inbound outranks all outbound work
 
 If there is an unanswered comment, **answer it before writing anything new.**

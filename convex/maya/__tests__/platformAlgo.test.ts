@@ -34,7 +34,13 @@ const ALGO_DIR = join(
 );
 
 /** The four channels, and no fifth. LinkedIn and Reddit are dead products. */
-const CHANNELS = ["tiktok", "instagram", "youtube", "x"];
+/**
+ * ⚠️ THREE, not four, since 2026-08-18. X was removed with the UGC-video pivot
+ * — it is the one channel that is not vertical video. This list, the *.md files
+ * on disk, and `zernioCapability.CHANNELS` are pinned to each other in both
+ * directions, so a half-done removal fails here. That is the pin working.
+ */
+const CHANNELS = ["tiktok", "instagram", "youtube"];
 
 describe("PLATFORM_ALGO is markdown in the repo", () => {
   it("has a file for every channel we publish to", () => {
@@ -82,11 +88,11 @@ describe("the facts a writer must not get wrong", () => {
     expect(algo("tiktok")).toMatch(/preview/i);
   });
 
-  it("X carries the weighted-280 rule and the URL constant", () => {
-    expect(algo("x")).toMatch(/weighted/i);
-    expect(algo("x")).toMatch(/\bURL\b/);
-    expect(algo("x")).toMatch(/\b23\b/);
-  });
+  /**
+   * ⚠️ The X norms test was removed with `PLATFORM_ALGO/x.md` (2026-08-18).
+   * It pinned the weighted-280 rule, which was real and is now irrelevant: we
+   * do not publish to X. She may still READ X — that needs no posting norms.
+   */
 
   it("every channel states a hashtag rule, since none of them agree", () => {
     // §7.5.9: the counts differ sharply per channel, and inventing tags is the

@@ -1,16 +1,27 @@
 ---
 name: write-post
-description: Draft one post in the founder's voice for a specific channel. Generates 3-5 varied candidates and picks the most human — never writes one and polishes it. Every draft is written to a named reader, capped hard for length, and grounded in product truth. Outputs the draft plus the candidates it beat.
+description: Write the words around a video — the caption, the hook text, carousel slides — or a standalone text post when video genuinely is not the right artifact. Generates 3-5 varied candidates and picks the most human, never writes one and polishes it. Written to a named reader, capped hard, grounded in product truth.
 ---
 
 # write-post
 
-Read `CONVENTIONS.md` first. It carries the four channels, the safety floor, the
-tool envelope, and the voice split.
+Read `CONVENTIONS.md` first. It carries the three channels, the safety floor,
+the tool envelope, and the voice split.
 
 ## Purpose
 
-Turn an idea into one draft that a real person would actually post.
+Turn an idea into words a real person would actually post.
+
+## ⚠️ This is not the default artifact
+
+**Video is.** Most of the time these words wrap something you made — the
+caption under a Reel, the text on a hook frame, the slides of a carousel.
+
+Before writing a standalone text post, ask what would have to be true to make
+the video instead. Usually the answer is one asset you could ask for, and
+asking is better than settling. Reach for a text post when the thing genuinely
+is text — a short answer, a note to an audience that already follows them, a
+reply — not because writing is quicker than making.
 
 **Substance from the founder, form from the channel.** The idea already carries
 the evidence — a complaint someone posted, a thread, a trend that passed the

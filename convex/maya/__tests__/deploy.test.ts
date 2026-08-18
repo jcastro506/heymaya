@@ -304,14 +304,14 @@ describe("the workspace is built from ROWS, not arguments", () => {
         truth: "turns a CSV into a dashboard",
       }),
     });
-    await addChannel(t, customerId, "x", "connected");
+    await addChannel(t, customerId, "tiktok", "connected");
 
     const input = await t.query(internal.maya.deploy.workspaceInput, {
       customerId,
     });
     expect(input?.product.name).toBe("Widgetly");
     expect(input?.product.truth).toBe("turns a CSV into a dashboard");
-    expect(input?.channels).toEqual([{ channel: "x", postingMode: "just_go" }]);
+    expect(input?.channels).toEqual([{ channel: "tiktok", postingMode: "just_go" }]);
   });
 
   it("DORMANT AND DISCONNECTED CHANNELS SHIP NO NORMS", async () => {
@@ -319,21 +319,24 @@ describe("the workspace is built from ROWS, not arguments", () => {
     // her worse — she plans around something with no live grant.
     const t = convexTest(schema, modules);
     const customerId = await seedCustomer(t, "dormant");
-    await addChannel(t, customerId, "x", "connected");
-    await addChannel(t, customerId, "tiktok", "dormant");
-    await addChannel(t, customerId, "instagram", "disconnected");
-    await addChannel(t, customerId, "youtube", "error");
+    // ⚠️ One live channel and three that are not, each for a different reason.
+    // The X fixture that used to carry this went with the channel (2026-08-18).
+    await addChannel(t, customerId, "tiktok", "connected");
+    await addChannel(t, customerId, "instagram", "dormant");
+    await addChannel(t, customerId, "youtube", "disconnected");
 
     const input = await t.query(internal.maya.deploy.workspaceInput, {
       customerId,
     });
-    expect(input?.channels.map((c) => c.channel)).toEqual(["x"]);
+    expect(input?.channels.map((c) => c.channel)).toEqual(["tiktok"]);
 
     const workspace = await t.action(internal.maya.deploy.workspaceFor, {
       customerId,
     });
-    expect(Object.keys(workspace!.files)).toContain("PLATFORM_ALGO/x.md");
-    expect(Object.keys(workspace!.files)).not.toContain("PLATFORM_ALGO/tiktok.md");
+    const files = Object.keys(workspace!.files);
+    expect(files).toContain("PLATFORM_ALGO/tiktok.md");
+    expect(files).not.toContain("PLATFORM_ALGO/instagram.md");
+    expect(files).not.toContain("PLATFORM_ALGO/youtube.md");
   });
 
   it("a MALFORMED json column degrades rather than failing the deploy", async () => {
@@ -356,7 +359,7 @@ describe("the workspace is built from ROWS, not arguments", () => {
   it("the assembled workspace still fits the prompt budget", async () => {
     const t = convexTest(schema, modules);
     const customerId = await seedCustomer(t, "budget");
-    await addChannel(t, customerId, "x", "connected");
+    await addChannel(t, customerId, "tiktok", "connected");
     const workspace = await t.action(internal.maya.deploy.workspaceFor, {
       customerId,
     });
@@ -407,7 +410,7 @@ async function seedCustomer(
 async function addChannel(
   t: ReturnType<typeof convexTest>,
   customerId: Id<"customers">,
-  channel: "x" | "tiktok" | "instagram" | "youtube",
+  channel: "tiktok" | "instagram" | "youtube",
   status: "connected" | "dormant" | "disconnected" | "error"
 ): Promise<void> {
   await t.run((ctx) =>

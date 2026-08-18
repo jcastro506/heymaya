@@ -78,7 +78,14 @@ export const PLATFORM_IMPOSSIBLE: Array<{
   },
 ];
 
-export const CHANNELS = ["tiktok", "instagram", "youtube", "x"] as const;
+/**
+ * ⚠️ X REMOVED 2026-08-18 with the UGC-video pivot — it is the one channel that
+ * is not vertical video. This constant and `PLATFORM_ALGO/*.md` on disk are
+ * pinned to each other in BOTH directions by `platformAlgo.test.ts`, so this
+ * edit, the file deletion, and `npm run sync:maya-skills` are one change. A
+ * half-done removal fails the suite, which is the pin working.
+ */
+export const CHANNELS = ["tiktok", "instagram", "youtube"] as const;
 export const CAPABILITIES = [
   "post",
   "read_own_comments",

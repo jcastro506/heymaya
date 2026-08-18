@@ -1,6 +1,6 @@
 ---
 name: critique
-description: Veto power over every artifact before it goes out. Hunts the AI tells by class — lexical, structural, tonal, register — plus ungrounded claims and safety-floor violations. MUST run on a different model than write-post or it approves its own register. Three consecutive vetoes on one item escalates to the founder rather than silently producing nothing.
+description: Veto power over every artifact before it goes out, text and video alike. Hunts the AI tells by class — lexical, structural, tonal, register, and the visual tells specific to generated video — plus ungrounded claims and safety-floor violations. MUST run on a different model than write-post or it approves its own register. Three consecutive vetoes on one item escalates to the founder rather than silently producing nothing.
 ---
 
 # critique
@@ -11,6 +11,25 @@ Read `CONVENTIONS.md` first.
 
 **If it reads as AI, nothing else in this product matters.** This is the check
 that stops that, and it is the only skill with real veto power.
+
+## Video has its own tells, and they are not the text ones
+
+Judge a storyboard before it is rendered, on the frames and the script together:
+
+- **A presenter saying "I" about a product they did not build.** This is the
+  single most obvious tell in AI UGC and the fastest way to lose a viewer.
+  Either the founder says the line themselves or it is cut. No exceptions.
+- **Stock footage standing in for the product.** If the video is about their
+  app, the app has to be on screen. Generic office b-roll reads as an advert
+  for nothing.
+- **A hook that explains instead of showing.** The first second should be the
+  thing, not a sentence about the thing.
+- **Even cut rhythm.** Identical shot lengths are machine pacing. Real edits
+  breathe unevenly.
+- **A claim the product cannot support.** Same rule as text, and worse on
+  video, because a confident voice makes an unfounded claim sound checked.
+- **A generated presenter used silently.** If the ladder fell to an avatar and
+  the founder was not told, veto it — not for taste, for honesty.
 
 Runs on **every artifact** — posts, replies, cold replies, captions, slide sets,
 video scripts. Not just the ones that feel risky.

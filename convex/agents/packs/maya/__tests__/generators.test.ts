@@ -413,25 +413,28 @@ describe("THE DIFFERENT-MODEL RULE MOVED SERVER-SIDE", () => {
 });
 
 describe("only the customer's own channels ship", () => {
-  it("an X-only founder carries no TikTok, Instagram, or YouTube norms", () => {
+  it("a TikTok-only founder carries no Instagram or YouTube norms", () => {
     // §15.1.2 — a Solo customer on one channel should never pay context for
     // three others' norms.
-    const keys = [...buildMayaWorkspace(INPUT).files.keys()];
-    expect(keys).toContain("PLATFORM_ALGO/x.md");
-    expect(keys).not.toContain("PLATFORM_ALGO/tiktok.md");
+    const bundle = buildMayaWorkspace({
+      ...INPUT,
+      channels: [{ channel: "tiktok", postingMode: "just_go" as const }],
+    });
+    const keys = [...bundle.files.keys()];
+    expect(keys).toContain("PLATFORM_ALGO/tiktok.md");
     expect(keys).not.toContain("PLATFORM_ALGO/instagram.md");
     expect(keys).not.toContain("PLATFORM_ALGO/youtube.md");
   });
 
-  it("a four-channel founder gets all four", () => {
+  it("a three-channel founder gets all three", () => {
     const bundle = buildMayaWorkspace({
       ...INPUT,
-      channels: (["x", "tiktok", "instagram", "youtube"] as const).map((c) => ({
+      channels: (["tiktok", "instagram", "youtube"] as const).map((c) => ({
         channel: c,
         postingMode: "just_go" as const,
       })),
     });
-    for (const c of ["x", "tiktok", "instagram", "youtube"]) {
+    for (const c of ["tiktok", "instagram", "youtube"]) {
       expect(bundle.files.has(`PLATFORM_ALGO/${c}.md`)).toBe(true);
     }
   });
@@ -447,15 +450,11 @@ describe("only the customer's own channels ship", () => {
     expect(norms).toMatch(/their legal requirement|legal requirement/i);
   });
 
-  it("X's norms say the 280 is WEIGHTED and not to count manually", () => {
-    const norms = buildMayaWorkspace(INPUT).files.get("PLATFORM_ALGO/x.md")!;
-    expect(norms).toMatch(/weighted/i);
-    // ⚠️ Pin the RULE, not the sentence. The weighted-23 fact is what a writer
-    // must not get wrong; the wording around it is prose in a markdown file
-    // that is meant to be edited when the platform changes.
-    expect(norms).toMatch(/\bURL\b/i);
-    expect(norms).toMatch(/\b23\b/);
-  });
+  /**
+   * ⚠️ The X-norms test went with `PLATFORM_ALGO/x.md` (2026-08-18). It pinned
+   * the weighted-280 rule — real, and now irrelevant, because we do not publish
+   * to X. Reading X needs no posting norms.
+   */
 });
 
 describe("the doctrine stays coherent with the server", () => {
