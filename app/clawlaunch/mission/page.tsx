@@ -89,7 +89,13 @@ const EVENT_SUB: Record<string, string> = {
 };
 
 export default function TodayPage() {
-  const snapshot = useQuery(api.gtmMaya.researchLifecycle.getMyGtmSnapshot);
+  /**
+   * ⚠️ v2. Today used `getMyGtmSnapshot` for ONE THING — an onboarding gate —
+   * and it came from the frozen product, so a founder fully set up on v2 could
+   * be told to onboard. `myState` answers the same question from the live
+   * tables: is there a customer at all.
+   */
+  const setup = useQuery(api.maya.setup.myState, {});
   /**
    * ⚠️ v2. This read `gtmMaya.missionActions.getMyDraftQueue` — the FROZEN
    * product — while a v2 Maya wrote to `convex/maya/drafts`. See
@@ -139,9 +145,9 @@ export default function TodayPage() {
     [events, todayStart, tomorrowStart],
   );
 
-  if (snapshot === undefined || draftQueue === undefined || events === undefined)
+  if (setup === undefined || draftQueue === undefined || events === undefined)
     return <Loading />;
-  if (snapshot === null) return <NeedsOnboarding />;
+  if (!setup?.customerId) return <NeedsOnboarding />;
 
   // ── Needs you ───────────────────────────────────────────────────────────
   /**
@@ -162,6 +168,14 @@ export default function TodayPage() {
    * her words.
    */
   const broken = (channels ?? []).filter((c) => c.state === "needs_attention");
+  /**
+   * ⚠️ STILL v1, AND IT NEEDS A FEATURE THAT DOES NOT EXIST. v2 has
+   * `strategy.planScreen`, but it carries targeting and a changelog — there is
+   * no proposed/approved state, because weekly plan approval is
+   * `pick-the-week`'s territory and that skill has not shipped. Swapping the
+   * query would silently drop the card; leaving it reads a frozen table.
+   * Recorded rather than guessed at — see docs/MISSION_CONTROL_V2_MIGRATION.md.
+   */
   const planAwaiting = planDoc?.plan?.status === "proposed";
   const noChannels =
     channels !== undefined &&

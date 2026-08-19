@@ -40,6 +40,13 @@ const h = vi.hoisted(() => {
      * that a fixture's channel was one we actually sell.
      */
     myVideos: { ok: true, videos: [] },
+    myState: {
+      signedIn: true,
+      customerId: "c1",
+      productName: "Widgetly",
+      telegramPaired: true,
+      deployed: true,
+    },
     myFormats: {
       ok: true,
       shapes: [
@@ -344,6 +351,7 @@ vi.mock("@/convex/_generated/api", () => ({
        */
       channels: { myChannels: "myChannels" },
       formats: { myFormats: "myFormats" },
+      setup: { myState: "myState" },
       // The Videos screen — the artifact the founder is paying for.
       // `myVideos` is on dashboard alongside the other read-only panels.
     },
