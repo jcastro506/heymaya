@@ -14,6 +14,8 @@ import {
   candidatesFrom,
   parseIdentified,
   buildShortlist,
+  advertisersFrom,
+  parseDiscovered,
   PROVEN_DAYS,
   type PageCandidate,
   type RankedAd,
@@ -218,5 +220,103 @@ describe("⭐ ONE COMPETITOR MUST NOT EAT THE SHORTLIST", () => {
   it("the strongest ad still leads", () => {
     const out = buildShortlist([mk("A", 10, "a"), mk("B", 99, "b")], 12);
     expect(out[0].daysRunning).toBe(99);
+  });
+});
+
+describe("⭐ SHE BRINGS A LIST INSTEAD OF ASKING A QUESTION", () => {
+  /**
+   * `competitors` is populated only when the founder's own page names rivals,
+   * which most don't — so the top rung of the ladder was unreachable for nearly
+   * every customer. Discovery finds who pays to reach the same buyers.
+   *
+   * ⚠️ Candidates below are the REAL ones returned live on 2026-08-19 for
+   * "AI video ads" and "UGC ad creative", including the false positives, which
+   * are the entire reason a model judges this rather than a rank cutoff.
+   */
+  const LIVE = [
+    { pageId: "1", pageName: "ElevenLabs", liveAds: 8, longestDays: 187 },
+    { pageId: "2", pageName: "Alex Mehr, Ph.D.", liveAds: 8, longestDays: 39 },
+    { pageId: "3", pageName: "FlyAds.ai", liveAds: 6, longestDays: 104 },
+    { pageId: "4", pageName: "Mr. Paid Social", liveAds: 1, longestDays: 182 },
+    { pageId: "5", pageName: "Euro Júnior 2", liveAds: 1, longestDays: 169 },
+  ];
+
+  function haul(rows: { page: string; days: number; id: string }[]) {
+    return {
+      searchResults: rows.map((r) => ({
+        ad_archive_id: r.id,
+        page_id: r.page,
+        page_name: r.page,
+        is_active: true,
+        start_date: Math.floor((NOW - r.days * DAY) / 1000),
+        collation_count: 1,
+        collation_id: r.id,
+        snapshot: { title: "t" },
+      })),
+    };
+  }
+
+  it("groups a keyword haul by advertiser and counts their commitment", () => {
+    const out = advertisersFrom(
+      [
+        haul([
+          { page: "FlyAds.ai", days: 104, id: "a" },
+          { page: "FlyAds.ai", days: 20, id: "b" },
+          { page: "Someone", days: 200, id: "c" },
+        ]),
+      ],
+      NOW
+    );
+    expect(out[0].pageName).toBe("FlyAds.ai");
+    expect(out[0].liveAds).toBe(2);
+    // Longevity is kept as conviction, not just presence.
+    expect(out[0].longestDays).toBe(104);
+  });
+
+  it("merges hauls across keywords rather than double-counting a page", () => {
+    const out = advertisersFrom(
+      [
+        haul([{ page: "ElevenLabs", days: 187, id: "a" }]),
+        haul([{ page: "ElevenLabs", days: 133, id: "b" }]),
+      ],
+      NOW
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].liveAds).toBe(2);
+  });
+
+  it("⭐ AD COUNT ALONE WOULD PICK A COURSE SELLER", () => {
+    // `Alex Mehr, Ph.D.` ties ElevenLabs on volume and outranks the real
+    // competitor FlyAds.ai. Any "top N by ad count" rule ships him as a rival.
+    const byVolume = [...LIVE].sort((a, b) => b.liveAds - a.liveAds);
+    expect(byVolume[1].pageName).toBe("Alex Mehr, Ph.D.");
+    expect(byVolume.indexOf(LIVE[2])).toBeGreaterThan(1);
+  });
+
+  it("keeps only names that were actually offered", () => {
+    // A model naming a company that was never in the list has invented it, and
+    // an invented name would be searched as though the founder had said it.
+    expect(
+      parseDiscovered('{"competitors":["FlyAds.ai","Runway"]}', LIVE)
+    ).toEqual(["FlyAds.ai"]);
+  });
+
+  it("matches names case-insensitively but returns the page's own spelling", () => {
+    expect(parseDiscovered('{"competitors":["flyads.ai"]}', LIVE)).toEqual([
+      "FlyAds.ai",
+    ]);
+  });
+
+  it("an empty answer is a real answer, never a fallback to the top row", () => {
+    // "None of these compete with you" is correct far more often than a stretch,
+    // and a stretch becomes a whole week aimed at the wrong company.
+    expect(parseDiscovered('{"competitors":[]}', LIVE)).toEqual([]);
+    expect(parseDiscovered("no JSON here at all", LIVE)).toEqual([]);
+  });
+
+  it("never returns the same competitor twice", () => {
+    expect(
+      parseDiscovered('{"competitors":["FlyAds.ai","FlyAds.ai"]}', LIVE)
+    ).toEqual(["FlyAds.ai"]);
   });
 });

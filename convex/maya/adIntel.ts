@@ -415,28 +415,38 @@ export const sweepAdIntel = internalAction({
       customerId: args.customerId,
     });
 
-    const named = (truth?.competitors ?? [])
-      .map((c) => c.trim())
-      .filter((c) => c.length > 0)
-      .slice(0, MAX_COMPETITORS);
+    const clean = (xs: string[] | undefined) =>
+      (xs ?? []).map((c) => c.trim()).filter((c) => c.length > 0);
 
+    /**
+     * Confirmed names first, then the ones we worked out ourselves.
+     *
+     * ⭐ AND IF WE HAVE NEITHER, WORK THEM OUT NOW RATHER THAN GIVING UP.
+     * `competitors` is populated only when the founder's own page names rivals,
+     * which most don't — so for most customers this used to return "nothing on
+     * file" forever, and the top rung of the ladder was permanently unreachable.
+     * Discovery runs once here and its result persists, so this is a first-run
+     * cost rather than a weekly one.
+     */
+    let named = [...clean(truth?.competitors), ...clean(truth?.discoveredCompetitors)];
     if (named.length === 0) {
-      /**
-       * ⭐ A REAL FINDING, NOT AN ERROR. `competitors` is populated only when
-       * the founder's own page names them, which most landing pages don't. The
-       * honest answer is that we don't know who they compete with — and the
-       * fix is to ask the founder, which is a message, not a retry.
-       */
-      return {
-        ok: true,
-        competitorsTried: 0,
-        adsFound: 0,
-        proven: 0,
-        failures: [],
-        detail:
-          "no competitors on file — ask the founder who they lose deals to, then this runs",
-      };
+      const discovered = await ctx.runAction(
+        internal.maya.adIntel.discoverCompetitors,
+        { customerId: args.customerId, now }
+      );
+      named = discovered.found;
+      if (named.length === 0) {
+        return {
+          ok: true,
+          competitorsTried: 0,
+          adsFound: 0,
+          proven: 0,
+          failures: [],
+          detail: `couldn't work out who the competitors are — ${discovered.detail}`,
+        };
+      }
     }
+    named = [...new Set(named)].slice(0, MAX_COMPETITORS);
 
     const { facebook } = await import(
       "../integrations/scrapeCreators/platforms/facebook"
@@ -736,5 +746,258 @@ export const sweepAllAdIntel = internalAction({
     }
 
     return { checked: customerIds.length, swept, adsFound };
+  },
+});
+
+/* -------------------------------------------------------------------------- */
+/* Discovery — working out who the competitors are                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ SHE BRINGS A LIST INSTEAD OF ASKING A QUESTION.
+ *
+ * `competitors` is populated only when the founder's own landing page names
+ * rivals, and most don't — so the strongest rung of the evidence ladder was
+ * unreachable for nearly every customer. The obvious fix is to ask, and the
+ * better fix is to ask having already done the work: search the ad library for
+ * who is paying to reach the same buyers, then confirm the shortlist.
+ *
+ * That difference is the product. "Who are your competitors?" is homework for
+ * the founder; "these five are advertising against your keywords — right?" is
+ * homework already done.
+ *
+ * ⚠️ **A KEYWORD SEARCH ALONE IS NOT A COMPETITOR LIST.** Measured live
+ * 2026-08-19 on "AI video ads" and "UGC ad creative": the top advertisers were
+ * ElevenLabs, FlyAds.ai and foreplay.co — real — mixed with `Alex Mehr, Ph.D.`,
+ * `Sean Ferres` and `Mr. Paid Social`, who are course sellers advertising INTO
+ * the niche rather than competing in it, plus outright noise (`Euro Júnior 2`).
+ * So the same split applies here as everywhere else in this module: code
+ * collects and counts, the model judges, the founder confirms.
+ */
+export const DISCOVERY_KEYWORDS = 3;
+export const DISCOVERY_CANDIDATES = 8;
+
+export interface AdvertiserCandidate {
+  pageId: string;
+  pageName: string;
+  /** How many live ads they are running against our keywords. */
+  liveAds: number;
+  /** Their longest-running ad, in days — conviction, not just presence. */
+  longestDays: number;
+}
+
+/**
+ * Group a keyword-search haul by advertiser.
+ *
+ * Ranked by how many live ads they run against our terms, then by longevity: an
+ * advertiser with six ads and a 104-day survivor is committed to this audience,
+ * which is what makes them worth watching. One ad is a passer-by.
+ */
+export function advertisersFrom(
+  hauls: unknown[],
+  now: number
+): AdvertiserCandidate[] {
+  const byPage = new Map<string, AdvertiserCandidate>();
+  for (const haul of hauls) {
+    for (const ad of rankAds(haul, now)) {
+      if (!ad.pageName) continue;
+      const key = ad.pageId || ad.pageName;
+      const seen = byPage.get(key);
+      if (seen) {
+        seen.liveAds += 1;
+        seen.longestDays = Math.max(seen.longestDays, ad.daysRunning);
+      } else {
+        byPage.set(key, {
+          pageId: ad.pageId,
+          pageName: ad.pageName,
+          liveAds: 1,
+          longestDays: ad.daysRunning,
+        });
+      }
+    }
+  }
+  return [...byPage.values()].sort(
+    (a, b) => b.liveAds - a.liveAds || b.longestDays - a.longestDays
+  );
+}
+
+export const DISCOVERY_SYSTEM = `You work out which advertisers are genuine competitors.
+
+You are given a founder's product and a list of advertisers currently running ads
+against the same keywords. Most are NOT competitors. Typical false positives:
+
+- coaches, course sellers and agencies advertising INTO this niche rather than
+  competing in it (often a person's name, or a name promising to teach the thing)
+- unrelated businesses that happened to match a keyword
+- tool vendors from an adjacent category that this product's buyer would not
+  consider instead of it
+
+A competitor is a company whose product a buyer might genuinely choose INSTEAD of
+this one. Judge by what the company appears to sell, not by how many ads it runs.
+
+Return ONLY JSON: {"competitors":["Exact Page Name", ...]}
+Use the page names exactly as given. Return an empty array if none qualify —
+that is a real answer and much better than a stretch.`;
+
+export function buildDiscoveryPrompt(
+  product: { name: string; whatItIs: string },
+  candidates: AdvertiserCandidate[]
+): string {
+  const rows = candidates
+    .map(
+      (c) =>
+        `  - "${c.pageName}" | live ads against our keywords: ${c.liveAds} | longest running: ${c.longestDays} days`
+    )
+    .join("\n");
+  return `THE FOUNDER'S PRODUCT
+${product.name} — ${product.whatItIs}
+
+ADVERTISERS IN THIS SPACE
+${rows}`;
+}
+
+/** Names the model returned that were actually offered. Invented ones dropped. */
+export function parseDiscovered(
+  content: string,
+  candidates: AdvertiserCandidate[]
+): string[] {
+  let parsed: unknown;
+  try {
+    const m = content.match(/\{[\s\S]*\}/);
+    parsed = JSON.parse(m ? m[0] : content);
+  } catch {
+    return [];
+  }
+  const names = (parsed as { competitors?: unknown })?.competitors;
+  if (!Array.isArray(names)) return [];
+
+  const offered = new Map(
+    candidates.map((c) => [c.pageName.trim().toLowerCase(), c.pageName])
+  );
+  const out: string[] = [];
+  for (const n of names) {
+    if (typeof n !== "string") continue;
+    const hit = offered.get(n.trim().toLowerCase());
+    if (hit && !out.includes(hit)) out.push(hit);
+  }
+  return out;
+}
+
+/**
+ * Work out who this founder competes with, from who advertises against their
+ * keywords.
+ *
+ * ⚠️ WRITES TO `discoveredCompetitors`, NEVER TO `competitors`. The latter
+ * means "the page said so", and mixing inferred names into it would destroy the
+ * only thing that makes it trustworthy. These are a proposal awaiting a yes.
+ */
+export const discoverCompetitors = internalAction({
+  args: { customerId: v.id("customers"), now: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: boolean; found: string[]; detail: string }> => {
+    const now = args.now ?? Date.now();
+    const truth = await ctx.runQuery(internal.maya.productTruth.forCustomer, {
+      customerId: args.customerId,
+    });
+    if (!truth) {
+      return { ok: false, found: [], detail: "nothing known about the product yet" };
+    }
+
+    const targets = await ctx.runQuery(internal.maya.learnBusiness.targetsFor, {
+      customerId: args.customerId,
+    });
+    const keywords = (targets?.keywords ?? []).slice(0, DISCOVERY_KEYWORDS);
+    if (keywords.length === 0) {
+      return {
+        ok: false,
+        found: [],
+        detail: "no niche keywords worked out yet — the business learn has to run first",
+      };
+    }
+
+    const { facebook } = await import(
+      "../integrations/scrapeCreators/platforms/facebook"
+    );
+
+    const hauls: unknown[] = [];
+    for (const keyword of keywords) {
+      try {
+        const found = await facebook.searchAds(keyword);
+        hauls.push(found.raw);
+      } catch {
+        // One dead keyword is not a dead search; the others still count.
+      }
+    }
+
+    const candidates = advertisersFrom(hauls, now).slice(0, DISCOVERY_CANDIDATES);
+    if (candidates.length === 0) {
+      return {
+        ok: true,
+        found: [],
+        detail: "nobody is running ads against this niche's terms right now",
+      };
+    }
+
+    const { callModel } = await import("./llm");
+    const completion = await callModel(ctx, {
+      customerId: args.customerId,
+      purpose: "ad_competitor_discover",
+      apiKey: process.env.OPENROUTER_API_KEY ?? "",
+      model: IDENTIFY_MODEL,
+      temperature: 0,
+      maxTokens: 800,
+      messages: [
+        { role: "system", content: DISCOVERY_SYSTEM },
+        {
+          role: "user",
+          content: buildDiscoveryPrompt(
+            { name: truth.name, whatItIs: truth.whatItIs },
+            candidates
+          ),
+        },
+      ],
+    });
+    if (!completion.ok) {
+      return { ok: false, found: [], detail: `couldn't judge the candidates (${completion.reason})` };
+    }
+
+    const found = parseDiscovered(completion.content, candidates);
+    if (found.length > 0) {
+      await ctx.runMutation(internal.maya.adIntel.storeDiscovered, {
+        customerId: args.customerId,
+        namesJson: JSON.stringify(found),
+      });
+    }
+
+    return {
+      ok: true,
+      found,
+      detail:
+        found.length === 0
+          ? `${candidates.length} advertisers in this space, none of them actually competitors`
+          : `${found.length} likely competitors, from ${candidates.length} advertisers running ads against these terms`,
+    };
+  },
+});
+
+/** Store the proposal. Confirmed names live in `competitors` and are untouched. */
+export const storeDiscovered = internalMutation({
+  args: { customerId: v.id("customers"), namesJson: v.string() },
+  handler: async (ctx, args): Promise<null> => {
+    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    if (!customer?.productTruthJson) return null;
+    try {
+      const truth = JSON.parse(customer.productTruthJson) as Record<string, unknown>;
+      truth.discoveredCompetitors = JSON.parse(args.namesJson) as string[];
+      await ctx.db.patch(args.customerId, {
+        productTruthJson: JSON.stringify(truth),
+        updatedAt: Date.now(),
+      });
+    } catch {
+      // A corrupt truth record is not this function's to repair.
+    }
+    return null;
   },
 });

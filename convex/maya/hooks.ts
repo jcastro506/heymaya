@@ -1615,6 +1615,20 @@ export const adIntelHttp = httpAction(async (ctx, request) => {
   const { PROVEN_DAYS } = await import("./adIntel");
   const proven = ads.filter((a) => a.daysRunning >= PROVEN_DAYS);
 
+  /**
+   * ⭐ UNCONFIRMED COMPETITORS ARE FLAGGED, NOT LAUNDERED INTO FACTS.
+   *
+   * When the founder's page never named rivals we work out who advertises
+   * against the same keywords — a good guess, and still a guess. Presenting it
+   * as settled is how a week gets built on the wrong company, so the response
+   * says which names are unconfirmed and tells her to check.
+   */
+  const truth = await ctx.runQuery(internal.maya.productTruth.forCustomer, {
+    customerId: auth.customer._id,
+  });
+  const unconfirmed = truth?.discoveredCompetitors ?? [];
+  const confirmed = truth?.competitors ?? [];
+
   return respond({
     ok: true,
     data: {
@@ -1631,6 +1645,8 @@ export const adIntelHttp = httpAction(async (ctx, request) => {
       })),
       provenCount: proven.length,
       provenAfterDays: PROVEN_DAYS,
+      confirmedCompetitors: confirmed,
+      unconfirmedCompetitors: unconfirmed,
     },
     why:
       ads.length === 0
@@ -1639,7 +1655,9 @@ export const adIntelHttp = httpAction(async (ctx, request) => {
     next:
       ads.length === 0
         ? "drop to the next rung — an organic post beating its own baseline, then a complaint a real buyer typed. And ask the founder who they lose deals to, because that is what makes this rung work next week"
-        : "copy the STRUCTURE — the hook, the objection it answers, the order it reveals things in. Never the claims: their product is not ours and their numbers are not ours. Say how long the ad has been running when you propose it; that is the reason it is worth copying",
+        : unconfirmed.length > 0 && confirmed.length === 0
+          ? `copy the STRUCTURE — the hook, the objection it answers, the order it reveals things in — never the claims. ⚠️ AND CHECK THE LIST: ${unconfirmed.join(", ")} are who WE worked out they compete with, from who advertises against the same keywords. The founder never confirmed them. Show them the names when you propose the week and ask if that is right, because everything here rests on it`
+          : "copy the STRUCTURE — the hook, the objection it answers, the order it reveals things in. Never the claims: their product is not ours and their numbers are not ours. Say how long the ad has been running when you propose it; that is the reason it is worth copying",
   });
 });
 

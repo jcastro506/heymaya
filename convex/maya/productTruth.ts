@@ -77,6 +77,22 @@ export interface ProductTruth {
   vocabulary: string[];
   /** Named ONLY when the page names them. Never inferred. */
   competitors: string[];
+  /**
+   * ⭐ Competitors WE worked out, by seeing who advertises against the same
+   * keywords — and who the founder has not confirmed yet.
+   *
+   * ⚠️ SEPARATE FROM `competitors` ON PURPOSE. That field's whole guarantee is
+   * "the page said so", and quietly mixing inferred names into it would destroy
+   * the one thing that makes it trustworthy. These are a proposal; they become
+   * `competitors` only when the founder says yes.
+   *
+   * Why infer at all: `competitors` is populated only when the founder's own
+   * landing page names rivals, which most don't — so the strongest rung of the
+   * evidence ladder was unreachable for nearly every customer. Bringing a list
+   * to confirm is also the product's actual pitch: she does the homework rather
+   * than asking the founder to do it.
+   */
+  discoveredCompetitors?: string[];
   /** ⭐ What we could not establish. The honest half of the record. */
   gaps: string[];
   /**
