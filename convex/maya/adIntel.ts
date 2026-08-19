@@ -429,6 +429,8 @@ export const sweepAdIntel = internalAction({
      * cost rather than a weekly one.
      */
     let named = [...clean(truth?.competitors), ...clean(truth?.discoveredCompetitors)];
+    let knownPages = truth?.discoveredCompetitorPages ?? [];
+
     if (named.length === 0) {
       const discovered = await ctx.runAction(
         internal.maya.adIntel.discoverCompetitors,
@@ -445,8 +447,23 @@ export const sweepAdIntel = internalAction({
           detail: `couldn't work out who the competitors are — ${discovered.detail}`,
         };
       }
+      const fresh = await ctx.runQuery(internal.maya.productTruth.forCustomer, {
+        customerId: args.customerId,
+      });
+      knownPages = fresh?.discoveredCompetitorPages ?? [];
     }
     named = [...new Set(named)].slice(0, MAX_COMPETITORS);
+
+    /**
+     * ⭐ NAMES WE ALREADY HAVE A PAGE FOR SKIP THE LOOKUP ENTIRELY.
+     *
+     * Discovery found these by reading their ads, so the page id is exact. Any
+     * re-derivation from the name is a wasted paid call AND a fresh chance to
+     * land on the wrong company — measured live: `AutoReel`, discovered from
+     * its own running ads, was re-looked-up onto a namesake page with none, and
+     * the sweep reported it was not advertising.
+     */
+    const pageFor = new Map(knownPages.map((p) => [p.name, p.pageId]));
 
     const { facebook } = await import(
       "../integrations/scrapeCreators/platforms/facebook"
@@ -459,7 +476,14 @@ export const sweepAdIntel = internalAction({
      * Pass 1 — COLLECT. One name search per competitor, no judgement yet.
      */
     const groups: { competitor: string; candidates: PageCandidate[] }[] = [];
+    const resolved = new Map<string, PageCandidate>();
+
     for (const name of named) {
+      const known = pageFor.get(name);
+      if (known) {
+        resolved.set(name, { pageId: known, name, category: "", likes: 0 });
+        continue;
+      }
       try {
         const found = await facebook.searchCompanies(name);
         const candidates = candidatesFrom(found.raw);
@@ -480,7 +504,7 @@ export const sweepAdIntel = internalAction({
      * per competitor: the judgement is identical in kind each time and batching
      * makes the weekly sweep a single, priceable line on the bill.
      */
-    let chosen = new Map<string, PageCandidate>();
+    let chosen = new Map<string, PageCandidate>(resolved);
     if (groups.length > 0) {
       const { callModel } = await import("./llm");
       const completion = await callModel(ctx, {
@@ -506,7 +530,9 @@ export const sweepAdIntel = internalAction({
       });
 
       if (completion.ok) {
-        chosen = parseIdentified(completion.content, groups);
+        for (const [k, v2] of parseIdentified(completion.content, groups)) {
+          chosen.set(k, v2);
+        }
       } else {
         /**
          * ⚠️ NO HEURISTIC FALLBACK HERE, DELIBERATELY. Guessing by name or
@@ -775,6 +801,34 @@ export const sweepAllAdIntel = internalAction({
  * collects and counts, the model judges, the founder confirms.
  */
 export const DISCOVERY_KEYWORDS = 3;
+
+export const SEARCH_TERMS_SYSTEM = `You turn a product description into ad-library search queries.
+
+Given a product, return the search terms a COMPETING PRODUCT would run ads on —
+the words a rival uses to describe what it sells, or that a buyer types when
+shopping for this category.
+
+⚠️ Do NOT return the problems this product solves. A competitor does not buy ads
+on "my ads stopped converting"; it buys ads on "AI video ad generator". Category
+and product language only.
+
+Two to four short queries, each 2-4 words.
+Return ONLY JSON: {"queries":["...","..."]}`;
+
+export function parseSearchTerms(content: string): string[] {
+  try {
+    const m = content.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(m ? m[0] : content) as { queries?: unknown };
+    if (!Array.isArray(parsed.queries)) return [];
+    return parsed.queries
+      .filter((q): q is string => typeof q === "string")
+      .map((q) => q.trim())
+      .filter((q) => q.length > 2)
+      .slice(0, DISCOVERY_KEYWORDS);
+  } catch {
+    return [];
+  }
+}
 export const DISCOVERY_CANDIDATES = 8;
 
 export interface AdvertiserCandidate {
@@ -830,7 +884,9 @@ against the same keywords. Most are NOT competitors. Typical false positives:
   competing in it (often a person's name, or a name promising to teach the thing)
 - unrelated businesses that happened to match a keyword
 - tool vendors from an adjacent category that this product's buyer would not
-  consider instead of it
+  consider instead of it — SAME TECHNOLOGY, DIFFERENT BUYER is the most common
+  mistake here. An AI video tool for realtors does not compete with an AI video
+  tool for ecommerce advertisers, however similar the product sounds.
 
 A competitor is a company whose product a buyer might genuinely choose INSTEAD of
 this one. Judge by what the company appears to sell, not by how many ads it runs.
@@ -839,9 +895,25 @@ Return ONLY JSON: {"competitors":["Exact Page Name", ...]}
 Use the page names exactly as given. Return an empty array if none qualify —
 that is a real answer and much better than a stretch.`;
 
+/**
+ * ⚠️ THE BUYER'S OWN WORDS GO IN THE PROMPT, AND LEAVING THEM OUT PICKS THE
+ * WRONG COMPANY.
+ *
+ * Measured live 2026-08-19: for Arcads (UGC ads for ecommerce), discovery
+ * returned `AutoReel` — an AI video tool for REALTORS turning listing photos
+ * into reels. Adjacent technology, completely different buyer. The cause was in
+ * the prompt: `whoItsFor` is empty on that record (the page never says), so the
+ * model was asked to judge who competes for a buyer it had never been told
+ * about, and fell back to "also makes videos with AI".
+ *
+ * The niche keywords ARE the buyer — "ecommerce media buyers", "dropshipping
+ * store owners", "ad creative fatigue" — so they go in. This costs nothing and
+ * is the difference between judging a category and judging a customer.
+ */
 export function buildDiscoveryPrompt(
-  product: { name: string; whatItIs: string },
-  candidates: AdvertiserCandidate[]
+  product: { name: string; whatItIs: string; whoItsFor?: string },
+  candidates: AdvertiserCandidate[],
+  buyerWords: string[] = []
 ): string {
   const rows = candidates
     .map(
@@ -849,8 +921,16 @@ export function buildDiscoveryPrompt(
         `  - "${c.pageName}" | live ads against our keywords: ${c.liveAds} | longest running: ${c.longestDays} days`
     )
     .join("\n");
+
+  const who = product.whoItsFor?.trim()
+    ? `\nWHO IT IS FOR\n${product.whoItsFor}`
+    : "";
+  const buyer = buyerWords.length
+    ? `\n\nWHAT THIS PRODUCT'S BUYER SEARCHES FOR — a competitor serves THIS person\n${buyerWords.map((k) => `  - ${k}`).join("\n")}`
+    : "";
+
   return `THE FOUNDER'S PRODUCT
-${product.name} — ${product.whatItIs}
+${product.name} — ${product.whatItIs}${who}${buyer}
 
 ADVERTISERS IN THIS SPACE
 ${rows}`;
@@ -908,12 +988,49 @@ export const discoverCompetitors = internalAction({
     const targets = await ctx.runQuery(internal.maya.learnBusiness.targetsFor, {
       customerId: args.customerId,
     });
-    const keywords = (targets?.keywords ?? []).slice(0, DISCOVERY_KEYWORDS);
+
+    const { callModel } = await import("./llm");
+
+    /**
+     * ⭐ SEARCH ON PRODUCT WORDS, NOT ON THE BUYER'S PROBLEM WORDS.
+     *
+     * ⚠️ This function originally reused the niche keywords, and that was the
+     * wrong vocabulary — measured live 2026-08-19 for Arcads (UGC ads for
+     * ecommerce). Its keywords are buyer PAINS: "ad creative fatigue", "meta
+     * ads not converting", "facebook ads low ctr". Searching those returned
+     * `Meta for Business` (24 ads), `Kong`, `Glitch Studios`, `Hernan Vazquez`
+     * and an academy — coaches and unrelated businesses, and NOT ONE genuine
+     * competitor, because a rival product does not buy ads against its buyer's
+     * complaints. It buys them against category terms.
+     *
+     * Searching "AI video ads" and "UGC ad creative" against the same library
+     * returned ElevenLabs, FlyAds.ai and foreplay.co on the first try.
+     *
+     * So the product description becomes search terms first. One cheap call,
+     * once per customer, and it decides whether everything after it is aimed at
+     * the right pool.
+     */
+    const termCall = await callModel(ctx, {
+      customerId: args.customerId,
+      purpose: "ad_competitor_search_terms",
+      apiKey: process.env.OPENROUTER_API_KEY ?? "",
+      model: IDENTIFY_MODEL,
+      temperature: 0,
+      maxTokens: 300,
+      messages: [
+        { role: "system", content: SEARCH_TERMS_SYSTEM },
+        {
+          role: "user",
+          content: `${truth.name} — ${truth.whatItIs}${truth.whoItsFor ? `\nFor: ${truth.whoItsFor}` : ""}`,
+        },
+      ],
+    });
+    const keywords = termCall.ok ? parseSearchTerms(termCall.content) : [];
     if (keywords.length === 0) {
       return {
         ok: false,
         found: [],
-        detail: "no niche keywords worked out yet — the business learn has to run first",
+        detail: "couldn't work out what to search the ad library for",
       };
     }
 
@@ -940,7 +1057,6 @@ export const discoverCompetitors = internalAction({
       };
     }
 
-    const { callModel } = await import("./llm");
     const completion = await callModel(ctx, {
       customerId: args.customerId,
       purpose: "ad_competitor_discover",
@@ -953,8 +1069,13 @@ export const discoverCompetitors = internalAction({
         {
           role: "user",
           content: buildDiscoveryPrompt(
-            { name: truth.name, whatItIs: truth.whatItIs },
-            candidates
+            {
+              name: truth.name,
+              whatItIs: truth.whatItIs,
+              whoItsFor: truth.whoItsFor,
+            },
+            candidates,
+            targets?.keywords ?? []
           ),
         },
       ],
@@ -965,9 +1086,22 @@ export const discoverCompetitors = internalAction({
 
     const found = parseDiscovered(completion.content, candidates);
     if (found.length > 0) {
+      /**
+       * ⭐ KEEP THE PAGE IDS. We got them by reading these advertisers' ads, so
+       * re-deriving them from the name later is both a wasted call and a chance
+       * to land on the wrong company.
+       */
+      const pages = found
+        .map((name) => {
+          const hit = candidates.find((c) => c.pageName === name);
+          return hit ? { name, pageId: hit.pageId } : null;
+        })
+        .filter((x): x is { name: string; pageId: string } => x !== null);
+
       await ctx.runMutation(internal.maya.adIntel.storeDiscovered, {
         customerId: args.customerId,
         namesJson: JSON.stringify(found),
+        pagesJson: JSON.stringify(pages),
       });
     }
 
@@ -977,20 +1111,30 @@ export const discoverCompetitors = internalAction({
       detail:
         found.length === 0
           ? `${candidates.length} advertisers in this space, none of them actually competitors`
-          : `${found.length} likely competitors, from ${candidates.length} advertisers running ads against these terms`,
+          : `${found.length} likely competitors, from ${candidates.length} advertisers running ads on ${keywords.join(", ")}`,
     };
   },
 });
 
 /** Store the proposal. Confirmed names live in `competitors` and are untouched. */
 export const storeDiscovered = internalMutation({
-  args: { customerId: v.id("customers"), namesJson: v.string() },
+  args: {
+    customerId: v.id("customers"),
+    namesJson: v.string(),
+    pagesJson: v.optional(v.string()),
+  },
   handler: async (ctx, args): Promise<null> => {
     const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
     if (!customer?.productTruthJson) return null;
     try {
       const truth = JSON.parse(customer.productTruthJson) as Record<string, unknown>;
       truth.discoveredCompetitors = JSON.parse(args.namesJson) as string[];
+      if (args.pagesJson) {
+        truth.discoveredCompetitorPages = JSON.parse(args.pagesJson) as {
+          name: string;
+          pageId: string;
+        }[];
+      }
       await ctx.db.patch(args.customerId, {
         productTruthJson: JSON.stringify(truth),
         updatedAt: Date.now(),

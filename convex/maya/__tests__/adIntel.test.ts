@@ -16,6 +16,9 @@ import {
   buildShortlist,
   advertisersFrom,
   parseDiscovered,
+  parseSearchTerms,
+  buildDiscoveryPrompt,
+  DISCOVERY_KEYWORDS,
   PROVEN_DAYS,
   type PageCandidate,
   type RankedAd,
@@ -318,5 +321,69 @@ describe("⭐ SHE BRINGS A LIST INSTEAD OF ASKING A QUESTION", () => {
     expect(
       parseDiscovered('{"competitors":["FlyAds.ai","FlyAds.ai"]}', LIVE)
     ).toEqual(["FlyAds.ai"]);
+  });
+});
+
+describe("⚠️ SEARCH THE PRODUCT'S WORDS, NOT THE BUYER'S COMPLAINTS", () => {
+  /**
+   * Discovery originally reused the niche keywords, and that was the wrong
+   * vocabulary. Arcads' keywords are buyer PAINS — "ad creative fatigue",
+   * "meta ads not converting", "facebook ads low ctr" — and searching them live
+   * on 2026-08-19 returned `Meta for Business` (24 ads), `Kong`,
+   * `Glitch Studios`, `Hernan Vazquez` and an academy. NOT ONE competitor: a
+   * rival product does not buy ads against its buyer's complaints.
+   *
+   * Derived product terms — "AI video generator", "AI avatar creator",
+   * "AI ad maker" — returned Scalio, FlyAds.ai and Impresso on the first try.
+   */
+  it("parses the derived queries", () => {
+    expect(
+      parseSearchTerms('{"queries":["AI video generator","AI ad maker"]}')
+    ).toEqual(["AI video generator", "AI ad maker"]);
+  });
+
+  it("caps the queries, because each one is a paid call", () => {
+    expect(
+      parseSearchTerms('{"queries":["a one","b two","c three","d four","e five"]}')
+    ).toHaveLength(DISCOVERY_KEYWORDS);
+  });
+
+  it("no queries means STOP, never fall back to the buyer's pain words", () => {
+    // Falling back is what produced a pool with zero competitors in it.
+    expect(parseSearchTerms("sorry, I can't")).toEqual([]);
+    expect(parseSearchTerms('{"queries":[]}')).toEqual([]);
+    expect(parseSearchTerms('{"queries":[1,2]}')).toEqual([]);
+  });
+
+  it("drops junk too short to be a query", () => {
+    expect(parseSearchTerms('{"queries":["ai","AI ad maker"]}')).toEqual([
+      "AI ad maker",
+    ]);
+  });
+
+  it("the prompt carries the buyer's words so tech-adjacent tools are caught", () => {
+    /**
+     * ⚠️ Same technology, different buyer is the commonest false positive. With
+     * `whoItsFor` empty — which it is for Arcads, the page never says — the
+     * model had no buyer to judge against and returned `AutoReel`, an AI video
+     * tool for REALTORS.
+     */
+    const prompt = buildDiscoveryPrompt(
+      { name: "Arcads", whatItIs: "generate video ads with AI actors" },
+      [{ pageId: "1", pageName: "AutoReel", liveAds: 2, longestDays: 105 }],
+      ["ecommerce media buyers", "dropshipping store owners"]
+    );
+    expect(prompt).toContain("ecommerce media buyers");
+    expect(prompt).toContain("AutoReel");
+  });
+
+  it("omits the buyer section entirely when we have no buyer words", () => {
+    // An empty labelled section invites the model to invent a buyer.
+    const prompt = buildDiscoveryPrompt(
+      { name: "Arcads", whatItIs: "video ads" },
+      [{ pageId: "1", pageName: "X", liveAds: 1, longestDays: 5 }],
+      []
+    );
+    expect(prompt).not.toContain("BUYER");
   });
 });

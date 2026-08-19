@@ -93,6 +93,20 @@ export interface ProductTruth {
    * than asking the founder to do it.
    */
   discoveredCompetitors?: string[];
+  /**
+   * ⭐ THE PAGE IDS BEHIND THOSE NAMES — so the sweep never re-guesses them.
+   *
+   * ⚠️ Discovery finds an advertiser by reading their ads, which means it
+   * ALREADY HOLDS the exact `page_id`. Storing only the name threw that away
+   * and forced a fresh name→page lookup later — the same ambiguous step that
+   * once matched "Creatify" to a sticker printer.
+   *
+   * Caught live 2026-08-19: `AutoReel` was discovered from its running ads,
+   * then re-looked-up by name onto a different page that had no ads at all, and
+   * the sweep reported "not running any ads right now" about a company we had
+   * literally just watched advertising.
+   */
+  discoveredCompetitorPages?: { name: string; pageId: string }[];
   /** ⭐ What we could not establish. The honest half of the record. */
   gaps: string[];
   /**
