@@ -193,6 +193,18 @@ export const recordPlacement = internalMutation({
       snapshotText: args.snapshotText,
       draftId: args.draftId,
       ideaId: draft?.ideaId,
+      /**
+       * ⭐ WHICH ASSETS THIS POST ACTUALLY USED. `placements.mediaAssetIdsJson`
+       * was in the schema and written by NOTHING, so there was no way to get
+       * from a live post back to the video it was made from — and therefore no
+       * way to ask the only question that matters about a UGC product's output:
+       * did the ones built from real footage do better than the ones that used
+       * a presenter?
+       *
+       * Copied from the draft, which is where the brief put them. The join is
+       * one-to-many in the right direction: one video, three placements.
+       */
+      mediaAssetIdsJson: draft?.mediaAssetIdsJson,
       idempotencyKey: args.idempotencyKey,
     });
     return { placementId };

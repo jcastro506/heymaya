@@ -304,6 +304,126 @@ async function currentCustomer(ctx: {
  * reorder, no delete — seeing what is queued is a receipt; rearranging it is
  * the dashboard becoming the product.
  */
+/**
+ * ⭐ THE VIDEOS SHE MADE — the screen a UGC product exists to have.
+ *
+ * ⚠️ There was none. Mission Control could show drafts, results, activity and
+ * research, and not the one artifact the founder is paying for. A dashboard for
+ * a video product that cannot show you the videos is not that product's
+ * dashboard (docs/MISSION_CONTROL_UGC.md).
+ *
+ * ⭐ Each video carries HOW IT WAS BUILT and WHAT IT COST, which is the point.
+ * "This one underperformed" is not actionable; "this one underperformed and it
+ * used a generated presenter because the library was empty" is — it names the
+ * fix and it is the founder's to make.
+ */
+export const myVideos = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    ok: boolean;
+    videos: Array<{
+      assetId: string;
+      url?: string;
+      madeAt: number;
+      /** The §7.5.3 rung that built it — null on anything made before we recorded it. */
+      builtFrom: string | null;
+      usedAvatar: boolean | null;
+      credits: number | null;
+      placements: Array<{
+        channel: string;
+        url?: string;
+        views: number | null;
+        publishedAt: number;
+      }>;
+    }>;
+    error?: string;
+  }> => {
+    const customer = await currentCustomer(ctx);
+    if (!customer) return { ok: false, videos: [], error: "sign in first" };
+
+    const assets = (await ctx.db
+      .query("mediaAssets")
+      .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+      .collect()) as Doc<"mediaAssets">[];
+
+    const videos = assets
+      .filter((a) => a.kind === "video" && a.source === "generated")
+      .sort((a, b) => (b.capturedAt ?? 0) - (a.capturedAt ?? 0))
+      .slice(0, args.limit ?? 30);
+    if (videos.length === 0) return { ok: true, videos: [] };
+
+    const placements = (await ctx.db
+      .query("placements")
+      .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+      .collect()) as Doc<"placements">[];
+
+    /**
+     * ⚠️ Parsed defensively. `mediaAssetIdsJson` is an unvalidated JSON string,
+     * and one malformed row must not blank the whole screen — a video with no
+     * placements listed is a smaller lie than an empty page.
+     */
+    const assetsOfPlacement = (p: Doc<"placements">): string[] => {
+      if (!p.mediaAssetIdsJson) return [];
+      try {
+        const parsed = JSON.parse(p.mediaAssetIdsJson) as unknown;
+        return Array.isArray(parsed) ? parsed.map(String) : [];
+      } catch {
+        return [];
+      }
+    };
+
+    return {
+      ok: true,
+      videos: videos.map((v) => ({
+        assetId: v._id,
+        url: v.publicUrl,
+        madeAt: v.capturedAt ?? v.createdAt,
+        /**
+         * ⚠️ `null`, not a default. A video made before we recorded provenance
+         * genuinely has an unknown rung, and rendering that as "avatar" would
+         * be inventing a fact about the founder's own content — §16.4: never
+         * let "not measured" render as measured.
+         */
+        builtFrom: v.builtFrom ?? null,
+        usedAvatar: v.usedAvatar ?? null,
+        credits: v.renderCredits ?? null,
+        placements: placements
+          .filter((p) => assetsOfPlacement(p).includes(String(v._id)))
+          .sort((a, b) => b.publishedAt - a.publishedAt)
+          .map((p) => ({
+            channel: p.channel,
+            url: p.url,
+            views: viewsOrNull(p),
+            publishedAt: p.publishedAt,
+          })),
+      })),
+    };
+  },
+});
+
+/**
+ * Views off a placement's metrics blob, or NULL when it carries none.
+ *
+ * ⚠️ Deliberately separate from `viewsOf` above, which returns 0 in the same
+ * case. §16.4: "not measured" and "measured zero" are different facts, and a
+ * video whose metrics have never been fetched must not render as a video nobody
+ * watched. The existing helper conflates them — changing it blind would move
+ * every other caller's numbers, so this is additive and the difference is
+ * stated rather than quietly reconciled.
+ */
+function viewsOrNull(p: Doc<"placements">): number | null {
+  if (!p.metricsJson) return null;
+  try {
+    const m = JSON.parse(p.metricsJson) as { views?: unknown };
+    return typeof m.views === "number" ? m.views : null;
+  } catch {
+    return null;
+  }
+}
+
 export const myIdeaBank = query({
   args: { limit: v.optional(v.number()) },
   handler: async (
