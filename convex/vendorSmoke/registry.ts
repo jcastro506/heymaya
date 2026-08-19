@@ -16,6 +16,7 @@
  */
 
 import { z } from "zod";
+import { internalAction } from "../_generated/server";
 import type { SmokeCheck } from "./types";
 
 /* -------------------------------------------------------------------------- */
@@ -389,6 +390,51 @@ const perceptionChecks: SmokeCheck[] = [
     },
     { cursor: z.unknown() }
   ),
+  /**
+   * ⭐ THE AD-LIBRARY PROBE. The operator's ask, and the thing that decides
+   * whether competitor ad intelligence is buildable at all.
+   *
+   * ⚠️ Meta's OWN Ad Library API serves political and issue ads only, and only
+   * in the EU/UK — commercial ads are visible in the web UI and unavailable
+   * through it anywhere. So a paid intermediary is the only route to what a
+   * consumer-app founder's competitors are actually running, and these are the
+   * endpoints of the one we already buy.
+   *
+   * ⚠️ The prior evidence was a probe dated 2026-06-04 against the FROZEN
+   * product — 14 weeks stale — and TikTok Ad Library appeared in that document's
+   * prose but not in its verified matrix. Half the feature may have no vendor.
+   * This is how we find out before building on it, rather than after: a module
+   * built against an unverified endpoint fails OPEN, returns zero ads, and
+   * reports ok — which is exactly how `bankFromComplaints` produced 0 of 193
+   * ideas.
+   *
+   * A well-known advertiser is used deliberately: a niche brand returning
+   * nothing is ambiguous between "endpoint broken" and "runs no ads".
+   */
+  scCheck(
+    "scrapecreators.facebook.adlibrary_search_companies",
+    "searchResults",
+    async () => {
+      const { facebook } = await import(
+        "../integrations/scrapeCreators/platforms/facebook"
+      );
+      return (await facebook.searchCompanies("Duolingo")).raw;
+    }
+  ),
+  scCheck(
+    "scrapecreators.facebook.adlibrary_search_ads",
+    // ⚠️ `searchResults`, not `results` — confirmed against the live endpoint
+    // 2026-08-19. Guessed wrong first, which is the reason to probe.
+    "searchResults",
+    async () => {
+      const { facebook } = await import(
+        "../integrations/scrapeCreators/platforms/facebook"
+      );
+      return (await facebook.searchAds("habit tracker app")).raw;
+    },
+    // Confirmed live 2026-08-19: the payload is paginated and self-counting.
+    { searchResultsCount: z.unknown(), cursor: z.unknown() }
+  ),
   scCheck(
     "scrapecreators.instagram.reels_search",
     "reels",
@@ -662,3 +708,42 @@ export const SMOKE_CHECKS: SmokeCheck[] = [
 export function checksForTier(tier: 1 | 2 | 3): SmokeCheck[] {
   return SMOKE_CHECKS.filter((check) => check.tier === tier);
 }
+
+
+/**
+ * ⭐ A one-shot look at the real ad payload — specifically whether it carries a
+ * START DATE. The entire competitor-ad design ranks on LONGEVITY: an ad running
+ * 21+ days is one somebody pays for daily and has not killed, and existence
+ * alone means nothing because anyone can boost a post for twenty dollars.
+ *
+ * ⭐ RUN 2026-08-19, AND THE ANSWER IS YES. The payload carries `start_date`,
+ * `start_date_string`, `end_date`, `is_active` and — better than the design
+ * asked for — `total_active_time`, longevity already computed. Plus
+ * `collation_count`, which is the VARIANT COUNT: an advertiser running three
+ * versions of one concept is scaling a winner. `spend` and `reach_estimate` are
+ * there too.
+ *
+ * So the ranking rule is fully supported by the vendor and needs no derivation
+ * of our own.
+ *
+ * ⚠️ NO CALLER BY DESIGN — an operator diagnostic, run by hand when the vendor
+ * is suspected of drifting. Everything automated lives in the checks above.
+ */
+export const peekAdShape = internalAction({
+  args: {},
+  handler: async (): Promise<{ ok: boolean; keys: string[]; sample: string }> => {
+    const { facebook } = await import(
+      "../integrations/scrapeCreators/platforms/facebook"
+    );
+    const res = (await facebook.searchAds("habit tracker app")).raw as {
+      searchResults?: unknown[];
+    };
+    const first = (res.searchResults ?? [])[0] as Record<string, unknown> | undefined;
+    if (!first) return { ok: false, keys: [], sample: "no ads returned" };
+    return {
+      ok: true,
+      keys: Object.keys(first),
+      sample: JSON.stringify(first).slice(0, 900),
+    };
+  },
+});

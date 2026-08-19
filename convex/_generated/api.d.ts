@@ -168,6 +168,7 @@ import type * as integrations_scrapeCreators_client from "../integrations/scrape
 import type * as integrations_scrapeCreators_deps from "../integrations/scrapeCreators/deps.js";
 import type * as integrations_scrapeCreators_endpoints from "../integrations/scrapeCreators/endpoints.js";
 import type * as integrations_scrapeCreators_normalize from "../integrations/scrapeCreators/normalize.js";
+import type * as integrations_scrapeCreators_platforms_facebook from "../integrations/scrapeCreators/platforms/facebook.js";
 import type * as integrations_scrapeCreators_platforms_instagram from "../integrations/scrapeCreators/platforms/instagram.js";
 import type * as integrations_scrapeCreators_platforms_linkedin from "../integrations/scrapeCreators/platforms/linkedin.js";
 import type * as integrations_scrapeCreators_platforms_tiktok from "../integrations/scrapeCreators/platforms/tiktok.js";
@@ -450,6 +451,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/scrapeCreators/deps": typeof integrations_scrapeCreators_deps;
   "integrations/scrapeCreators/endpoints": typeof integrations_scrapeCreators_endpoints;
   "integrations/scrapeCreators/normalize": typeof integrations_scrapeCreators_normalize;
+  "integrations/scrapeCreators/platforms/facebook": typeof integrations_scrapeCreators_platforms_facebook;
   "integrations/scrapeCreators/platforms/instagram": typeof integrations_scrapeCreators_platforms_instagram;
   "integrations/scrapeCreators/platforms/linkedin": typeof integrations_scrapeCreators_platforms_linkedin;
   "integrations/scrapeCreators/platforms/tiktok": typeof integrations_scrapeCreators_platforms_tiktok;
