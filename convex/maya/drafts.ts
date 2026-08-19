@@ -26,7 +26,8 @@
  */
 
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "../_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "../_generated/server";
+import type { QueryCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { check as preflightCheck } from "./preflight";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -272,6 +273,139 @@ export const create = internalMutation({
  * Expired drafts are filtered rather than deleted — the text is still worth
  * having as voice signal even once it's too stale to offer.
  */
+/* -------------------------------------------------------------------------- */
+/* The web surface — Mission Control's "Needs you" tray                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ THE DRAFTS TABLE HAD NO PUBLIC READER. Everything here was
+ * `internalQuery`/`internalMutation`, so Mission Control's draft tray read
+ * `gtmMaya.missionActions.getMyDraftQueue` — the FROZEN product — while a v2
+ * Maya wrote to this table. The founder was shown a deleted product's drafts
+ * and could approve nothing that Maya had actually written.
+ *
+ * See docs/MISSION_CONTROL_V2_MIGRATION.md: 34 v1 calls against 8 v2, and this
+ * cluster is the largest share of one screen.
+ */
+async function customerOf(ctx: {
+  auth: { getUserIdentity: () => Promise<{ subject: string } | null> };
+  db: QueryCtx["db"];
+}): Promise<Doc<"customers"> | null> {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) return null;
+  const creator = (await ctx.db
+    .query("creators")
+    .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+    .first()) as Doc<"creators"> | null;
+  if (!creator) return null;
+  return (await ctx.db
+    .query("customers")
+    .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+    .first()) as Doc<"customers"> | null;
+}
+
+/**
+ * ⭐ What is waiting on the founder right now.
+ *
+ * ⚠️ Expired drafts are EXCLUDED even though their `outcome` is still
+ * "pending". A draft past `expiresAt` is dead — publishing will not touch it —
+ * and showing it invites an approval that silently does nothing, which is worse
+ * than showing nothing.
+ */
+export const myDraftQueue = query({
+  args: {},
+  handler: async (
+    ctx
+  ): Promise<{
+    ok: boolean;
+    drafts: Array<{
+      id: string;
+      channel: string;
+      kind: string;
+      text: string;
+      proposedAt: number;
+      expiresAt: number;
+    }>;
+    error?: string;
+  }> => {
+    const customer = await customerOf(ctx);
+    if (!customer) return { ok: false, drafts: [], error: "sign in first" };
+
+    const now = Date.now();
+    const rows = (await ctx.db
+      .query("drafts")
+      .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+      .collect()) as Doc<"drafts">[];
+
+    return {
+      ok: true,
+      drafts: rows
+        .filter((d) => d.outcome === "pending" && d.expiresAt > now)
+        // Oldest first: the one closest to expiring is the one that needs a
+        // decision most.
+        .sort((a, b) => a.proposedAt - b.proposedAt)
+        .map((d) => ({
+          id: d._id,
+          channel: d.channel,
+          kind: d.kind,
+          text: d.snapshotText,
+          proposedAt: d.proposedAt,
+          expiresAt: d.expiresAt,
+        })),
+    };
+  },
+});
+
+/**
+ * ⭐ Approve, edit, or pass — one door, because they are one decision.
+ *
+ * v1 spread this across three calls (`approveMyDraft`, `passOnMyDraft`,
+ * `requestDraftTweak`). One mutation with an outcome keeps the tenant check and
+ * the expiry check in a single place instead of three, and `decide` already
+ * models exactly this.
+ *
+ * ⚠️ The tenant check is the point. `decide` takes a `draftId` and trusts it —
+ * correct for an internal caller, unsafe from a browser. This confirms the
+ * draft belongs to the signed-in founder before touching it.
+ */
+export const decideMyDraft = mutation({
+  args: {
+    draftId: v.id("drafts"),
+    outcome: v.union(
+      v.literal("approved"),
+      v.literal("edited"),
+      v.literal("rejected")
+    ),
+    editedText: v.optional(v.string()),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<{ ok: boolean; error?: string }> => {
+    const customer = await customerOf(ctx);
+    if (!customer) return { ok: false, error: "sign in first" };
+
+    const draft = (await ctx.db.get(args.draftId)) as Doc<"drafts"> | null;
+    if (!draft) return { ok: false, error: "no such draft" };
+    // ⚠️ Cross-tenant guard. Same error either way — "not yours" and "not
+    // there" must be indistinguishable, or this becomes an existence oracle.
+    if (draft.customerId !== customer._id) {
+      return { ok: false, error: "no such draft" };
+    }
+    if (draft.outcome !== "pending") {
+      return { ok: false, error: "you already decided this one" };
+    }
+    if (draft.expiresAt <= Date.now()) {
+      return { ok: false, error: "that one expired — she'll write a new one" };
+    }
+
+    return await ctx.runMutation(internal.maya.drafts.decide, {
+      draftId: args.draftId,
+      outcome: args.outcome,
+      editedText: args.editedText,
+      reason: args.reason,
+    });
+  },
+});
+
 export const pending = internalQuery({
   args: { customerId: v.id("customers"), now: v.optional(v.number()) },
   handler: async (ctx, args): Promise<Doc<"drafts">[]> => {

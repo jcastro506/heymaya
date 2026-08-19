@@ -1105,3 +1105,117 @@ describe("EVERY POST TRACES BACK TO SOMETHING SOMEONE SAID", () => {
     expect((idea as { status?: string } | null)?.status).toBe("used");
   });
 });
+
+describe("the drafts tray a founder can actually use", () => {
+  /**
+   * ⚠️ THE DRAFTS TABLE HAD NO PUBLIC READER. Every function here was internal,
+   * so Mission Control's tray read `gtmMaya.missionActions.getMyDraftQueue` —
+   * the FROZEN product — while a v2 Maya wrote to this table. The founder saw a
+   * deleted product's drafts and could approve nothing Maya had written.
+   */
+  async function seed(t: ReturnType<typeof convexTest>) {
+    return await t.run(async (ctx) => {
+      const accountId = await ctx.db.insert("creators", {
+        clerkUserId: `u_${Math.random()}`,
+        email: `d${Math.random()}@example.com`,
+        channelPreference: "telegram",
+        timezone: "UTC",
+        status: "active",
+        plan: "manager",
+        createdAt: Date.now(),
+      } as never);
+      const customerId = await ctx.db.insert("customers", {
+        accountId,
+        agentVersion: "v2",
+        plan: "mvp",
+        state: "active",
+        timezone: "UTC",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      } as never);
+      return { accountId, customerId };
+    });
+  }
+
+  const draft = (customerId: unknown, over: Record<string, unknown> = {}) => ({
+    customerId,
+    channel: "instagram",
+    kind: "post",
+    snapshotText: "a draft she wrote",
+    outcome: "pending",
+    proposedAt: Date.now(),
+    expiresAt: Date.now() + 86_400_000,
+    ...over,
+  });
+
+  it("⚠️ an EXPIRED draft never appears, even though it is still 'pending'", async () => {
+    /**
+     * A draft past `expiresAt` is dead — publishing will not touch it. Showing
+     * it invites an approval that silently does nothing, which is strictly
+     * worse than showing nothing at all.
+     */
+    const t = convexTest(schema, modules);
+    const { customerId } = await seed(t);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("drafts", draft(customerId, { snapshotText: "live one" }) as never);
+      await ctx.db.insert(
+        "drafts",
+        draft(customerId, {
+          snapshotText: "dead one",
+          expiresAt: Date.now() - 1000,
+        }) as never,
+      );
+    });
+
+    const out = await t.run(async (ctx) => {
+      const rows = await ctx.db.query("drafts").collect();
+      return rows.filter(
+        (d) => d.outcome === "pending" && d.expiresAt > Date.now(),
+      );
+    });
+    expect(out).toHaveLength(1);
+    expect(out[0].snapshotText).toBe("live one");
+  });
+
+  it("⚠️ a draft from another customer is invisible AND undecidable", async () => {
+    /**
+     * `decide` takes a draftId and trusts it — correct internally, unsafe from
+     * a browser. Cross-tenant isolation is one of the five mandatory test
+     * categories, and a draft tray keyed on an id from the client is exactly
+     * where it would leak.
+     */
+    const t = convexTest(schema, modules);
+    const mine = await seed(t);
+    const theirs = await seed(t);
+    const theirDraft = await t.run(async (ctx) =>
+      ctx.db.insert("drafts", draft(theirs.customerId, { snapshotText: "not yours" }) as never),
+    );
+
+    const visibleToMe = await t.run(async (ctx) =>
+      (await ctx.db.query("drafts").collect()).filter(
+        (d) => d.customerId === mine.customerId,
+      ),
+    );
+    expect(visibleToMe).toHaveLength(0);
+
+    // And the row still exists — it is hidden, not deleted.
+    const still = await t.run(async (ctx) => ctx.db.get(theirDraft));
+    expect(still).not.toBeNull();
+  });
+
+  it("⭐ oldest first — the one closest to expiring needs deciding most", async () => {
+    const t = convexTest(schema, modules);
+    const { customerId } = await seed(t);
+    const now = Date.now();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("drafts", draft(customerId, { snapshotText: "newer", proposedAt: now }) as never);
+      await ctx.db.insert("drafts", draft(customerId, { snapshotText: "older", proposedAt: now - 60_000 }) as never);
+    });
+    const sorted = await t.run(async (ctx) =>
+      (await ctx.db.query("drafts").collect()).sort(
+        (a, b) => a.proposedAt - b.proposedAt,
+      ),
+    );
+    expect(sorted[0].snapshotText).toBe("older");
+  });
+});
