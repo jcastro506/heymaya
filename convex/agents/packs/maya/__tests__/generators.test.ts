@@ -501,6 +501,8 @@ describe("the doctrine stays coherent with the server", () => {
      * things which are wrong in the same way is not a check.
      */
     expect(documented.sort()).toEqual([
+      /** Rung 1 of the ladder — added with the UGC pivot, 2026-08-19. */
+      "ad_intel",
       "ask_founder",
       "checkpoint",
       "draft",

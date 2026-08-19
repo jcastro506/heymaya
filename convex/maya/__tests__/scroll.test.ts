@@ -293,17 +293,24 @@ describe("⭐ THE CHANNELS DON'T REPORT THE SAME THINGS", () => {
     expect(shape).not.toHaveProperty("payload");
   });
 
-  it("⭐ X IS SCROLLABLE — and was wrongly left out", () => {
-    // An earlier pass excluded X believing its search wasn't wrapped.
-    // `twitterApiIoSearch` has wrapped `advanced_search` all along; its only
-    // callers were in frozen v1. Since X is the launch channel and often the
-    // ONLY connected one, that omission mattered more than any of the rest.
+  it("⭐ X IS NOT SCROLLABLE — the product is video-first on three channels", () => {
+    /**
+     * This assertion is the exact inverse of what it said before, and the
+     * reversal is the point: X WAS the launch channel and often the only
+     * connected one, so an earlier pass added it deliberately. The UGC pivot
+     * dropped X entirely, and this constant kept listing it.
+     *
+     * ⚠️ Measured on staging 2026-08-18: **34 of the sweep's observations came
+     * from X** — about a quarter of every scroll spent reading, ranking and
+     * storing material for a channel she cannot publish to, competing for the
+     * 20 slots she actually reads.
+     */
     expect([...SCROLLABLE_CHANNELS].sort()).toEqual([
       "instagram",
       "tiktok",
-      "x",
       "youtube",
     ]);
+    expect(SCROLLABLE_CHANNELS).not.toContain("x");
   });
 });
 

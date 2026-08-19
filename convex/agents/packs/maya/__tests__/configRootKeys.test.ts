@@ -35,6 +35,7 @@
 
 import { describe, expect, it } from "vitest";
 import { SAFETY_CRITIC_MODEL } from "../../../../maya/outbound";
+import { BUNDLED_MAYA_PLUGIN_TOOLS } from "../bundledPlugin";
 import {
   buildMayaWorkspace,
   OPENCLAW_CONFIG_PATH,
@@ -61,7 +62,7 @@ describe("EVERY ROOT KEY IS ONE OPENCLAW ACCEPTS", () => {
           url: "https://widgetly.dev",
           truth: "turns a CSV into a dashboard in one paste",
         },
-        channels: [{ channel: "x", postingMode: "just_go" }],
+        channels: [{ channel: "tiktok", postingMode: "just_go" }],
       }).files.get(OPENCLAW_CONFIG_PATH)!
     ) as Record<string, unknown>;
 
@@ -82,7 +83,7 @@ describe("EVERY ROOT KEY IS ONE OPENCLAW ACCEPTS", () => {
           url: "https://widgetly.dev",
           truth: "turns a CSV into a dashboard in one paste",
         },
-        channels: [{ channel: "x", postingMode: "just_go" }],
+        channels: [{ channel: "tiktok", postingMode: "just_go" }],
       }).files.get(OPENCLAW_CONFIG_PATH)!
     );
     expect(config.discovery.mdns.mode).toBe("off");
@@ -101,7 +102,7 @@ describe("EVERY ROOT KEY IS ONE OPENCLAW ACCEPTS", () => {
           url: "https://widgetly.dev",
           truth: "turns a CSV into a dashboard in one paste",
         },
-        channels: [{ channel: "x", postingMode: "just_go" }],
+        channels: [{ channel: "tiktok", postingMode: "just_go" }],
       }).files.get(OPENCLAW_CONFIG_PATH)!
     );
 
@@ -201,7 +202,7 @@ describe("SHE HAS A DAY, NOT JUST A REPORTING SCHEDULE", () => {
     buildMayaWorkspace({
       founder: { email: "sam@example.com", name: "Sam", timezone: "America/Los_Angeles" },
       product: { name: "Widgetly", url: "https://widgetly.dev" },
-      channels: [{ channel: "x", postingMode: "just_go" }],
+      channels: [{ channel: "tiktok", postingMode: "just_go" }],
     }).files.get(CRON_STORE_PATH)!
   );
   const ids: string[] = cron.jobs.map((j: { id: string }) => j.id);
@@ -262,6 +263,74 @@ describe("SHE HAS A DAY, NOT JUST A REPORTING SCHEDULE", () => {
     // arrive" ambiguous between two mechanisms.
     for (const job of cron.jobs) {
       expect(job.delivery?.mode, `${job.id}`).toBe("none");
+    }
+  });
+
+  it("⭐ SOMETHING MAKES THE WEEKLY DECISION", () => {
+    /**
+     * `pick-the-week` describes a Monday ritual — one shape, five to seven
+     * variations, asked once — and for its whole existence NOTHING TRIGGERED
+     * IT. A skill describing a day that never arrives is the built-and-unwired
+     * defect this codebase produces more than any other.
+     */
+    expect(ids).toContain("0014_weekly_pick");
+    const [, , , , dow] = at("0014_weekly_pick").split(" ");
+    expect(dow, "the week is picked on Monday").toBe("1");
+  });
+
+  it("the week is picked BEFORE the day's placement is made", () => {
+    // A placement that runs first would be built on last week's shape, and the
+    // founder would see the change a day late every Monday.
+    const hour = (expr: string) => Number(expr.split(" ")[1]);
+    expect(hour(at("0014_weekly_pick"))).toBeLessThan(
+      hour(at("0011_daily_placement"))
+    );
+  });
+
+  it("⭐ THE WEEKLY PICK REACHES FOR RUNG-1 EVIDENCE BY NAME", () => {
+    /**
+     * ⚠️ Asserted on the TOOL NAME, not on the prose around it — these
+     * messages are prompt text and get rewritten, so a substring match on the
+     * wording is a false-alarm generator. `ad_intel` is a stable identifier:
+     * if it disappears from this message, the ladder's top rung is unreachable
+     * again and the pick silently falls back to organic posts.
+     */
+    const pick = (
+      cron.jobs.find((j: { id: string }) => j.id === "0014_weekly_pick") as {
+        payload: { message: string };
+      }
+    ).payload.message;
+    expect(pick).toContain("ad_intel");
+  });
+
+  it("⭐ EVERY TOOL HER CRONS TELL HER TO CALL IS ACTUALLY REGISTERED", () => {
+    /**
+     * The sibling-file check. A cron instructing her to call something the
+     * plugin never registered produces a turn that fails on a live machine and
+     * a founder who hears nothing — invisible in every other test.
+     *
+     * ⚠️ This list is maintained BY HAND on purpose. Scanning the messages for
+     * backticked words cannot tell a tool name from prose (`show_me_first` is a
+     * hold reason, not a tool), and a scan that skips what it cannot classify
+     * asserts nothing at all while looking thorough.
+     */
+    const TOOLS_THE_DAY_DEPENDS_ON = [
+      "history", // morning brief + weekly review
+      "ad_intel", // weekly pick — rung 1 of the ladder
+      "weekly_read", // weekly review
+      "checkpoint", // daily memory checkpoint
+    ];
+    for (const tool of TOOLS_THE_DAY_DEPENDS_ON) {
+      expect(BUNDLED_MAYA_PLUGIN_TOOLS, `${tool} is not registered`).toContain(
+        tool
+      );
+    }
+
+    const allMessages = cron.jobs
+      .map((j: { payload: { message: string } }) => j.payload.message)
+      .join("\n");
+    for (const tool of TOOLS_THE_DAY_DEPENDS_ON) {
+      expect(allMessages, `no cron ever calls ${tool}`).toContain(tool);
     }
   });
 

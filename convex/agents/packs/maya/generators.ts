@@ -582,6 +582,7 @@ Every tool returns the same envelope:
 | \`history\` | \`{days?, query?, placementId?}\` | recent · or a search · or one post's provenance |
 | \`inbox\` | \`{}\` | \`{waiting[]}\` — each carries \`inReplyTo\` + \`inboxItemId\` |
 | \`weekly_read\` | \`{}\` | \`{world[], borrowableShapes, unciteable}\` |
+| \`ad_intel\` | \`{}\` | \`{ads[], provenCount}\` — competitor ads by days running |
 | \`rules\` | \`{action?, directiveId?, kind?}\` | \`{rules[]}\` or \`{history[]}\` |
 | \`request_assets\` | \`{body?}\` | \`{asked, library}\` |
 | \`ask_founder\` | \`{question}\` | \`{asked, openQuestion?}\` |
@@ -947,19 +948,21 @@ function renderCronJobs(input: MayaWorkspaceInput): string {
      * ⭐ SCROLL BEFORE SPEAKING. This runs FIRST, and the brief depends on it.
      *
      * Without it she writes from product truth alone, which is the same post
-     * every day — verified live 2026-08-04, when three requested tweets came
+     * every day — verified live 2026-08-04, when three requested posts came
      * back as one sentence reworded three times. She had one fact and no
      * material. The sweep is not enrichment, it is the input (§13.5.2).
      *
-     * It is also the whole difference between this and a scheduler: a
-     * scheduler posts what you gave it, she posts what she found.
+     * ⚠️ ORGANIC ONLY. Competitor ads are rung 1 of the ladder but they arrive
+     * on a WEEKLY cron, not this one, because longevity is the signal and an ad
+     * running 58 days is still running tomorrow. Re-pulling them daily spends
+     * seven times the credits to watch a number tick up by one.
      */
     {
       id: "0008_scroll",
       name: "Scroll the niche",
       expr: "0 7 * * *",
       message:
-        "Scroll. Read what's actually moving in this niche in the last 24 hours — what's getting traction, what's being complained about, what format keeps working. Rank by traction over age; a big old post is not news. This is a read, not a decision: collect, don't judge yet. If it's genuinely quiet, that's a real finding — say so rather than inventing a trend.",
+        "Scroll. TikTok, Instagram and YouTube only. Read what is actually moving in this niche in the last 24 hours: what is getting traction, what format keeps working, what people are complaining about. Rank by traction over age; a big old post is not news. Then read our own inbound — comments and DMs that came in overnight. This is a read, not a decision: collect, do not judge yet. If it is genuinely quiet, that is a real finding — say so rather than inventing a trend.",
     },
     {
       id: "0010_morning_brief",
@@ -970,44 +973,63 @@ function renderCronJobs(input: MayaWorkspaceInput): string {
       /**
        * ⭐ SHE HAS TO LOOK AT HER OWN WORK BEFORE SHE TALKS ABOUT IT.
        *
-       * ⚠️ The previous version asked her to mention yesterday's numbers "if
-       * they're worth mentioning" — while giving her no instruction to FETCH
-       * them. `history` carries the timeline, the cadence and the rung, and the
-       * weekly review calls it explicitly; the morning brief never did. So she
-       * wrote the brief from whatever was in context, which is why it read the
-       * same most days.
+       * The previous version asked her to mention yesterday's numbers "if
+       * they're worth mentioning" while giving her no instruction to FETCH
+       * them, so she wrote the brief from whatever was in context — which is
+       * why it read the same most days.
        *
-       * The founder's words: *"I just wanna make sure that she's acting like a
-       * real human being would."* A person who runs your social account opens
-       * the morning by looking at what they shipped and how it did — not by
-       * restating the plan.
-       *
-       * Mirrors the weekly review's proven shape: name the tool, say FIRST,
-       * and say what to do with what comes back. Prompt-primary per the
-       * standing rule — the tool response carries the choreography, this says
-       * when to reach for it.
+       * ⚠️ AND IT NOW HAS TO NAME WORK IN FLIGHT. A video is not made in the
+       * turn that starts it: the render is asynchronous and can take tens of
+       * minutes or fail outright. A brief that cannot say "yesterday's render
+       * is still going" describes a day that is not the one happening.
        */
       message:
-        "Morning brief. Call `history` FIRST — it carries what actually went live, the numbers those posts have now, and which rung is working. Read it before you write a word. Then: what did yesterday's post actually do, is that better or worse than the ones before it, and what does that change about today? A number that moved is worth more than a plan restated. If today's angle is the same one you raised yesterday, say why it's still the right call — or pick a different one. What's planned today and why, grounded in rows, not vibes. If it was a bad day or a quiet one, lead with that and its cause; padding it with drafts written or things researched is the one thing that reads as fake.",
+        "Morning brief. Call `history` FIRST — it carries what actually went live, the numbers those posts have now, and which rung is working. Read it before you write a word. Then: what did yesterday's placement actually do, is that better or worse than the ones before it, and what does that change about today? A number that moved is worth more than a plan restated. Say which variation of THIS WEEK'S SHAPE today is, and why it is still the right call. ⭐ IF A RENDER IS STILL IN FLIGHT OR FAILED OVERNIGHT, SAY SO IN THE FIRST LINE — work in progress is the thing a founder most needs and least often gets. If it was a bad day or a quiet one, lead with that and its cause; padding it with drafts written or things researched is the one thing that reads as fake.",
     },
     /**
-     * The placement. Sprint 3's exit criterion is a placement a day for seven
-     * straight days, and until this existed nothing made one happen — her
-     * crons briefed, recapped and reviewed a day she never had.
+     * ⭐ THE ONE DECISION OF THE WEEK.
+     *
+     * Seven daily decisions produce seven unrelated posts and a founder cannot
+     * tell whether anything worked. A week built on one shape can be judged.
+     * `pick-the-week` describes this ritual in detail and, until this job
+     * existed, NOTHING TRIGGERED IT — the skill described a Monday that never
+     * arrived, which is the same built-and-unwired failure that has produced
+     * more defects in this codebase than any other.
+     *
+     * 07:30 Monday: after the brief, before the placement, and after the fleet
+     * ad sweep has run on Sunday.
+     */
+    {
+      id: "0014_weekly_pick",
+      name: "Pick the week",
+      expr: "30 7 * * 1",
+      message:
+        "Pick this week's shape. Use the `pick-the-week` skill and follow its ladder strictly: a competitor ad still running after three weeks beats an organic post beating its own account baseline, which beats a complaint a real buyer typed, which beats a hashtag. Call `ad_intel` FIRST — those are competitor ads with the number of days each has been running, and they are the only rung-1 evidence you have. Take the strongest thing you ACTUALLY have, and say which rung it came from: an ad has been running 58 days is a reason, this felt good is not. Then derive five to seven variations on that one shape — vary the hook, the objection answered, the screen you open on, and nothing else, or nothing is learned. Send the shape, why you chose it, and the variations as ONE message with ONE question. Do not re-decide this mid-week.",
+    },
+    /**
+     * The placement. Sprint 3's exit criterion is a placement a day, and until
+     * this existed nothing made one happen — her crons briefed, recapped and
+     * reviewed a day she never had.
+     *
+     * ⚠️ REWRITTEN FOR VIDEO. The previous message said "write a draft, then
+     * publish" — a single-turn flow that is correct for text and impossible for
+     * video. A render is asynchronous, costs real money, and must be approved
+     * BEFORE the spend rather than shown after it. So the day now has three
+     * shapes and she has to work out which one she is in.
      */
     {
       id: "0011_daily_placement",
       name: "Today's placement",
       expr: "0 11 * * *",
       message:
-        "Make today's placement. Take the strongest thing from this morning's scroll — a complaint worth answering, a format that's working, a moment worth being early to — and turn it into one post for a connected channel. Write to a specific person or moment, never to a topic. Apply the critique skill to your own draft, then publish; the server runs the independent safety check at the publish gate, so you do not need to call anything to get one. A hold is a real answer and not something to retry around. ⭐ IF THE HOLD IS `show_me_first`, THE TOOL HANDS YOU `data.draftText` — SEND IT VERBATIM, ON ITS OWN, then ask them to say post it, or tell you what to change. Saying you drafted a 237-character post is not showing it: they cannot approve what they cannot read. ⭐ IF YOU END THE DAY WITHOUT POSTING, SAY SO AND SAY WHY — a quiet niche, a hold, a tool you could not reach. Silence is the one thing that is never acceptable: it looks identical to you being dead.",
+        "Make today's placement, working from THIS WEEK'S SHAPE — not a fresh idea. First work out which kind of day this is. ⭐ IF AN ASSET IS READY AND APPROVED: publish it, then crosspost. Write a DIFFERENT caption per channel — the same caption on TikTok and Reels is the most recognisable automation tell there is. ⭐ IF A VIDEO IS DUE: build the brief from this week's shape, show the founder what it will be and what it costs against the monthly video budget, and get a yes BEFORE starting the render. Never spend on a render they have not seen. Then kick it off and stop; the render is a job and you will be told when it lands. ⭐ IF NO VIDEO IS DUE TODAY: make the day's placement another way — a carousel, a static, or a post answering a real question someone asked. Apply the critique skill to your own work, then publish; the server runs the independent safety check at the publish gate, so you do not need to call anything to get one. A hold is a real answer and not something to retry around. IF THE HOLD IS `show_me_first`, THE TOOL HANDS YOU `data.draftText` — SEND IT VERBATIM, ON ITS OWN, then ask them to say post it or tell you what to change. ⭐ IF YOU END THE DAY WITHOUT POSTING, SAY SO AND SAY WHY — a quiet niche, a hold, a render that failed, a tool you could not reach. Silence is the one thing that is never acceptable: it looks identical to you being dead.",
     },
     {
       id: "0012_evening_recap",
       name: "Evening recap",
       expr: "0 20 * * *",
       message:
-        "Evening recap. What actually went live today, with links, and what came back — replies, questions, anything that needs them. Placements only: a draft is not a result.",
+        "Evening recap. What actually went live today, with links, and what came back — replies, questions, anything that needs them. Placements only: a draft is not a result and neither is a render. ⚠️ IF A RENDER IS STILL RUNNING OR FAILED, NAME IT AND SAY WHICH — a video in progress counts as nothing, but a founder who is not told about it thinks the day was empty.",
     },
     {
       id: "0009_checkpoint",
@@ -1016,14 +1038,14 @@ function renderCronJobs(input: MayaWorkspaceInput): string {
       // overnight dreaming rather than a day already in progress.
       expr: "30 6 * * *",
       message:
-        "Daily checkpoint. Read MEMORY.md in full, run `openclaw doctor` to see whether bootstrap context is being truncated, and call `checkpoint` with both. This is the only copy of your memory that exists off this machine. If the reply says it SHRANK, stop and tell the operator — something overwrote it rather than tidying it. Otherwise say nothing; this is housekeeping and the founder doesn't need a report about it.",
+        "Daily checkpoint. Read MEMORY.md in full, run `openclaw doctor` to see whether bootstrap context is being truncated, and call `checkpoint` with both. This is the only copy of your memory that exists off this machine. If the reply says it SHRANK, stop and tell the operator — something overwrote it rather than tidying it. Otherwise say nothing; this is housekeeping and the founder does not need a report about it.",
     },
     {
       id: "0013_weekly_review",
       name: "Weekly review",
       expr: "0 19 * * 0",
       message:
-        "Weekly review. Call `weekly_read` FIRST — it is the only place the wider-world findings and the borrowable shapes come from, and it only runs when you call it. Then `history`, which now carries the numbers and the rung. Which of the five rungs is working and which isn't (§14.2)? Own data answers coarse questions only — format questions come from the corpus. Name one thing to change, not five.",
+        "Weekly review. Call `weekly_read` FIRST — it is the only place the wider-world findings and the borrowable shapes come from, and it only runs when you call it. Then `history`, which carries the numbers and the rung. This week ran on ONE shape: did it work? Judge the shape, not the seven posts individually — that is the entire reason for picking one. Which of the five rungs is working and which is not (§14.2)? Own data answers coarse questions only; format questions come from the corpus. Name one thing to change next week, not five.",
     },
   ] as const;
 

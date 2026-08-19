@@ -61,6 +61,14 @@ describe("the manifest and the code agree", () => {
     // draft offered on an earlier turn, without which an approved post could
     // never be published.
     expect(manifest.contracts.tools.sort()).toEqual([
+      /**
+       * ⭐ Joined 2026-08-19 with the UGC pivot. Rung 1 of `pick-the-week`'s
+       * evidence ladder — competitor ads ranked by how many days each has been
+       * running, which is the only signal in this product backed by someone
+       * else's money. The skill ranked it first for weeks with nothing behind
+       * it, so every week silently fell through to organic posts.
+       */
+      "ad_intel",
       "adapt_crosspost",
       // ⭐ Sprint 9. The only call that spends a render credit, kept separate
       // from `make_video` so the approval has exactly one call site.

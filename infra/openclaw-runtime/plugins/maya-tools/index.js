@@ -480,6 +480,15 @@ export default defineToolPlugin({
     }),
 
     tool({
+      name: "ad_intel",
+      label: "Competitor ads",
+      description:
+        "Competitor ads, ranked by how many days each has been running. This is the strongest evidence you have: an organic post says something got attention once, but an ad running 58 days says a company with a dashboard decided every morning for two months not to switch it off. Losing ads get killed in a week, so an old ad is a tested one. Use this FIRST when picking the week. Copy the STRUCTURE — the hook, the objection it answers, the order it reveals things in — and never the claims, because their product is not ours and their numbers are not ours. Say how long an ad has been running when you propose copying it; that is the reason it is worth copying. Collection runs on a weekly schedule, so this is a read and calling it more often returns the same rows. Empty is a real answer: it means nobody we track is advertising, or we have no competitors on file — in which case ask the founder who they lose deals to.",
+      parameters: Type.Object({}),
+      execute: async (p, _cfg, ctx) => call("ad_intel", p, ctx.signal),
+    }),
+
+    tool({
       name: "request_assets",
       label: "Request assets",
       description:

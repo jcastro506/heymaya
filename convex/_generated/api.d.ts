@@ -191,6 +191,7 @@ import type * as lib_planFeatures from "../lib/planFeatures.js";
 import type * as lib_posthog from "../lib/posthog.js";
 import type * as lib_usageEvents from "../lib/usageEvents.js";
 import type * as lib_webhookSecret from "../lib/webhookSecret.js";
+import type * as maya_adIntel from "../maya/adIntel.js";
 import type * as maya_archive from "../maya/archive.js";
 import type * as maya_assetClassifier from "../maya/assetClassifier.js";
 import type * as maya_assetFloor from "../maya/assetFloor.js";
@@ -474,6 +475,7 @@ declare const fullApi: ApiFromModules<{
   "lib/posthog": typeof lib_posthog;
   "lib/usageEvents": typeof lib_usageEvents;
   "lib/webhookSecret": typeof lib_webhookSecret;
+  "maya/adIntel": typeof maya_adIntel;
   "maya/archive": typeof maya_archive;
   "maya/assetClassifier": typeof maya_assetClassifier;
   "maya/assetFloor": typeof maya_assetFloor;

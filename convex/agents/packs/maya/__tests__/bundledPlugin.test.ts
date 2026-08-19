@@ -148,6 +148,14 @@ describe("the install contract", () => {
     // clearly the founder approved it. Live that day: shown at 12:18,
     // approved at 13:03, and the only reply she could give was a thumbs-up.
     expect([...BUNDLED_MAYA_PLUGIN_TOOLS].sort()).toEqual([
+      /**
+       * ⭐ Joined 2026-08-19 with the UGC pivot. Rung 1 of `pick-the-week`'s
+       * evidence ladder — competitor ads ranked by how many days each has been
+       * running, which is the only signal in this product backed by someone
+       * else's money. The skill ranked it first for weeks with nothing behind
+       * it, so every week silently fell through to organic posts.
+       */
+      "ad_intel",
       "adapt_crosspost",
       /**
        * ⭐ Joined 2026-08-17 with Sprint 9. `approve_video` is deliberately a

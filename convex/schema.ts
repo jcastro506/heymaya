@@ -3838,6 +3838,15 @@ export default defineSchema({
       v.literal("comment"),
       v.literal("trend"),
       v.literal("metric"),
+      /**
+       * ⭐ A competitor ad from the Meta ad library — rung 1 of the evidence
+       * ladder, and the only kind here backed by someone else's money.
+       *
+       * ⚠️ For this kind ONLY, `velocity` carries DAYS RUNNING rather than
+       * engagement ÷ age. Never sort ads and posts together on it; see
+       * `maya/adIntel.ts`.
+       */
+      v.literal("ad"),
     ),
     text: v.string(),
     /** Vendor time, normalised to ms on the way in. */

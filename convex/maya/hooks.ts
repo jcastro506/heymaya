@@ -1583,6 +1583,67 @@ export const weeklyReadHttp = httpAction(async (ctx, request) => {
 });
 
 /* -------------------------------------------------------------------------- */
+/* ad_intel                                                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ `ad_intel` — competitor ads, ranked by how long they have been running.
+ *
+ * Rung 1 of `pick-the-week`'s evidence ladder, and the only rung with someone
+ * else's money behind it. An organic post says something got attention once; an
+ * ad running 58 days says a company with a dashboard has decided every morning
+ * for two months not to switch it off.
+ *
+ * ⚠️ **A READ, NOT A SWEEP.** The collection runs on a Sunday Convex cron and
+ * spends vendor credits; this only reads the rows it left. That split is
+ * deliberate — an agent that could trigger the pull could also trigger it
+ * eleven times, and the spend has no owner in that turn.
+ *
+ * ⚠️ `daysRunning` IS DERIVED, NOT REPORTED. The vendor exposes
+ * `total_active_time`, which is null on every real ad measured (0 of 30). See
+ * `maya/adIntel.ts` — ranking on it would have produced a uniform zero and an
+ * ordering that was really the vendor's arbitrary return order.
+ */
+export const adIntelHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if ("error" in auth) return auth.error;
+
+  const ads = await ctx.runQuery(internal.maya.adIntel.provenAds, {
+    customerId: auth.customer._id,
+  });
+
+  const { PROVEN_DAYS } = await import("./adIntel");
+  const proven = ads.filter((a) => a.daysRunning >= PROVEN_DAYS);
+
+  return respond({
+    ok: true,
+    data: {
+      ads: ads.map((a) => ({
+        advertiser: a.pageName,
+        daysRunning: a.daysRunning,
+        variants: a.variants,
+        isVideo: a.hasVideo,
+        hook: a.title,
+        body: a.body,
+        cta: a.ctaText,
+        transcript: a.transcript,
+        url: a.url,
+      })),
+      provenCount: proven.length,
+      provenAfterDays: PROVEN_DAYS,
+    },
+    why:
+      ads.length === 0
+        ? "no competitor ads on file — either nobody we track is advertising, or we have no competitors on file to look up"
+        : `${ads.length} live competitor ads, ${proven.length} running ${PROVEN_DAYS}+ days`,
+    next:
+      ads.length === 0
+        ? "drop to the next rung — an organic post beating its own baseline, then a complaint a real buyer typed. And ask the founder who they lose deals to, because that is what makes this rung work next week"
+        : "copy the STRUCTURE — the hook, the objection it answers, the order it reveals things in. Never the claims: their product is not ours and their numbers are not ours. Say how long the ad has been running when you propose it; that is the reason it is worth copying",
+  });
+});
+
+/* -------------------------------------------------------------------------- */
 /* inbox                                                                       */
 /* -------------------------------------------------------------------------- */
 

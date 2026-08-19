@@ -251,4 +251,22 @@ crons.weekly(
   internal.vendorSmoke.runner.runTier3
 );
 
+/**
+ * ⭐ COMPETITOR ADS — rung 1 of the evidence ladder, collected before the pick.
+ *
+ * Sunday 05:00 UTC is ahead of Monday morning in EVERY founder timezone (Monday
+ * 07:00 at UTC+14 is Sunday 17:00 UTC), so one fleet cron serves the whole
+ * fleet's Monday without per-customer timezone arithmetic.
+ *
+ * Weekly and not daily because the signal is longevity: an ad running 58 days
+ * is still running tomorrow, and re-pulling it daily would spend seven times
+ * the credits to watch a number tick up by one.
+ */
+crons.weekly(
+  "maya-ad-intel-sweep",
+  { dayOfWeek: "sunday", hourUTC: 5, minuteUTC: 0 },
+  internal.maya.adIntel.sweepAllAdIntel,
+  {}
+);
+
 export default crons;

@@ -92,7 +92,19 @@ export const MAX_SEARCHES_PER_SCROLL = 9;
  * this sweep asks. Including them ranked by raw view count would be inventing
  * a recency signal that isn't in the data. §2.7: grounded or silent.
  */
-export const SCROLLABLE_CHANNELS = ["tiktok", "instagram", "youtube", "x"] as const;
+/**
+ * ⚠️ X IS GONE, AND ITS REMOVAL IS A COST SAVING AS MUCH AS AN ALIGNMENT ONE.
+ *
+ * The product is video-first on TikTok, Instagram and YouTube; X carried text
+ * and was dropped with the UGC pivot. This constant kept listing it, and the
+ * measurement on staging 2026-08-18 shows what that cost: **34 of the sweep's
+ * observations were from X** — roughly a quarter of every scroll spent reading,
+ * ranking and storing material for a channel she cannot publish to.
+ *
+ * Worse than wasted: those rows competed for the 20 slots she actually reads,
+ * so an X post could displace a TikTok one that could have become a placement.
+ */
+export const SCROLLABLE_CHANNELS = ["tiktok", "instagram", "youtube"] as const;
 /** What she actually reads. More than this is a firehose, not a scroll. */
 export const OBSERVATIONS_RETURNED = 20;
 /** Older than this isn't news, whatever its engagement. */
