@@ -40,6 +40,47 @@ const h = vi.hoisted(() => {
      * that a fixture's channel was one we actually sell.
      */
     myVideos: { ok: true, videos: [] },
+    myFormats: {
+      ok: true,
+      shapes: [
+        {
+          id: "f1",
+          channel: "tiktok",
+          depth: "watch",
+          hook: "Stop selling products. Start building a brand",
+          views: 47800,
+          watched: true,
+        },
+      ],
+    },
+    myIdeaBank: {
+      ok: true,
+      banked: 1,
+      ideas: [
+        {
+          id: "i1",
+          angle: "The CSV that became a dashboard project",
+          sourceKind: "complaint",
+          hasEvidence: true,
+          status: "bank",
+          bankedAt: now - 7200_000,
+        },
+      ],
+    },
+    myMediaLibrary: {
+      ok: true,
+      note: "building from a screen recording",
+      usesAvatar: false,
+      assets: [
+        {
+          id: "a1",
+          kind: "screen_recording",
+          source: "telegram",
+          rung: "screen_recording",
+          capturedAt: now - 86_400_000,
+        },
+      ],
+    },
     myChannels: {
       ok: true,
       channels: [
@@ -302,6 +343,7 @@ vi.mock("@/convex/_generated/api", () => ({
        * is something a stranger could have seen.
        */
       channels: { myChannels: "myChannels" },
+      formats: { myFormats: "myFormats" },
       // The Videos screen — the artifact the founder is paying for.
       // `myVideos` is on dashboard alongside the other read-only panels.
     },
@@ -513,25 +555,39 @@ describe("Mission Control v3.1 — board modules render with grounded data", () 
     expect(html).toContain("This week"); // segmented control
   });
 
-  it("Brain: dossier + fit ring + warmth + watch", async () => {
+  it("Brain: shapes + ideas + what she has to work with", async () => {
+    /**
+     * ⚠️ REWRITTEN 2026-08-19, and the old assertions went with the screen.
+     * They pinned "Who she believes is buying", the fit ring, the warmth
+     * stepper and the angle board — all from the SUPERSEDED intent-hunting
+     * design (docs/AGENT_REDESIGN_V2.md). Brain now answers the three questions
+     * a UGC agent's dashboard has to: what is she watching, what does she plan
+     * to make, and what does she have to make it with.
+     */
     const Page = (await import("../brain/page")).default;
     const html = renderToString(createElement(Page));
-    expect(html).toContain("Who she believes is buying");
-    expect(html).toContain("The shipped-but-silent solo dev");
-    expect(html).toContain("betting"); // bets panel
-    expect(html).toContain("78%"); // fit ring from audienceFit 0.78
-    expect(html).toContain("WARMING"); // warmth stepper from channelWarmthJson
-    expect(html).toContain("Built it, now what?"); // angle board
+
+    // What she's watching — the hook line, never the whole card (§7.5.3).
+    expect(html).toContain("Shapes that are working");
+    expect(html).toContain("Stop selling products");
+    expect(html).toContain("watched");
+
+    // What she plans to make.
+    expect(html).toContain("Ideas she&#x27;s banked");
+    expect(html).toContain("The CSV that became a dashboard project");
+    expect(html).toContain("has evidence");
+
+    // What she has to make it with — the LADDER VERDICT, not a count.
+    expect(html).toContain("What she has to work with");
+    expect(html).toContain("building from a screen recording");
+
     /**
-     * ⚠️ "Standing instructions" was removed 2026-08-12 — it rendered the
-     * FROZEN product's `gtmSteeringDirectives`, so it could never show a rule
-     * the live Maya was given. Asserted absent rather than deleted, so a
-     * revert reintroducing the stale panel fails here.
+     * ⚠️ The superseded frame must not come back. Asserted absent rather than
+     * merely deleted: "Intent signal" belongs to a product that no longer
+     * exists, and a copy-paste from the old screen would restore it silently.
      */
-    expect(html).not.toContain("Standing instructions");
-    expect(html).toContain("Competitor watch");
-    expect(html).toContain("Jasper AI");
-    expect(html).toContain("no attribution story");
+    expect(html).not.toContain("Intent signal");
+    expect(html).not.toContain("Who she believes is buying");
   });
 
   it("Activity: live wire + chat mirror", async () => {
