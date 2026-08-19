@@ -29,6 +29,29 @@ const h = vi.hoisted(() => {
       channelScores: [],
       costTotalUsd: 0,
     },
+    /**
+     * ⭐ v2 shape. `myDraftQueue` returns {ok, drafts[]} with `id`/`channel`/
+     * `text`/`proposedAt`, already filtered to pending-and-unexpired and sorted
+     * oldest-first — so the page does no filtering of its own.
+     *
+     * ⚠️ The v1 fixture below posted to REDDIT, a channel this product has
+     * never supported (`connectedChannelsMatchSpec.test.ts` explicitly forbids
+     * offering it). It rendered green the whole time because nothing checked
+     * that a fixture's channel was one we actually sell.
+     */
+    myDraftQueue: {
+      ok: true,
+      drafts: [
+        {
+          id: "d1",
+          channel: "instagram",
+          kind: "post",
+          text: "This hits hard. I shipped three products before I understood.",
+          proposedAt: now - 3600_000,
+          expiresAt: now + 20 * 3600_000,
+        },
+      ],
+    },
     getMyDraftQueue: [
       {
         _id: "d1",
@@ -232,6 +255,15 @@ vi.mock("@/convex/_generated/api", () => ({
       // export above the danger zone, so the founder passes "get your data out"
       // on the way to "delete everything".
       dataExport: { requestMyDataExport: "requestMyDataExport" },
+      /**
+       * ⭐ The drafts tray, migrated off `gtmMaya` 2026-08-19. The table had NO
+       * public reader, so Today's "Needs you" band read the frozen product
+       * while a v2 Maya wrote here.
+       */
+      drafts: {
+        myDraftQueue: "myDraftQueue",
+        decideMyDraft: "decideMyDraft",
+      },
     },
     gtmMaya: {
       missionControl: {
@@ -405,7 +437,11 @@ describe("Mission Control v3.1 — board modules render with grounded data", () 
     expect(html).toContain("Post it"); // draft decision card actions
     expect(html).toContain("Tweak");
     expect(html).toContain("Pass");
-    expect(html).toContain("who&#x27;s going to sell them?"); // thread context
+    /**
+     * ⚠️ The thread-context assertion went with the field. `thread` (the source
+     * post a reply answered) was an X/Reddit-era concept; `convex/maya/drafts`
+     * has nothing to populate it with, and both channels are gone.
+     */
     expect(html).toContain("The day she&#x27;s running");
     expect(html).toContain("Morning brief"); // cron block on the timeline
     expect(html).toContain("Evening recap");

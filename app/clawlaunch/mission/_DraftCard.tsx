@@ -1,31 +1,47 @@
 "use client";
 
 /**
- * DraftCard — one board "action": a decision card in Today's "Needs you"
- * band. Channel chip + thread metrics, the thread line, the draft clamped
- * to three lines, and Post it / Tweak / Pass wired to missionActions.
- * The thread link is the receipt; no prose beyond the draft itself.
+ * DraftCard — one decision in Today's "Needs you" band. Channel chip, age,
+ * the draft clamped to three lines, and Post it / Tweak / Pass.
+ *
+ * ⚠️ MIGRATED TO v2 (2026-08-19). This read `gtmMaya.missionActions` — the
+ * FROZEN product — while a v2 Maya wrote to `convex/maya/drafts`. The founder
+ * was shown a deleted product's drafts and could approve nothing she had
+ * actually written. See docs/MISSION_CONTROL_V2_MIGRATION.md.
+ *
+ * ⚠️ TWO FIELDS WENT AND BOTH WERE X-ERA. `thread` (the source thread the reply
+ * answered) and `draftSegments` (multi-part posts) only ever meant anything on
+ * X, which was dropped 2026-08-18. Carrying them forward would have kept UI for
+ * a channel we no longer sell, and there is nothing in `convex/maya/drafts` to
+ * populate them with.
+ *
+ * ⭐ THREE MUTATIONS BECAME ONE. `approveMyDraft` / `passOnMyDraft` /
+ * `requestDraftTweak` were one decision with three outcomes; `decideMyDraft`
+ * takes the outcome as an argument, so the tenant and expiry checks live in one
+ * place instead of three.
  */
 
 import { useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import type { QueueDraft } from "@/convex/gtmMaya/missionActions";
 import { Btn, Chip, channelLabel, timeAgo } from "./_components";
+
+/** What `maya.drafts.myDraftQueue` returns, one row. */
+export type QueueDraft = {
+  id: string;
+  channel: string;
+  kind: string;
+  text: string;
+  proposedAt: number;
+  expiresAt: number;
+};
 
 export function platformLabel(p: string): string {
   return channelLabel(p);
 }
 
-/** Draft age — thread vote metrics aren't on QueueDraft, so age only. */
-function threadMeta(d: QueueDraft): string {
-  return timeAgo(d.createdAt);
-}
-
 export function DraftCard({ d }: { d: QueueDraft }) {
-  const approve = useMutation(api.gtmMaya.missionActions.approveMyDraft);
-  const pass = useMutation(api.gtmMaya.missionActions.passOnMyDraft);
-  const tweak = useMutation(api.gtmMaya.missionActions.requestDraftTweak);
+  const decide = useMutation(api.maya.drafts.decideMyDraft);
 
   const [busy, setBusy] = useState<"approve" | "pass" | "tweak" | null>(null);
   const [tweaking, setTweaking] = useState(false);
@@ -34,12 +50,22 @@ export function DraftCard({ d }: { d: QueueDraft }) {
 
   const run = async (
     which: "approve" | "pass" | "tweak",
-    fn: () => Promise<unknown>
+    fn: () => Promise<{ ok: boolean; error?: string }>
   ) => {
     setBusy(which);
     setError(null);
     try {
-      await fn();
+      const res = await fn();
+      /**
+       * ⚠️ The mutation returns `{ok:false, error}` rather than throwing — an
+       * expired or already-decided draft is a NAMED failure, not an exception.
+       * Only checking for a thrown error would show a success state for a
+       * decision that did nothing.
+       */
+      if (!res.ok) {
+        setError(res.error ?? "Something went wrong.");
+        return;
+      }
       setTweaking(false);
       setNote("");
     } catch (e) {
@@ -49,41 +75,16 @@ export function DraftCard({ d }: { d: QueueDraft }) {
     }
   };
 
-  const srcLabel = `${channelLabel(d.platform)} · ${d.kind} draft`;
-  const threadLine = d.thread?.title ?? d.thread?.excerpt ?? null;
-  const body =
-    d.kind === "thread" && d.draftSegments && d.draftSegments.length > 0
-      ? d.draftSegments.join("\n")
-      : d.draftText;
+  const srcLabel = `${channelLabel(d.channel)} · ${d.kind} draft`;
 
   return (
     <div className="mc-action">
       <div className="mc-action-src">
-        <Chip platform={d.platform}>{srcLabel}</Chip>
-        <span className="mc-when mc-num">
-          {d.approvalState === "needs_revision" ? "reworking · " : ""}
-          {threadMeta(d)}
-        </span>
+        <Chip platform={d.channel}>{srcLabel}</Chip>
+        <span className="mc-when mc-num">{timeAgo(d.proposedAt)}</span>
       </div>
 
-      {threadLine ? (
-        <div className="mc-thread">
-          {d.thread?.url ? (
-            <a
-              href={d.thread.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="no-underline hover:underline"
-            >
-              “{threadLine}”
-            </a>
-          ) : (
-            <>“{threadLine}”</>
-          )}
-        </div>
-      ) : null}
-
-      <div className="mc-draft">{body}</div>
+      <div className="mc-draft">{d.text}</div>
 
       {tweaking ? (
         <div>
@@ -100,7 +101,18 @@ export function DraftCard({ d }: { d: QueueDraft }) {
               tone="primary"
               busy={busy === "tweak"}
               disabled={!note.trim()}
-              onClick={() => void run("tweak", () => tweak({ draftId: d._id, note }))}
+              /**
+               * ⚠️ A tweak is a REJECTION carrying their reason, not a separate
+               * state. `decide` records `rejectionReason` verbatim — §7.5.2
+               * layer 2, never paraphrased — and that is what she rewrites
+               * from. Inventing an extra outcome would put the same sentence in
+               * two places.
+               */
+              onClick={() =>
+                void run("tweak", () =>
+                  decide({ draftId: d.id as never, outcome: "rejected", reason: note })
+                )
+              }
             >
               Send to Maya
             </Btn>
@@ -114,7 +126,11 @@ export function DraftCard({ d }: { d: QueueDraft }) {
           <Btn
             tone="primary"
             busy={busy === "approve"}
-            onClick={() => void run("approve", () => approve({ draftId: d._id }))}
+            onClick={() =>
+              void run("approve", () =>
+                decide({ draftId: d.id as never, outcome: "approved" })
+              )
+            }
           >
             Post it
           </Btn>
@@ -122,7 +138,11 @@ export function DraftCard({ d }: { d: QueueDraft }) {
           <Btn
             tone="ghost"
             busy={busy === "pass"}
-            onClick={() => void run("pass", () => pass({ draftId: d._id }))}
+            onClick={() =>
+              void run("pass", () =>
+                decide({ draftId: d.id as never, outcome: "rejected" })
+              )
+            }
           >
             Pass
           </Btn>

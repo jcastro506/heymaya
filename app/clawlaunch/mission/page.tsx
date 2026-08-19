@@ -89,7 +89,13 @@ const EVENT_SUB: Record<string, string> = {
 
 export default function TodayPage() {
   const snapshot = useQuery(api.gtmMaya.researchLifecycle.getMyGtmSnapshot);
-  const drafts = useQuery(api.gtmMaya.missionActions.getMyDraftQueue);
+  /**
+   * ⚠️ v2. This read `gtmMaya.missionActions.getMyDraftQueue` — the FROZEN
+   * product — while a v2 Maya wrote to `convex/maya/drafts`. See
+   * docs/MISSION_CONTROL_V2_MIGRATION.md.
+   */
+  const draftQueue = useQuery(api.maya.drafts.myDraftQueue);
+  const drafts = draftQueue?.drafts;
   const health = useQuery(api.gtmMaya.missionActions.getMyConnectionHealth);
   const connected = useQuery(api.gtmMaya.zernioConnect.getMyConnectedAccounts);
   const events = useQuery(api.gtmMaya.calendarWrite.getMyCalendarEvents);
@@ -120,26 +126,22 @@ export default function TodayPage() {
     [events, todayStart, tomorrowStart],
   );
 
-  if (snapshot === undefined || drafts === undefined || events === undefined)
+  if (snapshot === undefined || draftQueue === undefined || events === undefined)
     return <Loading />;
   if (snapshot === null) return <NeedsOnboarding />;
 
   // ── Needs you ───────────────────────────────────────────────────────────
-  const decidable = (drafts ?? [])
-    .filter(
-      (d) =>
-        d.approvalState === "pending_approval" ||
-        d.approvalState === "draft" ||
-        d.approvalState === "needs_revision",
-    )
-    .sort((a, b) => {
-      const rank = (s: string) =>
-        s === "pending_approval" ? 0 : s === "needs_revision" ? 1 : 2;
-      return (
-        rank(a.approvalState) - rank(b.approvalState) ||
-        b.createdAt - a.createdAt
-      );
-    });
+  /**
+   * ⭐ No filtering or sorting here any more. `myDraftQueue` returns only
+   * drafts that are pending AND unexpired, oldest first — an expired draft is
+   * dead (publishing will not touch it) and showing it invites an approval that
+   * silently does nothing.
+   *
+   * v1 filtered on three `approvalState` values here because the frozen table
+   * modelled revision as a state; v2 records a tweak as a rejection carrying
+   * the founder's reason, so there is one pending state and nothing to rank.
+   */
+  const decidable = drafts ?? [];
   const broken = (health ?? []).filter(
     (h) => h.status === "reconnect_required" || h.status === "error",
   );
@@ -194,10 +196,15 @@ export default function TodayPage() {
   const nextSlot = slots.find((s) => s.state === "upcoming");
 
   // ── Pulse ───────────────────────────────────────────────────────────────
-  const postsOutToday = (drafts ?? []).filter(
-    (d) =>
-      d.approvalState === "published" &&
-      (d.publishedAt ?? d.updatedAt) >= todayStart,
+  /**
+   * ⚠️ COUNTED FROM PLACEMENTS, NOT DRAFTS. v1 kept published rows in the same
+   * table and filtered on `approvalState === "published"`. In v2 a draft is
+   * inventory and a PLACEMENT is the proof — §2.6, the unit of work is
+   * something live with a URL. `myDraftQueue` returns only what is still
+   * pending, so counting published drafts there would always be zero.
+   */
+  const postsOutToday = (postResults ?? []).filter(
+    (p) => p.snapshotAtMs >= todayStart,
   ).length;
   const gainingSpeed = new Set(
     (postResults ?? [])
@@ -271,7 +278,7 @@ export default function TodayPage() {
                   </div>
                 ))}
                 {decidable.map((d) => (
-                  <DraftCard key={d._id} d={d} />
+                  <DraftCard key={d.id} d={d} />
                 ))}
               </div>
             )}
