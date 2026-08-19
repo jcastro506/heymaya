@@ -48,11 +48,29 @@ import type { Doc, Id } from "../_generated/dataModel";
  *
  * ⚠️ So it is UNTRUSTED input — see the length caps below.
  */
+/**
+ * ⚠️ THIS BLOCKED EVERY SIGNUP. The public read (`demo.ts`) returns `gaps`
+ * alongside the four fields below, and a Convex `v.object` REJECTS an extra
+ * field rather than ignoring it — so step 2 of onboarding died with
+ * `ArgumentValidationError: Object contains extra field 'gaps'` for anyone who
+ * clicked "yes, that's it". Nobody could finish signing up.
+ *
+ * ⭐ Accepted rather than stripped client-side, because `gaps` is the most
+ * useful thing in the read: it is what she does NOT know about their product.
+ * That is exactly what should drive her first questions, and throwing it away
+ * at the door would repeat the defect already recorded against
+ * `ProductTruth.competitors` — a field the read produces and nothing consumes.
+ *
+ * ⚠️ The lesson generalises: `demo.ts` extracts five fields and this validator
+ * knew about four. Any field added there must be added here in the same
+ * commit, or onboarding breaks for everyone at once and silently passes tests.
+ */
 const READ = v.object({
   name: v.optional(v.string()),
   whatItIs: v.optional(v.string()),
   whoItsFor: v.optional(v.string()),
   whatsDifferent: v.optional(v.string()),
+  gaps: v.optional(v.array(v.string())),
 });
 
 /**
@@ -184,6 +202,17 @@ export const applyRead = internalMutation({
       whatItIs: clamp(args.read.whatItIs),
       whoItsFor: clamp(args.read.whoItsFor),
       whatsDifferent: clamp(args.read.whatsDifferent),
+      /**
+       * ⭐ What she does NOT know yet — kept, not discarded. These are the
+       * honest holes in the read ("pricing after the trial not disclosed",
+       * "target audience not stated"), and they are the best possible source
+       * for her first real questions to the founder. Capped, because this is
+       * model output arriving from a browser.
+       */
+      gaps: (args.read.gaps ?? [])
+        .map((g) => clamp(g))
+        .filter((g) => g.length > 0)
+        .slice(0, 8),
       /**
        * ⚠️ Provenance, on the row. §2.7 — grounded or silent. Six months from
        * now, "where did she get this?" has to be answerable, and "the founder
