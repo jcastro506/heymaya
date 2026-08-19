@@ -39,6 +39,28 @@ const h = vi.hoisted(() => {
      * offering it). It rendered green the whole time because nothing checked
      * that a fixture's channel was one we actually sell.
      */
+    myChannels: {
+      ok: true,
+      channels: [
+        { channel: "instagram", state: "connected", handle: "@founder", notices: [] },
+        { channel: "tiktok", state: "not_connected", notices: [] },
+        { channel: "youtube", state: "connected", handle: "@founder", notices: [] },
+      ],
+    },
+    myActivity: {
+      ok: true,
+      entries: [
+        {
+          placementId: "p1",
+          channel: "instagram",
+          text: "Most indie AI products die from zero distribution",
+          publishedAt: now - 1800_000,
+          tappable: true,
+          url: "https://instagram.com/p/1",
+          views: 412,
+        },
+      ],
+    },
     myDraftQueue: {
       ok: true,
       drafts: [
@@ -264,6 +286,14 @@ vi.mock("@/convex/_generated/api", () => ({
         myDraftQueue: "myDraftQueue",
         decideMyDraft: "decideMyDraft",
       },
+      /**
+       * ⭐ `myChannels` replaces BOTH `getMyConnectionHealth` and
+       * `getMyConnectedAccounts` — one read answering the two questions those
+       * asked separately. `myActivity` replaces `getMyAgentActivity`, and is
+       * narrower on purpose: v2 activity is the PLACEMENT ledger, so an entry
+       * is something a stranger could have seen.
+       */
+      channels: { myChannels: "myChannels" },
     },
     gtmMaya: {
       missionControl: {

@@ -28,6 +28,7 @@ import {
   Panel,
   Rise,
   Shell,
+  channelLabel,
 } from "./_components";
 import { DraftCard } from "./_DraftCard";
 import { PlanDecideCard } from "./_PlanCard";
@@ -96,13 +97,25 @@ export default function TodayPage() {
    */
   const draftQueue = useQuery(api.maya.drafts.myDraftQueue);
   const drafts = draftQueue?.drafts;
-  const health = useQuery(api.gtmMaya.missionActions.getMyConnectionHealth);
-  const connected = useQuery(api.gtmMaya.zernioConnect.getMyConnectedAccounts);
+  /**
+   * ⭐ TWO v1 QUERIES BECOME ONE. `getMyConnectionHealth` and
+   * `getMyConnectedAccounts` asked the same table two questions; `myChannels`
+   * returns every channel with its state, so "which are broken" and "how many
+   * are connected" are both derivations of one read rather than two round trips
+   * that can disagree.
+   */
+  const myChannels = useQuery(api.maya.channels.myChannels);
+  const channels = myChannels?.channels;
   const events = useQuery(api.gtmMaya.calendarWrite.getMyCalendarEvents);
   const planDoc = useQuery(api.gtmMaya.planDoc.getMyPlanDoc);
-  const activity = useQuery(api.gtmMaya.missionControl.getMyAgentActivity, {
-    limit: 5,
-  });
+  /**
+   * ⚠️ v2 activity IS THE PLACEMENT LEDGER, not a log of what she did. §2.6 —
+   * the unit of work is something live with a URL — so an entry here is a post
+   * a stranger could have seen, never "started a sweep". Narrower and truer:
+   * v1's feed could report activity on a day nothing shipped.
+   */
+  const activityQ = useQuery(api.maya.archive.myActivity, { limit: 5 });
+  const activity = activityQ?.entries;
   const postResults = useQuery(
     api.gtmMaya.postResults.getMyRecentPostResults,
     {},
@@ -142,11 +155,17 @@ export default function TodayPage() {
    * the founder's reason, so there is one pending state and nothing to rank.
    */
   const decidable = drafts ?? [];
-  const broken = (health ?? []).filter(
-    (h) => h.status === "reconnect_required" || h.status === "error",
-  );
+  /**
+   * ⚠️ `needs_attention` covers what v1 split across `reconnect_required` and
+   * `error`. The distinction was about WHY a grant died; the founder's action
+   * is identical either way, and `myChannels.reason` already carries the why in
+   * her words.
+   */
+  const broken = (channels ?? []).filter((c) => c.state === "needs_attention");
   const planAwaiting = planDoc?.plan?.status === "proposed";
-  const noChannels = connected !== undefined && (connected ?? []).length === 0;
+  const noChannels =
+    channels !== undefined &&
+    channels.filter((c) => c.state === "connected").length === 0;
   const needsYouCount =
     decidable.length +
     broken.length +
@@ -183,12 +202,12 @@ export default function TodayPage() {
     })),
   ];
   const latest = (activity ?? [])[0];
-  if (latest && now - latest.createdAt < NOW_WINDOW_MS) {
+  if (latest && now - latest.publishedAt < NOW_WINDOW_MS) {
     slots.push({
       key: "now",
       ms: now,
       time: "NOW",
-      what: latest.summary,
+      what: latest.text,
       state: "now",
     });
   }
@@ -256,17 +275,25 @@ export default function TodayPage() {
                     </div>
                   </div>
                 ) : null}
-                {broken.map((h) => (
-                  <div key={h._id} className="mc-action">
+                {/**
+                  * ⚠️ The `provider === "x" ? "X" : provider` special case went
+                  * with the channel (2026-08-18). `channelLabel` handles the
+                  * three we ship, so a per-channel conditional in the markup is
+                  * exactly the branch CONVENTIONS.md forbids.
+                  */}
+                {broken.map((c) => (
+                  <div key={c.channel} className="mc-action">
                     <div className="mc-action-src">
-                      <Chip platform={h.provider}>
-                        {h.provider === "x" ? "X" : h.provider} · needs a
-                        reconnect
+                      <Chip platform={c.channel}>
+                        {channelLabel(c.channel)} · needs a reconnect
                       </Chip>
                     </div>
-                    {h.failureReason ? (
-                      <div className="mc-draft">{h.failureReason}</div>
-                    ) : null}
+                    {/**
+                      * ⚠️ HER WORDS, NOT A SCOPE NAME. `reason` is written for
+                      * the founder — v1's `failureReason` sometimes carried a
+                      * raw provider string, which is the leak §11 forbids.
+                      */}
+                    {c.reason ? <div className="mc-draft">{c.reason}</div> : null}
                     <div className="mc-acts">
                       <Link
                         href="/clawlaunch/mission/settings"
@@ -316,9 +343,9 @@ export default function TodayPage() {
             {ticker.length > 0 ? (
               <ul className="mc-tick">
                 {ticker.map((a) => (
-                  <li key={a._id}>
-                    <span className="t">{clock(a.createdAt)}</span>
-                    <span className="s">{a.summary}</span>
+                  <li key={String(a.placementId)}>
+                    <span className="t">{clock(a.publishedAt)}</span>
+                    <span className="s">{a.text}</span>
                   </li>
                 ))}
               </ul>
