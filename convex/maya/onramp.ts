@@ -34,7 +34,7 @@
  */
 
 import { v } from "convex/values";
-import { internalMutation, mutation } from "../_generated/server";
+import { internalMutation, mutation, query } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 
@@ -315,5 +315,68 @@ export const applyRead = internalMutation({
     );
 
     return { ok: true, customerId, directiveId };
+  },
+});
+
+/* -------------------------------------------------------------------------- */
+/* Did she actually connect?                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ THE ONBOARDING'S LAST SCREEN HAD NO WAY TO KNOW IT HAD SUCCEEDED.
+ *
+ * `/start` walks url → read → assets → pair, and `pair` was TERMINAL. It
+ * rendered the Telegram button and the QR and then sat there forever — the
+ * founder taps Start, Maya replies in Telegram, and the browser tab they just
+ * came from still says "She'll take it from here", with no way forward.
+ *
+ * ⚠️ THIS WAS NEVER BUILT, in any version. Five commits on that page since "the
+ * live product had no front door" and not one of them closed the loop. The
+ * server side has always worked — `claimPairing` sets `telegramChatId` the
+ * moment the founder taps Start — so the fact was sitting in a row that nothing
+ * on the web ever asked for.
+ *
+ * ⭐ AND IT NEEDS NO POLLING. Convex queries are reactive: the page subscribes,
+ * `claimPairing` patches the row, and the screen advances by itself. A polling
+ * loop here would be strictly worse and is the obvious thing to reach for.
+ *
+ * Returns a plain shape rather than the customer row: this is read by an
+ * unauthenticated-until-signed-in screen, and the row carries tokens.
+ */
+export const pairingState = query({
+  args: {},
+  handler: async (
+    ctx
+  ): Promise<{ signedIn: boolean; paired: boolean; hasChannels: boolean }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { signedIn: false, paired: false, hasChannels: false };
+
+    const creator = (await ctx.db
+      .query("creators")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .first()) as Doc<"creators"> | null;
+    if (!creator) return { signedIn: true, paired: false, hasChannels: false };
+
+    const customer = (await ctx.db
+      .query("customers")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first()) as Doc<"customers"> | null;
+    if (!customer) return { signedIn: true, paired: false, hasChannels: false };
+
+    /**
+     * Whether they have a channel already decides where "next" points: a
+     * founder with nothing connected has nothing for her to post to, and
+     * sending them to Mission Control first shows an empty room.
+     */
+    const channel = await ctx.db
+      .query("channels")
+      .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+      .first();
+
+    return {
+      signedIn: true,
+      paired: Boolean(customer.telegramChatId),
+      hasChannels: channel !== null,
+    };
   },
 });

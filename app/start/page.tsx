@@ -40,7 +40,7 @@
  */
 
 import { useState } from "react";
-import { useAction, useConvexAuth, useMutation } from "convex/react";
+import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { SignInButton } from "@clerk/nextjs";
 import { api } from "@/convex/_generated/api";
 
@@ -70,6 +70,21 @@ export default function StartPage() {
   const [url, setUrl] = useState("");
   const [correction, setCorrection] = useState("");
   const [phase, setPhase] = useState<Phase>({ at: "url" });
+
+  /**
+   * ⭐ THE LAST SCREEN CAN NOW TELL IT WORKED.
+   *
+   * `pair` used to be terminal: the founder tapped Start in Telegram, Maya
+   * answered there, and this tab still said "She'll take it from here" with no
+   * way forward. The fact was in the database the whole time — `claimPairing`
+   * sets `telegramChatId` on the tap — and nothing here ever asked.
+   *
+   * ⚠️ NO POLLING, DELIBERATELY. Convex queries are live: this subscription
+   * re-fires when the row changes, so the screen advances on its own. A
+   * `setInterval` is the obvious thing to reach for here and is strictly worse.
+   */
+  const pairing = useQuery(api.maya.onramp.pairingState, {});
+  const paired = pairing?.paired === true;
   /** Minted during commit, used when they leave the (optional) asset step. */
   const [pairLink, setPairLink] = useState<string | undefined>(undefined);
   const [uploaded, setUploaded] = useState(0);
@@ -181,7 +196,36 @@ export default function StartPage() {
       {/* ① ─ near-empty, full-bleed. "The entire screen is a question and a
           box. Anything else on it is a distraction from the only thing that
           matters." No nav, no logo wall, no feature strip. */}
-      {(phase.at === "url" ||
+      {/**
+        * ⭐ ALREADY SET UP — don't make them onboard twice.
+        *
+        * Ported from the gtm onboarding, which redirected a paired founder
+        * straight to the HQ on load (`deployed && paired`, guarded by a
+        * resume ref). Kept as a SCREEN rather than a `window.location` jump:
+        * a hard redirect on mount traps anyone who deliberately came back
+        * here, and the only cost of asking is one tap.
+        */}
+      {phase.at === "url" && paired && (
+        <>
+          <h1 className="font-display italic text-[clamp(1.9rem,5vw,2.6rem)] leading-[1.1] tracking-[-0.015em]">
+            You&rsquo;re already set up.
+          </h1>
+          <p className="mt-4 text-[15px] leading-relaxed text-[#0a0a0a]/70">
+            Maya is connected to your Telegram. That chat is where everything
+            happens.
+          </p>
+          <a
+            href={pairing?.hasChannels ? "/clawlaunch/mission" : "/connect"}
+            className="mt-6 block w-full rounded-full bg-[#0a0a0a] px-4 py-3.5 text-center text-[15px] text-[#fbfaf6] no-underline transition-opacity hover:opacity-85"
+          >
+            {pairing?.hasChannels
+              ? "Open Mission Control"
+              : "Connect a channel"}
+          </a>
+        </>
+      )}
+
+      {((phase.at === "url" && !paired) ||
         phase.at === "reading" ||
         phase.at === "failed") && (
         <>
@@ -376,7 +420,40 @@ export default function StartPage() {
         </>
       )}
 
-      {phase.at === "pair" && (
+      {/**
+        * ⭐ SHE ANSWERED — the screen that only existed as a dead end before.
+        *
+        * Shown the instant `telegramChatId` lands, with no refresh and no
+        * polling. Where "next" points depends on whether they have a channel:
+        * a founder with nothing connected has nothing for her to post to, and
+        * Mission Control would open on an empty room.
+        */}
+      {phase.at === "pair" && paired && (
+        <>
+          <h1 className="font-display italic text-[clamp(1.9rem,5vw,2.6rem)] leading-[1.1] tracking-[-0.015em]">
+            That&apos;s her.
+          </h1>
+          <p className="mt-4 text-[15px] leading-relaxed text-[#0a0a0a]/70">
+            You&rsquo;re connected — keep that Telegram chat open, it&rsquo;s
+            where everything happens from now on.
+          </p>
+          <a
+            href={pairing?.hasChannels ? "/clawlaunch/mission" : "/connect"}
+            className="mt-6 block w-full rounded-full bg-[#0a0a0a] px-4 py-3.5 text-center text-[15px] text-[#fbfaf6] no-underline transition-opacity hover:opacity-85"
+          >
+            {pairing?.hasChannels
+              ? "Open Mission Control"
+              : "Now give her somewhere to post"}
+          </a>
+          {!pairing?.hasChannels && (
+            <p className="mt-3 text-center text-xs text-[#0a0a0a]/45">
+              TikTok, Instagram or YouTube — she needs at least one.
+            </p>
+          )}
+        </>
+      )}
+
+      {phase.at === "pair" && !paired && (
         <>
           <h1 className="font-display italic text-[clamp(1.9rem,5vw,2.6rem)] leading-[1.1] tracking-[-0.015em]">
             She&apos;ll take it from here.
@@ -426,6 +503,10 @@ export default function StartPage() {
               I couldn&apos;t make your link — refresh and I&apos;ll try again.
             </p>
           )}
+          {/* Says the screen is alive. Without it, waiting looks like stuck. */}
+          <p className="mt-6 text-center text-xs text-[#0a0a0a]/45">
+            Waiting for you to say hello&hellip; this page will move on its own.
+          </p>
         </>
       )}
       </main>
