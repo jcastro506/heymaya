@@ -39,6 +39,7 @@ const h = vi.hoisted(() => {
      * offering it). It rendered green the whole time because nothing checked
      * that a fixture's channel was one we actually sell.
      */
+    myVideos: { ok: true, videos: [] },
     myChannels: {
       ok: true,
       channels: [
@@ -249,6 +250,7 @@ vi.mock("lucide-react", () => {
     Activity: Stub,
     Brain: Stub,
     CalendarDays: Stub,
+    Clapperboard: Stub,
     Lightbulb: Stub,
     Map: Stub,
     MessageCircle: Stub,
@@ -270,7 +272,13 @@ vi.mock("@/convex/_generated/api", () => ({
     // restored Plan screen (§16.75) reads the live product's strategy.
     maya: {
       strategy: { planScreen: "planScreen" },
-      dashboard: { resultsLadder: "resultsLadder", myDashboard: "myDashboard" },
+      dashboard: {
+        resultsLadder: "resultsLadder",
+        myDashboard: "myDashboard",
+        myVideos: "myVideos",
+        myIdeaBank: "myIdeaBank",
+        myMediaLibrary: "myMediaLibrary",
+      },
       archive: { myActivity: "myActivity" },
       attribution: { myResults: "myResults" },
       // §18 Sprint 10's "account deletion + data export". Settings offers the
@@ -294,6 +302,8 @@ vi.mock("@/convex/_generated/api", () => ({
        * is something a stranger could have seen.
        */
       channels: { myChannels: "myChannels" },
+      // The Videos screen — the artifact the founder is paying for.
+      // `myVideos` is on dashboard alongside the other read-only panels.
     },
     gtmMaya: {
       missionControl: {
@@ -353,6 +363,7 @@ vi.mock("@clerk/nextjs", () => ({
 /** v3.1 IA — four tabs + the settings gear. */
 const TABS = [
   { name: "Today", path: "../page" },
+  { name: "Videos", path: "../videos/page" },
   { name: "Results", path: "../results/page" },
   { name: "Brain", path: "../brain/page" },
   { name: "Activity", path: "../activity/page" },
@@ -407,13 +418,20 @@ describe("the Plan screen is back (§16.75)", () => {
 });
 
 describe("Mission Control — SSR render smoke", () => {
-  it("the layout renders the 6 tabs + the settings gear", async () => {
+  it("the layout renders the 7 tabs + the settings gear", async () => {
     const Layout = (await import("../layout")).default;
     const html = renderToString(
       createElement(Layout, null, createElement("div", null, "content")),
     );
     for (const label of [
       "Today",
+      /**
+       * ⭐ Videos, added 2026-08-19 and placed SECOND — above Results. It is
+       * the artifact the founder pays for, and on a UGC product it is what they
+       * open this to see. Mission Control had every other screen and not this
+       * one (docs/MISSION_CONTROL_UGC.md).
+       */
+      "Videos",
       "Results",
       "Brain",
       "Activity",

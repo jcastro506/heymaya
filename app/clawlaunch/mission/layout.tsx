@@ -22,6 +22,7 @@ import type { ReactNode } from "react";
 import {
   Activity,
   CalendarDays,
+  Clapperboard,
   ScrollText,
   Brain,
   Settings,
@@ -33,6 +34,11 @@ const BASE = "/clawlaunch/mission";
 
 const NAV = [
   { href: BASE, label: "Today", icon: Sun },
+  /**
+   * ⭐ Videos sits second, above Results. It is the artifact the founder is
+   * paying for, and on a UGC product it is the thing they open this to see.
+   */
+  { href: `${BASE}/videos`, label: "Videos", icon: Clapperboard },
   { href: `${BASE}/results`, label: "Results", icon: TrendingUp },
   { href: `${BASE}/brain`, label: "Brain", icon: Brain },
   { href: `${BASE}/activity`, label: "Activity", icon: Activity },
