@@ -168,3 +168,36 @@ describe("the page sells three channels, not four", () => {
     expect(feed![0]).not.toContain('"x"');
   });
 });
+
+describe("onboarding's last screen can actually be completed", () => {
+  /**
+   * ⚠️ THE QR WAS SPEC'D, QUOTED IN A COMMENT, AND NEVER RENDERED. §18.9.25
+   * says "③ Pair Telegram — One QR, one button, one line". `/start` carried a
+   * comment repeating that sentence verbatim and shipped with only the button.
+   * The frozen v1 flow had a working QR the whole time, which is how the
+   * operator noticed: they remembered it from the flow that still has it.
+   *
+   * It is not decoration. On DESKTOP the button opens Telegram Desktop, which
+   * most founders do not have — so without a QR, pairing fails for them and
+   * onboarding dead-ends on its final screen with no way forward. A signup that
+   * cannot be finished is worth the same as no signup.
+   */
+  const START = readFileSync(join(process.cwd(), "app/start/page.tsx"), "utf8");
+
+  it("⭐ offers a QR as well as the button", () => {
+    expect(START).toMatch(/create-qr-code/);
+  });
+
+  it("⚠️ the QR encodes the real pairing link, not a placeholder", () => {
+    // A QR pointing at anything but `phase.link` sends them somewhere that
+    // cannot pair them, and looks completely correct while doing it.
+    expect(START).toMatch(/create-qr-code[^`]*encodeURIComponent\(phase\.link\)/);
+  });
+
+  it("⚠️ both routes appear together — desktop and phone", () => {
+    // The button alone strands desktop users; the QR alone strands anyone
+    // already reading on their phone.
+    expect(START).toContain("Open Telegram");
+    expect(START).toMatch(/Scan this instead/i);
+  });
+});

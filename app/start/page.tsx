@@ -279,14 +279,45 @@ export default function StartPage() {
             She&apos;ll take it from here.
           </h1>
           {phase.link ? (
-            <a
-              href={phase.link}
-              target="_blank"
-              rel="noreferrer"
-              className="w-full rounded-lg bg-paper px-4 py-3 text-center text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-50 mt-6 block no-underline"
-            >
-              Open Telegram
-            </a>
+            <>
+              <a
+                href={phase.link}
+                target="_blank"
+                rel="noreferrer"
+                className="w-full rounded-lg bg-paper px-4 py-3 text-center text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-50 mt-6 block no-underline"
+              >
+                Open Telegram
+              </a>
+              {/**
+                * ⚠️ THE QR WAS SPEC'D, QUOTED IN THE COMMENT ABOVE, AND NEVER
+                * RENDERED. §18.9.25 says "One QR, one button, one line", the
+                * comment three lines up repeats it verbatim, and this screen
+                * shipped with only the button. The frozen v1 flow had a working
+                * QR the whole time.
+                *
+                * ⚠️ It is not decoration. On a DESKTOP browser the button opens
+                * Telegram Desktop, which most founders do not have installed —
+                * so without the QR, pairing simply fails for them and the
+                * onboarding dead-ends on its last screen with no way forward.
+                *
+                * Rendered from an external QR service exactly as v1 did, and
+                * `next/image` is deliberately not used: it would need a domain
+                * allowlist for one decorative image.
+                */}
+              <div className="mt-6 flex flex-col items-center gap-3">
+                {/* eslint-disable-next-line @next/next/no-img-element -- reason: remote QR from an external host; next/image would need a domain allowlist for one decorative image */}
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(phase.link)}`}
+                  alt="Scan to open Telegram on your phone"
+                  width={160}
+                  height={160}
+                  className="rounded-lg bg-paper p-2"
+                />
+                <p className="text-xs text-paper-faint">
+                  On your phone? Scan this instead.
+                </p>
+              </div>
+            </>
           ) : (
             <p className="mt-4 text-sm text-paper-faint">
               I couldn&apos;t make your link — refresh and I&apos;ll try again.
