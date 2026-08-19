@@ -408,7 +408,6 @@ const TABS = [
   { name: "Videos", path: "../videos/page" },
   { name: "Results", path: "../results/page" },
   { name: "Brain", path: "../brain/page" },
-  { name: "Activity", path: "../activity/page" },
   { name: "Settings", path: "../settings/page" },
 ];
 
@@ -431,7 +430,7 @@ const REDIRECTS = [
   {
     name: "Thinking",
     path: "../thinking/page",
-    dest: "/clawlaunch/mission/activity",
+    dest: "/clawlaunch/mission",
   },
   {
     name: "Account",
@@ -460,7 +459,7 @@ describe("the Plan screen is back (§16.75)", () => {
 });
 
 describe("Mission Control — SSR render smoke", () => {
-  it("the layout renders the 7 tabs + the settings gear", async () => {
+  it("the layout renders the 6 tabs + the settings gear", async () => {
     const Layout = (await import("../layout")).default;
     const html = renderToString(
       createElement(Layout, null, createElement("div", null, "content")),
@@ -476,7 +475,6 @@ describe("Mission Control — SSR render smoke", () => {
       "Videos",
       "Results",
       "Brain",
-      "Activity",
       // §16.2 gives House Rules a top-level slot — the proof she remembers.
       "Rules",
       /**
@@ -590,13 +588,4 @@ describe("Mission Control v3.1 — board modules render with grounded data", () 
     expect(html).not.toContain("Who she believes is buying");
   });
 
-  it("Activity: live wire + chat mirror", async () => {
-    const Page = (await import("../activity/page")).default;
-    const html = renderToString(createElement(Page));
-    expect(html).toContain("Live wire");
-    expect(html).toContain("Found a rising thread in r/SaaS");
-    expect(html).toContain("read-only");
-    expect(html).toContain("Foundation&#x27;s done."); // maya bubble
-    expect(html).toContain("Why Reddit"); // operator bubble
-  });
 });

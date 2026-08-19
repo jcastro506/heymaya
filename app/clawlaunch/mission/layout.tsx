@@ -20,7 +20,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import {
-  Activity,
   CalendarDays,
   Clapperboard,
   ScrollText,
@@ -41,7 +40,11 @@ const NAV = [
   { href: `${BASE}/videos`, label: "Videos", icon: Clapperboard },
   { href: `${BASE}/results`, label: "Results", icon: TrendingUp },
   { href: `${BASE}/brain`, label: "Brain", icon: Brain },
-  { href: `${BASE}/activity`, label: "Activity", icon: Activity },
+  /**
+   * ⚠️ Activity removed 2026-08-19 — see app/clawlaunch/mission/activity.
+   * v2 activity IS the placement ledger, already Today's ticker and the Videos
+   * screen; a separate feed is the activity theatre §12 rules out.
+   */
   /**
    * ⭐ §16.2 gives House Rules a top-level slot even though it isn't data:
    * seeing your own sentences listed back with dates is "the single cheapest
