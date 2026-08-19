@@ -43,8 +43,7 @@ import { v } from "convex/values";
 import {
   internalAction,
   internalMutation,
-  internalQuery,
-} from "../_generated/server";
+  internalQuery, query} from "../_generated/server";
 import type { ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
@@ -177,6 +176,76 @@ export const storeCards = internalMutation({
  * that borrowed data carries its freshness — the caller decides, and the recap
  * can say "these are from last week" instead of silently implying they're new.
  */
+/**
+ * ⭐ THE SHAPES SHE IS WATCHING, for the web.
+ *
+ * ⚠️ `formatCardsFor` is internal, so nothing on the dashboard could show what
+ * she has learned about what works — the single most interesting thing the
+ * perception layer produces. Mission Control's Brain screen instead showed
+ * `gtmMaya.missionControl.getMyCompetitiveMap` and "Intent signal", which
+ * belong to the SUPERSEDED intent-hunting product (docs/AGENT_REDESIGN_V2.md).
+ *
+ * ⚠️ Returns the hook line and the metrics, never the whole card. §7.5.3's rule
+ * is copy the STRUCTURE, never the content — and a founder reading a
+ * competitor's full transcript on our dashboard is one copy-paste from
+ * reproducing someone else's claims, which is a defect, not a feature.
+ */
+export const myFormats = query({
+  args: {},
+  handler: async (
+    ctx
+  ): Promise<{
+    ok: boolean;
+    shapes: Array<{
+      id: string;
+      channel: string;
+      depth: string;
+      hook: string;
+      views: number;
+      watched: boolean;
+    }>;
+    error?: string;
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { ok: false, shapes: [], error: "sign in first" };
+
+    const creator = (await ctx.db
+      .query("creators")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .first()) as Doc<"creators"> | null;
+    if (!creator) return { ok: false, shapes: [], error: "no account yet" };
+
+    const customer = (await ctx.db
+      .query("customers")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first()) as Doc<"customers"> | null;
+    if (!customer) return { ok: false, shapes: [], error: "no account yet" };
+
+    const targets = await ctx.runQuery(internal.maya.learnBusiness.targetsFor, {
+      customerId: customer._id,
+    });
+    if (!targets) return { ok: true, shapes: [] };
+
+    const out = await ctx.runQuery(internal.maya.formats.formatCardsFor, {
+      customerId: customer._id,
+    });
+
+    return {
+      ok: true,
+      shapes: out.cards.map((c) => ({
+        id: c.cardId,
+        channel: c.channel,
+        depth: c.depth,
+        hook: c.hook.spokenLine,
+        views: c.metrics.views,
+        // ⭐ A watched card was actually viewed, not just read as text. That is
+        // the difference between knowing a video did well and knowing WHY.
+        watched: c.depth === "watch",
+      })),
+    };
+  },
+});
+
 export const formatCardsFor = internalQuery({
   args: { customerId: v.id("customers"), now: v.optional(v.number()) },
   handler: async (
