@@ -168,6 +168,10 @@ export const record = internalMutation({
     caption: v.optional(v.string()),
     classifiedAs: v.optional(v.string()),
     now: v.optional(v.number()),
+    /** §7.5.3 provenance — see the schema comment on `mediaAssets.builtFrom`. */
+    builtFrom: v.optional(v.string()),
+    usedAvatar: v.optional(v.boolean()),
+    renderCredits: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<{ assetId: Id<"mediaAssets"> }> => {
     const now = args.now ?? Date.now();
@@ -190,6 +194,9 @@ export const record = internalMutation({
       bytes: args.bytes,
       caption: args.caption,
       classifiedAs: args.classifiedAs,
+      builtFrom: args.builtFrom,
+      usedAvatar: args.usedAvatar,
+      renderCredits: args.renderCredits,
       capturedAt: now,
       createdAt: now,
     });

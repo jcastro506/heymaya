@@ -365,6 +365,7 @@ export const proposeVideo = internalAction({
        * reach the founder BEFORE he approves, not after he sees it.
        */
       assetNote: assetPlan.detail,
+      builtFrom: assetPlan.using[0]?.kind,
       usesAvatar: assetPlan.usesAvatar,
       length: (length as 15 | 30 | 45 | 60) ?? 30,
     });
@@ -796,6 +797,8 @@ export const runRender = internalAction({
           vendorJobId: outcome.vendorJobId,
           rung: brief.rung,
           poll: 1,
+          builtFrom: brief.builtFrom,
+          usedAvatar: brief.usesAvatar,
         }
       );
     }
@@ -818,6 +821,15 @@ export const collectRender = internalAction({
     vendorJobId: v.string(),
     rung: v.string(),
     poll: v.number(),
+    /**
+     * ⭐ The ladder verdict from the brief, carried through the poll so it can
+     * be RECORDED rather than recomputed. Recomputing at collection time would
+     * read the library as it is when the render finishes, not as it was when
+     * the brief was built — and a screenshot uploaded mid-render would rewrite
+     * history.
+     */
+    builtFrom: v.optional(v.string()),
+    usedAvatar: v.optional(v.boolean()),
   },
   handler: async (
     ctx: ActionCtx,
@@ -907,6 +919,15 @@ export const collectRender = internalAction({
       contentType,
       bytes: bytes.length,
       caption: "made for you",
+      /**
+       * ⭐ §7.5.3's verdict, kept. Which rung built this and what it cost were
+       * both computed and thrown away before: the ladder verdict went onto the
+       * brief and the brief is not kept, and `credits_used` came back on the
+       * vendor job and was read by nothing.
+       */
+      builtFrom: args.builtFrom,
+      usedAvatar: args.usedAvatar,
+      renderCredits: verdict.creditsUsed,
     });
 
     return { ok: true, detail: "the video is ready", assetId };

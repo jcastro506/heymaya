@@ -3785,6 +3785,40 @@ export default defineSchema({
     tagsJson: v.optional(v.string()),
     /** `product_screenshot` is the only one that counts as real product imagery. */
     classifiedAs: v.optional(v.string()),
+    /**
+     * ⭐ HOW A GENERATED VIDEO WAS ACTUALLY MADE — the rung off §7.5.3's
+     * ladder: `founder_footage` · `screen_recording` · `product_screenshot` ·
+     * `generated_background` · `avatar`.
+     *
+     * ⚠️ `video.ts` already COMPUTES this (`planAssets().using[0].kind`) and
+     * discards it — the verdict goes onto the BRIEF, and the brief is not kept.
+     * So the single most useful fact about a video that underperformed — did it
+     * show their real product or a generated presenter — existed for the length
+     * of one function call and was thrown away.
+     *
+     * ⚠️ ON THE ASSET, NOT THE PLACEMENT. A video is made ONCE and posted to
+     * three channels; the same three facts on three placement rows would
+     * triplicate and drift. The asset is the artifact, so the artifact carries
+     * its provenance.
+     *
+     * A string rather than a union: the ladder lives in `assetFloor.ASSET_RANK`
+     * and a second copy in the schema is a second thing to keep in step.
+     */
+    builtFrom: v.optional(v.string()),
+    /**
+     * ⭐ True when nothing better than a generated presenter was available.
+     * Carried as a FLAG as well as `builtFrom` because it is what a filter acts
+     * on — "show me the ones that used a presenter" is the question §7.5.3's
+     * never-a-silent-default rule exists to make answerable after the fact.
+     */
+    usedAvatar: v.optional(v.boolean()),
+    /**
+     * ⚠️ What the render actually cost in vendor credits — NOT an estimate.
+     * `estimateCredits` is the prediction; this is what came back on the job.
+     * Without it there is no cost per result, and "$0.90 a video, 14 videos, 6
+     * signups" is the sentence that renews a subscription.
+     */
+    renderCredits: v.optional(v.number()),
     /** Products change. A launch post must not draw on pre-launch imagery. */
     capturedAt: v.number(),
     staleAt: v.optional(v.number()),

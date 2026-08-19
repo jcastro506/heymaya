@@ -10,6 +10,8 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   submitRender,
   estimateCredits,
@@ -27,7 +29,7 @@ import {
   isDoneStatus,
   isFailedStatus,
 } from "../../integrations/creatify/types";
-import type { VideoBrief } from "../videoBrief";
+import { buildBrief, type VideoBrief } from "../videoBrief";
 import type { Id } from "../../_generated/dataModel";
 
 const brief = (over: Partial<VideoBrief> = {}): VideoBrief => ({
@@ -413,5 +415,73 @@ describe("the vendor's real status lifecycle", () => {
       isFailedStatus
     );
     expect(v.state).toBe("failed");
+  });
+});
+
+describe("what a video was made of survives the render", () => {
+  /**
+   * ⚠️ BOTH FACTS WERE COMPUTED AND THROWN AWAY. `planAssets()` decided which
+   * rung built a video and `credits_used` came back on the vendor job — the
+   * first went onto the BRIEF (which is not kept) and the second was read by
+   * nothing. So the most useful thing about a video that underperformed — did
+   * it show the founder's real product or a generated presenter — existed for
+   * the length of one function call.
+   *
+   * ⚠️ AND THEY BELONG ON THE ASSET, NOT THE PLACEMENT. A video is made once
+   * and posted to three channels; the same three facts on three placement rows
+   * would triplicate and drift.
+   */
+  it("⭐ the brief carries the rung that built it", () => {
+    const built = buildBrief({
+      rung: "avatar",
+      ideaId: "idea_1" as never,
+      script: "Paste the CSV. That's it.",
+      lines: ["one", "two"],
+      assets: [
+        { assetId: "a1" as never, url: "https://cdn/1.png" },
+        { assetId: "a2" as never, url: "https://cdn/2.png" },
+      ],
+      hasProductTruth: true,
+      assetNote: "building from a screen recording",
+      builtFrom: "screen_recording",
+      usesAvatar: false,
+    });
+    expect(built.ok).toBe(true);
+    expect(built.brief?.builtFrom).toBe("screen_recording");
+    expect(built.brief?.usesAvatar).toBe(false);
+  });
+
+  it("⚠️ the verdict is CARRIED through the poll, never recomputed", () => {
+    /**
+     * `collectRender` takes `builtFrom`/`usedAvatar` as arguments rather than
+     * recomputing them when the render finishes. Recomputing would read the
+     * library as it is at COLLECTION time — so a screenshot the founder
+     * uploaded mid-render would rewrite what the video was actually built from,
+     * and the record would describe a video that was never made.
+     */
+    const src = readFileSync(
+      join(process.cwd(), "convex/maya/video.ts"),
+      "utf8",
+    );
+    const args = /export const collectRender[\s\S]*?args: \{([\s\S]*?)\n  \},/.exec(src);
+    expect(args, "collectRender args not found").toBeTruthy();
+    expect(args![1]).toContain("builtFrom");
+    expect(args![1]).toContain("usedAvatar");
+    // And it must not call planAssets at collection time.
+    const body = /export const collectRender[\s\S]*?\n\}\);/.exec(src)![0];
+    expect(body).not.toContain("planAssets");
+  });
+
+  it("⭐ the real credit cost is recorded, not the estimate", () => {
+    /**
+     * `estimateCredits` is the prediction the gate spends against;
+     * `verdict.creditsUsed` is what the vendor actually charged. Recording the
+     * estimate would make cost-per-result a restatement of our own guess.
+     */
+    const src = readFileSync(
+      join(process.cwd(), "convex/maya/video.ts"),
+      "utf8",
+    );
+    expect(src).toMatch(/renderCredits:\s*verdict\.creditsUsed/);
   });
 });

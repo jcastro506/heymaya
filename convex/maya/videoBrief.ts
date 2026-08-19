@@ -108,6 +108,8 @@ export interface VideoBrief {
    * reaches him BEFORE he says yes.
    */
   assetNote?: string;
+  /** The rung that actually built this — see `mediaAssets.builtFrom`. */
+  builtFrom?: string;
   /**
    * ⚠️ True when nothing better than a generated presenter was available.
    * Carried as a FLAG as well as prose so a gate can act on it — prose can be
@@ -156,6 +158,7 @@ export function buildBrief(input: {
   hasProductTruth: boolean;
   /** From `assetFloor.planAssets` — see `VideoBrief.assetNote`. */
   assetNote?: string;
+  builtFrom?: string;
   usesAvatar?: boolean;
 }): BriefResult {
   if (!input.hasProductTruth) {
@@ -248,6 +251,7 @@ export function buildBrief(input: {
       imageUrls: usable.map((a) => a.url),
       referenceVideoUrl: input.referenceVideoUrl,
       assetNote: input.assetNote,
+      builtFrom: input.builtFrom,
       usesAvatar: input.usesAvatar,
     },
   };
