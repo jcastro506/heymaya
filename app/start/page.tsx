@@ -146,7 +146,7 @@ export default function StartPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center px-5 py-16">
+    <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center bg-[#fbfaf6] px-5 py-16 text-[#0a0a0a]">
       {/* ① ─ near-empty, full-bleed. "The entire screen is a question and a
           box. Anything else on it is a distraction from the only thing that
           matters." No nav, no logo wall, no feature strip. */}
@@ -154,7 +154,7 @@ export default function StartPage() {
         phase.at === "reading" ||
         phase.at === "failed") && (
         <>
-          <h1 className="text-2xl font-semibold tracking-tight text-paper">
+          <h1 className="font-display italic text-[clamp(1.9rem,5vw,2.6rem)] leading-[1.1] tracking-[-0.015em]">
             What did you build?
           </h1>
           <form onSubmit={read} className="mt-5">
@@ -167,15 +167,15 @@ export default function StartPage() {
               placeholder="yourproduct.com"
               disabled={phase.at === "reading"}
               /* Large and centered — this input IS the screen. */
-              className="w-full rounded-lg border border-white/15 bg-transparent px-4 py-4 text-lg text-paper outline-none placeholder:text-paper-faint/60 focus:border-white/40 disabled:opacity-60"
+              className="w-full rounded-xl border border-[#0a0a0a]/15 bg-transparent px-4 py-4 text-lg text-[#0a0a0a] outline-none placeholder:text-[#0a0a0a]/35 focus:border-[#0a0a0a]/45 disabled:opacity-60"
             />
           </form>
 
           {phase.at === "reading" && (
-            <p className="mt-4 text-sm text-paper-faint">Reading it now…</p>
+            <p className="mt-4 text-sm text-[#0a0a0a]/60">Reading it now…</p>
           )}
           {phase.at === "failed" && (
-            <p className="mt-4 text-sm text-paper-faint">{phase.detail}</p>
+            <p className="mt-4 text-sm text-[#0a0a0a]/60">{phase.detail}</p>
           )}
         </>
       )}
@@ -184,22 +184,22 @@ export default function StartPage() {
           appears beneath it. */}
       {phase.at === "read" && (
         <>
-          <span className="self-start rounded-full border border-white/15 px-3 py-1 text-xs text-paper-faint">
+          <span className="self-start rounded-full border border-[#0a0a0a]/15 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.16em] text-[#0a0a0a]/60">
             {url}
           </span>
 
           {/* The three beats, in the order §18.9.25 names them. */}
           <div className="mt-5 space-y-4">
-            <p className="text-lg leading-relaxed text-paper">
+            <p className="text-lg leading-relaxed text-[#0a0a0a]">
               {phase.read.whatItIs}
             </p>
             {phase.read.whoItsFor && (
-              <p className="leading-relaxed text-paper-dim">
+              <p className="leading-relaxed text-[#0a0a0a]/70">
                 {phase.read.whoItsFor}
               </p>
             )}
             {phase.read.whatsDifferent ? (
-              <p className="leading-relaxed text-paper-dim">
+              <p className="leading-relaxed text-[#0a0a0a]/70">
                 {phase.read.whatsDifferent}
               </p>
             ) : (
@@ -217,7 +217,7 @@ export default function StartPage() {
                * question worth answering, right above the box that answers it.
                * What they type becomes their first rule.
                */
-              <p className="leading-relaxed text-paper-dim">
+              <p className="leading-relaxed text-[#0a0a0a]/70">
                 What I couldn&apos;t work out is what actually makes you
                 different — and that&apos;s the thing worth posting about.
               </p>
@@ -227,7 +227,7 @@ export default function StartPage() {
           {/* ⭐ "Right?" — one tap for yes, one box for a correction. What they
               type here becomes a rule she keeps forever, so it is worth more
               than any onboarding form field. */}
-          <p className="mt-8 text-sm font-medium text-paper">Right?</p>
+          <p className="mt-8 text-sm font-medium text-[#0a0a0a]">Right?</p>
           <textarea
             value={correction}
             onChange={(e) => setCorrection(e.target.value)}
@@ -237,7 +237,7 @@ export default function StartPage() {
                 ? "Anything I got wrong?"
                 : "So — what makes you different?"
             }
-            className="mt-2 w-full resize-none rounded-lg border border-white/15 bg-transparent px-3 py-2 text-sm text-paper outline-none placeholder:text-paper-faint/60 focus:border-white/40"
+            className="mt-2 w-full resize-none rounded-xl border border-[#0a0a0a]/15 bg-transparent px-3 py-2 text-sm text-[#0a0a0a] outline-none placeholder:text-[#0a0a0a]/35 focus:border-[#0a0a0a]/45"
           />
 
           <div className="mt-4">
@@ -246,7 +246,7 @@ export default function StartPage() {
                 type="button"
                 disabled={busy}
                 onClick={() => commit(phase.read)}
-                className="w-full rounded-lg bg-paper px-4 py-3 text-center text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-50"
+                className="w-full rounded-full bg-[#0a0a0a] px-4 py-3.5 text-center text-[15px] text-[#fbfaf6] transition-opacity hover:opacity-85 disabled:opacity-50"
               >
                 {busy
                   ? "One second…"
@@ -260,7 +260,7 @@ export default function StartPage() {
               <SignInButton mode="modal">
                 <button
                   type="button"
-                  className="w-full rounded-lg bg-paper px-4 py-3 text-center text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-50"
+                  className="w-full rounded-full bg-[#0a0a0a] px-4 py-3.5 text-center text-[15px] text-[#fbfaf6] transition-opacity hover:opacity-85 disabled:opacity-50"
                 >
                   {correction.trim() ? "Got it — keep going" : "Yep, that's it"}
                 </button>
@@ -275,7 +275,7 @@ export default function StartPage() {
           no feature preview, no reassurance copy. */}
       {phase.at === "pair" && (
         <>
-          <h1 className="text-2xl font-semibold tracking-tight text-paper">
+          <h1 className="font-display italic text-[clamp(1.9rem,5vw,2.6rem)] leading-[1.1] tracking-[-0.015em]">
             She&apos;ll take it from here.
           </h1>
           {phase.link ? (
@@ -284,7 +284,7 @@ export default function StartPage() {
                 href={phase.link}
                 target="_blank"
                 rel="noreferrer"
-                className="w-full rounded-lg bg-paper px-4 py-3 text-center text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-50 mt-6 block no-underline"
+                className="mt-6 block w-full rounded-full bg-[#0a0a0a] px-4 py-3.5 text-center text-[15px] text-[#fbfaf6] no-underline transition-opacity hover:opacity-85"
               >
                 Open Telegram
               </a>
@@ -311,15 +311,15 @@ export default function StartPage() {
                   alt="Scan to open Telegram on your phone"
                   width={160}
                   height={160}
-                  className="rounded-lg bg-paper p-2"
+                  className="rounded-xl border border-[#0a0a0a]/10 bg-white p-2"
                 />
-                <p className="text-xs text-paper-faint">
+                <p className="text-xs text-[#0a0a0a]/55">
                   On your phone? Scan this instead.
                 </p>
               </div>
             </>
           ) : (
-            <p className="mt-4 text-sm text-paper-faint">
+            <p className="mt-4 text-sm text-[#0a0a0a]/60">
               I couldn&apos;t make your link — refresh and I&apos;ll try again.
             </p>
           )}
