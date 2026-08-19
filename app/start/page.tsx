@@ -166,7 +166,18 @@ export default function StartPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center bg-[#fbfaf6] px-5 py-16 text-[#0a0a0a]">
+    /**
+     * ⚠️ THE CREAM GOES ON A FULL-BLEED WRAPPER, NOT ON THE COLUMN. `<body>` is
+     * `bg-[var(--ink)]` — dark — from the root layout, so painting the
+     * `max-w-xl` container cream turned only the middle strip light and left
+     * the dark body showing down both sides. It read as a half-built mobile
+     * layout, which is exactly what the operator saw.
+     *
+     * The lesson generalises: on any page that opts out of the app's dark
+     * default, the override belongs on something that spans the viewport.
+     */
+    <div className="min-h-screen w-full bg-[#fbfaf6] text-[#0a0a0a]">
+      <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center px-5 py-16">
       {/* ① ─ near-empty, full-bleed. "The entire screen is a question and a
           box. Anything else on it is a distraction from the only thing that
           matters." No nav, no logo wall, no feature strip. */}
@@ -417,6 +428,7 @@ export default function StartPage() {
           )}
         </>
       )}
-    </main>
+      </main>
+    </div>
   );
 }
