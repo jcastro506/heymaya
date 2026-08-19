@@ -28,7 +28,7 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalMutation, internalQuery, mutation } from "../_generated/server";
 import { internal } from "../_generated/api";
 import {
   assessLibrary,
@@ -64,6 +64,85 @@ export function kindFor(contentType: string, caption?: string): Doc<"mediaAssets
 }
 
 /* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ THE WEB UPLOAD PATH. Onboarding needed one and there was none — every
+ * inbound asset arrived through Telegram (`ingestFromTelegram`), which is right
+ * for a screen recording taken on a phone and wrong for the five screenshots
+ * already sitting on the founder's desktop while they sign up.
+ *
+ * Standard two-step Convex upload: this hands back a short-lived URL the
+ * browser POSTs the bytes to, then `recordUpload` writes the row. The bytes
+ * never pass through a Convex function, so a 20MB screen recording does not
+ * have to fit in an argument.
+ */
+export const uploadUrl = mutation({
+  args: {},
+  handler: async (ctx): Promise<{ ok: boolean; url?: string; error?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { ok: false, error: "sign in first" };
+    return { ok: true, url: await ctx.storage.generateUploadUrl() };
+  },
+});
+
+/**
+ * ⭐ Record a browser upload against the signed-in founder's library.
+ *
+ * ⚠️ `source: "onboarding"` rather than "telegram". The asset ladder reads
+ * source to decide rank — founder-sent outranks scraped outranks generated —
+ * and a file the founder chose and uploaded is founder-sent whichever door it
+ * came through. Filing it as a scrape would rank their own screenshots below
+ * our generated backgrounds.
+ *
+ * ⚠️ Tagging is scheduled, not awaited. A founder dropping five files should
+ * not wait on five vision calls before the page moves on, and an untagged
+ * asset is far better than a lost one.
+ */
+export const recordUpload = mutation({
+  args: {
+    storageId: v.id("_storage"),
+    contentType: v.string(),
+    bytes: v.number(),
+    caption: v.optional(v.string()),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: boolean; assetId?: Id<"mediaAssets">; error?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { ok: false, error: "sign in first" };
+
+    const creator = (await ctx.db
+      .query("creators")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .first()) as Doc<"creators"> | null;
+    if (!creator) return { ok: false, error: "no account yet" };
+
+    const customer = (await ctx.db
+      .query("customers")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first()) as Doc<"customers"> | null;
+    if (!customer) return { ok: false, error: "no account yet" };
+
+    const url = await ctx.storage.getUrl(args.storageId);
+    if (!url) return { ok: false, error: "stored it but couldn't get a link" };
+
+    const assetId = await ctx.db.insert("mediaAssets", {
+      customerId: customer._id,
+      kind: kindFor(args.contentType, args.caption),
+      source: "onboarding",
+      storageKey: args.storageId,
+      publicUrl: url,
+      contentType: args.contentType,
+      bytes: args.bytes,
+      caption: args.caption,
+      capturedAt: Date.now(),
+      createdAt: Date.now(),
+    });
+
+    return { ok: true, assetId };
+  },
+});
 
 export const record = internalMutation({
   args: {

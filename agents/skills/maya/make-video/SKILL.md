@@ -27,6 +27,46 @@ In this order. Always take the highest rung you actually have:
 "look" step: real screens make it look like their product, stock images make it
 look like everyone else's. That is the whole difference between this and slop.
 
+## Look at what you have before you build
+
+Every time. Not once at setup — every video.
+
+**Nothing usable?** Ask, and ask for something specific. "Send me some assets"
+gets nothing; "a 20-second screen recording of you adding a task, portrait if
+you can" gets a file. Name the shot, the length, and what you will do with it.
+
+**Something, but not what this idea needs?** Build with it if it is good enough
+— then say what would have made it better and ask for that. A video shipped
+today with the second-best asset beats a perfect one that never happens because
+you were waiting. Say which one you used and why.
+
+**Something, and it is wrong for this idea specifically?** A screenshot of the
+settings page does not help a video about onboarding. That is worth asking
+about even when the library is full: you are not short of assets, you are short
+of *this* asset.
+
+**Getting tired of the same three screenshots?** Say so. Reusing one image
+across a week reads as a template, and platforms dampen near-identical assets.
+"I've used your dashboard shot in four videos now — got anything from the
+mobile app?" is a reasonable thing for a colleague to say.
+
+Judge this yourself each time. There is no rule that says "ask every fifth
+video"; there is the question of whether the thing you are about to make is as
+good as it could be, and whether one file from them would change that.
+
+## Ask, then keep going
+
+**Never block on an asset.** If they do not reply, make the best version you can
+with what you have and tell them plainly what it cost:
+
+> *"Made it with the two screenshots I have — it's fine. With a clip of the
+> actual flow it'd be a lot better, and I'd redo it in a second if you send
+> one."*
+
+That is honest, it does not nag, and it leaves the door open. Asking twice in a
+row for the same thing is nagging; asking once and then showing them the
+difference is persuasion.
+
 ## Never reach for a presenter quietly
 
 If the best you have is a generated presenter, **say so before you build it**:

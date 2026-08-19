@@ -56,6 +56,7 @@ type Phase =
   | { at: "reading" }
   | { at: "read"; read: Read }
   | { at: "failed"; detail: string }
+  | { at: "assets" }
   | { at: "pair"; link?: string };
 
 export default function StartPage() {
@@ -63,10 +64,16 @@ export default function StartPage() {
   const start = useMutation(api.maya.onramp.startFromRead);
   const createPairingLink = useMutation(api.maya.pairing.createPairingLink);
   const deployMine = useAction(api.maya.setup.deployMine);
+  const uploadUrl = useMutation(api.maya.media.uploadUrl);
+  const recordUpload = useMutation(api.maya.media.recordUpload);
 
   const [url, setUrl] = useState("");
   const [correction, setCorrection] = useState("");
   const [phase, setPhase] = useState<Phase>({ at: "url" });
+  /** Minted during commit, used when they leave the (optional) asset step. */
+  const [pairLink, setPairLink] = useState<string | undefined>(undefined);
+  const [uploaded, setUploaded] = useState(0);
+  const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function read(event: React.FormEvent) {
@@ -127,8 +134,21 @@ export default function StartPage() {
         return;
       }
 
+      /**
+       * ⭐ The optional asset step. §18.9.25 ④a — asked for, NEVER demanded.
+       * The founder is on a desktop with their screenshots already on it, which
+       * is the highest-conversion moment there is for images. The screen
+       * recording is asked for later, in Telegram, where recording a phone
+       * screen and sending it is trivial.
+       *
+       * ⚠️ Skippable, deliberately. §6.0.2's rule is that onboarding asks for
+       * almost nothing, and a hard gate here breaks the one-week promise for a
+       * founder who has nothing to hand at 11pm.
+       */
+      setPhase({ at: "assets" });
+
       const link = await createPairingLink({});
-      setPhase({ at: "pair", link: link.deepLink });
+      setPairLink(link.deepLink);
 
       /**
        * ⚠️ Deploy is fired but NOT awaited, and the screen does not depend on
@@ -273,6 +293,78 @@ export default function StartPage() {
       {/* ③ ─ the last web screen before the product becomes a conversation.
           "One QR, one button, one line." No explanation of what Telegram is,
           no feature preview, no reassurance copy. */}
+      {/* ③a ─ the optional asset step. Asked for, never demanded. */}
+      {phase.at === "assets" && (
+        <>
+          <h1 className="font-display italic text-[clamp(1.9rem,5vw,2.6rem)] leading-[1.1] tracking-[-0.015em]">
+            Anything of yours I can use?
+          </h1>
+          <p className="mt-4 text-sm text-[#0a0a0a]/60">
+            Screenshots of the screens that matter — three or four is plenty.
+            I&rsquo;ll build your videos from these instead of stock images, and
+            that&rsquo;s most of the difference between something that looks
+            like your product and something that looks like everyone
+            else&rsquo;s.
+          </p>
+
+          <label className="mt-6 block cursor-pointer rounded-xl border border-dashed border-[#0a0a0a]/25 px-4 py-8 text-center text-sm text-[#0a0a0a]/60 transition-colors hover:border-[#0a0a0a]/45">
+            <input
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              className="hidden"
+              disabled={uploading}
+              onChange={async (e) => {
+                const files = Array.from(e.target.files ?? []);
+                if (files.length === 0) return;
+                setUploading(true);
+                try {
+                  for (const file of files) {
+                    const slot = await uploadUrl({});
+                    if (!slot.ok || !slot.url) continue;
+                    const res = await fetch(slot.url, {
+                      method: "POST",
+                      headers: { "Content-Type": file.type },
+                      body: file,
+                    });
+                    if (!res.ok) continue;
+                    const { storageId } = (await res.json()) as {
+                      storageId: string;
+                    };
+                    await recordUpload({
+                      storageId: storageId as never,
+                      contentType: file.type,
+                      bytes: file.size,
+                      caption: file.name,
+                    });
+                    setUploaded((n) => n + 1);
+                  }
+                } finally {
+                  setUploading(false);
+                }
+              }}
+            />
+            {uploading
+              ? "Uploading…"
+              : uploaded > 0
+                ? `${uploaded} added — drop more, or carry on`
+                : "Drop screenshots here, or tap to choose"}
+          </label>
+
+          <button
+            type="button"
+            onClick={() => setPhase({ at: "pair", link: pairLink })}
+            className="mt-6 w-full rounded-full bg-[#0a0a0a] px-4 py-3.5 text-center text-[15px] text-[#fbfaf6] transition-opacity hover:opacity-85"
+          >
+            {uploaded > 0 ? "That's everything" : "I'll send them later"}
+          </button>
+          <p className="mt-3 text-center text-xs text-[#0a0a0a]/45">
+            Either way she starts now — she&rsquo;ll ask when she needs
+            something.
+          </p>
+        </>
+      )}
+
       {phase.at === "pair" && (
         <>
           <h1 className="font-display italic text-[clamp(1.9rem,5vw,2.6rem)] leading-[1.1] tracking-[-0.015em]">
