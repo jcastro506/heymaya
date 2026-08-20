@@ -21,7 +21,7 @@
 
 import { v } from "convex/values";
 import { internalMutation, mutation } from "../_generated/server";
-import type { Doc } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 
 /**
  * Fifteen minutes. Long enough to walk to your phone, short enough that a link
@@ -114,7 +114,12 @@ export const claimPairing = internalMutation({
   handler: async (
     ctx,
     args
-  ): Promise<{ paired: boolean; reason?: string }> => {
+  ): Promise<{
+    paired: boolean;
+    reason?: string;
+    /** So the caller can start her first run without a second lookup. */
+    customerId?: Id<"customers">;
+  }> => {
     const now = args.now ?? Date.now();
     const customer = (await ctx.db
       .query("customers")
@@ -139,6 +144,6 @@ export const claimPairing = internalMutation({
       pairingExpiresAt: undefined,
       updatedAt: now,
     });
-    return { paired: true };
+    return { paired: true, customerId: customer._id };
   },
 });

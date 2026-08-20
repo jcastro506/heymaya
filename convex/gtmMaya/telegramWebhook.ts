@@ -102,11 +102,34 @@ export const telegramWebhookHttp = httpAction(async (ctx, request) => {
       );
       const identity = resolveTelegramBotIdentity();
       if (identity) {
-        // The first thing she ever says. Deliberately short — the machine may
-        // not be up yet, and promising more than that would be a lie.
+        /**
+         * ⚠️ A RECEIPT, NOT AN INTRODUCTION — and the distinction is why this
+         * stays hardcoded.
+         *
+         * The founder has just tapped Start and is watching. This has to land
+         * in under a second, and her machine is usually still booting, so
+         * nothing she could write is available yet. What this must NOT do is
+         * be the only thing she ever says, which is what it was: it returned
+         * here and her next scheduled word was the 06:30 checkpoint, sixteen
+         * hours later.
+         *
+         * It now says what is about to happen, and `firstRun.kickoff` makes
+         * that true.
+         */
         await sendTelegramMessage(identity, {
           chatId,
-          text: "Paired. I'll take it from here.",
+          text: "Paired — give me a moment while I read up on you.",
+        });
+      }
+
+      /**
+       * ⭐ SHE INTRODUCES HERSELF AND STARTS WORKING. Scheduled rather than
+       * awaited: the founder is staring at Telegram, and this waits on a
+       * machine that is usually still booting.
+       */
+      if (claimed.customerId) {
+        await ctx.scheduler.runAfter(0, internal.maya.firstRun.kickoff, {
+          customerId: claimed.customerId,
         });
       }
       return new Response("ok", { status: 200 });

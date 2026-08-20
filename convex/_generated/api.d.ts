@@ -225,6 +225,7 @@ import type * as maya_directives from "../maya/directives.js";
 import type * as maya_drafts from "../maya/drafts.js";
 import type * as maya_embeddings from "../maya/embeddings.js";
 import type * as maya_experiments from "../maya/experiments.js";
+import type * as maya_firstRun from "../maya/firstRun.js";
 import type * as maya_formats from "../maya/formats.js";
 import type * as maya_handoff from "../maya/handoff.js";
 import type * as maya_hooks from "../maya/hooks.js";
@@ -509,6 +510,7 @@ declare const fullApi: ApiFromModules<{
   "maya/drafts": typeof maya_drafts;
   "maya/embeddings": typeof maya_embeddings;
   "maya/experiments": typeof maya_experiments;
+  "maya/firstRun": typeof maya_firstRun;
   "maya/formats": typeof maya_formats;
   "maya/handoff": typeof maya_handoff;
   "maya/hooks": typeof maya_hooks;

@@ -3623,6 +3623,15 @@ export default defineSchema({
     /** Set once the gateway has reported healthy at least once. */
     machineReadyAt: v.optional(v.number()),
     /**
+     * ⭐ When she introduced herself. THE IDEMPOTENCY MARKER FOR FIRST RUN.
+     *
+     * ⚠️ Durable, in a row — deliberately NOT MEMORY.md and NOT a session.
+     * v1 recorded the reason in its own kickstart job: *"MEMORY.md is wiped on
+     * restart, so it is NOT a reliable idempotency check."* A founder who gets
+     * introduced to twice has met an amnesiac, not an employee.
+     */
+    helloSentAt: v.optional(v.number()),
+    /**
      * SHA-256 of the agent's bearer token — the credential her runtime presents
      * on every tool call.
      *
