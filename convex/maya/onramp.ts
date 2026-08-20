@@ -125,11 +125,43 @@ export const startFromRead = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return { ok: false, error: "sign in first" };
 
-    const creator = await ctx.db
+    /**
+     * ⭐ A SIGNED-IN IDENTITY IS THE ACCOUNT. Create the row if it is missing.
+     *
+     * ⚠️ THIS USED TO RETURN "no account yet" AND STRAND THE FOUNDER FOREVER.
+     * `creators` rows are written by the Clerk `user.created` webhook — and
+     * that webhook fires exactly ONCE per user, at signup, and is never
+     * replayed. So any user whose row is absent could not onboard, could not
+     * recover, and had no action available to them: they were authenticated,
+     * looking at a screen that said they had no account, with nothing in the
+     * product able to create one.
+     *
+     * ⚠️ AND ON STAGING IT IS NOT HYPOTHETICAL — IT IS EVERY USER.
+     * `CLERK_WEBHOOK_SECRET` is configured on Production only, so on preview
+     * the webhook cannot verify its signature and no row is ever written. The
+     * only creator rows staging has ever had came from the frozen gtm
+     * onboarding, which inserted them directly. v2's on-ramp had no such path,
+     * which means a genuinely new signup could never complete it.
+     *
+     * Clerk has already authenticated this person; requiring a second,
+     * asynchronous, silently-failing confirmation of that fact buys nothing.
+     * `createFromClerk` is idempotent — it returns the existing row when there
+     * is one — so this is safe on every call, not just the first.
+     */
+    let creator = await ctx.db
       .query("creators")
       .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
       .first();
-    if (!creator) return { ok: false, error: "no account yet" };
+
+    if (!creator) {
+      const creatorId = await ctx.runMutation(internal.creators.createFromClerk, {
+        clerkUserId: identity.subject,
+        email: typeof identity.email === "string" ? identity.email : "",
+        timezone: args.timezone,
+      });
+      creator = await ctx.db.get(creatorId);
+      if (!creator) return { ok: false, error: "couldn't set up your account" };
+    }
 
     return await ctx.runMutation(internal.maya.onramp.applyRead, {
       creatorId: creator._id,

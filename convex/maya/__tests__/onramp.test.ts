@@ -15,6 +15,10 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { convexTest } from "convex-test";
+import schema from "../../schema";
+import { api } from "../../_generated/api";
+import { modules } from "../../../tests/_modules";
 import { needsFirstLearn } from "../onramp";
 
 describe("who still needs their first learn", () => {
@@ -102,5 +106,98 @@ describe("the read validator accepts what the read actually produces", () => {
      * questions.
      */
     expect(ONRAMP_SOURCE).toMatch(/gaps:\s*\(args\.read\.gaps/);
+  });
+});
+
+describe("⭐ A SIGNED-IN FOUNDER CAN ALWAYS ONBOARD", () => {
+  /**
+   * `startFromRead` used to return "no account yet" when the `creators` row was
+   * missing, which stranded the founder permanently: the row is written by the
+   * Clerk `user.created` webhook, that webhook fires ONCE per user and is never
+   * replayed, and nothing else in v2 could create one. Authenticated, told they
+   * have no account, with no action available.
+   *
+   * ⚠️ And on staging that was EVERY user — `CLERK_WEBHOOK_SECRET` is set on
+   * Production only, so the preview webhook cannot verify and writes nothing.
+   */
+  it("creates the account when the webhook never wrote one", async () => {
+    const t = convexTest(schema, modules);
+
+    const before = await t.run(async (ctx) =>
+      (await ctx.db.query("creators").collect()).length
+    );
+    expect(before).toBe(0);
+
+    const res = await t
+      .withIdentity({ subject: "u_never_webhooked", email: "new@example.com" })
+      .mutation(api.maya.onramp.startFromRead, {
+        url: "https://example.com",
+        read: {
+          name: "Example",
+          whatItIs: "a thing that does a thing",
+          whoItsFor: "",
+          whatsDifferent: "",
+          gaps: [],
+        },
+        timezone: "America/New_York",
+      });
+
+    expect(res.ok, JSON.stringify(res)).toBe(true);
+
+    const creators = await t.run(async (ctx) =>
+      ctx.db.query("creators").collect()
+    );
+    expect(creators).toHaveLength(1);
+    expect(creators[0].clerkUserId).toBe("u_never_webhooked");
+  });
+
+  it("does not create a second account on a repeat call", async () => {
+    // `createFromClerk` is idempotent; onboarding twice must not fork the
+    // account, or the second customer would be invisible to the first.
+    const t = convexTest(schema, modules);
+    const read = {
+      name: "Example",
+      whatItIs: "a thing",
+      whoItsFor: "",
+      whatsDifferent: "",
+      gaps: [],
+    };
+    const as = t.withIdentity({ subject: "u_twice", email: "twice@example.com" });
+    await as.mutation(api.maya.onramp.startFromRead, {
+      url: "https://example.com",
+      read,
+      timezone: "UTC",
+    });
+    await as.mutation(api.maya.onramp.startFromRead, {
+      url: "https://example.com",
+      read,
+      timezone: "UTC",
+    });
+
+    const creators = await t.run(async (ctx) =>
+      ctx.db.query("creators").collect()
+    );
+    expect(creators).toHaveLength(1);
+  });
+
+  it("still refuses when nobody is signed in", async () => {
+    // Self-healing must not become self-serve: no identity, no account.
+    const t = convexTest(schema, modules);
+    const res = await t.mutation(api.maya.onramp.startFromRead, {
+      url: "https://example.com",
+      read: {
+        name: "Example",
+        whatItIs: "a thing",
+        whoItsFor: "",
+        whatsDifferent: "",
+        gaps: [],
+      },
+      timezone: "UTC",
+    });
+    expect(res.ok).toBe(false);
+    const creators = await t.run(async (ctx) =>
+      ctx.db.query("creators").collect()
+    );
+    expect(creators).toHaveLength(0);
   });
 });
