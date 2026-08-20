@@ -19,10 +19,12 @@ import {
   parseSearchTerms,
   buildDiscoveryPrompt,
   DISCOVERY_KEYWORDS,
+  AD_WATCH_SYSTEM,
   PROVEN_DAYS,
   type PageCandidate,
   type RankedAd,
 } from "../adIntel";
+import { ASSET_RANK } from "../assetFloor";
 
 const NOW = 1_787_200_000_000;
 const DAY = 86_400_000;
@@ -388,5 +390,44 @@ describe("⚠️ SEARCH THE PRODUCT'S WORDS, NOT THE BUYER'S COMPLAINTS", () => 
       []
     );
     expect(prompt).not.toContain("BUYER");
+  });
+});
+
+describe("⭐ THE WATCH HAS TO ANSWER 'CAN WE BUILD THIS?'", () => {
+  /**
+   * The first version returned hook / device / beats / whyItWorks — enough to
+   * PITCH an ad and not enough to REBUILD one. Three fields decide whether
+   * `make-video` can act on it at all.
+   */
+  it("asks which ASSET RUNG the shape needs, in the ladder's own words", () => {
+    // Verified live on a 105-day FlyAds.ai ad: "screen_recording".
+    // Without this, a talking-head ad looks buildable right up until the render
+    // needs a founder who never agreed to be on camera.
+    for (const rung of ASSET_RANK) {
+      expect(AD_WATCH_SYSTEM).toContain(rung);
+    }
+    expect(AD_WATCH_SYSTEM).toMatch(/EXACTLY ONE of these words/i);
+  });
+
+  it("asks for the spoken script, which travels furthest", () => {
+    expect(AD_WATCH_SYSTEM).toMatch(/"spokenScript"/);
+    expect(AD_WATCH_SYSTEM).toMatch(/travels furthest/i);
+  });
+
+  it("asks what is ON SCREEN per beat, not just what it means", () => {
+    // "the shot, not the meaning" — a beat you cannot picture is a beat you
+    // cannot film.
+    expect(AD_WATCH_SYSTEM).toMatch(/"onScreen"/);
+    expect(AD_WATCH_SYSTEM).toMatch(/the shot, not the meaning/i);
+  });
+
+  it("⚠️ and still refuses to carry their claims across", () => {
+    // §7.5.3 — structure travels, claims do not. Their numbers would be a lie
+    // in our ad.
+    expect(AD_WATCH_SYSTEM).toMatch(/not transferable|are theirs/i);
+  });
+
+  it("says so rather than filling a field it cannot see", () => {
+    expect(AD_WATCH_SYSTEM).toMatch(/If you cannot tell, say so/i);
   });
 });

@@ -1203,28 +1203,42 @@ export const storeDiscovered = internalMutation({
  */
 export const ADS_WATCHED = 3;
 
-export const AD_WATCH_SYSTEM = `You are watching a competitor's video ad to describe HOW IT IS MADE.
+export const AD_WATCH_SYSTEM = `You are watching a competitor's video ad to describe HOW IT IS MADE, so a different product can rebuild the same shape.
 
 Return STRICT JSON, no prose:
 { "hook": string,
   "visualDevice": string,
-  "beats": [ { "atSec": number, "whatHappens": string } ],
+  "spokenScript": string,
+  "beats": [ { "atSec": number, "whatHappens": string, "onScreen": string } ],
   "onScreenText": string,
+  "cta": { "ask": string, "atSec": number },
   "pacing": { "cutsPerSecond": number, "totalLength": number },
+  "requires": string,
   "whyItWorks": string,
   "borrowable": string }
 
 - "hook": what the FIRST TWO SECONDS show or say. The thing that stops a scroll.
 - "visualDevice": the format itself — talking head, screen recording, before/after,
   hands-on-product, text-on-b-roll. What someone would have to film.
-- "beats": what happens when, six at most. The shape another product could follow.
+- "spokenScript": what is actually SAID, start to finish, as plain text. "" if
+  nobody speaks. This is the part that travels furthest between products.
+- "beats": what happens when, six at most. "onScreen" is what is literally
+  visible in that beat — the shot, not the meaning.
+- "cta": the ask, and the second it lands.
+- "requires": what someone would need IN HAND to rebuild this shape. Answer with
+  EXACTLY ONE of these words and nothing else:
+    "founder_footage"     a real person on camera is essential to it
+    "screen_recording"    the product's own interface carries it
+    "product_screenshot"  stills of the product are enough
+    "generated_background" stock or generated visuals carry it
+    "avatar"              a presenter is needed but any presenter would do
 - "whyItWorks": your read on why this has kept running. One sentence.
 - "borrowable": the ONE structural thing worth stealing, described so it could be
   rebuilt for a completely different product.
 
-⚠️ Describe only what you can see. Do not repeat their claims, their statistics
-or their offer — those are theirs and are not transferable. If you cannot tell,
-say so in that field rather than filling it in.`;
+⚠️ Describe only what you can see and hear. Do not repeat their claims, their
+statistics or their offer as though they were ours — those are theirs and are not
+transferable. If you cannot tell, say so in that field rather than filling it in.`;
 
 /**
  * Watch the top ads for one customer and store what they are made of.
