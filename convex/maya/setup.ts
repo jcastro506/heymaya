@@ -90,8 +90,22 @@ export const myState = query({
       productName: typeof product.name === "string" ? product.name : undefined,
       productUrl: typeof product.url === "string" ? product.url : undefined,
       telegramPaired: customer.telegramChatId !== undefined,
-      deployed: creator.mayaFlyAppId !== undefined,
-      flyAppId: creator.mayaFlyAppId,
+      /**
+       * ⚠️ READ FROM THE ROW THE DEPLOY ACTUALLY WRITES.
+       *
+       * This asked `creator.mayaFlyAppId`, which is read in exactly two places
+       * and WRITTEN IN NONE — `deployMachine` patches `flyAppName` onto the
+       * CUSTOMER. So `deployed` was permanently false and Mission Control
+       * believed she had never been deployed while her machine was up and
+       * posting.
+       *
+       * Same defect class as `dailyReport` reading a `metricsJson` nothing
+       * wrote: a field that only ever reads null looks like an empty state
+       * rather than a broken one, so it survives every test that asserts on
+       * shape.
+       */
+      deployed: customer.flyAppName !== undefined,
+      flyAppId: customer.flyAppName,
     };
   },
 });

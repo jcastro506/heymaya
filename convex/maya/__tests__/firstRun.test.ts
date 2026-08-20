@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "../../schema";
-import { internal } from "../../_generated/api";
+import { api, internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import {
   HELLO_BRIEF,
@@ -143,5 +143,63 @@ describe("the waits are bounded", () => {
     // `learnBusiness` runs ~12 live searches — it would have reported an empty
     // niche on the one day the founder was watching.
     expect(HOMEWORK_WAIT_MS).toBeGreaterThan(10 * 60_000);
+  });
+});
+
+describe("⚠️ MISSION CONTROL KNOWS SHE IS DEPLOYED", () => {
+  /**
+   * `myState.deployed` read `creator.mayaFlyAppId` — a field read in two places
+   * and written in NONE. `deployMachine` patches `flyAppName` onto the customer.
+   * So this was permanently false: Mission Control showed a founder that Maya
+   * had never been deployed while her machine was up and running crons.
+   *
+   * A field that only ever reads null renders as an EMPTY state rather than a
+   * broken one, which is why it survived every test asserting on shape.
+   */
+  async function seed(t: ReturnType<typeof convexTest>, fly?: string) {
+    return t.run(async (ctx) => {
+      const accountId = await ctx.db.insert("creators", {
+        clerkUserId: "u_deployed",
+        email: "d@example.com",
+        channelPreference: "web",
+        timezone: "UTC",
+        status: "onboarding",
+        plan: "coach",
+        createdAt: 1,
+      } as never);
+      await ctx.db.insert("customers", {
+        accountId,
+        agentVersion: "v2",
+        plan: "mvp",
+        state: "active",
+        timezone: "UTC",
+        telegramChatId: "123",
+        ...(fly ? { flyAppName: fly } : {}),
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      return accountId;
+    });
+  }
+
+  it("reports deployed once the machine exists", async () => {
+    const t = convexTest(schema, modules);
+    await seed(t, "maya-precisecanary781-abc");
+    const state = await t
+      .withIdentity({ subject: "u_deployed" })
+      .query(api.maya.setup.myState, {});
+    expect(state.deployed).toBe(true);
+    expect(state.flyAppId).toBe("maya-precisecanary781-abc");
+  });
+
+  it("and still reports NOT deployed before there is one", async () => {
+    // The fix must not make the flag always-true, which would hide a real
+    // failed deploy behind a green tick.
+    const t = convexTest(schema, modules);
+    await seed(t);
+    const state = await t
+      .withIdentity({ subject: "u_deployed" })
+      .query(api.maya.setup.myState, {});
+    expect(state.deployed).toBe(false);
   });
 });
