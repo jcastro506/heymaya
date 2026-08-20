@@ -111,18 +111,42 @@ describe("⚠️ THE BRIEFS ARE BRIEFS, NOT SCRIPTS", () => {
     expect(HELLO_BRIEF).toMatch(/nothing gets locked in without them/i);
   });
 
-  it("the report leads with days-running, which is the whole signal", () => {
+  it("⭐ the report names the competitor, the ad, and how long it has run", () => {
+    // The days-running number IS the argument. Without it "a competitor is
+    // advertising" is a fact nobody can act on.
     expect(HOMEWORK_BRIEF).toMatch(/ad_intel/);
-    expect(HOMEWORK_BRIEF).toMatch(/HOW LONG/);
+    expect(HOMEWORK_BRIEF).toMatch(/NAME THE COMPETITOR AND THE AD/);
+    expect(HOMEWORK_BRIEF).toMatch(/how long it has been running/i);
+  });
+
+  it("⭐ and SENDS THE LINK, because a described ad cannot be judged", () => {
+    expect(HOMEWORK_BRIEF).toMatch(/SEND THE LINK/);
+    expect(HOMEWORK_BRIEF).toMatch(/Never describe an ad you cannot link/i);
+  });
+
+  it("⭐ it pitches the rebuild rather than just reporting", () => {
+    // The point of day 0 is not "here is what competitors do" — it is "here is
+    // what I want to make for you". A report without a proposal is homework
+    // handed in, not work started.
+    expect(HOMEWORK_BRIEF).toMatch(/PITCH THE REBUILD/);
+  });
+
+  it("⚠️ structure travels, claims do not", () => {
+    expect(HOMEWORK_BRIEF).toMatch(/COPY THE STRUCTURE, NEVER THE CLAIMS/);
+  });
+
+  it("⚠️ ONE ad with an opinion, never a list of five", () => {
+    // A founder can act on one recommendation and drowns in five.
+    expect(HOMEWORK_BRIEF).toMatch(/Do not send a list of five ads/i);
   });
 
   it("⭐ a thin week is reported as thin, never padded", () => {
-    expect(HOMEWORK_BRIEF).toMatch(/IF IT IS THIN, SAY SO/);
+    expect(HOMEWORK_BRIEF).toMatch(/IF NOTHING IS WORTH COPYING, SAY THAT/);
     expect(HOMEWORK_BRIEF).toMatch(/Never pad this/i);
   });
 
   it("and the report ends by asking, not by deciding", () => {
-    expect(HOMEWORK_BRIEF).toMatch(/Nothing is locked in/i);
+    expect(HOMEWORK_BRIEF).toMatch(/Nothing gets made without them/i);
   });
 
   it("⭐ SHE STILL SPEAKS WHEN THE HOMEWORK COMES BACK EMPTY", () => {

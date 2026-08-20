@@ -93,18 +93,22 @@ Send it with \`update\`. That is the whole job — no research on this turn.`;
 /**
  * The report. Also deliberately small — it reads rows that already exist.
  */
-export const HOMEWORK_BRIEF = `Come back to the founder with what you found. You told them you were going to do the homework; this is you reporting it.
+export const HOMEWORK_BRIEF = `Come back to the founder with what you found. You told them you were going off to do the homework; this is you delivering it, and it is the first real proof they have that hiring you was worth it.
 
-Call \`ad_intel\` FIRST — competitor ads and how many days each has been running. Then look at what you now know about their niche.
+Call \`ad_intel\` FIRST. Those are competitors' ads, how many days each has been running, and — for the strongest ones — what you saw when you WATCHED them: the hook, the visual device, the beat order, the one borrowable thing.
 
-In a short message, phone-sized:
+Write them a short message, phone-sized. In this order:
 
-- What their buyers actually complain about, in the buyers' own words.
-- ⭐ Who is advertising against them and HOW LONG the strongest ad has run. That number is the point — an ad alive for weeks is one somebody keeps paying to keep alive.
-- One thing you think is worth making because of it.
+1. ⭐ NAME THE COMPETITOR AND THE AD. Say how long it has been running — that number is the whole argument. An ad alive for weeks is one somebody keeps paying every morning to keep alive, and that is worth more than any trend.
+2. ⭐ SEND THE LINK so they can watch it themselves. Never describe an ad you cannot link.
+3. Say what makes it work, from what you actually saw — the hook and the shape, not their claims.
+4. ⭐ PITCH THE REBUILD. Say plainly that you want to make our version of that shape for their product, and describe what ours would open on. Be specific enough that they can picture it.
+5. Ask what they think. Nothing gets made without them.
 
-⚠️ IF IT IS THIN, SAY SO. A quiet niche is a real finding and honest silence beats fake activity. Never pad this with how much you researched.
-⚠️ Nothing is locked in. End by asking whether that is the right read — they know their buyers better than any sweep does.
+⚠️ COPY THE STRUCTURE, NEVER THE CLAIMS. Their numbers and their offer belong to their product and would be a lie in ours. The hook shape, the beat order, the visual device — those travel.
+⚠️ IF NOTHING IS WORTH COPYING, SAY THAT. A quiet week is a real finding and honest silence beats fake activity. Never pad this with how much you researched.
+⚠️ Do not send a list of five ads. One, the strongest, with a real opinion attached — a founder can act on one recommendation and drowns in five.
+
 Send it with \`update\`.`;
 
 export const THIN_BRIEF = `Go back to the founder. You told them you were going off to read their space and it has not come back with anything usable.
@@ -278,6 +282,24 @@ export const homework = internalAction({
         customerId: args.customerId,
       });
       ads = swept.detail;
+
+      /**
+       * ⭐ AND SHE WATCHES THEM. Reading an ad's caption is the cheap half and
+       * for a video ad it is the half that matters least — what makes a
+       * competitor's ad worth copying is what it LOOKS like in the first two
+       * seconds. This is the difference between "your competitor is running
+       * ads" and "here is the ad, here is why it works, here is the one we
+       * should make."
+       *
+       * Deliberately after the sweep and before the report, so the report has
+       * something real to describe.
+       */
+      if (swept.adsFound > 0) {
+        const seen = await ctx.runAction(internal.maya.adIntel.watchTopAds, {
+          customerId: args.customerId,
+        });
+        ads = `${ads}; ${seen.detail}`;
+      }
     } catch (error) {
       // A vendor outage must not cost her the introduction she promised.
       console.warn(

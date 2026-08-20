@@ -88,6 +88,19 @@ export interface RankedAd {
   /** Groups the variants of ONE concept. The dedupe key for a shortlist. */
   collationId: string;
   hasVideo: boolean;
+  /**
+   * ⭐ THE PLAYABLE FILE. Without this an ad can only ever be READ, and the
+   * whole point of a competitor's video ad is what it looks like.
+   *
+   * SD deliberately: `watchFormat` caps downloads at 12MB because the bytes are
+   * base64'd into the Gemini request (~1.33× inflation), and the HD cut of a
+   * 30-second ad clears that regularly.
+   */
+  videoUrl: string;
+  /** First frame. The cheapest possible answer to "what does this look like". */
+  thumbUrl: string;
+  /** Filled by the watch pass: how the ad is MADE, never what it says. */
+  watchedJson: string | null;
   title: string;
   body: string;
   ctaText: string;
@@ -119,6 +132,19 @@ export function daysRunning(
 
 function str(x: unknown): string {
   return typeof x === "string" ? x : "";
+}
+
+/**
+ * The playable URL, preferring SD.
+ *
+ * ⚠️ NEVER the watermarked cuts. `watermarked_video_*` carry Meta's ad-library
+ * overlay burned into the frame, which would teach the watch pass that the
+ * overlay is part of the creative.
+ */
+function firstVideoUrl(videos: unknown): string {
+  if (!Array.isArray(videos) || videos.length === 0) return "";
+  const v = videos[0] as Record<string, unknown>;
+  return str(v.video_sd_url) || str(v.video_hd_url);
 }
 
 /**
@@ -167,6 +193,13 @@ export function rankAds(raw: unknown, now: number): RankedAd[] {
         typeof ad.collation_count === "number" ? ad.collation_count : 1,
       collationId: str(ad.collation_id) || id,
       hasVideo: Array.isArray(videos) && videos.length > 0,
+      videoUrl: firstVideoUrl(videos),
+      thumbUrl: str(
+        (Array.isArray(videos) && videos.length > 0
+          ? (videos[0] as Record<string, unknown>).video_preview_image_url
+          : "") as unknown
+      ),
+      watchedJson: null,
       title: str(snap.title),
       body: str((snap.body as Record<string, unknown> | undefined)?.text)
         || str(snap.body),
@@ -1141,6 +1174,238 @@ export const storeDiscovered = internalMutation({
       });
     } catch {
       // A corrupt truth record is not this function's to repair.
+    }
+    return null;
+  },
+});
+
+/* -------------------------------------------------------------------------- */
+/* Watching them                                                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⭐ SHE ACTUALLY WATCHES THE ADS.
+ *
+ * Everything above this point READS an ad — the title, the body, the transcript.
+ * That is the cheap half, and for a video ad it is the half that matters least.
+ * What makes a competitor's ad worth copying is what it LOOKS like in the first
+ * two seconds, and no amount of text tells you that.
+ *
+ * ⚠️ THE STRUCTURE TRAVELS, THE CLAIMS DO NOT. §7.5.3. We take the visual
+ * device, the beat order, how the on-screen text behaves and how fast it cuts.
+ * We never take their numbers, their offer, or their words — those belong to
+ * their product and would be a lie in ours.
+ *
+ * Reuses the proven Gemini path from `formats.ts` rather than inventing a
+ * second one: video goes as `inlineData` on the direct Gemini API, because
+ * routing bytes through a text-completions API is not a thing to discover is
+ * broken in production.
+ */
+export const ADS_WATCHED = 3;
+
+export const AD_WATCH_SYSTEM = `You are watching a competitor's video ad to describe HOW IT IS MADE.
+
+Return STRICT JSON, no prose:
+{ "hook": string,
+  "visualDevice": string,
+  "beats": [ { "atSec": number, "whatHappens": string } ],
+  "onScreenText": string,
+  "pacing": { "cutsPerSecond": number, "totalLength": number },
+  "whyItWorks": string,
+  "borrowable": string }
+
+- "hook": what the FIRST TWO SECONDS show or say. The thing that stops a scroll.
+- "visualDevice": the format itself — talking head, screen recording, before/after,
+  hands-on-product, text-on-b-roll. What someone would have to film.
+- "beats": what happens when, six at most. The shape another product could follow.
+- "whyItWorks": your read on why this has kept running. One sentence.
+- "borrowable": the ONE structural thing worth stealing, described so it could be
+  rebuilt for a completely different product.
+
+⚠️ Describe only what you can see. Do not repeat their claims, their statistics
+or their offer — those are theirs and are not transferable. If you cannot tell,
+say so in that field rather than filling it in.`;
+
+/**
+ * Watch the top ads for one customer and store what they are made of.
+ *
+ * ⚠️ Capped hard at `ADS_WATCHED`. Each watch downloads a video and base64s it
+ * into a model request — the expensive tier by a wide margin, and the reason
+ * `formats.ts` caps its own watching at five a week.
+ */
+export const watchTopAds = internalAction({
+  args: {
+    customerId: v.id("customers"),
+    limit: v.optional(v.number()),
+    now: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: boolean; watched: number; failed: number; detail: string }> => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return { ok: false, watched: 0, failed: 0, detail: "no GEMINI_API_KEY" };
+    }
+
+    const ads = await ctx.runQuery(internal.maya.adIntel.provenAds, {
+      customerId: args.customerId,
+      now: args.now,
+    });
+
+    /**
+     * Only ads with a playable file, only ones not already watched, longest
+     * first — re-watching spends the expensive tier on a settled question.
+     */
+    const queue = ads
+      .filter((a) => a.hasVideo && a.videoUrl && !a.watchedJson)
+      .slice(0, args.limit ?? ADS_WATCHED);
+
+    if (queue.length === 0) {
+      return {
+        ok: true,
+        watched: 0,
+        failed: 0,
+        detail:
+          ads.length === 0
+            ? "no competitor ads to watch yet"
+            : "their live ads are all stills — nothing to watch",
+      };
+    }
+
+    let watched = 0;
+    let failed = 0;
+    for (const ad of queue) {
+      try {
+        const seen = await watchOneAd(ctx, ad, apiKey, args.customerId);
+        if (!seen) {
+          failed += 1;
+          continue;
+        }
+        await ctx.runMutation(internal.maya.adIntel.storeWatched, {
+          customerId: args.customerId,
+          url: ad.url,
+          watchedJson: seen,
+        });
+        watched += 1;
+      } catch (error) {
+        failed += 1;
+        console.warn(
+          `[adIntel] watch failed for ${ad.url}: ${error instanceof Error ? error.message : error}`
+        );
+      }
+    }
+
+    return {
+      ok: true,
+      watched,
+      failed,
+      detail: `watched ${watched} of ${queue.length} competitor ads`,
+    };
+  },
+});
+
+/** One video, one model call. Returns the raw JSON string, or null. */
+async function watchOneAd(
+  ctx: { runMutation: (ref: never, args: never) => Promise<unknown> },
+  ad: RankedAd,
+  apiKey: string,
+  customerId: string
+): Promise<string | null> {
+  const { MAX_VIDEO_BYTES, WATCH_MODEL } = await import("./formats");
+
+  const res = await fetch(ad.videoUrl);
+  if (!res.ok) return null;
+  const bytes = await res.arrayBuffer();
+  if (bytes.byteLength > MAX_VIDEO_BYTES) {
+    console.warn(
+      `[adIntel] ${ad.url} is ${Math.round(bytes.byteLength / 1e6)}MB — over the cap`
+    );
+    return null;
+  }
+
+  let binary = "";
+  const view = new Uint8Array(bytes);
+  for (let i = 0; i < view.length; i += 1) binary += String.fromCharCode(view[i]);
+  const base64 = btoa(binary);
+
+  const gem = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${WATCH_MODEL}:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { inlineData: { mimeType: "video/mp4", data: base64 } },
+              { text: AD_WATCH_SYSTEM },
+            ],
+          },
+        ],
+        generationConfig: { responseMimeType: "application/json" },
+      }),
+    }
+  );
+
+  /**
+   * Recorded whether or not it parsed — the video was uploaded and processed by
+   * then, so the spend happened. A ledger counting only usable answers
+   * understates cost exactly when something is failing repeatedly.
+   */
+  try {
+    await ctx.runMutation(internal.maya.cogs.record as never, {
+      customerId,
+      vendor: "gemini",
+      resource: WATCH_MODEL,
+      purpose: "ad_watch",
+    } as never);
+  } catch {
+    // Never let ledger trouble cost the observation.
+  }
+
+  if (!gem.ok) {
+    console.error(`[adIntel] watch model returned ${gem.status}`);
+    return null;
+  }
+
+  const payload = (await gem.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+  const text = payload.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) return null;
+
+  try {
+    JSON.parse(text);
+  } catch {
+    return null;
+  }
+  return text;
+}
+
+/** Attach what the watch found to the ad's row. */
+export const storeWatched = internalMutation({
+  args: {
+    customerId: v.id("customers"),
+    url: v.string(),
+    watchedJson: v.string(),
+  },
+  handler: async (ctx, args): Promise<null> => {
+    const row = (await ctx.db
+      .query("observations")
+      .withIndex("by_customer_and_source", (q) =>
+        q.eq("customerId", args.customerId).eq("sourceUrl", args.url)
+      )
+      .first()) as Doc<"observations"> | null;
+    if (!row?.metricsJson) return null;
+
+    try {
+      const ad = JSON.parse(row.metricsJson) as RankedAd;
+      ad.watchedJson = args.watchedJson;
+      await ctx.db.patch(row._id, { metricsJson: JSON.stringify(ad) });
+    } catch {
+      // A corrupt row is not this function's to repair.
     }
     return null;
   },
