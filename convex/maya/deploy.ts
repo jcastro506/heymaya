@@ -870,9 +870,37 @@ export const workspaceFor = internalAction({
     });
     if (!input) return null;
     const bundle = buildMayaWorkspace(input);
+
+    /**
+     * ⭐ SHE COMES BACK REMEMBERING. The checkpoint had no reader.
+     *
+     * ⚠️ `checkpoint.record` has written a full copy of `MEMORY.md` into
+     * `memorySnapshots` every day since Sprint 2.9, retained 30 deep, and
+     * `checkpoint.latest` is even documented as *"Restore point: what her
+     * memory said at a given time."* NOTHING EVER READ IT. A machine that lost
+     * its volume came back amnesiac while a month of her memory sat in Convex.
+     *
+     * The same defect class as `dailyReport` reading a `metricsJson` nothing
+     * wrote, pointed the other way: a write with no reader looks exactly like a
+     * working backup right up to the moment you need it.
+     *
+     * ⚠️ It rides the SEED slot, not the workspace slot, which is what makes it
+     * safe. The boot script copies a seed only when the destination is absent
+     * (`if [ ! -f .../MEMORY.md ]`), so a machine whose volume survived keeps
+     * the live file and this is inert. It restores only into genuine emptiness
+     * — it can never overwrite memory that is newer than the snapshot.
+     */
+    const snapshot = await ctx.runQuery(internal.maya.checkpoint.latest, {
+      customerId: args.customerId,
+    });
+    const seedFiles = new Map(bundle.seedFiles);
+    if (snapshot?.markdown && snapshot.markdown.trim().length > 0) {
+      seedFiles.set("MEMORY.md", snapshot.markdown);
+    }
+
     return {
       files: Object.fromEntries(bundle.files),
-      seedFiles: Object.fromEntries(bundle.seedFiles),
+      seedFiles: Object.fromEntries(seedFiles),
       alwaysLoadedChars: bundle.alwaysLoadedChars,
       timezone: input.founder.timezone,
     };
@@ -947,5 +975,94 @@ export const destroyMyDeploymentMachines = internalAction({
       }
     }
     return { scope, destroyed, skippedOtherDeployments };
+  },
+});
+
+/* -------------------------------------------------------------------------- */
+/* Keeping the workspace true                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * How long to wait before rebuilding, so a burst of changes is one redeploy.
+ *
+ * A founder connecting TikTok, Instagram and YouTube does it in under a minute;
+ * rebuilding on each would take her machine down three times during the hour
+ * she is most likely to be talking to it.
+ */
+export const WORKSPACE_REFRESH_DELAY_MS = 5 * 60_000;
+
+/**
+ * Mark the workspace out of date, and schedule one rebuild.
+ *
+ * ⚠️ Idempotent by design: if a refresh is already pending, this does nothing
+ * but leave the marker set. The debounce IS the marker, so callers can be
+ * enthusiastic without coordinating.
+ */
+export const markWorkspaceStale = internalMutation({
+  args: { customerId: v.id("customers"), reason: v.string() },
+  handler: async (ctx, args): Promise<{ scheduled: boolean }> => {
+    const customer = (await ctx.db.get(args.customerId)) as Doc<"customers"> | null;
+    if (!customer) return { scheduled: false };
+
+    // Nothing to refresh until there is a machine to refresh.
+    if (!customer.flyAppName) return { scheduled: false };
+    if (customer.workspaceStaleAt !== undefined) return { scheduled: false };
+
+    await ctx.db.patch(args.customerId, { workspaceStaleAt: Date.now() });
+    await ctx.scheduler.runAfter(
+      WORKSPACE_REFRESH_DELAY_MS,
+      internal.maya.deploy.refreshWorkspace,
+      { customerId: args.customerId, reason: args.reason }
+    );
+    return { scheduled: true };
+  },
+});
+
+/** Clears the marker. Separate so the action can run it before the rebuild. */
+export const clearWorkspaceStale = internalMutation({
+  args: { customerId: v.id("customers") },
+  handler: async (ctx, args): Promise<null> => {
+    await ctx.db.patch(args.customerId, { workspaceStaleAt: undefined });
+    return null;
+  },
+});
+
+/**
+ * Rebuild her workspace from current rows.
+ *
+ * ⭐ This is a REDEPLOY, and that is the point rather than a shortcut: the
+ * deploy path already find-or-creates the app and reuses the existing VOLUME,
+ * so `MEMORY.md`, her memory store and her dreams all survive. What changes is
+ * the doctrine — platform norms, the plan, the product truth — which is exactly
+ * the half that was frozen.
+ *
+ * ⚠️ The marker is cleared BEFORE the rebuild, not after. A rebuild that throws
+ * must leave the customer able to be marked stale again; clearing afterwards
+ * would strand them with a permanently pending refresh that never re-arms.
+ */
+export const refreshWorkspace = internalAction({
+  args: { customerId: v.id("customers"), reason: v.optional(v.string()) },
+  handler: async (ctx, args): Promise<{ ok: boolean; detail: string }> => {
+    await ctx.runMutation(internal.maya.deploy.clearWorkspaceStale, {
+      customerId: args.customerId,
+    });
+
+    const result = await ctx.runAction(internal.maya.deploy.deployMachine, {
+      customerId: args.customerId,
+      image: (await import("./setup")).DEFAULT_IMAGE,
+    });
+
+    if (!result.ok) {
+      /**
+       * ⚠️ Named, not silent (§5). A machine still running the old doctrine is
+       * a working agent with stale beliefs — the least visible failure there is.
+       */
+      console.error(
+        `[deploy] workspace refresh failed for ${args.customerId} (${args.reason ?? "unspecified"}): ${result.error}`
+      );
+      return { ok: false, detail: result.error };
+    }
+
+    return { ok: true, detail: `rebuilt after ${args.reason ?? "a change"}` };
   },
 });

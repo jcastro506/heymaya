@@ -3632,6 +3632,20 @@ export default defineSchema({
      */
     helloSentAt: v.optional(v.number()),
     /**
+     * ⭐ Set when something the WORKSPACE carries has changed since deploy.
+     *
+     * ⚠️ Her workspace is written once, as Fly machine files, at deploy — and
+     * in v2 the deploy fires during `/start`, BEFORE channels are connected and
+     * before the first `learnBusiness` finishes. So everything it carries was a
+     * snapshot of the least-informed moment in the customer's life, and nothing
+     * ever refreshed it. Live proof: `PLATFORM_ALGO/` did not exist on a
+     * machine whose founder had three channels connected.
+     *
+     * Doubles as the debounce. Three channels connected in a row set this once,
+     * so the fleet gets one redeploy rather than three.
+     */
+    workspaceStaleAt: v.optional(v.number()),
+    /**
      * SHA-256 of the agent's bearer token — the credential her runtime presents
      * on every tool call.
      *

@@ -314,9 +314,17 @@ describe("the workspace is built from ROWS, not arguments", () => {
     expect(input?.channels).toEqual([{ channel: "tiktok", postingMode: "just_go" }]);
   });
 
-  it("DORMANT AND DISCONNECTED CHANNELS SHIP NO NORMS", async () => {
-    // Carrying context for a channel she can't post to spends budget to make
-    // her worse — she plans around something with no live grant.
+  it("DORMANT AND DISCONNECTED CHANNELS ARE STILL NOT POSTABLE", async () => {
+    /**
+     * ⚠️ This used to also assert that only the live channel's NORMS shipped.
+     * That gate ran at deploy — before `/connect` — so in practice it shipped
+     * no norms to anyone. All three now ship unconditionally; see
+     * `generators.test.ts`.
+     *
+     * What still matters, and is what this test is really about: `channels`
+     * carries only channels she can actually post to. Planning around a
+     * channel with no live grant is how a placement gets promised and held.
+     */
     const t = convexTest(schema, modules);
     const customerId = await seedCustomer(t, "dormant");
     // ⚠️ One live channel and three that are not, each for a different reason.
@@ -333,10 +341,11 @@ describe("the workspace is built from ROWS, not arguments", () => {
     const workspace = await t.action(internal.maya.deploy.workspaceFor, {
       customerId,
     });
+    // Norms for all three regardless — expertise is not gated on a grant.
     const files = Object.keys(workspace!.files);
     expect(files).toContain("PLATFORM_ALGO/tiktok.md");
-    expect(files).not.toContain("PLATFORM_ALGO/instagram.md");
-    expect(files).not.toContain("PLATFORM_ALGO/youtube.md");
+    expect(files).toContain("PLATFORM_ALGO/instagram.md");
+    expect(files).toContain("PLATFORM_ALGO/youtube.md");
   });
 
   it("a MALFORMED json column degrades rather than failing the deploy", async () => {

@@ -42,6 +42,15 @@ import {
 export type MayaChannel = "tiktok" | "instagram" | "youtube" | "x";
 
 /**
+ * The channels this product actually publishes to, in every workspace.
+ *
+ * ⚠️ X is deliberately absent. It stays in `MayaChannel` because live rows and
+ * the schema still carry it until they are migrated, but nothing ships its
+ * norms into a workspace any more.
+ */
+export const UGC_CHANNELS = ["tiktok", "instagram", "youtube"] as const;
+
+/**
  * Where things go on the machine.
  *
  * The workspace is NOT `/workspace` — OpenClaw defaults to
@@ -420,9 +429,26 @@ export function buildMayaWorkspace(
     ["MEMORY.md", renderMemorySeed()],
   ]);
 
-  // Only this customer's channels. A founder on X alone should never carry
-  // TikTok, Instagram, and YouTube norms in context (§15.1.2).
-  for (const { channel } of input.channels) {
+  /**
+   * ⭐ ALL THREE CHANNELS, ALWAYS — not just the ones connected right now.
+   *
+   * ⚠️ THIS SHIPPED EMPTY FOR EVERY CUSTOMER. It gated on `input.channels`,
+   * and the workspace is built at DEPLOY — which in v2 happens during `/start`,
+   * BEFORE the founder reaches `/connect`. So the list was empty every time,
+   * no files were written, and she ran with no platform expertise at all.
+   * Verified on a live machine: `/data/workspace/PLATFORM_ALGO` did not exist,
+   * while her TikTok, Instagram and YouTube had connected minutes after boot.
+   *
+   * That is the one thing that stops her being generic — how reach actually
+   * works on each surface — and it was the thing silently missing.
+   *
+   * ⚠️ AND THE ORIGINAL REASONING IS DEAD. §15.1.2 said *"a founder on X alone
+   * should never carry TikTok, Instagram, and YouTube norms in context"* — true
+   * when channels varied per customer. They no longer do: the product is
+   * TikTok, Instagram and YouTube for everyone, and X is gone. Gating on a
+   * per-customer list now costs context nothing and loses expertise everything.
+   */
+  for (const channel of UGC_CHANNELS) {
     const algo = renderPlatformAlgo(channel);
     // Skip rather than write an empty file — see `renderPlatformAlgo`.
     if (algo) files.set(`PLATFORM_ALGO/${channel}.md`, algo);
@@ -452,8 +478,18 @@ function renderIdentity(): string {
 
 I am Maya. I run social for one business, and I work for the person who built it.
 
+**I make short vertical video.** TikTok, Instagram and YouTube — the same 9:16
+asset travels to all three, and the caption never does. That is the job: not
+scheduling someone else's posts, but making the thing that gets posted.
+
 I am an employee, not a tool. Nobody logs into a dashboard to make me work — they
 text me, and I do the job.
+
+**I copy shapes, never claims.** The strongest thing I can build on is an ad a
+competitor has paid to keep running for weeks — someone else already proved that
+shape works. I take the hook, the order it reveals things in, the device. I never
+take their numbers, their offer or their words: those are theirs, and in our
+video they would be a lie.
 
 **Grounded or silent.** Every claim I make traces to something real: the product,
 the founder's own words, or a row I fetched. If it doesn't, I write something
@@ -470,8 +506,9 @@ function renderAgents(): string {
 ## What the job actually is
 
 Watch the niche, make the content, post it, and answer everyone who replies — in
-this founder's voice. The homework is the job: what's working in the niche, what
-buyers are complaining about, and only then what to write.
+this founder's voice. **The homework is the job**, strongest evidence first: what
+competitors are still paying to run, what's working in the niche organically,
+what buyers are complaining about — and only then what to make.
 
 **The unit of work is a placement** — something live, with a URL. A draft is not
 a result. A found thread is not a result. Inventory is not output.
@@ -497,6 +534,24 @@ gate now, and it is not me.
 
 Read \`CONVENTIONS.md\`. Asking permission to say something ungrounded is the
 wrong shape; the answer is to write something else.
+
+## When they reply to me
+
+⭐ **An answer unblocks work, so I go and do it in the same turn.**
+
+If I asked them something and they answered, the answer usually exists because
+something was waiting on it. I don't acknowledge it and stop — I carry on with
+whatever it unblocked, and if that will take a while I say what I'm doing.
+
+⚠️ Live 2026-08-21: I asked whether a competitor was really a competitor, they
+said yes, I replied "Got it, I'll treat them as confirmed" — and then did
+nothing for the rest of the evening, still holding the niche findings I owed
+them. \`HEARTBEAT.md\` has a "then the work" step for exactly this; a reply turn
+needs the same one.
+
+Before I finish any turn where they wrote to me: **is there something I said I
+would do, that I now can?** If yes, do it or start it. If it genuinely has to
+wait, say when.
 
 ## Message discipline
 
@@ -848,13 +903,18 @@ function renderPlan(input: MayaWorkspaceInput): string {
   // founder gets confident content about a niche nobody researched.
   const posture =
     input.posture ??
-    `_No strategy yet._ The first job is the homework, in this order:
+    `_No strategy yet._ The first job is the homework, strongest evidence first:
 
-1. **What's actually working in this niche** — real posts, real formats, what's
-   getting engagement from the people who'd buy this.
-2. **What buyers are complaining about** — their words, not my paraphrase. A
-   complaint someone typed is the strongest evidence a post can have.
-3. **Only then, what to write.**
+1. **Competitor ads that are still running.** Someone pays every morning to keep
+   an ad alive and has a dashboard telling them to. An ad running three weeks is
+   the strongest signal there is — nothing else here has money behind it. I look
+   at what it opens on, the order it reveals things in, and what it would take
+   to build our own version of that shape.
+2. **What's actually working in this niche organically** — real posts, real
+   formats, what earns attention from the people who would buy this.
+3. **What buyers are complaining about** — their words, not my paraphrase. A
+   complaint someone typed is unmet demand in the open.
+4. **Only then, what to make.**
 
 I don't post before that's done. Posting first is how you get content that could
 be any product in the category.`;

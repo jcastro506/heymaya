@@ -412,18 +412,48 @@ describe("THE DIFFERENT-MODEL RULE MOVED SERVER-SIDE", () => {
   });
 });
 
-describe("only the customer's own channels ship", () => {
-  it("a TikTok-only founder carries no Instagram or YouTube norms", () => {
-    // §15.1.2 — a Solo customer on one channel should never pay context for
-    // three others' norms.
+describe("⭐ EVERY WORKSPACE CARRIES ALL THREE CHANNELS' NORMS", () => {
+  /**
+   * ⚠️ THIS ASSERTED THE OPPOSITE, AND THE OPPOSITE SHIPPED EMPTY FOR EVERYONE.
+   *
+   * §15.1.2 said a customer on one channel should not pay context for three
+   * others' norms — correct when channels varied. They no longer do: the
+   * product is TikTok, Instagram and YouTube for every customer.
+   *
+   * And the gate did real harm. The workspace is built at DEPLOY, which in v2
+   * runs during `/start` — BEFORE the founder reaches `/connect`. So
+   * `input.channels` was empty every time and NO norms were written at all.
+   * Verified on a live machine: `/data/workspace/PLATFORM_ALGO` did not exist,
+   * while that founder had all three channels connected minutes after boot.
+   *
+   * The one thing that stops her being generic was the thing silently absent.
+   */
+  it("ships all three even when none are connected yet", () => {
+    // The live case: deployed during onboarding, before /connect.
+    const bundle = buildMayaWorkspace({ ...INPUT, channels: [] });
+    const keys = [...bundle.files.keys()];
+    expect(keys).toContain("PLATFORM_ALGO/tiktok.md");
+    expect(keys).toContain("PLATFORM_ALGO/instagram.md");
+    expect(keys).toContain("PLATFORM_ALGO/youtube.md");
+  });
+
+  it("ships all three for a founder with only one connected", () => {
     const bundle = buildMayaWorkspace({
       ...INPUT,
       channels: [{ channel: "tiktok", postingMode: "just_go" as const }],
     });
     const keys = [...bundle.files.keys()];
     expect(keys).toContain("PLATFORM_ALGO/tiktok.md");
-    expect(keys).not.toContain("PLATFORM_ALGO/instagram.md");
-    expect(keys).not.toContain("PLATFORM_ALGO/youtube.md");
+    expect(keys).toContain("PLATFORM_ALGO/instagram.md");
+    expect(keys).toContain("PLATFORM_ALGO/youtube.md");
+  });
+
+  it("⚠️ and never ships X, which the product no longer publishes to", () => {
+    const bundle = buildMayaWorkspace({
+      ...INPUT,
+      channels: [{ channel: "x", postingMode: "just_go" as const }],
+    });
+    expect([...bundle.files.keys()]).not.toContain("PLATFORM_ALGO/x.md");
   });
 
   it("a three-channel founder gets all three", () => {
@@ -711,5 +741,44 @@ describe("A DEAD TURN HAS SOMETHING BEHIND IT", () => {
     const main = config.agents.list.find((a: { id: string }) => a.id === "main");
     const vendor = (ref: string) => ref.split("/").slice(-2)[0];
     expect(vendor(main.model.fallbacks[0])).not.toBe(vendor(main.model.primary));
+  });
+});
+
+describe("⭐ SHE IS A UGC CREATOR, IN THE FILES THAT DEFINE HER", () => {
+  /**
+   * The skills pivoted to video; IDENTITY.md and AGENTS.md did not. Audited
+   * 2026-08-21: "video", "UGC" and "TikTok" appeared ZERO times in the file
+   * that says who she is, and the default plan ended "only then what to WRITE".
+   */
+  const bundle = buildMayaWorkspace(INPUT);
+  const file = (name: string) => bundle.files.get(name) ?? "";
+
+  it("her identity says she makes video, not that she posts", () => {
+    expect(file("IDENTITY.md")).toMatch(/short vertical video/i);
+  });
+
+  it("⭐ and that the shape travels while the claims never do", () => {
+    // §7.5.3 in her own words — the rule that makes copying a competitor's ad
+    // legitimate rather than plagiarism.
+    const id = file("IDENTITY.md");
+    expect(id).toMatch(/copy shapes, never claims/i);
+    expect(id).toMatch(/their numbers, their offer/i);
+  });
+
+  it("the homework starts with competitor ads, not with writing", () => {
+    // Rung 1 of the evidence ladder was absent from the file that tells her
+    // what to do first, months after the ladder was built.
+    expect(file("AGENTS.md")).toMatch(/competitors are still paying to run/i);
+  });
+
+  it("⭐ a reply that unblocks work makes her DO the work", () => {
+    /**
+     * Live: asked whether a competitor was real, told yes, answered "Got it"
+     * and then sat on the findings she owed for the rest of the evening.
+     * HEARTBEAT.md has a "then the work" step; a reply turn needed one too.
+     */
+    const agents = file("AGENTS.md");
+    expect(agents).toMatch(/An answer unblocks work/i);
+    expect(agents).toMatch(/is there something I said I/i);
   });
 });

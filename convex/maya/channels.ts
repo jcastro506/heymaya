@@ -373,6 +373,23 @@ export const syncChannels = internalAction({
       });
     }
 
+    /**
+     * ⭐ Her workspace carries PLATFORM_ALGO per channel, and it is written at
+     * DEPLOY — which happens during `/start`, before the founder ever reaches
+     * `/connect`. So a machine deployed with no channels shipped with no
+     * platform expertise at all, permanently. Marking stale here is what makes
+     * connecting a channel actually teach her that surface.
+     *
+     * Debounced in `markWorkspaceStale`: three channels connected in a row
+     * produce one rebuild, not three.
+     */
+    if (found.length > 0) {
+      await ctx.runMutation(internal.maya.deploy.markWorkspaceStale, {
+        customerId: args.customerId,
+        reason: "a channel was connected",
+      });
+    }
+
     return { ok: true, channels: found };
   },
 });

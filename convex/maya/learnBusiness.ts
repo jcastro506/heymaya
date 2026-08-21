@@ -527,6 +527,16 @@ export const storeTargets = internalMutation({
       }),
       updatedAt: Date.now(),
     });
+
+    /**
+     * ⭐ Her PLAN.md is written from these. Until the first learn lands it says
+     * "no strategy yet" and lists the homework — which is TRUE at deploy and
+     * false ten minutes later, and the file never changed. Now it does.
+     */
+    await ctx.runMutation(internal.maya.deploy.markWorkspaceStale, {
+      customerId: args.customerId,
+      reason: "the niche research landed",
+    });
     return null;
   },
 });
