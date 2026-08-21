@@ -176,9 +176,36 @@ export const PLAIN_FALLBACK =
  * message. No model call — a judge here would cost money on every message and
  * add a second of latency to catch something a regex catches exactly.
  */
-export function checkPlainLanguage(body: string): PlainLanguageVerdict {
+export function checkPlainLanguage(
+  body: string,
+  /**
+   * ⭐ THE FOUNDER'S OWN PRODUCT NAME, WHICH MUST NEVER BE REDACTED.
+   *
+   * ⚠️ FOUND LIVE, 2026-08-21. The customer's product is creatify.ai, and
+   * "Creatify" is on the denylist below because Creatify is OUR VIDEO VENDOR.
+   * So this function quietly deleted the customer's own product name from every
+   * message she sent them. Her introduction went out as *"I run social for, an
+   * AI-powered tool that generates advertisements"* and her pitch as *"I want to
+   * rebuild that shape for by opening on..."* — twice in one hour.
+   *
+   * The machine logs held the correct sentence with "Creatify" in it both
+   * times. She wrote it properly; we erased it on the way out, and the error
+   * log recorded a redaction nobody was reading.
+   *
+   * ⚠️ THIS IS A CLASS, NOT AN INCIDENT. The list also carries Clerk, Convex,
+   * Fly.io, Zernio and OpenRouter — every one a plausible product name. A
+   * global denylist applied to a multi-tenant product has to know whose tenant
+   * it is standing in, or it will erase the one word that matters most to them.
+   *
+   * The rule's purpose is to stop US leaking OUR stack. It was never to stop a
+   * founder hearing their own name.
+   */
+  ownName?: string
+): PlainLanguageVerdict {
   const redacted: string[] = [];
   let clean = body;
+
+  const own = (ownName ?? "").trim().toLowerCase();
 
   for (const { name, re } of MACHINE_PATTERNS) {
     if (re.test(clean)) {
@@ -188,6 +215,13 @@ export function checkPlainLanguage(body: string): PlainLanguageVerdict {
   }
 
   for (const term of INTERNAL_NAMES) {
+    /**
+     * Their name outranks our denylist. Compared on the whole term rather than
+     * by substring: a founder whose product is "Clerk" keeps it, while one
+     * called "Clerky" does not accidentally unlock "Clerk" for us to leak.
+     */
+    if (own && term.toLowerCase() === own) continue;
+
     // Word-boundary-ish, case-insensitive. Escaped because entries contain dots.
     const re = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi");
     if (re.test(clean)) {

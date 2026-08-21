@@ -114,7 +114,23 @@ async function writeOutbound(
     ts: number;
   },
 ): Promise<Id<"messages">> {
-  const plain = checkPlainLanguage(row.body);
+  /**
+   * ⚠️ The founder's own product name is passed in so the denylist cannot eat
+   * it. See `checkPlainLanguage` — "Creatify" is on that list as our video
+   * vendor, and the customer whose product IS creatify.ai had their name
+   * deleted from every message.
+   */
+  const customer = (await ctx.db.get(row.customerId)) as Doc<"customers"> | null;
+  let ownName: string | undefined;
+  if (customer?.productTruthJson) {
+    try {
+      ownName = (JSON.parse(customer.productTruthJson) as { name?: string }).name;
+    } catch {
+      // A corrupt truth record must not cost the message.
+    }
+  }
+
+  const plain = checkPlainLanguage(row.body, ownName);
   if (!plain.ok) {
     console.error(
       `[messages] redacted ${plain.redacted.join(", ")} from ${row.dedupeKey}: ${row.body}`,

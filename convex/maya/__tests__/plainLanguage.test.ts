@@ -258,3 +258,51 @@ async function seed(t: ReturnType<typeof convexTest>): Promise<Id<"customers">> 
     });
   });
 }
+
+describe("⚠️ THE DENYLIST MUST NOT EAT THE FOUNDER'S OWN PRODUCT NAME", () => {
+  /**
+   * Found live 2026-08-21. The customer's product is creatify.ai; "Creatify" is
+   * on the denylist because Creatify is OUR video vendor. Her introduction went
+   * out as "I run social for, an AI-powered tool that generates advertisements"
+   * and her pitch as "I want to rebuild that shape for by opening on..." —
+   * twice in one hour. The machine logs held the correct sentence both times.
+   * She wrote it properly; we erased it on the way out.
+   */
+  const SENT = "I run social for Creatify, an AI ad tool.";
+
+  it("⭐ redacts a vendor name for everyone else", () => {
+    // The rule still has to work — this is the reason the list exists.
+    expect(checkPlainLanguage(SENT).clean).not.toContain("Creatify");
+  });
+
+  it("⭐ but KEEPS it when it is the founder's own product", () => {
+    const v = checkPlainLanguage(SENT, "Creatify");
+    expect(v.clean).toBe(SENT);
+    expect(v.ok).toBe(true);
+    expect(v.redacted).toHaveLength(0);
+  });
+
+  it("matches case-insensitively, because the page's casing is not ours", () => {
+    expect(checkPlainLanguage(SENT, "creatify").clean).toBe(SENT);
+  });
+
+  it("⚠️ and it is a WHOLE-TERM match, not a substring one", () => {
+    // A founder whose product is "Clerky" must not thereby unlock "Clerk" for
+    // us to leak — the exemption is for their name, not for anything near it.
+    const body = "We use Clerk for that.";
+    expect(checkPlainLanguage(body, "Clerky").clean).not.toContain("Clerk");
+  });
+
+  it("still redacts OTHER vendors for that founder", () => {
+    // Exempting their name must not disarm the whole list.
+    const body = "Creatify posts through Zernio.";
+    const v = checkPlainLanguage(body, "Creatify");
+    expect(v.clean).toContain("Creatify");
+    expect(v.clean).not.toContain("Zernio");
+  });
+
+  it("an absent or empty name changes nothing", () => {
+    expect(checkPlainLanguage(SENT, "").clean).not.toContain("Creatify");
+    expect(checkPlainLanguage(SENT, undefined).clean).not.toContain("Creatify");
+  });
+});
