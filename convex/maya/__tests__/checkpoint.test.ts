@@ -251,6 +251,8 @@ describe("liveness notices a machine that stops checking in", () => {
     priorZeroDayStreak: 0,
     customerState: "active",
     hoursSinceCheckpoint: 6,
+    // Established, so the new-customer grace doesn't suppress the contract.
+    hoursSinceFirstSpoke: 72,
     contextTruncated: false,
   };
 

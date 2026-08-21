@@ -55,6 +55,9 @@ async function seedFleet(
         plan: "mvp",
         state: "active",
         timezone: "UTC",
+        // Long-established, so the new-customer liveness grace does not apply —
+        // these tests are about STALLED accounts, which is the opposite case.
+        helloSentAt: MORNING - 30 * 86_400_000,
         createdAt: MORNING - 30 * 86_400_000,
         updatedAt: MORNING,
         ...over,

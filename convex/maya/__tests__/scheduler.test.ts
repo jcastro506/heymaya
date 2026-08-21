@@ -24,6 +24,9 @@ async function customer(
       createdAt: MORNING - 30 * 86_400_000,
     });
     return await ctx.db.insert("customers", {
+      // Long-established, so the new-customer liveness grace does not apply —
+      // these tests are about STALLED accounts, which is the opposite case.
+      helloSentAt: MORNING - 30 * 86_400_000,
       accountId,
       agentVersion: "v2",
       plan: "mvp",

@@ -109,6 +109,43 @@ export interface LivenessInput {
    * oldest durable facts while appearing to work normally.
    */
   contextTruncated?: boolean;
+  /**
+   * ⭐ HOURS SINCE SHE FIRST SPOKE. Undefined when she never has.
+   *
+   * ⚠️ WITHOUT THIS, THE SAFETY NETS APOLOGISE FOR A DAY THAT NEVER HAPPENED.
+   * Measured live 2026-08-21: a founder onboarded at 17:54 local, and by 18:13
+   * — nineteen minutes later — Convex had sent them, in her voice:
+   *
+   *   "Morning — running late today, that one's on me. Nothing has gone out
+   *    yet. Where things stand: nothing live in the last few days."
+   *   "nothing went out today and I don't yet know why"
+   *
+   * Every clause of that is false. She had no morning to be late for, no last
+   * few days to be quiet in, and no placement had ever been scheduled. The
+   * founder's second message was "so are you still doing stuff or" — the
+   * safety nets made a working agent look broken on the one evening the
+   * founder was watching.
+   *
+   * ⚠️ The contract these enforce is about an agent that USED to work and has
+   * stopped. It has nothing to say about one that started an hour ago, and the
+   * clock it measures against does not exist yet.
+   */
+  hoursSinceFirstSpoke?: number;
+}
+
+/**
+ * A customer is too new for the liveness contract to mean anything.
+ *
+ * One full local day, so the first real morning brief and the first real
+ * placement window have both had their chance before anything is called
+ * missing.
+ */
+export const NEW_CUSTOMER_GRACE_HOURS = 24;
+
+export function tooNewToJudge(input: LivenessInput): boolean {
+  // Never spoke = never started. Nothing here can be late.
+  if (input.hoursSinceFirstSpoke === undefined) return true;
+  return input.hoursSinceFirstSpoke < NEW_CUSTOMER_GRACE_HOURS;
 }
 
 /**
@@ -119,6 +156,12 @@ export interface LivenessInput {
  * turns a single incident into a week of drip-fed alerts.
  */
 export function evaluate(input: LivenessInput): Breach[] {
+  /**
+   * ⚠️ Checked FIRST and returning empty, not filtered afterwards. A breach
+   * that is built and then dropped is one refactor away from being sent.
+   */
+  if (tooNewToJudge(input)) return [];
+
   const {
     hourLocal,
     briefSentToday,
@@ -534,6 +577,15 @@ export const gatherFacts = internalQuery({
         (now - (checkpoint?.capturedAt ?? customer.createdAt)) / 3_600_000,
       everCheckpointed: checkpoint !== null,
       contextTruncated: checkpoint?.contextTruncated === true,
+      /**
+       * ⚠️ `helloSentAt` is the honest start of her working life — not the
+       * customer row's creation, which is set during onboarding while she is
+       * still being deployed and could not have posted anything.
+       */
+      hoursSinceFirstSpoke:
+        customer.helloSentAt === undefined
+          ? undefined
+          : (now - customer.helloSentAt) / 3_600_000,
     };
   },
 });

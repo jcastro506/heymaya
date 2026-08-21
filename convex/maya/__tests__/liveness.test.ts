@@ -12,6 +12,7 @@ import {
   CREDIT_RESERVES,
   evaluate,
   type LivenessInput,
+  NEW_CUSTOMER_GRACE_HOURS,
   type BreachAction,
 } from "../liveness";
 
@@ -36,6 +37,12 @@ function facts(over: Partial<LivenessInput> = {}): LivenessInput {
     // block below.
     hoursSinceCheckpoint: 6,
     contextTruncated: false,
+    /**
+     * An established customer, so the new-customer grace does not apply.
+     * Defaulted here for the same reason the checkpoint facts are: these tests
+     * are about the contract, not about being new. The grace has its own block.
+     */
+    hoursSinceFirstSpoke: 72,
     ...over,
   };
 }
@@ -453,6 +460,16 @@ describe("gatherFacts — reads the world, judges nothing", () => {
     // The bug the composition test caught. Without clamping the walk-back to
     // the account's creation date, someone who signed up this morning shows a
     // 7-day zero streak on their first evening — and opens a support thread.
+    //
+    // ⚠️ THIS TEST USED TO ALSO ASSERT "a first quiet day is still reported",
+    // expecting `zero_placements_today`. That decision was WRONG and live
+    // evidence overturned it: on 2026-08-21 a founder who onboarded at 17:54
+    // was told "nothing went out today and I don't yet know why" NINETEEN
+    // MINUTES LATER, alongside an apology for a morning brief that was never
+    // due. `tooNewToJudge` now suppresses the whole contract for a day.
+    //
+    // The streak assertion below is still the point of this test and still
+    // holds — it is checked past the grace, where it can actually fire.
     const t = convexTest(schema, modules);
     const customerId = await seed(t, "brand_new", MORNING_TODAY);
     const f = await t.query(internal.maya.liveness.gatherFacts, {
@@ -461,11 +478,28 @@ describe("gatherFacts — reads the world, judges nothing", () => {
     });
     expect(f?.priorZeroDayStreak).toBe(0);
 
-    const breaches = evaluate({ ...f!, briefSentToday: true, recapSentToday: true });
-    const streak = breaches.find((b) => b.kind === "zero_day_streak");
-    expect(streak).toBeUndefined();
-    // A first quiet day is still reported — just not as a three-day crisis.
+    const established = {
+      ...f!,
+      briefSentToday: true,
+      recapSentToday: true,
+      hoursSinceFirstSpoke: NEW_CUSTOMER_GRACE_HOURS + 1,
+    };
+    const breaches = evaluate(established);
+    expect(breaches.find((b) => b.kind === "zero_day_streak")).toBeUndefined();
     expect(kinds(breaches)).toEqual(["zero_placements_today"]);
+  });
+
+  it("⭐ and on their FIRST evening, says nothing at all", async () => {
+    // The live case, end to end through gatherFacts: no `helloSentAt` on the
+    // row means she has not started, and nothing about her can be late.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "first_evening", MORNING_TODAY);
+    const f = await t.query(internal.maya.liveness.gatherFacts, {
+      customerId,
+      now: EVENING,
+    });
+    expect(f?.hoursSinceFirstSpoke).toBeUndefined();
+    expect(evaluate({ ...f!, briefSentToday: false, recapSentToday: false })).toEqual([]);
   });
 
   it("a missing customer is null, not a crash", async () => {
@@ -486,7 +520,13 @@ describe("gatherFacts — reads the world, judges nothing", () => {
       customerId,
       now: EVENING,
     });
-    const breaches = evaluate({ ...f!, knownReason: "your X token expired" });
+    // ⚠️ Past the new-customer grace — a genuinely stalled account is exactly
+    // what liveness exists to catch, and the grace must never swallow it.
+    const breaches = evaluate({
+      ...f!,
+      knownReason: "your X token expired",
+      hoursSinceFirstSpoke: NEW_CUSTOMER_GRACE_HOURS + 24,
+    });
     const streak = breaches.find((b) => b.kind === "zero_day_streak");
     expect(streak?.action).toBe("open_support_thread");
     expect(streak?.detail).toMatch(/your X token expired/);
@@ -697,5 +737,71 @@ describe("every action has somewhere to go", () => {
         expect(breach.detail).not.toMatch(/\b[45]\d{2}\b/);
       }
     }
+  });
+});
+
+describe("⚠️ A CUSTOMER AN HOUR OLD CANNOT BE 'LATE'", () => {
+  /**
+   * Live 2026-08-21. A founder onboarded at 17:54 local. By 18:13 — nineteen
+   * minutes later — Convex had sent them, in her voice:
+   *
+   *   "Morning — running late today, that one's on me. Nothing has gone out
+   *    yet. Where things stand: nothing live in the last few days."
+   *   "nothing went out today and I don't yet know why"
+   *
+   * Every clause false: no morning to be late for, no last few days to be
+   * quiet in, no placement ever scheduled. The founder replied "so are you
+   * still doing stuff or" — the safety nets made a working agent look broken on
+   * the one evening the founder was watching.
+   */
+  it("⭐ says nothing at all about a customer who never spoke", () => {
+    expect(evaluate(facts({ hoursSinceFirstSpoke: undefined }))).toEqual([]);
+  });
+
+  it("⭐ and nothing on the evening she was created", () => {
+    // The exact live case: brand new, no brief, no placement, 18:13 local.
+    const breaches = evaluate(
+      facts({
+        hoursSinceFirstSpoke: 0.3,
+        briefSentToday: false,
+        recapSentToday: false,
+        placementsToday: 0,
+        hourLocal: 18,
+      })
+    );
+    expect(breaches).toEqual([]);
+  });
+
+  it("stays quiet right up to the end of the grace", () => {
+    expect(
+      evaluate(
+        facts({
+          hoursSinceFirstSpoke: NEW_CUSTOMER_GRACE_HOURS - 0.1,
+          briefSentToday: false,
+          placementsToday: 0,
+          hourLocal: 20,
+        })
+      )
+    ).toEqual([]);
+  });
+
+  it("⭐ and starts judging the moment a full day has passed", () => {
+    // The grace must not become a permanent exemption — a genuinely stalled
+    // account has to be caught, which is the whole reason liveness exists.
+    const breaches = evaluate(
+      facts({
+        hoursSinceFirstSpoke: NEW_CUSTOMER_GRACE_HOURS + 0.1,
+        briefSentToday: false,
+        placementsToday: 0,
+        hourLocal: 20,
+      })
+    );
+    expect(breaches.length).toBeGreaterThan(0);
+  });
+
+  it("the grace is one full local day, so both windows get their chance", () => {
+    // Shorter and a founder who onboards at 23:00 is judged before their first
+    // morning brief was ever due.
+    expect(NEW_CUSTOMER_GRACE_HOURS).toBe(24);
   });
 });

@@ -269,7 +269,16 @@ describe("a full day, walked through every module", () => {
       customerId,
       now: EVENING,
     });
-    const breaches = evaluate({ ...facts!, knownReason: pre.message });
+    // ⚠️ Past the new-customer grace. This bad day is about a channel that
+    // EXPIRED — an account that used to work and stopped — so the contract has
+    // something to measure. A genuinely brand-new customer is silent instead;
+    // see `tooNewToJudge`, added after Convex told a 19-minute-old account
+    // "nothing went out today and I don't yet know why".
+    const breaches = evaluate({
+      ...facts!,
+      knownReason: pre.message,
+      hoursSinceFirstSpoke: 72,
+    });
     // A first zero day, not a crisis — the account is one day old, and the
     // liveness clamp knows the difference.
     expect(breaches.map((b) => b.kind)).toContain("zero_placements_today");
