@@ -522,6 +522,29 @@ export const historyHttp = httpAction(async (ctx, request) => {
 });
 
 /**
+ * Extra unprompted messages for the founder's first day with her.
+ *
+ * Anchored on `helloSentAt` rather than on the pairing, because that is the
+ * moment she actually started talking — a founder who paired, went to lunch,
+ * and came back to a booting machine should still get a whole first day.
+ *
+ * ⚠️ Zero once the window closes. This raises the ceiling for one day; it does
+ * not remove it, and there is no path that makes it permanent.
+ */
+export const FIRST_DAY_BONUS = 2;
+export const FIRST_DAY_WINDOW_MS = 24 * 60 * 60_000;
+
+export function firstDayAllowance(
+  customer: { helloSentAt?: number },
+  now: number
+): number {
+  // Not introduced yet — the intro itself must never be the message that is
+  // refused for being one too many.
+  if (customer.helloSentAt === undefined) return FIRST_DAY_BONUS;
+  return now - customer.helloSentAt <= FIRST_DAY_WINDOW_MS ? FIRST_DAY_BONUS : 0;
+}
+
+/**
  * `update` — tell the founder something, unprompted.
  *
  * The morning brief and the evening recap both need this and **there was no
@@ -562,12 +585,47 @@ export const updateHttp = httpAction(async (ctx, request) => {
     { customerId: auth.customer._id }
   );
 
-  if (sentToday >= budgets.proactiveMessagesPerDay) {
+  /**
+   * ⭐ THE FIRST DAY GETS ITS OWN ALLOWANCE, AND THAT IS NOT A LOOSENING.
+   *
+   * ⚠️ The steady-state cap is right and stays — §13.5.3: above ~4 she is
+   * interrupting rather than reporting, and unprompted messages are the churn
+   * risk. A muted chat is a dead agent.
+   *
+   * But day one is not steady state. Her introduction and her first research
+   * report are not interruptions — they ARE the product being delivered, and
+   * they land within an hour of each other. Against a budget of 4 that leaves
+   * two for the rest of the founder's first day, so an evening recap plus one
+   * question would hard-block the next thing she had to say. The single worst
+   * message to refuse is the first report, on the one day the founder is
+   * actually watching.
+   *
+   * ⚠️ Server-side and time-boxed, never a flag she can set. A `kind` she
+   * chooses would be a budget she controls, and the cap only means something
+   * if the thing being capped cannot opt out of it.
+   */
+  const firstDayBonus = firstDayAllowance(auth.customer, Date.now());
+  const limit = budgets.proactiveMessagesPerDay + firstDayBonus;
+
+  if (sentToday >= limit) {
     return respond({
       ok: false,
-      data: { sent: false, sentToday, limit: budgets.proactiveMessagesPerDay },
+      data: { sent: false, sentToday, limit },
       why: `you've already sent them ${sentToday} unprompted messages today — that's the limit`,
-      next: "hold it until tomorrow. Do NOT retry, and don't work around it by asking a question instead",
+      /**
+       * ⚠️ SHE RELAYED THIS REFUSAL TO THE FOUNDER, VERBATIM. Live 2026-08-21:
+       * *"The follow-up couldn't be sent as a separate proactive message today
+       * because the introduction already used that slot."*
+       *
+       * That is our plumbing in the founder's chat, and it breaks the standing
+       * rule that she never leaks technical detail. The bug was not her
+       * judgement — the refusal told her what happened and never told her that
+       * the explanation was for HER, so relaying it looked like honesty.
+       *
+       * Choreography rides in the tool response (§2.8), and that has to include
+       * saying which parts are private.
+       */
+      next: "hold it until tomorrow. ⚠️ This reason is FOR YOU, NOT FOR THEM — never tell them about slots, limits or budgets; that is our plumbing and it is not their problem. Do NOT retry, and don't work around it by asking a question instead. If what you had to say still matters tomorrow, say it then.",
     });
   }
 

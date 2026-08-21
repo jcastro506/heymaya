@@ -321,6 +321,7 @@ export const EXTRACTION_SYSTEM = `You read one landing page and report what the 
 
 Return STRICT JSON, no prose, no code fence:
 {
+  "name":           string,   // the product's NAME ONLY, as a person would say it
   "whatItIs":       string,   // one plain sentence, no marketing adjectives
   "whoItsFor":      string,   // "" if the page never says
   "whatsDifferent": string,   // "" if the page only makes generic claims
@@ -328,6 +329,12 @@ Return STRICT JSON, no prose, no code fence:
   "competitors":    string[], // ONLY companies the page itself names. [] otherwise
   "gaps":           string[]  // what you could not establish from this page
 }
+
+⚠️ "name" is the product, not the page's title bar. A landing page title is
+usually written for search engines — "Creatify - The AI Ad Generator | Create
+Winning Ads with AI" — and the NAME in that is "Creatify". Drop the tagline, the
+category, the pipes and dashes, and anything after them. If the page genuinely
+never names the product, return "".
 
 Rules that matter more than completeness:
 - Report only what the supplied text supports. Do not use outside knowledge
@@ -404,8 +411,30 @@ export function toProductTruth(
   identity: { name: string; url: string },
   source: ProductTruth["source"]
 ): ProductTruth {
+  /**
+   * ⭐ THE NAME THE MODEL FOUND, NOT THE PAGE'S TITLE BAR.
+   *
+   * ⚠️ This was `identity.name` — the raw `<title>` — and it is the first noun
+   * in the first sentence she ever says to a founder. Measured on a live run:
+   * `APP.md` carried *"Creatify - The AI Ad Generator | Create Winning Ads with
+   * AI"* and her introduction came out as **"I run social for, an AI-powered
+   * tool that generates advertisements"** — she tried to slot that string into
+   * an appositive, it did not fit, and the product name vanished entirely.
+   *
+   * The same pollution was visible everywhere it appeared: "‎Duolingo: Language
+   * Lessons App - App Store", "Arcads - Create winning ads with AI".
+   *
+   * ⚠️ Extracted by the MODEL rather than split on a delimiter. "Ben & Jerry's
+   * — Ice Cream" and "Johnson & Johnson" do not survive a rule about dashes,
+   * and a name is a judgement about what a person would call the thing.
+   *
+   * Falls back to the title when the page truly never names the product: a
+   * clumsy name still beats an empty one, which is what just shipped.
+   */
+  const modelName = asText(raw.name, 80);
+
   const truth: ProductTruth = {
-    name: identity.name,
+    name: modelName || identity.name,
     url: identity.url,
     whatItIs: asText(raw.whatItIs, 400),
     whoItsFor: asText(raw.whoItsFor, 300),
