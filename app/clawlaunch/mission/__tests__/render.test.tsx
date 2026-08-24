@@ -41,6 +41,24 @@ const h = vi.hoisted(() => {
      * cannot report an intention or be padded. 111 cost events were read by
      * nothing while the founder was asking "so are you still doing stuff or".
      */
+    /**
+     * ⭐ The trust section. Measured live: three nightly snapshots, all the
+     * bare seed — she had learned nothing durable in four days, and counting
+     * snapshots would have reported a healthy backup of an empty file.
+     */
+    myMemory: {
+      ok: true,
+      believes: {
+        name: "Acme",
+        whatItIs: "generates video ads with AI actors",
+        whoItsFor: "",
+        whatsDifferent: "",
+      },
+      gaps: ["no stated target audience"],
+      founderSays: [],
+      memory: { markdown: "# MEMORY.md", capturedAt: 1, days: 3, empty: true },
+      changes: [],
+    },
     myWork: {
       ok: true,
       days: [
@@ -381,6 +399,7 @@ vi.mock("@/convex/_generated/api", () => ({
         myIdeaBank: "myIdeaBank",
         myMediaLibrary: "myMediaLibrary",
         myResearch: "myResearch",
+        myMemory: "myMemory",
       },
       activityFeed: {
         /** The spend ledger, read in the founder's language. */
@@ -649,6 +668,14 @@ describe("Mission Control v3.1 — board modules render with grounded data", () 
     expect(html).toContain("The CSV that became a dashboard project");
     // ⭐ It opens now, rather than asserting she has a reason and stopping.
     expect(html).toContain("why she picked this");
+
+    // ⭐ What she believes, INCLUDING what she could not work out — §2.7's
+    // honest half, and the half a founder can fix in thirty seconds.
+    expect(html).toContain("generates video ads with AI actors");
+    expect(html).toContain("no stated target audience");
+
+    // ⚠️ An empty memory is reported as empty, not as three healthy backups.
+    expect(html).toContain("hasn&#x27;t kept anything durable yet");
 
     // What she has to make it with — the LADDER VERDICT, not a count.
     expect(html).toContain("What she has to work with");

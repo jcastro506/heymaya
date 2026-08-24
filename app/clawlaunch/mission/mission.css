@@ -1583,3 +1583,38 @@ details.mc-fold[open] > summary .mc-caret {
   opacity: 0.55;
   min-width: 22px;
 }
+
+/* ── WHAT SHE BELIEVES / REMEMBERS ────────────────────────────────────────
+   The gaps are shown deliberately (§2.7): what she could NOT work out is the
+   honest half of the record, and the half a founder can fix in thirty seconds. */
+
+.mc-gaps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.mc-gaps li {
+  font-size: 12.5px;
+  line-height: 1.45;
+  opacity: 0.68;
+  padding-left: 12px;
+  position: relative;
+}
+.mc-gaps li::before {
+  content: "?";
+  position: absolute;
+  left: 0;
+  opacity: 0.45;
+  font-family: var(--mc-mono);
+}
+.mc-memory {
+  font-family: var(--mc-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  margin: 0;
+  opacity: 0.82;
+}

@@ -1066,3 +1066,145 @@ export const myCompetition = query({
 function str(x: unknown): string {
   return typeof x === "string" ? x : "";
 }
+
+/**
+ * ⭐ WHAT SHE BELIEVES, AND WHAT SHE HAS LEARNED.
+ *
+ * The trust screen. For a product whose claim is "an employee, not a tool",
+ * the question a founder eventually asks is not "what did you post" but
+ * "do you actually understand my business, and are you getting better?"
+ *
+ * ⚠️ THE GAPS ARE SHOWN, NOT HIDDEN. §2.7 — grounded or silent. What she could
+ * NOT establish about a product is the honest half of the record and the half
+ * a founder can actually fix in thirty seconds. Showing only what she knows
+ * would make a thin read look like a complete one.
+ *
+ * ⚠️ AND HER MEMORY IS SHOWN AT ITS REAL SIZE. Measured on a live account:
+ * three daily snapshots, all 196 bytes, all the bare `MEMORY.md` header —
+ * she had learned nothing durable in four days. A screen that rendered "3
+ * snapshots" would have reported a healthy backup of an empty file.
+ */
+export const myMemory = query({
+  args: {},
+  handler: async (
+    ctx
+  ): Promise<{
+    ok: boolean;
+    error?: string;
+    /** What she believes the product is. */
+    believes: { name: string; whatItIs: string; whoItsFor: string; whatsDifferent: string };
+    /** What she could not work out — the half a founder can fix. */
+    gaps: string[];
+    /** Their own corrections, verbatim, newest last. */
+    founderSays: string[];
+    memory: {
+      /** Her durable notes, as they stand. Empty is a real answer. */
+      markdown: string;
+      capturedAt: number;
+      /** Distinct days she has checkpointed. */
+      days: number;
+      /** True when nothing but the file's own header has ever been written. */
+      empty: boolean;
+    } | null;
+    /** When she changed approach, and why. */
+    changes: Array<{ day: string; change: string; because: string; at: number }>;
+  }> => {
+    const customer = await currentCustomer(ctx);
+    if (!customer) {
+      return {
+        ok: false,
+        error: "sign in first",
+        believes: { name: "", whatItIs: "", whoItsFor: "", whatsDifferent: "" },
+        gaps: [],
+        founderSays: [],
+        memory: null,
+        changes: [],
+      };
+    }
+
+    let believes = { name: "", whatItIs: "", whoItsFor: "", whatsDifferent: "" };
+    let gaps: string[] = [];
+    let founderSays: string[] = [];
+    if (customer.productTruthJson) {
+      try {
+        const t = JSON.parse(customer.productTruthJson) as Record<string, unknown>;
+        believes = {
+          name: str(t.name),
+          whatItIs: str(t.whatItIs),
+          whoItsFor: str(t.whoItsFor),
+          whatsDifferent: str(t.whatsDifferent),
+        };
+        gaps = Array.isArray(t.gaps) ? (t.gaps as string[]).slice(0, 8) : [];
+        founderSays = Array.isArray(t.founderSays)
+          ? (t.founderSays as string[]).slice(-5)
+          : [];
+      } catch {
+        // A corrupt record shows as nothing known, never as a crash.
+      }
+    }
+
+    const snaps = (await ctx.db
+      .query("memorySnapshots")
+      .withIndex("by_customer_and_capturedAt", (q) =>
+        q.eq("customerId", customer._id)
+      )
+      .order("desc")
+      .take(30)) as Doc<"memorySnapshots">[];
+
+    /**
+     * ⚠️ "Empty" means the file carries no FACTS, not that it has no bytes.
+     * `MEMORY.md` ships with a header explaining what it is, so a never-written
+     * memory is ~196 bytes rather than 0 — and reporting that as a healthy
+     * backup is exactly the mistake this flag exists to prevent.
+     */
+    const latest = snaps[0] ?? null;
+
+    const changes = (await ctx.db
+      .query("strategyChanges")
+      .withIndex("by_customer_and_created", (q) =>
+        q.eq("customerId", customer._id)
+      )
+      .order("desc")
+      .take(10)) as Doc<"strategyChanges">[];
+
+    return {
+      ok: true,
+      believes,
+      gaps,
+      founderSays,
+      memory: latest
+        ? {
+            markdown: latest.markdown,
+            capturedAt: latest.capturedAt,
+            days: snaps.length,
+            empty: !hasFacts(latest.markdown),
+          }
+        : null,
+      changes: changes.map((c) => ({
+        day: c.day,
+        change: c.change,
+        because: c.because,
+        at: c.createdAt,
+      })),
+    };
+  },
+});
+
+/**
+ * Whether a `MEMORY.md` carries anything she has actually learned.
+ *
+ * ⚠️ Counted as FACT LINES, not bytes and not prose. The seeded file is ~196
+ * bytes of header explaining what the file is, ending in
+ * `_(empty — nothing learned yet)_` — so "has content" and "has learned
+ * something" are different questions, and only the second one matters.
+ *
+ * Facts are written one per line per the file's own instruction ("goes into
+ * MEMORY.md as one short line"), so a bullet is the structural signal. Filtering
+ * prose by length or wording would be a guess about her writing style.
+ */
+export function hasFacts(markdown: string): boolean {
+  return markdown
+    .split("\n")
+    .map((l) => l.trim())
+    .some((l) => /^([-*+]|\d+\.)\s+\S/.test(l));
+}

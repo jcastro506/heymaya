@@ -11,6 +11,7 @@ import { convexTest } from "convex-test";
 import schema from "../../schema";
 import { api } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
+import { hasFacts } from "../dashboard";
 import {
   livenessFrom,
   oldestMetricsAsOf,
@@ -224,5 +225,168 @@ describe("⭐ AN IDEA WITH NO EVIDENCE IS A GUESS, AND THE FOUNDER COULD NOT TEL
       .withIdentity({ subject: "u_many" })
       .query(api.maya.dashboard.myIdeaBank, {});
     expect(res.ideas[0].sourceUrls.length).toBeLessThanOrEqual(4);
+  });
+});
+
+describe("⭐ WHAT SHE BELIEVES, AND WHETHER SHE IS ACTUALLY LEARNING", () => {
+  async function seedTruth(
+    t: ReturnType<typeof convexTest>,
+    suffix: string,
+    over: { truth?: unknown; snapshots?: string[] } = {},
+  ) {
+    return t.run(async (ctx) => {
+      const accountId = await ctx.db.insert("creators", {
+        clerkUserId: `u_${suffix}`,
+        email: `${suffix}@e.com`,
+        channelPreference: "web",
+        timezone: "UTC",
+        status: "active",
+        plan: "manager",
+        createdAt: 1,
+      } as never);
+      const customerId = await ctx.db.insert("customers", {
+        accountId,
+        agentVersion: "v2",
+        plan: "mvp",
+        state: "active",
+        timezone: "UTC",
+        createdAt: 1,
+        updatedAt: 1,
+        productTruthJson: JSON.stringify(
+          over.truth ?? {
+            name: "Acme",
+            whatItIs: "a thing",
+            whoItsFor: "",
+            whatsDifferent: "",
+            gaps: ["no stated audience", "no pricing"],
+            founderSays: ["we sell to agencies, not solo founders"],
+          },
+        ),
+      });
+      for (const [i, md] of (over.snapshots ?? []).entries()) {
+        await ctx.db.insert("memorySnapshots", {
+          customerId,
+          capturedAt: 1000 + i,
+          markdown: md,
+          bytes: md.length,
+        });
+      }
+      return customerId;
+    });
+  }
+
+  const read = (t: ReturnType<typeof convexTest>, suffix: string) =>
+    t.withIdentity({ subject: `u_${suffix}` }).query(api.maya.dashboard.myMemory, {});
+
+  it("⭐ shows the GAPS, because they are the half a founder can fix", () => {
+    // §2.7 grounded or silent. Showing only what she knows makes a thin read
+    // look like a complete one.
+    return (async () => {
+      const t = convexTest(schema, modules);
+      await seedTruth(t, "gaps");
+      const res = await read(t, "gaps");
+      expect(res.gaps).toContain("no stated audience");
+      expect(res.founderSays[0]).toContain("agencies");
+    })();
+  });
+
+  it("⚠️ A MEMORY THAT IS ONLY ITS OWN HEADER IS EMPTY, NOT HEALTHY", async () => {
+    /**
+     * Measured live: three nightly snapshots, all 196 bytes, all the bare
+     * `MEMORY.md` header — she had learned nothing durable in four days.
+     * Counting snapshots would have reported a healthy backup of an empty file,
+     * which is the same defect as a write with no reader pointed the other way.
+     */
+    // The real seed, verbatim — header prose plus its own empty marker.
+    const header =
+      "# MEMORY.md\n\nDurable facts, preferences, and standing decisions — distilled from daily notes\nand from dreaming. **This file is mine.** Nothing rewrites it but me.\n\n_(empty — nothing learned yet)_\n";
+    const t = convexTest(schema, modules);
+    await seedTruth(t, "hollow", { snapshots: [header, header, header] });
+    const res = await read(t, "hollow");
+    expect(res.memory?.days).toBe(3);
+    expect(res.memory?.empty).toBe(true);
+  });
+
+  it("and a memory with real facts is not empty", async () => {
+    const t = convexTest(schema, modules);
+    await seedTruth(t, "real", {
+      snapshots: ["# MEMORY.md\n\n- They sell to agencies, never solo founders.\n"],
+    });
+    const res = await read(t, "real");
+    expect(res.memory?.empty).toBe(false);
+    expect(res.memory?.markdown).toContain("agencies");
+  });
+
+  it("no snapshots at all is null, not a crash", async () => {
+    const t = convexTest(schema, modules);
+    await seedTruth(t, "none2");
+    const res = await read(t, "none2");
+    expect(res.memory).toBeNull();
+    expect(res.ok).toBe(true);
+  });
+
+  it("⚠️ a corrupt truth record shows as nothing known, never a crash", async () => {
+    const t = convexTest(schema, modules);
+    await t.run(async (ctx) => {
+      const accountId = await ctx.db.insert("creators", {
+        clerkUserId: "u_bad2",
+        email: "b@e.com",
+        channelPreference: "web",
+        timezone: "UTC",
+        status: "active",
+        plan: "manager",
+        createdAt: 1,
+      } as never);
+      await ctx.db.insert("customers", {
+        accountId,
+        agentVersion: "v2",
+        plan: "mvp",
+        state: "active",
+        timezone: "UTC",
+        createdAt: 1,
+        updatedAt: 1,
+        productTruthJson: "{not json",
+      });
+    });
+    const res = await read(t, "bad2");
+    expect(res.ok).toBe(true);
+    expect(res.believes.whatItIs).toBe("");
+  });
+});
+
+describe("⚠️ 'HAS CONTENT' AND 'HAS LEARNED SOMETHING' ARE DIFFERENT QUESTIONS", () => {
+  /**
+   * The seeded `MEMORY.md` is ~196 bytes of header explaining what the file is,
+   * ending in `_(empty — nothing learned yet)_`. Measured live: three nightly
+   * snapshots, all exactly that. A byte count or a prose check would have
+   * reported a healthy backup of an empty file.
+   */
+  const SEED =
+    "# MEMORY.md\n\nDurable facts, preferences, and standing decisions — distilled from daily notes\nand from dreaming. **This file is mine.** Nothing rewrites it but me.\n\n_(empty — nothing learned yet)_\n";
+
+  it("the untouched seed has learned nothing", () => {
+    expect(hasFacts(SEED)).toBe(false);
+  });
+
+  it("one durable line is enough to count", () => {
+    expect(hasFacts(`${SEED}\n- They sell to agencies, never solo founders.`)).toBe(
+      true
+    );
+  });
+
+  it("accepts the bullet styles she actually writes", () => {
+    expect(hasFacts("- a fact")).toBe(true);
+    expect(hasFacts("* a fact")).toBe(true);
+    expect(hasFacts("1. a fact")).toBe(true);
+  });
+
+  it("⚠️ a bullet with nothing after it does not count", () => {
+    // An empty list item is a formatting artefact, not something learned.
+    expect(hasFacts("-\n-  \n")).toBe(false);
+  });
+
+  it("prose alone never counts, however much of it there is", () => {
+    // Filtering by length or wording would be a guess about her writing style.
+    expect(hasFacts("Some long explanatory paragraph. ".repeat(20))).toBe(false);
   });
 });

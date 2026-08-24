@@ -9,7 +9,6 @@
  */
 
 import type * as _admin_realWorldDeployGtm from "../_admin/realWorldDeployGtm.js";
-import type * as _admin_wk from "../_admin/wk.js";
 import type * as _admin_zernioLiveSmoke from "../_admin/zernioLiveSmoke.js";
 import type * as accountDeletion from "../accountDeletion.js";
 import type * as admin from "../admin.js";
@@ -296,7 +295,6 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "_admin/realWorldDeployGtm": typeof _admin_realWorldDeployGtm;
-  "_admin/wk": typeof _admin_wk;
   "_admin/zernioLiveSmoke": typeof _admin_zernioLiveSmoke;
   accountDeletion: typeof accountDeletion;
   admin: typeof admin;

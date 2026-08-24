@@ -59,6 +59,7 @@ type Idea = NonNullable<
 
 export default function BrainPage() {
   const [openIdea, setOpenIdea] = useState<Idea | null>(null);
+  const memory = useQuery(api.maya.dashboard.myMemory, {});
   const formats = useQuery(api.maya.formats.myFormats, {});
   const ideas = useQuery(api.maya.dashboard.myIdeaBank, {});
   const library = useQuery(api.maya.dashboard.myMediaLibrary, {});
@@ -77,6 +78,107 @@ export default function BrainPage() {
       subtitle="What she's watching, what she plans to make, and what she has to make it with."
     >
       {/* ── What she's watching ─────────────────────────────────────────── */}
+      {/**
+        * ⭐ WHAT SHE BELIEVES — the trust section. For a product whose claim is
+        * "an employee, not a tool", the question a founder eventually asks is
+        * not "what did you post" but "do you actually understand my business?"
+        */}
+      <Section title="What she believes about your product">
+        {!memory || !memory.ok ? null : (
+          <Rise>
+            <Card>
+              <div className="mc-draft">{memory.believes.whatItIs}</div>
+              {memory.believes.whoItsFor ? (
+                <p className="mc-ad-hook">For {memory.believes.whoItsFor}</p>
+              ) : null}
+              {memory.believes.whatsDifferent ? (
+                <p className="mc-ad-hook">{memory.believes.whatsDifferent}</p>
+              ) : null}
+
+              {/**
+                * ⭐ THE GAPS, SHOWN. §2.7 — grounded or silent. What she could
+                * NOT work out is the honest half of the record and the half a
+                * founder can fix in thirty seconds. Hiding it would make a thin
+                * read look like a complete one.
+                */}
+              {memory.gaps.length > 0 ? (
+                <>
+                  <div className="mc-learn-sub">
+                    What she couldn&apos;t work out — tell her in Telegram
+                  </div>
+                  <ul className="mc-gaps">
+                    {memory.gaps.map((g) => (
+                      <li key={g}>{g}</li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+
+              {memory.founderSays.length > 0 ? (
+                <>
+                  <div className="mc-learn-sub">What you told her</div>
+                  {memory.founderSays.map((f) => (
+                    <blockquote key={f} className="mc-quote">
+                      {f}
+                    </blockquote>
+                  ))}
+                </>
+              ) : null}
+            </Card>
+          </Rise>
+        )}
+      </Section>
+
+      {/* ── What she remembers ──────────────────────────────────────────── */}
+      <Section title="What she remembers">
+        {!memory || !memory.ok ? null : !memory.memory ? (
+          <Rise>
+            <Empty
+              title="Nothing kept yet."
+              body="She distils what matters into a durable note each night. It fills as she learns your business."
+            />
+          </Rise>
+        ) : (
+          <Rise>
+            <Card>
+              {/**
+                * ⚠️ EMPTY IS REPORTED AS EMPTY. `MEMORY.md` ships with a header
+                * explaining what it is, so a never-written memory is ~196 bytes
+                * rather than zero. Rendering "3 snapshots" would report a
+                * healthy backup of an empty file — measured on a live account,
+                * where three nightly snapshots were all the bare header.
+                */}
+              {memory.memory.empty ? (
+                <p className="mc-ad-hook">
+                  She hasn&apos;t kept anything durable yet — {memory.memory.days}{" "}
+                  {memory.memory.days === 1 ? "night" : "nights"} saved, all of
+                  them empty.
+                </p>
+              ) : (
+                <pre className="mc-memory">{memory.memory.markdown}</pre>
+              )}
+            </Card>
+          </Rise>
+        )}
+      </Section>
+
+      {/* ── When she changed her mind ───────────────────────────────────── */}
+      {memory?.ok && memory.changes.length > 0 ? (
+        <Section title="When she changed approach" count={memory.changes.length}>
+          {memory.changes.map((c) => (
+            <Rise key={`${c.at}-${c.change}`}>
+              <Card>
+                <div className="mc-draft">{c.change}</div>
+                <p className="mc-ad-steal">{c.because}</p>
+                <div className="mc-action-src">
+                  <Chip>{c.day}</Chip>
+                </div>
+              </Card>
+            </Rise>
+          ))}
+        </Section>
+      ) : null}
+
       <Section title="Shapes that are working" count={shapes.length}>
         {shapes.length === 0 ? (
           <Rise>
