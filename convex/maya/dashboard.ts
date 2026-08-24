@@ -730,3 +730,163 @@ export const resultsLadder = query({
     };
   },
 });
+
+/**
+ * ⭐ THE HOMEWORK, VISIBLE. What she has actually learned about this business.
+ *
+ * ⚠️ ALL OF THIS EXISTED AND NONE OF IT WAS REACHABLE FROM THE WEB. Audited on
+ * a live account, four days in: 51 ideas, 72 observations, 12 competitor ads
+ * with their structure watched and recorded, a niche vocabulary, ranked buyer
+ * complaints — and Mission Control showed an empty room, because every public
+ * query pointed at drafts, placements and results.
+ *
+ * The founder's read was "Results is empty, Videos have nothing, Today is
+ * useless." All three were TRUE and all three were answering the wrong
+ * question: on day four there is nothing live yet, and the thing worth seeing
+ * is the homework that makes the first post good.
+ *
+ * ⚠️ And it inverted what they heard. A third of her messages were watchdogs
+ * announcing that nothing had gone out; not one surfaced the 51 ideas. Failure
+ * was over-reported by machinery, success was reported by nobody.
+ *
+ * This is deliberately a READ of rows she already wrote. Nothing here computes,
+ * fetches or judges — if it isn't in a row, it isn't shown (§2.7).
+ */
+export const myResearch = query({
+  args: {},
+  handler: async (
+    ctx
+  ): Promise<{
+    ok: boolean;
+    error?: string;
+    /** Competitor ads, longest-running first — rung 1 of the ladder. */
+    ads: Array<{
+      advertiser: string;
+      daysRunning: number;
+      variants: number;
+      isVideo: boolean;
+      url: string;
+      hook: string;
+      /** What she saw when she watched it, if she has. */
+      device: string;
+      borrowable: string;
+      /** Which asset rung rebuilding it would need. */
+      requires: string;
+    }>;
+    /** The buyer's own words, as searched and verified. */
+    niche: string[];
+    /** Accounts worth watching, found by those terms. */
+    watching: number;
+    /** What buyers keep complaining about, ranked. */
+    complaints: string[];
+    counts: { ideas: number; observations: number; posts: number; ads: number };
+  }> => {
+    const customer = await currentCustomer(ctx);
+    if (!customer) {
+      return {
+        ok: false,
+        error: "sign in first",
+        ads: [],
+        niche: [],
+        watching: 0,
+        complaints: [],
+        counts: { ideas: 0, observations: 0, posts: 0, ads: 0 },
+      };
+    }
+
+    const observations = (await ctx.db
+      .query("observations")
+      .withIndex("by_customer_and_captured", (q) =>
+        q.eq("customerId", customer._id)
+      )
+      .collect()) as Doc<"observations">[];
+
+    const adRows = observations.filter((o) => o.kind === "ad" && o.metricsJson);
+    const ads = adRows
+      .map((row) => {
+        try {
+          const ad = JSON.parse(row.metricsJson as string) as {
+            pageName?: string;
+            daysRunning?: number;
+            variants?: number;
+            hasVideo?: boolean;
+            url?: string;
+            title?: string;
+            body?: string;
+            watchedJson?: string | null;
+          };
+          /**
+           * The watch is the expensive half and only the top few get it, so an
+           * unwatched ad still renders — with its hook from the ad's own copy
+           * rather than an empty card that reads as a bug.
+           */
+          let device = "";
+          let borrowable = "";
+          let requires = "";
+          let hook = ad.title || ad.body || "";
+          if (ad.watchedJson) {
+            const w = JSON.parse(ad.watchedJson) as Record<string, string>;
+            hook = w.hook || hook;
+            device = w.visualDevice ?? "";
+            borrowable = w.borrowable ?? "";
+            requires = w.requires ?? "";
+          }
+          return {
+            advertiser: ad.pageName ?? "",
+            daysRunning: ad.daysRunning ?? 0,
+            variants: ad.variants ?? 1,
+            isVideo: ad.hasVideo === true,
+            url: ad.url ?? "",
+            hook,
+            device,
+            borrowable,
+            requires,
+          };
+        } catch {
+          return null;
+        }
+      })
+      .filter((a): a is NonNullable<typeof a> => a !== null)
+      .sort((a, b) => b.daysRunning - a.daysRunning)
+      .slice(0, 8);
+
+    let niche: string[] = [];
+    let watching = 0;
+    let complaints: string[] = [];
+    if (customer.buyerJson) {
+      try {
+        const buyer = JSON.parse(customer.buyerJson) as {
+          targets?: { keywords?: string[]; trackedAccounts?: unknown[] };
+          complaints?: Array<{ summary?: string; text?: string }>;
+        };
+        niche = (buyer.targets?.keywords ?? []).slice(0, 12);
+        watching = (buyer.targets?.trackedAccounts ?? []).length;
+        complaints = (buyer.complaints ?? [])
+          .map((c) => c.summary ?? c.text ?? "")
+          .filter((s) => s.length > 0)
+          .slice(0, 5);
+      } catch {
+        // A corrupt blob shows as no research, never as a crash.
+      }
+    }
+
+    const ideas = (await ctx.db
+      .query("ideas")
+      .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+      .collect()) as Doc<"ideas">[];
+
+    return {
+      ok: true,
+      ads,
+      niche,
+      watching,
+      complaints,
+      counts: {
+        ideas: ideas.length,
+        observations: observations.length,
+        posts: observations.filter((o) => o.kind === "post").length,
+        ads: adRows.length,
+      },
+    };
+  },
+});

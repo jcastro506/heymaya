@@ -248,7 +248,88 @@
 
 .mc-today-grid {
   grid-template-columns: 1fr 1fr 340px;
-  grid-template-areas: "needs needs side" "work work side";
+  grid-template-areas: "needs needs side" "work work side" "learn learn side";
+}
+.mc-a-learn {
+  grid-area: learn;
+}
+
+/* ── WHAT SHE'S LEARNED ──────────────────────────────────────────────────
+   On day four a founder has no placements and no numbers, and the screen was
+   answering questions that only exist later. The homework is the work at that
+   point, and it was entirely invisible. */
+
+.mc-learn-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+.mc-learn-counts .v {
+  font-family: var(--mc-mono);
+  font-size: 20px;
+  line-height: 1.1;
+}
+.mc-learn-counts .k {
+  font-size: 11px;
+  opacity: 0.55;
+  text-transform: lowercase;
+}
+.mc-ad {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px 0;
+}
+.mc-ad-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* The number IS the argument — an ad alive for weeks is one somebody pays
+   every morning to keep alive. It reads first, before the advertiser. */
+.mc-ad-days {
+  font-family: var(--mc-mono);
+  font-size: 13px;
+  color: var(--mc-good);
+  white-space: nowrap;
+}
+.mc-ad-who {
+  font-size: 13px;
+  font-weight: 500;
+}
+.mc-ad-hook {
+  font-size: 13px;
+  opacity: 0.75;
+  margin-top: 3px;
+  line-height: 1.45;
+}
+.mc-ad-steal {
+  font-size: 12px;
+  opacity: 0.6;
+  margin-top: 4px;
+  line-height: 1.45;
+  border-left: 2px solid rgba(255, 255, 255, 0.14);
+  padding-left: 8px;
+}
+.mc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.mc-chip {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  opacity: 0.8;
+}
+.mc-learn-sub {
+  font-size: 11px;
+  opacity: 0.5;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 16px 0 6px;
 }
 .mc-a-needs {
   grid-area: needs;
@@ -1197,6 +1278,7 @@ details.mc-fold[open] > summary .mc-caret {
   }
   .mc-a-needs,
   .mc-a-work,
+  .mc-a-learn,
   .mc-a-side,
   .mc-a-dossier,
   .mc-a-bets,

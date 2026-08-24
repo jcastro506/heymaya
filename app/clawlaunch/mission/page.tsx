@@ -121,6 +121,7 @@ export default function TodayPage() {
    * v1's feed could report activity on a day nothing shipped.
    */
   const activityQ = useQuery(api.maya.archive.myActivity, { limit: 5 });
+  const research = useQuery(api.maya.dashboard.myResearch, {});
   const activity = activityQ?.entries;
   const postResults = useQuery(
     api.gtmMaya.postResults.getMyRecentPostResults,
@@ -364,6 +365,116 @@ export default function TodayPage() {
                 ))}
               </ul>
             ) : null}
+          </Panel>
+        </Rise>
+
+        {/**
+          * ⭐ WHAT SHE'S LEARNED — the homework, which IS the work on day four.
+          *
+          * ⚠️ Audited on a live account: 51 ideas, 72 observations, 12
+          * competitor ads with their structure recorded, a verified niche
+          * vocabulary and ranked buyer complaints — and this screen showed an
+          * empty room, because every panel asked a question that only has an
+          * answer after something is live.
+          *
+          * The founder's own words were "Results is empty, Videos have nothing,
+          * Today is useless." All three true, all three the wrong question.
+          */}
+        <Rise i={2} className="mc-a-learn">
+          <Panel title="What she's learned">
+            {/* ⚠️ Null AND undefined: undefined is loading, null is a query
+                that resolved to nothing. Checking only one renders a crash. */}
+            {!research ? null : !research.ok ? (
+              <p className="text-sm text-paper-faint">Sign in to see this.</p>
+            ) : (
+              <>
+                <div className="mc-learn-counts">
+                  <div>
+                    <div className="v">{research.counts.ideas}</div>
+                    <div className="k">ideas banked</div>
+                  </div>
+                  <div>
+                    <div className="v">{research.counts.posts}</div>
+                    <div className="k">posts read</div>
+                  </div>
+                  <div>
+                    <div className="v">{research.counts.ads}</div>
+                    <div className="k">competitor ads</div>
+                  </div>
+                  <div>
+                    <div className="v">{research.watching}</div>
+                    <div className="k">accounts watched</div>
+                  </div>
+                </div>
+
+                {research.ads.length > 0 ? (
+                  <>
+                    <div className="mc-learn-sub">
+                      Ads their competitors keep paying to run
+                    </div>
+                    {research.ads.slice(0, 4).map((ad) => (
+                      <div key={ad.url} className="mc-ad">
+                        <div className="mc-ad-top">
+                          {/* The number first — it is the whole argument. */}
+                          <span className="mc-ad-days">
+                            {ad.daysRunning}d live
+                          </span>
+                          <span className="mc-ad-who">{ad.advertiser}</span>
+                          {ad.isVideo ? (
+                            <span className="mc-chip">video</span>
+                          ) : null}
+                          {ad.url ? (
+                            <a
+                              href={ad.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mc-chip no-underline"
+                            >
+                              watch it
+                            </a>
+                          ) : null}
+                        </div>
+                        {ad.hook ? (
+                          <div className="mc-ad-hook">{ad.hook}</div>
+                        ) : null}
+                        {/* Only present once she has actually watched it. */}
+                        {ad.borrowable ? (
+                          <div className="mc-ad-steal">{ad.borrowable}</div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </>
+                ) : null}
+
+                {research.complaints.length > 0 ? (
+                  <>
+                    <div className="mc-learn-sub">
+                      What their buyers keep complaining about
+                    </div>
+                    {research.complaints.map((c) => (
+                      <div key={c} className="mc-ad-hook">
+                        {c}
+                      </div>
+                    ))}
+                  </>
+                ) : null}
+
+                {research.niche.length > 0 ? (
+                  <>
+                    <div className="mc-learn-sub">
+                      The words their buyers actually use
+                    </div>
+                    <div className="mc-chips">
+                      {research.niche.map((k) => (
+                        <span key={k} className="mc-chip">
+                          {k}
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                ) : null}
+              </>
+            )}
           </Panel>
         </Rise>
 

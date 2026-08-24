@@ -30,6 +30,33 @@ const h = vi.hoisted(() => {
       costTotalUsd: 0,
     },
     /**
+     * ⭐ The homework, which IS the work before anything is live. Audited on a
+     * live account four days in: 51 ideas, 72 observations, 12 competitor ads
+     * and a verified niche vocabulary — with this screen showing an empty room,
+     * because every panel asked a question that only has an answer once
+     * something has been published.
+     */
+    myResearch: {
+      ok: true,
+      counts: { ideas: 51, observations: 72, posts: 60, ads: 12 },
+      watching: 30,
+      niche: ["ads not converting", "creative fatigue facebook ads"],
+      complaints: ["I can't make fresh creative ads because management wants safe"],
+      ads: [
+        {
+          advertiser: "madgicx.com",
+          daysRunning: 60,
+          variants: 2,
+          isVideo: true,
+          url: "https://www.facebook.com/ads/library?id=1",
+          hook: "THIS IS YOUR BRAIN ON MANUAL ADS",
+          device: "talking head",
+          borrowable: "open on the mess, then show one simpler workflow",
+          requires: "screen_recording",
+        },
+      ],
+    },
+    /**
      * ⭐ v2 shape. `myDraftQueue` returns {ok, drafts[]} with `id`/`channel`/
      * `text`/`proposedAt`, already filtered to pending-and-unexpired and sorted
      * oldest-first — so the page does no filtering of its own.
@@ -326,6 +353,7 @@ vi.mock("@/convex/_generated/api", () => ({
         myVideos: "myVideos",
         myIdeaBank: "myIdeaBank",
         myMediaLibrary: "myMediaLibrary",
+        myResearch: "myResearch",
       },
       archive: { myActivity: "myActivity" },
       attribution: { myResults: "myResults" },
@@ -596,4 +624,42 @@ describe("Mission Control v3.1 — board modules render with grounded data", () 
     expect(html).not.toContain("Who she believes is buying");
   });
 
+});
+
+describe("⭐ THE HOMEWORK IS THE WORK, AND IT WAS INVISIBLE", () => {
+  // The grounded mode — the default is the everything-null state, which is the
+  // OTHER thing this panel has to survive and is covered by the smoke block.
+  beforeEach(() => {
+    h.mode = "data";
+  });
+
+  it("shows what she found when nothing is live yet", async () => {
+    const Page = (await import("../page")).default;
+    const html = renderToString(createElement(Page));
+
+    // Counts a founder can weigh — proof she has been working at all.
+    expect(html).toContain("ideas banked");
+    expect(html).toContain("51");
+    expect(html).toContain("accounts watched");
+
+    /**
+     * ⭐ The days-running number IS the argument: an ad alive for weeks is one
+     * somebody pays every morning to keep alive.
+     *
+     * ⚠️ Asserted in parts. React SSR inserts a `<!-- -->` separator between an
+     * expression and the text beside it, so the rendered markup is
+     * `60<!-- -->d live` — matching the visible string would fail on a panel
+     * that is rendering perfectly.
+     */
+    expect(html).toContain("mc-ad-days");
+    expect(html).toContain("60");
+    expect(html).toContain("d live");
+    expect(html).toContain("madgicx.com");
+
+    // The link, so they can judge the ad themselves rather than take her word.
+    expect(html).toContain("https://www.facebook.com/ads/library?id=1");
+
+    // Their buyers' own words — the whole point of the niche work.
+    expect(html).toContain("ads not converting");
+  });
 });
