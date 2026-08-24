@@ -9,7 +9,7 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "../../schema";
-import { internal } from "../../_generated/api";
+import { api, internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { readAccount } from "../channels";
 import type { Doc, Id } from "../../_generated/dataModel";
@@ -147,11 +147,13 @@ describe("CONNECTED IS NOT THE SAME AS CAN-POST", () => {
 
 async function seedCustomer(
   t: ReturnType<typeof convexTest>,
+  /** Suffix so several customers can coexist in one test file. */
+  suffix = "sync",
 ): Promise<Id<"customers">> {
   return await t.run(async (ctx) => {
     const accountId = await ctx.db.insert("creators", {
-      clerkUserId: "u_sync",
-      email: "sync@example.com",
+      clerkUserId: `u_${suffix}`,
+      email: `${suffix}@example.com`,
       channelPreference: "telegram",
       timezone: "UTC",
       status: "active",
@@ -348,3 +350,108 @@ async function seedNewChanCustomer(t: ReturnType<typeof convexTest>) {
     });
   });
 }
+
+describe("⭐ TRUST IS PER CHANNEL, AND THE FOUNDER CAN SET IT", () => {
+  /**
+   * ⚠️ Settings has had a "Trust Maya" control since v1 reading
+   * `gtmAgents.autonomousPosting` — a row v2 NEVER WRITES. It rendered null for
+   * every founder, and toggling it would have written to a table nothing reads.
+   * A control that appears to work and changes nothing is worse than a missing
+   * one.
+   *
+   * ⚠️ And the v1 shape was wrong, not just unwired: one account-level flag
+   * cannot express TikTok on `just_go` while Instagram still asks first, which
+   * is a normal state for a founder who trusts one surface more than another.
+   */
+  it("reports the mode each channel is actually on", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seedCustomer(t, "trust");
+    await t.run(async (ctx) => {
+      await ctx.db.insert("channels", {
+        customerId,
+        channel: "tiktok",
+        postingMode: "just_go",
+        status: "connected",
+        zernioAccountId: "a1",
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      await ctx.db.insert("channels", {
+        customerId,
+        channel: "instagram",
+        postingMode: "show_me_first",
+        status: "connected",
+        zernioAccountId: "a2",
+        createdAt: 1,
+        updatedAt: 1,
+      });
+    });
+
+    const res = await t
+      .withIdentity({ subject: "u_trust" })
+      .query(api.maya.channels.myChannels, {});
+    const byName = Object.fromEntries(
+      (res.channels ?? []).map((c) => [c.channel, c.postingMode])
+    );
+    expect(byName.tiktok).toBe("just_go");
+    expect(byName.instagram).toBe("show_me_first");
+  });
+
+  it("the founder can change one without touching the others", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seedCustomer(t, "set");
+    await t.run(async (ctx) => {
+      for (const channel of ["tiktok", "instagram"] as const) {
+        await ctx.db.insert("channels", {
+          customerId,
+          channel,
+          postingMode: "show_me_first",
+          status: "connected",
+          zernioAccountId: `a_${channel}`,
+          createdAt: 1,
+          updatedAt: 1,
+        });
+      }
+    });
+
+    const as = t.withIdentity({ subject: "u_set" });
+    expect(
+      await as.mutation(api.maya.channels.setMyPostingMode, {
+        channel: "tiktok",
+        postingMode: "just_go",
+      })
+    ).toEqual({ ok: true });
+
+    const res = await as.query(api.maya.channels.myChannels, {});
+    const byName = Object.fromEntries(
+      (res.channels ?? []).map((c) => [c.channel, c.postingMode])
+    );
+    expect(byName.tiktok).toBe("just_go");
+    // ⭐ Untouched — the whole point of per-channel.
+    expect(byName.instagram).toBe("show_me_first");
+  });
+
+  it("⚠️ refuses a channel with no grant", async () => {
+    // Recording a preference for a connection that does not exist would leave
+    // the publish gate deciding about a surface she cannot reach.
+    const t = convexTest(schema, modules);
+    await seedCustomer(t, "nogrant");
+    const res = await t
+      .withIdentity({ subject: "u_nogrant" })
+      .mutation(api.maya.channels.setMyPostingMode, {
+        channel: "youtube",
+        postingMode: "just_go",
+      });
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/isn't connected/i);
+  });
+
+  it("⚠️ and refuses a stranger entirely", async () => {
+    const t = convexTest(schema, modules);
+    const res = await t.mutation(api.maya.channels.setMyPostingMode, {
+      channel: "tiktok",
+      postingMode: "just_go",
+    });
+    expect(res.ok).toBe(false);
+  });
+});

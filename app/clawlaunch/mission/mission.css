@@ -1618,3 +1618,29 @@ details.mc-fold[open] > summary .mc-caret {
   margin: 0;
   opacity: 0.82;
 }
+
+/* ── TRUST, PER CHANNEL ───────────────────────────────────────────────────
+   One account-level toggle could not express what v2 stores: TikTok on
+   just_go while Instagram still asks first is a normal state. */
+
+.mc-trust-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+.mc-trust-row:last-child {
+  border-bottom: 0;
+}
+.mc-trust-ch {
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+.mc-trust-sub {
+  font-size: 12px;
+  opacity: 0.6;
+  margin-top: 2px;
+}

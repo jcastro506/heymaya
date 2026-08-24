@@ -1092,7 +1092,14 @@ export const myMemory = query({
     ok: boolean;
     error?: string;
     /** What she believes the product is. */
-    believes: { name: string; whatItIs: string; whoItsFor: string; whatsDifferent: string };
+    believes: {
+      name: string;
+      /** Their site, as she read it — the canonical URL, not what they typed. */
+      url: string;
+      whatItIs: string;
+      whoItsFor: string;
+      whatsDifferent: string;
+    };
     /** What she could not work out — the half a founder can fix. */
     gaps: string[];
     /** Their own corrections, verbatim, newest last. */
@@ -1114,7 +1121,13 @@ export const myMemory = query({
       return {
         ok: false,
         error: "sign in first",
-        believes: { name: "", whatItIs: "", whoItsFor: "", whatsDifferent: "" },
+        believes: {
+          name: "",
+          url: "",
+          whatItIs: "",
+          whoItsFor: "",
+          whatsDifferent: "",
+        },
         gaps: [],
         founderSays: [],
         memory: null,
@@ -1122,7 +1135,13 @@ export const myMemory = query({
       };
     }
 
-    let believes = { name: "", whatItIs: "", whoItsFor: "", whatsDifferent: "" };
+    let believes = {
+      name: "",
+      url: "",
+      whatItIs: "",
+      whoItsFor: "",
+      whatsDifferent: "",
+    };
     let gaps: string[] = [];
     let founderSays: string[] = [];
     if (customer.productTruthJson) {
@@ -1130,6 +1149,7 @@ export const myMemory = query({
         const t = JSON.parse(customer.productTruthJson) as Record<string, unknown>;
         believes = {
           name: str(t.name),
+          url: str(t.url),
           whatItIs: str(t.whatItIs),
           whoItsFor: str(t.whoItsFor),
           whatsDifferent: str(t.whatsDifferent),

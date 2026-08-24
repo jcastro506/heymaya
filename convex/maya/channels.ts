@@ -24,6 +24,7 @@ import {
   internalAction,
   internalMutation,
   internalQuery,
+  mutation,
   query,
 } from "../_generated/server";
 import { internal } from "../_generated/api";
@@ -529,6 +530,16 @@ export interface MyChannel {
   /** ⚠️ Permanent platform limits, not a problem with their setup. */
   permanentLimit?: string;
   lastCheckedAt?: number;
+  /**
+   * ⭐ How much rope she gets ON THIS CHANNEL — the single most consequential
+   * setting in the product, and it was not reachable from the web.
+   *
+   * ⚠️ PER CHANNEL, NOT PER ACCOUNT. Settings showed one account-level toggle
+   * read from `gtmAgents.autonomousPosting` — a v1 row v2 never writes — so it
+   * rendered null for everyone AND could not have expressed the truth anyway:
+   * a founder can run TikTok on `just_go` while Instagram still asks first.
+   */
+  postingMode?: "show_me_first" | "just_go";
 }
 
 const ALL_CHANNELS: Channel[] = ["tiktok", "instagram", "youtube", "x"];
@@ -566,6 +577,7 @@ export const myChannels = query({
         const permanentLimit = CHANNEL_REQUIREMENTS[channel].permanentLimit;
 
         if (!row) {
+          // No row means no grant — there is no mode to report, not a default.
           return {
             channel,
             state: "not_connected" as const,
@@ -596,8 +608,71 @@ export const myChannels = query({
           notices,
           permanentLimit,
           lastCheckedAt: row.lastCheckedAt,
+          postingMode: row.postingMode,
         };
       }),
     };
+  },
+});
+
+/**
+ * ⭐ THE FOUNDER SETS HOW MUCH ROPE SHE GETS, PER CHANNEL.
+ *
+ * ⚠️ Settings has had a "Trust Maya" control since v1 and it has been reading
+ * `gtmAgents.autonomousPosting` — a row v2 never writes. So it rendered null
+ * for every v2 founder, and toggling it would have written to a table nothing
+ * reads. A control that appears to work and changes nothing is worse than one
+ * that is missing.
+ *
+ * ⚠️ AND THE V1 SHAPE WAS WRONG, not just unwired. One account-level flag
+ * cannot express what v2 actually stores: TikTok on `just_go` while Instagram
+ * still asks first is a normal, correct state for a founder who trusts one
+ * surface more than another.
+ *
+ * Resolves the caller's own customer and never accepts one as an argument —
+ * the same rule as the agent tool surface, for the same reason.
+ */
+export const setMyPostingMode = mutation({
+  args: {
+    channel: v.union(
+      v.literal("tiktok"),
+      v.literal("instagram"),
+      v.literal("youtube")
+    ),
+    postingMode: v.union(v.literal("show_me_first"), v.literal("just_go")),
+  },
+  handler: async (ctx, args): Promise<{ ok: boolean; error?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { ok: false, error: "sign in first" };
+
+    const creator = (await ctx.db
+      .query("creators")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .first()) as Doc<"creators"> | null;
+    if (!creator) return { ok: false, error: "no account yet" };
+
+    const customer = (await ctx.db
+      .query("customers")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first()) as Doc<"customers"> | null;
+    if (!customer) return { ok: false, error: "no account yet" };
+
+    const rows = (await ctx.db
+      .query("channels")
+      .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+      .collect()) as Doc<"channels">[];
+    const row = rows.find((r) => r.channel === args.channel);
+    /**
+     * ⚠️ A channel with no row has no grant. Creating one here would record a
+     * preference for a connection that does not exist, and the publish gate
+     * would then be deciding about a channel she cannot reach.
+     */
+    if (!row) return { ok: false, error: `${args.channel} isn't connected yet` };
+
+    await ctx.db.patch(row._id, {
+      postingMode: args.postingMode,
+      updatedAt: Date.now(),
+    });
+    return { ok: true };
   },
 });

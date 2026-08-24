@@ -7,7 +7,7 @@
  */
 
 import { useState } from "react";
-import { useAction, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { useClerk } from "@clerk/nextjs";
 import { api } from "@/convex/_generated/api";
 import {
@@ -39,6 +39,12 @@ const DELETE_PHRASE = "DELETE";
 
 export default function SettingsPage() {
   const account = useQuery(api.gtmMaya.missionControl.getMyAccount);
+  /**
+   * ⚠️ v2 sources. `getMyAccount` still carries plan and billing, which have
+   * not migrated — but Product and Trust now read the rows v2 actually writes.
+   */
+  const product = useQuery(api.maya.dashboard.myMemory, {});
+  const productUrl = product?.ok ? product.believes.url : "";
   const cancelSubscription = useAction(
     api.gtmMaya.accountLifecycle.cancelMyGtmSubscription
   );
@@ -221,42 +227,58 @@ export default function SettingsPage() {
         </Rise>
       </Section>
 
-      <Section title="Trust Maya">
-        <PostingControl
-          mode={account.postingMode}
-          graduated={account.postingGraduated}
-        />
+      {/**
+        * ⭐ TRUST, PER CHANNEL — the single most consequential setting here.
+        *
+        * ⚠️ This read `account.postingMode` from `gtmAgents.autonomousPosting`,
+        * a v1 row v2 NEVER WRITES. It rendered null for every founder, and
+        * toggling it would have written to a table nothing reads. A control
+        * that looks like it works and changes nothing is worse than a missing
+        * one.
+        *
+        * ⚠️ And the v1 SHAPE was wrong, not just unwired: one account-level
+        * flag cannot express what v2 stores. TikTok on `just_go` while
+        * Instagram still asks first is a normal state for a founder who trusts
+        * one surface more than another.
+        */}
+      <Section title="How much rope she gets">
+        <TrustPerChannel />
       </Section>
 
+      {/**
+        * ⚠️ This read `gtmApps` via `agent.appId` — a table v2 never writes, so
+        * every row rendered "—". What she believes about the product lives in
+        * `customers.productTruthJson`, and Brain already shows the full read.
+        */}
       <Section title="Product">
         <Card>
-          <Row label="App" value={app?.name ?? "—"} />
+          <Row label="Product" value={product?.believes.name || "—"} />
           <Row
             label="Site"
             value={
-              app?.url ? (
+              productUrl ? (
                 <a
-                  href={app.url}
+                  href={productUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-paper underline decoration-paper/30 underline-offset-2"
                 >
-                  {app.url}
+                  {productUrl}
                 </a>
               ) : (
                 "—"
               )
             }
           />
-          <Row label="Stage" value={app?.stage ?? "—"} />
           <Row
-            label="Mode"
-            value={
-              app?.entryMode ? <Pill tone="lime">{app.entryMode}</Pill> : "unresolved"
-            }
+            label="What it is"
+            value={product?.believes.whatItIs || "—"}
           />
-          {app?.archetype ? <Row label="Archetype" value={app.archetype} /> : null}
-          <Row label="North Star" value={northStar} />
+          {/* The correction path is the chat, not a form here (§2.1). */}
+          <p className="mt-3 text-xs leading-relaxed text-paper-dim">
+            Got something wrong? Tell her in Telegram — what you say outranks
+            anything she read on your site.
+          </p>
         </Card>
       </Section>
 
@@ -464,5 +486,81 @@ export default function SettingsPage() {
         </Card>
       </Section>
     </Shell>
+  );
+}
+
+/**
+ * ⭐ How much rope she gets, per channel.
+ *
+ * ⚠️ Only connected channels are offered. A control for a channel with no
+ * grant would record a preference for a connection that does not exist, and
+ * the publish gate would then be deciding about a surface she cannot reach.
+ */
+function TrustPerChannel() {
+  const data = useQuery(api.maya.channels.myChannels);
+  const setMode = useMutation(api.maya.channels.setMyPostingMode);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  if (!data) return null;
+  if (!data.ok || !data.channels) {
+    return <p className="text-sm text-paper-faint">Sign in to change this.</p>;
+  }
+
+  const connected = data.channels.filter(
+    (c): c is typeof c & { channel: "tiktok" | "instagram" | "youtube" } =>
+      c.channel !== "x" && c.state !== "not_connected"
+  );
+
+  if (connected.length === 0) {
+    return (
+      <Card>
+        <p className="text-sm text-paper-faint">
+          Connect a channel and you can decide, for each one, whether she posts
+          straight away or shows you first.
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      {connected.map((c) => {
+        const justGo = c.postingMode === "just_go";
+        return (
+          <div key={c.channel} className="mc-trust-row">
+            <div>
+              <div className="mc-trust-ch">{c.channel}</div>
+              <div className="mc-trust-sub">
+                {justGo
+                  ? "she posts without asking"
+                  : "she shows you every post first"}
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={busy === c.channel}
+              className="mc-btn"
+              onClick={async () => {
+                setBusy(c.channel);
+                try {
+                  await setMode({
+                    channel: c.channel,
+                    postingMode: justGo ? "show_me_first" : "just_go",
+                  });
+                } finally {
+                  setBusy(null);
+                }
+              }}
+            >
+              {busy === c.channel
+                ? "…"
+                : justGo
+                  ? "Ask me first"
+                  : "Let her post"}
+            </button>
+          </div>
+        );
+      })}
+    </Card>
   );
 }
