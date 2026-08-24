@@ -207,10 +207,29 @@ export function checkPlainLanguage(
 
   const own = (ownName ?? "").trim().toLowerCase();
 
+  /**
+   * ⚠️ NEVER `re.test()` ON THESE. `MACHINE_PATTERNS` are module-level regexes
+   * carrying the `/g` flag, and a global regex is STATEFUL: `test()` advances
+   * `lastIndex`, so the next call starts mid-string and can return false for
+   * text that does contain a leak.
+   *
+   * That is a guard that silently stops guarding, and which message it misses
+   * depends on what was sent before it — the worst possible failure mode for
+   * something whose whole job is to stop our internals reaching a founder.
+   *
+   * Found 2026-08-24 by shuffling test order: `AN R2 EXCEPTION NEVER REACHES
+   * THEM` passed in isolation and failed after unrelated files ran first. The
+   * flake was real, and it was this.
+   *
+   * `String.replace` with `/g` always starts at zero and does not read
+   * `lastIndex`, so replacing and comparing is both stateless and simpler than
+   * testing first.
+   */
   for (const { name, re } of MACHINE_PATTERNS) {
-    if (re.test(clean)) {
+    const next = clean.replace(re, "").trim();
+    if (next !== clean) {
       redacted.push(name);
-      clean = clean.replace(new RegExp(re.source, re.flags), "").trim();
+      clean = next;
     }
   }
 
@@ -223,10 +242,13 @@ export function checkPlainLanguage(
     if (own && term.toLowerCase() === own) continue;
 
     // Word-boundary-ish, case-insensitive. Escaped because entries contain dots.
+    // Built fresh each pass, so it carries no `lastIndex` from anywhere — and
+    // replaced-and-compared for the same reason as above.
     const re = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi");
-    if (re.test(clean)) {
+    const next = clean.replace(re, "").trim();
+    if (next !== clean) {
       redacted.push(term.toLowerCase());
-      clean = clean.replace(re, "").trim();
+      clean = next;
     }
   }
 

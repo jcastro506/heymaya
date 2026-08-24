@@ -306,3 +306,48 @@ describe("⚠️ THE DENYLIST MUST NOT EAT THE FOUNDER'S OWN PRODUCT NAME", () =
     expect(checkPlainLanguage(SENT, undefined).clean).not.toContain("Creatify");
   });
 });
+
+describe("⚠️ THE GUARD MUST NOT DEPEND ON WHAT IT CHECKED BEFORE", () => {
+  /**
+   * `MACHINE_PATTERNS` are module-level regexes carrying `/g`, and a global
+   * regex is STATEFUL — `test()` advances `lastIndex`, so the next call starts
+   * mid-string and can return false for text that does contain a leak.
+   *
+   * A guard that silently stops guarding, where WHICH message it misses depends
+   * on what was sent before it. Found by shuffling test order: the R2 exception
+   * test passed alone and failed after unrelated files ran first.
+   */
+  const LEAK =
+    "That file didn't come through — NoSuchBucketError: The specified bucket does not exist. Worth another try?";
+
+  it("⭐ catches the same leak every time, however many came before it", () => {
+    for (let i = 0; i < 25; i += 1) {
+      const v = checkPlainLanguage(LEAK);
+      expect(v.ok, `call ${i}`).toBe(false);
+      expect(v.clean, `call ${i}`).not.toMatch(/NoSuchBucketError/);
+    }
+  });
+
+  it("⚠️ and is not disarmed by a long clean message in between", () => {
+    // The exact interleaving that broke it: something long and harmless moves
+    // `lastIndex` past the point where the next leak sits.
+    checkPlainLanguage("a perfectly ordinary sentence ".repeat(40));
+    expect(checkPlainLanguage(LEAK).ok).toBe(false);
+  });
+
+  it("⚠️ nor by a message that leaks a DIFFERENT pattern first", () => {
+    checkPlainLanguage("download failed (403)");
+    const v = checkPlainLanguage(LEAK);
+    expect(v.clean).not.toMatch(/NoSuchBucketError/);
+  });
+
+  it("a clean message stays clean no matter the order", () => {
+    checkPlainLanguage(LEAK);
+    const clean = "Posted your TikTok — 40 views so far.";
+    expect(checkPlainLanguage(clean)).toEqual({
+      clean,
+      redacted: [],
+      ok: true,
+    });
+  });
+});
