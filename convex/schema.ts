@@ -3954,6 +3954,21 @@ export default defineSchema({
     ),
     /** The exact text shown to the founder. Publishing reads THIS. */
     snapshotText: v.string(),
+    /**
+     * ⭐ WHEN THE FOUNDER ACTUALLY SAW IT. Absent means they never did.
+     *
+     * ⚠️ A draft on a `show_me_first` channel is worth nothing until it is in
+     * front of the founder, and until now nothing recorded whether it had been.
+     * Live 2026-08-22: a draft was created at 16:43, she asked for a screen
+     * recording in the same minute and never sent the text, and it expired 24h
+     * later unseen. Placements that week: zero. Nothing anywhere could tell a
+     * draft the founder ignored from one they were never shown.
+     *
+     * Set by OBSERVATION, not by her calling something — `messages.send`
+     * notices when an outbound message carries the draft's own words. A step
+     * that depends on her remembering is the step that was already missed.
+     */
+    shownAt: v.optional(v.number()),
     mediaAssetIdsJson: v.optional(v.string()),
     outcome: v.union(
       v.literal("pending"),

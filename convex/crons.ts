@@ -269,4 +269,22 @@ crons.weekly(
   {}
 );
 
+/**
+ * ⭐ A DRAFT NOBODY SAW IS NOT A DRAFT.
+ *
+ * §4 — anything promised to the user is enforced by the server. The publish
+ * gate hands her the text and asks her to send it; this makes sure it arrives.
+ * Live 2026-08-22: a draft written at 16:43 was never shown and expired unseen
+ * 24h later, on a customer whose three channels are all `show_me_first`.
+ *
+ * Every 10 minutes rather than hourly: the founder is usually still in the
+ * session the draft was written in, and an hour later they have moved on.
+ */
+crons.interval(
+  "maya-show-unshown-drafts",
+  { minutes: 10 },
+  internal.maya.drafts.sweepUnshownDrafts,
+  {}
+);
+
 export default crons;

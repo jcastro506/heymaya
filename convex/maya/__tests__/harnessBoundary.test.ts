@@ -99,6 +99,30 @@ const CONVEX_MAY_SCHEDULE = [
   "maya-refresh-metrics",
   "maya-drain-jobs",
   "maya-liveness-sweep",
+  /**
+   * ⭐ ENFORCEMENT, NOT AGENCY — and the distinction is the whole boundary.
+   *
+   * §4: anything promised to the user is enforced by the SERVER. The publish
+   * gate hands her a held draft's text and asks her to send it verbatim; that
+   * is choreography, and choreography can be missed.
+   *
+   * ⚠️ It was. Live 2026-08-22: a draft was written at 16:43, she asked for a
+   * screen recording in the same minute, never sent the text, and it expired
+   * unseen 24 hours later. Placements that week: zero, on a customer whose
+   * three channels are all `show_me_first`. The approval loop broke at the last
+   * inch and nothing was technically wrong, which is why it survived three days.
+   *
+   * ⚠️ THIS DOES NOT DECIDE ANYTHING. It does not write a draft, choose a
+   * channel, pick a time or judge whether a post is good — all of that is
+   * already done and sitting in a row she wrote. It moves an existing row in
+   * front of the person it was made for. A reminder to HER would have been the
+   * agency-preserving option and also the useless one: it depends on the same
+   * turn that already missed it once.
+   *
+   * It does NOT touch her cadence. The OpenClaw cron store still owns the
+   * brief, the placement, the recap and the heartbeat.
+   */
+  "maya-show-unshown-drafts",
 ] as const;
 
 function convexCronNames(): string[] {

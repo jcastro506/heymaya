@@ -822,6 +822,31 @@ export const sweepAllAdIntel = internalAction({
         });
         if (result.adsFound > 0) swept += 1;
         adsFound += result.adsFound;
+
+        /**
+         * ⭐ AND WATCH THEM. Sweeping alone only ever produced a LIST — the ad's
+         * caption and how long it has run. What makes one worth copying is what
+         * it looks like in the first two seconds, and that needs the video.
+         *
+         * ⚠️ `watchTopAds` was wired into the first-run homework and NOWHERE
+         * ELSE, so any ad found after a customer's first hour was never
+         * watched. Live proof: a founder four days in had 12 competitor ads and
+         * every detail panel said "she hasn't watched this one yet".
+         *
+         * Capped inside `watchTopAds`, skips ads already watched, and skips
+         * stills — so a weekly re-run costs nothing on ads it has seen.
+         */
+        if (result.adsFound > 0) {
+          const seen = await ctx.runAction(internal.maya.adIntel.watchTopAds, {
+            customerId,
+            now: args.now,
+          });
+          if (seen.failed > 0) {
+            console.warn(
+              `[adIntel] ${customerId}: ${seen.failed} ads could not be watched`
+            );
+          }
+        }
         if (result.failures.length > 0) {
           console.warn(
             `[adIntel] ${customerId}: ${result.failures.join("; ")}`

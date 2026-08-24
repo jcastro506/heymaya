@@ -26,7 +26,13 @@
  */
 
 import { v } from "convex/values";
-import { internalMutation, internalQuery, mutation, query } from "../_generated/server";
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "../_generated/server";
 import type { QueryCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { check as preflightCheck } from "./preflight";
@@ -616,3 +622,82 @@ async function maybeTrackProductLink(
     snapshotText: input.text.replace(found[0], `${appUrl}/r/${wrap.token}`),
   });
 }
+
+/* -------------------------------------------------------------------------- */
+/* The draft has to actually reach them                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * How long she gets to show a draft herself before the server does it.
+ *
+ * Long enough that a normal turn finishes first — she writes the draft and
+ * sends it moments later — and short enough that a founder is still in the same
+ * session they were in when she made it.
+ */
+export const SHOW_GRACE_MS = 12 * 60_000;
+
+/**
+ * ⭐ A DRAFT NOBODY SAW IS NOT A DRAFT.
+ *
+ * ⚠️ §4 — anything promised to the user is enforced by the server. The publish
+ * gate hands her the text and tells her to send it verbatim, and that is
+ * choreography, not enforcement. Live 2026-08-22: she wrote a draft at 16:43,
+ * asked for a screen recording in the same minute, never sent the text, and it
+ * expired unseen 24h later. Placements that week: zero, on all three channels,
+ * every one of them `show_me_first`.
+ *
+ * The approval loop broke at the last inch and nothing was technically wrong,
+ * which is why it survived three days.
+ *
+ * ⚠️ THE SERVER SENDS THE DRAFT ITSELF rather than nagging her to. A reminder
+ * is one more thing that can be missed by the same turn that already missed the
+ * first one, and the founder is the person waiting either way.
+ */
+export const sweepUnshownDrafts = internalAction({
+  args: { now: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ checked: number; shown: number }> => {
+    const now = args.now ?? Date.now();
+    const customerIds = await ctx.runQuery(
+      internal.maya.scheduler.activeV2Customers,
+      {}
+    );
+
+    let shown = 0;
+    for (const customerId of customerIds) {
+      const pendingDrafts = await ctx.runQuery(internal.maya.drafts.pending, {
+        customerId,
+        now,
+      });
+
+      for (const draft of pendingDrafts) {
+        if (draft.shownAt !== undefined) continue;
+        if (now - draft.proposedAt < SHOW_GRACE_MS) continue;
+
+        /**
+         * Sent as the draft ON ITS OWN, with the ask after it — the same shape
+         * the publish gate asks her for. Describing it is not showing it: they
+         * cannot approve what they cannot read.
+         */
+        await ctx.runMutation(internal.maya.messages.send, {
+          customerId,
+          surface: "telegram",
+          body: `${draft.snapshotText}\n\nThat's the ${draft.channel} post — say post it, or tell me what to change.`,
+          proactive: true,
+          /**
+           * ⚠️ Keyed on the DRAFT, not the day. A second draft on the same day
+           * is a second thing the founder has not seen, and a day key would
+           * silently swallow it.
+           */
+          dedupeKey: `draft-show:${draft._id}`,
+          ts: now,
+        });
+        shown += 1;
+      }
+    }
+
+    return { checked: customerIds.length, shown };
+  },
+});

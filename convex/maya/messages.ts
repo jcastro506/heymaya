@@ -101,6 +101,32 @@ export const recordInbound = internalMutation({
  * A second write path that skips either one is not a shortcut, it is a message
  * that never arrives. That is precisely what `askFounder` was.
  */
+/** Enough of a draft to be sure, short enough to survive a small edit. */
+export const DRAFT_MATCH_CHARS = 40;
+
+/**
+ * Whether an outbound message carries this draft's own words.
+ *
+ * ⚠️ Whitespace-normalised on both sides. Telegram and the model disagree about
+ * newlines constantly, and a match that broke on a line wrap would report a
+ * shown draft as unshown — which is the failure this exists to catch.
+ *
+ * Matched on a WINDOW rather than the whole string, because she legitimately
+ * trims a trailing hashtag or fixes a typo on the way out; and on a long enough
+ * window that a coincidental phrase cannot trip it.
+ */
+export function carriesDraft(body: string, snapshot: string): boolean {
+  const norm = (x: string) => x.replace(/\s+/g, " ").trim().toLowerCase();
+  const draft = norm(snapshot);
+  if (draft.length === 0) return false;
+  if (draft.length < DRAFT_MATCH_CHARS) {
+    // A very short draft is matched whole — a 20-character window would fire on
+    // almost anything.
+    return norm(body).includes(draft);
+  }
+  return norm(body).includes(draft.slice(0, DRAFT_MATCH_CHARS));
+}
+
 async function writeOutbound(
   ctx: MutationCtx,
   row: {
@@ -135,6 +161,33 @@ async function writeOutbound(
     console.error(
       `[messages] redacted ${plain.redacted.join(", ")} from ${row.dedupeKey}: ${row.body}`,
     );
+  }
+
+  /**
+   * ⭐ NOTICE WHEN A DRAFT IS ACTUALLY SHOWN.
+   *
+   * ⚠️ A draft on a `show_me_first` channel is inventory until the founder can
+   * read it, and nothing recorded whether they ever could. Live 2026-08-22: a
+   * draft was written at 16:43, she asked for a screen recording in the same
+   * minute, never sent the text, and it expired unseen 24h later. Placements
+   * that week: zero. Nothing could tell a draft the founder ignored from one
+   * they were never shown.
+   *
+   * ⚠️ OBSERVED, NOT SELF-REPORTED. The obvious design is a `markShown` tool
+   * she calls after sending — a second step depending on the same memory that
+   * already failed once. Reading her own outbound words cannot be forgotten.
+   */
+  if (row.surface !== "system") {
+    const open = (await ctx.db
+      .query("drafts")
+      .withIndex("by_customer", (q) => q.eq("customerId", row.customerId))
+      .collect()) as Doc<"drafts">[];
+    for (const draft of open) {
+      if (draft.outcome !== "pending" || draft.shownAt !== undefined) continue;
+      if (carriesDraft(row.body, draft.snapshotText)) {
+        await ctx.db.patch(draft._id, { shownAt: row.ts });
+      }
+    }
   }
 
   const messageId = await ctx.db.insert("messages", {

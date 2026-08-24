@@ -12,7 +12,8 @@ import { convexTest } from "convex-test";
 import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
-import { DRAFT_TTL_MS } from "../drafts";
+import { DRAFT_TTL_MS, SHOW_GRACE_MS } from "../drafts";
+import { carriesDraft } from "../messages";
 import type { Doc, Id } from "../../_generated/dataModel";
 
 const NOW = Date.UTC(2026, 7, 4, 12, 0, 0);
@@ -1217,5 +1218,154 @@ describe("the drafts tray a founder can actually use", () => {
       ),
     );
     expect(sorted[0].snapshotText).toBe("older");
+  });
+});
+
+describe("⭐ A DRAFT NOBODY SAW IS NOT A DRAFT", () => {
+  /**
+   * Live 2026-08-22: she wrote a draft at 16:43, asked for a screen recording
+   * in the same minute, never sent the text, and it expired unseen 24h later.
+   * Placements that week: zero, on three channels all set `show_me_first`.
+   *
+   * The publish gate already hands her the text and tells her to send it
+   * verbatim — that is choreography, not enforcement (§4).
+   */
+  it("matches an outbound message that carries the draft's words", () => {
+    const draft = "You've got the views and the messages, but no real customers yet.";
+    expect(carriesDraft(`${draft}\n\nWant this to go out?`, draft)).toBe(true);
+  });
+
+  it("⚠️ survives a line wrap, because Telegram and the model disagree on those", () => {
+    // A match that broke on whitespace would report a SHOWN draft as unshown —
+    // which is the exact failure this exists to catch.
+    const draft = "You've got the views and the messages,\nbut no real customers yet.";
+    const sent = "You've got the views and the messages, but no real customers yet.";
+    expect(carriesDraft(sent, draft)).toBe(true);
+  });
+
+  it("survives a small edit on the way out", () => {
+    // She legitimately trims a hashtag or fixes a typo; the window is the point.
+    const draft = "You've got the views and the messages, but no real customers yet. #saas";
+    const sent = "You've got the views and the messages, but no real customers yet.";
+    expect(carriesDraft(sent, draft)).toBe(true);
+  });
+
+  it("⚠️ does NOT fire when she only described it", () => {
+    // The original bug in one line: describing a draft is not showing it.
+    const draft = "You've got the views and the messages, but no real customers yet.";
+    expect(carriesDraft("I drafted a 237-character post for Instagram.", draft)).toBe(
+      false
+    );
+  });
+
+  it("a short draft is matched whole, never on a 20-char coincidence", () => {
+    expect(carriesDraft("ship it", "ship it")).toBe(true);
+    expect(carriesDraft("we should ship it tomorrow", "ship it")).toBe(true);
+    expect(carriesDraft("something else entirely", "ship it")).toBe(false);
+  });
+
+  it("an empty draft never counts as shown", () => {
+    expect(carriesDraft("anything at all", "")).toBe(false);
+  });
+
+  it("the grace is long enough for a normal turn, short enough to matter", () => {
+    // She usually sends it moments later; an hour later the founder has moved on.
+    expect(SHOW_GRACE_MS).toBeGreaterThanOrEqual(5 * 60_000);
+    expect(SHOW_GRACE_MS).toBeLessThanOrEqual(30 * 60_000);
+  });
+});
+
+describe("⭐ THE SERVER SHOWS THE DRAFT WHEN SHE DIDN'T", () => {
+  const DRAFT_TEXT =
+    "You've got the views and the messages, but no real customers yet.";
+
+  async function withDraft(
+    t: ReturnType<typeof convexTest>,
+    suffix: string,
+    over: Partial<Doc<"drafts">> = {},
+  ) {
+    const customerId = await seed(t, suffix, {
+      channel: "instagram",
+      postingMode: "show_me_first",
+    });
+    await t.run(async (ctx) => {
+      const ideaId = await ctx.db.insert("ideas", {
+        customerId,
+        angle: "a",
+        status: "bank",
+        createdAt: NOW,
+        updatedAt: NOW,
+      } as never);
+      await ctx.db.insert("drafts", {
+        customerId,
+        ideaId,
+        channel: "instagram",
+        kind: "post",
+        snapshotText: DRAFT_TEXT,
+        outcome: "pending",
+        proposedAt: NOW - 20 * 60_000,
+        expiresAt: NOW + 12 * 60 * 60_000,
+        ...over,
+      } as never);
+    });
+    return customerId;
+  }
+
+  const sent = async (t: ReturnType<typeof convexTest>, customerId: Id<"customers">) =>
+    t.run(async (ctx) =>
+      (await (ctx.db as any)
+        .query("messages")
+        .withIndex("by_customer_and_ts", (q: any) => q.eq("customerId", customerId))
+        .collect()) as Doc<"messages">[],
+    );
+
+  it("sends a pending draft the founder was never shown", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await withDraft(t, "unshown");
+
+    const res = await t.action(internal.maya.drafts.sweepUnshownDrafts, { now: NOW });
+    expect(res.shown).toBe(1);
+
+    // ⭐ The draft ITSELF, not a description of it — they cannot approve what
+    // they cannot read.
+    const messages = await sent(t, customerId);
+    expect(messages.some((m) => m.body.includes(DRAFT_TEXT))).toBe(true);
+  });
+
+  it("⚠️ leaves a draft alone inside the grace, so she can send it herself", async () => {
+    const t = convexTest(schema, modules);
+    await withDraft(t, "fresh", { proposedAt: NOW - 60_000 });
+    const res = await t.action(internal.maya.drafts.sweepUnshownDrafts, { now: NOW });
+    expect(res.shown).toBe(0);
+  });
+
+  it("never sends one she already showed", async () => {
+    const t = convexTest(schema, modules);
+    await withDraft(t, "already", { shownAt: NOW - 5 * 60_000 });
+    const res = await t.action(internal.maya.drafts.sweepUnshownDrafts, { now: NOW });
+    expect(res.shown).toBe(0);
+  });
+
+  it("⚠️ and never resurrects an EXPIRED draft", async () => {
+    // Verified live: the real stuck draft was two days old, and sending stale
+    // content is worse than sending none. `pending` filters on expiry.
+    const t = convexTest(schema, modules);
+    await withDraft(t, "stale", { expiresAt: NOW - 60_000 });
+    const res = await t.action(internal.maya.drafts.sweepUnshownDrafts, { now: NOW });
+    expect(res.shown).toBe(0);
+  });
+
+  it("⭐ sending it marks it shown, so it is never sent twice", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await withDraft(t, "once");
+
+    await t.action(internal.maya.drafts.sweepUnshownDrafts, { now: NOW });
+    const second = await t.action(internal.maya.drafts.sweepUnshownDrafts, {
+      now: NOW + 60_000,
+    });
+    expect(second.shown).toBe(0);
+
+    const messages = await sent(t, customerId);
+    expect(messages.filter((m) => m.body.includes(DRAFT_TEXT))).toHaveLength(1);
   });
 });
