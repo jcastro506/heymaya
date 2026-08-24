@@ -443,6 +443,18 @@ export const myIdeaBank = query({
        * "she has a reason for this", not our JSON.
        */
       hasEvidence: boolean;
+      /**
+       * ⭐ THE EVIDENCE ITSELF — the words that made her want to write this.
+       *
+       * ⚠️ This used to be `hasEvidence` alone, so the answer to "why does she
+       * want to post this?" was ONE BOOLEAN WIDE. Measured on a live account:
+       * 59 ideas, every single one carrying a verbatim quote and its source
+       * URLs, and a founder could see none of it. §2.6 — an idea with no
+       * evidence is a guess, and a founder cannot tell the difference from a
+       * checkmark.
+       */
+      quote: string;
+      sourceUrls: string[];
       status: string;
       score?: number;
       bankedAt: number;
@@ -468,15 +480,39 @@ export const myIdeaBank = query({
         // Newest first: a founder checking the bank wants this week's thinking.
         .sort((a, b) => b.createdAt - a.createdAt)
         .slice(0, args.limit ?? 25)
-        .map((r) => ({
-          id: r._id,
-          angle: r.angle,
-          sourceKind: r.sourceKind,
-          hasEvidence: Boolean(r.evidenceJson),
-          status: r.status,
-          score: r.score,
-          bankedAt: r.createdAt,
-        })),
+        .map((r) => {
+          /**
+           * A malformed blob degrades to "no quote", never to a crash — these
+           * are model-written and a truncated write must not take out the page.
+           */
+          let quote = "";
+          let sourceUrls: string[] = [];
+          if (r.evidenceJson) {
+            try {
+              const ev = JSON.parse(r.evidenceJson) as {
+                quote?: unknown;
+                sourceUrls?: unknown;
+              };
+              quote = typeof ev.quote === "string" ? ev.quote : "";
+              sourceUrls = Array.isArray(ev.sourceUrls)
+                ? ev.sourceUrls.filter((u): u is string => typeof u === "string").slice(0, 4)
+                : [];
+            } catch {
+              // Keep the idea, lose the evidence.
+            }
+          }
+          return {
+            id: r._id,
+            angle: r.angle,
+            sourceKind: r.sourceKind,
+            hasEvidence: Boolean(r.evidenceJson),
+            quote,
+            sourceUrls,
+            status: r.status,
+            score: r.score,
+            bankedAt: r.createdAt,
+          };
+        }),
     };
   },
 });

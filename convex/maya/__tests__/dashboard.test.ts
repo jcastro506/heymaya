@@ -7,6 +7,10 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { convexTest } from "convex-test";
+import schema from "../../schema";
+import { api } from "../../_generated/api";
+import { modules } from "../../../tests/_modules";
 import {
   livenessFrom,
   oldestMetricsAsOf,
@@ -119,5 +123,106 @@ describe("oldestMetricsAsOf", () => {
 
   it("ignores unmeasured placements rather than treating them as fresh", () => {
     expect(oldestMetricsAsOf([{ metricsAsOf: 900 }, {}])).toBe(900);
+  });
+});
+
+describe("⭐ AN IDEA WITH NO EVIDENCE IS A GUESS, AND THE FOUNDER COULD NOT TELL", () => {
+  /**
+   * §2.6. `myIdeaBank` returned `hasEvidence: boolean` and stopped, so the
+   * answer to "why does she want to post this?" was one boolean wide. Measured
+   * on a live account: 59 ideas, EVERY ONE carrying a verbatim quote and its
+   * source URLs, none of it reachable.
+   */
+  async function seedIdea(
+    t: ReturnType<typeof convexTest>,
+    suffix: string,
+    evidenceJson?: string,
+  ) {
+    return t.run(async (ctx) => {
+      const accountId = await ctx.db.insert("creators", {
+        clerkUserId: `u_${suffix}`,
+        email: `${suffix}@e.com`,
+        channelPreference: "web",
+        timezone: "UTC",
+        status: "active",
+        plan: "manager",
+        createdAt: 1,
+      } as never);
+      const customerId = await ctx.db.insert("customers", {
+        accountId,
+        agentVersion: "v2",
+        plan: "mvp",
+        state: "active",
+        timezone: "UTC",
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      await ctx.db.insert("ideas", {
+        customerId,
+        angle: "carousels are a sales conversation",
+        status: "bank",
+        sourceKind: "observation",
+        ...(evidenceJson ? { evidenceJson } : {}),
+        createdAt: 2,
+        updatedAt: 2,
+      } as never);
+      return customerId;
+    });
+  }
+
+  it("hands back the quote and where it was said", async () => {
+    const t = convexTest(schema, modules);
+    await seedIdea(
+      t,
+      "ev",
+      JSON.stringify({
+        quote: "A carousel ad isn't a photo album. It's a sales conversation.",
+        sourceUrls: ["https://www.tiktok.com/@x/video/1"],
+      }),
+    );
+    const res = await t
+      .withIdentity({ subject: "u_ev" })
+      .query(api.maya.dashboard.myIdeaBank, {});
+    expect(res.ideas[0].hasEvidence).toBe(true);
+    expect(res.ideas[0].quote).toContain("sales conversation");
+    expect(res.ideas[0].sourceUrls).toHaveLength(1);
+  });
+
+  it("⚠️ a malformed blob loses the evidence, never the idea", async () => {
+    // These are model-written. A truncated write must not take out the page.
+    const t = convexTest(schema, modules);
+    await seedIdea(t, "bad", "{not json");
+    const res = await t
+      .withIdentity({ subject: "u_bad" })
+      .query(api.maya.dashboard.myIdeaBank, {});
+    expect(res.ideas).toHaveLength(1);
+    expect(res.ideas[0].quote).toBe("");
+    expect(res.ideas[0].sourceUrls).toEqual([]);
+  });
+
+  it("an idea with no evidence at all says so honestly", async () => {
+    const t = convexTest(schema, modules);
+    await seedIdea(t, "none");
+    const res = await t
+      .withIdentity({ subject: "u_none" })
+      .query(api.maya.dashboard.myIdeaBank, {});
+    expect(res.ideas[0].hasEvidence).toBe(false);
+    expect(res.ideas[0].quote).toBe("");
+  });
+
+  it("⚠️ caps the source links, because provenance is not a link dump", async () => {
+    const t = convexTest(schema, modules);
+    await seedIdea(
+      t,
+      "many",
+      JSON.stringify({
+        quote: "q",
+        sourceUrls: ["a", "b", "c", "d", "e", "f"].map((x) => `https://x/${x}`),
+      }),
+    );
+    const res = await t
+      .withIdentity({ subject: "u_many" })
+      .query(api.maya.dashboard.myIdeaBank, {});
+    expect(res.ideas[0].sourceUrls.length).toBeLessThanOrEqual(4);
   });
 });

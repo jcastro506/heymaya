@@ -28,7 +28,9 @@
  * come from the sweeps. This screen proves she is paying attention.
  */
 
+import { useState } from "react";
 import { useQuery } from "convex/react";
+import * as Dialog from "@radix-ui/react-dialog";
 import { api } from "@/convex/_generated/api";
 import {
   Card,
@@ -51,7 +53,12 @@ const RUNG_LABEL: Record<string, string> = {
   avatar: "presenter",
 };
 
+type Idea = NonNullable<
+  ReturnType<typeof useQuery<typeof api.maya.dashboard.myIdeaBank>>
+>["ideas"][number];
+
 export default function BrainPage() {
+  const [openIdea, setOpenIdea] = useState<Idea | null>(null);
   const formats = useQuery(api.maya.formats.myFormats, {});
   const ideas = useQuery(api.maya.dashboard.myIdeaBank, {});
   const library = useQuery(api.maya.dashboard.myMediaLibrary, {});
@@ -119,21 +126,44 @@ export default function BrainPage() {
         ) : (
           bank.map((i) => (
             <Rise key={i.id}>
+              {/**
+                * ⚠️ Clickable only when there is something behind it. A control
+                * that opens an empty panel teaches a founder to stop clicking.
+                */}
               <Card>
-                <div className="mc-draft">{i.angle}</div>
-                <div className="mc-action-src">
-                  {i.sourceKind ? <Chip>{i.sourceKind}</Chip> : null}
-                  {/**
-                   * ⭐ Evidence as a boolean, not the blob. A founder wants to
-                   * know she has a REASON for an idea, not to read our JSON.
-                   */}
-                  {i.hasEvidence ? <Chip>has evidence</Chip> : null}
-                </div>
+                {i.hasEvidence ? (
+                  <button
+                    type="button"
+                    className="mc-idea-open"
+                    onClick={() => setOpenIdea(i)}
+                  >
+                    <div className="mc-draft">{i.angle}</div>
+                    <div className="mc-action-src">
+                      {i.sourceKind ? <Chip>{i.sourceKind}</Chip> : null}
+                      {/**
+                       * ⭐ It used to say "has evidence" and stop there — the
+                       * answer to "why does she want to post this?" was one
+                       * boolean wide, while every one of 59 ideas carried a
+                       * verbatim quote and its source. Now it opens.
+                       */}
+                      <Chip>why she picked this</Chip>
+                    </div>
+                  </button>
+                ) : (
+                  <>
+                    <div className="mc-draft">{i.angle}</div>
+                    <div className="mc-action-src">
+                      {i.sourceKind ? <Chip>{i.sourceKind}</Chip> : null}
+                    </div>
+                  </>
+                )}
               </Card>
             </Rise>
           ))
         )}
       </Section>
+
+      <IdeaEvidence idea={openIdea} onClose={() => setOpenIdea(null)} />
 
       {/* ── What she has to make it with ────────────────────────────────── */}
       <Section title="What she has to work with" count={assets.length}>
@@ -172,5 +202,77 @@ export default function BrainPage() {
         )}
       </Section>
     </Shell>
+  );
+}
+
+/**
+ * ⭐ WHY SHE PICKED THIS — the words that made her want to write it.
+ *
+ * §2.6: an idea with no evidence is a guess, and guesses don't get published.
+ * A founder could not tell the difference from a checkmark, so this shows the
+ * quote verbatim and links back to where it was said. Their market's words, not
+ * our paraphrase — the paraphrase is the thing that would make it a guess again.
+ */
+function IdeaEvidence({
+  idea,
+  onClose,
+}: {
+  idea: Idea | null;
+  onClose: () => void;
+}) {
+  return (
+    <Dialog.Root open={idea !== null} onOpenChange={(o) => !o && onClose()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="mc-dialog-overlay" />
+        <Dialog.Content className="mc-dialog">
+          {idea ? (
+            <>
+              <Dialog.Title className="mc-dialog-title">
+                Why she picked this
+              </Dialog.Title>
+              <Dialog.Description className="mc-dialog-desc">
+                {idea.angle}
+              </Dialog.Description>
+
+              {idea.quote ? (
+                <>
+                  <div className="mc-learn-sub">What someone actually said</div>
+                  <blockquote className="mc-quote">{idea.quote}</blockquote>
+                </>
+              ) : (
+                <p className="mc-ad-hook">
+                  She recorded a source for this one but no quote.
+                </p>
+              )}
+
+              {idea.sourceUrls.length > 0 ? (
+                <>
+                  <div className="mc-learn-sub">Where</div>
+                  <div className="mc-chips">
+                    {idea.sourceUrls.map((u) => (
+                      <a
+                        key={u}
+                        href={u}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mc-chip no-underline"
+                      >
+                        open the source
+                      </a>
+                    ))}
+                  </div>
+                </>
+              ) : null}
+
+              <div className="mc-dialog-acts">
+                <Dialog.Close className="mc-btn mc-btn-primary">
+                  Close
+                </Dialog.Close>
+              </div>
+            </>
+          ) : null}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

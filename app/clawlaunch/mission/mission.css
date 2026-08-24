@@ -1509,3 +1509,30 @@ details.mc-fold[open] > summary .mc-caret {
   flex: 1;
   text-align: center;
 }
+
+/* ── WHY SHE PICKED THIS ──────────────────────────────────────────────────
+   An idea with no evidence is a guess (§2.6), and a founder could not tell the
+   difference from a checkmark. The quote is verbatim — a paraphrase would make
+   it a guess again. */
+
+.mc-idea-open {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+}
+.mc-idea-open:hover .mc-draft {
+  opacity: 0.82;
+}
+.mc-quote {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  padding-left: 12px;
+  border-left: 2px solid rgba(255, 255, 255, 0.2);
+  opacity: 0.88;
+}

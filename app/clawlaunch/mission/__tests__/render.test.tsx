@@ -96,6 +96,14 @@ const h = vi.hoisted(() => {
           angle: "The CSV that became a dashboard project",
           sourceKind: "complaint",
           hasEvidence: true,
+          /**
+           * ⭐ The evidence itself. This used to be `hasEvidence` alone, so the
+           * answer to "why does she want to post this?" was one boolean wide —
+           * while every one of 59 ideas on a live account carried a verbatim
+           * quote and its source URL.
+           */
+          quote: "I paste a CSV and spend an hour formatting it every Monday.",
+          sourceUrls: ["https://www.tiktok.com/@someone/video/123"],
           status: "bank",
           bankedAt: now - 7200_000,
         },
@@ -617,7 +625,8 @@ describe("Mission Control v3.1 — board modules render with grounded data", () 
     // What she plans to make.
     expect(html).toContain("Ideas she&#x27;s banked");
     expect(html).toContain("The CSV that became a dashboard project");
-    expect(html).toContain("has evidence");
+    // ⭐ It opens now, rather than asserting she has a reason and stopping.
+    expect(html).toContain("why she picked this");
 
     // What she has to make it with — the LADDER VERDICT, not a count.
     expect(html).toContain("What she has to work with");
