@@ -153,12 +153,29 @@ function Hero() {
         <h1 className="rise max-w-[15ch] font-display italic text-[clamp(3rem,8vw,6.5rem)] leading-[0.98] tracking-[-0.025em]">
           The UGC your app needs. Without you filming any of it.
         </h1>
+        {/**
+          * ⭐ NAMES THE THING A SCHEDULER CANNOT DO.
+          *
+          * This said "watches what's working in your niche" — true, and true of
+          * every founder who has ever opened TikTok. "Working" is a gesture;
+          * "still paying to run" is EVIDENCE, and it is the one claim here with
+          * somebody else's money behind it. An ad alive for weeks is one a
+          * company with a dashboard has decided every morning not to kill.
+          *
+          * Not aspirational: she found a 60-day competitor ad on a live account
+          * and pitched the rebuild in the founder's own Telegram.
+          *
+          * ⚠️ The creation verb stays clear of "UGC" — `tests/marketingCopy`
+          * bans one within 40 characters of it, on the same line, because she
+          * has never rendered a video. The H1 names the category; this names
+          * the work.
+          */}
         <p
           className="rise mt-10 max-w-xl text-[19px] leading-[1.55] text-[#0a0a0a]/70 sm:text-[21px]"
           style={{ animationDelay: "1.5s" }}
         >
-          Maya watches what&rsquo;s working in your niche, creates your TikToks,
-          Reels and Shorts, and posts them for you.
+          Maya finds the ads your competitors keep paying to run, then makes
+          your version. You approve it in a text.
         </p>
         <div
           className="rise mt-12 flex flex-wrap items-center gap-6"
