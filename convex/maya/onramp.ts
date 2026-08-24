@@ -158,6 +158,26 @@ export const startFromRead = mutation({
         clerkUserId: identity.subject,
         email: typeof identity.email === "string" ? identity.email : "",
         timezone: args.timezone,
+        /**
+         * ⚠️ WITHOUT THIS, SETTINGS AND BILLING SHOW "No agent yet" FOREVER.
+         *
+         * The self-heal above created the account and left `accountType`
+         * undefined. `resolveMyGtmCreator` — which every `gtmMaya` query gates
+         * on, including `getMyAccount` — returns null for anything that is not
+         * `gtm-agent`. So a founder who onboarded, paired, connected channels
+         * and had Maya posting still saw "Finish setting up HeyMaya" on
+         * Settings, with no way to reach their own billing.
+         *
+         * Found by looking at a live account: the creator row had every other
+         * field and no `accountType`.
+         *
+         * ⚠️ It is not a legacy value. `gtm-agent` denotes THIS product line —
+         * `convex/gtmMaya` is the frozen previous implementation of the same
+         * thing, being replaced module by module. Settings and billing are the
+         * modules that have not moved yet, so the type has to be set for them
+         * to see the account at all.
+         */
+        accountType: "gtm-agent",
       });
       creator = await ctx.db.get(creatorId);
       if (!creator) return { ok: false, error: "couldn't set up your account" };

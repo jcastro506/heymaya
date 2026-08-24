@@ -175,6 +175,17 @@ describe("⭐ A SIGNED-IN FOUNDER CAN ALWAYS ONBOARD", () => {
     );
     expect(creators).toHaveLength(1);
     expect(creators[0].clerkUserId).toBe("u_never_webhooked");
+
+    /**
+     * ⚠️ WITHOUT `accountType`, SETTINGS AND BILLING SHOW "No agent yet"
+     * FOREVER. `resolveMyGtmCreator` gates every `gtmMaya` query on it, and
+     * Settings and billing are the modules that have not migrated to v2 yet.
+     *
+     * Found on a live account: onboarded, paired, channels connected, Maya
+     * posting — and Settings said "Finish setting up HeyMaya", with no route to
+     * their own billing.
+     */
+    expect(creators[0].accountType).toBe("gtm-agent");
   });
 
   it("does not create a second account on a repeat call", async () => {
