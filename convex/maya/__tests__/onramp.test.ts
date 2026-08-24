@@ -12,7 +12,7 @@
  * onboarded.
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { convexTest } from "convex-test";
@@ -111,6 +111,30 @@ describe("the read validator accepts what the read actually produces", () => {
 
 describe("⭐ A SIGNED-IN FOUNDER CAN ALWAYS ONBOARD", () => {
   /**
+   * ⚠️ `startFromRead` SCHEDULES THE FIRST `learnBusiness`, and a scheduled
+   * function that outlives its test writes outside the transaction. CI caught
+   * exactly that — 289 files green, then "Write outside of transaction
+   * _scheduled_functions" and a non-zero exit. It passed locally only because
+   * the process exited before the scheduler got there, which makes it a
+   * latency-dependent flake rather than a passing test.
+   *
+   * Drained inside each test, with `fetch` stubbed so the drain cannot reach
+   * the network. The established pattern here — see `productTruth.test.ts`.
+   */
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+  });
+
+  function isolate() {
+    vi.useFakeTimers();
+    globalThis.fetch = (async () =>
+      new Response("{}", { status: 200 })) as typeof fetch;
+  }
+
+  /**
    * `startFromRead` used to return "no account yet" when the `creators` row was
    * missing, which stranded the founder permanently: the row is written by the
    * Clerk `user.created` webhook, that webhook fires ONCE per user and is never
@@ -121,6 +145,7 @@ describe("⭐ A SIGNED-IN FOUNDER CAN ALWAYS ONBOARD", () => {
    * Production only, so the preview webhook cannot verify and writes nothing.
    */
   it("creates the account when the webhook never wrote one", async () => {
+    isolate();
     const t = convexTest(schema, modules);
 
     const before = await t.run(async (ctx) =>
@@ -143,6 +168,7 @@ describe("⭐ A SIGNED-IN FOUNDER CAN ALWAYS ONBOARD", () => {
       });
 
     expect(res.ok, JSON.stringify(res)).toBe(true);
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
 
     const creators = await t.run(async (ctx) =>
       ctx.db.query("creators").collect()
@@ -154,6 +180,7 @@ describe("⭐ A SIGNED-IN FOUNDER CAN ALWAYS ONBOARD", () => {
   it("does not create a second account on a repeat call", async () => {
     // `createFromClerk` is idempotent; onboarding twice must not fork the
     // account, or the second customer would be invisible to the first.
+    isolate();
     const t = convexTest(schema, modules);
     const read = {
       name: "Example",
@@ -173,6 +200,7 @@ describe("⭐ A SIGNED-IN FOUNDER CAN ALWAYS ONBOARD", () => {
       read,
       timezone: "UTC",
     });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
 
     const creators = await t.run(async (ctx) =>
       ctx.db.query("creators").collect()
@@ -182,6 +210,7 @@ describe("⭐ A SIGNED-IN FOUNDER CAN ALWAYS ONBOARD", () => {
 
   it("still refuses when nobody is signed in", async () => {
     // Self-healing must not become self-serve: no identity, no account.
+    isolate();
     const t = convexTest(schema, modules);
     const res = await t.mutation(api.maya.onramp.startFromRead, {
       url: "https://example.com",
