@@ -247,51 +247,6 @@ const h = vi.hoisted(() => {
         createdAt: now - 600_000,
       },
     ],
-    getMyFoundationInsights: {
-      hasFoundation: true,
-      synthesizedAt: now,
-      productPicture: null,
-      buyer: {
-        icpDescription: "The shipped-but-silent solo dev",
-        journeyStages: [
-          {
-            stage: "aware",
-            whereTheyHangOut: "r/SaaS",
-            intentLanguage: "who's going to sell them",
-            complaints: ["distribution, not code"],
-          },
-        ],
-        intentPhrases: ["how do I get users"],
-        trustedVoices: [
-          { handle: "@levelsio", platform: "x", whyTrusted: "peer" },
-        ],
-      },
-      competitors: [],
-      channels: [
-        {
-          channel: "reddit",
-          audienceFit: 0.78,
-          cadenceFit: 0.6,
-          uniqueUnlock: "Buyers vent here in exact problem language.",
-          bet: true,
-          notes: null,
-        },
-      ],
-      angles: [
-        {
-          angle: "Built it, now what?",
-          painQuote:
-            "We can build SaaS products. But who's going to sell them?",
-          painSourceUrl: "https://reddit.com/r/SaaS/1",
-          hookVariants: ["h1", "h2", "h3"],
-        },
-      ],
-      voice: {
-        traits: ["direct", "no hype"],
-        exemplar:
-          "I shipped three products before I understood distribution is a second job.",
-      },
-    },
     getMyCompetitiveMap: [
       {
         _id: "cm1",
@@ -437,7 +392,6 @@ vi.mock("@/convex/_generated/api", () => ({
       missionControl: {
         getMyAgentActivity: "getMyAgentActivity",
         getMyCompetitiveMap: "getMyCompetitiveMap",
-        getMyFoundationInsights: "getMyFoundationInsights",
         getMyNicheLearnings: "getMyNicheLearnings",
         getMyConversions: "getMyConversions",
         getMyAccount: "getMyAccount",
