@@ -248,7 +248,10 @@
 
 .mc-today-grid {
   grid-template-columns: 1fr 1fr 340px;
-  grid-template-areas: "needs needs side" "work work side" "learn learn side";
+  grid-template-areas: "needs needs side" "work work side" "did did side" "learn learn side";
+}
+.mc-a-did {
+  grid-area: did;
 }
 .mc-a-learn {
   grid-area: learn;
@@ -1278,6 +1281,7 @@ details.mc-fold[open] > summary .mc-caret {
   }
   .mc-a-needs,
   .mc-a-work,
+  .mc-a-did,
   .mc-a-learn,
   .mc-a-side,
   .mc-a-dossier,
@@ -1535,4 +1539,47 @@ details.mc-fold[open] > summary .mc-caret {
   padding-left: 12px;
   border-left: 2px solid rgba(255, 255, 255, 0.2);
   opacity: 0.88;
+}
+
+/* ── WHAT SHE'S BEEN DOING ────────────────────────────────────────────────
+   Read from the spend ledger, which records work that actually happened and
+   cannot be padded. Days are the founder's, never UTC. */
+
+.mc-did {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+}
+.mc-did-date {
+  font-family: var(--mc-mono);
+  font-size: 11px;
+  opacity: 0.5;
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 5px;
+  margin-bottom: 7px;
+}
+.mc-did-total {
+  opacity: 0.7;
+}
+.mc-did ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.mc-did li {
+  font-size: 12px;
+  line-height: 1.4;
+  opacity: 0.78;
+  display: flex;
+  gap: 7px;
+}
+.mc-did li .n {
+  font-family: var(--mc-mono);
+  opacity: 0.55;
+  min-width: 22px;
 }

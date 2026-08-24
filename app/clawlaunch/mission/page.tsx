@@ -122,6 +122,7 @@ export default function TodayPage() {
    */
   const activityQ = useQuery(api.maya.archive.myActivity, { limit: 5 });
   const research = useQuery(api.maya.dashboard.myResearch, {});
+  const work = useQuery(api.maya.activityFeed.myWork, {});
   const activity = activityQ?.entries;
   const postResults = useQuery(
     api.gtmMaya.postResults.getMyRecentPostResults,
@@ -380,7 +381,44 @@ export default function TodayPage() {
           * The founder's own words were "Results is empty, Videos have nothing,
           * Today is useless." All three true, all three the wrong question.
           */}
-        <Rise i={2} className="mc-a-learn">
+        {/**
+          * ⭐ WHAT SHE DID — from the spend ledger, which cannot be padded.
+          *
+          * ⚠️ 111 cost events read by nothing. The founder's only signal about
+          * whether she was working was a watchdog announcing that nothing had
+          * gone out, and their question was literally "so are you still doing
+          * stuff or".
+          */}
+        <Rise i={2} className="mc-a-did">
+          <Panel title="What she's been doing">
+            {!work ? null : !work.ok || work.days.length === 0 ? (
+              <p className="text-sm text-paper-faint">
+                Nothing logged yet — this fills as she works.
+              </p>
+            ) : (
+              <div className="mc-did">
+                {work.days.slice(0, 4).map((d) => (
+                  <div key={d.day} className="mc-did-day">
+                    <div className="mc-did-date">
+                      {d.day}
+                      <span className="mc-did-total">{d.total}</span>
+                    </div>
+                    <ul>
+                      {d.items.slice(0, 5).map((it) => (
+                        <li key={it.what}>
+                          <span className="n">{it.times}×</span>
+                          {it.what}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Panel>
+        </Rise>
+
+        <Rise i={3} className="mc-a-learn">
           <Panel title="What she's learned">
             {/* ⚠️ Null AND undefined: undefined is loading, null is a query
                 that resolved to nothing. Checking only one renders a crash. */}

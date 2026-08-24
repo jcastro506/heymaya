@@ -9,6 +9,7 @@
  */
 
 import type * as _admin_realWorldDeployGtm from "../_admin/realWorldDeployGtm.js";
+import type * as _admin_wk from "../_admin/wk.js";
 import type * as _admin_zernioLiveSmoke from "../_admin/zernioLiveSmoke.js";
 import type * as accountDeletion from "../accountDeletion.js";
 import type * as admin from "../admin.js";
@@ -191,6 +192,7 @@ import type * as lib_planFeatures from "../lib/planFeatures.js";
 import type * as lib_posthog from "../lib/posthog.js";
 import type * as lib_usageEvents from "../lib/usageEvents.js";
 import type * as lib_webhookSecret from "../lib/webhookSecret.js";
+import type * as maya_activityFeed from "../maya/activityFeed.js";
 import type * as maya_adIntel from "../maya/adIntel.js";
 import type * as maya_archive from "../maya/archive.js";
 import type * as maya_assetClassifier from "../maya/assetClassifier.js";
@@ -294,6 +296,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "_admin/realWorldDeployGtm": typeof _admin_realWorldDeployGtm;
+  "_admin/wk": typeof _admin_wk;
   "_admin/zernioLiveSmoke": typeof _admin_zernioLiveSmoke;
   accountDeletion: typeof accountDeletion;
   admin: typeof admin;
@@ -476,6 +479,7 @@ declare const fullApi: ApiFromModules<{
   "lib/posthog": typeof lib_posthog;
   "lib/usageEvents": typeof lib_usageEvents;
   "lib/webhookSecret": typeof lib_webhookSecret;
+  "maya/activityFeed": typeof maya_activityFeed;
   "maya/adIntel": typeof maya_adIntel;
   "maya/archive": typeof maya_archive;
   "maya/assetClassifier": typeof maya_assetClassifier;

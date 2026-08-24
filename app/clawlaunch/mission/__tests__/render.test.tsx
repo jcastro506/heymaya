@@ -36,6 +36,24 @@ const h = vi.hoisted(() => {
      * because every panel asked a question that only has an answer once
      * something has been published.
      */
+    /**
+     * ⭐ What she actually did, from the spend ledger — the one source that
+     * cannot report an intention or be padded. 111 cost events were read by
+     * nothing while the founder was asking "so are you still doing stuff or".
+     */
+    myWork: {
+      ok: true,
+      days: [
+        {
+          day: "2026-08-22",
+          total: 26,
+          items: [
+            { what: "worked out which shapes are landing", times: 22 },
+            { what: "read what buyers are complaining about", times: 4 },
+          ],
+        },
+      ],
+    },
     myResearch: {
       ok: true,
       counts: { ideas: 51, observations: 72, posts: 60, ads: 12 },
@@ -364,6 +382,10 @@ vi.mock("@/convex/_generated/api", () => ({
         myMediaLibrary: "myMediaLibrary",
         myResearch: "myResearch",
       },
+      activityFeed: {
+        /** The spend ledger, read in the founder's language. */
+        myWork: "myWork",
+      },
       archive: { myActivity: "myActivity" },
       attribution: { myResults: "myResults" },
       // §18 Sprint 10's "account deletion + data export". Settings offers the
@@ -678,5 +700,20 @@ describe("⭐ THE HOMEWORK IS THE WORK, AND IT WAS INVISIBLE", () => {
 
     // Their buyers' own words — the whole point of the niche work.
     expect(html).toContain("ads not converting");
+  });
+
+  it("⭐ and shows what she DID, in the founder's language", async () => {
+    /**
+     * From the spend ledger, which records work that actually happened and
+     * cannot be padded. The founder's question, verbatim, was "so are you still
+     * doing stuff or" — while 111 cost events sat unread.
+     */
+    const Page = (await import("../page")).default;
+    const html = renderToString(createElement(Page));
+    expect(html).toContain("What she&#x27;s been doing");
+    expect(html).toContain("worked out which shapes are landing");
+    // ⚠️ Never our vocabulary — no purpose slugs leak through.
+    expect(html).not.toContain("trend_shape");
+    expect(html).not.toContain("complaint_mining");
   });
 });
