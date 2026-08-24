@@ -324,6 +324,7 @@ vi.mock("lucide-react", () => {
   return {
     Activity: Stub,
     Brain: Stub,
+    Swords: Stub,
     CalendarDays: Stub,
     Clapperboard: Stub,
     Lightbulb: Stub,
@@ -495,7 +496,7 @@ describe("the Plan screen is back (§16.75)", () => {
 });
 
 describe("Mission Control — SSR render smoke", () => {
-  it("the layout renders the 6 tabs + the settings gear", async () => {
+  it("the layout renders the 7 tabs + the settings gear", async () => {
     const Layout = (await import("../layout")).default;
     const html = renderToString(
       createElement(Layout, null, createElement("div", null, "content")),
@@ -510,6 +511,13 @@ describe("Mission Control — SSR render smoke", () => {
        */
       "Videos",
       "Results",
+      /**
+       * ⭐ Competition, added 2026-08-24. The only screen that reports on
+       * somebody ELSE's money — an ad a rival has kept paying to run for sixty
+       * days is the strongest evidence in the product, and it was reachable
+       * from nowhere.
+       */
+      "Competition",
       "Brain",
       // §16.2 gives House Rules a top-level slot — the proof she remembers.
       "Rules",

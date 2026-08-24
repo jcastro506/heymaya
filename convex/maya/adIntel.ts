@@ -99,6 +99,19 @@ export interface RankedAd {
   videoUrl: string;
   /** First frame. The cheapest possible answer to "what does this look like". */
   thumbUrl: string;
+  /**
+   * ⭐ WHEN THE PLAYABLE URL STOPS PLAYING. Epoch ms, or 0 when unknown.
+   *
+   * ⚠️ Meta signs these and they DIE. Measured: an ad captured 2026-08-23
+   * carried `oe=6A9059C5` — 2026-08-27, a four-day window. Without this the UI
+   * cannot tell a working video from a dead one, and a founder opening last
+   * week's ad gets a broken player with no explanation.
+   *
+   * Stored rather than rehosted on purpose: rehosting a competitor's video is a
+   * decision about someone else's asset, and the poster frame plus a link to
+   * Meta's own library answers the same question without making it.
+   */
+  videoExpiresAt: number;
   /** Filled by the watch pass: how the ad is MADE, never what it says. */
   watchedJson: string | null;
   title: string;
@@ -132,6 +145,22 @@ export function daysRunning(
 
 function str(x: unknown): string {
   return typeof x === "string" ? x : "";
+}
+
+/**
+ * When a signed fbcdn URL stops working, in epoch ms. 0 when it cannot be read.
+ *
+ * The `oe` query parameter is a HEX unix-seconds expiry. Returning 0 rather
+ * than a guess matters: the UI treats "unknown" as "try it and fall back",
+ * while a fabricated far-future date would render a dead player confidently.
+ */
+export function videoExpiryOf(url: string): number {
+  if (!url) return 0;
+  const match = /[?&]oe=([0-9a-fA-F]+)/.exec(url);
+  if (!match) return 0;
+  const seconds = Number.parseInt(match[1], 16);
+  if (!Number.isFinite(seconds) || seconds <= 0) return 0;
+  return seconds * 1000;
 }
 
 /**
@@ -194,6 +223,7 @@ export function rankAds(raw: unknown, now: number): RankedAd[] {
       collationId: str(ad.collation_id) || id,
       hasVideo: Array.isArray(videos) && videos.length > 0,
       videoUrl: firstVideoUrl(videos),
+      videoExpiresAt: videoExpiryOf(firstVideoUrl(videos)),
       thumbUrl: str(
         (Array.isArray(videos) && videos.length > 0
           ? (videos[0] as Record<string, unknown>).video_preview_image_url

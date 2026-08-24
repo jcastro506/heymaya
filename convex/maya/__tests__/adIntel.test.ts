@@ -20,6 +20,7 @@ import {
   buildDiscoveryPrompt,
   DISCOVERY_KEYWORDS,
   AD_WATCH_SYSTEM,
+  videoExpiryOf,
   PROVEN_DAYS,
   type PageCandidate,
   type RankedAd,
@@ -181,6 +182,7 @@ describe("⭐ ONE COMPETITOR MUST NOT EAT THE SHORTLIST", () => {
     hasVideo: true,
     videoUrl: 'https://video.example/x.mp4',
     thumbUrl: 'https://img.example/x.jpg',
+    videoExpiresAt: 0,
     watchedJson: null,
     title: concept,
     body: "",
@@ -429,5 +431,61 @@ describe("⭐ THE WATCH HAS TO ANSWER 'CAN WE BUILD THIS?'", () => {
 
   it("says so rather than filling a field it cannot see", () => {
     expect(AD_WATCH_SYSTEM).toMatch(/If you cannot tell, say so/i);
+  });
+});
+
+describe("⚠️ A COMPETITOR'S VIDEO URL DIES IN ABOUT FOUR DAYS", () => {
+  /**
+   * Meta signs these. Measured on a real ad captured 2026-08-23: `oe=6A9059C5`
+   * decodes to 2026-08-27. It fetches fine today — HTTP 206, video/mp4, range
+   * requests supported, so `<video>` plays and seeks natively — and it will be
+   * a broken player by next week.
+   *
+   * Knowing the expiry is what lets the screen show a poster and a link to
+   * Meta's library instead of a dead frame, without rehosting someone else's
+   * video to find out.
+   */
+  it("reads the hex expiry out of a real signed URL", () => {
+    const url =
+      "https://video-lga3-3.xx.fbcdn.net/o1/v/t2/f2/m412/AQOjR4.mp4?_nc_cat=108&oh=00_AQFM7K&oe=6A9059C5";
+    // 0x6A9059C5 = 2026-08-27T15:37Z
+    expect(videoExpiryOf(url)).toBe(0x6a9059c5 * 1000);
+    expect(new Date(videoExpiryOf(url)).toISOString().slice(0, 10)).toBe(
+      "2026-08-27"
+    );
+  });
+
+  it("⭐ returns 0 rather than guessing, so the UI can try and fall back", () => {
+    // A fabricated far-future date renders a dead player confidently, which is
+    // the one outcome worse than admitting we don't know.
+    expect(videoExpiryOf("https://example.com/x.mp4")).toBe(0);
+    expect(videoExpiryOf("")).toBe(0);
+    expect(videoExpiryOf("https://x/y.mp4?oe=notahexnumber")).toBe(0);
+    expect(videoExpiryOf("https://x/y.mp4?oe=0")).toBe(0);
+  });
+
+  it("is carried on the ad, so the screen never has to parse a URL", () => {
+    const ranked = rankAds({ results: [ad({
+      snapshot: {
+        title: "t",
+        videos: [{ video_sd_url: "https://v/x.mp4?oe=6A9059C5" }],
+      },
+    })] }, NOW);
+    expect(ranked[0].videoExpiresAt).toBe(0x6a9059c5 * 1000);
+  });
+
+  it("⚠️ and never picks the watermarked cut", () => {
+    // Meta's ad-library overlay is burned into those, which would teach the
+    // watch pass that the overlay is part of the creative.
+    const ranked = rankAds({ results: [ad({
+      snapshot: {
+        title: "t",
+        videos: [{
+          watermarked_video_sd_url: "https://v/marked.mp4",
+          video_sd_url: "https://v/clean.mp4",
+        }],
+      },
+    })] }, NOW);
+    expect(ranked[0].videoUrl).toBe("https://v/clean.mp4");
   });
 });

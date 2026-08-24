@@ -24,6 +24,7 @@ import {
   Clapperboard,
   ScrollText,
   Brain,
+  Swords,
   Settings,
   Sun,
   TrendingUp,
@@ -39,6 +40,7 @@ const NAV = [
    */
   { href: `${BASE}/videos`, label: "Videos", icon: Clapperboard },
   { href: `${BASE}/results`, label: "Results", icon: TrendingUp },
+  { href: `${BASE}/competition`, label: "Competition", icon: Swords },
   { href: `${BASE}/brain`, label: "Brain", icon: Brain },
   /**
    * ⚠️ Activity removed 2026-08-19 — see app/clawlaunch/mission/activity.

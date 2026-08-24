@@ -890,3 +890,143 @@ export const myResearch = query({
     };
   },
 });
+
+/**
+ * ⭐ THE COMPETITION — the richest thing she knows, and the screen that proves
+ * the pitch.
+ *
+ * `myResearch` shows two lines per ad on Today. This is the depth behind it:
+ * everything she recorded when she WATCHED the ad, plus whether the video can
+ * still be played.
+ *
+ * ⚠️ PLAYABILITY IS A FACT WITH AN EXPIRY DATE. Meta signs these URLs and they
+ * die in about four days — measured, not assumed. `playable` is computed here
+ * against the request time rather than left to the browser to discover, so the
+ * screen shows a poster and a link to Meta's library instead of a dead frame.
+ * We deliberately do not rehost the video: that is a decision about someone
+ * else's asset, and the poster answers the same question without making it.
+ */
+export const myCompetition = query({
+  args: {},
+  handler: async (
+    ctx
+  ): Promise<{
+    ok: boolean;
+    error?: string;
+    /** Names she is watching, and whether the founder ever confirmed them. */
+    confirmed: string[];
+    unconfirmed: string[];
+    ads: Array<{
+      id: string;
+      advertiser: string;
+      daysRunning: number;
+      variants: number;
+      url: string;
+      posterUrl: string;
+      videoUrl: string;
+      /** False when the signed URL has expired, or there is no video. */
+      playable: boolean;
+      hook: string;
+      body: string;
+      cta: string;
+      /** Everything below is empty until she has watched it. */
+      watched: boolean;
+      device: string;
+      script: string;
+      borrowable: string;
+      requires: string;
+      beats: Array<{ atSec: number; whatHappens: string; onScreen: string }>;
+      lengthSec: number;
+    }>;
+  }> => {
+    const customer = await currentCustomer(ctx);
+    if (!customer) {
+      return { ok: false, error: "sign in first", confirmed: [], unconfirmed: [], ads: [] };
+    }
+
+    let confirmed: string[] = [];
+    let unconfirmed: string[] = [];
+    if (customer.productTruthJson) {
+      try {
+        const truth = JSON.parse(customer.productTruthJson) as {
+          competitors?: string[];
+          discoveredCompetitors?: string[];
+        };
+        confirmed = truth.competitors ?? [];
+        unconfirmed = truth.discoveredCompetitors ?? [];
+      } catch {
+        // A corrupt blob shows as no competitors, never as a crash.
+      }
+    }
+
+    const now = Date.now();
+    const rows = (await ctx.db
+      .query("observations")
+      .withIndex("by_customer_and_captured", (q) =>
+        q.eq("customerId", customer._id)
+      )
+      .collect()) as Doc<"observations">[];
+
+    const ads = rows
+      .filter((r) => r.kind === "ad" && r.metricsJson)
+      .map((row) => {
+        try {
+          const a = JSON.parse(row.metricsJson as string) as Record<string, unknown>;
+          const watchedRaw = a.watchedJson as string | null | undefined;
+          const w = watchedRaw
+            ? (JSON.parse(watchedRaw) as Record<string, unknown>)
+            : null;
+
+          const videoUrl = typeof a.videoUrl === "string" ? a.videoUrl : "";
+          const expiresAt =
+            typeof a.videoExpiresAt === "number" ? a.videoExpiresAt : 0;
+
+          return {
+            id: row.sourceUrl,
+            advertiser: typeof a.pageName === "string" ? a.pageName : "",
+            daysRunning: typeof a.daysRunning === "number" ? a.daysRunning : 0,
+            variants: typeof a.variants === "number" ? a.variants : 1,
+            url: typeof a.url === "string" ? a.url : "",
+            posterUrl: typeof a.thumbUrl === "string" ? a.thumbUrl : "",
+            videoUrl,
+            /**
+             * ⚠️ An unknown expiry (0) is treated as PLAYABLE — older rows
+             * predate the field, and letting the browser try and fall back
+             * beats hiding a video that would have worked.
+             */
+            playable: videoUrl !== "" && (expiresAt === 0 || expiresAt > now),
+            hook: str(w?.hook) || str(a.title),
+            body: str(a.body),
+            cta: str((w?.cta as Record<string, unknown> | undefined)?.ask) || str(a.ctaText),
+            watched: w !== null,
+            device: str(w?.visualDevice),
+            script: str(w?.spokenScript) || str(a.transcript),
+            borrowable: str(w?.borrowable),
+            requires: str(w?.requires),
+            beats: Array.isArray(w?.beats)
+              ? (w.beats as Array<Record<string, unknown>>).slice(0, 8).map((b) => ({
+                  atSec: typeof b.atSec === "number" ? b.atSec : 0,
+                  whatHappens: str(b.whatHappens),
+                  onScreen: str(b.onScreen),
+                }))
+              : [],
+            lengthSec:
+              typeof (w?.pacing as Record<string, unknown> | undefined)?.totalLength === "number"
+                ? ((w!.pacing as Record<string, unknown>).totalLength as number)
+                : 0,
+          };
+        } catch {
+          return null;
+        }
+      })
+      .filter((a): a is NonNullable<typeof a> => a !== null)
+      .sort((a, b) => b.daysRunning - a.daysRunning);
+
+    return { ok: true, confirmed, unconfirmed, ads };
+  },
+});
+
+/** Local coercion — a missing field renders as empty, never as "undefined". */
+function str(x: unknown): string {
+  return typeof x === "string" ? x : "";
+}

@@ -48,6 +48,7 @@
   "dependencies": {
     "@clerk/nextjs": "^7.2.7",
     "@emotion-machine/claw-messenger": "^0.1.8",
+    "@radix-ui/react-dialog": "^1.1.23",
     "@resvg/resvg-wasm": "^2.6.2",
     "convex": "^1.36.1",
     "google-play-scraper": "^10.1.3",
