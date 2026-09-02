@@ -104,3 +104,9 @@ Running handoff. Newest at the bottom. Read the **Blocked on you** section first
 - Landing page (S1) with the phone mock, three beats, one price, "what she can't do", FAQ; Privacy and Terms drafted (**Operator**: a person reviews both before launch; set the **18+ age gate in Clerk**; the data-deletion URL for Meta/Google review is `/privacy` + Settings). PostHog landing events are not wired (no key on the creator app yet).
 - `/ops?token=…` operator console (token on the dev deployment as `OPS_TOKEN`; fail-closed). Nightly consolidation tombstones expired notes and learns the reply hour; the scout aims for the hour before it. "Stop watching @x?" after three passes, answered by buttons.
 - 252 tests, CI green through billing.
+
+## 14:00–14:05 PT — "why is @x growing", first week, save
+
+- profile-creator on demand: "why is @stoolpresidente growing" came back in four lines, live. **Fixture caveat**: with zero ScrapeCreators credits the fixture client answers every handle with the same spec example, so the numbers she cited were the seeded creator's own post. Real credits make this real; the skill and routing are done.
+- The first week is a schedule row (`creators.firstWeek`); the day-4 invitation to send a draft is hers to initiate. "save" keeps the idea (`savedAt`) and Ideas can filter to saved.
+- Plan §6 now opens with a status block: built · not built · operator-gated. 255 tests, CI green.
