@@ -43,6 +43,7 @@ import type * as integrations_scrapeCreators_platforms_instagram from "../integr
 import type * as integrations_scrapeCreators_platforms_tiktok from "../integrations/scrapeCreators/platforms/tiktok.js";
 import type * as integrations_scrapeCreators_schemas from "../integrations/scrapeCreators/schemas.js";
 import type * as integrations_telegram_client from "../integrations/telegram/client.js";
+import type * as onboarding_admired from "../onboarding/admired.js";
 import type * as onboarding_dev from "../onboarding/dev.js";
 import type * as onboarding_firstRead from "../onboarding/firstRead.js";
 import type * as onboarding_ingest from "../onboarding/ingest.js";
@@ -96,6 +97,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/scrapeCreators/platforms/tiktok": typeof integrations_scrapeCreators_platforms_tiktok;
   "integrations/scrapeCreators/schemas": typeof integrations_scrapeCreators_schemas;
   "integrations/telegram/client": typeof integrations_telegram_client;
+  "onboarding/admired": typeof onboarding_admired;
   "onboarding/dev": typeof onboarding_dev;
   "onboarding/firstRead": typeof onboarding_firstRead;
   "onboarding/ingest": typeof onboarding_ingest;
