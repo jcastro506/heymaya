@@ -23,13 +23,11 @@ const WEEK_MS = 7 * 86_400_000;
 
 export const WEEKLY_REVIEW_SKILL = `weekly-review
 When: Sunday. You are telling them what happened this week and why, in under 900 characters, no bullets, no headers, like a text from someone who watched every post.
-Order: (1) the week in one line with a number they were given (posts, median multiple); (2) the one thing that most explains it, from the cards and numbers, not from theory; (3) LIKED vs WORKED: which ideas they took and which posts actually performed, and if those disagree say so plainly, because results beat taste and you owe them that; (4) last week's experiment: held, failed, or unknown, with the number; (5) one new experiment for next week, small enough to do in one post; (6) if you have a scored prediction record, one honest line on how your calls have been running.
+Order: (1) the week in one line with a number they were given (posts, median multiple); (2) the one thing that most explains it, from the cards and numbers, not from theory; (3) LIKED vs WORKED: which ideas they took and which posts actually performed, and if those disagree say so plainly, because results beat taste and you owe them that; (4) last week's experiment: held, failed, or unknown, with the number; (5) one new experiment for next week, small enough to do in one post; (6) if you have a scored prediction record, one honest line on how your calls have been running. (7) The pulse tells you how they've been with you this week, read from what they did, never from asking. If it is cooling or silent, end with ONE specific question about their content that a reply would answer in a sentence (which of two hooks, whether a post is still planned); never ask how they feel about you, whether they'd miss you, or whether anything was useless. If warm or steady, no question unless one is genuinely useful.
 The rung is a computed fact you were given. You may disagree with it, but then say why in "rungOverride".
 Never invent a metric. If the week is thin (under three posts with a 48 h sample), say so and make the review about the one thing you can see.
 Output ONLY JSON:
 {"message": "≤900 chars", "experimentVerdict": "held|failed|unknown|none", "experimentVerdictWhy": "≤120", "newExperiment": "≤140, one post, measurable", "rungOverride": {"rung": "L0|L1|L2|healthy|unknown", "why": "≤120"} | null}`;
-
-export const CHECK_IN = "three quick ones, answer any or all: was anything i sent this week useless? what did you wish i'd said? would you miss me if i stopped?";
 
 export const dueForReview = internalQuery({
   args: { now: v.number() },
@@ -121,9 +119,10 @@ export const run = internalAction({
     const inp = await ctx.runQuery(internal.review.weekly.inputs, { creatorId: a.creatorId, now });
     if (!inp) return { sent: false, reason: "creator not found" };
     const record = await ctx.runQuery(internal.review.predictions.trackRecord, { creatorId: a.creatorId });
+    const pulse = await ctx.runQuery(internal.review.pulse.pulseFor, { creatorId: a.creatorId, now });
     const prefix = buildPrefix({ creator: inp.creator, directives: inp.directives, skill: WEEKLY_REVIEW_SKILL });
     const spec = REGISTRY.writer;
-    const evidence = { rung: inp.rung, week: inp.week, liked: inp.liked, passed: inp.passed, worked: inp.worked, taste: inp.taste, ideasSent: inp.ideasSent, lastExperiment: inp.lastExperiment, trackRecord: record.filter((r) => r.n >= 3) };
+    const evidence = { rung: inp.rung, week: inp.week, liked: inp.liked, passed: inp.passed, worked: inp.worked, taste: inp.taste, ideasSent: inp.ideasSent, lastExperiment: inp.lastExperiment, trackRecord: record.filter((r) => r.n >= 3), pulse: pulse ? { word: pulse.word, why: pulse.why } : null };
     const user = `This week's evidence (everything you may cite is here):\n${JSON.stringify(evidence)}`;
     const r = await callModel(ctx, { creatorId: a.creatorId, purpose: "weekly_review", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: user }], temperature: 0.5, maxTokens: 1600, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
     if (!r.ok) return { sent: false, reason: r.reason };
@@ -156,8 +155,6 @@ export const run = internalAction({
     await ctx.runMutation(internal.review.weekly.finish, { creatorId: a.creatorId, experimentVerdict: ev, newExperiment: out.newExperiment ?? "", rungOverride: out.rungOverride && out.rungOverride.rung !== inp.rung.rung ? { rung: String(out.rungOverride.rung), why: String(out.rungOverride.why ?? "").slice(0, 120) } : undefined, rung: inp.rung.rung });
     const weekKey = new Date(now).toISOString().slice(0, 10);
     await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: text, dedupeKey: `review:${weekKey}`, proactive: true, kind: "review", links: inp.week.slice(0, 3).map((p) => p.url), produced, criticSkipped });
-    // The pilot's three questions, as the one open question (§6 Sprint 3 instrumentation).
-    await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: CHECK_IN, dedupeKey: `checkin:${weekKey}`, proactive: false, awaitingAnswer: true, kind: "checkin" });
     // learn-creator: the weekly dossier rewrite, after the review, with the week's corrections in front of it (§15.7).
     await ctx.scheduler.runAfter(60_000, internal.onboarding.ingest.synthesize, { creatorId: a.creatorId, reason: "weekly" });
     return { sent: true };

@@ -60,3 +60,31 @@ describe("thin UI scoping", () => {
     expect(s?.rules.map((r) => r.text)).toEqual(["I stopped doing gear reviews"]);
   });
 });
+
+describe("results and plan are scoped too", () => {
+  it("a stranger sees null; the owner sees their own blocks and an unknown rung on an empty week", async () => {
+    const { t, a } = await twoCreators();
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      await ctx.db.insert("calendarBlocks", { creatorId: a, kind: "film", start: now + 86_400_000, end: now + 90_000_000, title: "film: the launch", status: "proposed", createdAt: now });
+    });
+    expect(await t.withIdentity({ subject: "user_zzz" }).query(api.ui.results, {})).toBeNull();
+    expect(await t.withIdentity({ subject: "user_zzz" }).query(api.ui.plan, {})).toBeNull();
+    const r = await t.withIdentity({ subject: "user_a" }).query(api.ui.results, {});
+    expect(r?.rung.rung).toBe("unknown");
+    expect(r?.week).toEqual([]);
+    const p = await t.withIdentity({ subject: "user_a" }).query(api.ui.plan, {});
+    expect(p?.blocks.map((b) => b.title)).toEqual(["film: the launch"]);
+    expect((await t.withIdentity({ subject: "user_b" }).query(api.ui.plan, {}))?.blocks).toEqual([]);
+  });
+
+  it("a block control from the web refuses another creator's block", async () => {
+    const { t, a } = await twoCreators();
+    const blockId = await t.run(async (ctx) => {
+      const now = Date.now();
+      return await ctx.db.insert("calendarBlocks", { creatorId: a, kind: "film", start: now + 86_400_000, end: now + 90_000_000, title: "x", status: "proposed", createdAt: now });
+    });
+    expect(await t.withIdentity({ subject: "user_b" }).mutation(api.ui.blockControl, { id: blockId, op: "delete" })).toEqual({ ok: false });
+    expect(await t.withIdentity({ subject: "user_a" }).mutation(api.ui.blockControl, { id: blockId, op: "move", start: 5, end: 1 })).toEqual({ ok: false }); // ends before it starts
+  });
+});

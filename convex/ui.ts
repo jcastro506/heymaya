@@ -9,6 +9,7 @@ import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/s
 import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { summarize, type Affinity } from "./taste/affinities";
+import { computeRung, engagement } from "./review/rung";
 
 async function me(ctx: QueryCtx | MutationCtx): Promise<Doc<"creators"> | null> {
   const identity = await ctx.auth.getUserIdentity();
@@ -159,6 +160,84 @@ export const passIdea = mutation({
     const row = (await ctx.db.get(a.id)) as Doc<"ideas"> | null;
     if (!c || !row || row.creatorId !== c._id) return { ok: false };
     await ctx.db.patch(a.id, { status: "passed" });
+    return { ok: true };
+  },
+});
+
+/** Results: last week as she saw it (§7 S4). The rung and its reasons, the posts, the track record, the experiments. */
+export const results = query({
+  args: {},
+  handler: async (ctx) => {
+    const c = await me(ctx);
+    if (!c) return null;
+    const now = Date.now();
+    const since = now - 7 * 86_400_000;
+    const all = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").take(80)) as Doc<"ownPosts">[];
+    const week = all.filter((p) => p.createTime >= since);
+    const history = all.filter((p) => p.createTime < since).slice(0, 40);
+    const planned = (c.dossier as { cadence?: { postsPerWeek?: number } } | undefined)?.cadence?.postsPerWeek ?? null;
+    const rung = computeRung({
+      week: week.map((p) => ({ views: p.metrics.views, multiple: p.multiple ?? null, likes: p.metrics.likes, comments: p.metrics.comments, shares: p.metrics.shares, saves: p.metrics.saves ?? 0, ageHours: (now - p.createTime) / 3_600_000 })),
+      planned: planned && planned > 0 ? planned : null,
+      history: history.map((p) => ({ views: p.metrics.views, comments: p.metrics.comments, shares: p.metrics.shares, saves: p.metrics.saves ?? 0 })),
+    });
+    const reads = (await ctx.db.query("ownPostReads").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").take(80)) as Doc<"ownPostReads">[];
+    const override = reads.find((r) => r.modelOverride)?.modelOverride ?? null;
+    const preds = (await ctx.db.query("predictions").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).collect()) as Doc<"predictions">[];
+    const by = new Map<string, { expected: number; actuals: number[] }>();
+    for (const p of preds) {
+      if (p.outcomeMultiple === undefined) continue;
+      const cur = by.get(p.confidence) ?? { expected: p.expectedMultiple, actuals: [] };
+      cur.actuals.push(p.outcomeMultiple);
+      by.set(p.confidence, cur);
+    }
+    const review = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", c._id)).order("desc").take(60)) as Doc<"messages">[];
+    const lastReview = review.find((m) => m.direction === "out" && m.kind === "review") ?? null;
+    return {
+      rung,
+      override,
+      week: week.map((p) => ({ id: p._id, url: p.url, platform: p.platform, createTime: p.createTime, views: p.metrics.views, multiple: p.multiple ?? null, engagementPerView: engagement({ views: p.metrics.views, comments: p.metrics.comments, shares: p.metrics.shares, saves: p.metrics.saves ?? 0 }), source: p.source, metricsAsOf: p.metricsAsOf, sampled: now - p.createTime >= 48 * 3_600_000 })),
+      trackRecord: Array.from(by.entries()).map(([confidence, x]) => { const s = [...x.actuals].sort((m, n) => m - n); return { confidence, expected: x.expected, medianActual: s[Math.floor(s.length / 2)], n: s.length }; }),
+      openPredictions: preds.filter((p) => p.scoredAt === undefined).length,
+      experiments: [...(c.experiments ?? [])].sort((x, y) => y.proposedAt - x.proposedAt).slice(0, 6).map((e) => ({ id: e.id, text: e.text, proposedAt: e.proposedAt, result: e.result ?? null })),
+      lastReview: lastReview ? { body: lastReview.body, ts: lastReview.ts, links: lastReview.links ?? [] } : null,
+    };
+  },
+});
+
+/** Plan: the calendar week (§7 S4). Blocks she proposed or they confirmed, and the events she intends to use. */
+export const plan = query({
+  args: {},
+  handler: async (ctx) => {
+    const c = await me(ctx);
+    if (!c) return null;
+    const now = Date.now();
+    const horizon = now + 14 * 86_400_000;
+    const blocks = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", c._id).gte("start", now - 86_400_000).lte("start", horizon)).collect()) as Doc<"calendarBlocks">[];
+    const events = (await ctx.db.query("calendarEvents").withIndex("by_creator_start", (q) => q.eq("creatorId", c._id).gte("start", now).lte("start", horizon)).collect()) as Doc<"calendarEvents">[];
+    const conn = (await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", c._id).eq("provider", "google_calendar")).first()) as Doc<"connections"> | null;
+    const bestHours = (c.dossier as { cadence?: { bestHoursLocal?: number[] } } | undefined)?.cadence?.bestHoursLocal ?? [];
+    return {
+      connected: conn?.status === "connected",
+      timezone: c.timezone,
+      blocks: blocks.filter((b) => b.status !== "deleted").map((b) => ({ id: b._id, kind: b.kind, title: b.title, start: b.start, end: b.end, status: b.status, onCalendar: Boolean(b.externalEventId), ideaId: b.ideaId ?? null })),
+      events: events.filter((e) => e.status === "active" && e.class !== "private").map((e) => ({ id: e.externalId, title: e.title, start: e.start, end: e.end, allDay: e.allDay, class: e.class, link: e.htmlLink ?? null })),
+      bestHours,
+    };
+  },
+});
+
+/** A block control from the web has the same effect as the words in chat (§1). Writes go through the same actions. */
+export const blockControl = mutation({
+  args: { id: v.id("calendarBlocks"), op: v.union(v.literal("confirm"), v.literal("delete"), v.literal("move")), start: v.optional(v.number()), end: v.optional(v.number()) },
+  handler: async (ctx, a): Promise<{ ok: boolean }> => {
+    const c = await me(ctx);
+    const b = (await ctx.db.get(a.id)) as Doc<"calendarBlocks"> | null;
+    if (!c || !b || b.creatorId !== c._id) return { ok: false };
+    if (a.op === "confirm") await ctx.scheduler.runAfter(0, internal.calendar.blocks.confirm, { blockId: a.id });
+    else if (a.op === "delete") await ctx.scheduler.runAfter(0, internal.calendar.blocks.remove, { blockId: a.id });
+    else if (a.start && a.end && a.end > a.start) await ctx.scheduler.runAfter(0, internal.calendar.blocks.move, { blockId: a.id, start: a.start, end: a.end });
+    else return { ok: false };
     return { ok: true };
   },
 });

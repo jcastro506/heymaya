@@ -66,6 +66,7 @@ import type * as reads_key from "../reads/key.js";
 import type * as reads_kinds from "../reads/kinds.js";
 import type * as reads_read from "../reads/read.js";
 import type * as review_predictions from "../review/predictions.js";
+import type * as review_pulse from "../review/pulse.js";
 import type * as review_rung from "../review/rung.js";
 import type * as review_weekly from "../review/weekly.js";
 import type * as scout_gate from "../scout/gate.js";
@@ -145,6 +146,7 @@ declare const fullApi: ApiFromModules<{
   "reads/kinds": typeof reads_kinds;
   "reads/read": typeof reads_read;
   "review/predictions": typeof review_predictions;
+  "review/pulse": typeof review_pulse;
   "review/rung": typeof review_rung;
   "review/weekly": typeof review_weekly;
   "scout/gate": typeof scout_gate;
