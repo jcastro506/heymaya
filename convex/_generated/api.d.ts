@@ -42,8 +42,10 @@ import type * as integrations_scrapeCreators_platforms_instagram from "../integr
 import type * as integrations_scrapeCreators_platforms_tiktok from "../integrations/scrapeCreators/platforms/tiktok.js";
 import type * as integrations_scrapeCreators_schemas from "../integrations/scrapeCreators/schemas.js";
 import type * as integrations_telegram_client from "../integrations/telegram/client.js";
+import type * as onboarding_dev from "../onboarding/dev.js";
 import type * as onboarding_firstRead from "../onboarding/firstRead.js";
 import type * as onboarding_ingest from "../onboarding/ingest.js";
+import type * as onboarding_start from "../onboarding/start.js";
 import type * as reads_cache from "../reads/cache.js";
 import type * as reads_key from "../reads/key.js";
 import type * as reads_kinds from "../reads/kinds.js";
@@ -91,8 +93,10 @@ declare const fullApi: ApiFromModules<{
   "integrations/scrapeCreators/platforms/tiktok": typeof integrations_scrapeCreators_platforms_tiktok;
   "integrations/scrapeCreators/schemas": typeof integrations_scrapeCreators_schemas;
   "integrations/telegram/client": typeof integrations_telegram_client;
+  "onboarding/dev": typeof onboarding_dev;
   "onboarding/firstRead": typeof onboarding_firstRead;
   "onboarding/ingest": typeof onboarding_ingest;
+  "onboarding/start": typeof onboarding_start;
   "reads/cache": typeof reads_cache;
   "reads/key": typeof reads_key;
   "reads/kinds": typeof reads_kinds;
