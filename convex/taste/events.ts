@@ -10,6 +10,7 @@ import { internalMutation, internalQuery, mutation } from "../_generated/server"
 import type { Doc, Id } from "../_generated/dataModel";
 import { applyEvent, featureKeys, TASTE, WEIGHTS, type Affinity } from "./affinities";
 import { creatorForIdentity } from "../core/identity";
+import { THRESHOLDS } from "../config/thresholds";
 
 const STATUS_FOR: Record<string, Doc<"ideas">["status"] | undefined> = { posted: "posted", heart: "hearted", notme: "passed", thumbs_down: "passed", ignored: "expired" };
 
@@ -86,6 +87,13 @@ export const expireIgnored = internalMutation({
       if (keys.length && weight !== 0) await ctx.db.patch(creator._id, { affinities: applyEvent((creator.affinities ?? []) as Affinity[], keys, weight, now), updatedAt: now });
       await ctx.db.patch(idea._id, { status: "expired" });
       expired++;
+    }
+    // Unanswered questions older than the threshold close too; silence is an answer, and an open row must not mute the scout.
+    const qCutoff = now - THRESHOLDS.openQuestionHours * 3_600_000;
+    const creators = (await ctx.db.query("creators").take(500)) as Doc<"creators">[];
+    for (const c of creators) {
+      const open = (await ctx.db.query("messages").withIndex("by_creator_and_awaiting", (q) => q.eq("creatorId", c._id).eq("awaitingAnswer", true)).take(10)) as Doc<"messages">[];
+      for (const m of open) if (m.ts < qCutoff) await ctx.db.patch(m._id, { awaitingAnswer: false });
     }
     return { expired };
   },

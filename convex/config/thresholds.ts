@@ -13,6 +13,8 @@ export const THRESHOLDS = {
 
   // §13.8 gate rails
   dailyMessageCap: 3,
+  /** An unanswered question stops counting as open after this many hours; silence is an answer (found by the simulated fortnight: one ignored "want the shot list?" muted the scout for thirteen days). */
+  openQuestionHours: 24,
   // §3 daily budgets per creator, trial and paid alike (tune from the ledger)
   dailyUsdCap: 0.75,
   dailyWatchCap: 8,

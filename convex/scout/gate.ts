@@ -61,7 +61,7 @@ export const railsFor = internalQuery({
     const day = dayKeyInZone(a.now, creator.timezone);
     const recent = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(50)) as Doc<"messages">[];
     const sentToday = recent.filter((m) => m.direction === "out" && m.proactive && dayKeyInZone(m.ts, creator.timezone) === day && m.kind !== "status").length;
-    const openQuestion = recent.some((m) => m.direction === "out" && m.awaitingAnswer);
+    const openQuestion = recent.some((m) => m.direction === "out" && m.awaitingAnswer && a.now - m.ts < THRESHOLDS.openQuestionHours * 3_600_000);
     const budget = (await ctx.db.query("budgets").withIndex("by_creator_day", (q) => q.eq("creatorId", a.creatorId).eq("day", day)).first()) as Doc<"budgets"> | null;
     const rails = checkRails({ creator, sentToday, openQuestion, now: a.now, budget });
     const pending = (await ctx.db.query("signals").withIndex("by_creator_verdict", (q) => q.eq("creatorId", a.creatorId).eq("verdict", "pending")).collect()) as Doc<"signals">[];
