@@ -815,6 +815,20 @@ Order of checks, each producing the verdict reason if it fails: quiet hours → 
 
 **Cost.** An investigated candidate costs about 3–8 credits and two to four writer turns; at three per day per creator that is inside the §3 budget, and the cache means the fleet shares the reads.
 
+### 13.12 Transfer — formats travel, topics don't
+
+**The claim.** Most of what a creator can steal is not in their lane. A comedy account's interruption bit, a cooking account's "things nobody tells you" list, a hook structure that opens on an object instead of a face, a sense of humor, an angle: these travel; the topic does not have to. A scout that only looks inside the lane, or judges "fit" as "same topic", misses the best half of what is out there. (Josh, 2026-09-02: "content that isn't directly tied to our user's niche can still be useful and copied.")
+
+**1. Two kinds of fit, both judged.** `fit` in §14.4 is not topic fit. The scout answers two questions for a candidate: does the *topic* belong to this creator, and does the *format* (structure, hook shape, angle, humor, pacing) transfer to their subject. A candidate can pass on transfer alone; the message then names what transfers and what does not ("the format is the thing here, not the subject: the list with a cut to an object on every point; yours is the shoe rack"). The idea's `features.format` and `tone` carry the transferable part into taste, so a creator who takes transfer ideas gets more of them.
+
+**2. Where out-of-lane candidates come from.** The admired list (already often outside the lane) · the platform's trending feeds, pulled once a day fleet-wide (TikTok trending for the region, Instagram trending reels; one read each, shared across creators) · discover · and any link they send. The daily **format watch** (`convex/scout/formats.ts`) runs the screener over the day's trending posts and keeps the ones whose format is transferable: what the format is, the angle, the humor, why it is working, and what it would look like on someone else's subject. Each becomes a `worth_seeing` signal for every paired creator with a `formatFingerprint`, ranked by taste like any other candidate, and the scout may pick at most one per day.
+
+**3. The rail.** `worth_seeing` reaches the scout only when the screener marked it transferable (the fingerprint is present), and never more than one transfer pick a day; the rest of the day's messages stay in the lane. Taste decides the balance over time: the explore slot (§13.10 (6)) prefers a transfer idea when the creator has been taking them.
+
+**4. The message.** A transfer idea says three things a lane idea does not: the source is not in their world (so they don't get confused), what exactly transfers (the structure, not the joke), and what it looks like on their subject, in one line. Never "this is trending, jump on it".
+
+**Tests.** A trending post outside the lane with a transferable format produces a worth_seeing signal with a fingerprint · one without the screener's mark never reaches the scout · at most one worth_seeing per creator per day passes the rail · the scout's rejected reason may never be only "outside their lane" when transfer was not judged.
+
 ## 14. Data contracts
 
 Contracts are Zod schemas in `contracts/`; the same schemas are handed to Gemini and OpenRouter as `responseSchema`. Prose fields have length caps. Any field that can be unknown has an explicit `unknown` value; nulls are not used for "we don't know".

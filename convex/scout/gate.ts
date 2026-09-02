@@ -79,7 +79,17 @@ export const railsFor = internalQuery({
     const tasteDropped: Array<{ signalId: Id<"signals">; why: string }> = [];
     const askStop: Array<{ trackedAccountId: Id<"trackedAccounts">; handle: string }> = [];
     const ranked: Array<{ s: Doc<"signals">; rank: number }> = [];
+    let worthSeeingPassed = 0;
     for (const s of fresh) {
+      // §13.12 rail: a transfer candidate needs the screener's mark, and at most one a day reaches the scout.
+      if (s.kind === "worth_seeing") {
+        if (!s.formatFingerprint) {
+          tasteDropped.push({ signalId: s._id, why: "rail: no transferable format marked" });
+          continue;
+        }
+        if (worthSeeingPassed >= 1) continue; // stays pending for tomorrow
+        worthSeeingPassed++;
+      }
       const keys = [`source:${s.kind}`];
       if (s.trackedAccountId) {
         const t = (await ctx.db.get(s.trackedAccountId)) as Doc<"trackedAccounts"> | null;

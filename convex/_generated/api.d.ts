@@ -90,6 +90,7 @@ import type * as review_pulse from "../review/pulse.js";
 import type * as review_rung from "../review/rung.js";
 import type * as review_weekly from "../review/weekly.js";
 import type * as scout_firstWeek from "../scout/firstWeek.js";
+import type * as scout_formats from "../scout/formats.js";
 import type * as scout_gate from "../scout/gate.js";
 import type * as scout_matchPost from "../scout/matchPost.js";
 import type * as scout_readback from "../scout/readback.js";
@@ -191,6 +192,7 @@ declare const fullApi: ApiFromModules<{
   "review/rung": typeof review_rung;
   "review/weekly": typeof review_weekly;
   "scout/firstWeek": typeof scout_firstWeek;
+  "scout/formats": typeof scout_formats;
   "scout/gate": typeof scout_gate;
   "scout/matchPost": typeof scout_matchPost;
   "scout/readback": typeof scout_readback;

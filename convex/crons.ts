@@ -41,4 +41,7 @@ crons.hourly("first week", { minuteUTC: 50 }, internal.scout.firstWeek.runAll, {
 // Sprint 3c: last night's real outbound through the checks and the judge, every night.
 crons.daily("eval recent outbound", { hourUTC: 4, minuteUTC: 0 }, internal.eval.run.recent, {});
 
+// The format watch (§13.12): the platform's trending feeds once a day, fleet-wide; formats travel, topics don't.
+crons.daily("format watch", { hourUTC: 12, minuteUTC: 0 }, internal.scout.formats.run, {});
+
 export default crons;
