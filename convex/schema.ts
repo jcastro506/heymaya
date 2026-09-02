@@ -56,8 +56,10 @@ export default defineSchema({
         result: v.optional(v.union(v.literal("held"), v.literal("failed"), v.literal("unknown"))),
       }),
     ),
+    telegramChatId: v.optional(v.string()), // set by pairing; the only key inbound routes by
+    pairingToken: v.optional(v.string()),
+    pairingExpiresAt: v.optional(v.number()),
     channel: v.object({
-      telegramChatId: v.optional(v.string()),
       paired: v.boolean(),
       pairedAt: v.optional(v.number()),
       broken: v.optional(v.boolean()),
@@ -82,9 +84,11 @@ export default defineSchema({
     firstWeek: v.optional(v.object({ startedAt: v.number(), stepsDone: v.array(v.string()) })),
     openQuestionId: v.optional(v.id("messages")), // at most one open question
     createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
   })
     .index("by_clerkUserId", ["clerkUserId"])
-    .index("by_telegramChatId", ["channel.telegramChatId"])
+    .index("by_telegram_chat", ["telegramChatId"])
+    .index("by_pairing_token", ["pairingToken"])
     .index("by_tiktok", ["handles.tiktok"])
     .index("by_instagram", ["handles.instagram"]),
 
@@ -290,56 +294,75 @@ export default defineSchema({
   // ---------------------------------------------------------------- directives
   directives: defineTable({
     creatorId: v.id("creators"),
-    text: v.string(), // verbatim, never edited
-    source: v.union(v.literal("chat"), v.literal("settings"), v.literal("correction"), v.literal("default")),
-    codeEnforced: v.optional(v.string()), // which code rule mirrors it, if any
+    // Kinds are the ported ledger's vocabulary for now; the creator-specific set (§15.2) lands with Sprint 3.
+    kind: v.string(),
+    verbatim: v.string(), // never edited
+    interpretationJson: v.optional(v.string()),
+    active: v.boolean(),
+    supersedesId: v.optional(v.id("directives")),
+    supersededAt: v.optional(v.number()),
+    sourceMessageId: v.optional(v.id("messages")),
+    source: v.optional(v.union(v.literal("chat"), v.literal("settings"), v.literal("correction"), v.literal("default"))),
+    codeEnforced: v.optional(v.string()),
     createdAt: v.number(),
-    tombstonedAt: v.optional(v.number()),
-  }).index("by_creator", ["creatorId", "createdAt"]),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_active", ["creatorId", "active"])
+    .index("by_creator_and_kind", ["creatorId", "kind"]),
 
   // ------------------------------------------------------------------ messages
   messages: defineTable({
     creatorId: v.id("creators"),
     direction: v.union(v.literal("in"), v.literal("out")),
-    kind: v.string(), // first_read | scout | worth_seeing | calendar_idea | checklist | feedback | review | status | reply | inbound
-    text: v.string(),
-    dedupeKey: v.optional(v.string()), // required on every outbound
+    surface: v.union(v.literal("telegram"), v.literal("web"), v.literal("system")),
+    kind: v.optional(v.string()), // first_read | scout | worth_seeing | calendar_idea | checklist | feedback | review | status | reply | inbound
+    body: v.string(),
+    dedupeKey: v.optional(v.string()), // required on every proactive outbound; enforced in messages.ts
+    proactive: v.optional(v.boolean()),
+    turnId: v.optional(v.string()),
+    awaitingAnswer: v.optional(v.boolean()), // the one open question
+    deliveredAt: v.optional(v.number()),
+    deliveryError: v.optional(v.string()),
     telegramMessageId: v.optional(v.string()),
     telegramUpdateId: v.optional(v.number()),
     buttons: v.optional(v.array(v.object({ id: v.string(), label: v.string() }))),
     links: v.optional(v.array(v.string())),
-    isQuestion: v.optional(v.boolean()),
-    answeredAt: v.optional(v.number()),
     ideaId: v.optional(v.id("ideas")),
     reaction: v.optional(v.string()),
-    delivery: v.optional(v.object({ status: v.string(), attempts: v.number(), lastError: v.optional(v.string()) })),
     criticSkipped: v.optional(v.boolean()),
     produced: v.optional(produced),
-    createdAt: v.number(),
+    ts: v.number(),
   })
-    .index("by_creator", ["creatorId", "createdAt"])
-    .index("by_dedupeKey", ["dedupeKey"])
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_ts", ["creatorId", "ts"])
+    .index("by_creator_and_dedupe", ["creatorId", "dedupeKey"])
+    .index("by_creator_and_awaiting", ["creatorId", "awaitingAnswer"])
+    .index("by_delivery", ["direction", "deliveredAt"])
     .index("by_telegramUpdateId", ["telegramUpdateId"]),
 
   // ---------------------------------------------------------------------- jobs
   jobs: defineTable({
-    kind: v.string(),
     creatorId: v.optional(v.id("creators")),
+    kind: v.string(),
     idempotencyKey: v.string(),
-    payload: v.any(),
-    status: v.union(v.literal("queued"), v.literal("running"), v.literal("done"), v.literal("failed"), v.literal("dead")),
+    status: v.union(v.literal("queued"), v.literal("running"), v.literal("succeeded"), v.literal("failed"), v.literal("dead")),
     attempts: v.number(),
     maxAttempts: v.number(),
+    payloadJson: v.optional(v.string()),
     runAfter: v.number(),
-    deadline: v.number(),
-    priority: v.number(), // lower runs first; first-read sample = 0
+    deadlineAt: v.number(),
+    priority: v.optional(v.number()), // lower runs first; the first-read sample is 0 (plan §3.75)
     lastError: v.optional(v.string()),
+    costUsd: v.optional(v.number()),
     result: v.optional(v.any()),
     createdAt: v.number(),
-    finishedAt: v.optional(v.number()),
+    updatedAt: v.number(),
   })
     .index("by_idempotencyKey", ["idempotencyKey"])
-    .index("by_status_runAfter", ["status", "runAfter"])
+    .index("by_creator_and_createdAt", ["creatorId", "createdAt"])
+    .index("by_status_and_runAfter", ["status", "runAfter"])
+    .index("by_creator", ["creatorId"])
+    .index("by_status_and_deadline", ["status", "deadlineAt"])
     .index("by_creator_kind", ["creatorId", "kind", "createdAt"]),
 
   // ------------------------------------------------------------------- budgets
@@ -379,10 +402,15 @@ export default defineSchema({
 
   vendorBreaker: defineTable({
     vendor: v.string(),
-    open: v.boolean(),
+    // The credit-balance breaker (ported): a verdict from the last balance check.
+    verdict: v.union(v.literal("ok"), v.literal("low"), v.literal("critical")),
+    balance: v.number(),
+    detail: v.string(),
+    checkedAt: v.number(),
+    // Failure breaker (plan §16.2): opened on consecutive vendor failures.
+    open: v.optional(v.boolean()),
     openedAt: v.optional(v.number()),
     reason: v.optional(v.string()),
-    failures: v.number(),
-    updatedAt: v.number(),
+    failures: v.optional(v.number()),
   }).index("by_vendor", ["vendor"]),
 });
