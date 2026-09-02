@@ -22,9 +22,12 @@ The judgment: turn the idea into something they can shoot this afternoon. Five t
 Hard rules: under 120 words. No question at the end unless a real decision needs it.`;
 
 export const markIdea = internalMutation({
-  args: { ideaId: v.id("ideas"), status: v.union(v.literal("sent"), v.literal("hearted"), v.literal("posted"), v.literal("passed"), v.literal("expired")) },
+  args: { ideaId: v.id("ideas"), status: v.optional(v.union(v.literal("sent"), v.literal("hearted"), v.literal("posted"), v.literal("passed"), v.literal("expired"))), savedAt: v.optional(v.number()) },
   handler: async (ctx, a): Promise<null> => {
-    await ctx.db.patch(a.ideaId, { status: a.status });
+    const patch: Record<string, unknown> = {};
+    if (a.status) patch.status = a.status;
+    if (a.savedAt) patch.savedAt = a.savedAt;
+    if (Object.keys(patch).length) await ctx.db.patch(a.ideaId, patch);
     return null;
   },
 });
@@ -164,6 +167,7 @@ export const run = internalAction({
           return { ok: true };
         }
         if (op === "save") {
+          await ctx.runMutation(internal.agent.converse.markIdea, { ideaId, savedAt: Date.now() });
           await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: "saved. it's in your swipe file.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
           await deliverNow(ctx as never);
           return { ok: true };

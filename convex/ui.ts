@@ -53,14 +53,15 @@ export const today = query({
 
 /** Ideas: the inventory and the scoreboard. */
 export const ideas = query({
-  args: { unpostedOnly: v.optional(v.boolean()) },
+  args: { unpostedOnly: v.optional(v.boolean()), savedOnly: v.optional(v.boolean()) },
   handler: async (ctx, a) => {
     const c = await me(ctx);
     if (!c) return null;
     const rows = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").take(100)) as Doc<"ideas">[];
     return rows
       .filter((i) => !a.unpostedOnly || i.status !== "posted")
-      .map((i) => ({ id: i._id, status: i.status, reaction: i.reaction ?? null, newForYou: Boolean(i.newForYou), features: i.features ?? null, fitWhy: i.fitWhy, evidenceLinks: i.evidenceLinks, version: i.version as { hook?: string; onScreenText?: string; lengthSec?: number; sound?: string } | null, messageText: i.messageText, sentAt: i.sentAt ?? null, postedAt: i.postedAt ?? null, matchedPostId: i.matchedPostId ?? null }));
+      .filter((i) => !a.savedOnly || i.savedAt)
+      .map((i) => ({ id: i._id, status: i.status, saved: Boolean(i.savedAt), reaction: i.reaction ?? null, newForYou: Boolean(i.newForYou), features: i.features ?? null, fitWhy: i.fitWhy, evidenceLinks: i.evidenceLinks, version: i.version as { hook?: string; onScreenText?: string; lengthSec?: number; sound?: string } | null, messageText: i.messageText, sentAt: i.sentAt ?? null, postedAt: i.postedAt ?? null, matchedPostId: i.matchedPostId ?? null }));
   },
 });
 

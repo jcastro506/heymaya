@@ -255,6 +255,7 @@ export default defineSchema({
     // §13.10 (2): named by the writer in the same call that wrote the idea
     features: v.optional(v.object({ format: v.string(), topics: v.array(v.string()), tone: v.string(), lengthBucket: v.string(), sound: v.string(), source: v.string(), account: v.optional(v.string()) })),
     newForYou: v.optional(v.boolean()),
+    savedAt: v.optional(v.number()), // the swipe file (§11.3 save): kept, filterable, never expires
     produced,
     createdAt: v.number(),
   })

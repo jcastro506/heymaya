@@ -45,6 +45,7 @@ export const run = internalAction({
         kind: "status",
       });
       await deliverNow(ctx as never);
+      await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: args.creatorId, step: "first_read" });
       return { ok: true };
     }
 
@@ -91,6 +92,7 @@ export const run = internalAction({
       produced: producedStamp(spec.primary),
     });
     await deliverNow(ctx as never);
+      await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: args.creatorId, step: "first_read" });
     return { ok: true };
   },
 });

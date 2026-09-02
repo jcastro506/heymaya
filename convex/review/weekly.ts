@@ -155,6 +155,7 @@ export const run = internalAction({
     await ctx.runMutation(internal.review.weekly.finish, { creatorId: a.creatorId, experimentVerdict: ev, newExperiment: out.newExperiment ?? "", rungOverride: out.rungOverride && out.rungOverride.rung !== inp.rung.rung ? { rung: String(out.rungOverride.rung), why: String(out.rungOverride.why ?? "").slice(0, 120) } : undefined, rung: inp.rung.rung });
     const weekKey = new Date(now).toISOString().slice(0, 10);
     await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: text, dedupeKey: `review:${weekKey}`, proactive: true, kind: "review", links: inp.week.slice(0, 3).map((p) => p.url), produced, criticSkipped });
+    await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: a.creatorId, step: "first_review" });
     // learn-creator: the weekly dossier rewrite, after the review, with the week's corrections in front of it (§15.7).
     await ctx.scheduler.runAfter(60_000, internal.onboarding.ingest.synthesize, { creatorId: a.creatorId, reason: "weekly" });
     return { sent: true };

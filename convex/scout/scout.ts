@@ -200,6 +200,8 @@ export const run = internalAction({
     });
     if (messageId) await ctx.runMutation(internal.scout.scout.linkIdeaMessage, { ideaId, messageId, sentAt: now });
     verdicts.push({ signalId: signal._id, verdict: "sent", why: `sent: ${pick.fitWhy}` });
+    await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: args.creatorId, step: "first_scout" });
+    if (signal.kind === "calendar" || signal.kind === "worth_seeing") await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: args.creatorId, step: "first_calendar_or_worth_seeing" });
     await ctx.runMutation(internal.scout.gate.setVerdicts, { verdicts });
     await deliverNow(ctx as never);
     return { sent: true, reason: pick.fitWhy };

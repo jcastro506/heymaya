@@ -8,7 +8,8 @@ const CHIP: Record<string, string> = { sent: "border-white/20", hearted: "border
 
 export default function IdeasPage() {
   const [unposted, setUnposted] = useState(false);
-  const ideas = useQuery(api.ui.ideas, { unpostedOnly: unposted });
+  const [savedOnly, setSavedOnly] = useState(false);
+  const ideas = useQuery(api.ui.ideas, { unpostedOnly: unposted, savedOnly });
   const pass = useMutation(api.ui.passIdea);
   const posted = useMutation(api.taste.events.markPosted);
   const [open, setOpen] = useState<string | null>(null);
@@ -18,7 +19,10 @@ export default function IdeasPage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-baseline justify-between">
         <h1 className="text-lg font-semibold">Ideas</h1>
-        <label className="text-xs opacity-70 flex items-center gap-2"><input type="checkbox" checked={unposted} onChange={(e) => setUnposted(e.target.checked)} /> unposted only</label>
+        <span className="flex gap-3">
+          <label className="text-xs opacity-70 flex items-center gap-2"><input type="checkbox" checked={unposted} onChange={(e) => setUnposted(e.target.checked)} /> unposted</label>
+          <label className="text-xs opacity-70 flex items-center gap-2"><input type="checkbox" checked={savedOnly} onChange={(e) => setSavedOnly(e.target.checked)} /> saved</label>
+        </span>
       </div>
       {ideas.length === 0 && <p className="text-sm opacity-60">Nothing yet. Ideas land here with their evidence the moment she texts one.</p>}
       <ul className="flex flex-col gap-3">
@@ -29,6 +33,7 @@ export default function IdeasPage() {
                 <span className={`text-[11px] uppercase tracking-wide px-2 py-0.5 rounded-full border ${CHIP[i.status] ?? ""}`}>{i.status}</span>
                 {i.reaction && i.reaction !== "removed" && <span className="text-xs">{i.reaction}</span>}
                 {i.newForYou && <span className="text-[11px] opacity-60">not your usual</span>}
+                {i.saved && <span className="text-[11px] opacity-60">saved</span>}
               </span>
               <span className="text-[11px] opacity-50">{i.sentAt ? new Date(i.sentAt).toLocaleDateString() : ""}</span>
             </div>
