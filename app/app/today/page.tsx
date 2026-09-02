@@ -40,7 +40,7 @@ export default function TodayPage() {
 
       <section>
         <h2 className="text-sm uppercase tracking-wide opacity-50">Next filming block</h2>
-        <p className="text-sm opacity-80 mt-2">{t.nextBlock ? `${t.nextBlock.kind} · ${new Date(t.nextBlock.start).toLocaleString()} · ${t.nextBlock.title}` : "None planned. Calendar planning arrives with the calendar connection."}</p>
+        <p className="text-sm opacity-80 mt-2">{t.nextBlock ? `${t.nextBlock.title} · ${new Date(t.nextBlock.start).toLocaleString()}${t.nextBlock.status === "proposed" ? " · waiting for your yes" : ""}` : "None planned yet. She proposes one when something on your calendar is worth filming around."}</p>
       </section>
 
       <section>

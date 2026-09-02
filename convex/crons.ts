@@ -22,4 +22,7 @@ crons.daily("readback own posts", { hourUTC: 1, minuteUTC: 15 }, internal.scout.
 // The scout: rails then judgment, per creator, in their daytime; the gate holds the cap and quiet hours (§13.8).
 crons.hourly("scout", { minuteUTC: 5 }, internal.scout.scout.runAll, {});
 
+// The calendar sync: every connected calendar, every 30 minutes; push channels are post-pilot (§12.5).
+crons.interval("sync calendars", { minutes: 30 }, internal.calendar.sync.runAll, {});
+
 export default crons;

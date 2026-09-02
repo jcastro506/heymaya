@@ -30,7 +30,8 @@ export const today = query({
     const active = tracked.filter((t) => t.status === "active");
     const lastSample = active.reduce((m, t) => Math.max(m, t.lastSampledAt ?? 0), 0);
     const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").take(7)) as Doc<"ownPosts">[];
-    const block = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", c._id).gte("start", now)).first()) as Doc<"calendarBlocks"> | null;
+    const blocks = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", c._id).gte("start", now)).take(10)) as Doc<"calendarBlocks">[];
+    const block = blocks.find((b) => b.status === "confirmed" || b.status === "moved") ?? blocks.find((b) => b.status === "proposed") ?? null;
     const statusLine = !c.channel.paired
       ? "Not connected to Telegram yet."
       : !c.dossier
@@ -41,7 +42,7 @@ export const today = query({
       paired: c.channel.paired,
       dossier: Boolean(c.dossier),
       sentToday,
-      nextBlock: block ? { kind: block.kind, start: block.start, end: block.end, title: block.title } : null,
+      nextBlock: block ? { kind: block.kind, start: block.start, end: block.end, title: block.title, status: block.status } : null,
       week: posts.map((p) => ({ id: p._id, url: p.url, platform: p.platform, createTime: p.createTime, views: p.metrics.views, multiple: p.multiple ?? null, metricsAsOf: p.metricsAsOf })),
     };
   },

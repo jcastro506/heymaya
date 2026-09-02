@@ -52,6 +52,22 @@ export const run = internalAction({
 
     // One-tap options on an idea (§7 S3). Handled here without a model call where the answer is code.
     if (target.kind === "button") {
+      // A proposed filming block: yes is the consent row and the calendar write; no keeps the idea (§12.5).
+      const b = target.body.match(/^block:([a-z0-9]+):(yes|no)$/);
+      if (b) {
+        const blockId = b[1] as Id<"calendarBlocks">;
+        let body: string;
+        if (b[2] === "yes") {
+          const r = await ctx.runAction(internal.calendar.blocks.confirm, { blockId });
+          body = r.ok ? `blocked ${r.when}. it's on your calendar; move it and i'll follow.${r.htmlLink ? `\n${r.htmlLink}` : ""}` : `couldn't write to your calendar just now (${r.reason}). it's saved here as a plan for ${r.when}; reconnect in Settings and tap again.`;
+        } else {
+          await ctx.runMutation(internal.calendar.blocks.decline, { blockId });
+          body = "idea only. it's in Ideas whenever you want it.";
+        }
+        await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body, dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
+        await deliverNow(ctx as never);
+        return { ok: true };
+      }
       const m = target.body.match(/^idea:([a-z0-9]+):(shotlist|notme|save)$/);
       if (m) {
         const ideaId = m[1] as Id<"ideas">;

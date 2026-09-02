@@ -58,7 +58,16 @@ export const railsFor = internalQuery({
     const openQuestion = recent.some((m) => m.direction === "out" && m.awaitingAnswer);
     const rails = checkRails({ creator, sentToday, openQuestion, now: a.now });
     const pending = (await ctx.db.query("signals").withIndex("by_creator_verdict", (q) => q.eq("creatorId", a.creatorId).eq("verdict", "pending")).collect()) as Doc<"signals">[];
-    const fresh = pending.filter((s) => a.now - s.createdAt < THRESHOLDS.breakoutMaxAgeHours * 3_600_000);
+    const fresh: Doc<"signals">[] = [];
+    for (const s of pending) {
+      if (s.kind === "calendar") {
+        // The calendar rail (§13.8): the event must still be filmable, active, and ≥ 2 days ahead.
+        const ev = s.calendarEventId ? ((await ctx.db.query("calendarEvents").withIndex("by_creator_external", (q) => q.eq("creatorId", a.creatorId).eq("externalId", s.calendarEventId!)).first()) as Doc<"calendarEvents"> | null) : null;
+        if (ev && ev.status === "active" && ev.class === "filmable" && ev.start - a.now >= 2 * 86_400_000) fresh.push(s);
+        continue;
+      }
+      if (a.now - s.createdAt < THRESHOLDS.breakoutMaxAgeHours * 3_600_000) fresh.push(s);
+    }
     const candidates = fresh.sort((x, y) => y.score - x.score).slice(0, THRESHOLDS.candidatesPerDay);
     return { rails, creator, candidates };
   },

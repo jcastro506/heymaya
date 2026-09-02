@@ -272,8 +272,42 @@ export default defineSchema({
     status: v.union(v.literal("proposed"), v.literal("confirmed"), v.literal("moved"), v.literal("deleted")),
     consentAt: v.optional(v.number()), // required before any external write
     externalEventId: v.optional(v.string()),
+    calendarId: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_creator", ["creatorId", "start"]),
+
+  // ----------------------------------------------------------- calendarEvents
+  // What we keep from a calendar (§12.5): title, bounds, all-day flag, calendar id and
+  // our class. Never description, attendees, location. A `private` event keeps no title.
+  calendarEvents: defineTable({
+    creatorId: v.id("creators"),
+    calendarId: v.string(),
+    externalId: v.string(),
+    title: v.string(),
+    htmlLink: v.optional(v.string()),
+    start: v.number(),
+    end: v.number(),
+    allDay: v.boolean(),
+    recurring: v.boolean(),
+    class: v.union(v.literal("filmable"), v.literal("private"), v.literal("routine"), v.literal("unknown")),
+    classifiedBy: v.union(v.literal("code"), v.literal("model")),
+    status: v.union(v.literal("active"), v.literal("cancelled")),
+    updatedAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_creator_start", ["creatorId", "start"])
+    .index("by_creator_external", ["creatorId", "externalId"]),
+
+  // -------------------------------------------------------------- oauthStates
+  // Single-use, 15-minute state tokens for OAuth round trips; the token is the auth.
+  oauthStates: defineTable({
+    creatorId: v.id("creators"),
+    provider: v.literal("google"),
+    token: v.string(),
+    expiresAt: v.number(),
+    claimedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  }).index("by_token", ["token"]),
 
   // --------------------------------------------------------------- connections
   connections: defineTable({
@@ -284,6 +318,9 @@ export default defineSchema({
     calendarIds: v.optional(v.array(v.string())),
     watchChannels: v.optional(v.array(v.object({ channelId: v.string(), resourceId: v.string(), expiresAt: v.number() }))),
     syncToken: v.optional(v.string()),
+    calendars: v.optional(v.array(v.object({ id: v.string(), name: v.string(), selected: v.boolean() }))),
+    lastSyncedAt: v.optional(v.number()),
+    detail: v.optional(v.string()), // plain-language reason for attention / needs_reconnect
     // zernio
     zernioProfileId: v.optional(v.string()),
     zernioAccounts: v.optional(v.array(v.object({ accountId: v.string(), platform, canFetchAnalytics: v.boolean(), needsReconnect: v.boolean() }))),

@@ -12,6 +12,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
 import { buildPrefix, producedStamp } from "../agent/context";
+import { localDateKey, zonedTimeToEpoch } from "../calendar/time";
 import { deliverNow } from "../core/scheduler";
 import { THRESHOLDS } from "../config/thresholds";
 import { critique, tooLong } from "../agent/critic";
@@ -19,10 +20,10 @@ import { localHourMinute } from "./gate";
 import { internalQuery } from "../_generated/server";
 
 export const SCOUT_SKILL = `scout
-When: the gate has passed and there are candidates. Three kinds: "breakout" (an account they admire, above its own normal), "shape" (the top of their lane for one of their keywords this week; the account is not one they named), and "win" (THEIR OWN post crossing 3× their normal; the message is a real, specific celebration and one thing to do while it's moving, nothing else).
+When: the gate has passed and there are candidates. Four kinds: "breakout" (an account they admire, above its own normal), "shape" (the top of their lane for one of their keywords this week; the account is not one they named), "win" (THEIR OWN post crossing 3× their normal; the message is a real, specific celebration and one thing to do while it's moving, nothing else), and "calendar" (something on THEIR OWN calendar two or more days out that a post could ride: the message names the event, the shape of the post it makes possible, and proposes ONE filming block before it, with a day and a time on their clock; "version.block" carries that block and the question at the end is whether to block it).
 The judgment: which of these, if any, is notable (a real breakout above that account's own normal, not just a big account being big) AND fits this creator (their formats, their register, their lane, the dossier). Default is no. Pick at most one. If one fits, write the message: the evidence (who, how far above their normal, how old), the link, what the post does (from the transcript; you have NOT watched it, so say nothing about visuals), and their version: a hook line, the length, the sound if known, one line of on-screen text. End with exactly one question that has a decision behind it.
 Output ONLY JSON:
-{"pick": {"postId": "", "notable": true, "fit": "yes|maybe|no", "fitWhy": "≤160", "message": "≤900 chars, in your voice, lowercase fine, no bullets", "version": {"hook": "≤120", "onScreenText": "≤80", "lengthSec": 0, "sound": "≤80 or ''"}} | null,
+{"pick": {"postId": "", "notable": true, "fit": "yes|maybe|no", "fitWhy": "≤160", "message": "≤900 chars, in your voice, lowercase fine, no bullets", "version": {"hook": "≤120", "onScreenText": "≤80", "lengthSec": 0, "sound": "≤80 or ''", "block": {"startLocal": "YYYY-MM-DDTHH:MM on their clock", "lengthMin": 60, "title": "≤60, starts with 'film:'"} | null}} | null,
  "rejected": [{"postId": "", "why": "≤80"}]}`;
 
 export const writeIdea = internalMutation({
@@ -71,7 +72,7 @@ export const run = internalAction({
     if (g.candidates.length === 0) return { sent: false, reason: "no candidates" };
 
     // Evidence for the model: the candidate posts with transcripts (a credit each, cached fleet-wide).
-    const evidence: Array<{ postId: string; url: string; ratio: number; why: string; transcript: string | null; handle: string | null }> = [];
+    const evidence: Array<{ postId: string; kind: string; url: string; ratio: number; why: string; transcript: string | null; handle: string | null }> = [];
     for (const s of g.candidates) {
       const url = s.why.split("; ").pop() ?? "";
       let transcript: string | null = null;
@@ -80,7 +81,7 @@ export const run = internalAction({
         const t = (await ctx.runQuery(internal.scout.scout.trackedHandle, { id: s.trackedAccountId })) ?? null;
         handle = t;
       }
-      if (url.startsWith("http")) {
+      if (s.kind !== "calendar" && url.startsWith("http")) {
         try {
           const r = await ctx.runAction(internal.reads.read.read, { kind: "post.transcript", params: { platform: url.includes("tiktok.com") ? "tiktok" : "instagram", url }, creatorId: args.creatorId });
           transcript = ((r.value as { transcript?: string | null } | null)?.transcript ?? null)?.slice(0, 1200) ?? null;
@@ -88,14 +89,14 @@ export const run = internalAction({
           transcript = null;
         }
       }
-      evidence.push({ postId: s.sourcePostIds[0], url, ratio: s.score, why: s.why, transcript, handle });
+      evidence.push({ postId: s.sourcePostIds[0], kind: s.kind, url, ratio: s.score, why: s.why, transcript, handle });
     }
 
     const gathered = await ctx.runQuery(internal.agent.context.gather, { creatorId: args.creatorId });
     if (!gathered) return { sent: false, reason: "creator not found" };
     const prefix = buildPrefix({ creator: gathered.creator, directives: gathered.directives, skill: SCOUT_SKILL });
     const spec = REGISTRY.writer;
-    const user = `Candidates from accounts they admire, ranked by how far above each account's own normal:\n${JSON.stringify(evidence)}\n\nLocal time: ${g.rails.localHour}:00. Messages already sent today: ${g.rails.sentToday}.`;
+    const user = `Candidates (kind: breakout / shape / win / calendar), ranked; for posts, ratio is how far above that account's own normal:\n${JSON.stringify(evidence)}\n\nToday on their clock: ${localDateKey(now, g.creator.timezone)}, ${g.rails.localHour}:00 (${g.creator.timezone}). Messages already sent today: ${g.rails.sentToday}.`;
     const result = await callModel(ctx, { creatorId: args.creatorId, purpose: "scout", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: user }], temperature: 0.5, maxTokens: 900, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
     if (!result.ok) return { sent: false, reason: `scout model failed: ${result.reason}` };
 
@@ -128,7 +129,7 @@ export const run = internalAction({
     }
 
     const ev = evidence.find((e) => e.postId === pick.postId);
-    const links = ev?.url ? [ev.url] : [];
+    const links = ev?.url && signal.kind !== "calendar" ? [ev.url] : [];
     const produced = producedStamp(spec.primary);
 
     // The critic (§15.5): different family, one rewrite, then drop with a verdict.
@@ -152,6 +153,25 @@ export const run = internalAction({
     }
     pick.message = text;
     const ideaId = await ctx.runMutation(internal.scout.scout.writeIdea, { creatorId: args.creatorId, signalId: signal._id, evidenceLinks: links, fit: pick.fit, fitWhy: pick.fitWhy, version: pick.version ?? {}, messageText: pick.message, produced });
+    // A calendar pick proposes a block; the row is `proposed` and nothing reaches Google until they tap yes (§12.5).
+    let buttons: Array<{ id: string; label: string }> = [
+      { id: `idea:${ideaId}:shotlist`, label: "shot list" },
+      { id: `idea:${ideaId}:notme`, label: "not me" },
+      { id: `idea:${ideaId}:save`, label: "save" },
+    ];
+    const block = (pick.version as { block?: { startLocal?: string; lengthMin?: number; title?: string } | null } | undefined)?.block;
+    if (signal.kind === "calendar" && block?.startLocal) {
+      const start = zonedTimeToEpoch(block.startLocal, g.creator.timezone);
+      if (Number.isFinite(start) && start > now) {
+        const minutes = Math.min(240, Math.max(15, Number(block.lengthMin) || 60));
+        const blockId = await ctx.runMutation(internal.calendar.blocks.propose, { creatorId: args.creatorId, kind: "film", start, end: start + minutes * 60_000, title: (block.title || "film").slice(0, 80), ideaId });
+        buttons = [
+          { id: `block:${blockId}:yes`, label: "block it" },
+          { id: `block:${blockId}:no`, label: "idea only" },
+          { id: `idea:${ideaId}:notme`, label: "not me" },
+        ];
+      }
+    }
     const body = links.length && !pick.message.includes(links[0]) ? `${pick.message}\n\n${links[0]}` : pick.message;
     const { messageId } = await ctx.runMutation(internal.core.messages.send, {
       creatorId: args.creatorId,
@@ -162,11 +182,7 @@ export const run = internalAction({
       awaitingAnswer: /\?\s*$/.test(pick.message),
       kind: "scout",
       links,
-      buttons: [
-        { id: `idea:${ideaId}:shotlist`, label: "shot list" },
-        { id: `idea:${ideaId}:notme`, label: "not me" },
-        { id: `idea:${ideaId}:save`, label: "save" },
-      ],
+      buttons,
       produced,
       criticSkipped,
     });

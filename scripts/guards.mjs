@@ -19,7 +19,7 @@ const files = walk(root);
 const rel = (p) => relative(root, p);
 
 // 1. Marketing and product copy: no "AI", no "UGC", no vendor names (plan §7, S1).
-const copyFiles = files.filter((p) => /\/(app|components|content)\/.*\.(tsx|ts|md|mdx)$/.test(p) && !/\.test\./.test(p) && !/\/providers\.tsx$/.test(p)); // providers is wiring, not copy
+const copyFiles = files.filter((p) => /\/(app|components|content)\/.*\.(tsx|ts|md|mdx)$/.test(p) && !/\.test\./.test(p) && !/\/providers\.tsx$/.test(p) && !/\/app\/api\//.test(p)); // providers and API routes are wiring, not copy
 const forbidden = [/\bAI\b/, /\bUGC\b/, /ScrapeCreators/i, /Zernio/i, /OpenRouter/i, /Gemini/i, /Convex/i];
 for (const p of copyFiles) {
   // Copy is what a user could see: drop import lines and comments before matching,

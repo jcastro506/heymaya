@@ -1,9 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import Link from "next/link";
+
+function minutesAgo(ts: number): number {
+  return Math.max(1, Math.round((Date.now() - ts) / 60_000));
+}
 
 export default function SettingsPage() {
   const s = useQuery(api.ui.settings);
@@ -11,6 +15,18 @@ export default function SettingsPage() {
   const correct = useMutation(api.ui.correct);
   const revoke = useMutation(api.ui.revokeRule);
   const [correction, setCorrection] = useState("");
+  const cal = useQuery(api.calendar.oauth.status);
+  const selectCalendars = useMutation(api.calendar.oauth.selectCalendars);
+  const disconnect = useAction(api.calendar.oauth.disconnect);
+  // The connect round trip lands here with a query string; read it once, at mount, without an effect.
+  const [calNote, setCalNote] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const q = new URLSearchParams(window.location.search);
+    const err = q.get("calendar_error");
+    if (q.get("calendar") === "connected") return "Calendar connected. She reads it every half hour.";
+    if (err === "denied") return "You said no to Google. Fine; connect later from here.";
+    return err ? `Couldn't connect the calendar (${err}). Try again.` : null;
+  });
   if (s === undefined) return <p className="opacity-60 text-sm">loading…</p>;
   if (s === null) return <p className="text-sm">No account yet. <Link className="underline" href="/start">Start here.</Link></p>;
 
@@ -22,6 +38,38 @@ export default function SettingsPage() {
         <h2 className="text-sm uppercase tracking-wide opacity-50">Accounts</h2>
         <div>TikTok: {s.handles.tiktok ? `@${s.handles.tiktok}` : "—"} · Instagram: {s.handles.instagram ? `@${s.handles.instagram}` : "—"}</div>
         <div>Telegram: {s.paired ? "connected" : <Link className="underline" href="/telegram">connect</Link>} · plan: {s.plan}</div>
+      </section>
+
+      <section className="flex flex-col gap-2 text-sm">
+        <h2 className="text-sm uppercase tracking-wide opacity-50">Calendar</h2>
+        {calNote && <p className="text-xs opacity-80">{calNote}</p>}
+        {!cal || cal.status === "disconnected" ? (
+          <div>
+            <p className="opacity-70">Not connected. With it she plans filming around your life and finds ideas in it. She keeps only titles and times, never details, and skips anything private.</p>
+            <a className="btn mt-2 inline-flex" href="/api/google-calendar/start">Connect Google Calendar</a>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <div>
+              {cal.status === "connected" ? "Connected" : cal.status === "attention" ? "Connected, with a hiccup" : "Needs reconnecting"}
+              {cal.lastSyncedAt ? <span className="opacity-50"> · read {minutesAgo(cal.lastSyncedAt)} min ago</span> : null}
+              {cal.detail && <div className="text-xs opacity-70">{cal.detail}</div>}
+              {cal.status === "needs_reconnect" && <a className="underline text-xs" href="/api/google-calendar/start">reconnect</a>}
+            </div>
+            {cal.calendars.length > 1 && (
+              <div className="flex flex-col gap-1">
+                <div className="opacity-50 text-xs">which calendars she may read</div>
+                {cal.calendars.map((k) => (
+                  <label key={k.id} className="flex items-center gap-2">
+                    <input type="checkbox" checked={k.selected} onChange={(e) => selectCalendars({ ids: cal.calendars.filter((x) => (x.id === k.id ? e.target.checked : x.selected)).map((x) => x.id) })} />
+                    {k.name}
+                  </label>
+                ))}
+              </div>
+            )}
+            <button className="text-xs underline opacity-60 self-start" onClick={async () => { await disconnect({}); setCalNote("Disconnected. Everything she stored from it is gone."); }}>disconnect and forget my calendar</button>
+          </div>
+        )}
       </section>
 
       <section className="flex flex-col gap-2 text-sm">
