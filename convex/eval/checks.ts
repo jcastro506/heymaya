@@ -49,7 +49,10 @@ export function numberGrounded(token: string, evidence: string): boolean {
   return false;
 }
 
-export function runChecks(input: { text: string; evidence: unknown; kind: string; creatorUsesEmoji?: boolean; maxChars?: number }): Check[] {
+/** Words that assert she did something to their setup. Only a routed management turn may say them. */
+const ACTION_CLAIMS = /\b(added|i've added|now watching|tracking (her|him|them) now|i'?ve set|i set (your|the)|updated your|i'?ve updated|blocked (it|that|thu|fri|mon|tue|wed|sat|sun)|removed|dropped (her|him|them)|paused|i'?ve turned)\b/i;
+
+export function runChecks(input: { text: string; evidence: unknown; kind: string; creatorUsesEmoji?: boolean; maxChars?: number; actionTaken?: boolean }): Check[] {
   const text = input.text;
   const evidence = typeof input.evidence === "string" ? input.evidence : JSON.stringify(input.evidence ?? "");
   const checks: Check[] = [];
@@ -85,6 +88,12 @@ export function runChecks(input: { text: string; evidence: unknown; kind: string
   checks.push({ name: "complete", pass: complete, detail: complete ? "ends on a sentence" : `ends with "…${trimmed.slice(-30)}"` });
   const markdown = /\*\*|^#{1,6}\s|```/m.test(text) || /\b(refining|draft|revised|final answer)\b.*[:*]/i.test(text.split("\n")[0] ?? "");
   checks.push({ name: "no_markdown", pass: !markdown, detail: markdown ? "markdown or a draft label in chat" : "clean" });
+
+  // A reply that says "added" or "done" when no management row was written is a lie about their setup.
+  if (input.kind === "reply" && input.actionTaken === false) {
+    const claim = ACTION_CLAIMS.test(text);
+    checks.push({ name: "no_claimed_action", pass: !claim, detail: claim ? "claims an action no tool took" : "no action claimed" });
+  }
 
   if (input.kind === "scout") checks.push({ name: "has_link", pass: /https?:\/\//.test(text) || /https?:\/\//.test(evidence), detail: /https?:\/\//.test(text) ? "link in message" : "link only in evidence" });
 

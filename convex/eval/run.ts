@@ -21,9 +21,9 @@ export const record = internalMutation({
 
 /** Evaluate one message with the evidence it had. The evidence is whatever the caller can reconstruct; empty evidence fails any number. */
 export const evaluate = internalAction({
-  args: { suite: v.string(), skill: v.string(), text: v.string(), evidence: v.any(), creatorId: v.optional(v.id("creators")), messageId: v.optional(v.id("messages")), creatorUsesEmoji: v.optional(v.boolean()), trace: v.optional(v.any()) },
+  args: { suite: v.string(), skill: v.string(), text: v.string(), evidence: v.any(), creatorId: v.optional(v.id("creators")), messageId: v.optional(v.id("messages")), creatorUsesEmoji: v.optional(v.boolean()), trace: v.optional(v.any()), actionTaken: v.optional(v.boolean()) },
   handler: async (ctx, a): Promise<{ id: Id<"evalRuns">; pass: boolean }> => {
-    const checks = runChecks({ text: a.text, evidence: a.evidence, kind: a.skill, creatorUsesEmoji: a.creatorUsesEmoji });
+    const checks = runChecks({ text: a.text, evidence: a.evidence, kind: a.skill, creatorUsesEmoji: a.creatorUsesEmoji, actionTaken: a.actionTaken });
     const j = await judge(ctx, { creatorId: a.creatorId, text: a.text, kind: a.skill, evidence: a.evidence });
     const pass = passed(checks) && judgePass(j);
     const id = await ctx.runMutation(internal.eval.run.record, { suite: a.suite, skill: a.skill, creatorId: a.creatorId, messageId: a.messageId, text: a.text, checks, judge: j ?? undefined, pass, trace: a.trace });
@@ -34,9 +34,9 @@ export const evaluate = internalAction({
 /** Last night's outbound, with what evidence can be reconstructed: the prediction's opinion, the idea's evidence, the signal's investigation. */
 export const recentOutbound = internalQuery({
   args: { since: v.number() },
-  handler: async (ctx, a): Promise<Array<{ messageId: Id<"messages">; creatorId: Id<"creators">; skill: string; text: string; evidence: unknown; usesEmoji: boolean }>> => {
+  handler: async (ctx, a): Promise<Array<{ messageId: Id<"messages">; creatorId: Id<"creators">; skill: string; text: string; evidence: unknown; usesEmoji: boolean; actionTaken?: boolean }>> => {
     const done = new Set((await ctx.db.query("evalRuns").withIndex("by_at", (q) => q.gte("at", a.since)).collect()).map((r) => r.messageId).filter(Boolean));
-    const out: Array<{ messageId: Id<"messages">; creatorId: Id<"creators">; skill: string; text: string; evidence: unknown; usesEmoji: boolean }> = [];
+    const out: Array<{ messageId: Id<"messages">; creatorId: Id<"creators">; skill: string; text: string; evidence: unknown; usesEmoji: boolean; actionTaken?: boolean }> = [];
     const creators = (await ctx.db.query("creators").collect()) as Doc<"creators">[];
     for (const c of creators) {
       const rows = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", c._id).gte("ts", a.since)).collect()) as Doc<"messages">[];
@@ -60,7 +60,9 @@ export const recentOutbound = internalQuery({
           const before = rows.filter((x) => x.ts < m.ts).slice(-6).map((x) => x.body);
           evidence = { conversation: before, dossier: c.dossier ?? null, notes: (c.notes ?? []).map((n) => n.text) };
         }
-        out.push({ messageId: m._id, creatorId: c._id, skill: m.kind ?? "reply", text: m.body, evidence, usesEmoji });
+        // A management, button or command turn wrote a row; a plain reply did not, and may not claim to.
+        const actionTaken = /^(manage|btn|cmd|person):/.test(m.dedupeKey ?? "");
+        out.push({ messageId: m._id, creatorId: c._id, skill: m.kind ?? "reply", text: m.body, evidence, usesEmoji, actionTaken });
       }
     }
     return out.slice(0, 60);
@@ -74,7 +76,7 @@ export const recent = internalAction({
     const rows = await ctx.runQuery(internal.eval.run.recentOutbound, { since });
     let evaluated = 0, ok = 0;
     for (const r of rows) {
-      const res = await ctx.runAction(internal.eval.run.evaluate, { suite: "recent", skill: r.skill, text: r.text, evidence: r.evidence, creatorId: r.creatorId, messageId: r.messageId, creatorUsesEmoji: r.usesEmoji });
+      const res = await ctx.runAction(internal.eval.run.evaluate, { suite: "recent", skill: r.skill, text: r.text, evidence: r.evidence, creatorId: r.creatorId, messageId: r.messageId, creatorUsesEmoji: r.usesEmoji, actionTaken: r.actionTaken });
       evaluated++;
       if (res.pass) ok++;
     }

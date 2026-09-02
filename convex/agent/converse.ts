@@ -41,7 +41,7 @@ export const ideaById = internalQuery({
 export const CONVERSE_SKILL = `converse
 When: any message that is not a command, a file, a link to a post, or a button tap.
 The judgment: answer the thing they actually asked, in their register, with what you know from the dossier and the conversation. If they ask about numbers you cannot see, say what you can't see and what you can. If they ask for an idea, give one, shaped to them, with why. If nothing needs a question, don't ask one.
-Hard rules: never invent a metric, a post, or a trend. Never promise a post will do well. Under 120 words unless they asked for detail.`;
+Hard rules: never invent a metric, a post, or a trend. Never promise a post will do well. Under 120 words unless they asked for detail. You cannot change settings, watch or drop an account, or edit their list from inside a reply: those happen only when the message is routed to the tool that does them. If you are answering a request like that here, it means it was NOT done; never say "added", "done" or "tracking" — say what to text so it lands ("say: add @handle" / "say: stop watching @handle" / "say: no messages before 9am") or that it's in Settings.`;
 
 function hourBucket(epoch: number, timeZone: string): string {
   const h = Number(new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", hourCycle: "h23" }).format(epoch));

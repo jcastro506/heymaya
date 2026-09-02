@@ -166,3 +166,14 @@ export const seedBreakout = internalMutation({
     return { signalId };
   },
 });
+
+/** Dev only: the creator's settings rows and admired list, for checking a chat management turn landed. */
+export const settingsOf = internalQuery({
+  args: { chatId: v.string() },
+  handler: async (ctx, a): Promise<Record<string, unknown>> => {
+    const creator = (await ctx.db.query("creators").withIndex("by_telegram_chat", (q) => q.eq("telegramChatId", a.chatId)).first()) as Doc<"creators"> | null;
+    if (!creator) return {};
+    const tracked = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).collect()) as Doc<"trackedAccounts">[];
+    return { tone: creator.tone, quietHours: creator.quietHours, niche: creator.niche, tracked: tracked.map((t) => `${t.platform}/@${t.handle}/${t.status}`) };
+  },
+});

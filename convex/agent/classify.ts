@@ -35,6 +35,7 @@ export const CLASSIFY_PROMPT = `You label one message a content creator sent to 
   - "stop_watching": stop watching an account: "handle".
   - "niche": they are redefining what they make ("i do gear reviews now"): "text" in their words.
 - "text": anything else.
+Examples: "add @runwithcarly to the list" → manage/add_admired handle runwithcarly · "watch @gymgirl on insta" → manage/add_admired instagram · "be blunter with me" → manage/tone blunt · "go easier on me" → manage/tone friend · "don't text me before 9am" → manage/quiet_hours end 09:00 (start from current) · "stop watching @x" → manage/stop_watching · "i only do gear reviews now" → manage/niche · "why is @x blowing up" → profile_ask · "what was that shoe rack idea" → recall · "should i post at 7 or 9" → opinion_ask.
 Output ONLY JSON: {"intent": "profile_ask|recall|opinion_ask|calendar_answer|manage|text", "handle": "", "platform": "tiktok|instagram", "action": "", "start": "", "end": "", "tone": "", "text": ""}`;
 
 export async function classifyText(ctx: ActionCtx, input: { creatorId: Id<"creators">; text: string; ownHandles: { tiktok?: string; instagram?: string }; lastOutbound?: string; quietHours?: { start: string; end: string } }): Promise<Intent> {

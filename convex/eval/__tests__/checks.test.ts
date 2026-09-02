@@ -43,6 +43,11 @@ describe("runChecks", () => {
     expect(runChecks({ text: "hey leah. looking through your setup now. the data on my end is still thin—only one clip came through the wire so far, the", evidence, kind: "reply" }).find((x) => x.name === "complete")?.pass).toBe(false);
     expect(runChecks({ text: "Refining word count & voice:**\n\nhey leah, maya here", evidence, kind: "reply" }).find((x) => x.name === "no_markdown")?.pass).toBe(false);
   });
+  it("catches a reply that claims an action no tool took, and allows it on a routed management turn", () => {
+    const text = "added @runwithcarly. tracking her now.";
+    expect(runChecks({ text, evidence, kind: "reply", actionTaken: false }).find((x) => x.name === "no_claimed_action")?.pass).toBe(false);
+    expect(runChecks({ text, evidence, kind: "reply", actionTaken: true }).find((x) => x.name === "no_claimed_action")).toBeUndefined();
+  });
   it("a clean scout message passes every check", () => {
     const text = "@x just posted a list that's at 6× their normal after 9h. your wnba post did 559,925 views on the same directness, so this is yours to take. your version: open on the shoe rack, keep it under 30s. want the shot list? https://www.tiktok.com/@x/video/1";
     const c = runChecks({ text, evidence, kind: "scout" });
