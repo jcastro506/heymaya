@@ -555,6 +555,7 @@ Base `https://api.scrapecreators.com`, header `x-api-key`. No rate limit; stay u
 | Demand | `GET /v1/tiktok/search/suggestions?query=&region=US` | 1 | suggested terms | daily per lane keyword |
 | Profile, region | `GET /v1/tiktok/profile?handle=` · `GET /v1/tiktok/profile/region?handle=` | 1 each | follower count, avatar, region code | region drives the trending feed |
 | Audience | `GET /v1/tiktok/user/audience?handle=` | **26** | countries | once at onboarding, optional, never in a loop |
+| Their collections (their own swipe file) | `GET /v1/tiktok/collection/videos?url=&cursor=` | 1 / page | videos they saved publicly | onboarding only; feeds dossier `interests[source: collections]`; skip if none public |
 
 **Instagram**
 
@@ -572,6 +573,7 @@ Base `https://api.scrapecreators.com`, header `x-api-key`. No rate limit; stay u
 | Creator discovery | `GET /v1/instagram/search/profiles?query=&cursor=` | 1 / page | profiles from bios and captions | onboarding suggestions |
 | Trending reels | `GET /v1/instagram/reels/trending` | 1 | small batch, overlapping | call repeatedly, dedupe by shortcode |
 | Sound | `GET /v1/instagram/audio/reels?audio_id=&cursor=` | 1 / page | reels using an audio | `audio_id` from the audio page URL |
+| Story highlights (what they keep on their profile) | `GET /v1/instagram/user/highlights?handle=` · `GET /v1/instagram/user/highlight/detail?...` | 1 each | highlight titles and covers | onboarding only; feeds dossier `interests[source: highlights]` |
 
 **Cross-platform and account**
 
@@ -634,7 +636,7 @@ All thresholds live in `config/thresholds.ts`. Every one marked *(tune)* is a fi
 
 ### 13.1 Reading the catalogue, by size
 
-**What is pulled**, per platform, through `read()`: profile (bio, links, region, related accounts) · Find Social Profiles and the link-in-bio · posts sorted latest until 200 or 12 months · the first page sorted popular so the all-time top 50 are in the set · the sound on every post (free, in metadata) · the TikTok following list (1 credit) · comments on the top 10 posts. About 30–60 credits.
+**What is pulled**, per platform, through `read()`: profile (bio, links, region, related accounts) · Find Social Profiles and the link-in-bio · posts sorted latest until 200 or 12 months · the first page sorted popular so the all-time top 50 are in the set · the sound on every post (free, in metadata) · the TikTok following list (1 credit) · their public TikTok collections and Instagram story highlights (1 credit each; what they save and what they keep is taste) · comments on the top 10 posts. About 30–60 credits.
 
 **Three passes.** (1) Code: type, length, posting hour, caption features, hashtags, sound, counts; baseline = median views of the last 20 posts; every post gets a multiple against it. (2) Transcripts for every video post (1 credit each; captions stand in for photos). (3) Watching, on the sample below, producing a format card plus the creator-only extension (presence, setting, energy, editing signatures).
 
@@ -730,7 +732,7 @@ Dossier {
   readFrom: { tiktokPosts, instagramPosts, transcripts, watched, sampledFromHistory: boolean },  // what she actually read; the first message states it
   persona: { summary ≤ 400, register: "casual"|"expert"|"comic"|"calm"|"hype"|"mixed", onCamera: "face"|"voice"|"hands"|"text"|"mixed", whyTheyPost ≤ 200 | "unknown" },
   themes: [{ label, share: 0..1, evidencePostIds[] }],                       // from transcripts and captions
-  interests: [{ label, source: "follows"|"sounds"|"linkInBio"|"admired"|"stated", evidence ≤ 120 }],  // what they care about beyond what they post
+  interests: [{ label, source: "follows"|"sounds"|"linkInBio"|"admired"|"collections"|"highlights"|"stated", evidence ≤ 120 }],  // what they care about beyond what they post
   audience: { whoComments ≤ 200, asks[] ≤ 5, arguesAbout[] ≤ 3, regionTop?, evidencePostIds[] },
   formatsUsed: [{ formatFingerprint, label, count, medianMultiple, evidencePostIds[] }],
   fingerprint: { opening: "text-first"|"speech-first"|"visual-first"|"mixed", medianCutSeconds | "unknown", textStyle ≤ 120, settings[] ≤ 5, energy ≤ 80, confidence: 0..1 },
