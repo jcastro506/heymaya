@@ -180,6 +180,7 @@ export default defineSchema({
     sample: v.optional(v.array(v.string())), // top | weak | recent | outlier | history
   })
     .index("by_creator", ["creatorId", "createTime"])
+    .index("by_creator_post", ["creatorId", "platform", "postId"])
     .index("by_post", ["platform", "postId"]),
 
   // -------------------------------------------------------------- ownPostReads

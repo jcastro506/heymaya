@@ -24,7 +24,7 @@ export const HANDLED_KINDS = new Set<string>([
 type Handler = (
   ctx: { runAction: (ref: never, args: never) => Promise<unknown> },
   job: { kind: string; payloadJson?: string; creatorId?: Id<"creators">; idempotencyKey: string },
-) => Promise<{ ok: true } | { ok: false; error: string }>;
+) => Promise<{ ok: true } | { ok: false; error: string; defer?: number }>;
 
 function payloadOf<T>(job: { payloadJson?: string }): T | null {
   try {
@@ -41,7 +41,9 @@ const handlers: Record<string, Handler> = {
     if (!p.messageId) return { ok: false, error: "delivery job has no messageId" };
     const r = (await (ctx as unknown as { runAction: (ref: typeof internal.core.telegram.deliverMessage, a: { messageId: Id<"messages"> }) => Promise<{ delivered: boolean; reason?: string }> })
       .runAction(internal.core.telegram.deliverMessage, { messageId: p.messageId }));
-    return r.delivered ? { ok: true } : { ok: false, error: r.reason ?? "delivery failed" };
+    if (r.delivered) return { ok: true };
+    if (r.reason?.includes("no Telegram chat paired")) return { ok: false, error: r.reason, defer: 10 * 60 * 1000 };
+    return { ok: false, error: r.reason ?? "delivery failed" };
   },
   async converse(ctx, job) {
     const p = payloadOf<{ messageId?: Id<"messages">; chatId?: string; kind?: string }>(job);
@@ -107,6 +109,8 @@ export const drainJobs = internalAction({
         if (outcome.ok) {
           await ctx.runMutation(internal.core.jobs.succeed, { jobId: job._id });
           succeeded += 1;
+        } else if (outcome.defer) {
+          await ctx.runMutation(internal.core.jobs.defer, { jobId: job._id, delayMs: outcome.defer, reason: outcome.error });
         } else {
           await ctx.runMutation(internal.core.jobs.fail, { jobId: job._id, error: outcome.error });
           failed += 1;

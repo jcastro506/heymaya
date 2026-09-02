@@ -20,6 +20,7 @@
  */
 
 import { v } from "convex/values";
+import { internal } from "../_generated/api";
 import { internalMutation, mutation } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 
@@ -140,6 +141,8 @@ export const claimPairing = internalMutation({
       pairingExpiresAt: undefined,
       updatedAt: now,
     });
+    // Everything written while unpaired (the first read, at least) goes out now.
+    await ctx.runMutation(internal.core.jobs.wakeDeliveries, { creatorId: creator._id });
     return { paired: true, creatorId: creator._id };
   },
 });

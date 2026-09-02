@@ -58,7 +58,7 @@ export const status = internalQuery({
       dossierSummary: (creator.dossier as { persona?: { summary?: string } } | undefined)?.persona?.summary ?? null,
       posts: posts.length,
       transcripts: posts.filter((p) => p.transcript).length,
-      baselineSample: posts.slice(0, 3).map((p) => ({ id: p.postId, views: p.metrics.views, multiple: p.multiple, sample: p.sample })),
+      baselineSample: posts.slice(0, 3).map((p) => ({ id: p.postId, url: p.url, type: p.contentType, sec: p.durationSec, views: p.metrics.views, multiple: p.multiple, sample: p.sample, transcript: p.transcript ? p.transcript.slice(0, 80) : null })),
       jobs: jobs.map((j) => ({ kind: j.kind, status: j.status, attempts: j.attempts, lastError: j.lastError })),
       messages: messages.map((m) => ({ dir: m.direction, kind: m.kind, body: m.body.slice(0, 160), delivered: m.deliveredAt ? true : m.deliveryError ?? "pending" })),
       spendUsd: costs.reduce((s, c) => s + c.costUsd, 0),

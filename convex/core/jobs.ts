@@ -306,3 +306,34 @@ export async function countByStatus(
     .collect();
   return rows.length;
 }
+
+/**
+ * Put a job back without burning an attempt: the work is not broken, it is waiting
+ * on something (an unpaired chat, a vendor breaker). Runs again after `delayMs`.
+ */
+export const defer = internalMutation({
+  args: { jobId: v.id("jobs"), delayMs: v.number(), reason: v.string() },
+  handler: async (ctx, args): Promise<null> => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job) return null;
+    const now = Date.now();
+    await ctx.db.patch(args.jobId, { status: "queued", attempts: Math.max(0, job.attempts - 1), lastError: `deferred: ${args.reason}`, runAfter: now + args.delayMs, updatedAt: now });
+    return null;
+  },
+});
+
+/** A chat just paired: every message waiting on delivery for this creator runs now. */
+export const wakeDeliveries = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, args): Promise<{ woken: number }> => {
+    const rows = (await ctx.db.query("jobs").withIndex("by_creator", (q) => q.eq("creatorId", args.creatorId)).collect()) as Doc<"jobs">[];
+    const now = Date.now();
+    let woken = 0;
+    for (const j of rows) {
+      if (j.kind !== "deliver_message" || j.status === "succeeded") continue;
+      await ctx.db.patch(j._id, { status: "queued", attempts: 0, runAfter: now, updatedAt: now, lastError: undefined });
+      woken += 1;
+    }
+    return { woken };
+  },
+});

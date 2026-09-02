@@ -34,7 +34,7 @@ export const creatorHandles = internalQuery({
 
 /** Upsert own posts from a normalized page; returns how many were new. */
 export const upsertOwnPosts = internalMutation({
-  args: { creatorId: v.id("creators"), posts: v.any(), now: v.number() },
+  args: { creatorId: v.id("creators"), posts: v.any(), now: v.number(), handle: v.optional(v.string()) },
   handler: async (ctx, a): Promise<{ inserted: number; total: number }> => {
     const posts = a.posts as PostIn[];
     let inserted = 0;
@@ -42,7 +42,7 @@ export const upsertOwnPosts = internalMutation({
       if (!p.postId) continue;
       const existing = await ctx.db
         .query("ownPosts")
-        .withIndex("by_post", (q) => q.eq("platform", p.platform).eq("postId", p.postId))
+        .withIndex("by_creator_post", (q) => q.eq("creatorId", a.creatorId).eq("platform", p.platform).eq("postId", p.postId))
         .first();
       const metrics = {
         views: p.metrics.viewCount ?? 0,
@@ -55,11 +55,14 @@ export const upsertOwnPosts = internalMutation({
         await ctx.db.patch(existing._id, { metrics, metricsAsOf: a.now });
         continue;
       }
+      // TikTok's single-post, transcript and comment endpoints key on the public URL, so
+      // a missing share_url is rebuilt from the handle and id rather than left empty.
+      const url = p.url ?? (p.platform === "tiktok" && a.handle ? `https://www.tiktok.com/@${a.handle}/video/${p.postId}` : "");
       await ctx.db.insert("ownPosts", {
         creatorId: a.creatorId,
         platform: p.platform,
         postId: p.postId,
-        url: p.url ?? "",
+        url,
         createTime: p.postedAt ? (p.postedAt < 1e12 ? p.postedAt * 1000 : p.postedAt) : a.now,
         contentType: p.mediaType === "carousel" ? "carousel" : p.mediaType === "image" ? "photo" : "video",
         durationSec: p.videoDurationSec ?? undefined,
@@ -154,7 +157,7 @@ export const run = internalAction({
             creatorId: creator._id,
           });
           const posts = (Array.isArray(r.value) ? r.value : []) as PostIn[];
-          const { inserted } = await ctx.runMutation(internal.onboarding.ingest.upsertOwnPosts, { creatorId: creator._id, posts, now });
+          const { inserted } = await ctx.runMutation(internal.onboarding.ingest.upsertOwnPosts, { creatorId: creator._id, posts, now, handle });
           if (platform === "tiktok") readFrom.tiktokPosts += inserted;
           else readFrom.instagramPosts += inserted;
         } catch (err) {
