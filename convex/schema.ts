@@ -351,6 +351,36 @@ export default defineSchema({
     .index("by_creator_ref", ["creatorId", "refId"])
     .vectorIndex("by_embedding", { vectorField: "embedding", dimensions: 768, filterFields: ["creatorId"] }),
 
+  // ------------------------------------------------------------------ evalRuns
+  // Sprint 3c: one row per evaluated message; the checks are code, the judge is a second family.
+  evalRuns: defineTable({
+    suite: v.string(), // recent | scout | manual
+    skill: v.string(),
+    creatorId: v.optional(v.id("creators")),
+    messageId: v.optional(v.id("messages")),
+    text: v.string(),
+    checks: v.array(v.object({ name: v.string(), pass: v.boolean(), detail: v.string() })),
+    judge: v.optional(v.object({ corny: v.number(), generic: v.number(), flattering: v.number(), toolSpeak: v.number(), specific: v.number(), wouldSend: v.number(), note: v.string(), model: v.string() })),
+    pass: v.boolean(),
+    trace: v.optional(v.any()),
+    at: v.number(),
+  })
+    .index("by_at", ["at"])
+    .index("by_suite_at", ["suite", "at"]),
+
+  // ---------------------------------------------------------------- evalLabels
+  // Sprint 3c: the operator's word, one row per label; these become the golden sets (§17.3).
+  evalLabels: defineTable({
+    messageId: v.optional(v.id("messages")),
+    evalRunId: v.optional(v.id("evalRuns")),
+    creatorId: v.optional(v.id("creators")),
+    skill: v.string(),
+    label: v.union(v.literal("good"), v.literal("bad")),
+    reason: v.string(),
+    by: v.string(),
+    at: v.number(),
+  }).index("by_at", ["at"]),
+
   // -------------------------------------------------------------- oauthStates
   // Single-use, 15-minute state tokens for OAuth round trips; the token is the auth.
   oauthStates: defineTable({

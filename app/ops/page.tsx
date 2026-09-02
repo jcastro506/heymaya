@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
 /** The operator console (plan §7). Token in the URL once, then in session storage; fail-closed on the server. */
@@ -17,6 +17,8 @@ export default function OpsPage() {
     }
   });
   const o = useQuery(api.ops.overview, token ? { token } : "skip");
+  const ev = useQuery(api.eval.run.report, token ? { token } : "skip");
+  const label = useMutation(api.eval.run.label);
   if (!token) return <p className="p-6 text-sm opacity-60">No token.</p>;
   if (o === undefined) return <p className="p-6 text-sm opacity-60">loading…</p>;
   if (o === null) return <p className="p-6 text-sm">Not authorized.</p>;
@@ -47,6 +49,37 @@ export default function OpsPage() {
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section>
+        <h2 className="text-xs uppercase tracking-wide opacity-50 mb-2">Evals · is she corny, generic, flattering, leaking, inventing?</h2>
+        {!ev ? <p className="opacity-60">no runs yet</p> : (
+          <div className="flex flex-col gap-4">
+            <div className="overflow-x-auto">
+              <table className="tabular-nums">
+                <thead className="text-[11px] uppercase tracking-wide opacity-50 text-left"><tr><th className="pr-4">skill</th><th className="pr-4">runs</th><th className="pr-4">pass</th><th className="pr-4">corny</th><th className="pr-4">generic</th><th className="pr-4">specific</th><th className="pr-4">would send</th></tr></thead>
+                <tbody>{ev.perSkill.map((s) => <tr key={s.skill} className="border-t border-white/5"><td className="pr-4 py-1">{s.skill}</td><td className="pr-4">{s.n}</td><td className="pr-4">{s.passRate}%</td><td className="pr-4">{s.corny ?? "—"}</td><td className="pr-4">{s.generic ?? "—"}</td><td className="pr-4">{s.specific ?? "—"}</td><td className="pr-4">{s.wouldSend ?? "—"}</td></tr>)}</tbody>
+              </table>
+              <p className="text-[11px] opacity-50 mt-1">judge scores 0–3; corny/generic lower is better, specific/would-send higher. {ev.labels} labels{ev.agreement !== null ? ` · judge agrees with you ${ev.agreement}%` : " · label 5+ to see judge agreement"}</p>
+            </div>
+            <ul className="flex flex-col gap-2">
+              {ev.recent.map((r) => (
+                <li key={r.id} className={`border rounded p-2 ${r.pass ? "border-white/10" : "border-amber-400/40"}`}>
+                  <div className="flex items-center justify-between text-[11px] opacity-60"><span>{r.suite} · {r.skill} · {new Date(r.at).toLocaleString()} · {r.pass ? "pass" : "FAIL"}{r.judge ? ` · corny ${r.judge.corny} generic ${r.judge.generic} specific ${r.judge.specific} send ${r.judge.wouldSend}` : ""}</span><span>{r.label ? `you: ${r.label}` : ""}</span></div>
+                  <p className="whitespace-pre-wrap mt-1">{r.text}</p>
+                  {r.failed.length > 0 && <p className="text-[11px] text-amber-300 mt-1">{r.failed.join(" · ")}</p>}
+                  {r.judge?.note && <p className="text-[11px] opacity-60 mt-1">judge: {r.judge.note}</p>}
+                  {!r.label && (
+                    <div className="mt-1 flex gap-2 text-[11px]">
+                      <button className="underline" onClick={() => label({ token, evalRunId: r.id, skill: r.skill, label: "good", reason: "" })}>👍 good</button>
+                      <button className="underline" onClick={() => { const reason = window.prompt("what's wrong with it?") ?? ""; label({ token, evalRunId: r.id, skill: r.skill, label: "bad", reason }); }}>👎 bad</button>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
 
       <section className="grid md:grid-cols-3 gap-6">

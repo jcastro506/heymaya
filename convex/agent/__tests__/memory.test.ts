@@ -5,7 +5,6 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { asksToRecall } from "../inbound";
 
 const vec = (seed: number) => Array.from({ length: 768 }, (_, i) => Math.sin(seed + i));
 
@@ -23,10 +22,4 @@ describe("memory", () => {
     expect(rows.map((r) => r.text)).toEqual(["the shoe rack list, edited"]);
   });
 
-  it("recognises a look back", () => {
-    expect(asksToRecall("what was that idea about the shoe rack")).toBe(true);
-    expect(asksToRecall("remember the one where i film at the track?")).toBe(true);
-    expect(asksToRecall("did i save the mile repeat thing")).toBe(true);
-    expect(asksToRecall("thoughts on this hook?")).toBe(false);
-  });
 });

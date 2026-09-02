@@ -9,7 +9,7 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { asksForOpinion, classifyInbound, parseLink, parseProfileAsk } from "../inbound";
+import { classifyInbound, parseLink } from "../inbound";
 
 const handles = { tiktok: "runwithmaya", instagram: "run.with.maya" };
 
@@ -39,18 +39,9 @@ describe("classifyInbound", () => {
     expect(classifyInbound({ text: "", kind: "file", mime: "application/pdf", handles })).toEqual({ route: "file", media: "other" });
   });
 
-  it("a question about an account routes to profile-creator; their own handle does not", () => {
-    expect(parseProfileAsk("why is @runwithcarly growing so fast lately", handles)).toEqual({ platform: "tiktok", handle: "runwithcarly" });
-    expect(parseProfileAsk("what's @gymgirl.ig doing on insta that's working", handles)).toEqual({ platform: "instagram", handle: "gymgirl.ig" });
-    expect(parseProfileAsk("why is @runwithmaya growing", handles)).toBeNull();
-    expect(parseProfileAsk("look at https://www.tiktok.com/@x/video/1 why is @x growing", handles)).toBeNull();
-    expect(classifyInbound({ text: "hows @fastguy doing", kind: "inbound", handles })).toEqual({ route: "profile", platform: "tiktok", handle: "fastguy" });
-  });
-
-  it("asksForOpinion catches the phrasings", () => {
-    expect(asksForOpinion("will this go viral")).toBe(true);
-    expect(asksForOpinion("thoughts?")).toBe(true);
-    expect(asksForOpinion("what time is it")).toBe(false);
+  it("plain text is text: intent is the classifier's job, not a pattern's", () => {
+    expect(classifyInbound({ text: "why is @fastguy growing so fast", kind: "inbound", handles }).route).toBe("text");
+    expect(classifyInbound({ text: "what was that idea about the shoe rack", kind: "inbound", handles }).route).toBe("text");
   });
 });
 

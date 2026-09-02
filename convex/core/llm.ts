@@ -76,7 +76,13 @@ export interface CallModelInput {
  * **empty completion, not an error.** The post simply doesn't get made, and the
  * failure names the wrong thing ("I couldn't get a set out of this angle").
  */
-export const REASONING_MODELS = ["openai/gpt-5.6-luna-pro"];
+export const REASONING_MODELS = [
+  "openai/gpt-5.6-luna-pro",
+  // GLM 5.3 flash and DeepSeek v4 flash reason before answering; the critic fell back on every call
+  // until they were listed, because a 400-token answer budget was eaten by thinking (2026-09-02).
+  "z-ai/glm",
+  "deepseek/",
+];
 
 /**
  * Room to think, added on top of whatever the caller budgeted.

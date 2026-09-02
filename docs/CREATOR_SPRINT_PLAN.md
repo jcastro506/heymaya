@@ -302,6 +302,22 @@ The manifest also carries **the scar tissue**, as a numbered list with the incid
 
 **DoD.** Simulated month: a pass on day 1 changes the ranking on day 30 (the §15.7 test, extended) · Settings shows the note and the creator can correct it · the operator can read every `signals.why` that says "taste:" and agree with it.
 
+### Sprint 3c — Evals · *the harness, built 2026-09-02; the labeled sets fill during the pilot*
+
+**Goal.** Know, every day and before every prompt or model change, that she is not corny, generic, flattering, leaking, or inventing numbers, across the whole complex loop: watching, deciding what she likes, checking what is trending and how it relates to this creator, coming up with the idea, saying it. §17.3 names the golden sets; this sprint is the machinery that runs them and the labels that fill them.
+
+**Build.**
+- **Deterministic checks** (`convex/eval/checks.ts`), run on every evaluated message: every number in the message appears in the evidence she was given (an invented number is the worst failure); no denylist tells ("great question", "as an AI", "I hope this helps", *leverage*, *optimize*, *engagement* to a human); no leak (the plain-language guard); under the length cap; at most one question; no bullets or headers in chat; her name at most once; a scout message carries a link.
+- **The judge** (`convex/eval/judge.ts`): a second-family model scores each message 0–3 on corny, generic, flattering, tool-speak, specific-to-this-creator, and "would a sharp friend in the industry send this", with a one-line note. The judge's own calibration is checked against operator labels.
+- **Dry runs**: `scout.run` with `dryRun` produces the message, the pick, the evidence and the investigation trace without sending or writing verdicts, so a scenario can be replayed N times for variance.
+- **Suites** (`convex/eval/run.ts`): `recent` (last night's real outbound, every kind) nightly; `scout` (dry runs over the seeded scenario creators) before any prompt or model change; results in `evalRuns`.
+- **Labels**: the ops console shows recent outbound and eval results with 👍 / 👎 and a reason; `evalLabels` rows become the golden sets of §17.3 as the pilot runs.
+- **Report**: pass rate and judge means per skill, the worst five with text, on the ops console; a floor per skill in thresholds; below the floor the build fails once the sets have 50 labels.
+
+**Named tests.** An invented number is caught (a message citing 12,400 views when the evidence says 559,925 fails) · every denylist tell is caught · a leak is caught · two questions are caught · a clean scout message passes every check · a dry run writes no message, idea or verdict rows · eval rows never cross a tenant.
+
+**DoD.** The nightly `recent` suite has run seven nights with the report on the console · the operator has labeled 50 messages · judge agreement with labels ≥ 0.7 · the scout dry-run suite runs green before the next prompt change.
+
 ### Sprint 4 — Results, connections, and the thin UI · pairs with S4
 
 **Goal.** Weekly review, daily readback, own-account metrics through Zernio, the five tabs live.

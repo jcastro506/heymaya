@@ -12,7 +12,8 @@ import { callModel } from "../core/llm";
 import { REGISTRY } from "./registry";
 import { buildPrefix, buildSuffix, producedStamp } from "./context";
 import { deliverNow } from "../core/scheduler";
-import { asksToRecall, classifyInbound, type Route } from "./inbound";
+import { classifyInbound, type Route } from "./inbound";
+import { classifyText } from "./classify";
 import { internalMutation, internalQuery } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 
@@ -87,10 +88,6 @@ export const run = internalAction({
         await deliverNow(ctx as never);
       }
       return { ok: true };
-    }
-    if (route.route === "profile") {
-      const r = await ctx.runAction(internal.agent.profile.run, { creatorId: creator._id, messageId: target._id, platform: route.platform, handle: route.handle });
-      return { ok: r.ok, reason: r.reason };
     }
     if (route.route === "link") {
       const r = await ctx.runAction(internal.agent.opinion.run, { creatorId: creator._id, messageId: target._id, mode: route.own ? "own" : "link", link: route.link });
@@ -198,9 +195,17 @@ export const run = internalAction({
       if (w.startsWith("warm") || w.startsWith("cold")) await ctx.runMutation(internal.taste.events.record, { creatorId: creator._id, kind: w.startsWith("warm") ? "reply_pos" : "reply_neg", ideaId: lastOut.ideaId, messageId: target._id });
     }
 
+    // §15.3: what do they want? The model decides (one cheap call); code has already taken commands, links and files.
+    const lastOutbound = [...recent].reverse().find((m) => m.direction === "out")?.body;
+    const intent = target.kind === "inbound" && !args.rerouted ? await classifyText(ctx, { creatorId: creator._id, text: target.body, ownHandles: creator.handles, lastOutbound }) : ({ intent: "text" } as const);
+    if (intent.intent === "profile_ask") {
+      const r = await ctx.runAction(internal.agent.profile.run, { creatorId: creator._id, messageId: target._id, platform: intent.platform, handle: intent.handle });
+      return { ok: r.ok, reason: r.reason };
+    }
+
     // §15.7 (4): a look back runs the vector search; the passages ride into the turn, the prefix stays the same size.
     let recalled = "";
-    if (target.kind === "inbound" && asksToRecall(target.body)) {
+    if (intent.intent === "recall") {
       const hits = await ctx.runAction(internal.agent.memory.recall, { creatorId: creator._id, query: target.body, k: 4 }).catch(() => []);
       if (hits.length) recalled = `\n\n# From memory (their own saved ideas and notes; quote, don't invent)\n${hits.map((h) => `- [${h.kind}, ${new Date(h.at).toISOString().slice(0, 10)}] ${h.text.slice(0, 400)}`).join("\n")}`;
       else recalled = "\n\n# From memory\n- nothing close enough; say so plainly";

@@ -38,4 +38,7 @@ crons.daily("consolidate", { hourUTC: 3, minuteUTC: 0 }, internal.agent.consolid
 // The first week's day-4 invitation (§1): hers to initiate, enforced as a schedule row.
 crons.hourly("first week", { minuteUTC: 50 }, internal.scout.firstWeek.runAll, {});
 
+// Sprint 3c: last night's real outbound through the checks and the judge, every night.
+crons.daily("eval recent outbound", { hourUTC: 4, minuteUTC: 0 }, internal.eval.run.recent, {});
+
 export default crons;

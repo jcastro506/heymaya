@@ -36,6 +36,8 @@ export const TABLES_BY_CREATOR = [
   "budgets",
   "costEvents",
   "memories",
+  "evalRuns",
+  "evalLabels",
 ] as const;
 
 export const FINAL_MESSAGE = "deleting everything now: your posts as i read them, every idea, every message, your calendar fields, your notes. this chat unpairs after this text. take care out there.";

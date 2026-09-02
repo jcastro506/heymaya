@@ -70,15 +70,15 @@ export const linkIdeaMessage = internalMutation({
 
 /** One creator's scout pass. Rails → candidates → the skill → at most one message. */
 export const run = internalAction({
-  args: { creatorId: v.id("creators") },
-  handler: async (ctx, args): Promise<{ sent: boolean; reason: string }> => {
+  args: { creatorId: v.id("creators"), dryRun: v.optional(v.boolean()) },
+  handler: async (ctx, args): Promise<{ sent: boolean; reason: string; dry?: { message: string; pick: unknown; evidence: unknown; trace: unknown } }> => {
     const now = Date.now();
     const g = await ctx.runQuery(internal.scout.gate.railsFor, { creatorId: args.creatorId, now });
     if (!g) return { sent: false, reason: "creator not found" };
     if (!g.rails.ok) return { sent: false, reason: g.rails.reason ?? "rails" };
-    if (g.tasteDropped.length) await ctx.runMutation(internal.scout.gate.setVerdicts, { verdicts: g.tasteDropped.map((d) => ({ signalId: d.signalId, verdict: "dropped" as const, why: d.why })) });
+    if (g.tasteDropped.length && !args.dryRun) await ctx.runMutation(internal.scout.gate.setVerdicts, { verdicts: g.tasteDropped.map((d) => ({ signalId: d.signalId, verdict: "dropped" as const, why: d.why })) });
     // §13.9 / §13.10 (5): after three passes on one account she asks once whether to stop watching it.
-    for (const ask of g.askStop) {
+    for (const ask of args.dryRun ? [] : g.askStop) {
       await ctx.runMutation(internal.core.messages.send, { creatorId: args.creatorId, surface: "telegram", body: `you've passed on the last three from @${ask.handle}. want me to stop watching them, or keep them on the list and just be pickier?`, dedupeKey: `askstop:${ask.trackedAccountId}`, proactive: false, kind: "status", buttons: [{ id: `watch:${ask.trackedAccountId}:stop`, label: "stop watching" }, { id: `watch:${ask.trackedAccountId}:keep`, label: "keep, be pickier" }] });
     }
     if (g.candidates.length === 0) return { sent: false, reason: g.tasteDropped.length ? "no candidates (taste dropped the rest)" : "no candidates" };
@@ -113,7 +113,7 @@ export const run = internalAction({
     const inv = await investigate(ctx, { creatorId: args.creatorId, purpose: "scout", prefix, user, temperature: 0.5, maxTokens: 1400 });
     if (!inv.content) return { sent: false, reason: `scout ${inv.ended === "model_error" ? "model failed" : "gave no answer"} after ${inv.trace.length} lookups` };
     const result = { ok: true as const, content: inv.content };
-    if (inv.trace.length) await ctx.runMutation(internal.scout.gate.setInvestigation, { signalIds: g.candidates.map((s) => s._id), trace: inv.trace });
+    if (inv.trace.length && !args.dryRun) await ctx.runMutation(internal.scout.gate.setInvestigation, { signalIds: g.candidates.map((s) => s._id), trace: inv.trace });
 
     let parsed: { pick: null | { postId: string; notable: boolean; fit: "yes" | "maybe" | "no"; fitWhy: string; message: string; version: unknown; newForYou?: boolean; features?: { format?: string; topics?: string[]; tone?: string; lengthBucket?: string; sound?: string } }; rejected?: Array<{ postId: string; why: string }> };
     try {
@@ -133,9 +133,12 @@ export const run = internalAction({
     }
 
     if (!pick || !pick.message?.trim()) {
+      if (args.dryRun) return { sent: false, reason: "nothing worth their time today", dry: { message: "", pick: parsed.pick, evidence, trace: inv.trace } };
       await ctx.runMutation(internal.scout.gate.setVerdicts, { verdicts });
       return { sent: false, reason: "nothing worth their time today" };
     }
+    // A dry run stops here: the message as she would have sent it, nothing written (Sprint 3c).
+    if (args.dryRun) return { sent: false, reason: "dry run", dry: { message: pick.message.trim(), pick, evidence, trace: inv.trace } };
     const signal = g.candidates.find((s) => s.sourcePostIds[0] === pick.postId)!;
     if (pick.fit === "maybe") {
       verdicts.push({ signalId: signal._id, verdict: "held", why: `maybe: ${pick.fitWhy}` });

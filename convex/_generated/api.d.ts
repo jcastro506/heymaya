@@ -9,6 +9,7 @@
  */
 
 import type * as account_deletion from "../account/deletion.js";
+import type * as agent_classify from "../agent/classify.js";
 import type * as agent_commands from "../agent/commands.js";
 import type * as agent_consolidate from "../agent/consolidate.js";
 import type * as agent_context from "../agent/context.js";
@@ -53,6 +54,9 @@ import type * as core_scheduler from "../core/scheduler.js";
 import type * as core_telegram from "../core/telegram.js";
 import type * as core_telegramFiles from "../core/telegramFiles.js";
 import type * as crons from "../crons.js";
+import type * as eval_checks from "../eval/checks.js";
+import type * as eval_judge from "../eval/judge.js";
+import type * as eval_run from "../eval/run.js";
 import type * as http from "../http.js";
 import type * as integrations_gemini_client from "../integrations/gemini/client.js";
 import type * as integrations_google_calendar from "../integrations/google/calendar.js";
@@ -106,6 +110,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "account/deletion": typeof account_deletion;
+  "agent/classify": typeof agent_classify;
   "agent/commands": typeof agent_commands;
   "agent/consolidate": typeof agent_consolidate;
   "agent/context": typeof agent_context;
@@ -150,6 +155,9 @@ declare const fullApi: ApiFromModules<{
   "core/telegram": typeof core_telegram;
   "core/telegramFiles": typeof core_telegramFiles;
   crons: typeof crons;
+  "eval/checks": typeof eval_checks;
+  "eval/judge": typeof eval_judge;
+  "eval/run": typeof eval_run;
   http: typeof http;
   "integrations/gemini/client": typeof integrations_gemini_client;
   "integrations/google/calendar": typeof integrations_google_calendar;
