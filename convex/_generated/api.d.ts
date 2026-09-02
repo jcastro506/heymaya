@@ -29,6 +29,7 @@ import type * as calendar_oauth from "../calendar/oauth.js";
 import type * as calendar_sync from "../calendar/sync.js";
 import type * as calendar_time from "../calendar/time.js";
 import type * as config_thresholds from "../config/thresholds.js";
+import type * as connections_zernio from "../connections/zernio.js";
 import type * as contracts_dossier from "../contracts/dossier.js";
 import type * as core_breaker from "../core/breaker.js";
 import type * as core_cadence from "../core/cadence.js";
@@ -62,6 +63,7 @@ import type * as integrations_scrapeCreators_platforms_instagram from "../integr
 import type * as integrations_scrapeCreators_platforms_tiktok from "../integrations/scrapeCreators/platforms/tiktok.js";
 import type * as integrations_scrapeCreators_schemas from "../integrations/scrapeCreators/schemas.js";
 import type * as integrations_telegram_client from "../integrations/telegram/client.js";
+import type * as integrations_zernio_index from "../integrations/zernio/index.js";
 import type * as lib_encryption from "../lib/encryption.js";
 import type * as onboarding_admired from "../onboarding/admired.js";
 import type * as onboarding_dev from "../onboarding/dev.js";
@@ -119,6 +121,7 @@ declare const fullApi: ApiFromModules<{
   "calendar/sync": typeof calendar_sync;
   "calendar/time": typeof calendar_time;
   "config/thresholds": typeof config_thresholds;
+  "connections/zernio": typeof connections_zernio;
   "contracts/dossier": typeof contracts_dossier;
   "core/breaker": typeof core_breaker;
   "core/cadence": typeof core_cadence;
@@ -152,6 +155,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/scrapeCreators/platforms/tiktok": typeof integrations_scrapeCreators_platforms_tiktok;
   "integrations/scrapeCreators/schemas": typeof integrations_scrapeCreators_schemas;
   "integrations/telegram/client": typeof integrations_telegram_client;
+  "integrations/zernio/index": typeof integrations_zernio_index;
   "lib/encryption": typeof lib_encryption;
   "onboarding/admired": typeof onboarding_admired;
   "onboarding/dev": typeof onboarding_dev;

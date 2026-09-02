@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import Link from "next/link";
@@ -16,6 +16,18 @@ export default function SettingsPage() {
   const revoke = useMutation(api.ui.revokeRule);
   const [correction, setCorrection] = useState("");
   const [confirmText, setConfirmText] = useState("");
+  const z = useQuery(api.connections.zernio.status);
+  const zStart = useAction(api.connections.zernio.startConnect);
+  const zDisconnect = useAction(api.connections.zernio.disconnect);
+  const zReconcile = useAction(api.connections.zernio.reconcile);
+  const [zNote, setZNote] = useState<string | null>(null);
+  const [zBack] = useState<boolean>(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("connect") === "back");
+  useEffect(() => {
+    if (!zBack) return;
+    // Back from the OAuth screen: the webhook is the authority, the reconcile covers a missed delivery.
+    zReconcile({}).then((r) => setZNote(r.accounts > 0 ? `Connected: ${r.accounts} account${r.accounts === 1 ? "" : "s"}.` : "Nothing attached yet. If you finished the login, give it a minute and refresh.")).catch(() => setZNote("Couldn't check the connection. Refresh in a minute."));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once, on the return from OAuth
+  }, [zBack]);
   const createCheckout = useAction(api.billing.checkout.createCheckout);
   const openPortal = useAction(api.billing.checkout.openPortal);
   const [billingNote, setBillingNote] = useState<string | null>(() => {
@@ -99,6 +111,28 @@ export default function SettingsPage() {
             <button className="text-xs underline opacity-60 self-start" onClick={async () => { await disconnect({}); setCalNote("Disconnected. Everything she stored from it is gone."); }}>disconnect and forget my calendar</button>
           </div>
         )}
+      </section>
+
+      <section className="flex flex-col gap-2 text-sm">
+        <h2 className="text-sm uppercase tracking-wide opacity-50">Connected accounts</h2>
+        {zNote && <p className="text-xs opacity-80">{zNote}</p>}
+        <p className="opacity-70">Connect your own TikTok or Instagram and she reads your real numbers, labeled as such. Opens when the trial ends. She never posts for you.</p>
+        {z && z.accounts.length > 0 && (
+          <ul className="flex flex-col gap-1">
+            {z.accounts.map((a) => (
+              <li key={a.accountId} className="flex items-center justify-between">
+                <span>{a.platform}{a.username ? ` · @${a.username}` : ""}{!a.canFetchAnalytics ? " · numbers not available on this plan" : ""}</span>
+                {a.needsReconnect ? <button className="underline text-xs" onClick={async () => { const r = await zStart({ platform: a.platform as "tiktok" | "instagram" }); if (r.ok) window.location.href = r.url; else setZNote(r.reason); }}>reconnect</button> : <span className="text-[11px] uppercase tracking-wide text-emerald-300">connected</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+        {z?.detail && <p className="text-xs opacity-60">{z.detail}</p>}
+        <div className="flex gap-2">
+          <button className="btn-secondary" onClick={async () => { const r = await zStart({ platform: "tiktok" }); if (r.ok) window.location.href = r.url; else setZNote(r.reason); }}>connect TikTok</button>
+          <button className="btn-secondary" onClick={async () => { const r = await zStart({ platform: "instagram" }); if (r.ok) window.location.href = r.url; else setZNote(r.reason); }}>connect Instagram</button>
+        </div>
+        {z && z.status !== "disconnected" && <button className="text-xs underline opacity-60 self-start" onClick={async () => { const r = await zDisconnect({}); setZNote(r.detail); }}>disconnect all</button>}
       </section>
 
       <section className="flex flex-col gap-2 text-sm">

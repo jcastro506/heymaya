@@ -15,6 +15,7 @@ import { creatorForIdentity } from "../core/identity";
 import { disconnectFor } from "../calendar/oauth";
 import { resolveTelegramBotIdentity, sendTelegramMessage } from "../integrations/telegram/client";
 import { getStripe } from "../billing/stripe";
+import { disconnectFor as zernioDisconnectFor } from "../connections/zernio";
 
 /** Every table with a creatorId, and the index that reaches it. Adding a table without listing it here fails the deletion test. */
 export const TABLES_BY_CREATOR = [
@@ -108,8 +109,12 @@ export const run = internalAction({
       }
     } else steps.stripe = "no subscription";
 
-    // 3. Zernio: disconnect every account, then the profile. Rows only, in this build; the API calls arrive with the connections sprint.
-    steps.zernio = snap.zernio ? `profile ${snap.zernio.zernioProfileId ?? "?"}: rows dropped; API disconnect pending the connections sprint` : "not connected";
+    // 3. Zernio: every account, then the profile (400 while any account remains, so the order is enforced).
+    try {
+      steps.zernio = await zernioDisconnectFor(ctx, a.creatorId);
+    } catch (e) {
+      steps.zernio = `disconnect failed: ${e instanceof Error ? e.message.slice(0, 80) : "error"}; rows purged below`;
+    }
 
     // 4. Calendar: revoke at Google, drop the bundle and every stored event.
     try {

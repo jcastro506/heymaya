@@ -1,5 +1,6 @@
 import { httpRouter } from "convex/server";
 import { stripeWebhook } from "./billing/webhook";
+import { zernioWebhook } from "./connections/zernio";
 import { telegramWebhookHttp } from "./telegram/webhook";
 
 /**
@@ -15,5 +16,8 @@ http.route({ path: "/telegram/webhook", method: "POST", handler: telegramWebhook
 
 // Billing (§19.3): public, signature-verified, idempotent; never behind the web deployment's auth.
 http.route({ path: "/stripe/webhook", method: "POST", handler: stripeWebhook });
+
+// Connections: Zernio's account events are the authoritative path for attach/detach (§6 Sprint 4).
+http.route({ path: "/zernio/webhook", method: "POST", handler: zernioWebhook });
 
 export default http;

@@ -27,6 +27,7 @@ for (const p of copyFiles) {
   const src = readFileSync(p, "utf8")
     .split("\n")
     .filter((l) => !/^\s*import\b/.test(l) && !/^\s*(\/\/|\*|\/\*)/.test(l))
+    .map((l) => l.replace(/\bapi\.[\w.]+/g, "").replace(/\b(useAction|useMutation|useQuery)\([^)]*\)/g, "")) // function references are code, not copy
     .join("\n");
   for (const re of forbidden) {
     if (/\/app\/(ops|privacy|terms)\//.test(p)) continue; // the operator console and the legal pages must name vendors

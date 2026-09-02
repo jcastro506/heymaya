@@ -361,7 +361,7 @@ export default defineSchema({
     detail: v.optional(v.string()), // plain-language reason for attention / needs_reconnect
     // zernio
     zernioProfileId: v.optional(v.string()),
-    zernioAccounts: v.optional(v.array(v.object({ accountId: v.string(), platform, canFetchAnalytics: v.boolean(), needsReconnect: v.boolean() }))),
+    zernioAccounts: v.optional(v.array(v.object({ accountId: v.string(), platform, username: v.optional(v.string()), canFetchAnalytics: v.boolean(), needsReconnect: v.boolean() }))),
     // secrets live in Convex env / encrypted fields, never plain
     tokenRef: v.optional(v.string()),
     updatedAt: v.number(),
