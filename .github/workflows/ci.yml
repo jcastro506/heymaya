@@ -24,3 +24,8 @@ jobs:
         run: npm run test -- --run
       - name: guards (copy grep, chat-completeness registry, scar-tissue list, stray files)
         run: npm run guards
+      - name: web build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_CONVEX_URL: https://example.convex.cloud
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2xlcmsuZXhhbXBsZS5jb20k
