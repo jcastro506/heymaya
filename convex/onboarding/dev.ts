@@ -12,7 +12,7 @@ import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 
 export const seed = internalMutation({
-  args: { tiktok: v.optional(v.string()), instagram: v.optional(v.string()), niche: v.optional(v.string()), timezone: v.optional(v.string()), email: v.optional(v.string()) },
+  args: { tiktok: v.optional(v.string()), instagram: v.optional(v.string()), niche: v.optional(v.string()), timezone: v.optional(v.string()), email: v.optional(v.string()), admired: v.optional(v.array(v.string())) },
   handler: async (ctx, a): Promise<{ creatorId: string }> => {
     const now = Date.now();
     const creatorId = await ctx.db.insert("creators", {
@@ -33,6 +33,9 @@ export const seed = internalMutation({
       plan: { status: "comped", founding: true },
       createdAt: now,
     });
+    for (const h of a.admired ?? []) {
+      await ctx.db.insert("trackedAccounts", { creatorId, platform: "tiktok", handle: h.replace(/^@/, "").toLowerCase(), addedBy: "creator", baselineN: 0, status: "active", createdAt: now });
+    }
     await ctx.runMutation(internal.core.jobs.enqueue, {
       kind: "ingest_catalogue",
       idempotencyKey: `ingest:${creatorId}:v0`,

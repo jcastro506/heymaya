@@ -12,6 +12,26 @@ import { callModel } from "../core/llm";
 import { REGISTRY } from "./registry";
 import { buildPrefix, buildSuffix, producedStamp } from "./context";
 import { deliverNow } from "../core/scheduler";
+import { internalMutation, internalQuery } from "../_generated/server";
+import type { Id } from "../_generated/dataModel";
+
+export const SHOTLIST_SKILL = `adapt-format (shot list)
+When: they tapped "shot list" on an idea you sent.
+The judgment: turn the idea into something they can shoot this afternoon. Five to six shots at most, each one line: what's on screen, what they say or the text that appears, roughly how long. Their setting and their opening pattern from the dossier. No production jargon.
+Hard rules: under 120 words. No question at the end unless a real decision needs it.`;
+
+export const markIdea = internalMutation({
+  args: { ideaId: v.id("ideas"), status: v.union(v.literal("sent"), v.literal("hearted"), v.literal("posted"), v.literal("passed"), v.literal("expired")) },
+  handler: async (ctx, a): Promise<null> => {
+    await ctx.db.patch(a.ideaId, { status: a.status });
+    return null;
+  },
+});
+
+export const ideaById = internalQuery({
+  args: { ideaId: v.id("ideas") },
+  handler: async (ctx, a) => await ctx.db.get(a.ideaId),
+});
 
 export const CONVERSE_SKILL = `converse
 When: any message that is not a command, a file, a link to a post, or a button tap.
@@ -29,6 +49,35 @@ export const run = internalAction({
     // Commands were handled before a job existed (§15.3); a reaction or button
     // is a signal, not a prompt, and gets no reply tonight.
     if (target.kind === "reaction") return { ok: true };
+
+    // One-tap options on an idea (§7 S3). Handled here without a model call where the answer is code.
+    if (target.kind === "button") {
+      const m = target.body.match(/^idea:([a-z0-9]+):(shotlist|notme|save)$/);
+      if (m) {
+        const ideaId = m[1] as Id<"ideas">;
+        const op = m[2];
+        if (op === "notme") {
+          await ctx.runMutation(internal.agent.converse.markIdea, { ideaId, status: "passed" });
+          await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: "noted. fewer like that.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
+          await deliverNow(ctx as never);
+          return { ok: true };
+        }
+        if (op === "save") {
+          await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: "saved. it's in your swipe file.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
+          await deliverNow(ctx as never);
+          return { ok: true };
+        }
+        // shotlist: a short writer call with the idea in context
+        const idea = await ctx.runQuery(internal.agent.converse.ideaById, { ideaId });
+        const prefix = buildPrefix({ creator, directives, skill: SHOTLIST_SKILL });
+        const spec = REGISTRY.writer;
+        const r = await callModel(ctx, { creatorId: creator._id, purpose: "shot_list", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `The idea you sent them:\n${JSON.stringify(idea)}\n\nWrite the shot list.` }], temperature: 0.5, maxTokens: 500, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+        const text = r.ok ? r.content.trim() : "";
+        await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: text || "couldn't put the shot list together just now. ask me again in a minute.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply", produced: producedStamp(spec.primary) });
+        await deliverNow(ctx as never);
+        return { ok: true };
+      }
+    }
 
     const prefix = buildPrefix({ creator, directives, skill: CONVERSE_SKILL });
     const suffix = buildSuffix({ recent: recent.filter((m) => m._id !== target._id), target });

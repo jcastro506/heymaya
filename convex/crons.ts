@@ -10,4 +10,10 @@ const crons = cronJobs();
 // The queue backstop. Anything a creator is waiting on is drained inline by `deliverNow`.
 crons.interval("drain jobs", { minutes: 1 }, internal.core.scheduler.drainJobs, {});
 
+// The tracked-account sampler: one read per distinct admired account per 6 h, fleet-wide (§13.2).
+crons.interval("sample tracked accounts", { hours: 6 }, internal.scout.sampler.run, {});
+
+// The scout: rails then judgment, per creator, in their daytime; the gate holds the cap and quiet hours (§13.8).
+crons.hourly("scout", { minuteUTC: 5 }, internal.scout.scout.runAll, {});
+
 export default crons;

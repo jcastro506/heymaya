@@ -12,6 +12,7 @@ import type * as agent_context from "../agent/context.js";
 import type * as agent_converse from "../agent/converse.js";
 import type * as agent_registry from "../agent/registry.js";
 import type * as agent_soul from "../agent/soul.js";
+import type * as config_thresholds from "../config/thresholds.js";
 import type * as contracts_dossier from "../contracts/dossier.js";
 import type * as core_breaker from "../core/breaker.js";
 import type * as core_cadence from "../core/cadence.js";
@@ -53,6 +54,9 @@ import type * as reads_cache from "../reads/cache.js";
 import type * as reads_key from "../reads/key.js";
 import type * as reads_kinds from "../reads/kinds.js";
 import type * as reads_read from "../reads/read.js";
+import type * as scout_gate from "../scout/gate.js";
+import type * as scout_sampler from "../scout/sampler.js";
+import type * as scout_scout from "../scout/scout.js";
 import type * as telegram_webhook from "../telegram/webhook.js";
 
 import type {
@@ -66,6 +70,7 @@ declare const fullApi: ApiFromModules<{
   "agent/converse": typeof agent_converse;
   "agent/registry": typeof agent_registry;
   "agent/soul": typeof agent_soul;
+  "config/thresholds": typeof config_thresholds;
   "contracts/dossier": typeof contracts_dossier;
   "core/breaker": typeof core_breaker;
   "core/cadence": typeof core_cadence;
@@ -107,6 +112,9 @@ declare const fullApi: ApiFromModules<{
   "reads/key": typeof reads_key;
   "reads/kinds": typeof reads_kinds;
   "reads/read": typeof reads_read;
+  "scout/gate": typeof scout_gate;
+  "scout/sampler": typeof scout_sampler;
+  "scout/scout": typeof scout_scout;
   "telegram/webhook": typeof telegram_webhook;
 }>;
 
