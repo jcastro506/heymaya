@@ -24,12 +24,12 @@ For a link, before the read:
 2. If there is a sound id and the sound could be the reason, sound_videos. Say "the sound, not you" when it is.
 3. account_posts on the author to know whether this is their normal; a read against a fluke is worthless.
 4. post_comments only when the reaction changes a fix (people asking the same question is a fix; "fire" fifty times is not).
-5. own_rhymes for their own history with this structure; cite their multiple when they have one.
+5. own_rhymes for their own history with this structure; cite their multiple when they have one. lane_benchmark is free: a number is only good or bad next to the lane's median.
 For a draft file there is nothing to look up except own_rhymes; the card and their history are the evidence.`,
 
   explainPost: `
 Before explaining their own post:
-1. own_rhymes for what they did last time with this structure, and how it did.
+1. own_rhymes for what they did last time with this structure, and how it did; lane_benchmark (free) so the number sits next to the lane's median, not in a vacuum.
 2. search_keyword for the post's plainest keyword this week: if the lane's top post on it is theirs, say so; if someone else's did five times better, that is the thing to name.
 3. post_comments on their own post if the comments carry the reason (a question, a correction, a bit that landed).
 No more than three lookups; under 48 hours old the numbers are too fresh, say when you will know, and look nothing up.`,
@@ -43,7 +43,7 @@ Before answering why an account is growing:
 5. own_rhymes to decide what of it is this creator's to take. Four lookups at most.`,
 
   review: `
-You have the week's numbers and cards. One lookup is worth it, at most two: for the post you cannot explain (the one furthest from their normal, up or down), search_keyword for its plainest keyword to see whether the lane moved that week, or own_rhymes to see whether they have done it before. Everything else in the review comes from what you were given.`,
+You have the week's numbers, cards and the lane's median (say it: "your normal is X, the lane's median is Y"). One lookup is worth it, at most two: for the post you cannot explain (the one furthest from their normal, up or down), search_keyword for its plainest keyword to see whether the lane moved that week, or own_rhymes to see whether they have done it before. Everything else in the review comes from what you were given.`,
 } as const;
 
 export type LookupSkill = keyof typeof LOOKUPS;

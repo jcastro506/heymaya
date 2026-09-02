@@ -1294,3 +1294,13 @@ Each item becomes a test or a guard in the new repo **before the module that cou
 | 28 | The "unreadable response" vendor guard was unreachable (2026-08-12, `75fd825`). | `tests/vendorSchemaStrictness.test.ts` | Every guard branch in `integrations/` has a test that reaches it; the vendor replayer includes a malformed-body case per endpoint. |
 | 29 | Auditing REAL rows found in 10 minutes what tests never would: 8 of 39 sent messages leaking plumbing, replies waiting up to 5 minutes (2026-08-05). | `plainLanguage` guard; no audit tooling | A weekly script over real outbound rows (leak count, reply latency p50/p95) surfaced in the S5 operator console; the exit criterion is demonstrated on a live deploy, not in a harness (§18.0). |
 | 30 | Account deletion left live-product tables behind — five orphaned tables (2026-07-15, `b330d1e`), then every live table (2026-08-11, `7b687ac`). | `tests/accountDeletionCoverage.test.ts` (derives the table list from `schema.ts`) | Port the static coverage test; deletion coverage is derived from the schema, never hand-listed. Instagram App Review requires the deletion endpoint in S1. |
+
+
+## Addendum, 2026-09-02 evening — the parked modules
+
+| Parked module | Verdict now | Where |
+|---|---|---|
+| `pending/core/benchmarks.ts` | ADAPTED → `convex/scout/benchmarks.ts` (lane median / top quarter from observations, the three guards kept) | review inputs, Results tab, the `lane_benchmark` tool |
+| `pending/core/spendCeiling.ts` | SUPERSEDED by per-creator daily budgets (`convex/core/budgets.ts`) and the gate's budget rail; the standing rule ("throttle, never destroy, never fleet-wide") holds by construction: nothing in the new code can stop a creator's replies | — |
+| `pending/adapt/liveness.ts`, `watchers.ts` | SUPERSEDED by `core/alerts.ts` (operator, hourly) and `core/status.ts` (creator-facing, hourly) | — |
+| `pending/adapt/scheduler.ts`, `telegram*.ts`, `firstRun.ts`, `onramp.ts` | REFERENCE only; the creator branch has its own | — |
