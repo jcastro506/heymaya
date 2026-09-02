@@ -208,6 +208,13 @@ Fourteen tables, from zero. Invariants: idempotency keys on jobs, dedupe keys on
 
 ## 6. Core track — Sprints 0–5
 
+> **Status, 2026-09-02 14:00 PT (branch `creator`, dev deployment `impressive-roadrunner-997`, 253 tests, CI green).**
+> **Built:** Sprint 0 (salvage, clean sheet, cache, fixtures) · Sprint 1 (onboarding, catalogue read, watch pass, dossier, first read, Telegram pairing) · Sprint 2 (sampler, sweep, gate, scout with critic, readback with wins) · Sprint 3 (calendar read/write with consent, opinion on links and drafts, explain-post, screenshots, voice notes, commands, remember) · Sprint 3b (taste: events, affinities, note, rails, explore, match-post) · Sprint 4 (weekly review, rung, prediction scoring, learn-creator weekly with diff, six tabs, pulse) · Sprint 5 in part (billing state machine and webhook on Convex, deletion procedure, export, landing, privacy, terms, ops console) · first week as a schedule row · nightly consolidation (code half) · learned send hour · "stop watching @x?".
+> **Not built:** Zernio connections (needs the throwaway account) · worth-seeing and sound signals · the swipe file's embeddings · `search_memory` · Apple Calendar · calendar push channels · staging project and `creator-main` · fixture recording against real credits · the deletion receipt email and PostHog person delete · PostHog landing events · the chat-register golden set and the simulated-month test.
+> **Operator-gated:** ScrapeCreators credits · Clerk bot protection off (or sign up yourself) and the 18+ gate · Google OAuth production redirect URI · Stripe live products and webhook · Telegram staging/prod bots · a person's review of Privacy and Terms.
+
+
+
 Every sprint: goal · what comes across from the old repo · build · named tests · **exit criterion demonstrated on a live deploy** · acceptance edge cases · cost gate · paired surface sprint.
 
 ### Sprint 0 — Salvage audit and clean sheet · *nothing user-visible* · pairs with S1
