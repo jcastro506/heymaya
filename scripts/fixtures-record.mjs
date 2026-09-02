@@ -9,6 +9,9 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
+// One path is down at the vendor, not here: /v1/tiktok/creators/popular answers 400 with
+// "TikTok's Creative Center creator page/API is down" and charges nothing (probed 2026-09-02).
+// Kept out of the sample list so a recording run is not a red herring; the belt still lists it.
 const SAMPLES = [
   ["/v1/tiktok/profile", { handle: "stoolpresidente" }],
   ["/v3/tiktok/profile/videos", { handle: "stoolpresidente" }],
@@ -20,7 +23,6 @@ const SAMPLES = [
   ["/v1/tiktok/search/top", { query: "marathon training", date_posted: "this-week" }],
   ["/v1/tiktok/search/suggestions", { query: "marathon" }],
   ["/v1/tiktok/get-trending-feed", { region: "US" }],
-  ["/v1/tiktok/creators/popular", { band: "100K-1M", country: "US" }],
   ["/v1/instagram/profile", { handle: "nike" }],
   ["/v2/instagram/user/posts", { handle: "nike" }],
   ["/v2/instagram/reels/search", { query: "marathon training" }],
@@ -29,11 +31,17 @@ const SAMPLES = [
   ["/v1/credit-balance", {}],
 ];
 
+// Recording keeps only what the reader uses, and search responses run to megabytes;
+// the pipe through the CLI blew at 1MB the first time (ENOBUFS on three paths).
+// The write below already merges into whatever is on disk, so naming paths on the command
+// line re-records only those and leaves the rest of the file alone.
+const only = process.argv.slice(2);
 const out = {};
 for (const [path, query] of SAMPLES) {
+  if (only.length && !only.includes(path)) continue;
   process.stdout.write(`${path} … `);
   try {
-    const raw = execFileSync("arch", ["-arm64", "npx", "convex", "run", "onboarding/dev:recordFixture", JSON.stringify({ path, query })], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    const raw = execFileSync("arch", ["-arm64", "npx", "convex", "run", "onboarding/dev:recordFixture", JSON.stringify({ path, query })], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
     const r = JSON.parse(raw);
     if (r.ok) {
       out[path] = r.body;

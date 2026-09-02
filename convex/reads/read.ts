@@ -16,26 +16,40 @@ import { CREDITS_BY_PATH } from "../integrations/scrapeCreators/platforms/cross"
 import { getDefaultClient, type ScrapeCreatorsClient } from "../integrations/scrapeCreators/client";
 import { FixtureScrapeCreatorsClient, fixtureStoreFrom } from "../integrations/scrapeCreators/fixtureClient";
 import specFixtures from "../integrations/scrapeCreators/fixtures.spec.json";
+import recordedFixtures from "../integrations/scrapeCreators/fixtures.recorded.json";
 
 const USD_PER_CREDIT = Number(process.env.SCRAPE_CREATORS_USD_PER_CREDIT ?? "0.00188"); // $47 / 25,000
 const WAIT_MS = 400;
 const MAX_WAITS = 60; // ~24 s, under the action ceiling and over any single vendor call
 
-let fixtureClient: FixtureScrapeCreatorsClient | null = null;
+/**
+ * ⚠️ Cached per mode, not globally. `recorded` used to be labelled `recorded` while still
+ * being served the spec examples, so a recording run changed nothing and every read looked
+ * healthy against the wrong shapes. The recorded set falls back to spec per path, so a path
+ * that failed to record still answers.
+ */
+let fixtureClients: Partial<Record<"spec" | "recorded", FixtureScrapeCreatorsClient>> = {};
 export function clientForEnv(): { client: ScrapeCreatorsClient; fixture?: "spec-example" | "recorded" } {
   const mode = process.env.SCRAPE_FIXTURES;
   if (mode === "spec" || mode === "recorded") {
-    fixtureClient ??= new FixtureScrapeCreatorsClient(
-      fixtureStoreFrom(specFixtures as Record<string, unknown>, mode === "recorded" ? "recorded" : "spec-example"),
+    const map = mode === "recorded"
+      ? { ...(specFixtures as Record<string, unknown>), ...(recordedFixtures as Record<string, unknown>) }
+      : (specFixtures as Record<string, unknown>);
+    fixtureClients[mode] ??= new FixtureScrapeCreatorsClient(
+      fixtureStoreFrom(map, mode === "recorded" ? "recorded" : "spec-example"),
     );
-    return { client: fixtureClient, fixture: mode === "recorded" ? "recorded" : "spec-example" };
+    return { client: fixtureClients[mode]!, fixture: mode === "recorded" ? "recorded" : "spec-example" };
   }
   return { client: getDefaultClient() };
 }
 
+/** Test hook: drop the cached fixture clients so a test can switch modes. */
+export function resetFixtureClients(): void { fixtureClients = {}; }
+
 /** Test hook: how many vendor calls the fixture client has served (in-flight dedupe test). */
 export function fixtureCallCount(): number {
-  return fixtureClient?.calls.length ?? 0;
+  const mode = process.env.SCRAPE_FIXTURES === "recorded" ? "recorded" : "spec";
+  return fixtureClients[mode]?.calls.length ?? 0;
 }
 
 export class ReadFailed extends Error {
