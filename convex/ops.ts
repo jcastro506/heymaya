@@ -62,3 +62,58 @@ export const overview = query({
     return { at: now, creators: rows, failedJobs: failed, queued: jobs.filter((j) => j.status === "queued").length, running: jobs.filter((j) => j.status === "running").length, breakers: breakers.map((b) => ({ vendor: b.vendor, verdict: b.verdict, balance: b.balance, detail: b.detail, checkedAt: b.checkedAt })), spendDayByVendor: byVendor };
   },
 });
+
+/** §18 metrics and §3.6 COGS, all from rows: activation, weekly active, the north star, track record, silence, funnel, cost per creator. */
+export const metrics = query({
+  args: { token: v.string() },
+  handler: async (ctx, a) => {
+    if (!authorized(a.token)) return null;
+    const now = Date.now();
+    const week = now - 7 * 86_400_000;
+    const month = now - 30 * 86_400_000;
+    const creators = (await ctx.db.query("creators").collect()) as Doc<"creators">[];
+    const paying = creators.filter((c) => c.plan.status === "active" || c.plan.status === "trialing" || c.plan.status === "comped");
+    let activated = 0, withFirstRead = 0, weeklyActive = 0, postedIdeas = 0, mutes = 0;
+    const ttfm: number[] = [];
+    const perCreatorSpend: number[] = [];
+    const byVendor: Record<string, number> = {};
+    for (const c of creators) {
+      const msgs = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", c._id)).collect()) as Doc<"messages">[];
+      const firstOut = msgs.filter((m) => m.direction === "out" && m.deliveredAt).sort((x, y) => x.ts - y.ts)[0];
+      if (firstOut) {
+        withFirstRead++;
+        ttfm.push((firstOut.deliveredAt! - c.createdAt) / 60_000);
+        if (msgs.some((m) => m.direction === "in" && m.ts >= firstOut.ts && m.ts <= firstOut.ts + 48 * 3_600_000)) activated++;
+      }
+      if (msgs.some((m) => m.direction === "in" && m.ts >= week)) weeklyActive++;
+      if (c.plan.status === "paused") mutes++;
+      const ideas = (await ctx.db.query("ideas").withIndex("by_creator_status", (q) => q.eq("creatorId", c._id).eq("status", "posted")).collect()) as Doc<"ideas">[];
+      postedIdeas += ideas.filter((i) => (i.postedAt ?? 0) >= month && (i.matchConfidence === "certain" || i.matchConfidence === "likely")).length;
+      const costs = (await ctx.db.query("costEvents").withIndex("by_creator_at", (q) => q.eq("creatorId", c._id).gte("at", week)).collect()) as Doc<"costEvents">[];
+      const spend = costs.reduce((s, x) => s + x.costUsd, 0);
+      perCreatorSpend.push(spend);
+      for (const x of costs) byVendor[x.vendor] = (byVendor[x.vendor] ?? 0) + x.costUsd;
+    }
+    const sorted = [...ttfm].sort((x, y) => x - y);
+    const q = (p: number) => (sorted.length ? Math.round(sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))]) : null);
+    const preds = (await ctx.db.query("predictions").collect()) as Doc<"predictions">[];
+    const byConf = new Map<string, number[]>();
+    for (const p of preds) if (p.outcomeMultiple !== undefined) byConf.set(p.confidence, [...(byConf.get(p.confidence) ?? []), p.outcomeMultiple]);
+    const med = (xs: number[]) => { const s = [...xs].sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : null; };
+    const record = ["strong", "solid", "fine", "weak", "broken"].map((k) => ({ confidence: k, medianActual: med(byConf.get(k) ?? []), n: (byConf.get(k) ?? []).length }));
+    const weeklySpend = perCreatorSpend.reduce((s, x) => s + x, 0);
+    const perCreatorMonthly = creators.length ? (weeklySpend / creators.length) * (30 / 7) : 0;
+    const proactiveWeek = (await ctx.db.query("messages").withIndex("by_creator_and_ts").order("desc").take(1000)).filter((m) => m.direction === "out" && m.proactive && m.ts >= week).length;
+    return {
+      creators: creators.length,
+      paying: paying.length,
+      activation: withFirstRead ? Math.round((activated / withFirstRead) * 100) : null,
+      weeklyActive: paying.length ? Math.round((weeklyActive / paying.length) * 100) : null,
+      ideasPostedPerCreatorMonth: creators.length ? Math.round((postedIdeas / creators.length) * 10) / 10 : 0,
+      trackRecord: record,
+      silence: { proactivePerCreatorWeek: creators.length ? Math.round((proactiveWeek / creators.length) * 10) / 10 : 0, mutePct: creators.length ? Math.round((mutes / creators.length) * 100) : 0 },
+      funnel: { timeToFirstMessageMinP50: q(0.5), p95: q(0.95), withFirstMessage: withFirstRead },
+      cogs: { weeklySpendUsd: Math.round(weeklySpend * 100) / 100, perCreatorMonthlyUsd: Math.round(perCreatorMonthly * 100) / 100, byVendorWeek: Object.fromEntries(Object.entries(byVendor).map(([k, v2]) => [k, Math.round(v2 * 100) / 100])), marginAt19: perCreatorMonthly ? Math.round((1 - perCreatorMonthly / 19) * 100) : null, marginAt29: perCreatorMonthly ? Math.round((1 - perCreatorMonthly / 29) * 100) : null },
+    };
+  },
+});

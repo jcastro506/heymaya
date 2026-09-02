@@ -213,3 +213,21 @@ export const probeScrapeCreators = internalAction({
     return out;
   },
 });
+
+/** Fixture recording (§17.1): one real vendor call, whatever the fixture flag says, returning the raw body for fixtures.recorded.json. Costs credits. */
+export const recordFixture = internalAction({
+  args: { path: v.string(), query: v.any() },
+  handler: async (_ctx, a): Promise<{ ok: boolean; status?: number; body?: unknown; reason?: string }> => {
+    const key = process.env.SCRAPE_CREATORS_API_KEY ?? "";
+    if (!key) return { ok: false, reason: "no key" };
+    const url = new URL(`https://api.scrapecreators.com${a.path}`);
+    for (const [k, val] of Object.entries((a.query ?? {}) as Record<string, unknown>)) if (val !== undefined && val !== null) url.searchParams.set(k, String(val));
+    const res = await fetch(url.toString(), { headers: { "x-api-key": key, accept: "application/json" } });
+    const text = await res.text();
+    try {
+      return { ok: res.ok, status: res.status, body: JSON.parse(text) };
+    } catch {
+      return { ok: false, status: res.status, reason: text.slice(0, 200) };
+    }
+  },
+});

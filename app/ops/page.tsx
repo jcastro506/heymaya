@@ -18,6 +18,7 @@ export default function OpsPage() {
   });
   const o = useQuery(api.ops.overview, token ? { token } : "skip");
   const ev = useQuery(api.eval.run.report, token ? { token } : "skip");
+  const mx = useQuery(api.ops.metrics, token ? { token } : "skip");
   const label = useMutation(api.eval.run.label);
   if (!token) return <p className="p-6 text-sm opacity-60">No token.</p>;
   if (o === undefined) return <p className="p-6 text-sm opacity-60">loading…</p>;
@@ -50,6 +51,15 @@ export default function OpsPage() {
           </table>
         </div>
       </section>
+
+      {mx && (
+        <section className="grid md:grid-cols-4 gap-4 text-sm">
+          <div className="border border-white/10 rounded p-3"><div className="text-[11px] uppercase tracking-wide opacity-50">Activation · weekly active</div><div className="text-lg tabular-nums">{mx.activation ?? "—"}% · {mx.weeklyActive ?? "—"}%</div><div className="text-[11px] opacity-50">first reply within 48h of the first read · replied this week, of paying</div></div>
+          <div className="border border-white/10 rounded p-3"><div className="text-[11px] uppercase tracking-wide opacity-50">North star</div><div className="text-lg tabular-nums">{mx.ideasPostedPerCreatorMonth}</div><div className="text-[11px] opacity-50">ideas posted per creator per month (target ≥ 2)</div></div>
+          <div className="border border-white/10 rounded p-3"><div className="text-[11px] uppercase tracking-wide opacity-50">Silence · funnel</div><div className="text-lg tabular-nums">{mx.silence.proactivePerCreatorWeek}/wk · {mx.silence.mutePct}% paused</div><div className="text-[11px] opacity-50">first message p50 {mx.funnel.timeToFirstMessageMinP50 ?? "—"} min · p95 {mx.funnel.p95 ?? "—"} min</div></div>
+          <div className="border border-white/10 rounded p-3"><div className="text-[11px] uppercase tracking-wide opacity-50">COGS (§3.6)</div><div className="text-lg tabular-nums">${mx.cogs.perCreatorMonthlyUsd}/creator/mo</div><div className="text-[11px] opacity-50">margin {mx.cogs.marginAt19 ?? "—"}% at $19 · {mx.cogs.marginAt29 ?? "—"}% at $29 · week: {Object.entries(mx.cogs.byVendorWeek).map(([k, v2]) => `${k} $${v2}`).join(", ") || "—"}</div></div>
+        </section>
+      )}
 
       <section>
         <h2 className="text-xs uppercase tracking-wide opacity-50 mb-2">Evals · is she corny, generic, flattering, leaking, inventing?</h2>
