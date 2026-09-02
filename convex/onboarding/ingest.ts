@@ -13,6 +13,7 @@ import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
 import { DossierSchema, DOSSIER_JSON_SHAPE } from "../contracts/dossier";
 import { SOUL } from "../agent/soul";
+import { summarize, type Affinity } from "../taste/affinities";
 
 const TRANSCRIPT_CAP = 40; // tonight: transcripts for the sample only; the full-catalogue pass follows with batch
 
@@ -113,7 +114,11 @@ export const writeDossier = internalMutation({
   handler: async (ctx, a): Promise<{ version: number }> => {
     const creator = (await ctx.db.get(a.creatorId)) as Doc<"creators">;
     const version = (creator.dossierVersion ?? 0) + 1;
-    await ctx.db.patch(a.creatorId, { dossier: { ...(a.dossier as object), version }, dossierVersion: version, mode: a.mode, updatedAt: Date.now() });
+    const next = { ...(a.dossier as object), version } as Record<string, unknown>;
+    const prev = (creator.dossier ?? null) as Record<string, unknown> | null;
+    // §15.7: a rewrite is a diff row, never a silent overwrite. Section-level, by code.
+    const changed = prev ? Object.keys({ ...prev, ...next }).filter((k) => k !== "version" && k !== "readFrom" && JSON.stringify(prev[k]) !== JSON.stringify(next[k])) : Object.keys(next);
+    await ctx.db.patch(a.creatorId, { dossier: next, dossierVersion: version, dossierPrevious: prev ?? undefined, dossierDiff: { version, at: Date.now(), changed }, mode: a.mode, updatedAt: Date.now() });
     return { version };
   },
 });
@@ -202,8 +207,40 @@ export const run = internalAction({
       console.error(`[ingest] watch pass failed: ${String(err)}`);
     }
 
-    // Synthesis: one writer call over everything, validated before it is written.
+    const synth = await ctx.runAction(internal.onboarding.ingest.synthesize, { creatorId: creator._id, mode, readFrom, reason: "onboarding" });
+    if (!synth.ok) return synth;
+    await ctx.runMutation(internal.core.jobs.enqueue, {
+      kind: "first_read",
+      idempotencyKey: `first_read:${creator._id}:after_ingest`,
+      creatorId: creator._id,
+      payloadJson: JSON.stringify({ after: "ingest" }),
+    });
+    return { ok: true };
+  },
+});
+
+/**
+ * learn-creator (§11.2, §15.7): one writer call over everything, validated before it
+ * is written. Runs at onboarding and again weekly after the review, with the house
+ * rules, their notes, their taste and the previous dossier in front of it so a
+ * correction ("not quite") is folded in and a creator who changes direction is seen
+ * changing. The previous dossier and the changed sections are stored beside the new one.
+ */
+export const synthesize = internalAction({
+  args: { creatorId: v.id("creators"), mode: v.optional(v.union(v.literal("full"), v.literal("thin"), v.literal("newCreator"))), readFrom: v.optional(v.any()), reason: v.union(v.literal("onboarding"), v.literal("weekly"), v.literal("correction")) },
+  handler: async (ctx, args): Promise<{ ok: boolean; reason?: string }> => {
+    const creator = await ctx.runQuery(internal.onboarding.ingest.creatorHandles, { creatorId: args.creatorId });
+    if (!creator) return { ok: false, reason: "creator not found" };
+    const learn = await ctx.runQuery(internal.onboarding.ingest.learnInputs, { creatorId: creator._id });
+    if (!learn) return { ok: false, reason: "creator not found" };
     const fresh = await ctx.runQuery(internal.onboarding.ingest.ownPostsFor, { creatorId: creator._id });
+    const posts = fresh.length;
+    const mode: "full" | "thin" | "newCreator" = args.mode ?? (posts <= 4 ? "newCreator" : posts <= 30 ? "thin" : "full");
+    const views = fresh.slice(0, 20).map((r) => r.metrics.views).sort((x, y) => x - y);
+    const baseline = views.length >= 5 ? views[Math.floor(views.length / 2)] : null;
+    const reads = await ctx.runQuery(internal.onboarding.watch.readsFor, { creatorId: creator._id });
+    const cards = reads.map((r) => ({ postId: (r.card as { postId?: string })?.postId ?? "", depth: r.depth, card: r.card }));
+    const readFrom = (args.readFrom as Record<string, unknown> | undefined) ?? (learn.dossier as { readFrom?: Record<string, unknown> } | null)?.readFrom ?? { tiktokPosts: 0, instagramPosts: 0, transcripts: 0, watched: cards.filter((c) => c.depth === "watch").length, sampledFromHistory: false };
     const digest = fresh.slice(0, 200).map((r) => ({
       id: r.postId,
       platform: r.platform,
@@ -216,25 +253,37 @@ export const run = internalAction({
       transcript: r.transcript ? r.transcript.slice(0, 600) : null,
       sample: r.sample ?? null,
     }));
-    const system = `${SOUL}\n\n# Skill: learn-creator\nYou are writing the creator's dossier from their own posts. Every claim must cite post ids from the data. Say "unknown" where the data is silent. Do not invent visuals: you may describe how a post looks ONLY from the watched cards; everything else is captions, transcripts and numbers. Output ONLY JSON matching this shape:\n${DOSSIER_JSON_SHAPE}`;
+    const system = `${SOUL}\n\n# Skill: learn-creator\nYou are writing the creator's dossier from their own posts. Every claim must cite post ids from the data. Say "unknown" where the data is silent. Do not invent visuals: you may describe how a post looks ONLY from the watched cards; everything else is captions, transcripts and numbers.${args.reason === "onboarding" ? "" : " This is a rewrite: the previous dossier, their house rules, their notes and their taste are below. A house rule or a note from them beats anything you inferred. Keep what still holds, change what the new posts contradict, and never keep a claim they corrected."}\nOutput ONLY JSON matching this shape:\n${DOSSIER_JSON_SHAPE}`;
     const watchedCards = cards.filter((c) => c.depth === "watch").slice(0, 40);
-    const user = `Creator handles: ${JSON.stringify(creator.handles)}\nTheir sentence about what they make: ${JSON.stringify(creator.niche)}\nMode: ${mode} (posts read: ${posts}, baseline median views of last 20: ${baseline ?? "unknown"})\n\nPosts (newest first):\n${JSON.stringify(digest)}\n\nWatched cards (${watchedCards.length}; these are the only posts you may describe visually):\n${JSON.stringify(watchedCards)}`;
+    const context = args.reason === "onboarding" ? "" : `\n\nPrevious dossier (version ${learn.dossierVersion}):\n${JSON.stringify(learn.dossier)}\n\nHouse rules, verbatim:\n${JSON.stringify(learn.rules)}\n\nThings they told you:\n${JSON.stringify(learn.notes)}\n\nTheir taste (what they took / passed on):\n${JSON.stringify(learn.taste)}\n\nIdeas of yours they posted this month:\n${JSON.stringify(learn.postedIdeas)}`;
+    const user = `Creator handles: ${JSON.stringify(creator.handles)}\nTheir sentence about what they make: ${JSON.stringify(creator.niche)}\nMode: ${mode} (posts read: ${posts}, baseline median views of last 20: ${baseline ?? "unknown"})\n\nPosts (newest first):\n${JSON.stringify(digest)}\n\nWatched cards (${watchedCards.length}; these are the only posts you may describe visually):\n${JSON.stringify(watchedCards)}${context}`;
     const spec = REGISTRY.writer;
-    let result = await callModel(ctx, { creatorId: creator._id, purpose: "learn_creator", model: spec.primary, messages: [{ role: "system", content: system }, { role: "user", content: user }], temperature: 0.3, maxTokens: 3000, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+    let result = await callModel(ctx, { creatorId: creator._id, purpose: args.reason === "onboarding" ? "learn_creator" : "learn_creator_weekly", model: spec.primary, messages: [{ role: "system", content: system }, { role: "user", content: user }], temperature: 0.3, maxTokens: 3000, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
     if (!result.ok) result = await callModel(ctx, { creatorId: creator._id, purpose: "learn_creator_fallback", model: spec.fallback, messages: [{ role: "system", content: system }, { role: "user", content: user }], temperature: 0.3, maxTokens: 3000, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
     if (!result.ok) return { ok: false, reason: `dossier synthesis failed: ${result.reason}` };
 
-    const parsed = parseDossier(result.content, { readFrom, mode });
+    const parsed = parseDossier(result.content, { readFrom: readFrom as never, mode });
     if (!parsed.ok) return { ok: false, reason: `dossier did not validate: ${parsed.error}` };
-
     await ctx.runMutation(internal.onboarding.ingest.writeDossier, { creatorId: creator._id, dossier: parsed.dossier, mode });
-    await ctx.runMutation(internal.core.jobs.enqueue, {
-      kind: "first_read",
-      idempotencyKey: `first_read:${creator._id}:after_ingest`,
-      creatorId: creator._id,
-      payloadJson: JSON.stringify({ after: "ingest" }),
-    });
     return { ok: true };
+  },
+});
+
+export const learnInputs = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ dossier: unknown; dossierVersion: number; rules: string[]; notes: string[]; taste: { likes: string[]; dislikes: string[] }; postedIdeas: string[] } | null> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!c) return null;
+    const directives = (await ctx.db.query("directives").withIndex("by_creator_and_active", (q) => q.eq("creatorId", a.creatorId).eq("active", true)).collect()) as Doc<"directives">[];
+    const ideas = (await ctx.db.query("ideas").withIndex("by_creator_status", (q) => q.eq("creatorId", a.creatorId).eq("status", "posted")).take(20)) as Doc<"ideas">[];
+    return {
+      dossier: c.dossier ?? null,
+      dossierVersion: c.dossierVersion ?? 0,
+      rules: directives.map((d) => d.verbatim),
+      notes: (c.notes ?? []).filter((n) => !n.tombstonedAt).map((n) => n.text),
+      taste: summarize((c.affinities ?? []) as Affinity[], Date.now(), 6),
+      postedIdeas: ideas.map((i) => (i.version as { hook?: string } | undefined)?.hook ?? i.messageText.slice(0, 80)),
+    };
   },
 });
 

@@ -32,6 +32,8 @@ export default defineSchema({
     mode: v.union(v.literal("full"), v.literal("thin"), v.literal("newCreator")),
     dossier: v.optional(v.any()), // Dossier (§14.1), zod-validated at write time
     dossierVersion: v.number(),
+    dossierPrevious: v.optional(v.any()), // §15.7: the version before the last rewrite
+    dossierDiff: v.optional(v.object({ version: v.number(), at: v.number(), changed: v.array(v.string()) })),
     notes: v.array(
       v.object({
         id: v.string(),

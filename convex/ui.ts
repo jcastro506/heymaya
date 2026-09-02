@@ -7,6 +7,7 @@
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
 import { summarize, type Affinity } from "./taste/affinities";
 
 async function me(ctx: QueryCtx | MutationCtx): Promise<Doc<"creators"> | null> {
@@ -135,6 +136,7 @@ export const correct = mutation({
     const c = await me(ctx);
     if (!c || !a.text.trim()) return { ok: false };
     await ctx.db.insert("directives", { creatorId: c._id, kind: "correction", verbatim: a.text.trim().slice(0, 500), active: true, source: "settings", createdAt: Date.now() });
+    if (c.dossier) await ctx.scheduler.runAfter(5 * 60_000, internal.onboarding.ingest.synthesize, { creatorId: c._id, reason: "correction" }); // batched: several corrections, one rewrite
     return { ok: true };
   },
 });

@@ -158,6 +158,8 @@ export const run = internalAction({
     await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: text, dedupeKey: `review:${weekKey}`, proactive: true, kind: "review", links: inp.week.slice(0, 3).map((p) => p.url), produced, criticSkipped });
     // The pilot's three questions, as the one open question (§6 Sprint 3 instrumentation).
     await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: CHECK_IN, dedupeKey: `checkin:${weekKey}`, proactive: false, awaitingAnswer: true, kind: "checkin" });
+    // learn-creator: the weekly dossier rewrite, after the review, with the week's corrections in front of it (§15.7).
+    await ctx.scheduler.runAfter(60_000, internal.onboarding.ingest.synthesize, { creatorId: a.creatorId, reason: "weekly" });
     return { sent: true };
   },
 });
