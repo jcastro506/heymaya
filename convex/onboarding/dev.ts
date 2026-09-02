@@ -81,3 +81,14 @@ export const retryNow = internalMutation({
     return { moved };
   },
 });
+
+/** Bind a Telegram chat to a dev creator without the web flow (the operator's own chat, for a live smoke). */
+export const pairChat = internalMutation({
+  args: { creatorId: v.id("creators"), chatId: v.string() },
+  handler: async (ctx, a): Promise<{ paired: boolean }> => {
+    await ctx.db.patch(a.creatorId, { telegramChatId: a.chatId, channel: { paired: true, pairedAt: Date.now() }, updatedAt: Date.now() });
+    const jobs = (await ctx.db.query("jobs").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"jobs">[];
+    for (const j of jobs) if (j.kind === "deliver_message" && j.status !== "succeeded") await ctx.db.patch(j._id, { status: "queued", runAfter: Date.now(), updatedAt: Date.now() });
+    return { paired: true };
+  },
+});
