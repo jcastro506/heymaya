@@ -78,6 +78,25 @@ describe("a simulated day", () => {
     expect((await t.run((ctx) => ctx.db.query("ideas").collect()))).toHaveLength(0);
   });
 
+  it("a link from them → the opinion skill → a prediction on the record and a reply, no proactive row", async () => {
+    const { t, creatorId } = await scenario();
+    const { messageId } = await t.mutation(internal.core.messages.recordInbound, { creatorId, surface: "telegram", body: "what do you think https://www.tiktok.com/@runwithcarly/video/7395965676629888274" });
+    const c = await t.action(internal.agent.converse.run, { creatorId, messageId });
+    expect(c.ok, c.reason ?? "").toBe(true);
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    const preds = await t.run((ctx) => ctx.db.query("predictions").collect());
+    expect(preds).toHaveLength(1);
+    expect(preds[0].subject.url).toContain("7395965676629888274");
+    expect(preds[0].confidence).toBe("solid");
+    expect(preds[0].expectedMultiple).toBeGreaterThan(0);
+    const out = (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out");
+    expect(out).toHaveLength(1);
+    expect(out[0].proactive).toBeFalsy();
+    // Every vendor read on the way was a fixture: cost rows carry zero dollars but name the vendor.
+    const costs = await t.run((ctx) => ctx.db.query("costEvents").collect());
+    expect(costs.every((e) => e.costUsd === 0 && e.vendor)).toBe(true);
+  });
+
   it("the review runs on the fake model and writes the experiment ledger and a review message", async () => {
     const { t, creatorId } = await scenario();
     const r = await t.action(internal.review.weekly.run, { creatorId });
