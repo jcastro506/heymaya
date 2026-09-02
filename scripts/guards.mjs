@@ -19,13 +19,17 @@ const files = walk(root);
 const rel = (p) => relative(root, p);
 
 // 1. Marketing and product copy: no "AI", no "UGC", no vendor names (plan §7, S1).
-const copyFiles = files.filter((p) => /\/(app|components|content)\/.*\.(tsx|ts|md|mdx)$/.test(p) && !/\.test\./.test(p));
+const copyFiles = files.filter((p) => /\/(app|components|content)\/.*\.(tsx|ts|md|mdx)$/.test(p) && !/\.test\./.test(p) && !/\/providers\.tsx$/.test(p)); // providers is wiring, not copy
 const forbidden = [/\bAI\b/, /\bUGC\b/, /ScrapeCreators/i, /Zernio/i, /OpenRouter/i, /Gemini/i, /Convex/i];
 for (const p of copyFiles) {
-  const src = readFileSync(p, "utf8");
+  // Copy is what a user could see: drop import lines and comments before matching,
+  // otherwise `from "convex/react"` counts as a vendor name in the UI.
+  const src = readFileSync(p, "utf8")
+    .split("\n")
+    .filter((l) => !/^\s*import\b/.test(l) && !/^\s*(\/\/|\*|\/\*)/.test(l))
+    .join("\n");
   for (const re of forbidden) {
-    // allow inside code comments that start with `// internal:` and inside operator console
-    if (/\/app\/ops\//.test(p)) continue;
+    if (/\/app\/ops\//.test(p)) continue; // operator console may name vendors
     const m = src.match(re);
     if (m) failures.push(`copy: ${rel(p)} contains ${JSON.stringify(m[0])} (§7 copy rules)`);
   }
