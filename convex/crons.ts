@@ -25,4 +25,8 @@ crons.hourly("scout", { minuteUTC: 5 }, internal.scout.scout.runAll, {});
 // The calendar sync: every connected calendar, every 30 minutes; push channels are post-pilot (§12.5).
 crons.interval("sync calendars", { minutes: 30 }, internal.calendar.sync.runAll, {});
 
+// Taste (§13.10): silence on an idea becomes an event after 72 h; the taste note is rewritten weekly.
+crons.daily("expire ignored ideas", { hourUTC: 2, minuteUTC: 0 }, internal.taste.events.expireIgnored, {});
+crons.daily("taste profiles", { hourUTC: 9, minuteUTC: 0 }, internal.taste.profile.runAll, {});
+
 export default crons;

@@ -7,7 +7,8 @@
 
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
-import type { Doc } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
+import { rankMultiplier, tasteHint, TASTE, type Affinity } from "../taste/affinities";
 import { THRESHOLDS } from "../config/thresholds";
 import { dayKeyInZone } from "../core/cadence";
 
@@ -49,7 +50,7 @@ export function checkRails(input: { creator: Doc<"creators">; sentToday: number;
 
 export const railsFor = internalQuery({
   args: { creatorId: v.id("creators"), now: v.number() },
-  handler: async (ctx, a): Promise<{ rails: Rails; creator: Doc<"creators">; candidates: Doc<"signals">[] } | null> => {
+  handler: async (ctx, a): Promise<{ rails: Rails; creator: Doc<"creators">; candidates: Doc<"signals">[]; tasteHints: Record<string, string>; tasteDropped: Array<{ signalId: Id<"signals">; why: string }>; exploreOpen: boolean } | null> => {
     const creator = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!creator) return null;
     const day = dayKeyInZone(a.now, creator.timezone);
@@ -68,8 +69,32 @@ export const railsFor = internalQuery({
       }
       if (a.now - s.createdAt < THRESHOLDS.breakoutMaxAgeHours * 3_600_000) fresh.push(s);
     }
-    const candidates = fresh.sort((x, y) => y.score - x.score).slice(0, THRESHOLDS.candidatesPerDay);
-    return { rails, creator, candidates };
+    // Taste (§13.10 (5)): coarse features are known now (source kind, account); re-rank by
+    // affinity and drop a hard no with the reason written, so she can say why when asked.
+    const now = a.now;
+    const affinities = (creator.affinities ?? []) as Affinity[];
+    const tasteHints: Record<string, string> = {};
+    const tasteDropped: Array<{ signalId: Id<"signals">; why: string }> = [];
+    const ranked: Array<{ s: Doc<"signals">; rank: number }> = [];
+    for (const s of fresh) {
+      const keys = [`source:${s.kind}`];
+      if (s.trackedAccountId) {
+        const t = (await ctx.db.get(s.trackedAccountId)) as Doc<"trackedAccounts"> | null;
+        if (t) keys.push(`account:@${t.handle.toLowerCase()}`);
+      }
+      const h = tasteHint(affinities, keys, now);
+      if (h.hardNo && s.kind !== "win") {
+        tasteDropped.push({ signalId: s._id, why: `taste: ${h.hardNo}` });
+        continue;
+      }
+      tasteHints[s._id] = h.hint;
+      ranked.push({ s, rank: s.score * rankMultiplier(h.score) });
+    }
+    const candidates = ranked.sort((x, y) => y.rank - x.rank).slice(0, THRESHOLDS.candidatesPerDay).map((x) => x.s);
+    // The explore slot (§13.10 (6)): one idea in five outside the core.
+    const lastIdeas = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(TASTE.exploreEvery)) as Doc<"ideas">[];
+    const exploreOpen = lastIdeas.length >= TASTE.exploreEvery && !lastIdeas.some((i) => i.newForYou);
+    return { rails, creator, candidates, tasteHints, tasteDropped, exploreOpen };
   },
 });
 

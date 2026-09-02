@@ -13,7 +13,7 @@ import { REGISTRY } from "./registry";
 import { buildPrefix, buildSuffix, producedStamp } from "./context";
 import { deliverNow } from "../core/scheduler";
 import { internalMutation, internalQuery } from "../_generated/server";
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 
 export const SHOTLIST_SKILL = `adapt-format (shot list)
 When: they tapped "shot list" on an idea you sent.
@@ -38,6 +38,19 @@ When: any message that is not a command, a file, a link to a post, or a button t
 The judgment: answer the thing they actually asked, in their register, with what you know from the dossier and the conversation. If they ask about numbers you cannot see, say what you can't see and what you can. If they ask for an idea, give one, shaped to them, with why. If nothing needs a question, don't ask one.
 Hard rules: never invent a metric, a post, or a trend. Never promise a post will do well. Under 120 words unless they asked for detail.`;
 
+function hourBucket(epoch: number, timeZone: string): string {
+  const h = Number(new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", hourCycle: "h23" }).format(epoch));
+  return h < 12 ? "morning" : h < 17 ? "afternoon" : "evening";
+}
+
+export const messageByTelegramId = internalQuery({
+  args: { creatorId: v.id("creators"), telegramMessageId: v.string() },
+  handler: async (ctx, a): Promise<{ ideaId: Id<"ideas"> | null } | null> => {
+    const m = (await ctx.db.query("messages").withIndex("by_creator_tg_message", (q) => q.eq("creatorId", a.creatorId).eq("telegramMessageId", a.telegramMessageId)).first()) as Doc<"messages"> | null;
+    return m ? { ideaId: m.ideaId ?? null } : null;
+  },
+});
+
 export const run = internalAction({
   args: { creatorId: v.id("creators"), messageId: v.id("messages") },
   handler: async (ctx, args): Promise<{ ok: boolean; reason?: string }> => {
@@ -48,7 +61,16 @@ export const run = internalAction({
 
     // Commands were handled before a job existed (§15.3); a reaction or button
     // is a signal, not a prompt, and gets no reply tonight.
-    if (target.kind === "reaction") return { ok: true };
+    if (target.kind === "reaction") {
+      // A reaction on an idea message is a taste event (§13.10); on anything else it is just noticed.
+      const reacted = target.telegramMessageId ? await ctx.runQuery(internal.agent.converse.messageByTelegramId, { creatorId: creator._id, telegramMessageId: target.telegramMessageId }) : null;
+      if (reacted?.ideaId) {
+        const emoji = target.body;
+        const kind = /👎|💩|🤮|😴/.test(emoji) ? "thumbs_down" : emoji === "removed" ? null : "heart";
+        if (kind) await ctx.runMutation(internal.taste.events.record, { creatorId: creator._id, kind, ideaId: reacted.ideaId, messageId: target._id, reaction: emoji });
+      }
+      return { ok: true };
+    }
 
     // One-tap options on an idea (§7 S3). Handled here without a model call where the answer is code.
     if (target.kind === "button") {
@@ -57,6 +79,8 @@ export const run = internalAction({
       if (b) {
         const blockId = b[1] as Id<"calendarBlocks">;
         let body: string;
+        const blk = await ctx.runQuery(internal.calendar.blocks.byId, { blockId });
+        if (blk?.ideaId) await ctx.runMutation(internal.taste.events.record, { creatorId: creator._id, kind: b[2] === "yes" ? "blocked" : "idea_only", ideaId: blk.ideaId, messageId: target._id, extraKeys: [`blockhour:${hourBucket(blk.start, creator.timezone)}`] });
         if (b[2] === "yes") {
           const r = await ctx.runAction(internal.calendar.blocks.confirm, { blockId });
           body = r.ok ? `blocked ${r.when}. it's on your calendar; move it and i'll follow.${r.htmlLink ? `\n${r.htmlLink}` : ""}` : `couldn't write to your calendar just now (${r.reason}). it's saved here as a plan for ${r.when}; reconnect in Settings and tap again.`;
@@ -72,8 +96,8 @@ export const run = internalAction({
       if (m) {
         const ideaId = m[1] as Id<"ideas">;
         const op = m[2];
+        await ctx.runMutation(internal.taste.events.record, { creatorId: creator._id, kind: op, ideaId, messageId: target._id });
         if (op === "notme") {
-          await ctx.runMutation(internal.agent.converse.markIdea, { ideaId, status: "passed" });
           await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: "noted. fewer like that.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
           await deliverNow(ctx as never);
           return { ok: true };
@@ -93,6 +117,14 @@ export const run = internalAction({
         await deliverNow(ctx as never);
         return { ok: true };
       }
+    }
+
+    // Their first reply to an idea is read once, by the screener, as warm or cold (§13.10 reply_pos/neg).
+    const lastOut = [...recent].reverse().find((m) => m.direction === "out" && m._id !== target._id);
+    if (target.kind === "inbound" && lastOut?.ideaId && !recent.some((m) => m.direction === "in" && m._id !== target._id && m.ts > lastOut.ts)) {
+      const screen = await callModel(ctx, { creatorId: creator._id, purpose: "taste_reply", model: REGISTRY.screener.primary, messages: [{ role: "system", content: `A creator was just sent a content idea. Read their reply and answer ONE word: warm (they like it, they're in, they're building on it), cold (they're passing, unconvinced, annoyed), or neutral (a question, a logistics detail, unclear).` }, { role: "user", content: `Idea message: ${lastOut.body.slice(0, 600)}\n\nTheir reply: ${target.body.slice(0, 400)}` }], temperature: 0, maxTokens: 5, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+      const w = screen.ok ? screen.content.trim().toLowerCase() : "";
+      if (w.startsWith("warm") || w.startsWith("cold")) await ctx.runMutation(internal.taste.events.record, { creatorId: creator._id, kind: w.startsWith("warm") ? "reply_pos" : "reply_neg", ideaId: lastOut.ideaId, messageId: target._id });
     }
 
     const prefix = buildPrefix({ creator, directives, skill: CONVERSE_SKILL });

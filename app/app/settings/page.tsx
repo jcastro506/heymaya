@@ -109,6 +109,20 @@ export default function SettingsPage() {
       </section>
 
       <section className="flex flex-col gap-2 text-sm">
+        <h2 className="text-sm uppercase tracking-wide opacity-50">What she&apos;s learned about your taste</h2>
+        {!s.taste.events ? (
+          <p className="opacity-60">Nothing yet. Every heart, &ldquo;not me&rdquo;, shot list and post teaches her; she writes it up here weekly.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <p>{s.taste.note ?? "She has the reactions; the write-up lands after the first few."}</p>
+            {s.taste.likes.length > 0 && <div className="text-xs opacity-70">you take: {s.taste.likes.join(" · ")}</div>}
+            {s.taste.dislikes.length > 0 && <div className="text-xs opacity-70">you pass on: {s.taste.dislikes.join(" · ")}</div>}
+            <p className="text-xs opacity-40">Scores fade over about six weeks, so changing direction is allowed. Correct her above if she has it wrong.</p>
+          </div>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-2 text-sm">
         <h2 className="text-sm uppercase tracking-wide opacity-50">House rules</h2>
         {s.rules.length === 0 ? <p className="opacity-60">None yet. Anything you tell her to always or never do lands here, in your words.</p> : (
           <ul className="flex flex-col gap-2">

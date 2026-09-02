@@ -44,9 +44,12 @@ export default defineSchema({
         tombstonedAt: v.optional(v.number()),
       }),
     ),
+    // §13.10: computed from tasteEvents, decayed, never written by a model
     affinities: v.array(
-      v.object({ key: v.string(), kind: v.union(v.literal("format"), v.literal("topic")), score: v.number(), n: v.number() }),
+      v.object({ key: v.string(), kind: v.string(), score: v.number(), n: v.number(), updatedAt: v.optional(v.number()) }),
     ),
+    // §13.10 (4): the taste profile in prose, weekly rewrite, previous kept
+    taste: v.optional(v.object({ text: v.string(), version: v.number(), updatedAt: v.number(), previous: v.optional(v.string()), eventsSeen: v.number() })),
     experiments: v.array(
       v.object({
         id: v.string(),
@@ -242,6 +245,9 @@ export default defineSchema({
     matchConfidence: v.optional(v.union(v.literal("certain"), v.literal("likely"), v.literal("unsure"), v.literal("no"))),
     status: v.union(v.literal("sent"), v.literal("hearted"), v.literal("posted"), v.literal("passed"), v.literal("expired")),
     formatFingerprint: v.optional(v.string()),
+    // §13.10 (2): named by the writer in the same call that wrote the idea
+    features: v.optional(v.object({ format: v.string(), topics: v.array(v.string()), tone: v.string(), lengthBucket: v.string(), sound: v.string(), source: v.string(), account: v.optional(v.string()) })),
+    newForYou: v.optional(v.boolean()),
     produced,
     createdAt: v.number(),
   })
@@ -297,6 +303,18 @@ export default defineSchema({
   })
     .index("by_creator_start", ["creatorId", "start"])
     .index("by_creator_external", ["creatorId", "externalId"]),
+
+  // -------------------------------------------------------------- tasteEvents
+  // §13.10 (1): one row per signal about an idea, written by code the moment it happens.
+  tasteEvents: defineTable({
+    creatorId: v.id("creators"),
+    ideaId: v.optional(v.id("ideas")),
+    messageId: v.optional(v.id("messages")),
+    kind: v.string(), // posted | blocked | shotlist | heart | save | reply_pos | reply_neg | idea_only | ignored | thumbs_down | notme | unlinked
+    weight: v.number(),
+    features: v.array(v.string()), // "format:skit", "account:@x", "source:breakout", …
+    at: v.number(),
+  }).index("by_creator", ["creatorId", "at"]),
 
   // -------------------------------------------------------------- oauthStates
   // Single-use, 15-minute state tokens for OAuth round trips; the token is the auth.
@@ -375,6 +393,7 @@ export default defineSchema({
     ts: v.number(),
   })
     .index("by_creator", ["creatorId"])
+    .index("by_creator_tg_message", ["creatorId", "telegramMessageId"])
     .index("by_creator_and_ts", ["creatorId", "ts"])
     .index("by_creator_and_dedupe", ["creatorId", "dedupeKey"])
     .index("by_creator_and_awaiting", ["creatorId", "awaitingAnswer"])

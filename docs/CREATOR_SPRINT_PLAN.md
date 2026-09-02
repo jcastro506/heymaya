@@ -720,6 +720,50 @@ Order of checks, each producing the verdict reason if it fails: quiet hours → 
 
 **Validation.** Private or dead accounts are rejected with the reason. Accounts over 1M followers are allowed with a note about transfer. The same account may be admired by any number of creators; it is sampled once.
 
+### 13.10 Taste — how she learns what they like, and gets better every week
+
+**The claim.** Every idea she sends is a question with a measurable answer, and every answer changes the next idea. Personalisation is not a feature; it is the loop every skill sits inside. The dossier says who they are. Taste says what they *take*. The two diverge often (a creator admires skits and only ever posts talking-heads), and she has to hold both.
+
+**1. Evidence is a row: `tasteEvents`.** One row per signal about an idea (or a block, or an opinion), written by code at the moment it happens, never inferred later from a prompt. `{ creatorId, ideaId?, messageId?, kind, weight, features, at }`. Kinds and default weights *(tune)*:
+
+| Kind | When | Weight |
+|---|---|---|
+| `posted` | the match-post skill (§13.5) or their own "posted it" tap | **+3**, ×1.5 if the post beat their baseline, ×0.5 if it fell below |
+| `blocked` | they tapped "block it" on a calendar idea | +2 |
+| `shotlist` | they asked for the shot list | +1.5 |
+| `heart` | 👍 ❤️ 🔥 😂 on the idea message | +1 |
+| `save` | "save" | +1 |
+| `reply_pos` / `reply_neg` | their first reply to an idea, read by the screener as warm or cold (one cheap call, only when an idea's question was just answered) | +1 / −1.5 |
+| `idea_only` | calendar idea kept, block declined | +0.3 |
+| `ignored` | 72 h with no reaction, tap, reply or post | −0.3 |
+| `thumbs_down` | 👎 💩 | −1.5 |
+| `notme` | "not me" | −2 |
+| `unlinked` | they said a matched post wasn't from the idea | −1 on the match, taste unaffected |
+| `rule` | a directive they wrote ("never dance trends") | enforced by code, outside the scores |
+
+**2. Features are named at birth.** The writer that produces an idea also names its features in the same call and they are stored on `ideas.features`: `format` (talking-head, skit, vlog, tutorial, list, reaction, duet, pov, grwm, text-on-screen, other), `topics[] ≤ 3`, `tone` (serious, deadpan, ironic, hype, warm), `lengthBucket` (<15, 15–30, 30–60, 60+), `sound` (trending, original, none), plus what code already knows: `source` (breakout, shape, win, calendar, worth_seeing) and `account` (the admired handle it came from). An event on an idea is an event on every one of its features.
+
+**3. Affinities are computed, decayed, and visible.** `creators.affinities[]: { key: "format:skit", kind, score, n, updatedAt }`. Each event adds its weight to every feature of the idea; scores decay with a 45-day half-life *(tune)* so a creator who changes direction is seen changing. `n` is the count of events behind the score, and it is the confidence: a score of −2 from one "not me" is noise, from three is a pattern. Pure functions, unit-tested, no model.
+
+**4. The taste profile is prose she can read and correct.** Weekly (and after the first three events) the writer turns the affinities and the last twenty events into ≤ 600 characters of plain language, stored on `creators.taste` with the previous version kept: "you take talking-heads and ignore skits even from accounts you admire; you've posted 3 of 11 ideas, all under 30 s; you like it when i'm blunt about hooks." It sits in the prefix between the dossier and the house rules, so every skill reads it on every turn. Settings shows it under "what she's learned about your taste" with the same correct-me control as the dossier; a correction becomes a directive and the next rewrite obeys it.
+
+**5. Where it bites, skill by skill.**
+
+| Skill / stage | What taste changes |
+|---|---|
+| Gate ranking (§13.8) | candidates are re-ordered by their coarse features (source kind, account): `score × (1 + 0.25 × affinity)`. A feature at ≤ −2 with n ≥ 3 is a **rail**: dropped before judgment with the reason "passed on the last three from @x" written to `signals.why`, so she can say why when asked |
+| `scout` | the taste profile in the prefix; each candidate carries a one-line taste hint ("close to 2 you hearted", "like the 3 you passed on"); the explore rule below |
+| Adaptation (their version) | hook style, length and sound default to what they have actually posted, not to what the source post did |
+| `opinion` / `explain-post` | calibrated to their history with the structure in question; and to how they take critique (an argued critique that held is a `reply_neg` on directness, and the register addendum shifts) |
+| Calendar blocks | declined blocks in the morning three times → she stops proposing mornings, and says so |
+| Admired list (§13.9) | an account whose breakouts they keep passing on drops in rank; after three she asks once whether to stop watching it |
+| `weekly-review` | reports **liked vs worked**: the ideas they took, the ones that performed, and where the two disagree, in words. Taste is not the goal; results are. She says when their taste is costing them reach |
+| Cadence | reply hour-of-day histogram → her preferred send hour inside the allowed window |
+
+**6. Explore, so taste does not collapse.** One idea in five *(tune)* is chosen outside the affinity core and flagged `newForYou` in the message ("not your usual, tell me if it's wrong"). An ignored explore idea costs nothing (weight 0); a taken one counts double. This is how she finds the second thing they're good at.
+
+**7. The tests, because "she learns" is not observable.** Decay and weight arithmetic · three "not me" on one account → that account's next breakout is rail-dropped with the reason · a posted idea outweighs any number of hearts · a reaction on an idea message writes exactly one event and flips the idea to `hearted` · ignored ideas expire at 72 h with a −0.3 event · a correction in Settings changes the next profile · cross-tenant: an event can never attach to another creator's idea · the day-1 → day-30 simulation in §15.7 extended with taste: a pass on day 1 shapes ranking on day 30.
+
 ## 14. Data contracts
 
 Contracts are Zod schemas in `contracts/`; the same schemas are handed to Gemini and OpenRouter as `responseSchema`. Prose fields have length caps. Any field that can be unknown has an explicit `unknown` value; nulls are not used for "we don't know".
@@ -869,7 +913,7 @@ The old runtime kept a markdown memory file per agent on a volume, with the harn
 
 | Signal | Computed by | Feeds |
 |---|---|---|
-| Reactions, "Not me," passes, expiries | code → `creators.affinities[]` by `formatFingerprint` and topic | `scout` ranking; after three passes on a shape it stops appearing, and she can say why |
+| Reactions, "Not me," passes, posts, expiries | code → `tasteEvents` → `creators.affinities[]` (§13.10) | every skill, through the taste profile in the prefix; gate ranking and rails; after three passes on a shape it stops appearing, and she can say why |
 | The difference between her hook and the one they actually posted (§13.5 match) | code diff + writer summary | voice and taste in the dossier |
 | Prediction outcomes | code | per-creator calibration of confidence words |
 | Corrections ("Not quite") | directive + `learn-creator` re-run | the dossier |

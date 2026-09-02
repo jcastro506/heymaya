@@ -7,6 +7,7 @@
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import { summarize, type Affinity } from "./taste/affinities";
 
 async function me(ctx: QueryCtx | MutationCtx): Promise<Doc<"creators"> | null> {
   const identity = await ctx.auth.getUserIdentity();
@@ -57,7 +58,7 @@ export const ideas = query({
     const rows = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").take(100)) as Doc<"ideas">[];
     return rows
       .filter((i) => !a.unpostedOnly || i.status !== "posted")
-      .map((i) => ({ id: i._id, status: i.status, fitWhy: i.fitWhy, evidenceLinks: i.evidenceLinks, version: i.version as { hook?: string; onScreenText?: string; lengthSec?: number; sound?: string } | null, messageText: i.messageText, sentAt: i.sentAt ?? null, postedAt: i.postedAt ?? null, matchedPostId: i.matchedPostId ?? null }));
+      .map((i) => ({ id: i._id, status: i.status, reaction: i.reaction ?? null, newForYou: Boolean(i.newForYou), features: i.features ?? null, fitWhy: i.fitWhy, evidenceLinks: i.evidenceLinks, version: i.version as { hook?: string; onScreenText?: string; lengthSec?: number; sound?: string } | null, messageText: i.messageText, sentAt: i.sentAt ?? null, postedAt: i.postedAt ?? null, matchedPostId: i.matchedPostId ?? null }));
   },
 });
 
@@ -107,6 +108,7 @@ export const settings = query({
       knows: d ? { summary: d.persona?.summary ?? null, register: d.persona?.register ?? null, works: (d.works ?? []).map((w) => w.claim), doesNot: (d.doesNot ?? []).map((w) => w.claim), keywords: d.keywords ?? [], mode: d.mode ?? c.mode } : null,
       notes: (c.notes ?? []).filter((n) => !n.tombstonedAt).map((n) => ({ id: n.id, text: n.text, kind: n.kind, at: n.at })),
       rules: directives.map((r) => ({ id: r._id, text: r.verbatim, at: r.createdAt })),
+      taste: { note: c.taste?.text ?? null, updatedAt: c.taste?.updatedAt ?? null, ...summarize((c.affinities ?? []) as Affinity[], Date.now()), events: (await ctx.db.query("tasteEvents").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).take(1)).length > 0 },
     };
   },
 });

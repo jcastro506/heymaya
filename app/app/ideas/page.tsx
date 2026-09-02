@@ -10,6 +10,7 @@ export default function IdeasPage() {
   const [unposted, setUnposted] = useState(false);
   const ideas = useQuery(api.ui.ideas, { unpostedOnly: unposted });
   const pass = useMutation(api.ui.passIdea);
+  const posted = useMutation(api.taste.events.markPosted);
   const [open, setOpen] = useState<string | null>(null);
   if (ideas === undefined) return <p className="opacity-60 text-sm">loading…</p>;
   if (ideas === null) return <p className="text-sm">No account yet.</p>;
@@ -24,7 +25,11 @@ export default function IdeasPage() {
         {ideas.map((i) => (
           <li key={i.id} className="border border-white/10 rounded-lg p-3 text-sm">
             <div className="flex items-center justify-between">
-              <span className={`text-[11px] uppercase tracking-wide px-2 py-0.5 rounded-full border ${CHIP[i.status] ?? ""}`}>{i.status}</span>
+              <span className="flex items-center gap-2">
+                <span className={`text-[11px] uppercase tracking-wide px-2 py-0.5 rounded-full border ${CHIP[i.status] ?? ""}`}>{i.status}</span>
+                {i.reaction && i.reaction !== "removed" && <span className="text-xs">{i.reaction}</span>}
+                {i.newForYou && <span className="text-[11px] opacity-60">not your usual</span>}
+              </span>
               <span className="text-[11px] opacity-50">{i.sentAt ? new Date(i.sentAt).toLocaleDateString() : ""}</span>
             </div>
             <p className="mt-2 whitespace-pre-wrap">{open === i.id ? i.messageText : i.messageText.slice(0, 160) + (i.messageText.length > 160 ? "…" : "")}</p>
@@ -36,10 +41,12 @@ export default function IdeasPage() {
                 {i.version.lengthSec ? <div><b>length</b> · {i.version.lengthSec}s</div> : null}
                 {i.version.sound && <div><b>sound</b> · {i.version.sound}</div>}
                 <div className="opacity-60">why it fits · {i.fitWhy}</div>
+                {i.features && <div className="opacity-50">{[i.features.format, i.features.tone, i.features.lengthBucket, ...i.features.topics].filter((x) => x && x !== "unknown").join(" · ")}</div>}
               </div>
             )}
             <div className="mt-2 flex gap-3 text-xs">
               <button className="underline" onClick={() => setOpen(open === i.id ? null : i.id)}>{open === i.id ? "less" : "the version"}</button>
+              {i.status !== "posted" && <button className="underline opacity-70" onClick={() => posted({ ideaId: i.id })}>posted it</button>}
               {i.status === "sent" && <button className="underline opacity-70" onClick={() => pass({ id: i.id })}>not for me</button>}
             </div>
           </li>

@@ -8,6 +8,7 @@ import { internalQuery } from "../_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import { SOUL, SOUL_VERSION, REGISTER_ADDENDA } from "./soul";
+import { summarize, type Affinity } from "../taste/affinities";
 
 export const RECENT_MESSAGES = 20;
 export const CONTEXT_VERSION = "ctx-2026-09-02.1";
@@ -49,9 +50,17 @@ export function buildPrefix(input: { creator: Doc<"creators">; directives: Doc<"
     REGISTER_ADDENDA[c.tone ?? "friend"],
     `# Skill\n${input.skill}`,
     `# The creator (their dossier, evidence-backed; say "unknown" for anything not in it)\nHandles: ${JSON.stringify(c.handles)}\nTheir words about what they make: ${JSON.stringify(c.niche)}\nTimezone: ${c.timezone}\n${dossier}`,
+    tasteSection(c),
     `# House rules, verbatim (${input.directives.length})\n${input.directives.map((d) => `- ${d.verbatim}`).join("\n") || "- none yet"}`,
     `# Things they told you (${notes.length})\n${notes.map((n) => `- ${n.text}`).join("\n") || "- nothing yet"}`,
   ].join("\n\n");
+}
+
+/** §13.10 (4): what they take, in prose, plus the strongest computed likes and dislikes. */
+function tasteSection(c: Doc<"creators">): string {
+  const { likes, dislikes } = summarize((c.affinities ?? []) as Affinity[], Date.now());
+  const note = c.taste?.text ?? "no note yet — you have not seen enough of their reactions";
+  return `# Their taste (what they actually take from you; weigh it, name what is different when you go against it)\n${note}\nComputed, decayed, (score, count): took ${likes.join(", ") || "nothing yet"} · passed on ${dislikes.join(", ") || "nothing yet"}`;
 }
 
 /** The variable suffix: the recent conversation, oldest first, then the message being answered. */

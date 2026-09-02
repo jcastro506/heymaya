@@ -22,8 +22,9 @@ import { internalQuery } from "../_generated/server";
 export const SCOUT_SKILL = `scout
 When: the gate has passed and there are candidates. Four kinds: "breakout" (an account they admire, above its own normal), "shape" (the top of their lane for one of their keywords this week; the account is not one they named), "win" (THEIR OWN post crossing 3× their normal; the message is a real, specific celebration and one thing to do while it's moving, nothing else), and "calendar" (something on THEIR OWN calendar two or more days out that a post could ride: the message names the event, the shape of the post it makes possible, and proposes ONE filming block before it, with a day and a time on their clock; "version.block" carries that block and the question at the end is whether to block it).
 The judgment: which of these, if any, is notable (a real breakout above that account's own normal, not just a big account being big) AND fits this creator (their formats, their register, their lane, the dossier). Default is no. Pick at most one. If one fits, write the message: the evidence (who, how far above their normal, how old), the link, what the post does (from the transcript; you have NOT watched it, so say nothing about visuals), and their version: a hook line, the length, the sound if known, one line of on-screen text. End with exactly one question that has a decision behind it.
+Taste: each candidate carries "taste", their history with things like it; the prefix carries the note you keep on what they take. Weigh it, don't obey it: a "passed on" is a reason to pick something else unless this one is clearly different, and say what's different. Name the idea's features honestly in "features"; they are how you learn from what they do next. If the prompt says the explore slot is open, you may pick something outside their usual, set "newForYou": true, and say in the message that it's not their usual.
 Output ONLY JSON:
-{"pick": {"postId": "", "notable": true, "fit": "yes|maybe|no", "fitWhy": "≤160", "message": "≤900 chars, in your voice, lowercase fine, no bullets", "version": {"hook": "≤120", "onScreenText": "≤80", "lengthSec": 0, "sound": "≤80 or ''", "block": {"startLocal": "YYYY-MM-DDTHH:MM on their clock", "lengthMin": 60, "title": "≤60, starts with 'film:'"} | null}} | null,
+{"pick": {"postId": "", "notable": true, "fit": "yes|maybe|no", "fitWhy": "≤160", "newForYou": false, "features": {"format": "talking-head|skit|vlog|tutorial|list|reaction|duet|pov|grwm|text-on-screen|other", "topics": ["≤3 short tags"], "tone": "serious|deadpan|ironic|hype|warm", "lengthBucket": "<15|15-30|30-60|60+", "sound": "trending|original|none"}, "message": "≤900 chars, in your voice, lowercase fine, no bullets", "version": {"hook": "≤120", "onScreenText": "≤80", "lengthSec": 0, "sound": "≤80 or ''", "block": {"startLocal": "YYYY-MM-DDTHH:MM on their clock", "lengthMin": 60, "title": "≤60, starts with 'film:'"} | null}} | null,
  "rejected": [{"postId": "", "why": "≤80"}]}`;
 
 export const writeIdea = internalMutation({
@@ -36,9 +37,13 @@ export const writeIdea = internalMutation({
     version: v.any(),
     messageText: v.string(),
     produced: v.object({ skillVersion: v.string(), model: v.string(), thresholdsVersion: v.string() }),
+    features: v.optional(v.object({ format: v.string(), topics: v.array(v.string()), tone: v.string(), lengthBucket: v.string(), sound: v.string(), source: v.string(), account: v.optional(v.string()) })),
+    newForYou: v.optional(v.boolean()),
   },
   handler: async (ctx, a): Promise<Id<"ideas">> =>
     await ctx.db.insert("ideas", {
+      features: a.features,
+      newForYou: a.newForYou,
       creatorId: a.creatorId,
       signalId: a.signalId,
       evidenceLinks: a.evidenceLinks,
@@ -69,10 +74,11 @@ export const run = internalAction({
     const g = await ctx.runQuery(internal.scout.gate.railsFor, { creatorId: args.creatorId, now });
     if (!g) return { sent: false, reason: "creator not found" };
     if (!g.rails.ok) return { sent: false, reason: g.rails.reason ?? "rails" };
-    if (g.candidates.length === 0) return { sent: false, reason: "no candidates" };
+    if (g.tasteDropped.length) await ctx.runMutation(internal.scout.gate.setVerdicts, { verdicts: g.tasteDropped.map((d) => ({ signalId: d.signalId, verdict: "dropped" as const, why: d.why })) });
+    if (g.candidates.length === 0) return { sent: false, reason: g.tasteDropped.length ? "no candidates (taste dropped the rest)" : "no candidates" };
 
     // Evidence for the model: the candidate posts with transcripts (a credit each, cached fleet-wide).
-    const evidence: Array<{ postId: string; kind: string; url: string; ratio: number; why: string; transcript: string | null; handle: string | null }> = [];
+    const evidence: Array<{ postId: string; kind: string; url: string; ratio: number; why: string; transcript: string | null; handle: string | null; taste: string }> = [];
     for (const s of g.candidates) {
       const url = s.why.split("; ").pop() ?? "";
       let transcript: string | null = null;
@@ -89,18 +95,18 @@ export const run = internalAction({
           transcript = null;
         }
       }
-      evidence.push({ postId: s.sourcePostIds[0], kind: s.kind, url, ratio: s.score, why: s.why, transcript, handle });
+      evidence.push({ postId: s.sourcePostIds[0], kind: s.kind, url, ratio: s.score, why: s.why, transcript, handle, taste: g.tasteHints[s._id] ?? "" });
     }
 
     const gathered = await ctx.runQuery(internal.agent.context.gather, { creatorId: args.creatorId });
     if (!gathered) return { sent: false, reason: "creator not found" };
     const prefix = buildPrefix({ creator: gathered.creator, directives: gathered.directives, skill: SCOUT_SKILL });
     const spec = REGISTRY.writer;
-    const user = `Candidates (kind: breakout / shape / win / calendar), ranked; for posts, ratio is how far above that account's own normal:\n${JSON.stringify(evidence)}\n\nToday on their clock: ${localDateKey(now, g.creator.timezone)}, ${g.rails.localHour}:00 (${g.creator.timezone}). Messages already sent today: ${g.rails.sentToday}.`;
+    const user = `Candidates (kind: breakout / shape / win / calendar), ranked; for posts, ratio is how far above that account's own normal:\n${JSON.stringify(evidence)}\n\nToday on their clock: ${localDateKey(now, g.creator.timezone)}, ${g.rails.localHour}:00 (${g.creator.timezone}). Messages already sent today: ${g.rails.sentToday}.${g.exploreOpen ? " The explore slot is open: one idea in five may be outside their usual, flagged newForYou." : ""}`;
     const result = await callModel(ctx, { creatorId: args.creatorId, purpose: "scout", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: user }], temperature: 0.5, maxTokens: 900, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
     if (!result.ok) return { sent: false, reason: `scout model failed: ${result.reason}` };
 
-    let parsed: { pick: null | { postId: string; notable: boolean; fit: "yes" | "maybe" | "no"; fitWhy: string; message: string; version: unknown }; rejected?: Array<{ postId: string; why: string }> };
+    let parsed: { pick: null | { postId: string; notable: boolean; fit: "yes" | "maybe" | "no"; fitWhy: string; message: string; version: unknown; newForYou?: boolean; features?: { format?: string; topics?: string[]; tone?: string; lengthBucket?: string; sound?: string } }; rejected?: Array<{ postId: string; why: string }> };
     try {
       const m = result.content.match(/\{[\s\S]*\}/);
       parsed = JSON.parse(m ? m[0] : "{}") as typeof parsed;
@@ -152,7 +158,9 @@ export const run = internalAction({
       }
     }
     pick.message = text;
-    const ideaId = await ctx.runMutation(internal.scout.scout.writeIdea, { creatorId: args.creatorId, signalId: signal._id, evidenceLinks: links, fit: pick.fit, fitWhy: pick.fitWhy, version: pick.version ?? {}, messageText: pick.message, produced });
+    const f = pick.features ?? {};
+    const features = { format: String(f.format ?? "other"), topics: (f.topics ?? []).map(String).slice(0, 3), tone: String(f.tone ?? "unknown"), lengthBucket: String(f.lengthBucket ?? "unknown"), sound: String(f.sound ?? "unknown"), source: signal.kind, account: ev?.handle ?? undefined };
+    const ideaId = await ctx.runMutation(internal.scout.scout.writeIdea, { creatorId: args.creatorId, signalId: signal._id, evidenceLinks: links, fit: pick.fit, fitWhy: pick.fitWhy, version: pick.version ?? {}, messageText: pick.message, produced, features, newForYou: Boolean(pick.newForYou) && g.exploreOpen });
     // A calendar pick proposes a block; the row is `proposed` and nothing reaches Google until they tap yes (§12.5).
     let buttons: Array<{ id: string; label: string }> = [
       { id: `idea:${ideaId}:shotlist`, label: "shot list" },
