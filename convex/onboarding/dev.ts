@@ -55,6 +55,7 @@ export const status = internalQuery({
     const jobs = (await ctx.db.query("jobs").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"jobs">[];
     const messages = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(10)) as Doc<"messages">[];
     const costs = await ctx.db.query("costEvents").withIndex("by_creator_at", (q) => q.eq("creatorId", a.creatorId)).collect();
+    const signals = (await ctx.db.query("signals").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(10)) as Doc<"signals">[];
     return {
       mode: creator.mode,
       dossierVersion: creator.dossierVersion,
@@ -65,6 +66,7 @@ export const status = internalQuery({
       jobs: jobs.map((j) => ({ kind: j.kind, status: j.status, attempts: j.attempts, lastError: j.lastError })),
       messages: messages.map((m) => ({ dir: m.direction, kind: m.kind, body: m.body.slice(0, 160), delivered: m.deliveredAt ? true : m.deliveryError ?? "pending" })),
       spendUsd: costs.reduce((s, c) => s + c.costUsd, 0),
+      signals: signals.map((x) => ({ kind: x.kind, score: x.score, verdict: x.verdict, why: x.why.slice(0, 200) })),
     };
   },
 });

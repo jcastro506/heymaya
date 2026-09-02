@@ -61,6 +61,7 @@ import type * as scout_sampler from "../scout/sampler.js";
 import type * as scout_scout from "../scout/scout.js";
 import type * as scout_sweep from "../scout/sweep.js";
 import type * as telegram_webhook from "../telegram/webhook.js";
+import type * as ui from "../ui.js";
 
 import type {
   ApiFromModules,
@@ -122,6 +123,7 @@ declare const fullApi: ApiFromModules<{
   "scout/scout": typeof scout_scout;
   "scout/sweep": typeof scout_sweep;
   "telegram/webhook": typeof telegram_webhook;
+  ui: typeof ui;
 }>;
 
 /**

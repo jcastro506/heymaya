@@ -2,9 +2,11 @@
  * A valid `creators` row for tests. Every ported test seeds through this so a schema
  * change is one edit, not thirty. Overrides win.
  */
-import type { Id } from "../../convex/_generated/dataModel";
+import type { WithoutSystemFields } from "convex/server";
+import type { Doc, Id } from "../../convex/_generated/dataModel";
+import type { MutationCtx } from "../../convex/_generated/server";
 
-type InsertCtx = { db: { insert: (table: "creators", value: Record<string, unknown>) => Promise<Id<"creators">> } };
+type InsertCtx = Pick<MutationCtx, "db">;
 
 export function creatorRow(suffix: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const now = overrides.createdAt ?? Date.UTC(2026, 6, 3, 9, 0, 0);
@@ -30,5 +32,5 @@ export function creatorRow(suffix: string, overrides: Record<string, unknown> = 
 }
 
 export async function seedCreator(ctx: InsertCtx, suffix: string, overrides: Record<string, unknown> = {}): Promise<Id<"creators">> {
-  return await ctx.db.insert("creators", creatorRow(suffix, overrides));
+  return await ctx.db.insert("creators", creatorRow(suffix, overrides) as WithoutSystemFields<Doc<"creators">>);
 }
