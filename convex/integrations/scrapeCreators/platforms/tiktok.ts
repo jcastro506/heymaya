@@ -901,52 +901,76 @@ export const tiktok = {
     );
     return tiktokResearchResult("tiktok_search_keyword", query, raw);
   },
+  /**
+   * TikTok's "Top" tab: the only search that returns photo carousels alongside
+   * videos (`content_type`). Same time-frame and sort vocabulary as keyword
+   * search, but the parameter is `publish_time`, not `date_posted`.
+   */
   async searchTop(
     queryText: string,
-    deps?: EndpointDeps
+    options?: EndpointDeps & TikTokSearchKeywordOptions
   ): Promise<TikTokResearchResult> {
-    const query = { query: queryText };
-    const raw = await clientOf(deps).request<unknown>(
+    const query: Record<string, string | number | boolean | undefined> = {
+      query: queryText,
+    };
+    if (options?.datePosted !== undefined) query.publish_time = options.datePosted;
+    if (options?.sortBy !== undefined) query.sort_by = options.sortBy;
+    if (options?.region !== undefined) query.region = options.region;
+    if (options?.cursor !== undefined) query.cursor = options.cursor;
+    const raw = await clientOf(options).request<unknown>(
       "/v1/tiktok/search/top",
       { query }
     );
     return tiktokResearchResult("tiktok_search_top", query, raw);
   },
+  /**
+   * The For You feed as seen from `region`. No pagination: each call is a fresh
+   * batch with overlap, so the sweep calls it a few times a day fleet-wide and
+   * dedupes by `aweme_id` (plan §3.2, `trending.tiktok`).
+   */
   async trendingFeed(
     region: string,
-    deps?: EndpointDeps
+    options?: EndpointDeps & { trim?: boolean }
   ): Promise<TikTokResearchResult> {
-    const query = { region };
-    const raw = await clientOf(deps).request<unknown>(
+    const query: Record<string, string | number | boolean | undefined> = { region };
+    if (options?.trim !== undefined) query.trim = options.trim;
+    const raw = await clientOf(options).request<unknown>(
       "/v1/tiktok/get-trending-feed",
       { query }
     );
     return tiktokResearchResult("tiktok_trending_feed", query, raw);
   },
-  async popularVideos(deps?: EndpointDeps): Promise<TikTokResearchResult> {
-    const raw = await clientOf(deps).request<unknown>(
-      "/v1/tiktok/videos/popular"
+  /**
+   * Discovery for the admired list (plan §13.9): creators in a follower band and
+   * country, sortable by engagement. NOT the Creative Center; the vendor
+   * sources this from the Creator Marketplace.
+   *
+   * Retired and deliberately absent: `/v1/tiktok/videos/popular`,
+   * `/v1/tiktok/songs/popular` (gone from the OpenAPI spec, doc pages render
+   * the intro page) and `/v1/tiktok/hashtags/popular` (retired 2026-07-16).
+   */
+  async popularCreators(
+    options?: EndpointDeps & TikTokPopularCreatorsOptions
+  ): Promise<RawScrapeCreatorsResult> {
+    const query: Record<string, string | number | boolean | undefined> = {};
+    if (options?.followerCount !== undefined) query.followerCount = options.followerCount;
+    if (options?.creatorCountry !== undefined) query.creatorCountry = options.creatorCountry;
+    if (options?.audienceCountry !== undefined) query.audienceCountry = options.audienceCountry;
+    if (options?.sortBy !== undefined) query.sortBy = options.sortBy;
+    if (options?.page !== undefined) query.page = options.page;
+    const raw = await clientOf(options).request<unknown>(
+      "/v1/tiktok/creators/popular",
+      { query }
     );
-    return tiktokResearchResult("tiktok_popular_videos", {}, raw);
+    return rawResult("tiktok_popular_creators", query, raw);
   },
-  async popularCreators(deps?: EndpointDeps): Promise<RawScrapeCreatorsResult> {
-    const raw = await clientOf(deps).request<unknown>(
-      "/v1/tiktok/creators/popular"
-    );
-    return rawResult("tiktok_popular_creators", {}, raw);
-  },
-  async popularHashtags(deps?: EndpointDeps): Promise<RawScrapeCreatorsResult> {
-    const raw = await clientOf(deps).request<unknown>(
-      "/v1/tiktok/hashtags/popular"
-    );
-    return rawResult("tiktok_popular_hashtags", {}, raw);
-  },
-  async popularSongs(deps?: EndpointDeps): Promise<RawScrapeCreatorsResult> {
-    const raw = await clientOf(deps).request<unknown>(
-      "/v1/tiktok/songs/popular"
-    );
-    return rawResult("tiktok_popular_songs", {}, raw);
-  },
+  /**
+   * Sound details. `clipId` is the id in a sound URL
+   * (`tiktok.com/music/Name-7370375686554782506`), NOT the song id, and it is
+   * a string end to end: TikTok ids exceed `Number.MAX_SAFE_INTEGER`, so
+   * anything that goes through a JS number is silently corrupted. Use
+   * `extractClipId` on raw post objects; never `Number(...)` an id.
+   */
   async song(
     clipId: string,
     deps?: EndpointDeps
@@ -959,13 +983,78 @@ export const tiktok = {
   },
   async songVideos(
     clipId: string,
-    deps?: EndpointDeps
+    options?: EndpointDeps & { cursor?: string }
   ): Promise<TikTokResearchResult> {
-    const query = { clipId };
-    const raw = await clientOf(deps).request<unknown>("/v1/tiktok/song/videos", {
+    const query: Record<string, string | number | boolean | undefined> = { clipId };
+    if (options?.cursor !== undefined) query.cursor = options.cursor;
+    const raw = await clientOf(options).request<unknown>("/v1/tiktok/song/videos", {
       query,
     });
     return tiktokResearchResult("tiktok_song_videos", query, raw);
   },
+  /** Autocomplete as a demand signal (plan §12.1). 1 credit, daily per lane keyword. */
+  async searchSuggestions(
+    queryText: string,
+    options?: EndpointDeps & { region?: string }
+  ): Promise<RawScrapeCreatorsResult> {
+    const query: Record<string, string | number | boolean | undefined> = { query: queryText };
+    if (options?.region !== undefined) query.region = options.region;
+    const raw = await clientOf(options).request<unknown>(
+      "/v1/tiktok/search/suggestions",
+      { query }
+    );
+    return rawResult("tiktok_search_suggestions", query, raw);
+  },
+  /** The account's region code (`US`, `MX`, …); drives which trending feed a creator sees. */
+  async profileRegion(
+    handle: string,
+    deps?: EndpointDeps
+  ): Promise<{ region: string | null; raw: unknown }> {
+    const raw = await clientOf(deps).request<unknown>("/v1/tiktok/profile/region", {
+      query: { handle: handle.replace(/^@/, "") },
+    });
+    const region = str((raw as { region?: unknown })?.region);
+    return { region, raw };
+  },
+  /**
+   * A creator's public collection ("playlist"): the videos they saved, which is
+   * their own swipe file. Onboarding only (plan §13.1), feeds dossier interests.
+   */
+  async collectionVideos(
+    collectionUrl: string,
+    options?: EndpointDeps & { cursor?: string }
+  ): Promise<TikTokResearchResult> {
+    const query: Record<string, string | number | boolean | undefined> = { url: collectionUrl };
+    if (options?.cursor !== undefined) query.cursor = options.cursor;
+    const raw = await clientOf(options).request<unknown>(
+      "/v1/tiktok/collection/videos",
+      { query }
+    );
+    // Collection responses use TikTok's web shape (`videos[]` with `stats`),
+    // not `aweme_list`; the research normalizer accepts both.
+    return tiktokResearchResult("tiktok_collection_videos", query, raw);
+  },
 };
+
+export interface TikTokPopularCreatorsOptions {
+  followerCount?: "10K-100K" | "100K-1M" | "1M-10M" | "10M+";
+  creatorCountry?: string;
+  audienceCountry?: string;
+  sortBy?: "engagement" | "follower" | "avg_views";
+  page?: number;
+}
+
+/**
+ * Read a sound's clip id off a raw post object as a STRING. Prefers `id_str`;
+ * falls back to a string-typed `id`; refuses a numeric `id` above
+ * MAX_SAFE_INTEGER rather than returning a corrupted value.
+ */
+export function extractClipId(rawPost: unknown): string | null {
+  const music = (rawPost as { music?: { id_str?: unknown; id?: unknown } } | null)?.music;
+  if (!music) return null;
+  if (typeof music.id_str === "string" && music.id_str) return music.id_str;
+  if (typeof music.id === "string" && music.id) return music.id;
+  if (typeof music.id === "number" && Number.isSafeInteger(music.id)) return String(music.id);
+  return null;
+}
 
