@@ -9,7 +9,7 @@
 import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
-import type { Doc } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 
 export const seed = internalMutation({
   args: { tiktok: v.optional(v.string()), instagram: v.optional(v.string()), niche: v.optional(v.string()), timezone: v.optional(v.string()), email: v.optional(v.string()), admired: v.optional(v.array(v.string())) },
@@ -149,5 +149,20 @@ export const probeModel = internalAction({
     const { callOpenRouter } = await import("../integrations/openrouter/client");
     const r = await callOpenRouter({ model: a.model, messages: [{ role: "system", content: "Answer with one word." }, { role: "user", content: "Say ok." }], temperature: 0, maxTokens: a.maxTokens ?? 200, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
     return r.ok ? { ok: true, content: r.content.slice(0, 80), usage: r.usage } : { ok: false, reason: r.reason };
+  },
+});
+
+/** Dev only: a plausible breakout candidate for an admired account, so the scout and its evals have something worth judging. */
+export const seedBreakout = internalMutation({
+  args: { creatorId: v.id("creators"), handle: v.string(), ratio: v.number(), url: v.string() },
+  handler: async (ctx, a): Promise<{ signalId: Id<"signals"> }> => {
+    const now = Date.now();
+    let tracked = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).filter((q) => q.eq(q.field("handle"), a.handle)).first()) as Doc<"trackedAccounts"> | null;
+    if (!tracked) {
+      const id = await ctx.db.insert("trackedAccounts", { creatorId: a.creatorId, platform: "tiktok", handle: a.handle, status: "active", addedBy: "creator", baselineN: 12, medianPace24h: 4000, createdAt: now } as never);
+      tracked = (await ctx.db.get(id)) as Doc<"trackedAccounts">;
+    }
+    const signalId = await ctx.db.insert("signals", { creatorId: a.creatorId, kind: "breakout", sourcePostIds: [a.url.split("/").pop() ?? "p"], trackedAccountId: tracked._id, score: a.ratio, corroboration: { accounts: 2, soundRising: false }, verdict: "pending", why: `${a.ratio}x their normal after 9h (${Math.round(a.ratio * 4000 * 9).toLocaleString()} views vs a normal of ${(4000 * 9).toLocaleString()} at this age); ${a.url}`, thresholdsVersion: "dev", createdAt: now });
+    return { signalId };
   },
 });

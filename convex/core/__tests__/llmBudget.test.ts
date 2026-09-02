@@ -26,7 +26,7 @@ describe("budgetFor", () => {
 
   it("leaves a non-reasoning model's budget exactly as asked", () => {
     // Paying for headroom nothing uses is a silent cost increase.
-    expect(budgetFor("google/gemini-3.1-flash-lite", 300)).toBe(300);
+    expect(budgetFor("openai/gpt-oss-120b", 300)).toBe(300);
     expect(budgetFor("openai/gpt-oss-120b", 600)).toBe(600);
   });
 
@@ -54,7 +54,7 @@ describe("isReasoningModel", () => {
   });
 
   it("does not match the cheap judge tiers", () => {
-    expect(isReasoningModel("google/gemini-3.1-flash-lite")).toBe(false);
+    expect(isReasoningModel("google/gemini-3.1-flash-lite")).toBe(true); // Gemini 3.x thinks; measured 2026-09-02 (first reads trailed off on 500 tokens)
     expect(isReasoningModel("openai/gpt-oss-120b")).toBe(false);
   });
 
