@@ -110,3 +110,9 @@ Running handoff. Newest at the bottom. Read the **Blocked on you** section first
 - profile-creator on demand: "why is @stoolpresidente growing" came back in four lines, live. **Fixture caveat**: with zero ScrapeCreators credits the fixture client answers every handle with the same spec example, so the numbers she cited were the seeded creator's own post. Real credits make this real; the skill and routing are done.
 - The first week is a schedule row (`creators.firstWeek`); the day-4 invitation to send a draft is hers to initiate. "save" keeps the idea (`savedAt`) and Ideas can filter to saved.
 - Plan §6 now opens with a status block: built · not built · operator-gated. 255 tests, CI green.
+
+## 14:05–14:20 PT — Zernio connections
+
+- Read half ported (`convex/integrations/zernio/index.ts`, `convex/connections/zernio.ts`): one profile per creator persisted before the redirect, OAuth kickoff from Settings (paid plans only), webhook `/zernio/webhook` (HMAC over the raw body; 401 on a bad signature, verified live), reconcile on return, needsReconnect drives state, deletion removes accounts then the profile. `probeAnalytics` records the analytics shape into `vendorHealth` before anything depends on it.
+- The dev webhook subscription was sent to Zernio with a fresh `ZERNIO_WEBHOOK_SECRET` on the dev deployment; Zernio's create response carried no id, so the listing call below is the check. **Clarified for Josh**: Fly is not in this stack; the `FLY_API_TOKEN` item is only a legacy secret to rotate because it was echoed into a shell error overnight.
+- **Operator**: connect one throwaway TikTok or Instagram account from Settings (Zernio's OAuth screen needs a human login), then run `arch -arm64 npx convex run connections/zernio:probeAnalytics '{"creatorId":"…"}'` and read `vendorHealth`. That result decides how own-account numbers merge into `ownPosts` with the `zernio` source label.

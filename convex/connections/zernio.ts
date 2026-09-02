@@ -13,7 +13,7 @@ import { action, httpAction, internalAction, internalMutation, internalQuery, qu
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { creatorForIdentity } from "../core/identity";
-import { accountsHealth, connectUrl, createProfile, deleteAccount, deleteProfile, listAccounts, postAnalytics, verifySignature, zernioClient, ZERNIO_SIGNATURE_HEADER, ZernioError, subscribeWebhook, type ZernioAccount } from "../integrations/zernio";
+import { accountsHealth, connectUrl, createProfile, deleteAccount, deleteProfile, listAccounts, postAnalytics, verifySignature, zernioClient, ZERNIO_SIGNATURE_HEADER, ZernioError, subscribeWebhook, listWebhooks, type ZernioAccount } from "../integrations/zernio";
 
 function client() {
   return zernioClient(process.env.ZERNIO_API_KEY ?? "");
@@ -259,4 +259,10 @@ export const recordHealth = internalMutation({
 export const subscribeDeploymentWebhook = internalAction({
   args: { url: v.string(), secret: v.string() },
   handler: async (_ctx, a): Promise<{ id: string }> => await subscribeWebhook(client(), { name: "Maya creator", url: a.url, secret: a.secret }),
+});
+
+/** Dev/operator: what Zernio has on file for this account's webhooks. */
+export const listDeploymentWebhooks = internalAction({
+  args: {},
+  handler: async (): Promise<unknown> => await listWebhooks(client()),
 });

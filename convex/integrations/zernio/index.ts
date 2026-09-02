@@ -130,6 +130,10 @@ export async function subscribeWebhook(c: ZernioClient, args: { name: string; ur
   return { id: raw?._id ?? raw?.id ?? "" };
 }
 
+export async function listWebhooks(c: ZernioClient): Promise<unknown> {
+  return await c.request("/api/v1/webhooks/settings");
+}
+
 export const ZERNIO_SIGNATURE_HEADER = "x-zernio-signature";
 
 /** HMAC-SHA256 over the raw body, hex, compared in constant time. The header may carry a `sha256=` prefix. */
