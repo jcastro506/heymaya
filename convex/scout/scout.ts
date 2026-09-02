@@ -71,7 +71,7 @@ export const linkIdeaMessage = internalMutation({
 /** One creator's scout pass. Rails → candidates → the skill → at most one message. */
 export const run = internalAction({
   args: { creatorId: v.id("creators"), dryRun: v.optional(v.boolean()) },
-  handler: async (ctx, args): Promise<{ sent: boolean; reason: string; dry?: { message: string; pick: unknown; evidence: unknown; trace: unknown } }> => {
+  handler: async (ctx, args): Promise<{ sent: boolean; reason: string; dry?: { message: string; pick: unknown; rejected?: unknown; evidence: unknown; trace: unknown } }> => {
     const now = Date.now();
     const g = await ctx.runQuery(internal.scout.gate.railsFor, { creatorId: args.creatorId, now });
     if (!g) return { sent: false, reason: "creator not found" };
@@ -135,7 +135,7 @@ export const run = internalAction({
     }
 
     if (!pick || !pick.message?.trim()) {
-      if (args.dryRun) return { sent: false, reason: "nothing worth their time today", dry: { message: "", pick: parsed.pick, evidence, trace: inv.trace } };
+      if (args.dryRun) return { sent: false, reason: "nothing worth their time today", dry: { message: "", pick: parsed.pick, rejected: parsed.rejected ?? [], evidence, trace: inv.trace } };
       await ctx.runMutation(internal.scout.gate.setVerdicts, { verdicts });
       return { sent: false, reason: "nothing worth their time today" };
     }
