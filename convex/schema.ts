@@ -325,6 +325,9 @@ export default defineSchema({
     deliveryError: v.optional(v.string()),
     telegramMessageId: v.optional(v.string()),
     telegramUpdateId: v.optional(v.number()),
+    fileId: v.optional(v.id("_storage")), // an inbound file, stored for the classifier (§15.3)
+    fileMime: v.optional(v.string()),
+    fileUniqueId: v.optional(v.string()),
     buttons: v.optional(v.array(v.object({ id: v.string(), label: v.string() }))),
     links: v.optional(v.array(v.string())),
     ideaId: v.optional(v.id("ideas")),

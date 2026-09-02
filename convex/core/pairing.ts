@@ -134,6 +134,7 @@ export const claimPairing = internalMutation({
 
     await ctx.db.patch(creator._id, {
       telegramChatId: args.chatId,
+      channel: { paired: true, pairedAt: now },
       // One-shot. Cleared on claim, not on expiry.
       pairingToken: undefined,
       pairingExpiresAt: undefined,
