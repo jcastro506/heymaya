@@ -26,6 +26,7 @@ export const record = internalMutation({
     promptTokens: v.optional(v.number()),
     completionTokens: v.optional(v.number()),
     now: v.optional(v.number()),
+    costSource: v.optional(v.union(v.literal("vendor_reported"), v.literal("endpoint_table"), v.literal("tier_table"))),
   },
   handler: async (ctx, a) => {
     await ctx.db.insert("costEvents", {
@@ -34,7 +35,7 @@ export const record = internalMutation({
       kind: `${a.purpose}:${a.resource}`,
       units: (a.promptTokens ?? 0) + (a.completionTokens ?? 0),
       costUsd: a.costUsd ?? 0,
-      costSource: "vendor_reported",
+      costSource: a.costSource ?? "vendor_reported",
       environment: process.env.ENVIRONMENT_NAME ?? "local",
       at: a.now ?? Date.now(),
     });

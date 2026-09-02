@@ -188,6 +188,17 @@ export const run = internalAction({
     }
     readFrom.transcripts = transcribed;
 
+    // Pass three: watch the sample (Gemini, one post per call). Degrades per post, never blocks.
+    let cards: Array<{ postId: string; depth: string; card: unknown }> = [];
+    try {
+      const w = await ctx.runAction(internal.onboarding.watch.run, { creatorId: creator._id });
+      readFrom.watched = w.watched;
+      const reads = await ctx.runQuery(internal.onboarding.watch.readsFor, { creatorId: creator._id });
+      cards = reads.map((r) => ({ postId: (r.card as { postId?: string })?.postId ?? "", depth: r.depth, card: r.card }));
+    } catch (err) {
+      console.error(`[ingest] watch pass failed: ${String(err)}`);
+    }
+
     // Synthesis: one writer call over everything, validated before it is written.
     const fresh = await ctx.runQuery(internal.onboarding.ingest.ownPostsFor, { creatorId: creator._id });
     const digest = fresh.slice(0, 200).map((r) => ({
@@ -202,8 +213,9 @@ export const run = internalAction({
       transcript: r.transcript ? r.transcript.slice(0, 600) : null,
       sample: r.sample ?? null,
     }));
-    const system = `${SOUL}\n\n# Skill: learn-creator\nYou are writing the creator's dossier from their own posts. Every claim must cite post ids from the data. Say "unknown" where the data is silent. Do not invent visuals: you have captions, transcripts and numbers only tonight. Output ONLY JSON matching this shape:\n${DOSSIER_JSON_SHAPE}`;
-    const user = `Creator handles: ${JSON.stringify(creator.handles)}\nTheir sentence about what they make: ${JSON.stringify(creator.niche)}\nMode: ${mode} (posts read: ${posts}, baseline median views of last 20: ${baseline ?? "unknown"})\n\nPosts (newest first):\n${JSON.stringify(digest)}`;
+    const system = `${SOUL}\n\n# Skill: learn-creator\nYou are writing the creator's dossier from their own posts. Every claim must cite post ids from the data. Say "unknown" where the data is silent. Do not invent visuals: you may describe how a post looks ONLY from the watched cards; everything else is captions, transcripts and numbers. Output ONLY JSON matching this shape:\n${DOSSIER_JSON_SHAPE}`;
+    const watchedCards = cards.filter((c) => c.depth === "watch").slice(0, 40);
+    const user = `Creator handles: ${JSON.stringify(creator.handles)}\nTheir sentence about what they make: ${JSON.stringify(creator.niche)}\nMode: ${mode} (posts read: ${posts}, baseline median views of last 20: ${baseline ?? "unknown"})\n\nPosts (newest first):\n${JSON.stringify(digest)}\n\nWatched cards (${watchedCards.length}; these are the only posts you may describe visually):\n${JSON.stringify(watchedCards)}`;
     const spec = REGISTRY.writer;
     let result = await callModel(ctx, { creatorId: creator._id, purpose: "learn_creator", model: spec.primary, messages: [{ role: "system", content: system }, { role: "user", content: user }], temperature: 0.3, maxTokens: 3000, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
     if (!result.ok) result = await callModel(ctx, { creatorId: creator._id, purpose: "learn_creator_fallback", model: spec.fallback, messages: [{ role: "system", content: system }, { role: "user", content: user }], temperature: 0.3, maxTokens: 3000, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
