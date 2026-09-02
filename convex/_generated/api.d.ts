@@ -8,9 +8,12 @@
  * @module
  */
 
+import type * as agent_commands from "../agent/commands.js";
 import type * as agent_context from "../agent/context.js";
 import type * as agent_converse from "../agent/converse.js";
 import type * as agent_critic from "../agent/critic.js";
+import type * as agent_inbound from "../agent/inbound.js";
+import type * as agent_opinion from "../agent/opinion.js";
 import type * as agent_registry from "../agent/registry.js";
 import type * as agent_soul from "../agent/soul.js";
 import type * as calendar_blocks from "../calendar/blocks.js";
@@ -80,9 +83,12 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "agent/commands": typeof agent_commands;
   "agent/context": typeof agent_context;
   "agent/converse": typeof agent_converse;
   "agent/critic": typeof agent_critic;
+  "agent/inbound": typeof agent_inbound;
+  "agent/opinion": typeof agent_opinion;
   "agent/registry": typeof agent_registry;
   "agent/soul": typeof agent_soul;
   "calendar/blocks": typeof calendar_blocks;

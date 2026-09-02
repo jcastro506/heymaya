@@ -12,6 +12,7 @@ import { callModel } from "../core/llm";
 import { REGISTRY } from "./registry";
 import { buildPrefix, buildSuffix, producedStamp } from "./context";
 import { deliverNow } from "../core/scheduler";
+import { classifyInbound, type Route } from "./inbound";
 import { internalMutation, internalQuery } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 
@@ -52,15 +53,49 @@ export const messageByTelegramId = internalQuery({
 });
 
 export const run = internalAction({
-  args: { creatorId: v.id("creators"), messageId: v.id("messages") },
+  args: { creatorId: v.id("creators"), messageId: v.id("messages"), rerouted: v.optional(v.boolean()) },
   handler: async (ctx, args): Promise<{ ok: boolean; reason?: string }> => {
     const gathered = await ctx.runQuery(internal.agent.context.gather, { creatorId: args.creatorId, messageId: args.messageId });
     if (!gathered) return { ok: false, reason: "creator not found" };
     const { creator, directives, recent, target } = gathered;
     if (!target) return { ok: false, reason: "message not found" };
 
-    // Commands were handled before a job existed (§15.3); a reaction or button
-    // is a signal, not a prompt, and gets no reply tonight.
+    // §15.3: code decides the route. Commands never reach a model; links and files go
+    // to the opinion path; a voice note or screenshot is read first and then answered here.
+    const route: Route = args.rerouted ? { route: "text" } : classifyInbound({ text: target.body, kind: target.kind ?? "inbound", mime: target.fileMime, handles: creator.handles });
+    if (route.route === "command") {
+      if (route.command === "person") {
+        await ctx.runAction(internal.agent.commands.person, { creatorId: creator._id, messageId: target._id });
+        return { ok: true };
+      }
+      const { body } = await ctx.runMutation(internal.agent.commands.apply, { creatorId: creator._id, command: route.command });
+      if (body) {
+        await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body, dedupeKey: `cmd:${target._id}`, proactive: false, kind: "reply" });
+        await deliverNow(ctx as never);
+      }
+      return { ok: true };
+    }
+    if (route.route === "link") {
+      const r = await ctx.runAction(internal.agent.opinion.run, { creatorId: creator._id, messageId: target._id, mode: route.own ? "own" : "link", link: route.link });
+      return { ok: r.ok, reason: r.reason };
+    }
+    if (route.route === "file") {
+      if (route.media === "video") {
+        const r = await ctx.runAction(internal.agent.opinion.run, { creatorId: creator._id, messageId: target._id, mode: "video" });
+        return { ok: r.ok, reason: r.reason };
+      }
+      if (route.media === "image" || route.media === "audio") {
+        const r = await ctx.runAction(internal.agent.opinion.run, { creatorId: creator._id, messageId: target._id, mode: route.media });
+        if (!r.ok) return { ok: true, reason: r.reason }; // she already answered in words
+        // The body now carries the transcript or the numbers: answer it as text.
+        return await ctx.runAction(internal.agent.converse.run, { creatorId: creator._id, messageId: target._id, rerouted: true });
+      }
+      await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: "i can take a video, a screenshot, a voice note or a link. this one i can't open.", dedupeKey: `file:${target._id}`, proactive: false, kind: "reply" });
+      await deliverNow(ctx as never);
+      return { ok: true };
+    }
+
+    // A reaction or button is a signal, not a prompt.
     if (target.kind === "reaction") {
       // A reaction on an idea message is a taste event (§13.10); on anything else it is just noticed.
       const reacted = target.telegramMessageId ? await ctx.runQuery(internal.agent.converse.messageByTelegramId, { creatorId: creator._id, telegramMessageId: target.telegramMessageId }) : null;
