@@ -7,7 +7,7 @@
  */
 
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 
@@ -116,8 +116,10 @@ export const chatTrace = internalQuery({
     const jobs = (await ctx.db.query("jobs").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).order("desc").take(6)) as Doc<"jobs">[];
     const messages = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", creator._id)).order("desc").take(4)) as Doc<"messages">[];
     const predictions = (await ctx.db.query("predictions").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).order("desc").take(3)) as Doc<"predictions">[];
+    const costs = (await ctx.db.query("costEvents").withIndex("by_creator_at", (q) => q.eq("creatorId", creator._id)).order("desc").take(12)) as Doc<"costEvents">[];
     return {
       creator: creator._id,
+      recentCosts: costs.map((c) => `${new Date(c.at).toISOString().slice(11, 19)} ${c.vendor} ${c.kind} $${c.costUsd.toFixed(4)}`),
       predictions: predictions.map((p) => ({ confidence: p.confidence, expectedMultiple: p.expectedMultiple, subject: p.subject, citations: (p.opinion as { citations?: unknown }).citations, investigation: ((p.opinion as { investigation?: Array<{ tool: string; params: unknown; ok: boolean; credits?: number; why: string }> }).investigation ?? []).map((t) => `${t.tool}(${JSON.stringify(t.params).slice(0, 70)}) ${t.ok ? "ok" : "refused"} ${t.credits ?? 0}cr — ${t.why.slice(0, 80)}`) })),
       jobs: jobs.map((j) => ({ kind: j.kind, status: j.status, attempts: j.attempts, error: j.lastError ?? null })),
       messages: messages.reverse().map((m) => ({ dir: m.direction, kind: m.kind, body: m.body.slice(0, 500), delivered: Boolean(m.deliveredAt), error: m.deliveryError ?? null })),
@@ -137,5 +139,15 @@ export const reopenSignals = internalMutation({
       n++;
     }
     return { reopened: n };
+  },
+});
+
+/** Dev only: one call to a model id through OpenRouter, to see the raw reason when a role's primary keeps falling back. */
+export const probeModel = internalAction({
+  args: { model: v.string(), maxTokens: v.optional(v.number()) },
+  handler: async (_ctx, a): Promise<{ ok: boolean; reason?: string; content?: string; usage?: unknown }> => {
+    const { callOpenRouter } = await import("../integrations/openrouter/client");
+    const r = await callOpenRouter({ model: a.model, messages: [{ role: "system", content: "Answer with one word." }, { role: "user", content: "Say ok." }], temperature: 0, maxTokens: a.maxTokens ?? 200, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+    return r.ok ? { ok: true, content: r.content.slice(0, 80), usage: r.usage } : { ok: false, reason: r.reason };
   },
 });
