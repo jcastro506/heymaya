@@ -262,7 +262,18 @@ export const synthesize = internalAction({
     if (!result.ok) result = await callModel(ctx, { creatorId: creator._id, purpose: "learn_creator_fallback", model: spec.fallback, messages: [{ role: "system", content: system }, { role: "user", content: user }], temperature: 0.3, maxTokens: 3000, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
     if (!result.ok) return { ok: false, reason: `dossier synthesis failed: ${result.reason}` };
 
-    const parsed = parseDossier(result.content, { readFrom: readFrom as never, mode });
+    let parsed = parseDossier(result.content, { readFrom: readFrom as never, mode });
+    /**
+     * ⭐ One retry with a bigger answer budget, because the failure mode here is length,
+     * not competence: the first live creator's dossier came back cut off mid-object twice.
+     * Onboarding is a one-shot for a real person, and a creator with no dossier gets no
+     * first read and no ideas, so it is worth one more call before giving up.
+     */
+    if (!parsed.ok) {
+      console.warn(`[ingest] dossier retry after: ${parsed.error}`);
+      const retry = await callModel(ctx, { creatorId: creator._id, purpose: "learn_creator_retry", model: spec.primary, messages: [{ role: "system", content: system }, { role: "user", content: `${user}\n\nYour previous answer was cut off before the JSON closed. Answer again, complete and valid, and keep every string short.` }], temperature: 0.2, maxTokens: 4500, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+      if (retry.ok) parsed = parseDossier(retry.content, { readFrom: readFrom as never, mode });
+    }
     if (!parsed.ok) return { ok: false, reason: `dossier did not validate: ${parsed.error}` };
     await ctx.runMutation(internal.onboarding.ingest.writeDossier, { creatorId: creator._id, dossier: parsed.dossier, mode });
     return { ok: true };

@@ -95,10 +95,25 @@ export const REASONING_MODELS = [
  * be"*. Callers reason about output length; none of them can reason about how
  * long a model will deliberate, and requiring them to would put the trap back.
  *
- * 1500 covers the observed spread with headroom — the measured cases ran 188
- * and 892 reasoning tokens.
+ * 1500 covers the observed spread on SHORT answers — the measured cases ran 188
+ * and 892 reasoning tokens on a few hundred tokens of output.
  */
 export const REASONING_ALLOWANCE = 1_500;
+
+/**
+ * ⚠️ The floor is not enough on its own: how long a model deliberates scales with
+ * how much it is being asked to produce. The 3,000-token dossier on the first live
+ * creator (2026-09-02) came back truncated mid-object TWICE — thinking ate most of
+ * `3000 + 1500` and the JSON stopped at ~4,600 characters, which surfaced as
+ * "dossier did not validate" and left onboarding with no dossier at all.
+ *
+ * So: room to think is at least the floor, and at least as much room as the answer
+ * itself gets. Short calls are unchanged; long structured ones get the headroom they
+ * always needed.
+ */
+export function reasoningAllowanceFor(maxTokens: number): number {
+  return Math.max(REASONING_ALLOWANCE, maxTokens);
+}
 
 export function isReasoningModel(model: string): boolean {
   return REASONING_MODELS.some((m) => model.startsWith(m));
@@ -107,7 +122,7 @@ export function isReasoningModel(model: string): boolean {
 /** What to actually send, given what the caller wants back. */
 export function budgetFor(model: string, maxTokens?: number): number | undefined {
   if (maxTokens === undefined) return undefined;
-  return isReasoningModel(model) ? maxTokens + REASONING_ALLOWANCE : maxTokens;
+  return isReasoningModel(model) ? maxTokens + reasoningAllowanceFor(maxTokens) : maxTokens;
 }
 
 export async function callModel(

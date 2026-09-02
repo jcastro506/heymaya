@@ -60,6 +60,7 @@ export function fakeAnswer(purpose: string, messages: OpenRouterMessage[]): Open
     case "taste_profile":
       return ok("you take talking-heads and pass on skits.");
     case "learn_creator":
+    case "learn_creator_retry":
     case "learn_creator_weekly":
     case "learn_creator_fallback":
       return ok("{}");
