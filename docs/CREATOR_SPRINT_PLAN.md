@@ -318,6 +318,14 @@ The manifest also carries **the scar tissue**, as a numbered list with the incid
 
 **DoD.** The nightly `recent` suite has run seven nights with the report on the console · the operator has labeled 50 messages · judge agreement with labels ≥ 0.7 · the scout dry-run suite runs green before the next prompt change.
 
+### Sprint 3d — In the moment · *built 2026-09-02*
+
+**Goal.** She is an interactive agent, not a morning newsletter. When they are somewhere, or something just happened, they text her, or send a photo or a clip of where they are, and she reads it, holds it against who they are, and hands back two angles and one idea they can shoot in the next twenty minutes. Then everything about that idea is theirs to change from the chat: the hook, the length, the shots, the on-screen text; block time now; save it; scrap it. Full create / read / update / delete on ideas, on the fly. (Josh, 2026-09-02.)
+
+**Build.** `convex/agent/moment.ts`: Gemini decides what a file is (screenshot, draft, scene) so a photo of a restaurant is never read as analytics · a scene read (facts only) · the `moment` skill with the personal prefix (dossier, taste, their week, their calendar) → two angles with hook, shots, length, on-screen text, one recommended, as an `ideas` row with `features.source: "moment"` · buttons: shot list · block time now (a proposed block in fifteen minutes, then the usual yes/no) · save · classifier intents `moment`, `edit_idea` (field + value on the most recent idea), `drop_idea` (a taste event, like "not me").
+
+**Named tests.** A photo classified as a scene routes to the moment skill and never to the screenshot reader · the idea row carries the recommended angle and `source: moment` · an edit changes only the named field, clamps length, never another creator's idea · block-now proposes a block fifteen minutes out sized to the idea · drop writes the taste event.
+
 ### Sprint 4 — Results, connections, and the thin UI · pairs with S4
 
 **Goal.** Weekly review, daily readback, own-account metrics through Zernio, the five tabs live.

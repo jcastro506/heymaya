@@ -18,6 +18,9 @@ export type Intent =
   | { intent: "manage"; action: "add_admired"; platform: "tiktok" | "instagram"; handle: string }
   | { intent: "manage"; action: "stop_watching"; handle: string }
   | { intent: "manage"; action: "niche"; text: string }
+  | { intent: "moment" }
+  | { intent: "edit_idea"; field: "hook" | "lengthSec" | "onScreenText" | "sound" | "shotList" | "caption"; value: string }
+  | { intent: "drop_idea" }
   | { intent: "recall" }
   | { intent: "opinion_ask" }
   | { intent: "calendar_answer" }
@@ -34,9 +37,12 @@ export const CLASSIFY_PROMPT = `You label one message a content creator sent to 
   - "add_admired": watch an account: "handle" without @, "platform".
   - "stop_watching": stop watching an account: "handle".
   - "niche": they are redefining what they make ("i do gear reviews now"): "text" in their words.
+- "moment": they are somewhere or something is happening NOW and they want to make content about it ("i'm at this ramen place, want to do something", "we're at the start line, ideas?", "just got the medal").
+- "edit_idea": they want to change the most recent idea she sent: give "field" (hook | lengthSec | onScreenText | sound | shotList | caption) and "text" (the new value, or the instruction in their words if it is a rewrite like "make the hook meaner").
+- "drop_idea": scrap the most recent idea ("scrap that", "nah not that one", "kill it").
 - "text": anything else.
-Examples: "add @runwithcarly to the list" → manage/add_admired handle runwithcarly · "watch @gymgirl on insta" → manage/add_admired instagram · "be blunter with me" → manage/tone blunt · "go easier on me" → manage/tone friend · "don't text me before 9am" → manage/quiet_hours end 09:00 (start from current) · "stop watching @x" → manage/stop_watching · "i only do gear reviews now" → manage/niche · "why is @x blowing up" → profile_ask · "what was that shoe rack idea" → recall · "should i post at 7 or 9" → opinion_ask.
-Output ONLY JSON: {"intent": "profile_ask|recall|opinion_ask|calendar_answer|manage|text", "handle": "", "platform": "tiktok|instagram", "action": "", "start": "", "end": "", "tone": "", "text": ""}`;
+Examples: "i'm at a rooftop bar with the whole run club, what do i shoot" → moment · "make it 15 seconds" → edit_idea lengthSec "15" · "change the hook to 'nobody trains for this part'" → edit_idea hook · "scrap that" → drop_idea · "add @runwithcarly to the list" → manage/add_admired handle runwithcarly · "watch @gymgirl on insta" → manage/add_admired instagram · "be blunter with me" → manage/tone blunt · "go easier on me" → manage/tone friend · "don't text me before 9am" → manage/quiet_hours end 09:00 (start from current) · "stop watching @x" → manage/stop_watching · "i only do gear reviews now" → manage/niche · "why is @x blowing up" → profile_ask · "what was that shoe rack idea" → recall · "should i post at 7 or 9" → opinion_ask.
+Output ONLY JSON: {"intent": "profile_ask|recall|opinion_ask|calendar_answer|manage|moment|edit_idea|drop_idea|text", "handle": "", "platform": "tiktok|instagram", "action": "", "start": "", "end": "", "tone": "", "field": "", "text": ""}`;
 
 export async function classifyText(ctx: ActionCtx, input: { creatorId: Id<"creators">; text: string; ownHandles: { tiktok?: string; instagram?: string }; lastOutbound?: string; quietHours?: { start: string; end: string } }): Promise<Intent> {
   const r = await callModel(ctx, {
@@ -54,7 +60,15 @@ export async function classifyText(ctx: ActionCtx, input: { creatorId: Id<"creat
   if (!r.ok) return { intent: "text" };
   try {
     const m = r.content.match(/\{[\s\S]*\}/);
-    const j = JSON.parse(m ? m[0] : "{}") as { intent?: string; handle?: string; platform?: string; action?: string; start?: string; end?: string; tone?: string; text?: string };
+    const j = JSON.parse(m ? m[0] : "{}") as { intent?: string; handle?: string; platform?: string; action?: string; start?: string; end?: string; tone?: string; text?: string; field?: string; value?: string };
+    if (j.intent === "moment") return { intent: "moment" };
+    if (j.intent === "drop_idea") return { intent: "drop_idea" };
+    if (j.intent === "edit_idea") {
+      const field = (["hook", "lengthSec", "onScreenText", "sound", "shotList", "caption"] as const).find((f) => f === j.field);
+      const value = String(j.text ?? j.value ?? "").trim();
+      if (field && value) return { intent: "edit_idea", field, value };
+      return { intent: "text" };
+    }
     if (j.intent === "manage") {
       const handle = String(j.handle ?? "").replace(/^@/, "").trim().toLowerCase();
       const platform = j.platform === "instagram" ? "instagram" : "tiktok";

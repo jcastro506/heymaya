@@ -177,3 +177,25 @@ export const settingsOf = internalQuery({
     return { tone: creator.tone, quietHours: creator.quietHours, niche: creator.niche, tracked: tracked.map((t) => `${t.platform}/@${t.handle}/${t.status}`) };
   },
 });
+
+/** Dev only: put a public image into a chat as if the creator sent it, so the moment path can be exercised from the CLI. */
+export const injectImage = internalAction({
+  args: { chatId: v.string(), url: v.string(), caption: v.optional(v.string()) },
+  handler: async (ctx, a): Promise<{ ok: boolean; reason?: string }> => {
+    const res = await fetch(a.url);
+    if (!res.ok) return { ok: false, reason: `fetch ${res.status}` };
+    const mime = res.headers.get("content-type")?.split(";")[0] ?? "image/jpeg";
+    const bytes = await res.arrayBuffer();
+    const storageId = await ctx.storage.store(new Blob([bytes], { type: mime }));
+    const creatorId = await ctx.runQuery(internal.onboarding.dev.creatorIdByChat, { chatId: a.chatId });
+    if (!creatorId) return { ok: false, reason: "no creator for chat" };
+    const messageId = await ctx.runMutation(internal.core.telegramFiles.recordInboundFile, { creatorId, storageId, mime, fileUniqueId: `dev_${Date.now()}`, caption: a.caption ?? "", ts: Date.now() });
+    await ctx.runMutation(internal.core.jobs.enqueue, { kind: "converse", idempotencyKey: `converse:${messageId}`, creatorId, payloadJson: JSON.stringify({ messageId, chatId: a.chatId, kind: "file", kindHint: "image", mime }) });
+    return { ok: true, reason: String(messageId) };
+  },
+});
+
+export const creatorIdByChat = internalQuery({
+  args: { chatId: v.string() },
+  handler: async (ctx, a): Promise<Id<"creators"> | null> => ((await ctx.db.query("creators").withIndex("by_telegram_chat", (q) => q.eq("telegramChatId", a.chatId)).first()) as Doc<"creators"> | null)?._id ?? null,
+});

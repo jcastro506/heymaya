@@ -24,7 +24,8 @@ export const evaluate = internalAction({
   args: { suite: v.string(), skill: v.string(), text: v.string(), evidence: v.any(), creatorId: v.optional(v.id("creators")), messageId: v.optional(v.id("messages")), creatorUsesEmoji: v.optional(v.boolean()), trace: v.optional(v.any()), actionTaken: v.optional(v.boolean()) },
   handler: async (ctx, a): Promise<{ id: Id<"evalRuns">; pass: boolean }> => {
     const checks = runChecks({ text: a.text, evidence: a.evidence, kind: a.skill, creatorUsesEmoji: a.creatorUsesEmoji, actionTaken: a.actionTaken });
-    const j = await judge(ctx, { creatorId: a.creatorId, text: a.text, kind: a.skill, evidence: a.evidence });
+    // A routed confirmation ("done: nothing from me between…") is code's sentence, not hers to be witty in; checks only.
+    const j = a.actionTaken ? null : await judge(ctx, { creatorId: a.creatorId, text: a.text, kind: a.skill, evidence: a.evidence });
     const pass = passed(checks) && judgePass(j);
     const id = await ctx.runMutation(internal.eval.run.record, { suite: a.suite, skill: a.skill, creatorId: a.creatorId, messageId: a.messageId, text: a.text, checks, judge: j ?? undefined, pass, trace: a.trace });
     return { id, pass };

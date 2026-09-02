@@ -94,9 +94,17 @@ export const run = internalAction({
       return { ok: r.ok, reason: r.reason };
     }
     if (route.route === "file") {
-      if (route.media === "video") {
-        const r = await ctx.runAction(internal.agent.opinion.run, { creatorId: creator._id, messageId: target._id, mode: "video" });
-        return { ok: r.ok, reason: r.reason };
+      // A photo of a place is a moment, a screenshot is numbers, an edited clip is a draft: Gemini says which (Sprint 3d).
+      if (route.media === "video" || route.media === "image") {
+        const kind = await ctx.runAction(internal.agent.moment.kindOfMedia, { messageId: target._id });
+        if (kind === "scene" || (kind === "unknown" && route.media === "image" && target.body.trim().length > 0)) {
+          const r = await ctx.runAction(internal.agent.moment.run, { creatorId: creator._id, messageId: target._id, hasMedia: true });
+          return { ok: r.ok, reason: r.reason };
+        }
+        if (route.media === "video") {
+          const r = await ctx.runAction(internal.agent.opinion.run, { creatorId: creator._id, messageId: target._id, mode: "video" });
+          return { ok: r.ok, reason: r.reason };
+        }
       }
       if (route.media === "image" || route.media === "audio") {
         const r = await ctx.runAction(internal.agent.opinion.run, { creatorId: creator._id, messageId: target._id, mode: route.media });
@@ -157,6 +165,16 @@ export const run = internalAction({
         await deliverNow(ctx as never);
         return { ok: r.ok };
       }
+      const bn = target.body.match(/^idea:([a-z0-9]+):blocknow$/);
+      if (bn) {
+        const b = await ctx.runMutation(internal.agent.moment.blockNow, { creatorId: creator._id, ideaId: bn[1] as Id<"ideas"> });
+        if (b) {
+          const when = new Intl.DateTimeFormat("en-US", { timeZone: creator.timezone, hour: "numeric", minute: "2-digit" }).format(b.start);
+          await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: `block it from ${when}? i'll put it on your calendar and you shoot.`, dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply", buttons: [{ id: `block:${b.blockId}:yes`, label: "block it" }, { id: `block:${b.blockId}:no`, label: "not now" }] });
+        } else await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: "couldn't find that idea.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
+        await deliverNow(ctx as never);
+        return { ok: true };
+      }
       const m = target.body.match(/^idea:([a-z0-9]+):(shotlist|notme|save)$/);
       if (m) {
         const ideaId = m[1] as Id<"ideas">;
@@ -211,6 +229,25 @@ export const run = internalAction({
         await deliverNow(ctx as never);
         return { ok: true };
       }
+    }
+    if (intent.intent === "moment") {
+      const r = await ctx.runAction(internal.agent.moment.run, { creatorId: creator._id, messageId: target._id, hasMedia: false });
+      return { ok: r.ok, reason: r.reason };
+    }
+    if (intent.intent === "edit_idea" || intent.intent === "drop_idea") {
+      const latest = await ctx.runQuery(internal.agent.moment.latestIdea, { creatorId: creator._id });
+      let body: string;
+      if (!latest) body = "nothing of mine to change yet. send me a moment or wait for the next idea.";
+      else if (intent.intent === "drop_idea") {
+        await ctx.runMutation(internal.taste.events.record, { creatorId: creator._id, kind: "notme", ideaId: latest.id, messageId: target._id });
+        body = "scrapped. fewer like that.";
+      } else {
+        const r = await ctx.runMutation(internal.agent.moment.editIdea, { creatorId: creator._id, ideaId: latest.id, field: intent.field, value: intent.value });
+        body = r.ok ? `changed. ${intent.field === "lengthSec" ? `${intent.value.replace(/[^\d]/g, "")}s it is.` : `${intent.field === "hook" ? "hook" : intent.field === "onScreenText" ? "on-screen text" : intent.field === "shotList" ? "shots" : intent.field} updated.`} it's in ideas.` : "couldn't change that one.";
+      }
+      await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body, dedupeKey: `edit:${target._id}`, proactive: false, kind: "reply" });
+      await deliverNow(ctx as never);
+      return { ok: true };
     }
     if (intent.intent === "profile_ask") {
       const r = await ctx.runAction(internal.agent.profile.run, { creatorId: creator._id, messageId: target._id, platform: intent.platform, handle: intent.handle });
