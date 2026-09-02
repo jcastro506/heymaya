@@ -123,3 +123,7 @@ Running handoff. Newest at the bottom. Read the **Blocked on you** section first
 - **Verified live**: "is this the sound or the guy?" on a fixture link → she called `post_info` ("check video stats and sound id to see if it's the account or sound") and answered "it's the guy and the interruption premise, not a trending sound carry", with a citation and a `weak` confidence. The scout, given two obviously poor candidates, made no lookups and dropped both, which is the right call.
 - Memory recall (§15.7 layer 4): `memories` with a 768-dim vector index; saved ideas, sent ideas and notes are embedded; "what was that idea about…" runs the search and the passages ride into the turn.
 - Shell note for future me: never put backticks inside a `git commit -m "…"` string; zsh runs them.
+
+## 14:30 PT — the belt covers the catalogue; playbooks in every skill
+
+- Josh: "a smart agent armed with skills and clear prompting is essentially what we want" — yes, plus code-enforced promises and the learning loops. Nine more tools (Instagram reels/hashtag/popular, reels on an audio, both trending feeds, suggestions, discover creators/profiles). Every judgment skill carries a lookup playbook (`convex/agent/playbooks.ts`): the questions to answer with tools, which tool, when not to look. Explain-post and the weekly review look up too.
