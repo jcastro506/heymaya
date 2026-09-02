@@ -16,6 +16,13 @@ export default function SettingsPage() {
   const revoke = useMutation(api.ui.revokeRule);
   const [correction, setCorrection] = useState("");
   const [confirmText, setConfirmText] = useState("");
+  const createCheckout = useAction(api.billing.checkout.createCheckout);
+  const openPortal = useAction(api.billing.checkout.openPortal);
+  const [billingNote, setBillingNote] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const b = new URLSearchParams(window.location.search).get("billing");
+    return b === "started" ? "Trial started. Card on file, charged on day seven." : b === "canceled" ? "Checkout closed. Nothing charged." : null;
+  });
   const [deleting, setDeleting] = useState(false);
   const [deleteNote, setDeleteNote] = useState<string | null>(null);
   const cal = useQuery(api.calendar.oauth.status);
@@ -41,6 +48,25 @@ export default function SettingsPage() {
         <h2 className="text-sm uppercase tracking-wide opacity-50">Accounts</h2>
         <div>TikTok: {s.handles.tiktok ? `@${s.handles.tiktok}` : "—"} · Instagram: {s.handles.instagram ? `@${s.handles.instagram}` : "—"}</div>
         <div>Telegram: {s.paired ? "connected" : <Link className="underline" href="/telegram">connect</Link>} · plan: {s.plan}</div>
+      </section>
+
+      <section className="flex flex-col gap-2 text-sm">
+        <h2 className="text-sm uppercase tracking-wide opacity-50">Billing</h2>
+        {billingNote && <p className="text-xs opacity-80">{billingNote}</p>}
+        {s.plan === "trialing" || s.plan === "active" || s.plan === "past_due" || s.plan === "paused" ? (
+          <div className="flex flex-col gap-1">
+            <div>{s.plan === "trialing" ? `Trial${s.trialEndsAt ? `, ends ${new Date(s.trialEndsAt).toLocaleDateString()}` : ""}` : s.plan === "active" ? `Subscribed${s.founding ? " at the founding price" : ""}${s.currentPeriodEnd ? `, renews ${new Date(s.currentPeriodEnd).toLocaleDateString()}` : ""}` : s.plan === "past_due" ? "Payment didn't go through. Update your card; she keeps going for a few days." : "Paused. No charge."}</div>
+            <button className="underline self-start" onClick={async () => { const r = await openPortal({}); if (r.ok) window.location.href = r.url; else setBillingNote(r.reason); }}>manage card, plan, or cancel</button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <p className="opacity-70">{s.plan === "canceled" ? "Canceled. Come back any time; you're billed right away the second time." : "Seven days free, card required, charged on day seven. $19 a month or $180 a year while founding seats last."}</p>
+            <div className="flex gap-2">
+              <button className="btn" onClick={async () => { const r = await createCheckout({ interval: "monthly" }); if (r.ok) window.location.href = r.url; else setBillingNote(r.reason); }}>monthly</button>
+              <button className="btn-secondary" onClick={async () => { const r = await createCheckout({ interval: "annual" }); if (r.ok) window.location.href = r.url; else setBillingNote(r.reason); }}>annual</button>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="flex flex-col gap-2 text-sm">

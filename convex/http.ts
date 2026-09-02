@@ -1,4 +1,5 @@
 import { httpRouter } from "convex/server";
+import { stripeWebhook } from "./billing/webhook";
 import { telegramWebhookHttp } from "./telegram/webhook";
 
 /**
@@ -11,5 +12,8 @@ import { telegramWebhookHttp } from "./telegram/webhook";
 const http = httpRouter();
 
 http.route({ path: "/telegram/webhook", method: "POST", handler: telegramWebhookHttp });
+
+// Billing (§19.3): public, signature-verified, idempotent; never behind the web deployment's auth.
+http.route({ path: "/stripe/webhook", method: "POST", handler: stripeWebhook });
 
 export default http;

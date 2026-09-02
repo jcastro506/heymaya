@@ -14,6 +14,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { creatorForIdentity } from "../core/identity";
 import { disconnectFor } from "../calendar/oauth";
 import { resolveTelegramBotIdentity, sendTelegramMessage } from "../integrations/telegram/client";
+import { getStripe } from "../billing/stripe";
 
 /** Every table with a creatorId, and the index that reaches it. Adding a table without listing it here fails the deletion test. */
 export const TABLES_BY_CREATOR = [
@@ -97,8 +98,15 @@ export const run = internalAction({
     const { creator } = snap;
     if (creator.plan.status !== "deleting") return { ok: false, steps: { freeze: "not frozen; refusing" } };
 
-    // 2. Stripe: cancel now, retain the customer (tax law). No subscription row in this build yet.
-    steps.stripe = (creator as { stripeSubscriptionId?: string }).stripeSubscriptionId ? "cancel requested" : "no subscription";
+    // 2. Stripe: cancel now; the customer and invoices are retained (tax law, and the privacy policy says so).
+    if (creator.plan.stripeSubscriptionId && process.env.STRIPE_SECRET_KEY) {
+      try {
+        const sub = await getStripe().subscriptions.cancel(creator.plan.stripeSubscriptionId);
+        steps.stripe = `subscription ${sub.status}`;
+      } catch (e) {
+        steps.stripe = `cancel failed: ${e instanceof Error ? e.message.slice(0, 80) : "error"}`;
+      }
+    } else steps.stripe = "no subscription";
 
     // 3. Zernio: disconnect every account, then the profile. Rows only, in this build; the API calls arrive with the connections sprint.
     steps.zernio = snap.zernio ? `profile ${snap.zernio.zernioProfileId ?? "?"}: rows dropped; API disconnect pending the connections sprint` : "not connected";

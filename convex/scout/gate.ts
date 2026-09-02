@@ -41,6 +41,8 @@ export function checkRails(input: { creator: Doc<"creators">; sentToday: number;
   const { creator, now } = input;
   const { hour } = localHourMinute(now, creator.timezone);
   if (creator.plan.status === "paused" || creator.plan.status === "canceled" || creator.plan.status === "deleting") return { ok: false, reason: `plan is ${creator.plan.status}`, localHour: hour, sentToday: input.sentToday };
+  // §19.3: past due keeps proactive for three days of grace, then it pauses; nothing is deleted.
+  if (creator.plan.status === "past_due" && creator.plan.pastDueSince && now - creator.plan.pastDueSince > 3 * 86_400_000) return { ok: false, reason: "plan is past due for more than three days", localHour: hour, sentToday: input.sentToday };
   if (!creator.channel.paired) return { ok: false, reason: "not paired", localHour: hour, sentToday: input.sentToday };
   if (inQuietHours(now, creator.timezone, creator.quietHours ?? THRESHOLDS.quietHoursDefault)) return { ok: false, reason: "quiet hours", localHour: hour, sentToday: input.sentToday };
   if (input.sentToday >= THRESHOLDS.dailyMessageCap) return { ok: false, reason: `daily cap (${THRESHOLDS.dailyMessageCap}) reached`, localHour: hour, sentToday: input.sentToday };

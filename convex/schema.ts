@@ -84,6 +84,8 @@ export default defineSchema({
       currentPeriodEnd: v.optional(v.number()),
       stripeCustomerId: v.optional(v.string()),
       stripeSubscriptionId: v.optional(v.string()),
+      pastDueSince: v.optional(v.number()), // §19.3: three days of grace for proactive, then it pauses
+      lastEventAt: v.optional(v.number()), // the Stripe event time last applied; older events change nothing
       founding: v.boolean(),
     }),
     firstWeek: v.optional(v.object({ startedAt: v.number(), stepsDone: v.array(v.string()) })),
@@ -91,6 +93,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.optional(v.number()),
   })
+    .index("by_stripe_customer", ["plan.stripeCustomerId"])
     .index("by_clerkUserId", ["clerkUserId"])
     .index("by_telegram_chat", ["telegramChatId"])
     .index("by_pairing_token", ["pairingToken"])
@@ -318,6 +321,18 @@ export default defineSchema({
     features: v.array(v.string()), // "format:skit", "account:@x", "source:breakout", …
     at: v.number(),
   }).index("by_creator", ["creatorId", "at"]),
+
+  // ------------------------------------------------------- stripeWebhookEvents
+  // §19.3: every event once; replays are audited as rows and change nothing.
+  stripeWebhookEvents: defineTable({
+    eventId: v.string(),
+    type: v.string(),
+    livemode: v.boolean(),
+    status: v.union(v.literal("processed"), v.literal("replay_dropped"), v.literal("skipped"), v.literal("errored")),
+    detail: v.optional(v.string()),
+    customerId: v.optional(v.string()),
+    receivedAt: v.number(),
+  }).index("by_event_id", ["eventId"]),
 
   // -------------------------------------------------------------- oauthStates
   // Single-use, 15-minute state tokens for OAuth round trips; the token is the auth.
