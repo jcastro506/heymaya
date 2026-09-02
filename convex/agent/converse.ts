@@ -86,7 +86,7 @@ export const run = internalAction({
       }
       if (route.media === "image" || route.media === "audio") {
         const r = await ctx.runAction(internal.agent.opinion.run, { creatorId: creator._id, messageId: target._id, mode: route.media });
-        if (!r.ok) return { ok: true, reason: r.reason }; // she already answered in words
+        if (!r.transcript) return { ok: true, reason: r.reason }; // she already answered in words
         // The body now carries the transcript or the numbers: answer it as text.
         return await ctx.runAction(internal.agent.converse.run, { creatorId: creator._id, messageId: target._id, rerouted: true });
       }

@@ -118,7 +118,7 @@ export const run = internalAction({
       const t = await watchBytes(ctx, creator._id, "voice_transcribe", await file.arrayBuffer(), target.fileMime ?? "audio/ogg", TRANSCRIBE_PROMPT);
       if (!t.text) {
         await reply("couldn't make out the voice note. type it?");
-        return { ok: false, reason: t.reason };
+        return { ok: true, reason: `voice: ${t.reason}` };
       }
       await ctx.runMutation(internal.agent.opinion.setBody, { messageId: a.messageId, body: `(voice) ${t.text.trim().slice(0, 2000)}` });
       return { ok: true, transcript: t.text.trim() };
@@ -131,7 +131,7 @@ export const run = internalAction({
       const read = r.text ? parseJson<{ kind: string; platform: string; numbers: Array<{ label: string; value: string }>; postTitleOrCaption: string; period: string }>(r.text) : null;
       if (!read || !read.numbers?.length) {
         await reply("i can see it's a screenshot but can't read numbers off it. what am i looking at?");
-        return { ok: false, reason: "no numbers read" };
+        return { ok: true, reason: "screenshot: no numbers read" };
       }
       // The numbers are evidence for a converse turn, in the message body, so they are a row.
       await ctx.runMutation(internal.agent.opinion.setBody, { messageId: a.messageId, body: `(screenshot: ${read.kind} on ${read.platform}${read.period ? `, ${read.period}` : ""}) ${read.numbers.map((n) => `${n.label}: ${n.value}`).join("; ")}${read.postTitleOrCaption ? ` — "${read.postTitleOrCaption}"` : ""}` });
@@ -177,7 +177,7 @@ export const run = internalAction({
 
     if (!card && !transcript && !own) {
       await reply(a.mode === "video" ? `couldn't watch that one (${cannotWatch ?? "the file didn't open"}). try a smaller export, under 20 MB, or a link once it's up.` : `couldn't open that link (${cannotWatch ?? "nothing came back"}). if it's private or a draft, send the file instead.`);
-      return { ok: false, reason: cannotWatch ?? "no evidence" };
+      return { ok: true, reason: `no evidence: ${cannotWatch ?? "none"}` };
     }
 
     // ── the read ─────────────────────────────────────────────────────────
@@ -194,7 +194,7 @@ export const run = internalAction({
       theirHistory: history,
     };
     const user = `Evidence (everything you may cite is here; nothing else):\n${JSON.stringify(evidence)}`;
-    const ask = async (purpose: string, extra = "") => callModel(ctx, { creatorId: creator._id, purpose, model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: user + extra }], temperature: 0.4, maxTokens: 800, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+    const ask = async (purpose: string, extra = "") => callModel(ctx, { creatorId: creator._id, purpose, model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: user + extra }], temperature: 0.4, maxTokens: 1600, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
     type Out = { message: string; biggest: string; second: string; fine: string; confidence: string; citations: Array<{ stat: string; value: string | number; sampleSize?: number }>; cannotKnow: string };
     let r = await ask("opinion");
     let out = r.ok ? parseJson<Out>(r.content) : null;
@@ -204,7 +204,7 @@ export const run = internalAction({
     }
     if (!out || !out.citations?.length || !out.message?.trim()) {
       await reply("i watched it but i can't give you a read i'd stand behind right now. give me an hour and send it again?");
-      return { ok: false, reason: "no grounded opinion" };
+      return { ok: true, reason: `no grounded opinion: ${r.ok ? `raw=${r.content.slice(0, 300).replace(/\s+/g, " ")}` : r.reason}` };
     }
     const confidence = (["strong", "solid", "fine", "weak", "broken"] as const).includes(out.confidence as never) ? (out.confidence as "strong" | "solid" | "fine" | "weak" | "broken") : "fine";
     const produced = producedStamp(spec.primary);
@@ -223,7 +223,7 @@ export const run = internalAction({
       }
       if (!verdict.pass) {
         await reply("i have a read on it but it didn't pass my own check. ask me again in a bit and i'll do it properly.");
-        return { ok: false, reason: `critic: ${verdict.problems.join(", ")}` };
+        return { ok: true, reason: `critic: ${verdict.problems.join(", ")}` };
       }
     }
 

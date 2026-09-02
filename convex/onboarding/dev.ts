@@ -97,3 +97,30 @@ export const pairChat = internalMutation({
     return { paired: true };
   },
 });
+
+/** Dev only: the most recent failed or dead jobs with their errors, fleet-wide. */
+export const failedJobs = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<Array<Record<string, unknown>>> => {
+    const rows = (await ctx.db.query("jobs").order("desc").take(40)) as Doc<"jobs">[];
+    return rows.filter((j) => j.status === "failed" || j.status === "dead").slice(0, 5).map((j) => ({ kind: j.kind, status: j.status, attempts: j.attempts, creatorId: j.creatorId, error: j.lastError ?? null, payload: (j.payloadJson ?? "").slice(0, 200) }));
+  },
+});
+
+/** Dev only: the last jobs and messages for whichever creator owns a Telegram chat. */
+export const chatTrace = internalQuery({
+  args: { chatId: v.string() },
+  handler: async (ctx, a): Promise<Record<string, unknown>> => {
+    const creator = (await ctx.db.query("creators").withIndex("by_telegram_chat", (q) => q.eq("telegramChatId", a.chatId)).first()) as Doc<"creators"> | null;
+    if (!creator) return { creator: null };
+    const jobs = (await ctx.db.query("jobs").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).order("desc").take(6)) as Doc<"jobs">[];
+    const messages = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", creator._id)).order("desc").take(4)) as Doc<"messages">[];
+    const predictions = (await ctx.db.query("predictions").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).order("desc").take(3)) as Doc<"predictions">[];
+    return {
+      creator: creator._id,
+      predictions: predictions.map((p) => ({ confidence: p.confidence, expectedMultiple: p.expectedMultiple, subject: p.subject, citations: (p.opinion as { citations?: unknown }).citations })),
+      jobs: jobs.map((j) => ({ kind: j.kind, status: j.status, attempts: j.attempts, error: j.lastError ?? null })),
+      messages: messages.reverse().map((m) => ({ dir: m.direction, kind: m.kind, body: m.body.slice(0, 500), delivered: Boolean(m.deliveredAt), error: m.deliveryError ?? null })),
+    };
+  },
+});
