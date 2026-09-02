@@ -168,7 +168,7 @@ export const instagram = {
     limit: number,
     deps?: EndpointDeps
   ): Promise<NormalizedPost[]> {
-    const raw = await clientOf(deps).request<unknown>("/v1/instagram/user/posts", {
+    const raw = await clientOf(deps).request<unknown>("/v2/instagram/user/posts", {
       query: { handle, limit },
     });
     return normalizeIgPosts(raw);

@@ -19,17 +19,17 @@ export interface ToolBudget { calls: number; credits: number; deadlineAt: number
 export const DEFAULT_BUDGET = (): ToolBudget => ({ calls: 6, credits: 40, deadlineAt: Date.now() + 60_000 });
 
 /** Approximate credit prices per call (the ledger records the vendor's real number). */
-export const TOOL_CREDITS: Record<string, number> = { post_info: 1, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, sound_reels: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, search_reels: 1, search_ig_hashtag: 1, ig_popular: 1, trending_tiktok: 1, trending_reels: 1, suggestions: 1, discover_creators: 1, discover_profiles: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0, recall: 0 };
+export const TOOL_CREDITS: Record<string, number> = { post_info: 10, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, sound_reels: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, search_reels: 1, search_ig_hashtag: 1, ig_popular: 1, trending_tiktok: 1, trending_reels: 1, suggestions: 1, discover_creators: 1, discover_profiles: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0, recall: 0 };
 
 const str = { type: "string" } as const;
 
 export const TOOLS: OpenRouterTool[] = [
-  { type: "function", function: { name: "post_info", description: "Stats, caption, sound id, author and length for one post. 1 credit. Use to check the numbers behind a candidate or a link.", parameters: { type: "object", properties: { url: str, why: str }, required: ["url", "why"] } } },
+  { type: "function", function: { name: "post_info", description: "Full detail for one post: sound id, media, caption, author, length, stats. 10 credits when the vendor finds the media, so use account_posts (1 credit, the whole feed with stats) when numbers are all you need; post_info is for the sound id or a link they sent.", parameters: { type: "object", properties: { url: str, why: str }, required: ["url", "why"] } } },
   { type: "function", function: { name: "post_transcript", description: "What is said in the post, as text. 1 credit. You have NOT watched it; this is the words.", parameters: { type: "object", properties: { url: str, why: str }, required: ["url", "why"] } } },
-  { type: "function", function: { name: "post_comments", description: "The top comments: what people are reacting to. 1 credit (15 on Instagram, so only when it decides something).", parameters: { type: "object", properties: { url: str, why: str }, required: ["url", "why"] } } },
+  { type: "function", function: { name: "post_comments", description: "The top comments: what people are reacting to. 1 credit on TikTok, 15 on Instagram (replies are fetched too), so on Instagram only when it decides something.", parameters: { type: "object", properties: { url: str, why: str }, required: ["url", "why"] } } },
   { type: "function", function: { name: "sound_info", description: "A TikTok sound: title, author, how many videos use it. 1 credit. Use when the sound might be the reason, not the account.", parameters: { type: "object", properties: { clipId: str, why: str }, required: ["clipId", "why"] } } },
   { type: "function", function: { name: "sound_videos", description: "Recent videos on a TikTok sound: is it rising, who else used it. 1 credit.", parameters: { type: "object", properties: { clipId: str, why: str }, required: ["clipId", "why"] } } },
-  { type: "function", function: { name: "profile", description: "An account's size and bio. 1 credit. Use to tell a breakout from a big account being big.", parameters: { type: "object", properties: { platform: { type: "string", enum: ["tiktok", "instagram"] }, handle: str, why: str }, required: ["platform", "handle", "why"] } } },
+  { type: "function", function: { name: "profile", description: "An account's size and bio. Free when the vendor's cache is fresh, 1 credit live. Use to tell a breakout from a big account being big.", parameters: { type: "object", properties: { platform: { type: "string", enum: ["tiktok", "instagram"] }, handle: str, why: str }, required: ["platform", "handle", "why"] } } },
   { type: "function", function: { name: "account_posts", description: "An account's recent posts with numbers, to compute its normal and see whether this one is above it. 1 credit.", parameters: { type: "object", properties: { platform: { type: "string", enum: ["tiktok", "instagram"] }, handle: str, why: str }, required: ["platform", "handle", "why"] } } },
   { type: "function", function: { name: "search_keyword", description: "TikTok posts for a keyword this week, most liked first: is this shape a wave right now, or one account? 1 credit.", parameters: { type: "object", properties: { keyword: str, why: str }, required: ["keyword", "why"] } } },
   { type: "function", function: { name: "search_hashtag", description: "TikTok posts under a hashtag. 1 credit.", parameters: { type: "object", properties: { hashtag: str, why: str }, required: ["hashtag", "why"] } } },
@@ -46,6 +46,16 @@ export const TOOLS: OpenRouterTool[] = [
   { type: "function", function: { name: "recall", description: "Search the creator's own memory: ideas she sent, ideas they saved, things they told her. Free. Use when they refer to something from before.", parameters: { type: "object", properties: { query: str, why: str }, required: ["query", "why"] } } },
   { type: "function", function: { name: "calendar_upcoming", description: "What is on the creator's calendar in the next two weeks (titles and times only). Free.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
 ];
+
+/** The vendor's price, platform-aware where it matters (docs/scrapecreators-credits.json). */
+export function priceFor(name: string, args: Record<string, unknown>): number | undefined {
+  const base = TOOL_CREDITS[name];
+  if (base === undefined) return undefined;
+  const url = typeof args.url === "string" ? args.url : "";
+  const ig = args.platform === "instagram" || /instagram\.com/.test(url);
+  if (name === "post_comments") return ig ? 15 : 1;
+  return base;
+}
 
 export interface ToolCallRecord { tool: string; params: Record<string, unknown>; why: string; credits?: number; ms: number; ok: boolean; detail?: string }
 
@@ -132,7 +142,7 @@ export async function runTool(ctx: ActionCtx, creatorId: Id<"creators">, call: {
     record(false, 0, "out of time");
     return "refused: out of time. Answer with what you have.";
   }
-  const price = TOOL_CREDITS[call.name];
+  const price = priceFor(call.name, call.args);
   if (price === undefined) {
     record(false, 0, "unknown tool");
     return `refused: no tool named ${call.name}`;

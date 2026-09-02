@@ -271,7 +271,7 @@ export function pathFor(kind: ReadKind, params: Record<string, unknown>): string
     case "profile":
       return platform === "instagram" ? "/v1/instagram/profile" : "/v1/tiktok/profile";
     case "account.posts":
-      return platform === "instagram" ? "/v1/instagram/user/posts" : "/v3/tiktok/profile/videos";
+      return platform === "instagram" ? "/v2/instagram/user/posts" : "/v3/tiktok/profile/videos";
     case "post.info":
       return platform === "instagram" ? "/v1/instagram/post" : "/v2/tiktok/video";
     case "post.transcript":

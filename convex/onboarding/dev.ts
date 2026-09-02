@@ -199,3 +199,17 @@ export const creatorIdByChat = internalQuery({
   args: { chatId: v.string() },
   handler: async (ctx, a): Promise<Id<"creators"> | null> => ((await ctx.db.query("creators").withIndex("by_telegram_chat", (q) => q.eq("telegramChatId", a.chatId)).first()) as Doc<"creators"> | null)?._id ?? null,
 });
+
+/** Dev only: the real vendor, whatever SCRAPE_FIXTURES says: the credit balance and one cheap live read. */
+export const probeScrapeCreators = internalAction({
+  args: {},
+  handler: async (): Promise<Record<string, unknown>> => {
+    const key = process.env.SCRAPE_CREATORS_API_KEY ?? "";
+    const headers = { "x-api-key": key, accept: "application/json" };
+    const out: Record<string, unknown> = { keyPresent: Boolean(key), keyTail: key.slice(-4) };
+    const bal = await fetch("https://api.scrapecreators.com/v1/credit-balance", { headers });
+    out.balanceStatus = bal.status;
+    out.balance = (await bal.text()).slice(0, 300);
+    return out;
+  },
+});

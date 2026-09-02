@@ -97,7 +97,7 @@ export const CREDITS_BY_PATH: Record<string, number> = {
   "/v1/tiktok/profile": 1,
   "/v1/tiktok/profile/region": 1,
   "/v3/tiktok/profile/videos": 1,
-  "/v2/tiktok/video": 1,
+  "/v2/tiktok/video": 10, // 10 when media is found, 1 otherwise (vendor spec, 2026-09-02)
   "/v1/tiktok/video/transcript": 1, // +10 when use_ai_as_fallback=true and used
   "/v1/tiktok/video/comments": 1,
   "/v1/tiktok/comment/replies": 1,
@@ -119,7 +119,7 @@ export const CREDITS_BY_PATH: Record<string, number> = {
   "/v1/instagram/user/posts": 1,
   "/v2/instagram/user/posts": 1,
   "/v1/instagram/user/reels": 1,
-  "/v1/instagram/post": 1,
+  "/v1/instagram/post": 10, // 10 when media is found, 1 otherwise
   "/v2/instagram/post/comments": 15, // per the vendor spec; mine Instagram comments on top posts only
   "/v2/instagram/media/transcript": 1,
   "/v2/instagram/reels/search": 1,
