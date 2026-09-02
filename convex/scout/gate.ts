@@ -9,6 +9,7 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { rankMultiplier, tasteHint, TASTE, type Affinity } from "../taste/affinities";
+import { budgetExhausted } from "../core/budgets";
 import { THRESHOLDS } from "../config/thresholds";
 import { dayKeyInZone } from "../core/cadence";
 
@@ -37,7 +38,7 @@ export function inQuietHours(now: number, timezone: string, quiet: { start: stri
 }
 
 /** The rails, read from rows. Pure given its inputs. */
-export function checkRails(input: { creator: Doc<"creators">; sentToday: number; openQuestion: boolean; now: number }): Rails {
+export function checkRails(input: { creator: Doc<"creators">; sentToday: number; openQuestion: boolean; now: number; budget?: Pick<Doc<"budgets">, "spentUsd" | "watches" | "marginalCredits"> | null }): Rails {
   const { creator, now } = input;
   const { hour } = localHourMinute(now, creator.timezone);
   if (creator.plan.status === "paused" || creator.plan.status === "canceled" || creator.plan.status === "deleting") return { ok: false, reason: `plan is ${creator.plan.status}`, localHour: hour, sentToday: input.sentToday };
@@ -47,6 +48,8 @@ export function checkRails(input: { creator: Doc<"creators">; sentToday: number;
   if (inQuietHours(now, creator.timezone, creator.quietHours ?? THRESHOLDS.quietHoursDefault)) return { ok: false, reason: "quiet hours", localHour: hour, sentToday: input.sentToday };
   if (input.sentToday >= THRESHOLDS.dailyMessageCap) return { ok: false, reason: `daily cap (${THRESHOLDS.dailyMessageCap}) reached`, localHour: hour, sentToday: input.sentToday };
   if (input.openQuestion) return { ok: false, reason: "a question is still open", localHour: hour, sentToday: input.sentToday };
+  const spent = budgetExhausted(input.budget ?? null);
+  if (spent) return { ok: false, reason: `budget exhausted: ${spent}`, localHour: hour, sentToday: input.sentToday };
   return { ok: true, localHour: hour, sentToday: input.sentToday };
 }
 
@@ -59,7 +62,8 @@ export const railsFor = internalQuery({
     const recent = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(50)) as Doc<"messages">[];
     const sentToday = recent.filter((m) => m.direction === "out" && m.proactive && dayKeyInZone(m.ts, creator.timezone) === day && m.kind !== "status").length;
     const openQuestion = recent.some((m) => m.direction === "out" && m.awaitingAnswer);
-    const rails = checkRails({ creator, sentToday, openQuestion, now: a.now });
+    const budget = (await ctx.db.query("budgets").withIndex("by_creator_day", (q) => q.eq("creatorId", a.creatorId).eq("day", day)).first()) as Doc<"budgets"> | null;
+    const rails = checkRails({ creator, sentToday, openQuestion, now: a.now, budget });
     const pending = (await ctx.db.query("signals").withIndex("by_creator_verdict", (q) => q.eq("creatorId", a.creatorId).eq("verdict", "pending")).collect()) as Doc<"signals">[];
     const fresh: Doc<"signals">[] = [];
     for (const s of pending) {

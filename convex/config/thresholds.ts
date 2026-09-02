@@ -13,6 +13,10 @@ export const THRESHOLDS = {
 
   // §13.8 gate rails
   dailyMessageCap: 3,
+  // §3 daily budgets per creator, trial and paid alike (tune from the ledger)
+  dailyUsdCap: 0.75,
+  dailyWatchCap: 8,
+  dailyCreditCap: 60,
   quietHoursDefault: { start: "22:00", end: "07:00" },
   formatCooldownDays: 14,
 

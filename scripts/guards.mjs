@@ -18,6 +18,12 @@ function walk(dir, out = []) {
 const files = walk(root);
 const rel = (p) => relative(root, p);
 
+// 0. No import resolves to the old repo (§17.2): the legacy tree is history, not a dependency.
+for (const p of files.filter((f) => /\.(ts|tsx|mjs)$/.test(f) && !/node_modules|pending\//.test(f))) {
+  const src = readFileSync(p, "utf8");
+  if (/from "(\.\.\/)+heymaya\/|from "@\/legacy|from "\.\.\/\.\.\/\.\.\/heymaya/.test(src)) failures.push(`legacy import: ${rel(p)}`);
+}
+
 // 1. Marketing and product copy: no "AI", no "UGC", no vendor names (plan §7, S1).
 const copyFiles = files.filter((p) => /\/(app|components|content)\/.*\.(tsx|ts|md|mdx)$/.test(p) && !/\.test\./.test(p) && !/\/providers\.tsx$/.test(p) && !/\/app\/api\//.test(p)); // providers and API routes are wiring, not copy
 const forbidden = [/\bAI\b/, /\bUGC\b/, /ScrapeCreators/i, /Zernio/i, /OpenRouter/i, /Gemini/i, /Convex/i];

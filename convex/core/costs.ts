@@ -6,6 +6,9 @@
 
 import { internalMutation } from "../_generated/server";
 import { v } from "convex/values";
+import { applyBump, emptyDay, kindForCost } from "./budgets";
+import type { Doc } from "../_generated/dataModel";
+import { dayKeyInZone } from "./cadence";
 
 const vendorArg = v.union(
   v.literal("scrapecreators"),
@@ -39,6 +42,18 @@ export const record = internalMutation({
       environment: process.env.ENVIRONMENT_NAME ?? "local",
       at: a.now ?? Date.now(),
     });
+    // §3: budgets, never booleans. Every priced event lands on the creator's day.
+    if (a.creatorId) {
+      const kind = kindForCost(a.vendor, a.purpose, a.resource);
+      if (kind) {
+        const creator = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+        const day = dayKeyInZone(a.now ?? Date.now(), creator?.timezone ?? "UTC");
+        const existing = (await ctx.db.query("budgets").withIndex("by_creator_day", (q) => q.eq("creatorId", a.creatorId!).eq("day", day)).first()) as Doc<"budgets"> | null;
+        const next = applyBump(existing ?? emptyDay(a.creatorId, day), kind, (a.promptTokens ?? 0) + (a.completionTokens ?? 0), a.costUsd ?? 0);
+        if (existing) await ctx.db.patch(existing._id, { screenerTokens: next.screenerTokens, writerTokens: next.writerTokens, watches: next.watches, marginalCredits: next.marginalCredits, messages: next.messages, spentUsd: next.spentUsd });
+        else await ctx.db.insert("budgets", next);
+      }
+    }
     return null;
   },
 });

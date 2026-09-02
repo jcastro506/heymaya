@@ -29,6 +29,7 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { dayKeyInZone } from "./cadence";
 import { checkPlainLanguage } from "./plainLanguage";
 import { dayScanFloor, isSameDayInZone } from "./cadence";
+import { applyBump, emptyDay } from "./budgets";
 
 const SURFACE = v.union(
   v.literal("telegram"),
@@ -168,6 +169,15 @@ async function writeOutbound(
     turnId: row.turnId,
     ts: row.ts,
   });
+
+  // §3 budgets: a proactive message counts on the creator's day; a reply never does.
+  if (row.proactive) {
+    const day = dayKeyInZone(row.ts ?? Date.now(), creator?.timezone ?? "UTC");
+    const b = (await ctx.db.query("budgets").withIndex("by_creator_day", (q) => q.eq("creatorId", row.creatorId).eq("day", day)).first()) as Doc<"budgets"> | null;
+    const next = applyBump(b ?? emptyDay(row.creatorId, day), "message", 0, 0);
+    if (b) await ctx.db.patch(b._id, { messages: next.messages });
+    else await ctx.db.insert("budgets", next);
+  }
 
   if (row.surface === "telegram") {
     await ctx.runMutation(internal.core.jobs.enqueue, {
