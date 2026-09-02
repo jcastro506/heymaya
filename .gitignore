@@ -1,0 +1,11 @@
+node_modules/
+.next/
+.convex/
+.env
+.env.*
+!.env.example
+.vercel/
+dist/
+coverage/
+.DS_Store
+*.log
