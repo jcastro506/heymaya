@@ -10,6 +10,7 @@
 
 import type * as agent_context from "../agent/context.js";
 import type * as agent_converse from "../agent/converse.js";
+import type * as agent_critic from "../agent/critic.js";
 import type * as agent_registry from "../agent/registry.js";
 import type * as agent_soul from "../agent/soul.js";
 import type * as config_thresholds from "../config/thresholds.js";
@@ -70,6 +71,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   "agent/context": typeof agent_context;
   "agent/converse": typeof agent_converse;
+  "agent/critic": typeof agent_critic;
   "agent/registry": typeof agent_registry;
   "agent/soul": typeof agent_soul;
   "config/thresholds": typeof config_thresholds;

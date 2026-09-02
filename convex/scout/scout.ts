@@ -14,6 +14,7 @@ import { REGISTRY } from "../agent/registry";
 import { buildPrefix, producedStamp } from "../agent/context";
 import { deliverNow } from "../core/scheduler";
 import { THRESHOLDS } from "../config/thresholds";
+import { critique, tooLong } from "../agent/critic";
 import { localHourMinute } from "./gate";
 import { internalQuery } from "../_generated/server";
 
@@ -129,6 +130,27 @@ export const run = internalAction({
     const ev = evidence.find((e) => e.postId === pick.postId);
     const links = ev?.url ? [ev.url] : [];
     const produced = producedStamp(spec.primary);
+
+    // The critic (§15.5): different family, one rewrite, then drop with a verdict.
+    const dossierVoice = (gathered.creator.dossier as { voice?: unknown; persona?: unknown } | undefined);
+    const directiveTexts = gathered.directives.map((d) => d.verbatim);
+    let text = pick.message.trim();
+    let verdict = tooLong(text) ? { pass: false, problems: ["too_long" as const], note: "over the length cap" } : await critique(ctx, { creatorId: args.creatorId, kind: "scout", text, evidence: ev, voice: { voice: dossierVoice?.voice, persona: dossierVoice?.persona }, directives: directiveTexts });
+    let criticSkipped = Boolean(verdict.skipped);
+    if (!verdict.pass) {
+      const rewrite = await callModel(ctx, { creatorId: args.creatorId, purpose: "scout_rewrite", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `${user}\n\nYour previous message was rejected by the critic for: ${verdict.problems.join(", ")} (${verdict.note}). Rewrite ONLY the message text for post ${pick.postId}, fixing exactly that. Output the message text only, no JSON.` }], temperature: 0.4, maxTokens: 600, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+      if (rewrite.ok && rewrite.content.trim()) {
+        text = rewrite.content.trim();
+        verdict = tooLong(text) ? { pass: false, problems: ["too_long" as const], note: "still over the length cap" } : await critique(ctx, { creatorId: args.creatorId, kind: "scout", text, evidence: ev, voice: { voice: dossierVoice?.voice, persona: dossierVoice?.persona }, directives: directiveTexts });
+        criticSkipped = criticSkipped || Boolean(verdict.skipped);
+      }
+      if (!verdict.pass) {
+        verdicts.push({ signalId: signal._id, verdict: "dropped", why: `critic: ${verdict.problems.join(", ")}; ${verdict.note}` });
+        await ctx.runMutation(internal.scout.gate.setVerdicts, { verdicts });
+        return { sent: false, reason: `dropped by the critic: ${verdict.problems.join(", ")}` };
+      }
+    }
+    pick.message = text;
     const ideaId = await ctx.runMutation(internal.scout.scout.writeIdea, { creatorId: args.creatorId, signalId: signal._id, evidenceLinks: links, fit: pick.fit, fitWhy: pick.fitWhy, version: pick.version ?? {}, messageText: pick.message, produced });
     const body = links.length && !pick.message.includes(links[0]) ? `${pick.message}\n\n${links[0]}` : pick.message;
     const { messageId } = await ctx.runMutation(internal.core.messages.send, {
@@ -146,6 +168,7 @@ export const run = internalAction({
         { id: `idea:${ideaId}:save`, label: "save" },
       ],
       produced,
+      criticSkipped,
     });
     if (messageId) await ctx.runMutation(internal.scout.scout.linkIdeaMessage, { ideaId, messageId, sentAt: now });
     verdicts.push({ signalId: signal._id, verdict: "sent", why: `sent: ${pick.fitWhy}` });

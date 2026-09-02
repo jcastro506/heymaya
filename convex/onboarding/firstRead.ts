@@ -14,6 +14,7 @@ import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
 import { buildPrefix, producedStamp } from "../agent/context";
 import { deliverNow } from "../core/scheduler";
+import { critique, tooLong } from "../agent/critic";
 
 export const FIRST_READ_SKILL = `first-read
 When: once, the first message after the dossier exists.
@@ -62,13 +63,27 @@ export const run = internalAction({
       apiKey: process.env.OPENROUTER_API_KEY ?? "",
     });
     if (!result.ok) return { ok: false, reason: result.reason };
-    const text = result.content.trim();
+    let text = result.content.trim();
     if (!text) return { ok: false, reason: "empty completion" };
+
+    const d = creator.dossier as { voice?: unknown; persona?: unknown; works?: unknown } | undefined;
+    let verdict = tooLong(text) ? { pass: false, problems: ["too_long" as const], note: "over the length cap" } : await critique(ctx, { creatorId: creator._id, kind: "first_read", text, evidence: d, voice: { voice: d?.voice, persona: d?.persona }, directives: directives.map((x) => x.verbatim) });
+    let criticSkipped = Boolean(verdict.skipped);
+    if (!verdict.pass) {
+      const rewrite = await callModel(ctx, { creatorId: creator._id, purpose: "first_read_rewrite", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `Your previous first message was rejected by the critic for: ${verdict.problems.join(", ")} (${verdict.note}). Rewrite it, fixing exactly that. Message text only.` }], temperature: 0.5, maxTokens: 500, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+      if (rewrite.ok && rewrite.content.trim()) {
+        text = rewrite.content.trim();
+        verdict = tooLong(text) ? { pass: false, problems: ["too_long" as const], note: "still over the length cap" } : await critique(ctx, { creatorId: creator._id, kind: "first_read", text, evidence: d, voice: { voice: d?.voice, persona: d?.persona }, directives: directives.map((x) => x.verbatim) });
+        criticSkipped = criticSkipped || Boolean(verdict.skipped);
+      }
+      if (!verdict.pass) return { ok: false, reason: `dropped by the critic: ${verdict.problems.join(", ")} (${verdict.note})` };
+    }
 
     await ctx.runMutation(internal.core.messages.send, {
       creatorId: creator._id,
       surface: "telegram",
       body: text,
+      criticSkipped,
       dedupeKey: `first_read:${creator._id}:v${creator.dossierVersion}`,
       proactive: true,
       kind: "first_read",
