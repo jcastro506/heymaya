@@ -12,17 +12,20 @@ import { readFileSync, writeFileSync } from "node:fs";
 // One path is down at the vendor, not here: /v1/tiktok/creators/popular answers 400 with
 // "TikTok's Creative Center creator page/API is down" and charges nothing (probed 2026-09-02).
 // Kept out of the sample list so a recording run is not a red herring; the belt still lists it.
+// ⚠️ Each sample must send the SAME query the product sends. `trim: true` flattens every
+// item (no `aweme_info` wrapper), so recording untrimmed produced a fixture that could not
+// have caught a regression in the shape production actually receives.
 const SAMPLES = [
   ["/v1/tiktok/profile", { handle: "stoolpresidente" }],
   ["/v3/tiktok/profile/videos", { handle: "stoolpresidente" }],
   ["/v2/tiktok/video", { url: "https://www.tiktok.com/@stoolpresidente/video/7499229683859426602" }],
   ["/v1/tiktok/video/transcript", { url: "https://www.tiktok.com/@stoolpresidente/video/7499229683859426602" }],
   ["/v1/tiktok/video/comments", { url: "https://www.tiktok.com/@stoolpresidente/video/7499229683859426602" }],
-  ["/v1/tiktok/search/keyword", { query: "marathon training", date_posted: "this-week", sort_by: "most-liked" }],
-  ["/v1/tiktok/search/hashtag", { hashtag: "marathontraining" }],
+  ["/v1/tiktok/search/keyword", { query: "marathon training", date_posted: "this-week", sort_by: "most-liked", trim: true }],
+  ["/v1/tiktok/search/hashtag", { hashtag: "marathontraining", trim: true }],
   ["/v1/tiktok/search/top", { query: "marathon training", date_posted: "this-week" }],
   ["/v1/tiktok/search/suggestions", { query: "marathon" }],
-  ["/v1/tiktok/get-trending-feed", { region: "US" }],
+  ["/v1/tiktok/get-trending-feed", { region: "US", trim: true }],
   ["/v1/instagram/profile", { handle: "nike" }],
   ["/v2/instagram/user/posts", { handle: "nike" }],
   ["/v2/instagram/reels/search", { query: "marathon training" }],
