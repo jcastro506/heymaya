@@ -49,7 +49,7 @@ export const run = internalAction({
       return { ok: true };
     }
 
-    const prefix = buildPrefix({ creator, directives, skill: FIRST_READ_SKILL });
+    const prefix = buildPrefix({ creator, directives, skill: FIRST_READ_SKILL, personal: gathered.personal });
     const spec = REGISTRY.writer;
     const result = await callModel(ctx, {
       creatorId: creator._id,

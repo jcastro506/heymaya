@@ -76,7 +76,7 @@ export const run = internalAction({
       }
     }
     const evidence = { handle: `@${handle}`, platform: a.platform, theirQuestion: target.body.slice(0, 300), facts: f, recentCaptions: posts.slice(0, 12).map((p) => ({ when: p.createTime ? new Date(p.createTime).toISOString().slice(0, 10) : null, views: p.metrics?.viewCount ?? null, caption: (p.caption ?? "").slice(0, 140) })), transcripts };
-    const prefix = buildPrefix({ creator, directives, skill: PROFILE_SKILL });
+    const prefix = buildPrefix({ creator, directives, skill: PROFILE_SKILL, personal: g.personal });
     const spec = REGISTRY.writer;
     const inv = await investigate(ctx, { creatorId: creator._id, purpose: "profile_creator", prefix, user: `Evidence (everything you may cite):\n${JSON.stringify(evidence)}`, budget: { calls: 4, credits: 20, deadlineAt: Date.now() + 45_000 }, temperature: 0.4, maxTokens: 1200 });
     const r = inv.content ? { ok: true as const, content: inv.content } : { ok: false as const, content: "" };

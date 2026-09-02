@@ -7,6 +7,7 @@ import { v } from "convex/values";
 import { action, mutation, query, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
+import { addTracked } from "../agent/manage";
 
 const platform = v.union(v.literal("tiktok"), v.literal("instagram"));
 
@@ -50,24 +51,8 @@ export const add = mutation({
   handler: async (ctx, a): Promise<{ ok: boolean; error?: string; id?: Id<"trackedAccounts"> }> => {
     const creator = await creatorFor(ctx);
     if (!creator) return { ok: false, error: "sign in first" };
-    const handle = a.handle.trim().replace(/^@/, "").toLowerCase();
     const existing = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).collect()) as Doc<"trackedAccounts">[];
-    const dup = existing.find((r) => r.platform === a.platform && r.handle === handle);
-    if (dup) {
-      if (dup.status === "removed") await ctx.db.patch(dup._id, { status: "active" });
-      return { ok: true, id: dup._id };
-    }
-    if (existing.filter((r) => r.status !== "removed").length >= 10) return { ok: false, error: "ten is the most she can watch closely" };
-    const id = await ctx.db.insert("trackedAccounts", {
-      creatorId: creator._id,
-      platform: a.platform,
-      handle,
-      addedBy: a.addedBy ?? "creator",
-      baselineN: 0,
-      status: "active",
-      createdAt: Date.now(),
-    });
-    return { ok: true, id };
+    return await addTracked(ctx as never, creator._id, a.platform, a.handle, existing); // one rule for the web and the chat
   },
 });
 

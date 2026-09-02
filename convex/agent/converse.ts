@@ -177,7 +177,7 @@ export const run = internalAction({
         }
         // shotlist: a short writer call with the idea in context
         const idea = await ctx.runQuery(internal.agent.converse.ideaById, { ideaId });
-        const prefix = buildPrefix({ creator, directives, skill: SHOTLIST_SKILL });
+        const prefix = buildPrefix({ creator, directives, skill: SHOTLIST_SKILL, personal: gathered.personal });
         const spec = REGISTRY.writer;
         const r = await callModel(ctx, { creatorId: creator._id, purpose: "shot_list", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `The idea you sent them:\n${JSON.stringify(idea)}\n\nWrite the shot list.` }], temperature: 0.5, maxTokens: 500, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
         const text = r.ok ? r.content.trim() : "";
@@ -197,7 +197,21 @@ export const run = internalAction({
 
     // §15.3: what do they want? The model decides (one cheap call); code has already taken commands, links and files.
     const lastOutbound = [...recent].reverse().find((m) => m.direction === "out")?.body;
-    const intent = target.kind === "inbound" && !args.rerouted ? await classifyText(ctx, { creatorId: creator._id, text: target.body, ownHandles: creator.handles, lastOutbound }) : ({ intent: "text" } as const);
+    const intent = target.kind === "inbound" && !args.rerouted ? await classifyText(ctx, { creatorId: creator._id, text: target.body, ownHandles: creator.handles, lastOutbound, quietHours: creator.quietHours }) : ({ intent: "text" } as const);
+    // §1 chat is complete: the same rows the Settings controls write, from a sentence.
+    if (intent.intent === "manage") {
+      let out: { ok: boolean; body: string; buttons?: Array<{ id: string; label: string }> };
+      if (intent.action === "quiet_hours") out = await ctx.runMutation(internal.agent.manage.setQuietHours, { creatorId: creator._id, start: intent.start, end: intent.end });
+      else if (intent.action === "tone") out = await ctx.runMutation(internal.agent.manage.setTone, { creatorId: creator._id, tone: intent.tone });
+      else if (intent.action === "add_admired") out = await ctx.runMutation(internal.agent.manage.addAdmired, { creatorId: creator._id, platform: intent.platform, handle: intent.handle });
+      else if (intent.action === "stop_watching") out = await ctx.runMutation(internal.agent.manage.stopWatchingButtons, { creatorId: creator._id, handle: intent.handle });
+      else out = await ctx.runMutation(internal.agent.manage.setNiche, { creatorId: creator._id, text: intent.text });
+      if (out.body) {
+        await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: out.body, dedupeKey: `manage:${target._id}`, proactive: false, kind: "reply", buttons: out.buttons });
+        await deliverNow(ctx as never);
+        return { ok: true };
+      }
+    }
     if (intent.intent === "profile_ask") {
       const r = await ctx.runAction(internal.agent.profile.run, { creatorId: creator._id, messageId: target._id, platform: intent.platform, handle: intent.handle });
       return { ok: r.ok, reason: r.reason };
@@ -211,7 +225,7 @@ export const run = internalAction({
       else recalled = "\n\n# From memory\n- nothing close enough; say so plainly";
     }
 
-    const prefix = buildPrefix({ creator, directives, skill: CONVERSE_SKILL });
+    const prefix = buildPrefix({ creator, directives, skill: CONVERSE_SKILL, personal: gathered.personal });
     const suffix = buildSuffix({ recent: recent.filter((m) => m._id !== target._id), target }) + recalled;
     const apiKey = process.env.OPENROUTER_API_KEY ?? "";
     const spec = REGISTRY.writer;

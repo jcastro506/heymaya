@@ -13,7 +13,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
-import { buildPrefix, producedStamp } from "../agent/context";
+import { buildPrefix, personalFor, producedStamp } from "../agent/context";
 import { critique, tooLong } from "../agent/critic";
 import { computeRung, engagement, type RungFacts } from "./rung";
 import { localHourMinute } from "../scout/gate";
@@ -83,6 +83,7 @@ export const inputs = internalQuery({
     return {
       creator,
       directives,
+      personal: await personalFor(ctx, creator),
       rung,
       week: week.map((p) => ({ url: p.url, daysAgo: Math.round((a.now - p.createTime) / 86_400_000), views: p.metrics.views, multiple: p.multiple ?? null, engagementPerView: engagement({ views: p.metrics.views, comments: p.metrics.comments, shares: p.metrics.shares, saves: p.metrics.saves ?? 0 }), caption: p.caption.slice(0, 100), card: cardFor.get(p._id) ?? null, sampled: a.now - p.createTime >= 48 * 3_600_000 })),
       liked: ideas.filter((i) => i.status === "hearted" || i.status === "posted" || i.reaction).map((i) => ({ hook: (i.version as { hook?: string } | undefined)?.hook ?? i.messageText.slice(0, 80), status: i.status, features: i.features ?? null })),
@@ -122,7 +123,7 @@ export const run = internalAction({
     if (!inp) return { sent: false, reason: "creator not found" };
     const record = await ctx.runQuery(internal.review.predictions.trackRecord, { creatorId: a.creatorId });
     const pulse = await ctx.runQuery(internal.review.pulse.pulseFor, { creatorId: a.creatorId, now });
-    const prefix = buildPrefix({ creator: inp.creator, directives: inp.directives, skill: WEEKLY_REVIEW_SKILL });
+    const prefix = buildPrefix({ creator: inp.creator, directives: inp.directives, skill: WEEKLY_REVIEW_SKILL, personal: inp.personal });
     const spec = REGISTRY.writer;
     const evidence = { rung: inp.rung, week: inp.week, liked: inp.liked, passed: inp.passed, worked: inp.worked, taste: inp.taste, ideasSent: inp.ideasSent, lastExperiment: inp.lastExperiment, trackRecord: record.filter((r) => r.n >= 3), pulse: pulse ? { word: pulse.word, why: pulse.why } : null };
     const user = `This week's evidence (everything you may cite is here):\n${JSON.stringify(evidence)}`;
