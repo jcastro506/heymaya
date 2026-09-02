@@ -5,7 +5,7 @@
  * while another creator's rows are untouched.
  */
 import { convexTest } from "convex-test";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import schema from "../../schema";
 import { api, internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
@@ -47,6 +47,10 @@ async function countFor(t: ReturnType<typeof convexTest>, creatorId: Id<"creator
 }
 
 describe("deletion", () => {
+  // requestDelete schedules the run; with fake timers it stays scheduled, so each step is asserted on its own.
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
   it("TABLES_BY_CREATOR names every table in the schema that has a creatorId field", () => {
     const tables = Object.entries(schema.tables) as Array<[string, { validator?: { fields?: Record<string, unknown> } }]>;
     const withCreator = tables.filter(([name, t]) => name !== "creators" && t.validator?.fields && "creatorId" in t.validator.fields).map(([name]) => name).sort();

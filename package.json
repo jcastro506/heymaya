@@ -15,7 +15,8 @@
     "deploy:staging": "bash scripts/convex-deploy.sh staging",
     "deploy:prod": "bash scripts/convex-deploy.sh production",
     "fixtures:record": "node scripts/fixtures-record.mjs",
-    "codegen": "npx convex codegen"
+    "codegen": "npx convex codegen",
+    "check": "npm run typecheck && npm run lint && npx vitest run && npm run guards"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.8.4",
