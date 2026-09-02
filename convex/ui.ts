@@ -10,6 +10,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { summarize, type Affinity } from "./taste/affinities";
 import { computeRung, engagement } from "./review/rung";
+import { laneBenchmarkFor } from "./scout/benchmarks";
 
 async function me(ctx: QueryCtx | MutationCtx): Promise<Doc<"creators"> | null> {
   const identity = await ctx.auth.getUserIdentity();
@@ -197,8 +198,10 @@ export const results = query({
     }
     const review = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", c._id)).order("desc").take(60)) as Doc<"messages">[];
     const lastReview = review.find((m) => m.direction === "out" && m.kind === "review") ?? null;
+    const lane = await laneBenchmarkFor(ctx, c._id, now);
     return {
       rung,
+      lane: { usable: lane.usable, medianViews: lane.medianViews, p75Views: lane.p75Views, why: lane.why, computedAt: lane.computedAt },
       override,
       week: week.map((p) => ({ id: p._id, url: p.url, platform: p.platform, createTime: p.createTime, views: p.metrics.views, multiple: p.multiple ?? null, engagementPerView: engagement({ views: p.metrics.views, comments: p.metrics.comments, shares: p.metrics.shares, saves: p.metrics.saves ?? 0 }), source: p.source, metricsAsOf: p.metricsAsOf, sampled: now - p.createTime >= 48 * 3_600_000 })),
       trackRecord: Array.from(by.entries()).map(([confidence, x]) => { const s = [...x.actuals].sort((m, n) => m - n); return { confidence, expected: x.expected, medianActual: s[Math.floor(s.length / 2)], n: s.length }; }),

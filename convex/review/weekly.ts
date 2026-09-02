@@ -18,6 +18,7 @@ import { critique, tooLong } from "../agent/critic";
 import { computeRung, engagement, type RungFacts } from "./rung";
 import { localHourMinute } from "../scout/gate";
 import { summarize, type Affinity } from "../taste/affinities";
+import { laneBenchmarkFor } from "../scout/benchmarks";
 import { investigate } from "../agent/investigate";
 import { LOOKUPS } from "../agent/playbooks";
 
@@ -80,11 +81,13 @@ export const inputs = internalQuery({
     const postFor = new Map(all.map((p) => [p._id, p]));
     const directives = (await ctx.db.query("directives").withIndex("by_creator_and_active", (q) => q.eq("creatorId", a.creatorId).eq("active", true)).collect()) as Doc<"directives">[];
     const lastExperiment = [...(creator.experiments ?? [])].sort((x, y) => y.proposedAt - x.proposedAt)[0] ?? null;
+    const lane = await laneBenchmarkFor(ctx, a.creatorId, a.now);
     return {
       creator,
       directives,
       personal: await personalFor(ctx, creator),
       rung,
+      lane,
       week: week.map((p) => ({ url: p.url, daysAgo: Math.round((a.now - p.createTime) / 86_400_000), views: p.metrics.views, multiple: p.multiple ?? null, engagementPerView: engagement({ views: p.metrics.views, comments: p.metrics.comments, shares: p.metrics.shares, saves: p.metrics.saves ?? 0 }), caption: p.caption.slice(0, 100), card: cardFor.get(p._id) ?? null, sampled: a.now - p.createTime >= 48 * 3_600_000 })),
       liked: ideas.filter((i) => i.status === "hearted" || i.status === "posted" || i.reaction).map((i) => ({ hook: (i.version as { hook?: string } | undefined)?.hook ?? i.messageText.slice(0, 80), status: i.status, features: i.features ?? null })),
       passed: ideas.filter((i) => i.status === "passed").map((i) => ({ hook: (i.version as { hook?: string } | undefined)?.hook ?? i.messageText.slice(0, 80), features: i.features ?? null })),
@@ -125,7 +128,7 @@ export const run = internalAction({
     const pulse = await ctx.runQuery(internal.review.pulse.pulseFor, { creatorId: a.creatorId, now });
     const prefix = buildPrefix({ creator: inp.creator, directives: inp.directives, skill: WEEKLY_REVIEW_SKILL, personal: inp.personal });
     const spec = REGISTRY.writer;
-    const evidence = { rung: inp.rung, week: inp.week, liked: inp.liked, passed: inp.passed, worked: inp.worked, taste: inp.taste, ideasSent: inp.ideasSent, lastExperiment: inp.lastExperiment, trackRecord: record.filter((r) => r.n >= 3), pulse: pulse ? { word: pulse.word, why: pulse.why } : null };
+    const evidence = { rung: inp.rung, lane: inp.lane, week: inp.week, liked: inp.liked, passed: inp.passed, worked: inp.worked, taste: inp.taste, ideasSent: inp.ideasSent, lastExperiment: inp.lastExperiment, trackRecord: record.filter((r) => r.n >= 3), pulse: pulse ? { word: pulse.word, why: pulse.why } : null };
     const user = `This week's evidence (everything you may cite is here):\n${JSON.stringify(evidence)}`;
     const inv = await investigate(ctx, { creatorId: a.creatorId, purpose: "weekly_review", prefix, user, budget: { calls: 2, credits: 10, deadlineAt: Date.now() + 45_000 }, temperature: 0.5, maxTokens: 1600 });
     const r = inv.content ? { ok: true as const, content: inv.content } : { ok: false as const, reason: `review ${inv.ended}` };

@@ -26,6 +26,7 @@ export default function ResultsPage() {
         <div className="text-[11px] uppercase tracking-wide opacity-50">The week</div>
         <p className="text-sm mt-1">{RUNG_WORDS[r.rung.rung]}</p>
         <p className="text-xs opacity-60 mt-1">{r.rung.why}{r.rung.medianMultiple !== null ? ` · median ${r.rung.medianMultiple}× your normal` : ""}{r.rung.planned ? ` · ${r.rung.posted} of ${r.rung.planned} planned` : ` · ${r.rung.posted} posted`}</p>
+        <p className="text-xs opacity-60 mt-1">{r.lane.usable ? `Your lane's median this week: ${r.lane.medianViews?.toLocaleString()} views (top quarter from ${r.lane.p75Views?.toLocaleString()}), from ${r.lane.why}.` : `No lane median yet: ${r.lane.why}.`}</p>
         {r.override && <p className="text-xs mt-2 opacity-80">She read it differently: {r.override.rung}. {r.override.why}</p>}
       </section>
 

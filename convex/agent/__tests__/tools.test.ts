@@ -55,7 +55,7 @@ describe("runTool", () => {
       expect(TOOL_CREDITS[t.function.name], t.function.name).toBeDefined();
     }
     const names = TOOLS.map((t) => t.function.name);
-    for (const n of ["post_info", "post_transcript", "post_comments", "sound_info", "sound_videos", "sound_reels", "profile", "account_posts", "search_keyword", "search_hashtag", "search_reels", "search_ig_hashtag", "ig_popular", "trending_tiktok", "trending_reels", "suggestions", "discover_creators", "discover_profiles", "own_rhymes", "calendar_upcoming", "recall"]) expect(names).toContain(n);
+    for (const n of ["post_info", "post_transcript", "post_comments", "sound_info", "sound_videos", "sound_reels", "profile", "account_posts", "search_keyword", "search_hashtag", "search_reels", "search_ig_hashtag", "ig_popular", "trending_tiktok", "trending_reels", "suggestions", "discover_creators", "discover_profiles", "own_rhymes", "calendar_upcoming", "recall", "lane_benchmark"]) expect(names).toContain(n);
   });
 
   it("every judgment skill carries its lookup playbook", () => {

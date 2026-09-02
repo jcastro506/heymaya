@@ -19,7 +19,7 @@ export interface ToolBudget { calls: number; credits: number; deadlineAt: number
 export const DEFAULT_BUDGET = (): ToolBudget => ({ calls: 6, credits: 40, deadlineAt: Date.now() + 60_000 });
 
 /** Approximate credit prices per call (the ledger records the vendor's real number). */
-export const TOOL_CREDITS: Record<string, number> = { post_info: 10, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, sound_reels: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, search_reels: 1, search_ig_hashtag: 1, ig_popular: 1, trending_tiktok: 1, trending_reels: 1, suggestions: 1, discover_creators: 1, discover_profiles: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0, recall: 0 };
+export const TOOL_CREDITS: Record<string, number> = { post_info: 10, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, sound_reels: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, search_reels: 1, search_ig_hashtag: 1, ig_popular: 1, trending_tiktok: 1, trending_reels: 1, suggestions: 1, discover_creators: 1, discover_profiles: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0, recall: 0, lane_benchmark: 0 };
 
 const str = { type: "string" } as const;
 
@@ -43,6 +43,7 @@ export const TOOLS: OpenRouterTool[] = [
   { type: "function", function: { name: "discover_creators", description: "Popular TikTok creators in a follower band (10K-100K, 100K-1M, 1M-10M, 10M+) for a country. 1 credit. For 'who else is in this lane', not for judging a post.", parameters: { type: "object", properties: { band: { type: "string", enum: ["10K-100K", "100K-1M", "1M-10M", "10M+"] }, country: str, why: str }, required: ["band", "why"] } } },
   { type: "function", function: { name: "discover_profiles", description: "Instagram profiles for a keyword. 1 credit.", parameters: { type: "object", properties: { keyword: str, why: str }, required: ["keyword", "why"] } } },
   { type: "function", function: { name: "own_rhymes", description: "The creator's OWN posts that rhyme with a topic or format, with their multiples. Free. Use before saying 'this is yours to take'.", parameters: { type: "object", properties: { query: str, why: str }, required: ["query", "why"] } } },
+  { type: "function", function: { name: "lane_benchmark", description: "This week's median and top-quarter views across the creator's lane (their keywords and the accounts they watch), or why it is unusable. Free. Use to say whether a number is good, not just big.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
   { type: "function", function: { name: "recall", description: "Search the creator's own memory: ideas she sent, ideas they saved, things they told her. Free. Use when they refer to something from before.", parameters: { type: "object", properties: { query: str, why: str }, required: ["query", "why"] } } },
   { type: "function", function: { name: "calendar_upcoming", description: "What is on the creator's calendar in the next two weeks (titles and times only). Free.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
 ];
@@ -159,6 +160,11 @@ export async function runTool(ctx: ActionCtx, creatorId: Id<"creators">, call: {
       record(true, 0);
       const rows = value as Array<{ url: string; multiple: number | null; caption: string; createTime: number }>;
       return rows.length ? cap(rows.map((r) => `${r.url} · ${new Date(r.createTime).toISOString().slice(0, 10)} · ${r.multiple ?? "?"}× · "${r.caption.slice(0, 100)}"`).join("\n")) : "nothing of theirs rhymes with that";
+    }
+    if (call.name === "lane_benchmark") {
+      const b = await ctx.runQuery(internal.scout.benchmarks.laneFor, { creatorId, now: Date.now() });
+      record(true, 0);
+      return b.usable ? `lane this week: median ${b.medianViews?.toLocaleString()} views, top quarter from ${b.p75Views?.toLocaleString()}, median engagement per view ${((b.medianEngagementPerView ?? 0) * 100).toFixed(1)}% (${b.why})` : `no usable lane median: ${b.why}`;
     }
     if (call.name === "recall") {
       const hits = await ctx.runAction(internal.agent.memory.recall, { creatorId, query: String(call.args.query ?? ""), k: 4 });
