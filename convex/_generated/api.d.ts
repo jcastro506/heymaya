@@ -54,6 +54,7 @@ import type * as core_messages from "../core/messages.js";
 import type * as core_pairing from "../core/pairing.js";
 import type * as core_plainLanguage from "../core/plainLanguage.js";
 import type * as core_quality from "../core/quality.js";
+import type * as core_reconcile from "../core/reconcile.js";
 import type * as core_retention from "../core/retention.js";
 import type * as core_scheduler from "../core/scheduler.js";
 import type * as core_smoke from "../core/smoke.js";
@@ -165,6 +166,7 @@ declare const fullApi: ApiFromModules<{
   "core/pairing": typeof core_pairing;
   "core/plainLanguage": typeof core_plainLanguage;
   "core/quality": typeof core_quality;
+  "core/reconcile": typeof core_reconcile;
   "core/retention": typeof core_retention;
   "core/scheduler": typeof core_scheduler;
   "core/smoke": typeof core_smoke;

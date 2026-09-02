@@ -56,4 +56,7 @@ crons.daily("retention", { hourUTC: 3, minuteUTC: 30 }, internal.core.retention.
 // Creator-facing status (§7 S3): "behind today" / "couldn't see TikTok today", once a day each, only when true.
 crons.hourly("creator status", { minuteUTC: 25 }, internal.core.status.run, {});
 
+// Cost reconciliation (§16.4): the vendor's count of credits used today against our ledger, within ten percent.
+crons.daily("cost reconcile", { hourUTC: 23, minuteUTC: 30 }, internal.core.reconcile.run, {});
+
 export default crons;
