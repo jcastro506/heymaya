@@ -18,6 +18,7 @@ import type * as agent_inbound from "../agent/inbound.js";
 import type * as agent_investigate from "../agent/investigate.js";
 import type * as agent_memory from "../agent/memory.js";
 import type * as agent_opinion from "../agent/opinion.js";
+import type * as agent_playbooks from "../agent/playbooks.js";
 import type * as agent_profile from "../agent/profile.js";
 import type * as agent_registry from "../agent/registry.js";
 import type * as agent_remember from "../agent/remember.js";
@@ -114,6 +115,7 @@ declare const fullApi: ApiFromModules<{
   "agent/investigate": typeof agent_investigate;
   "agent/memory": typeof agent_memory;
   "agent/opinion": typeof agent_opinion;
+  "agent/playbooks": typeof agent_playbooks;
   "agent/profile": typeof agent_profile;
   "agent/registry": typeof agent_registry;
   "agent/remember": typeof agent_remember;

@@ -20,6 +20,7 @@ import { fetchMedia, watchMedia } from "../integrations/gemini/client";
 import { WATCH_PROMPT } from "../onboarding/watch";
 import type { ParsedLink } from "./inbound";
 import { investigate } from "./investigate";
+import { LOOKUPS } from "./playbooks";
 
 export const CONFIDENCE_MULTIPLE: Record<string, number> = { strong: 1.8, solid: 1.3, fine: 1.0, weak: 0.7, broken: 0.4 }; // §13.6 (tune)
 
@@ -29,11 +30,11 @@ The judgment: what the video does in its first three seconds against what has wo
 Tone: the same as always. If the card says one thing and their caption implies another (an ironic caption on a straight video is a bit, not a mistake), read it as the bit. A draft with a copyrighted sound: "fine if it's in the app's library".
 Cite: at least one number you were actually given (their multiple on a comparable post, a stat from the card, their normal). No number you weren't given.
 Output ONLY JSON:
-{"message": "≤700 chars, in your voice, the read then the three fixes then the confidence word in a sentence, no bullets", "biggest": "≤200", "second": "≤200", "fine": "≤120 what already works", "confidence": "strong|solid|fine|weak|broken", "citations": [{"stat": "", "value": "", "sampleSize": 0}], "cannotKnow": "≤160"}`;
+{"message": "≤700 chars, in your voice, the read then the three fixes then the confidence word in a sentence, no bullets", "biggest": "≤200", "second": "≤200", "fine": "≤120 what already works", "confidence": "strong|solid|fine|weak|broken", "citations": [{"stat": "", "value": "", "sampleSize": 0}], "cannotKnow": "≤160"}` + LOOKUPS.opinion;
 
 export const EXPLAIN_POST_SKILL = `explain-post
 When: they sent a link to their OWN post. Four lines, not four paragraphs: what it did against their normal (a number they were given), the one thing most likely responsible, one thing to keep, one thing to change next time. If the numbers are too fresh to mean anything (under 48 hours), say so and say when you'll know. Never invent a metric.
-Output ONLY JSON: {"message": "≤500 chars, in your voice", "biggest": "≤200", "second": "≤200", "fine": "≤120", "confidence": "strong|solid|fine|weak|broken", "citations": [{"stat": "", "value": "", "sampleSize": 0}], "cannotKnow": "≤160"}`;
+Output ONLY JSON: {"message": "≤500 chars, in your voice", "biggest": "≤200", "second": "≤200", "fine": "≤120", "confidence": "strong|solid|fine|weak|broken", "citations": [{"stat": "", "value": "", "sampleSize": 0}], "cannotKnow": "≤160"}` + LOOKUPS.explainPost;
 
 const SCREENSHOT_PROMPT = `This is a screenshot from a creator's phone: analytics, a profile, or a post. Read every number you can see with its label, exactly as written. Return STRICT JSON: {"kind": "analytics|profile|post|other", "platform": "tiktok|instagram|unknown", "numbers": [{"label": "", "value": ""}], "postTitleOrCaption": "≤120 or ''", "period": "≤40 or ''"}. If a number is unreadable, leave it out. Never guess.`;
 
@@ -200,8 +201,8 @@ export const run = internalAction({
     // §13.11: for a link she may look up the sound, the comments and the author's normal before the read.
     let r: { ok: boolean; content: string; reason?: string };
     let investigation: Array<{ tool: string; params: Record<string, unknown>; why: string; credits?: number; ms: number; ok: boolean }> = [];
-    if (a.mode === "link") {
-      const inv = await investigate(ctx, { creatorId: creator._id, purpose: "opinion", prefix, user, budget: { calls: 4, credits: 20, deadlineAt: Date.now() + 45_000 }, temperature: 0.4, maxTokens: 1600 });
+    if (a.mode === "link" || a.mode === "own") {
+      const inv = await investigate(ctx, { creatorId: creator._id, purpose: a.mode === "own" ? "explain_post" : "opinion", prefix, user, budget: { calls: a.mode === "own" ? 3 : 4, credits: 20, deadlineAt: Date.now() + 45_000 }, temperature: 0.4, maxTokens: 1600 });
       investigation = inv.trace;
       r = inv.content ? { ok: true, content: inv.content } : { ok: false, content: "", reason: inv.ended };
     } else {

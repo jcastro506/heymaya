@@ -19,6 +19,7 @@ import { THRESHOLDS } from "../config/thresholds";
 import { critique, tooLong } from "../agent/critic";
 import { localHourMinute } from "./gate";
 import { internalQuery } from "../_generated/server";
+import { LOOKUPS } from "../agent/playbooks";
 
 export const SCOUT_SKILL = `scout
 When: the gate has passed and there are candidates. Four kinds: "breakout" (an account they admire, above its own normal), "shape" (the top of their lane for one of their keywords this week; the account is not one they named), "win" (THEIR OWN post crossing 3× their normal; the message is a real, specific celebration and one thing to do while it's moving, nothing else), and "calendar" (something on THEIR OWN calendar two or more days out that a post could ride: the message names the event, the shape of the post it makes possible, and proposes ONE filming block before it, with a day and a time on their clock; "version.block" carries that block and the question at the end is whether to block it).
@@ -26,7 +27,7 @@ The judgment: which of these, if any, is notable (a real breakout above that acc
 Taste: each candidate carries "taste", their history with things like it; the prefix carries the note you keep on what they take. Weigh it, don't obey it: a "passed on" is a reason to pick something else unless this one is clearly different, and say what's different. Name the idea's features honestly in "features"; they are how you learn from what they do next. If the prompt says the explore slot is open, you may pick something outside their usual, set "newForYou": true, and say in the message that it's not their usual.
 Output ONLY JSON:
 {"pick": {"postId": "", "notable": true, "fit": "yes|maybe|no", "fitWhy": "≤160", "newForYou": false, "features": {"format": "talking-head|skit|vlog|tutorial|list|reaction|duet|pov|grwm|text-on-screen|other", "topics": ["≤3 short tags"], "tone": "serious|deadpan|ironic|hype|warm", "lengthBucket": "<15|15-30|30-60|60+", "sound": "trending|original|none"}, "message": "≤900 chars, in your voice, lowercase fine, no bullets", "version": {"hook": "≤120", "onScreenText": "≤80", "lengthSec": 0, "sound": "≤80 or ''", "block": {"startLocal": "YYYY-MM-DDTHH:MM on their clock", "lengthMin": 60, "title": "≤60, starts with 'film:'"} | null}} | null,
- "rejected": [{"postId": "", "why": "≤80"}]}`;
+ "rejected": [{"postId": "", "why": "≤80"}]}` + LOOKUPS.scout;
 
 export const writeIdea = internalMutation({
   args: {

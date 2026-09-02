@@ -19,7 +19,7 @@ export interface ToolBudget { calls: number; credits: number; deadlineAt: number
 export const DEFAULT_BUDGET = (): ToolBudget => ({ calls: 6, credits: 40, deadlineAt: Date.now() + 60_000 });
 
 /** Approximate credit prices per call (the ledger records the vendor's real number). */
-export const TOOL_CREDITS: Record<string, number> = { post_info: 1, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0 };
+export const TOOL_CREDITS: Record<string, number> = { post_info: 1, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, sound_reels: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, search_reels: 1, search_ig_hashtag: 1, ig_popular: 1, trending_tiktok: 1, trending_reels: 1, suggestions: 1, discover_creators: 1, discover_profiles: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0 };
 
 const str = { type: "string" } as const;
 
@@ -33,6 +33,15 @@ export const TOOLS: OpenRouterTool[] = [
   { type: "function", function: { name: "account_posts", description: "An account's recent posts with numbers, to compute its normal and see whether this one is above it. 1 credit.", parameters: { type: "object", properties: { platform: { type: "string", enum: ["tiktok", "instagram"] }, handle: str, why: str }, required: ["platform", "handle", "why"] } } },
   { type: "function", function: { name: "search_keyword", description: "TikTok posts for a keyword this week, most liked first: is this shape a wave right now, or one account? 1 credit.", parameters: { type: "object", properties: { keyword: str, why: str }, required: ["keyword", "why"] } } },
   { type: "function", function: { name: "search_hashtag", description: "TikTok posts under a hashtag. 1 credit.", parameters: { type: "object", properties: { hashtag: str, why: str }, required: ["hashtag", "why"] } } },
+  { type: "function", function: { name: "search_reels", description: "Instagram reels for a keyword, last week or month. 1 credit.", parameters: { type: "object", properties: { keyword: str, why: str }, required: ["keyword", "why"] } } },
+  { type: "function", function: { name: "search_ig_hashtag", description: "Instagram posts under a hashtag. 1 credit.", parameters: { type: "object", properties: { hashtag: str, why: str }, required: ["hashtag", "why"] } } },
+  { type: "function", function: { name: "ig_popular", description: "What Instagram surfaces as popular for a topic right now. 1 credit.", parameters: { type: "object", properties: { topic: str, why: str }, required: ["topic", "why"] } } },
+  { type: "function", function: { name: "sound_reels", description: "Instagram reels on one audio id: is the audio rising, who used it. 1 credit.", parameters: { type: "object", properties: { audioId: str, why: str }, required: ["audioId", "why"] } } },
+  { type: "function", function: { name: "trending_tiktok", description: "TikTok's trending feed for a region (US default): what the platform is pushing today. 1 credit. Rarely decides anything; use to check whether a shape is platform-wide.", parameters: { type: "object", properties: { region: str, why: str }, required: ["why"] } } },
+  { type: "function", function: { name: "trending_reels", description: "Instagram's trending reels right now. 1 credit.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
+  { type: "function", function: { name: "suggestions", description: "TikTok search autocomplete for a keyword: what people are typing next to it, a demand signal. 1 credit.", parameters: { type: "object", properties: { keyword: str, why: str }, required: ["keyword", "why"] } } },
+  { type: "function", function: { name: "discover_creators", description: "Popular TikTok creators in a follower band (10K-100K, 100K-1M, 1M-10M, 10M+) for a country. 1 credit. For 'who else is in this lane', not for judging a post.", parameters: { type: "object", properties: { band: { type: "string", enum: ["10K-100K", "100K-1M", "1M-10M", "10M+"] }, country: str, why: str }, required: ["band", "why"] } } },
+  { type: "function", function: { name: "discover_profiles", description: "Instagram profiles for a keyword. 1 credit.", parameters: { type: "object", properties: { keyword: str, why: str }, required: ["keyword", "why"] } } },
   { type: "function", function: { name: "own_rhymes", description: "The creator's OWN posts that rhyme with a topic or format, with their multiples. Free. Use before saying 'this is yours to take'.", parameters: { type: "object", properties: { query: str, why: str }, required: ["query", "why"] } } },
   { type: "function", function: { name: "calendar_upcoming", description: "What is on the creator's calendar in the next two weeks (titles and times only). Free.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
 ];
@@ -72,9 +81,25 @@ function summarize(tool: string, value: unknown): string {
       if (!rows.length) return "no comments returned";
       return cap(rows.slice(0, 15).map((c) => `(${c.likeCount ?? 0}) ${(c.text ?? "").slice(0, 120)}`).join("\n"));
     }
+    case "suggestions": {
+      const rows = (Array.isArray(value) ? value : ((value as { suggestions?: unknown[] } | null)?.suggestions ?? [])) as unknown[];
+      return rows.length ? cap(rows.slice(0, 20).map((x) => (typeof x === "string" ? x : JSON.stringify(x))).join(" · ")) : "no suggestions";
+    }
+    case "discover_creators":
+    case "discover_profiles": {
+      const rows = (Array.isArray(value) ? value : ((value as { profiles?: unknown[]; creators?: unknown[]; users?: unknown[] } | null)?.profiles ?? (value as { creators?: unknown[] } | null)?.creators ?? (value as { users?: unknown[] } | null)?.users ?? [])) as Array<{ handle?: string; username?: string; followerCount?: number; followers?: number; bio?: string; displayName?: string }>;
+      return rows.length ? cap(rows.slice(0, 15).map((r) => `@${r.handle ?? r.username ?? "?"} · ${r.followerCount ?? r.followers ?? "?"} followers · ${(r.displayName ?? "")} · "${(r.bio ?? "").slice(0, 80)}"`).join("\n")) : "no profiles returned";
+    }
     case "account_posts":
     case "search_keyword":
-    case "search_hashtag": {
+    case "search_hashtag":
+    case "search_reels":
+    case "search_ig_hashtag":
+    case "ig_popular":
+    case "sound_videos":
+    case "sound_reels":
+    case "trending_tiktok":
+    case "trending_reels": {
       const rows = postsOf(value);
       if (!rows.length) return "no posts returned";
       const views = rows.map((p) => p.metrics?.viewCount ?? 0).filter((x) => x > 0).sort((a, b) => a - b);
@@ -170,6 +195,42 @@ export async function runTool(ctx: ActionCtx, creatorId: Id<"creators">, call: {
       case "search_hashtag":
         kind = "search.hashtag";
         params = { hashtag: String(call.args.hashtag ?? "").replace(/^#/, "") };
+        break;
+      case "search_reels":
+        kind = "search.reels";
+        params = { keyword: String(call.args.keyword ?? ""), window: "last-week" };
+        break;
+      case "search_ig_hashtag":
+        kind = "search.hashtagPosts";
+        params = { hashtag: String(call.args.hashtag ?? "").replace(/^#/, ""), window: "last-week" };
+        break;
+      case "ig_popular":
+        kind = "ig.popular";
+        params = { topic: String(call.args.topic ?? "") };
+        break;
+      case "sound_reels":
+        kind = "sound.reels";
+        params = { audioId: String(call.args.audioId ?? "") };
+        break;
+      case "trending_tiktok":
+        kind = "trending.tiktok";
+        params = { region: String(call.args.region ?? "US") };
+        break;
+      case "trending_reels":
+        kind = "trending.reels";
+        params = { batch: 1 };
+        break;
+      case "suggestions":
+        kind = "suggestions.tiktok";
+        params = { keyword: String(call.args.keyword ?? "") };
+        break;
+      case "discover_creators":
+        kind = "discover.creators";
+        params = { band: String(call.args.band ?? "100K-1M"), country: String(call.args.country ?? "US") };
+        break;
+      case "discover_profiles":
+        kind = "discover.profiles";
+        params = { keyword: String(call.args.keyword ?? "") };
         break;
       default:
         record(false, 0);

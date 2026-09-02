@@ -18,6 +18,8 @@ import { critique, tooLong } from "../agent/critic";
 import { computeRung, engagement, type RungFacts } from "./rung";
 import { localHourMinute } from "../scout/gate";
 import { summarize, type Affinity } from "../taste/affinities";
+import { investigate } from "../agent/investigate";
+import { LOOKUPS } from "../agent/playbooks";
 
 const WEEK_MS = 7 * 86_400_000;
 
@@ -27,7 +29,7 @@ Order: (1) the week in one line with a number they were given (posts, median mul
 The rung is a computed fact you were given. You may disagree with it, but then say why in "rungOverride".
 Never invent a metric. If the week is thin (under three posts with a 48 h sample), say so and make the review about the one thing you can see.
 Output ONLY JSON:
-{"message": "≤900 chars", "experimentVerdict": "held|failed|unknown|none", "experimentVerdictWhy": "≤120", "newExperiment": "≤140, one post, measurable", "rungOverride": {"rung": "L0|L1|L2|healthy|unknown", "why": "≤120"} | null}`;
+{"message": "≤900 chars", "experimentVerdict": "held|failed|unknown|none", "experimentVerdictWhy": "≤120", "newExperiment": "≤140, one post, measurable", "rungOverride": {"rung": "L0|L1|L2|healthy|unknown", "why": "≤120"} | null}` + LOOKUPS.review;
 
 export const dueForReview = internalQuery({
   args: { now: v.number() },
@@ -124,7 +126,8 @@ export const run = internalAction({
     const spec = REGISTRY.writer;
     const evidence = { rung: inp.rung, week: inp.week, liked: inp.liked, passed: inp.passed, worked: inp.worked, taste: inp.taste, ideasSent: inp.ideasSent, lastExperiment: inp.lastExperiment, trackRecord: record.filter((r) => r.n >= 3), pulse: pulse ? { word: pulse.word, why: pulse.why } : null };
     const user = `This week's evidence (everything you may cite is here):\n${JSON.stringify(evidence)}`;
-    const r = await callModel(ctx, { creatorId: a.creatorId, purpose: "weekly_review", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: user }], temperature: 0.5, maxTokens: 1600, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+    const inv = await investigate(ctx, { creatorId: a.creatorId, purpose: "weekly_review", prefix, user, budget: { calls: 2, credits: 10, deadlineAt: Date.now() + 45_000 }, temperature: 0.5, maxTokens: 1600 });
+    const r = inv.content ? { ok: true as const, content: inv.content } : { ok: false as const, reason: `review ${inv.ended}` };
     if (!r.ok) return { sent: false, reason: r.reason };
     type Out = { message: string; experimentVerdict?: string; experimentVerdictWhy?: string; newExperiment?: string; rungOverride?: { rung: string; why: string } | null };
     let out: Out | null = null;

@@ -16,11 +16,12 @@ import { buildPrefix, producedStamp } from "./context";
 import { critique, tooLong } from "./critic";
 import { deliverNow } from "../core/scheduler";
 import { investigate } from "./investigate";
+import { LOOKUPS } from "./playbooks";
 
 export const PROFILE_SKILL = `profile-creator
 When: they asked why an account is growing, or what an account is doing. You have that account's recent posts with numbers and the transcripts of its top three. You have NOT watched anything, so say nothing about visuals.
 Four lines, no bullets: (1) what this account actually does, from the captions and transcripts; (2) what is working right now, with the numbers you were given (posting cadence, their normal, the outliers and how far above); (3) what of it is THIS creator's to take, given the dossier and their taste; (4) what is not theirs, and why. Under 600 characters. Never invent a metric.
-Output ONLY JSON: {"message": "≤600 chars in your voice", "takeaway": "≤120, the one transferable thing"}`;
+Output ONLY JSON: {"message": "≤600 chars in your voice", "takeaway": "≤120, the one transferable thing"}` + LOOKUPS.profile;
 
 type PostIn = { postId?: string; url?: string; createTime?: number; caption?: string; durationSec?: number; metrics?: { viewCount?: number; likeCount?: number; commentCount?: number; shareCount?: number } };
 

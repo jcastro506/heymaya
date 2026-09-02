@@ -11,7 +11,8 @@ import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
 import type { ActionCtx } from "../../_generated/server";
 import type { Id } from "../../_generated/dataModel";
-import { DEFAULT_BUDGET, runTool, SUMMARY_CAP, TOOLS, type ToolCallRecord } from "../tools";
+import { DEFAULT_BUDGET, runTool, SUMMARY_CAP, TOOL_CREDITS, TOOLS, type ToolCallRecord } from "../tools";
+import { LOOKUPS } from "../playbooks";
 import { tokens } from "../toolsData";
 
 function fakeCtx(overrides: Partial<{ runAction: (ref: unknown, args: unknown) => Promise<unknown>; runQuery: (ref: unknown, args: unknown) => Promise<unknown> }> = {}): ActionCtx {
@@ -48,10 +49,17 @@ describe("runTool", () => {
     expect(trace[0].credits).toBe(0); // cached: free
   });
 
-  it("every tool in the belt has a price and a why parameter", () => {
+  it("every tool in the belt has a price and a why parameter; the belt covers the catalogue", () => {
     for (const t of TOOLS) {
       expect((t.function.parameters as { required: string[] }).required).toContain("why");
+      expect(TOOL_CREDITS[t.function.name], t.function.name).toBeDefined();
     }
+    const names = TOOLS.map((t) => t.function.name);
+    for (const n of ["post_info", "post_transcript", "post_comments", "sound_info", "sound_videos", "sound_reels", "profile", "account_posts", "search_keyword", "search_hashtag", "search_reels", "search_ig_hashtag", "ig_popular", "trending_tiktok", "trending_reels", "suggestions", "discover_creators", "discover_profiles", "own_rhymes", "calendar_upcoming"]) expect(names).toContain(n);
+  });
+
+  it("every judgment skill carries its lookup playbook", () => {
+    for (const k of ["scout", "opinion", "explainPost", "profile", "review"] as const) expect(LOOKUPS[k].length).toBeGreaterThan(200);
   });
 });
 
