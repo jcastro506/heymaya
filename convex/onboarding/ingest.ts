@@ -146,7 +146,7 @@ export const run = internalAction({
     if (platforms.length === 0) return { ok: false, reason: "no handles to read" };
 
     // Pass one: the catalogue. Popular first so the all-time top posts are in the set, then latest.
-    let readFrom = { tiktokPosts: 0, instagramPosts: 0, transcripts: 0, watched: 0, sampledFromHistory: false };
+    const readFrom = { tiktokPosts: 0, instagramPosts: 0, transcripts: 0, watched: 0, sampledFromHistory: false };
     for (const platform of platforms) {
       const handle = creator.handles[platform]!;
       for (const sort of ["popular", "latest"] as const) {

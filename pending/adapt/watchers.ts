@@ -325,7 +325,7 @@ export const sweepDue = internalAction({
     /** ⚠️ SCHEDULED, not completed — each sweep reports its own outcome. */
     let scheduled = 0;
     let skipped = 0;
-    let failed = 0;
+    const failed = 0;
 
     /**
      * ⚠️ A SECOND SWEEP MAP LIVED HERE, declared and never read, while
