@@ -165,3 +165,9 @@ Running handoff. Newest at the bottom. Read the **Blocked on you** section first
 
 - Sound signals: observations now carry the clip id; a daily pass makes a `sound` signal from any sound two or more lane accounts used this week; the gate's sound rail; the scout's sixth kind looks the sound up first.
 - Landing analytics (view, scroll depth, CTA click; memory persistence, nothing personal). The calendar round trip can return to onboarding. Onboarding: screen 5 calendar (skip allowed), screen 7 done (timezone confirm, quiet hours, progress from jobs, Open Maya in Telegram), existing account → Today, tap-to-pick suggestions (popular creators in their band and country, accounts they follow). 285 tests.
+
+## 18:00 PT — budgets as rows, vendor smoke, alerts, retention
+
+- Daily budgets (§3): every priced cost event lands on the creator's day in their timezone; the gate refuses proactive at the day's spend, watch or credit cap and says which; replies are never throttled. Caps in thresholds ($0.75, 8 watches, 60 credits; tune from the ledger).
+- Vendor smoke (§17.1): one free call per vendor daily into vendorHealth, on the console; ran live: ScrapeCreators, Telegram, OpenRouter, Gemini all ok (the vendor's balance call answers even at 0 credits).
+- Operator alerts (§16 principle 5): hourly, one Telegram message to the operator chat for new dead jobs, outbound undelivered over an hour, failed smoke, connections needing attention; ids only, never content. Retention (§16.5): messages 12 months, calendar fields 90 days rolling, expired oauth states, nightly and bounded.
