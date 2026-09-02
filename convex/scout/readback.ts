@@ -65,6 +65,7 @@ export const run = internalAction({
           await ctx.runMutation(internal.onboarding.ingest.upsertOwnPosts, { creatorId: c.id, posts, now, handle });
         }
         await ctx.runMutation(internal.onboarding.ingest.computeMultiples, { creatorId: c.id });
+        await ctx.runMutation(internal.review.predictions.scoreDue, { creatorId: c.id, now }); // §13.6: the 48 h outcome beside the call
         const { written } = await ctx.runMutation(internal.scout.readback.writeWins, { creatorId: c.id, now });
         wins += written;
         // §13.5: did they make one of the ideas? A judgment, per new post, against the last 14 days of ideas.
