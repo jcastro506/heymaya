@@ -37,9 +37,13 @@ export const run = internalAction({
     let vendor: number | null = null;
     try {
       const res = await fetch("https://api.scrapecreators.com/v1/account/get-daily-usage-count", { headers: { "x-api-key": process.env.SCRAPE_CREATORS_API_KEY ?? "" } });
-      const body = (await res.json().catch(() => null)) as { creditsUsed?: number; credits?: number; count?: number; usage?: { credits?: number } } | null;
-      const n = body?.creditsUsed ?? body?.credits ?? body?.usage?.credits ?? body?.count;
-      vendor = typeof n === "number" ? n : null;
+      // The vendor answers a list of days: [{ usage_date: "2026-08-23T00:00:00.000Z", total_credits: "78", request_count: "78" }, …]
+      const body = (await res.json().catch(() => null)) as Array<{ usage_date?: string; total_credits?: string | number }> | null;
+      if (Array.isArray(body)) {
+        const today = new Date(midnight).toISOString().slice(0, 10);
+        const row = body.find((r) => String(r.usage_date ?? "").slice(0, 10) === today);
+        vendor = row ? Number(row.total_credits ?? 0) : 0; // no row for today means nothing was spent today
+      }
     } catch {
       vendor = null;
     }
