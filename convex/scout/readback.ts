@@ -67,6 +67,8 @@ export const run = internalAction({
         await ctx.runMutation(internal.onboarding.ingest.computeMultiples, { creatorId: c.id });
         const { written } = await ctx.runMutation(internal.scout.readback.writeWins, { creatorId: c.id, now });
         wins += written;
+        // §13.5: did they make one of the ideas? A judgment, per new post, against the last 14 days of ideas.
+        await ctx.runAction(internal.scout.matchPost.run, { creatorId: c.id });
       } catch (error) {
         failed += 1;
         console.error(`[readback] ${c.id}: ${error instanceof Error ? error.message : String(error)}`);

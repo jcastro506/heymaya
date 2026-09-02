@@ -66,6 +66,7 @@ import type * as reads_key from "../reads/key.js";
 import type * as reads_kinds from "../reads/kinds.js";
 import type * as reads_read from "../reads/read.js";
 import type * as scout_gate from "../scout/gate.js";
+import type * as scout_matchPost from "../scout/matchPost.js";
 import type * as scout_readback from "../scout/readback.js";
 import type * as scout_sampler from "../scout/sampler.js";
 import type * as scout_scout from "../scout/scout.js";
@@ -141,6 +142,7 @@ declare const fullApi: ApiFromModules<{
   "reads/kinds": typeof reads_kinds;
   "reads/read": typeof reads_read;
   "scout/gate": typeof scout_gate;
+  "scout/matchPost": typeof scout_matchPost;
   "scout/readback": typeof scout_readback;
   "scout/sampler": typeof scout_sampler;
   "scout/scout": typeof scout_scout;

@@ -179,6 +179,7 @@ export default defineSchema({
     metricsAsOf: v.number(),
     source: v.union(v.literal("scrape"), v.literal("zernio"), v.literal("official"), v.literal("screenshot")),
     multiple: v.optional(v.number()), // views / creator baseline at capture
+    matchCheckedAt: v.optional(v.number()), // §13.5: match-post has judged this post against recent ideas
     transcript: v.optional(v.string()),
     sample: v.optional(v.array(v.string())), // top | weak | recent | outlier | history
   })

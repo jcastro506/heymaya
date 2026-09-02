@@ -127,6 +127,14 @@ export const run = internalAction({
         await deliverNow(ctx as never);
         return { ok: true };
       }
+      // "maybe this one?" (§13.5 unsure): their yes is the match; their no is a negative example for the skill, not for taste.
+      const mm = target.body.match(/^match:([a-z0-9]+):([a-z0-9]+):(yes|no)$/);
+      if (mm) {
+        const r = await ctx.runMutation(internal.scout.matchPost.apply, { creatorId: creator._id, ideaId: mm[1] as Id<"ideas">, ownPostId: mm[2] as Id<"ownPosts">, confidence: mm[3] === "yes" ? "certain" : "no", why: "they said so" });
+        await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: mm[3] === "yes" ? "logged. that one counts." : "got it, not from me. i'll be less sure next time.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
+        await deliverNow(ctx as never);
+        return { ok: r.ok };
+      }
       const m = target.body.match(/^idea:([a-z0-9]+):(shotlist|notme|save)$/);
       if (m) {
         const ideaId = m[1] as Id<"ideas">;
