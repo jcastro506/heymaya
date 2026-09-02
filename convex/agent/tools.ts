@@ -46,7 +46,7 @@ export const TOOLS: OpenRouterTool[] = [
   { type: "function", function: { name: "calendar_upcoming", description: "What is on the creator's calendar in the next two weeks (titles and times only). Free.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
 ];
 
-export interface ToolCallRecord { tool: string; params: Record<string, unknown>; why: string; credits?: number; ms: number; ok: boolean }
+export interface ToolCallRecord { tool: string; params: Record<string, unknown>; why: string; credits?: number; ms: number; ok: boolean; detail?: string }
 
 function cap(s: string): string {
   return s.length > SUMMARY_CAP ? `${s.slice(0, SUMMARY_CAP)}… (cut)` : s;
@@ -122,23 +122,23 @@ function summarize(tool: string, value: unknown): string {
 export async function runTool(ctx: ActionCtx, creatorId: Id<"creators">, call: { name: string; args: Record<string, unknown> }, budget: ToolBudget, trace: ToolCallRecord[]): Promise<string> {
   const why = String(call.args.why ?? "").slice(0, 160);
   const started = Date.now();
-  const record = (ok: boolean, credits?: number) => trace.push({ tool: call.name, params: Object.fromEntries(Object.entries(call.args).filter(([k]) => k !== "why")), why, credits, ms: Date.now() - started, ok });
+  const record = (ok: boolean, credits?: number, detail?: string) => trace.push({ tool: call.name, params: Object.fromEntries(Object.entries(call.args).filter(([k]) => k !== "why")), why, credits, ms: Date.now() - started, ok, ...(detail ? { detail } : {}) });
   if (trace.length >= budget.calls) {
-    record(false, 0);
+    record(false, 0, "call budget spent");
     return `refused: the call budget (${budget.calls}) is spent. Answer with what you have.`;
   }
   if (Date.now() > budget.deadlineAt) {
-    record(false, 0);
+    record(false, 0, "out of time");
     return "refused: out of time. Answer with what you have.";
   }
   const price = TOOL_CREDITS[call.name];
   if (price === undefined) {
-    record(false, 0);
+    record(false, 0, "unknown tool");
     return `refused: no tool named ${call.name}`;
   }
   const spent = trace.reduce((s, t) => s + (t.credits ?? 0), 0);
   if (spent + price > budget.credits) {
-    record(false, 0);
+    record(false, 0, "credit budget");
     return `refused: the credit budget (${budget.credits}) would be exceeded. Answer with what you have.`;
   }
   try {
@@ -240,7 +240,8 @@ export async function runTool(ctx: ActionCtx, creatorId: Id<"creators">, call: {
     record(true, r.cached ? 0 : price);
     return summarize(call.name, r.value);
   } catch (e) {
-    record(false, 0);
-    return `failed: ${e instanceof Error ? e.message.slice(0, 120) : "error"}`;
+    const detail = e instanceof Error ? e.message.slice(0, 160) : "error";
+    record(false, 0, detail);
+    return `failed: ${detail.slice(0, 120)}`;
   }
 }

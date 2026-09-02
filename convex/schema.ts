@@ -226,7 +226,7 @@ export default defineSchema({
     corroboration: v.object({ accounts: v.number(), soundRising: v.boolean() }),
     formatFingerprint: v.optional(v.string()),
     // §13.11: the trace of what she looked up before judging, and what it cost
-    investigation: v.optional(v.array(v.object({ tool: v.string(), params: v.any(), why: v.string(), credits: v.optional(v.number()), ms: v.number(), ok: v.boolean() }))),
+    investigation: v.optional(v.array(v.object({ tool: v.string(), params: v.any(), why: v.string(), credits: v.optional(v.number()), ms: v.number(), ok: v.boolean(), detail: v.optional(v.string()) }))),
     verdict: v.union(v.literal("pending"), v.literal("sent"), v.literal("held"), v.literal("dropped")),
     why: v.string(),
     thresholdsVersion: v.string(),
