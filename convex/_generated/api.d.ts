@@ -57,6 +57,7 @@ import type * as core_quality from "../core/quality.js";
 import type * as core_retention from "../core/retention.js";
 import type * as core_scheduler from "../core/scheduler.js";
 import type * as core_smoke from "../core/smoke.js";
+import type * as core_status from "../core/status.js";
 import type * as core_telegram from "../core/telegram.js";
 import type * as core_telegramFiles from "../core/telegramFiles.js";
 import type * as crons from "../crons.js";
@@ -166,6 +167,7 @@ declare const fullApi: ApiFromModules<{
   "core/retention": typeof core_retention;
   "core/scheduler": typeof core_scheduler;
   "core/smoke": typeof core_smoke;
+  "core/status": typeof core_status;
   "core/telegram": typeof core_telegram;
   "core/telegramFiles": typeof core_telegramFiles;
   crons: typeof crons;

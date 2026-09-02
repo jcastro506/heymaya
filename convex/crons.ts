@@ -53,4 +53,7 @@ crons.hourly("operator alerts", { minuteUTC: 20 }, internal.core.alerts.run, {})
 // Retention (§16.5): messages 12 months, calendar fields 90 days rolling, expired oauth states; nightly, bounded.
 crons.daily("retention", { hourUTC: 3, minuteUTC: 30 }, internal.core.retention.nightly, {});
 
+// Creator-facing status (§7 S3): "behind today" / "couldn't see TikTok today", once a day each, only when true.
+crons.hourly("creator status", { minuteUTC: 25 }, internal.core.status.run, {});
+
 export default crons;
