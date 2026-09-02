@@ -283,6 +283,18 @@ The manifest also carries **the scar tissue**, as a numbered list with the incid
 
 **Cost gate.** Per-creator daily spend < $0.60 every day of the pilot; pilot COGS per creator < $10 measured.
 
+### Sprint 3b — Taste · *built 2026-09-02, ahead of schedule* · runs alongside Sprint 3 and 4
+
+**Goal.** She gets more personal every week, in every skill, and can say why. The full design is §13.10; this entry is the sprint-shaped view of it.
+
+**Build.** `tasteEvents` rows written by code at the moment of every reaction, tap, first reply, post and 72-hour silence · features named by the writer in the same call that writes the idea · affinities computed and decayed (45-day half-life) with `n` as confidence · the weekly taste note in prose, in the prefix between the dossier and the house rules, shown in Settings with correct-me · gate re-rank by coarse affinity and the hard-no rail (format, topic, sound, account; never the source kind) with the reason on the signal · the explore slot, one idea in five · Ideas shows reactions and "posted it". **Status: all of the above is on `creator` (commit `2b0bae4`).**
+
+**Still to build in this sprint.** The `match-post` skill (§13.5), so "posted" stops being self-reported · the nightly consolidation call (§15.7 layer 3) · the weekly review's "liked vs worked" paragraph · reply-hour cadence learning · the admired-list question after three passes on one account ("stop watching @x?") · `opinion` calibrated to how they take critique.
+
+**Named tests.** Decay and weight arithmetic · three "not me" on one account → that account's next breakout is rail-dropped with the reason · a posted idea outweighs any number of hearts · a reaction on an idea message writes exactly one event and flips the idea to `hearted` · posted never regresses · an event can never attach to another creator's idea · silence expires at 72 h with −0.3, an explore idea's silence with 0 · the prefix carries the note and the computed likes. **Nine of nine green.**
+
+**DoD.** Simulated month: a pass on day 1 changes the ranking on day 30 (the §15.7 test, extended) · Settings shows the note and the creator can correct it · the operator can read every `signals.why` that says "taste:" and agree with it.
+
 ### Sprint 4 — Results, connections, and the thin UI · pairs with S4
 
 **Goal.** Weekly review, daily readback, own-account metrics through Zernio, the five tabs live.
