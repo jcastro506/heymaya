@@ -69,6 +69,11 @@ export const enqueue = internalMutation({
     args
   ): Promise<{ jobId: Id<"jobs">; created: boolean }> => {
     const now = Date.now();
+    // §16.5 step 1: a frozen creator gets no new work, from any path.
+    if (args.creatorId) {
+      const creator = await ctx.db.get(args.creatorId);
+      if (creator && (creator as { plan?: { status?: string } }).plan?.status === "deleting") throw new Error("creator is deleting; no new jobs");
+    }
     const existing = await ctx.db
       .query("jobs")
       .withIndex("by_idempotencyKey", (q) =>

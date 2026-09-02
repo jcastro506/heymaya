@@ -216,6 +216,8 @@ export const run = internalAction({
       produced: producedStamp(spec.primary),
     });
     await deliverNow(ctx as never);
+    // remember (§15.7 layer 2): what they said in passing becomes a note or a rule, after the reply is on its way.
+    await ctx.scheduler.runAfter(0, internal.agent.remember.afterTurn, { creatorId: creator._id, messageId: target._id });
     return { ok: true };
   },
 });

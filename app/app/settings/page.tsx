@@ -15,6 +15,9 @@ export default function SettingsPage() {
   const correct = useMutation(api.ui.correct);
   const revoke = useMutation(api.ui.revokeRule);
   const [correction, setCorrection] = useState("");
+  const [confirmText, setConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteNote, setDeleteNote] = useState<string | null>(null);
   const cal = useQuery(api.calendar.oauth.status);
   const selectCalendars = useMutation(api.calendar.oauth.selectCalendars);
   const disconnect = useAction(api.calendar.oauth.disconnect);
@@ -135,6 +138,28 @@ export default function SettingsPage() {
           </ul>
         )}
         {s.notes.length > 0 && <div className="mt-2"><div className="opacity-50 text-xs">things you told her</div><ul className="list-disc pl-5">{s.notes.map((n) => <li key={n.id}>{n.text}</li>)}</ul></div>}
+      </section>
+
+      <section className="flex flex-col gap-2 text-sm">
+        <h2 className="text-sm uppercase tracking-wide opacity-50">Your data</h2>
+        <p className="opacity-70">Everything she keeps about you, as one file. Take it any time.</p>
+        <a className="underline self-start" href="/api/account/export">download my export</a>
+        <details className="mt-2">
+          <summary className="cursor-pointer opacity-70">Delete my account</summary>
+          <div className="mt-2 flex flex-col gap-2">
+            <p className="opacity-70">This deletes everything: your posts as she read them, every idea, every message, calendar fields, notes, and the Telegram pairing. Not undoable. Download the export first if you want it.</p>
+            <div className="flex gap-2">
+              <input className="input flex-1" placeholder="type DELETE" value={confirmText} onChange={(e) => setConfirmText(e.target.value)} />
+              <button className="btn" disabled={confirmText.trim().toUpperCase() !== "DELETE" || deleting} onClick={async () => {
+                setDeleting(true);
+                const r = await fetch("/api/account/delete", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ confirm: confirmText }) }).then((x) => x.json()).catch(() => ({ ok: false, reason: "network" }));
+                if (r.ok) window.location.href = "/?deleted=1";
+                else { setDeleteNote(r.reason ?? "couldn't delete"); setDeleting(false); }
+              }}>{deleting ? "deleting…" : "delete everything"}</button>
+            </div>
+            {deleteNote && <p className="text-xs text-red-400">{deleteNote}</p>}
+          </div>
+        </details>
       </section>
     </div>
   );
