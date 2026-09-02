@@ -199,8 +199,10 @@ export const run = internalAction({
     type Out = { message: string; biggest: string; second: string; fine: string; confidence: string; citations: Array<{ stat: string; value: string | number; sampleSize?: number }>; cannotKnow: string };
     // §13.11: for a link she may look up the sound, the comments and the author's normal before the read.
     let r: { ok: boolean; content: string; reason?: string };
+    let investigation: Array<{ tool: string; params: Record<string, unknown>; why: string; credits?: number; ms: number; ok: boolean }> = [];
     if (a.mode === "link") {
       const inv = await investigate(ctx, { creatorId: creator._id, purpose: "opinion", prefix, user, budget: { calls: 4, credits: 20, deadlineAt: Date.now() + 45_000 }, temperature: 0.4, maxTokens: 1600 });
+      investigation = inv.trace;
       r = inv.content ? { ok: true, content: inv.content } : { ok: false, content: "", reason: inv.ended };
     } else {
       const first = await ask("opinion");
@@ -237,7 +239,7 @@ export const run = internalAction({
       }
     }
 
-    const predictionId = a.mode === "own" && !own ? null : await ctx.runMutation(internal.agent.opinion.writePrediction, { creatorId: creator._id, subject, confidence, opinion: { biggest: out.biggest, second: out.second, fine: out.fine, citations: out.citations, cannotKnow: out.cannotKnow, mode: a.mode }, produced });
+    const predictionId = a.mode === "own" && !own ? null : await ctx.runMutation(internal.agent.opinion.writePrediction, { creatorId: creator._id, subject, confidence, opinion: { biggest: out.biggest, second: out.second, fine: out.fine, citations: out.citations, cannotKnow: out.cannotKnow, mode: a.mode, investigation }, produced });
     await reply(text, { produced, criticSkipped });
     return { ok: true, reason: predictionId ? `prediction ${predictionId}` : "explained" };
   },

@@ -66,7 +66,7 @@ export const status = internalQuery({
       jobs: jobs.map((j) => ({ kind: j.kind, status: j.status, attempts: j.attempts, lastError: j.lastError })),
       messages: messages.map((m) => ({ dir: m.direction, kind: m.kind, body: m.body.slice(0, 160), delivered: m.deliveredAt ? true : m.deliveryError ?? "pending" })),
       spendUsd: costs.reduce((s, c) => s + c.costUsd, 0),
-      signals: signals.map((x) => ({ kind: x.kind, score: x.score, verdict: x.verdict, why: x.why.slice(0, 200) })),
+      signals: signals.map((x) => ({ kind: x.kind, score: x.score, verdict: x.verdict, why: x.why.slice(0, 200), investigation: (x.investigation ?? []).map((t) => `${t.tool}(${JSON.stringify(t.params).slice(0, 60)}) ${t.ok ? "ok" : "refused"} ${t.credits ?? 0}cr ${t.ms}ms — ${t.why.slice(0, 80)}`) })),
     };
   },
 });
@@ -118,9 +118,24 @@ export const chatTrace = internalQuery({
     const predictions = (await ctx.db.query("predictions").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).order("desc").take(3)) as Doc<"predictions">[];
     return {
       creator: creator._id,
-      predictions: predictions.map((p) => ({ confidence: p.confidence, expectedMultiple: p.expectedMultiple, subject: p.subject, citations: (p.opinion as { citations?: unknown }).citations })),
+      predictions: predictions.map((p) => ({ confidence: p.confidence, expectedMultiple: p.expectedMultiple, subject: p.subject, citations: (p.opinion as { citations?: unknown }).citations, investigation: ((p.opinion as { investigation?: Array<{ tool: string; params: unknown; ok: boolean; credits?: number; why: string }> }).investigation ?? []).map((t) => `${t.tool}(${JSON.stringify(t.params).slice(0, 70)}) ${t.ok ? "ok" : "refused"} ${t.credits ?? 0}cr — ${t.why.slice(0, 80)}`) })),
       jobs: jobs.map((j) => ({ kind: j.kind, status: j.status, attempts: j.attempts, error: j.lastError ?? null })),
       messages: messages.reverse().map((m) => ({ dir: m.direction, kind: m.kind, body: m.body.slice(0, 500), delivered: Boolean(m.deliveredAt), error: m.deliveryError ?? null })),
     };
+  },
+});
+
+
+/** Dev only: put a creator's judged signals back to pending so the scout can be exercised again. */
+export const reopenSignals = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ reopened: number }> => {
+    const rows = (await ctx.db.query("signals").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"signals">[];
+    let n = 0;
+    for (const r of rows) {
+      await ctx.db.patch(r._id, { verdict: "pending", createdAt: Date.now(), investigation: undefined });
+      n++;
+    }
+    return { reopened: n };
   },
 });
