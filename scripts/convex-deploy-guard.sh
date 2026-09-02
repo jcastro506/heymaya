@@ -10,3 +10,9 @@ MSG
   exit 1
 fi
 exec npx convex "$@"
+
+# The fake model is for tests only. A shell with MODEL_FAKE set must never deploy.
+if [ -n "${MODEL_FAKE:-}" ]; then
+  echo "refusing: MODEL_FAKE is set in this shell; unset it before deploying" >&2
+  exit 1
+fi

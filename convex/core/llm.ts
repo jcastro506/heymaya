@@ -22,6 +22,7 @@
 import type { ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
+import { fakeAnswer, fakeModelEnabled } from "./fakeModel";
 import type {
   OpenRouterMessage,
   OpenRouterResult, OpenRouterTool } from "../integrations/openrouter/client";
@@ -113,6 +114,8 @@ export async function callModel(
   ctx: ActionCtx,
   input: CallModelInput
 ): Promise<OpenRouterResult> {
+  // Tests only (MODEL_FAKE=1): deterministic answers by purpose, no network, no spend. The deploy guard refuses this flag.
+  if (fakeModelEnabled()) return fakeAnswer(input.purpose, input.messages);
   const { callOpenRouter } = await import("../integrations/openrouter/client");
 
   const result = await callOpenRouter({

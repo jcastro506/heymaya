@@ -237,8 +237,16 @@ export const send = internalMutation({
       body: args.body,
       dedupeKey: args.dedupeKey,
       proactive: args.proactive,
+      awaitingAnswer: args.awaitingAnswer,
       turnId: args.turnId,
       ts: args.ts ?? Date.now(),
+      // Found by the simulated-day test: these five were accepted and dropped, so every
+      // scout message was stored with no kind, no buttons and no links.
+      kind: args.kind,
+      produced: args.produced,
+      buttons: args.buttons,
+      links: args.links,
+      criticSkipped: args.criticSkipped,
     });
 
     /**
