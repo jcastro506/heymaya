@@ -13,6 +13,9 @@ crons.interval("drain jobs", { minutes: 1 }, internal.core.scheduler.drainJobs, 
 // The tracked-account sampler: one read per distinct admired account per 6 h, fleet-wide (§13.2).
 crons.interval("sample tracked accounts", { hours: 6 }, internal.scout.sampler.run, {});
 
+// The niche sweep: one search per distinct lane keyword per day, shared across creators (§3.2).
+crons.daily("sweep lane keywords", { hourUTC: 11, minuteUTC: 30 }, internal.scout.sweep.run, {});
+
 // The scout: rails then judgment, per creator, in their daytime; the gate holds the cap and quiet hours (§13.8).
 crons.hourly("scout", { minuteUTC: 5 }, internal.scout.scout.runAll, {});
 

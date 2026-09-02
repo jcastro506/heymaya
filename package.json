@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit -p tsconfig.json && npx convex codegen --typecheck",
+    "typecheck": "npx convex codegen && tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
     "test": "vitest",
     "test:ci": "vitest --run",
