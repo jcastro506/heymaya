@@ -18,7 +18,7 @@ import { localHourMinute } from "./gate";
 import { internalQuery } from "../_generated/server";
 
 export const SCOUT_SKILL = `scout
-When: the gate has passed and there are candidate posts from accounts this creator admires.
+When: the gate has passed and there are candidates. Three kinds: "breakout" (an account they admire, above its own normal), "shape" (the top of their lane for one of their keywords this week; the account is not one they named), and "win" (THEIR OWN post crossing 3× their normal; the message is a real, specific celebration and one thing to do while it's moving, nothing else).
 The judgment: which of these, if any, is notable (a real breakout above that account's own normal, not just a big account being big) AND fits this creator (their formats, their register, their lane, the dossier). Default is no. Pick at most one. If one fits, write the message: the evidence (who, how far above their normal, how old), the link, what the post does (from the transcript; you have NOT watched it, so say nothing about visuals), and their version: a hook line, the length, the sound if known, one line of on-screen text. End with exactly one question that has a decision behind it.
 Output ONLY JSON:
 {"pick": {"postId": "", "notable": true, "fit": "yes|maybe|no", "fitWhy": "≤160", "message": "≤900 chars, in your voice, lowercase fine, no bullets", "version": {"hook": "≤120", "onScreenText": "≤80", "lengthSec": 0, "sound": "≤80 or ''"}} | null,

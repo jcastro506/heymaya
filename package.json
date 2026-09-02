@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "npx convex codegen && tsc --noEmit -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
     "test": "vitest",
     "test:ci": "vitest --run",
@@ -14,7 +14,8 @@
     "convex": "bash scripts/convex-deploy-guard.sh",
     "deploy:staging": "bash scripts/convex-deploy.sh staging",
     "deploy:prod": "bash scripts/convex-deploy.sh production",
-    "fixtures:record": "node scripts/fixtures-record.mjs"
+    "fixtures:record": "node scripts/fixtures-record.mjs",
+    "codegen": "npx convex codegen"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.8.4",

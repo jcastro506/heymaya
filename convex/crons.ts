@@ -16,6 +16,9 @@ crons.interval("sample tracked accounts", { hours: 6 }, internal.scout.sampler.r
 // The niche sweep: one search per distinct lane keyword per day, shared across creators (§3.2).
 crons.daily("sweep lane keywords", { hourUTC: 11, minuteUTC: 30 }, internal.scout.sweep.run, {});
 
+// The daily readback: their own posts and numbers, and a `win` signal when one crosses 3× (§21.5).
+crons.daily("readback own posts", { hourUTC: 1, minuteUTC: 15 }, internal.scout.readback.run, {});
+
 // The scout: rails then judgment, per creator, in their daytime; the gate holds the cap and quiet hours (§13.8).
 crons.hourly("scout", { minuteUTC: 5 }, internal.scout.scout.runAll, {});
 
