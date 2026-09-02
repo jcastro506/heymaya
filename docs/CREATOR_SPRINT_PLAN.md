@@ -16,7 +16,7 @@ These shape every sprint. They are assumed, not decided. Change them here and th
 |---|---|---|---|
 | D-A | Pilot channel | **Telegram** | Already routed by Convex, free, buttons and reactions, no Mac, no Apple risk. Tests the product, not the channel. |
 | D-B | Own-account OAuth in the pilot | **No** | Public counts from ScrapeCreators are enough to judge a week. Own-account connections arrive in Sprint 4 (D-D). |
-| D-C | The existing codebase | **Clean sheet in a new repo, with a salvage manifest.** The old repo stays untouched and running until cutover. | The current repo carries three product generations, a schema at the compiler ceiling, and ~3,000 tests that assert the old product. The reusable part is ~15 files and copies cleanly; untangling it does not. See Sprint 0. |
+| D-C | The existing codebase | **Clean sheet on an orphan branch of the same GitHub repo, with a salvage manifest.** Today's code is preserved on `legacy` and keeps running until cutover. *(Decided 2026-09-01: same repo, not a new one.)* | The current repo carries three product generations, a schema at the compiler ceiling, and ~3,000 tests that assert the old product. The reusable part is ~15 files and copies cleanly; untangling it does not. See Sprint 0. |
 | D-D | Own-account connections | **Zernio from Sprint 4, direct Instagram API as the cost-down path** | Zernio holds approved Instagram and TikTok apps, so one connect flow gives Instagram watch-time metrics in days instead of the 6–8 week App Review. It costs $1–6 per connected account per month (§3.8). The direct Instagram API is free and replaces it once App Review clears. |
 
 ---
@@ -51,7 +51,7 @@ The five design laws from `CLEAN_SHEET_SPEC.md` §0.3 hold: the database is the 
 | D4 | **Telegram for the pilot; the US channel is decided from pilot data.** | WhatsApp proactive to US numbers is paused by Meta. iMessage has no API; Messages for Business is the only legitimate route and the application goes in during Sprint 0. SMS plus a web brief is the fallback. |
 | D5 | **The read cache is shared across tenants and is the business.** | §3.2. It contains no customer-identifying data. |
 | D6 | **Exactly one function decides message-or-silence.** | Above the account's own median · corroborated by two accounts or a rising sound · daily cap not hit · no open question · not in quiet hours · format not on cooldown. Any other code path that can send a proactive message is a bug, and a test asserts it. |
-| D7 | **Clean sheet. Salvage, don't refactor.** | New repo, new Convex project, ~14 tables from zero. Proven modules are copied in per the salvage manifest (Sprint 0), with their tests. Nothing imports from the old repo. |
+| D7 | **Clean sheet. Salvage, don't refactor.** | An orphan branch sharing no history with today's code, new Convex projects, ~14 tables from zero. Proven modules are copied in per the salvage manifest (Sprint 0), with their tests. Nothing imports from the legacy tree. |
 | D8 | **Cost is architecture.** | §3 is enforced by budget rows, a weekly COGS test, and a margin gate in the definition of done. |
 
 **The stack.** Next.js on Vercel, Clerk, Stripe. Convex for everything else. Telegram Bot API. ScrapeCreators for public reads. Gemini direct for watching. OpenRouter through the single routing layer for text. Google Calendar API (Apple Calendar via CalDAV post-pilot). Zernio for own-account connections from Sprint 4. Convex storage for thumbnails and screenshots. Not in the stack: Fly, OpenClaw, Creatify, twitterapi.io, R2, YouTube APIs.
@@ -1046,15 +1046,18 @@ Card declined at day 7 → Smart Retries, one message, grace, no deletion. Annua
 
 ## 20. Repo, environments, and deploys
 
-**A new GitHub repository**, `jcastro506/heymaya-creator` *(name open, §10)*, created in Sprint 0. The old repo is not forked; proven files are copied in per the salvage manifest with their tests. Nothing imports across repos; a static test asserts it.
+**The same GitHub repository, `jcastro506/heymaya`, a fresh orphan branch.** Decided 2026-09-01. `git checkout --orphan creator` shares no history with today's code; proven files are copied in per the salvage manifest with their tests. Today's `main` is preserved as branch `legacy` and tag `legacy-2026-09-01`, and keeps deploying the old product until cutover. Nothing on `creator` imports from the legacy tree; a static test asserts it (there is nothing to import, since the trees never coexist in one checkout).
 
 ### 20.1 Branches and CI
 
-| Branch | Purpose | Deploys to |
-|---|---|---|
-| `feat/*` | all work; PR into `staging` | Vercel preview + the developer's own Convex dev deployment |
-| `staging` | integration; the pilot runs here until Sprint 3 moves it to prod | Vercel staging, Convex staging |
-| `main` | production | Vercel production, Convex production |
+Until cutover the old product owns `staging` and `main`, so the new product uses its own names and is renamed at cutover.
+
+| Branch | Purpose | Deploys to | At cutover (Sprint 5) |
+|---|---|---|---|
+| `feat/*` | all work; PR into `creator` | Vercel preview + the developer's own Convex dev deployment | unchanged |
+| `creator` | integration; the new product's staging | a second Vercel project on the same repo with production branch `creator` → `staging.hey-maya.ai`; the new Convex staging project | renamed `staging` |
+| `creator-main` | the new product's production, from Sprint 3 (the pilot runs on real production) | a third Vercel project, production branch `creator-main`, on a temporary domain until cutover; the new Convex prod project | becomes `main`; `hey-maya.ai` re-pointed |
+| `main`, `staging` (today's) | the old product, frozen except hotfixes | the existing Vercel and Convex projects | `main` → `legacy`; old `staging` deleted; old projects frozen, deleted after 30 days |
 
 CI on every PR and on `staging` and `main`: typecheck, the full test suite, the five mandatory categories, the copy grep, the chat-completeness registry, the scar-tissue guard list. All blocking from day one; lint blocking too, since the repo starts clean. The live smoke suite runs on a schedule and before every production deploy, and writes `vendorHealth`.
 
