@@ -12,7 +12,11 @@ import type { Id } from "../../_generated/dataModel";
 describe("budgets", () => {
   it("classifies cost events into budget kinds", () => {
     expect(kindForCost("scrapecreators", "read", "/v1/x")).toBe("credits");
-    expect(kindForCost("gemini", "watch_own", "gemini-3.7-flash")).toBe("watch");
+    // The one-time catalogue watch is counted apart from the daily operating cap: onboarding
+    // watches up to 40 own posts against a daily cap of 8, so counting them together made
+    // every new creator's first day hit the rail and get nothing.
+    expect(kindForCost("gemini", "watch_own", "gemini-3.7-flash")).toBe("onboarding_watch");
+    expect(kindForCost("gemini", "format_watch", "gemini-3.7-flash")).toBe("watch");
     expect(kindForCost("openrouter", "scout", "google/gemini-3.7-flash")).toBe("writer");
     expect(kindForCost("openrouter", "critic", "z-ai/glm-5.3-flash")).toBe("screener");
     expect(kindForCost("telegram", "send", "x")).toBeNull();
@@ -55,5 +59,24 @@ describe("budgets", () => {
     const rows = await t.run((ctx) => ctx.db.query("budgets").collect());
     expect(rows).toHaveLength(1);
     expect(rows[0].messages).toBe(1);
+  });
+});
+
+describe("onboarding never starves day one", () => {
+  it("a full catalogue watch does not trip the daily rail, but real spend still does", () => {
+    let row = emptyDay("c1" as never, "2026-09-02");
+    for (let i = 0; i < 40; i++) row = applyBump(row, "onboarding_watch", 1, 0.002);
+    expect(row.onboardingWatches).toBe(40);
+    expect(row.watches).toBe(0);
+    expect(budgetExhausted(row), "40 catalogue watches must not silence day one").toBeNull();
+    // The dollar cap still governs: an expensive onboarding does stop the day.
+    const pricey = applyBump(row, "onboarding_watch", 1, 1.0);
+    expect(budgetExhausted(pricey)).toMatch(/spend/);
+  });
+
+  it("lane watching still hits the daily cap", () => {
+    let row = emptyDay("c1" as never, "2026-09-02");
+    for (let i = 0; i < THRESHOLDS.dailyWatchCap; i++) row = applyBump(row, "watch", 1, 0);
+    expect(budgetExhausted(row)).toMatch(/watches today/);
   });
 });

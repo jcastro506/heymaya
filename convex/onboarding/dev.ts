@@ -231,3 +231,13 @@ export const recordFixture = internalAction({
     }
   },
 });
+
+/** Dev only: clear today's budget row so a rail can be re-tested without waiting for tomorrow. */
+export const resetBudget = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ cleared: number }> => {
+    const rows = await ctx.db.query("budgets").withIndex("by_creator_day", (q) => q.eq("creatorId", a.creatorId)).collect();
+    for (const r of rows) await ctx.db.delete(r._id);
+    return { cleared: rows.length };
+  },
+});

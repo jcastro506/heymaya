@@ -499,6 +499,13 @@ export default defineSchema({
     screenerTokens: v.number(),
     writerTokens: v.number(),
     watches: v.number(),
+    /**
+     * The one-time catalogue watch, counted APART from `watches`. Onboarding watches up to
+     * 40 of their own posts; the daily operating cap is 8. Counted together, every new
+     * creator's first day was guaranteed to hit the budget rail and get no idea at all —
+     * the worst possible day to be silent. Optional: rows written before this existed.
+     */
+    onboardingWatches: v.optional(v.number()),
     marginalCredits: v.number(),
     messages: v.number(),
     spentUsd: v.number(),
