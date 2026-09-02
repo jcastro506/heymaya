@@ -138,7 +138,7 @@ export const KINDS = {
         const posts = await tiktok.lastPosts(p.handle, 0, deps); // page one; cursor paging arrives with the sampler
         return posts.map((post) => ({ ...post, clipId: extractClipId(post.raw) }));
       }
-      return instagram.userReels(p.handle, { ...deps, maxId: p.cursor, trim: true });
+      return instagram.lastPosts(p.handle, 50, deps); // normalized; reels + posts + carousels
     },
   }),
   "account.following": spec<{ handle: string }>({
@@ -271,7 +271,7 @@ export function pathFor(kind: ReadKind, params: Record<string, unknown>): string
     case "profile":
       return platform === "instagram" ? "/v1/instagram/profile" : "/v1/tiktok/profile";
     case "account.posts":
-      return platform === "instagram" ? "/v1/instagram/user/reels" : "/v3/tiktok/profile/videos";
+      return platform === "instagram" ? "/v1/instagram/user/posts" : "/v3/tiktok/profile/videos";
     case "post.info":
       return platform === "instagram" ? "/v1/instagram/post" : "/v2/tiktok/video";
     case "post.transcript":

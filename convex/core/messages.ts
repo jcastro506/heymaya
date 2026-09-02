@@ -114,6 +114,10 @@ async function writeOutbound(
     awaitingAnswer?: boolean;
     turnId?: string;
     ts: number;
+    kind?: string;
+    produced?: { skillVersion: string; model: string; thresholdsVersion: string };
+    buttons?: Array<{ id: string; label: string }>;
+    links?: string[];
   },
 ): Promise<Id<"messages">> {
   /**
@@ -152,6 +156,10 @@ async function writeOutbound(
     direction: "out",
     surface: row.surface,
     body: plain.clean,
+    kind: row.kind,
+    produced: row.produced,
+    buttons: row.buttons,
+    links: row.links,
     dedupeKey: row.dedupeKey,
     proactive: row.proactive,
     awaitingAnswer: row.awaitingAnswer,
@@ -186,6 +194,10 @@ export const send = internalMutation({
     awaitingAnswer: v.optional(v.boolean()),
     turnId: v.optional(v.string()),
     ts: v.optional(v.number()),
+    kind: v.optional(v.string()),
+    produced: v.optional(v.object({ skillVersion: v.string(), model: v.string(), thresholdsVersion: v.string() })),
+    buttons: v.optional(v.array(v.object({ id: v.string(), label: v.string() }))),
+    links: v.optional(v.array(v.string())),
   },
   handler: async (
     ctx,

@@ -8,6 +8,11 @@
  * @module
  */
 
+import type * as agent_context from "../agent/context.js";
+import type * as agent_converse from "../agent/converse.js";
+import type * as agent_registry from "../agent/registry.js";
+import type * as agent_soul from "../agent/soul.js";
+import type * as contracts_dossier from "../contracts/dossier.js";
 import type * as core_breaker from "../core/breaker.js";
 import type * as core_cadence from "../core/cadence.js";
 import type * as core_costs from "../core/costs.js";
@@ -20,8 +25,10 @@ import type * as core_messages from "../core/messages.js";
 import type * as core_pairing from "../core/pairing.js";
 import type * as core_plainLanguage from "../core/plainLanguage.js";
 import type * as core_quality from "../core/quality.js";
+import type * as core_scheduler from "../core/scheduler.js";
 import type * as core_telegram from "../core/telegram.js";
 import type * as core_telegramFiles from "../core/telegramFiles.js";
+import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as integrations_openrouter_client from "../integrations/openrouter/client.js";
 import type * as integrations_scrapeCreators___tests___fixtures_instagram from "../integrations/scrapeCreators/__tests__/fixtures/instagram.js";
@@ -35,6 +42,8 @@ import type * as integrations_scrapeCreators_platforms_instagram from "../integr
 import type * as integrations_scrapeCreators_platforms_tiktok from "../integrations/scrapeCreators/platforms/tiktok.js";
 import type * as integrations_scrapeCreators_schemas from "../integrations/scrapeCreators/schemas.js";
 import type * as integrations_telegram_client from "../integrations/telegram/client.js";
+import type * as onboarding_firstRead from "../onboarding/firstRead.js";
+import type * as onboarding_ingest from "../onboarding/ingest.js";
 import type * as reads_cache from "../reads/cache.js";
 import type * as reads_key from "../reads/key.js";
 import type * as reads_kinds from "../reads/kinds.js";
@@ -48,6 +57,11 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "agent/context": typeof agent_context;
+  "agent/converse": typeof agent_converse;
+  "agent/registry": typeof agent_registry;
+  "agent/soul": typeof agent_soul;
+  "contracts/dossier": typeof contracts_dossier;
   "core/breaker": typeof core_breaker;
   "core/cadence": typeof core_cadence;
   "core/costs": typeof core_costs;
@@ -60,8 +74,10 @@ declare const fullApi: ApiFromModules<{
   "core/pairing": typeof core_pairing;
   "core/plainLanguage": typeof core_plainLanguage;
   "core/quality": typeof core_quality;
+  "core/scheduler": typeof core_scheduler;
   "core/telegram": typeof core_telegram;
   "core/telegramFiles": typeof core_telegramFiles;
+  crons: typeof crons;
   http: typeof http;
   "integrations/openrouter/client": typeof integrations_openrouter_client;
   "integrations/scrapeCreators/__tests__/fixtures/instagram": typeof integrations_scrapeCreators___tests___fixtures_instagram;
@@ -75,6 +91,8 @@ declare const fullApi: ApiFromModules<{
   "integrations/scrapeCreators/platforms/tiktok": typeof integrations_scrapeCreators_platforms_tiktok;
   "integrations/scrapeCreators/schemas": typeof integrations_scrapeCreators_schemas;
   "integrations/telegram/client": typeof integrations_telegram_client;
+  "onboarding/firstRead": typeof onboarding_firstRead;
+  "onboarding/ingest": typeof onboarding_ingest;
   "reads/cache": typeof reads_cache;
   "reads/key": typeof reads_key;
   "reads/kinds": typeof reads_kinds;
