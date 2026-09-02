@@ -565,7 +565,7 @@ Base `https://api.scrapecreators.com`, header `x-api-key`. No rate limit; stay u
 | Own catalogue, tracked-account sample | `GET /v2/instagram/user/posts?handle=&next_max_id=&trim=true` · `GET /v1/instagram/user/reels?user_id=&max_id=&trim=true` | 1 / page | play count, likes, comments, `created_at`, video URLs | pass `user_id` after the first call |
 | Single post | `GET /v1/instagram/post?url=` | 1 | media, engagement, audio | |
 | Transcript | `GET /v2/instagram/media/transcript?url=&cache_max_age=30d` | 1, 0 on cache hit | text per video slide | under 2 min; 10–30 s latency; photo posts return 404 "does not have a video" |
-| Comments | `GET /v2/instagram/post/comments?url=` | 1 | | |
+| Comments | `GET /v2/instagram/post/comments?url=` | **15** | | expensive on Instagram: top 3 posts only at onboarding, never in the sweep |
 | Lane search | `GET /v2/instagram/reels/search?query=&date_posted=last-week&page=` | 1 / page | Google-indexed reels | best effort, pages 1–11 only |
 | Hashtag | `GET /v1/instagram/search/hashtag?hashtag=&date_posted=last-week&media_type=reels&cursor=` | 1 / page | Google-indexed | same limits |
 | Curated topic | `GET /v1/instagram/search/popular?query=&cursor=` | 1 / page | Instagram's own topic page, suggested terms, posts | the best Instagram trend surface |
@@ -579,7 +579,7 @@ Base `https://api.scrapecreators.com`, header `x-api-key`. No rate limit; stay u
 
 | Purpose | Call | Credits |
 |---|---|---|
-| One handle → all linked profiles | `GET /v1/find-social-profiles?platform=tiktok&handle=&cache_max_age=30d` | 1, 0 on hit |
+| One handle → all linked profiles | `GET /v1/find-social-profiles?platform=tiktok&handle=&cache_max_age=30d` | **10**, 0 on hit |
 | Audience pain in their words | `GET /v1/reddit/search?query=&filter=posts&sort=top&timeframe=week&trim=true` | 1 |
 | Balance, before every sweep | `GET /v1/credit-balance` | 0 |
 | Usage reconciliation, daily | `GET /v1/account/get-daily-usage-count` · `GET /v1/account/get-most-used-routes` | 0 |

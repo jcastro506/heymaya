@@ -120,7 +120,7 @@ export const CREDITS_BY_PATH: Record<string, number> = {
   "/v2/instagram/user/posts": 1,
   "/v1/instagram/user/reels": 1,
   "/v1/instagram/post": 1,
-  "/v2/instagram/post/comments": 1,
+  "/v2/instagram/post/comments": 15, // per the vendor spec; mine Instagram comments on top posts only
   "/v2/instagram/media/transcript": 1,
   "/v2/instagram/reels/search": 1,
   "/v1/instagram/search": 1,
@@ -131,7 +131,7 @@ export const CREDITS_BY_PATH: Record<string, number> = {
   "/v1/instagram/audio/reels": 1,
   "/v1/instagram/user/highlights": 1,
   "/v1/instagram/user/highlight/detail": 1,
-  "/v1/find-social-profiles": 1,
+  "/v1/find-social-profiles": 10, // per the vendor spec; 0 on a cache_max_age hit
   "/v1/reddit/search": 1,
   "/v1/credit-balance": 0,
   "/v1/account/get-daily-usage-count": 0,

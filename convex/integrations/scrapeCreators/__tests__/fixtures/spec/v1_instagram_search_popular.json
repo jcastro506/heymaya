@@ -1,0 +1,38 @@
+{
+  "success": true,
+  "credits_remaining": 99,
+  "credits_charged": 1,
+  "query": "basketball",
+  "title": "Basketball",
+  "total_media_count": 8800000,
+  "description": {
+    "plain_text": "James Naismith invented basketball in December 1891 in Springfield, Massachusetts as an indoor winter activity.",
+    "source_uris": [
+      "https://en.wikipedia.org/wiki/Outline_of_basketball"
+    ],
+    "linked_terms": []
+  },
+  "suggested_terms": [
+    "the tallest basketball player"
+  ],
+  "posts": [
+    {
+      "id": "POLARIS_3892957342260916992",
+      "shortcode": "DYGkBO3NfMA",
+      "url": "https://www.instagram.com/reel/DYGkBO3NfMA/",
+      "type": "reel",
+      "caption": "😂😂 #meta #pov #hooper #basketball",
+      "display_url": "https://instagram.example.com/basketball-cover.jpg",
+      "video_url": "https://instagram.example.com/basketball-video.mp4",
+      "play_count": 11993988,
+      "owner": {
+        "id": "17841409679275910",
+        "username": "lukaceo",
+        "is_verified": false,
+        "profile_pic_url": "https://instagram.example.com/lukaceo-profile.jpg"
+      }
+    }
+  ],
+  "cursor": "opaque-cursor-from-response",
+  "has_more": true
+}

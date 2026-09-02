@@ -1,0 +1,34 @@
+{
+  "success": true,
+  "credits_remaining": 100,
+  "credits_charged": 1,
+  "creators": [
+    {
+      "tcm_id": "7377026041014927376",
+      "user_id": "6620098253516439554",
+      "nick_name": "SANIEV",
+      "avatar_url": "https://p16-sign-sg.tiktokcdn.com/tos-alisg-avt-0068/e2699c87b4fe37f8fc4d65a7dc453786~tplv-tiktokx-cropcenter:100:100.png?dr=14579&refresh_token=db296f9e&x-expires=1768082400&x-signature=JL5qjD7FOX%2FF4ML6XbWBeose9Zc%3D&t=4d5b0474&ps=13740610&shp=a5d48078&shcp=317596d8&idc=my",
+      "country_code": "US",
+      "follower_cnt": 431339,
+      "liked_cnt": 129772610,
+      "tt_link": "https://www.tiktok.com/@sanievv_",
+      "tcm_link": "https://creatormarketplace.tiktok.com/ad#/author/7377026041014927376",
+      "items": [
+        {
+          "item_id": "7395965676629888274",
+          "cover_url": "https://p16-sign-sg.tiktokcdn.com/tos-alisg-p-0037/9f078a63ecd74061b52172692e1f5600_1722007460~tplv-noop.image?dr=18692&refresh_token=d96f1adb&x-expires=1767931908&x-signature=QxvUl2ljXqt1iR6wt8FVfohlkAg%3D&t=9276707c&ps=14f1eb3e&shp=9e36835a&shcp=317596d8&idc=my",
+          "tt_link": "https://www.tiktok.com/@author/video/7395965676629888274",
+          "vv": 2062831,
+          "liked_cnt": 229970,
+          "create_time": 1722007452
+        }
+      ]
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "size": 20,
+    "total": 10,
+    "has_more": false
+  }
+}

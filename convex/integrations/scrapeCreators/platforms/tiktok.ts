@@ -457,8 +457,10 @@ function normalizeTikTokResearchPosts(raw: unknown): NormalizedPost[] {
       videos: z.array(TikTokVideoSchema).optional(),
       // `/v1/tiktok/search/keyword` wraps each post in `{ aweme_info: {...} }`
       // under `search_item_list`. Unwrap to the flat shape the other endpoints use.
+      // Live responses wrap each post as `{ aweme_info }`; trimmed responses and the
+      // vendor's own spec examples return the flat post. Accept both.
       search_item_list: z
-        .array(z.object({ aweme_info: TikTokVideoSchema }).passthrough())
+        .array(z.union([z.object({ aweme_info: TikTokVideoSchema }).passthrough(), TikTokVideoSchema]))
         .optional(),
       data: z
         .union([
@@ -488,7 +490,9 @@ function normalizeTikTokResearchPosts(raw: unknown): NormalizedPost[] {
       parsed.itemList ??
       parsed.items ??
       parsed.videos ??
-      parsed.search_item_list?.map((entry) => entry.aweme_info) ??
+      parsed.search_item_list?.map((entry) =>
+        "aweme_info" in entry && entry.aweme_info ? entry.aweme_info : (entry as z.infer<typeof TikTokVideoSchema>)
+      ) ??
       dataList ??
       [],
   });
@@ -627,13 +631,15 @@ function normalizeTikTokFollowList(
 
 // TikTok keyword-search bias params per ScrapeCreators OpenAPI
 // (/v1/tiktok/search/keyword). Snake_case mapping happens at the wrapper.
+// Values per the vendor OpenAPI spec (2026-09-01): `date_posted` / `publish_time` and `sort_by`.
 export type TikTokDatePosted =
-  | "this_day"
-  | "this_week"
-  | "this_month"
-  | "last_3_months"
-  | "last_6_months";
-export type TikTokSortBy = "relevance" | "likes" | "comments" | "recent";
+  | "yesterday"
+  | "this-week"
+  | "this-month"
+  | "last-3-months"
+  | "last-6-months"
+  | "all-time";
+export type TikTokSortBy = "relevance" | "most-liked" | "date-posted";
 
 export interface TikTokSearchKeywordOptions {
   datePosted?: TikTokDatePosted;

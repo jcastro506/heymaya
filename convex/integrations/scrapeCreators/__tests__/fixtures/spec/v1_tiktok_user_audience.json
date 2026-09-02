@@ -1,0 +1,13 @@
+{
+  "success": true,
+  "credits_remaining": 1000000,
+  "credits_charged": 26,
+  "audienceLocations": [
+    {
+      "country": "Mexico",
+      "countryCode": "MX",
+      "count": 83,
+      "percentage": "15.96%"
+    }
+  ]
+}
