@@ -4,22 +4,22 @@
  */
 
 import { v } from "convex/values";
-import { action, mutation, query } from "../_generated/server";
+import { action, mutation, query, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 
 const platform = v.union(v.literal("tiktok"), v.literal("instagram"));
 
-async function creatorFor(ctx: { auth: { getUserIdentity: () => Promise<{ subject: string } | null> }; db: { query: (t: "creators") => any } }): Promise<Doc<"creators"> | null> {
+async function creatorFor(ctx: QueryCtx | MutationCtx): Promise<Doc<"creators"> | null> {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) return null;
-  return (await ctx.db.query("creators").withIndex("by_clerkUserId", (q: any) => q.eq("clerkUserId", identity.subject)).first()) as Doc<"creators"> | null;
+  return (await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject)).first()) as Doc<"creators"> | null;
 }
 
 export const list = query({
   args: {},
   handler: async (ctx): Promise<Array<{ id: Id<"trackedAccounts">; platform: "tiktok" | "instagram"; handle: string; addedBy: string; status: string }>> => {
-    const creator = await creatorFor(ctx as never);
+    const creator = await creatorFor(ctx);
     if (!creator) return [];
     const rows = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).collect()) as Doc<"trackedAccounts">[];
     return rows.filter((r) => r.status !== "removed").map((r) => ({ id: r._id, platform: r.platform, handle: r.handle, addedBy: r.addedBy, status: r.status }));
@@ -48,7 +48,7 @@ export const validate = action({
 export const add = mutation({
   args: { platform, handle: v.string(), addedBy: v.optional(v.union(v.literal("creator"), v.literal("suggested"))) },
   handler: async (ctx, a): Promise<{ ok: boolean; error?: string; id?: Id<"trackedAccounts"> }> => {
-    const creator = await creatorFor(ctx as never);
+    const creator = await creatorFor(ctx);
     if (!creator) return { ok: false, error: "sign in first" };
     const handle = a.handle.trim().replace(/^@/, "").toLowerCase();
     const existing = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).collect()) as Doc<"trackedAccounts">[];
@@ -74,7 +74,7 @@ export const add = mutation({
 export const remove = mutation({
   args: { id: v.id("trackedAccounts") },
   handler: async (ctx, a): Promise<{ ok: boolean }> => {
-    const creator = await creatorFor(ctx as never);
+    const creator = await creatorFor(ctx);
     const row = (await ctx.db.get(a.id)) as Doc<"trackedAccounts"> | null;
     if (!creator || !row || row.creatorId !== creator._id) return { ok: false };
     await ctx.db.patch(a.id, { status: "removed" }); // history kept

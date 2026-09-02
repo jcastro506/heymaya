@@ -36,12 +36,16 @@ export default function TelegramPage() {
   }
 
   useEffect(() => {
-    void mint();
+    // Minted on the next tick so the state write is not synchronous inside the effect.
+    const t = setTimeout(() => void mint(), 0);
     const onVis = () => {
       if (document.hidden) hiddenAt.current = Date.now();
     };
     document.addEventListener("visibilitychange", onVis);
-    return () => document.removeEventListener("visibilitychange", onVis);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener("visibilitychange", onVis);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -80,17 +84,17 @@ export default function TelegramPage() {
       ) : (
         <section className="flex flex-col gap-4">
           <h2 className="text-lg">Meet Maya on Telegram</h2>
-          <p className="text-sm opacity-70">She texts you there. Tap the button, then tap <b>Start</b> in Telegram. That's the whole pairing.</p>
+          <p className="text-sm opacity-70">She texts you there. Tap the button, then tap <b>Start</b> in Telegram. That&apos;s the whole pairing.</p>
           <button className="btn" disabled={!link} onClick={open}>Open Maya in Telegram</button>
           {showStore && (
             <div className="flex flex-col gap-2">
-              <p className="text-sm opacity-80">Looks like Telegram isn't installed yet. It's free. Install it, come back here, and tap the button again.</p>
-              <a className="btn-secondary" href={storeUrl()} target="_blank" rel="noreferrer">Get Telegram, it's free</a>
+              <p className="text-sm opacity-80">Looks like Telegram isn&apos;t installed yet. It&apos;s free. Install it, come back here, and tap the button again.</p>
+              <a className="btn-secondary" href={storeUrl()} target="_blank" rel="noreferrer">Get Telegram, it&apos;s free</a>
             </div>
           )}
           {tapped && !showStore && !paired && <p className="text-xs opacity-60">Waiting for you to tap Start in Telegram…</p>}
           {stuck && !paired && (
-            <p className="text-sm opacity-80">Didn't work? Tap the button again. If Telegram opened but nothing happened, tap <b>Start</b> at the bottom of the chat, she can't message first.</p>
+            <p className="text-sm opacity-80">Didn&apos;t work? Tap the button again. If Telegram opened but nothing happened, tap <b>Start</b> at the bottom of the chat, she can&apos;t message first.</p>
           )}
           {link && (
             <details className="text-xs opacity-60">
