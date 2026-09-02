@@ -88,6 +88,10 @@ export const run = internalAction({
       }
       return { ok: true };
     }
+    if (route.route === "profile") {
+      const r = await ctx.runAction(internal.agent.profile.run, { creatorId: creator._id, messageId: target._id, platform: route.platform, handle: route.handle });
+      return { ok: r.ok, reason: r.reason };
+    }
     if (route.route === "link") {
       const r = await ctx.runAction(internal.agent.opinion.run, { creatorId: creator._id, messageId: target._id, mode: route.own ? "own" : "link", link: route.link });
       return { ok: r.ok, reason: r.reason };

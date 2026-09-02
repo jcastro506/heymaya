@@ -64,6 +64,15 @@ describe("arithmetic", () => {
     expect(rankMultiplier(0)).toBe(1);
   });
 
+  it("three passes on day 1 still rail-drop on day 30 and have faded by day 90 (§15.7 simulated month)", () => {
+    const day1 = Date.UTC(2026, 0, 1);
+    let a: ReturnType<typeof applyEvent> = [];
+    for (let i = 0; i < 3; i++) a = applyEvent(a, ["account:@x"], WEIGHTS.notme, day1);
+    expect(tasteHint(a, ["account:@x"], day1 + 30 * DAY).hardNo).toMatch(/passed on the last 3/);
+    expect(tasteHint(a, ["account:@x"], day1 + 90 * DAY).hardNo).toBeNull();
+    expect(tasteHint(a, ["account:@x"], day1 + 90 * DAY).score).toBeLessThan(0); // still remembered, no longer a wall
+  });
+
   it("one posted idea outweighs two hearts", () => {
     const now = Date.now();
     const hearts = applyEvent(applyEvent([], ["format:skit"], WEIGHTS.heart, now), ["format:skit"], WEIGHTS.heart, now);

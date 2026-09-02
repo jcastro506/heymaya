@@ -16,6 +16,7 @@ import type * as agent_converse from "../agent/converse.js";
 import type * as agent_critic from "../agent/critic.js";
 import type * as agent_inbound from "../agent/inbound.js";
 import type * as agent_opinion from "../agent/opinion.js";
+import type * as agent_profile from "../agent/profile.js";
 import type * as agent_registry from "../agent/registry.js";
 import type * as agent_remember from "../agent/remember.js";
 import type * as agent_soul from "../agent/soul.js";
@@ -105,6 +106,7 @@ declare const fullApi: ApiFromModules<{
   "agent/critic": typeof agent_critic;
   "agent/inbound": typeof agent_inbound;
   "agent/opinion": typeof agent_opinion;
+  "agent/profile": typeof agent_profile;
   "agent/registry": typeof agent_registry;
   "agent/remember": typeof agent_remember;
   "agent/soul": typeof agent_soul;

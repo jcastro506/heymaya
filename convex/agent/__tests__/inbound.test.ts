@@ -9,7 +9,7 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { asksForOpinion, classifyInbound, parseLink } from "../inbound";
+import { asksForOpinion, classifyInbound, parseLink, parseProfileAsk } from "../inbound";
 
 const handles = { tiktok: "runwithmaya", instagram: "run.with.maya" };
 
@@ -37,6 +37,14 @@ describe("classifyInbound", () => {
     expect(classifyInbound({ text: "", kind: "file", mime: "image/jpeg", handles })).toEqual({ route: "file", media: "image" });
     expect(classifyInbound({ text: "", kind: "file", mime: "audio/ogg", handles })).toEqual({ route: "file", media: "audio" });
     expect(classifyInbound({ text: "", kind: "file", mime: "application/pdf", handles })).toEqual({ route: "file", media: "other" });
+  });
+
+  it("a question about an account routes to profile-creator; their own handle does not", () => {
+    expect(parseProfileAsk("why is @runwithcarly growing so fast lately", handles)).toEqual({ platform: "tiktok", handle: "runwithcarly" });
+    expect(parseProfileAsk("what's @gymgirl.ig doing on insta that's working", handles)).toEqual({ platform: "instagram", handle: "gymgirl.ig" });
+    expect(parseProfileAsk("why is @runwithmaya growing", handles)).toBeNull();
+    expect(parseProfileAsk("look at https://www.tiktok.com/@x/video/1 why is @x growing", handles)).toBeNull();
+    expect(classifyInbound({ text: "hows @fastguy doing", kind: "inbound", handles })).toEqual({ route: "profile", platform: "tiktok", handle: "fastguy" });
   });
 
   it("asksForOpinion catches the phrasings", () => {
