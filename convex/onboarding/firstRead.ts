@@ -85,7 +85,14 @@ export const run = internalAction({
       surface: "telegram",
       body: text,
       criticSkipped,
-      dedupeKey: `first_read:${creator._id}:v${creator.dossierVersion}`,
+      /**
+       * ⚠️ Once per creator, FOREVER — not once per dossier version. The version was in
+       * this key until the first live creator got TWO introductions (2026-09-02), one per
+       * dossier write. Worse in production: the dossier is rewritten every week, so every
+       * Sunday would have opened with "took a look through your posts" as though they had
+       * just signed up.
+       */
+      dedupeKey: `first_read:${creator._id}`,
       proactive: true,
       kind: "first_read",
       awaitingAnswer: /\?\s*$/.test(text),

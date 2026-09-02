@@ -38,6 +38,7 @@ export function fakeAnswer(purpose: string, messages: OpenRouterMessage[]): Open
     case "classify":
       return ok(JSON.stringify({ intent: "text" }));
     case "converse":
+    case "converse_rewrite":
     case "converse_fallback":
     case "converse_final":
       return ok("got it. one line back, nothing invented.");

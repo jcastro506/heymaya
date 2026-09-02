@@ -17,6 +17,7 @@ import { classifyText } from "./classify";
 import { investigate } from "./investigate";
 import { internalMutation, internalQuery } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
+import { critique } from "./critic";
 
 export const SHOTLIST_SKILL = `adapt-format (shot list)
 When: they tapped "shot list" on an idea you sent.
@@ -290,8 +291,37 @@ export const run = internalAction({
     }
     if (!result.ok) return { ok: false, reason: result.reason };
 
-    const text = result.content.trim();
+    let text = result.content.trim();
     if (!text) return { ok: false, reason: "empty completion" };
+
+    /**
+     * ⭐ The reply path used to be the ONE outbound path with no critic: the scout, the
+     * review and the first read were all judged, and the surface the creator actually
+     * talks to was not. The first live conversation came back with a markdown heading and
+     * a bulleted shot list, which Telegram renders as literal asterisks (2026-09-02).
+     *
+     * ⚠️ It rewrites, it NEVER blocks. A person is waiting on this message, so a failed
+     * critique costs one rewrite and then sends regardless; a swallowed reply is worse
+     * than an ugly one.
+     */
+    const verdict = await critique(ctx, { creatorId: creator._id, kind: "reply", text, evidence: { theirMessage: target.body.slice(0, 400) }, voice: (creator.dossier as { voice?: unknown; persona?: unknown } | undefined) ?? {}, directives: directives.map((d) => d.verbatim) });
+    let criticSkipped = verdict.skipped === true;
+    if (!verdict.pass) {
+      const rewrite = await callModel(ctx, {
+        creatorId: creator._id,
+        purpose: "converse_rewrite",
+        model: spec.primary,
+        messages: [
+          { role: "system", content: prefix },
+          { role: "user", content: `${suffix}\n\nYour previous reply was rejected for: ${verdict.problems.join(", ")} (${verdict.note}). Send it again as one plain text message, fixing exactly that. No markdown, no asterisks, no headings, no bullet list.\n\nPrevious reply:\n${text}` },
+        ],
+        temperature: spec.temperature,
+        maxTokens: spec.maxTokens,
+        apiKey,
+      });
+      if (rewrite.ok && rewrite.content.trim()) text = rewrite.content.trim();
+      else criticSkipped = true;
+    }
 
     await ctx.runMutation(internal.core.messages.send, {
       creatorId: creator._id,
@@ -301,6 +331,7 @@ export const run = internalAction({
       proactive: false,
       kind: "reply",
       produced: producedStamp(spec.primary),
+      criticSkipped,
     });
     await deliverNow(ctx as never);
     // remember (§15.7 layer 2): what they said in passing becomes a note or a rule, after the reply is on its way.
