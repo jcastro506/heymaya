@@ -182,7 +182,7 @@ export const settingsOf = internalQuery({
 export const injectImage = internalAction({
   args: { chatId: v.string(), url: v.string(), caption: v.optional(v.string()) },
   handler: async (ctx, a): Promise<{ ok: boolean; reason?: string }> => {
-    const res = await fetch(a.url);
+    const res = await fetch(a.url, { headers: { "user-agent": "Maya-dev/1.0 (image injector for the moment path)" }, redirect: "follow" });
     if (!res.ok) return { ok: false, reason: `fetch ${res.status}` };
     const mime = res.headers.get("content-type")?.split(";")[0] ?? "image/jpeg";
     const bytes = await res.arrayBuffer();

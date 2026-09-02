@@ -14,6 +14,7 @@ import { buildPrefix, buildSuffix, producedStamp } from "./context";
 import { deliverNow } from "../core/scheduler";
 import { classifyInbound, type Route } from "./inbound";
 import { classifyText } from "./classify";
+import { investigate } from "./investigate";
 import { internalMutation, internalQuery } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 
@@ -40,7 +41,8 @@ export const ideaById = internalQuery({
 
 export const CONVERSE_SKILL = `converse
 When: any message that is not a command, a file, a link to a post, or a button tap.
-The judgment: answer the thing they actually asked, in their register, with what you know from the dossier and the conversation. If they ask about numbers you cannot see, say what you can't see and what you can. If they ask for an idea, give one, shaped to them, with why. If nothing needs a question, don't ask one.
+The judgment: answer the thing they actually asked, in their register, with what you know from the dossier, the conversation, and what you can look up (you have the tools: a post's numbers and words, a sound, an account's normal, what a keyword or hashtag is doing this week, what people are typing next to a keyword, their own posts that rhyme, their calendar). Look something up when it changes the answer; don't when it doesn't. If they ask about numbers nobody outside the app can see (watch time), say so. If they ask for an idea, give one, shaped to them, with why. If nothing needs a question, don't ask one.
+What you can do from here, when they ask: give an opinion on a plan or a hook in words; explain what an account is doing; recall an idea or a note; and the management moves (quiet hours, tone, watch or drop an account, what they make) and edits to the latest idea happen when their message is routed to those tools, not inside this reply.
 Hard rules: never invent a metric, a post, or a trend. Never promise a post will do well. Under 120 words unless they asked for detail. You cannot change settings, watch or drop an account, or edit their list from inside a reply: those happen only when the message is routed to the tool that does them. If you are answering a request like that here, it means it was NOT done; never say "added", "done" or "tracking" — say what to text so it lands ("say: add @handle" / "say: stop watching @handle" / "say: no messages before 9am") or that it's in Settings.`;
 
 function hourBucket(epoch: number, timeZone: string): string {
@@ -267,20 +269,12 @@ export const run = internalAction({
     const apiKey = process.env.OPENROUTER_API_KEY ?? "";
     const spec = REGISTRY.writer;
 
-    let result = await callModel(ctx, {
-      creatorId: creator._id,
-      purpose: "converse",
-      model: spec.primary,
-      messages: [
-        { role: "system", content: prefix },
-        { role: "user", content: suffix },
-      ],
-      temperature: spec.temperature,
-      maxTokens: spec.maxTokens,
-      apiKey,
-    });
+    // §13.11: conversation is armed too. Three lookups, ten credits, so "is this hashtag dead" or
+    // "when should i post this week" is answered from the catalogue, not from memory.
+    const inv = await investigate(ctx, { creatorId: creator._id, purpose: "converse", prefix, user: suffix, budget: { calls: 3, credits: 10, deadlineAt: Date.now() + 40_000 }, temperature: spec.temperature, maxTokens: spec.maxTokens });
+    let result: { ok: true; content: string } | { ok: false; reason: string } = inv.content ? { ok: true, content: inv.content } : { ok: false, reason: `converse ${inv.ended}` };
     if (!result.ok) {
-      result = await callModel(ctx, {
+      const fb = await callModel(ctx, {
         creatorId: creator._id,
         purpose: "converse_fallback",
         model: spec.fallback,
@@ -292,6 +286,7 @@ export const run = internalAction({
         maxTokens: spec.maxTokens,
         apiKey,
       });
+      result = fb.ok ? { ok: true, content: fb.content } : { ok: false, reason: fb.reason };
     }
     if (!result.ok) return { ok: false, reason: result.reason };
 
