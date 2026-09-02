@@ -52,7 +52,7 @@ export function checkRails(input: { creator: Doc<"creators">; sentToday: number;
 
 export const railsFor = internalQuery({
   args: { creatorId: v.id("creators"), now: v.number() },
-  handler: async (ctx, a): Promise<{ rails: Rails; creator: Doc<"creators">; candidates: Doc<"signals">[]; tasteHints: Record<string, string>; tasteDropped: Array<{ signalId: Id<"signals">; why: string }>; exploreOpen: boolean } | null> => {
+  handler: async (ctx, a): Promise<{ rails: Rails; creator: Doc<"creators">; candidates: Doc<"signals">[]; tasteHints: Record<string, string>; tasteDropped: Array<{ signalId: Id<"signals">; why: string }>; exploreOpen: boolean; askStop: Array<{ trackedAccountId: Id<"trackedAccounts">; handle: string }> } | null> => {
     const creator = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!creator) return null;
     const day = dayKeyInZone(a.now, creator.timezone);
@@ -77,6 +77,7 @@ export const railsFor = internalQuery({
     const affinities = (creator.affinities ?? []) as Affinity[];
     const tasteHints: Record<string, string> = {};
     const tasteDropped: Array<{ signalId: Id<"signals">; why: string }> = [];
+    const askStop: Array<{ trackedAccountId: Id<"trackedAccounts">; handle: string }> = [];
     const ranked: Array<{ s: Doc<"signals">; rank: number }> = [];
     for (const s of fresh) {
       const keys = [`source:${s.kind}`];
@@ -87,6 +88,10 @@ export const railsFor = internalQuery({
       const h = tasteHint(affinities, keys, now);
       if (h.hardNo && s.kind !== "win") {
         tasteDropped.push({ signalId: s._id, why: `taste: ${h.hardNo}` });
+        if (s.trackedAccountId && h.hardNo.includes("(@")) {
+          const t = (await ctx.db.get(s.trackedAccountId)) as Doc<"trackedAccounts"> | null;
+          if (t && t.status === "active" && !askStop.some((x) => x.trackedAccountId === t._id)) askStop.push({ trackedAccountId: t._id, handle: t.handle });
+        }
         continue;
       }
       tasteHints[s._id] = h.hint;
@@ -96,7 +101,7 @@ export const railsFor = internalQuery({
     // The explore slot (§13.10 (6)): one idea in five outside the core.
     const lastIdeas = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(TASTE.exploreEvery)) as Doc<"ideas">[];
     const exploreOpen = lastIdeas.length >= TASTE.exploreEvery && !lastIdeas.some((i) => i.newForYou);
-    return { rails, creator, candidates, tasteHints, tasteDropped, exploreOpen };
+    return { rails, creator, candidates, tasteHints, tasteDropped, exploreOpen, askStop };
   },
 });
 

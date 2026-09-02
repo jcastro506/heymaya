@@ -10,6 +10,7 @@
 
 import type * as account_deletion from "../account/deletion.js";
 import type * as agent_commands from "../agent/commands.js";
+import type * as agent_consolidate from "../agent/consolidate.js";
 import type * as agent_context from "../agent/context.js";
 import type * as agent_converse from "../agent/converse.js";
 import type * as agent_critic from "../agent/critic.js";
@@ -67,6 +68,7 @@ import type * as onboarding_firstRead from "../onboarding/firstRead.js";
 import type * as onboarding_ingest from "../onboarding/ingest.js";
 import type * as onboarding_start from "../onboarding/start.js";
 import type * as onboarding_watch from "../onboarding/watch.js";
+import type * as ops from "../ops.js";
 import type * as reads_cache from "../reads/cache.js";
 import type * as reads_key from "../reads/key.js";
 import type * as reads_kinds from "../reads/kinds.js";
@@ -96,6 +98,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   "account/deletion": typeof account_deletion;
   "agent/commands": typeof agent_commands;
+  "agent/consolidate": typeof agent_consolidate;
   "agent/context": typeof agent_context;
   "agent/converse": typeof agent_converse;
   "agent/critic": typeof agent_critic;
@@ -153,6 +156,7 @@ declare const fullApi: ApiFromModules<{
   "onboarding/ingest": typeof onboarding_ingest;
   "onboarding/start": typeof onboarding_start;
   "onboarding/watch": typeof onboarding_watch;
+  ops: typeof ops;
   "reads/cache": typeof reads_cache;
   "reads/key": typeof reads_key;
   "reads/kinds": typeof reads_kinds;

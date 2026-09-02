@@ -75,6 +75,10 @@ export const run = internalAction({
     if (!g) return { sent: false, reason: "creator not found" };
     if (!g.rails.ok) return { sent: false, reason: g.rails.reason ?? "rails" };
     if (g.tasteDropped.length) await ctx.runMutation(internal.scout.gate.setVerdicts, { verdicts: g.tasteDropped.map((d) => ({ signalId: d.signalId, verdict: "dropped" as const, why: d.why })) });
+    // §13.9 / §13.10 (5): after three passes on one account she asks once whether to stop watching it.
+    for (const ask of g.askStop) {
+      await ctx.runMutation(internal.core.messages.send, { creatorId: args.creatorId, surface: "telegram", body: `you've passed on the last three from @${ask.handle}. want me to stop watching them, or keep them on the list and just be pickier?`, dedupeKey: `askstop:${ask.trackedAccountId}`, proactive: false, kind: "status", buttons: [{ id: `watch:${ask.trackedAccountId}:stop`, label: "stop watching" }, { id: `watch:${ask.trackedAccountId}:keep`, label: "keep, be pickier" }] });
+    }
     if (g.candidates.length === 0) return { sent: false, reason: g.tasteDropped.length ? "no candidates (taste dropped the rest)" : "no candidates" };
 
     // Evidence for the model: the candidate posts with transcripts (a credit each, cached fleet-wide).
@@ -220,6 +224,8 @@ export const dueForScout = internalQuery({
       if (!c.channel.paired || !c.dossier) continue;
       const { hour } = localHourMinute(a.now, c.timezone);
       if (hour < 8 || hour >= 20) continue; // scouting is a daytime thing; the gate enforces quiet hours too
+      // Learned cadence (§13.10): once she knows the hour they tend to reply in, she aims for the hour before it.
+      if (c.preferredSendHour !== undefined && Math.abs(hour - (c.preferredSendHour - 1)) > 1) continue;
       due.push(c._id);
     }
     return due;

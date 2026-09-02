@@ -29,7 +29,7 @@ for (const p of copyFiles) {
     .filter((l) => !/^\s*import\b/.test(l) && !/^\s*(\/\/|\*|\/\*)/.test(l))
     .join("\n");
   for (const re of forbidden) {
-    if (/\/app\/ops\//.test(p)) continue; // operator console may name vendors
+    if (/\/app\/(ops|privacy|terms)\//.test(p)) continue; // the operator console and the legal pages must name vendors
     const m = src.match(re);
     if (m) failures.push(`copy: ${rel(p)} contains ${JSON.stringify(m[0])} (§7 copy rules)`);
   }

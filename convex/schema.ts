@@ -27,7 +27,8 @@ export default defineSchema({
     ownership: v.union(v.literal("unverified"), v.literal("verified")),
     niche: v.string(), // their one sentence, verbatim
     timezone: v.string(),
-    quietHours: v.object({ start: v.string(), end: v.string() }), // "22:00" / "07:00" local
+    quietHours: v.object({ start: v.string(), end: v.string() }),
+    preferredSendHour: v.optional(v.number()), // §13.10 (5) cadence: the local hour they tend to reply in, learned nightly // "22:00" / "07:00" local
     tone: v.union(v.literal("coach"), v.literal("friend"), v.literal("blunt")),
     mode: v.union(v.literal("full"), v.literal("thin"), v.literal("newCreator")),
     dossier: v.optional(v.any()), // Dossier (§14.1), zod-validated at write time

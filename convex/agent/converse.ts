@@ -44,6 +44,16 @@ function hourBucket(epoch: number, timeZone: string): string {
   return h < 12 ? "morning" : h < 17 ? "afternoon" : "evening";
 }
 
+export const setWatch = internalMutation({
+  args: { creatorId: v.id("creators"), trackedAccountId: v.id("trackedAccounts"), keep: v.boolean() },
+  handler: async (ctx, a): Promise<{ ok: boolean }> => {
+    const t = (await ctx.db.get(a.trackedAccountId)) as Doc<"trackedAccounts"> | null;
+    if (!t || t.creatorId !== a.creatorId) return { ok: false };
+    if (!a.keep) await ctx.db.patch(t._id, { status: "removed" }); // history kept, like the web control
+    return { ok: true };
+  },
+});
+
 export const messageByTelegramId = internalQuery({
   args: { creatorId: v.id("creators"), telegramMessageId: v.string() },
   handler: async (ctx, a): Promise<{ ideaId: Id<"ideas"> | null } | null> => {
@@ -124,6 +134,14 @@ export const run = internalAction({
           body = "idea only. it's in Ideas whenever you want it.";
         }
         await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body, dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
+        await deliverNow(ctx as never);
+        return { ok: true };
+      }
+      // "stop watching @x?" (§13.9): their answer is a row on the tracked account.
+      const w = target.body.match(/^watch:([a-z0-9]+):(stop|keep)$/);
+      if (w) {
+        const r = await ctx.runMutation(internal.agent.converse.setWatch, { creatorId: creator._id, trackedAccountId: w[1] as Id<"trackedAccounts">, keep: w[2] === "keep" });
+        await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: r.ok ? (w[2] === "keep" ? "kept. i'll only bring theirs when it's clearly a fit." : "done, off the list. add them back any time.") : "couldn't find that account on your list.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
         await deliverNow(ctx as never);
         return { ok: true };
       }
