@@ -143,6 +143,7 @@ export const run = internalAction({
     if (a.mode === "video") {
       const file = target.fileId ? await ctx.storage.get(target.fileId) : null;
       if (!file) return { ok: false, reason: "no file bytes" };
+      await ctx.runAction(internal.core.telegram.react, { creatorId: creator._id, messageId: target._id, emoji: "👀" }).catch(() => undefined); // §21.5: she's looking
       subject = { draftFileId: target.fileId ?? undefined };
       const w = await watchBytes(ctx, creator._id, "watch_draft", await file.arrayBuffer(), target.fileMime ?? "video/mp4", WATCH_PROMPT);
       card = w.text ? parseJson<Card>(w.text) : null;

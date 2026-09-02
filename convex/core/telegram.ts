@@ -283,3 +283,26 @@ export const handleInbound = internalAction({
     return { recorded: true };
   },
 });
+
+/** §21.5 "she reacts": a small reaction from the bot's side on their message, before the reply. Best effort, never blocks a turn. */
+export const react = internalAction({
+  args: { creatorId: v.id("creators"), messageId: v.id("messages"), emoji: v.union(v.literal("❤"), v.literal("🔥"), v.literal("👍"), v.literal("😂"), v.literal("👀")) },
+  handler: async (ctx, a): Promise<{ ok: boolean }> => {
+    const target = await ctx.runQuery(internal.core.telegram.reactionTarget, { creatorId: a.creatorId, messageId: a.messageId });
+    const { resolveTelegramBotIdentity, setMessageReaction } = await import("../integrations/telegram/client"); // same seam as deliverMessage
+    const identity = resolveTelegramBotIdentity();
+    if (!target || !identity) return { ok: false };
+    const ok = await setMessageReaction(identity, { chatId: target.chatId, messageId: Number(target.telegramMessageId), emoji: a.emoji }).catch(() => false);
+    return { ok };
+  },
+});
+
+export const reactionTarget = internalQuery({
+  args: { creatorId: v.id("creators"), messageId: v.id("messages") },
+  handler: async (ctx, a): Promise<{ chatId: string; telegramMessageId: string } | null> => {
+    const creator = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    const m = (await ctx.db.get(a.messageId)) as Doc<"messages"> | null;
+    if (!creator?.telegramChatId || !m?.telegramMessageId || m.creatorId !== a.creatorId) return null;
+    return { chatId: creator.telegramChatId, telegramMessageId: m.telegramMessageId };
+  },
+});

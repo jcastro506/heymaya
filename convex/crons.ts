@@ -47,4 +47,10 @@ crons.daily("format watch", { hourUTC: 12, minuteUTC: 0 }, internal.scout.format
 // Sound signals (§13.8): a sound two or more lane accounts used this week, once a day, after the sweep.
 crons.daily("sound signals", { hourUTC: 12, minuteUTC: 30 }, internal.scout.sounds.run, {});
 
+// Nothing fails silently (§16): one operator message an hour when something new went wrong.
+crons.hourly("operator alerts", { minuteUTC: 20 }, internal.core.alerts.run, {});
+
+// Retention (§16.5): messages 12 months, calendar fields 90 days rolling, expired oauth states; nightly, bounded.
+crons.daily("retention", { hourUTC: 3, minuteUTC: 30 }, internal.core.retention.nightly, {});
+
 export default crons;

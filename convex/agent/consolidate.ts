@@ -28,7 +28,8 @@ export const nightly = internalMutation({
     for (const c of creators) {
       const patch: Partial<Doc<"creators">> = {};
       const notes = (c.notes ?? []).map((n) => {
-        if (!n.tombstonedAt && n.expiresHint && n.expiresHint < now && !n.confirmedAt) {
+        // §21.5 callbacks: a running bit never expires on its own; only "forget that" ends one.
+        if (!n.tombstonedAt && n.expiresHint && n.expiresHint < now && !n.confirmedAt && n.kind !== "bit") {
           expiredNotes++;
           return { ...n, tombstonedAt: now };
         }

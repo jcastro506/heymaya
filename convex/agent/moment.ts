@@ -88,6 +88,7 @@ export const run = internalAction({
 
     let scene: string | null = null;
     if (a.hasMedia && target.fileId) {
+      await ctx.runAction(internal.core.telegram.react, { creatorId: creator._id, messageId: target._id, emoji: "👀" }).catch(() => undefined); // §21.5: she's looking
       const file = await ctx.storage.get(target.fileId);
       if (file) {
         const r = await watchMedia({ model: WATCH_MODEL_TOP, apiKey: process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY ?? "", prompt: SCENE_PROMPT, media: { bytes: await file.arrayBuffer(), mimeType: target.fileMime ?? "image/jpeg" }, resolution: "default", maxOutputTokens: 400 });
