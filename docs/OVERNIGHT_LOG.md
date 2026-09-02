@@ -43,3 +43,7 @@ Running handoff. Newest at the bottom. Read the **Blocked on you** section first
 ## Timeline
 
 - 23:xx — decision: same repo, orphan branch. Worktree created. Four salvage audits running (web/infra done; maya/agents, integrations/schema, tests/scar pending).
+- 20:44 — New Convex project **heymaya-creator** (team castrojoshua805), dev deployment `impressive-roadrunner-997`. Created with `arch -arm64 npx convex dev --once --configure new` (the Rosetta esbuild mismatch from the legacy repo applies here too: always `arch -arm64 npx convex …`). A separate **staging** project per §20 is still to be created.
+- 20:50 — Scaffold committed on `creator`: Next 16.3 + Convex + Clerk + Stripe + PostHog + Zod; vitest + convex-test; deploy guards; CI. Dev keys copied from legacy `.env.local` with a real parser (the naive `source` echoed a Fly token into a shell error — rotate `FLY_API_TOKEN` for the retired product as hygiene). Server-side keys set on the dev deployment via `convex env set`.
+- Confirmed `gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3.1-flash-lite` are all available on the key.
+- ScrapeCreators endpoint additions for the doc after reading the full catalogue: **TikTok collection videos** (a creator's public collections = their own swipe file) and **Instagram story highlights** (what they choose to keep on their profile), both 1 credit at onboarding → dossier `interests`.
