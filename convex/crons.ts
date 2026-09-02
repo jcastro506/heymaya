@@ -27,6 +27,9 @@ crons.interval("sync calendars", { minutes: 30 }, internal.calendar.sync.runAll,
 
 // Taste (§13.10): silence on an idea becomes an event after 72 h; the taste note is rewritten weekly.
 crons.daily("expire ignored ideas", { hourUTC: 2, minuteUTC: 0 }, internal.taste.events.expireIgnored, {});
+// An unanswered question stops being askable when their day ends; without this the
+// open-question rail mutes the scout forever (the function existed with no caller).
+crons.daily("expire stale questions", { hourUTC: 2, minuteUTC: 10 }, internal.core.messages.expireStaleQuestionsAll, {});
 crons.daily("taste profiles", { hourUTC: 9, minuteUTC: 0 }, internal.taste.profile.runAll, {});
 
 // The weekly review: Sunday morning on each creator's clock; the hourly check finds who is due (§11.2 #14).

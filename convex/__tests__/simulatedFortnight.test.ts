@@ -46,6 +46,8 @@ describe("a simulated fortnight", () => {
       expect(c.ok, `converse on day ${day}: ${c.reason ?? ""}`).toBe(true);
       await t.finishAllScheduledFunctions(vi.runAllTimers);
       await t.mutation(internal.taste.events.expireIgnored, { now: now + 12 * 3_600_000 });
+      // The nightly sweep: a question they never answered stops being askable when their day ends.
+      await t.mutation(internal.core.messages.expireStaleQuestionsAll, { now: now + 20 * 3_600_000 });
       if (new Date(now).getUTCDay() === 0) {
         const rv = await t.action(internal.review.weekly.run, { creatorId });
         expect(rv.sent, `review on day ${day}`).toBe(true);

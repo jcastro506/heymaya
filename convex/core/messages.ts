@@ -65,6 +65,17 @@ export const recordInbound = internalMutation({
       turnId: args.turnId,
       ts: args.ts ?? Date.now(),
     });
+    /**
+     * ⚠️ An inbound message answers whatever was outstanding — the SAME rule the Telegram
+     * door applies. This door did not, so anything arriving through it (the web surface,
+     * dev, tests) left the question open and the scout blocked behind the open-question
+     * rail until the nightly expiry. Two inbound doors must not disagree about this.
+     */
+    const open = (await ctx.db
+      .query("messages")
+      .withIndex("by_creator_and_awaiting", (q) => q.eq("creatorId", args.creatorId).eq("awaitingAnswer", true))
+      .collect()) as Doc<"messages">[];
+    for (const row of open) await ctx.db.patch(row._id, { awaitingAnswer: false });
     return { messageId };
   },
 });
@@ -471,50 +482,70 @@ export { getMessage };
  * All this restores is her ability to ask about something else, which is the
  * thing that was actually broken.
  */
+async function expireFor(ctx: MutationCtx, creatorId: Id<"creators">, now: number): Promise<{ expired: number; question?: string }> {
+  const creator = (await ctx.db.get(creatorId)) as Doc<"creators"> | null;
+  if (!creator) return { expired: 0 };
+  const today = dayKeyInZone(now, creator.timezone ?? "UTC");
+
+  const open = (await ctx.db
+    .query("messages")
+    .withIndex("by_creator_and_awaiting", (q) =>
+      q.eq("creatorId", creatorId).eq("awaitingAnswer", true),
+    )
+    .collect()) as Doc<"messages">[];
+
+  let expired = 0;
+  let question: string | undefined;
+  for (const row of open) {
+    // Asked today, in their timezone — still live, leave it alone.
+    if (dayKeyInZone(row.ts, creator.timezone ?? "UTC") === today) continue;
+
+    await ctx.db.patch(row._id, { awaitingAnswer: false });
+    expired += 1;
+    question ??= row.body?.slice(0, 120);
+
+    /**
+     * Logged, not silent. An expiry that leaves no trace makes "she never
+     * asked" and "they never answered" indistinguishable afterwards — and
+     * those need different fixes.
+     */
+    console.warn(
+      `[messages] expired an unanswered question from ${dayKeyInZone(
+        row.ts,
+        creator.timezone ?? "UTC",
+      )} for ${creatorId} — she was blocked from asking anything else`,
+    );
+  }
+
+  return { expired, question };
+}
+
 export const expireStaleQuestions = internalMutation({
   args: { creatorId: v.id("creators"), now: v.optional(v.number()) },
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{ expired: number; question?: string }> => {
-    const creator = (await ctx.db.get(
-      args.creatorId,
-    )) as Doc<"creators"> | null;
-    if (!creator) return { expired: 0 };
+  handler: async (ctx, args): Promise<{ expired: number; question?: string }> =>
+    await expireFor(ctx, args.creatorId, args.now ?? Date.now()),
+});
 
+/**
+ * The fleet sweep — the half that was missing.
+ *
+ * ⚠️ `expireStaleQuestions` was written, documented and tested, and had ZERO CALLERS. So
+ * an unanswered question stayed open forever and the open-question rail muted the scout
+ * permanently. Found by the simulated fortnight (thirteen silent days after one ignored
+ * question), confirmed on the first live creator. Nightly, bounded.
+ */
+export const expireStaleQuestionsAll = internalMutation({
+  args: { now: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<{ creators: number; expired: number }> => {
     const now = args.now ?? Date.now();
-    const today = dayKeyInZone(now, creator.timezone ?? "UTC");
-
-    const open = (await ctx.db
-      .query("messages")
-      .withIndex("by_creator_and_awaiting", (q) =>
-        q.eq("creatorId", args.creatorId).eq("awaitingAnswer", true),
-      )
-      .collect()) as Doc<"messages">[];
-
+    const creators = (await ctx.db.query("creators").take(500)) as Doc<"creators">[];
     let expired = 0;
-    let question: string | undefined;
-    for (const row of open) {
-      // Asked today, in their timezone — still live, leave it alone.
-      if (dayKeyInZone(row.ts, creator.timezone ?? "UTC") === today) continue;
-
-      await ctx.db.patch(row._id, { awaitingAnswer: false });
-      expired += 1;
-      question ??= row.body?.slice(0, 120);
-
-      /**
-       * Logged, not silent. An expiry that leaves no trace makes "she never
-       * asked" and "they never answered" indistinguishable afterwards — and
-       * those need different fixes.
-       */
-      console.warn(
-        `[messages] expired an unanswered question from ${dayKeyInZone(
-          row.ts,
-          creator.timezone ?? "UTC",
-        )} for ${args.creatorId} — she was blocked from asking anything else`,
-      );
+    let touched = 0;
+    for (const c of creators) {
+      const r = await expireFor(ctx, c._id, now);
+      if (r.expired > 0) touched += 1;
+      expired += r.expired;
     }
-
-    return { expired, question };
+    return { creators: touched, expired };
   },
 });
