@@ -79,6 +79,13 @@ export function runChecks(input: { text: string; evidence: unknown; kind: string
   const emoji = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(text);
   checks.push({ name: "emoji_default", pass: !emoji || Boolean(input.creatorUsesEmoji), detail: emoji ? (input.creatorUsesEmoji ? "emoji, and they use them" : "emoji, and they don't") : "none" });
 
+  // A message that stops mid-thought, or carries markdown or a draft label, is a budget or a leak problem, never a style.
+  const trimmed = text.trim();
+  const complete = trimmed.length < 40 || /[.!?…"”)\]]$/.test(trimmed) || /https?:\/\/\S+$/.test(trimmed);
+  checks.push({ name: "complete", pass: complete, detail: complete ? "ends on a sentence" : `ends with "…${trimmed.slice(-30)}"` });
+  const markdown = /\*\*|^#{1,6}\s|```/m.test(text) || /\b(refining|draft|revised|final answer)\b.*[:*]/i.test(text.split("\n")[0] ?? "");
+  checks.push({ name: "no_markdown", pass: !markdown, detail: markdown ? "markdown or a draft label in chat" : "clean" });
+
   if (input.kind === "scout") checks.push({ name: "has_link", pass: /https?:\/\//.test(text) || /https?:\/\//.test(evidence), detail: /https?:\/\//.test(text) ? "link in message" : "link only in evidence" });
 
   return checks;

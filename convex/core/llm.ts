@@ -82,6 +82,9 @@ export const REASONING_MODELS = [
   // until they were listed, because a 400-token answer budget was eaten by thinking (2026-09-02).
   "z-ai/glm",
   "deepseek/",
+  // Gemini 3.x flash thinks too: the first-night first reads trailed off mid-sentence and one leaked a
+  // "Refining word count & voice" scratchpad line, both from a 500-token budget eaten by thinking.
+  "google/gemini-3",
 ];
 
 /**

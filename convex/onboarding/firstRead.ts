@@ -60,7 +60,7 @@ export const run = internalAction({
         { role: "user", content: "Write the first message. Address them directly. This is the first thing they will ever read from you." },
       ],
       temperature: 0.6,
-      maxTokens: 500,
+      maxTokens: 900,
       apiKey: process.env.OPENROUTER_API_KEY ?? "",
     });
     if (!result.ok) return { ok: false, reason: result.reason };
@@ -71,7 +71,7 @@ export const run = internalAction({
     let verdict = tooLong(text) ? { pass: false, problems: ["too_long" as const], note: "over the length cap" } : await critique(ctx, { creatorId: creator._id, kind: "first_read", text, evidence: d, voice: { voice: d?.voice, persona: d?.persona }, directives: directives.map((x) => x.verbatim) });
     let criticSkipped = Boolean(verdict.skipped);
     if (!verdict.pass) {
-      const rewrite = await callModel(ctx, { creatorId: creator._id, purpose: "first_read_rewrite", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `Your previous first message was rejected by the critic for: ${verdict.problems.join(", ")} (${verdict.note}). Rewrite it, fixing exactly that. Message text only.` }], temperature: 0.5, maxTokens: 500, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+      const rewrite = await callModel(ctx, { creatorId: creator._id, purpose: "first_read_rewrite", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `Your previous first message was rejected by the critic for: ${verdict.problems.join(", ")} (${verdict.note}). Rewrite it, fixing exactly that. Message text only.` }], temperature: 0.5, maxTokens: 900, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
       if (rewrite.ok && rewrite.content.trim()) {
         text = rewrite.content.trim();
         verdict = tooLong(text) ? { pass: false, problems: ["too_long" as const], note: "still over the length cap" } : await critique(ctx, { creatorId: creator._id, kind: "first_read", text, evidence: d, voice: { voice: d?.voice, persona: d?.persona }, directives: directives.map((x) => x.verbatim) });
