@@ -4,7 +4,7 @@
  */
 
 import { v } from "convex/values";
-import { action, mutation, query, type MutationCtx, type QueryCtx } from "../_generated/server";
+import { action, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { addTracked } from "../agent/manage";
@@ -64,5 +64,65 @@ export const remove = mutation({
     if (!creator || !row || row.creatorId !== creator._id) return { ok: false };
     await ctx.db.patch(a.id, { status: "removed" }); // history kept
     return { ok: true };
+  },
+});
+
+/**
+ * Tap-to-pick suggestions for screen 3 (plan §7 S2): popular creators in their follower
+ * band and country, plus the accounts they follow on TikTok, both through the cache.
+ * Never their own handle, never one already on the list. Best effort: an empty list is
+ * a normal answer, the free-entry field is always there.
+ */
+export const suggest = action({
+  args: {},
+  handler: async (ctx): Promise<Array<{ platform: "tiktok" | "instagram"; handle: string; followers: number | null; why: string }>> => {
+    const me = await ctx.runQuery(internal.onboarding.admired.meForSuggest, {});
+    if (!me) return [];
+    const out: Array<{ platform: "tiktok" | "instagram"; handle: string; followers: number | null; why: string }> = [];
+    const seen = new Set<string>([...me.mine, ...me.already]);
+    const push = (platform: "tiktok" | "instagram", handle: string, followers: number | null, why: string) => {
+      const h = handle.toLowerCase().replace(/^@/, "");
+      if (!h || seen.has(h)) return;
+      seen.add(h);
+      out.push({ platform, handle: h, followers, why });
+    };
+    const country = me.timezone.startsWith("America/") ? "US" : me.timezone.startsWith("Europe/London") ? "GB" : me.timezone.startsWith("Australia/") ? "AU" : "US";
+    let followers = 0;
+    try {
+      if (me.handles.tiktok) {
+        const p = await ctx.runAction(internal.reads.read.read, { kind: "profile", params: { platform: "tiktok", handle: me.handles.tiktok }, creatorId: me.creatorId });
+        followers = Number((p.value as { followerCount?: number } | null)?.followerCount ?? 0);
+      }
+    } catch {
+      /* size unknown: middle band */
+    }
+    const band = followers >= 10_000_000 ? "10M+" : followers >= 1_000_000 ? "1M-10M" : followers >= 100_000 ? "100K-1M" : "10K-100K";
+    try {
+      const r = await ctx.runAction(internal.reads.read.read, { kind: "discover.creators", params: { band, country }, creatorId: me.creatorId });
+      const rows = (Array.isArray(r.value) ? r.value : ((r.value as { creators?: unknown[]; users?: unknown[] } | null)?.creators ?? (r.value as { users?: unknown[] } | null)?.users ?? [])) as Array<{ handle?: string; uniqueId?: string; username?: string; followerCount?: number; followers?: number }>;
+      for (const c of rows.slice(0, 12)) push("tiktok", String(c.handle ?? c.uniqueId ?? c.username ?? ""), Number(c.followerCount ?? c.followers ?? 0) || null, `popular in your size band (${band}) in ${country}`);
+    } catch {
+      /* discover is optional */
+    }
+    try {
+      if (me.handles.tiktok) {
+        const f = await ctx.runAction(internal.reads.read.read, { kind: "account.following", params: { handle: me.handles.tiktok }, creatorId: me.creatorId });
+        const rows = (Array.isArray(f.value) ? f.value : ((f.value as { users?: unknown[]; following?: unknown[] } | null)?.users ?? (f.value as { following?: unknown[] } | null)?.following ?? [])) as Array<{ handle?: string; uniqueId?: string; username?: string; followerCount?: number }>;
+        for (const c of rows.slice(0, 12)) push("tiktok", String(c.handle ?? c.uniqueId ?? c.username ?? ""), Number(c.followerCount ?? 0) || null, "you follow them");
+      }
+    } catch {
+      /* following can be private */
+    }
+    return out.slice(0, 10);
+  },
+});
+
+export const meForSuggest = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<{ creatorId: Id<"creators">; handles: { tiktok?: string; instagram?: string }; timezone: string; mine: string[]; already: string[] } | null> => {
+    const creator = await creatorFor(ctx);
+    if (!creator) return null;
+    const rows = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).collect()) as Doc<"trackedAccounts">[];
+    return { creatorId: creator._id, handles: creator.handles, timezone: creator.timezone, mine: [creator.handles.tiktok, creator.handles.instagram].filter((h): h is string => Boolean(h)).map((h) => h.toLowerCase()), already: rows.filter((r) => r.status !== "removed").map((r) => r.handle) };
   },
 });

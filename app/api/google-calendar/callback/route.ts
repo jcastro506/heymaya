@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   const result = await client.action(api.calendar.oauth.exchange, { code, state, redirectUri }).catch((e: unknown) => ({ ok: false as const, reason: e instanceof Error ? e.message.slice(0, 120) : "exchange_threw" }));
   if (!result.ok) return fail(req, result.reason);
 
-  const dest = new URL("/app/settings", req.url);
+  const dest = new URL(result.returnTo ?? "/app/settings", req.url);
   dest.searchParams.set("calendar", "connected");
   return NextResponse.redirect(dest);
 }

@@ -1,13 +1,15 @@
 "use client";
 
 /**
- * Onboarding screens 2–4 (plan §7 S2): handles, who you wish you were, what you make.
- * Mobile-first. The catalogue read starts the moment handles are saved, so nothing
- * here waits on Telegram. Phone verification and the calendar arrive with Sprint 3.
+ * Onboarding screens 2–7 (plan §7 S2): handles, who you wish you were (tap-to-pick, then
+ * free entry), what you make, your calendar (skip allowed), done (timezone, quiet hours,
+ * live progress from jobs), then Telegram. Mobile-first. The catalogue read starts the
+ * moment handles are saved, so nothing here waits on Telegram.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
@@ -22,8 +24,24 @@ export default function StartPage() {
   const removeAdmired = useMutation(api.onboarding.admired.remove);
   const admired = useQuery(api.onboarding.admired.list) ?? [];
   const progress = useQuery(api.onboarding.start.progress);
+  const suggest = useAction(api.onboarding.admired.suggest);
+  const updateSettings = useMutation(api.ui.updateSettings);
+  const cal = useQuery(api.calendar.oauth.status);
 
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(() => {
+    if (typeof window === "undefined") return 1;
+    const q = Number(new URLSearchParams(window.location.search).get("step"));
+    return q >= 1 && q <= 5 ? (q as 1 | 2 | 3 | 4 | 5) : 1;
+  });
+  const [suggestions, setSuggestions] = useState<Array<{ platform: Platform; handle: string; followers: number | null; why: string }> | null>(null);
+  const [tz, setTz] = useState<string>("");
+  // An existing account goes straight to Today; a returning onboarding lands on its step.
+  useEffect(() => {
+    if (progress && progress.state !== "none" && step === 1 && !new URLSearchParams(window.location.search).get("step")) router.replace(progress.paired ? "/app/today" : "/start?step=2");
+  }, [progress, step, router]);
+  useEffect(() => {
+    if (step === 2 && suggestions === null) suggest({}).then(setSuggestions).catch(() => setSuggestions([]));
+  }, [step, suggestions, suggest]);
   const [tiktok, setTiktok] = useState("");
   const [instagram, setInstagram] = useState("");
   const [checking, setChecking] = useState(false);
@@ -72,14 +90,14 @@ export default function StartPage() {
     if (admired.length < 3) return setError("three accounts, minimum. she watches these for you.");
     const r = await describe({ niche });
     if (!r.ok) return setError(r.error ?? "something went wrong");
-    router.push("/telegram");
+    setStep(4);
   }
 
   return (
     <main className="min-h-dvh max-w-md mx-auto p-6 flex flex-col gap-6">
       <header className="flex items-baseline justify-between">
         <h1 className="text-xl font-semibold">Maya</h1>
-        <span className="text-xs opacity-60">step {step} of 3</span>
+        <span className="text-xs opacity-60">step {step} of 5</span>
       </header>
 
       {step === 1 && (
@@ -116,6 +134,16 @@ export default function StartPage() {
             <input className="input flex-1" placeholder="@handle" value={candidate} onChange={(e) => setCandidate(e.target.value)} autoCapitalize="none" onKeyDown={(e) => e.key === "Enter" && addCandidate()} />
             <button className="btn" disabled={checking} onClick={addCandidate}>add</button>
           </div>
+          {suggestions && suggestions.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <div className="text-xs opacity-50">tap to add</div>
+              <div className="flex flex-wrap gap-2">
+                {suggestions.filter((sg) => !admired.some((a) => a.handle === sg.handle)).map((sg) => (
+                  <button key={`${sg.platform}:${sg.handle}`} className="rounded-full border border-white/20 px-3 py-1 text-xs" title={sg.why} onClick={() => addAdmired({ platform: sg.platform, handle: sg.handle })}>@{sg.handle}{sg.followers ? ` · ${Math.round(sg.followers / 1000)}k` : ""}</button>
+                ))}
+              </div>
+            </div>
+          )}
           <ul className="flex flex-col gap-2">
             {admired.map((a) => (
               <li key={a.id} className="flex items-center justify-between text-sm border border-white/10 rounded px-3 py-2">
@@ -134,6 +162,31 @@ export default function StartPage() {
           <p className="text-sm opacity-70">One sentence, in your words.</p>
           <textarea className="input min-h-24" value={niche} onChange={(e) => setNiche(e.target.value)} placeholder="running and gear for people who started late" />
           <button className="btn" onClick={saveNiche}>next</button>
+        </section>
+      )}
+
+      {step === 4 && (
+        <section className="flex flex-col gap-4">
+          <h2 className="text-lg">Your calendar</h2>
+          <p className="text-sm opacity-70">With it she finds ideas in your life and plans filming around it. She keeps only titles and times, never details, and skips anything private. You can skip this.</p>
+          {cal?.status === "connected" ? <p className="text-sm text-emerald-300">Connected.</p> : <a className="btn" href="/api/google-calendar/start?return=%2Fstart%3Fstep%3D5">Connect Google Calendar</a>}
+          <button className="btn-secondary" onClick={() => setStep(5)}>{cal?.status === "connected" ? "next" : "skip for now"}</button>
+          <p className="text-xs opacity-40">Apple Calendar is coming after the pilot.</p>
+        </section>
+      )}
+
+      {step === 5 && (
+        <section className="flex flex-col gap-4">
+          <h2 className="text-lg">Almost there</h2>
+          <label className="text-sm flex flex-col gap-1">your timezone
+            <select className="input" value={tz || progress?.timezone || ""} onChange={(e) => { setTz(e.target.value); updateSettings({ timezone: e.target.value }); }}>
+              {Array.from(new Set([progress?.timezone ?? "", Intl.DateTimeFormat().resolvedOptions().timeZone, ...(typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [])])).filter(Boolean).map((z) => <option key={z} value={z}>{z}</option>)}
+            </select>
+          </label>
+          <p className="text-sm opacity-70">She stays quiet between {progress?.quietHours.start ?? "22:00"} and {progress?.quietHours.end ?? "07:00"}. Change it in Settings, or just tell her.</p>
+          <p className="text-sm">{progress?.dossier ? "She has read your posts." : progress?.ingest === "running" || (progress?.posts ?? 0) > 0 ? `Reading your posts now: ${progress?.posts ?? 0} so far${progress?.transcripts ? `, ${progress.transcripts} transcribed` : ""}.` : progress?.ingest === "failed" || progress?.ingest === "dead" ? "The read hit a snag; she'll retry, and you can go on." : "Starting the read of your posts."}</p>
+          <p className="text-sm opacity-70">Your first message lands in about 8 minutes, on Telegram.</p>
+          <Link className="btn" href="/telegram">Open Maya in Telegram</Link>
         </section>
       )}
 

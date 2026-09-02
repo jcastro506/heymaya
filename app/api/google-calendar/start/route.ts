@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
 
   let state: string;
   try {
-    state = (await client.mutation(api.calendar.oauth.issueState, {})).token;
+    state = (await client.mutation(api.calendar.oauth.issueState, { returnTo: new URL(req.url).searchParams.get("return") ?? undefined })).token;
   } catch {
     return fail(req, "no_account");
   }

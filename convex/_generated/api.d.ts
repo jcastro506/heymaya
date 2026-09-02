@@ -98,6 +98,7 @@ import type * as scout_matchPost from "../scout/matchPost.js";
 import type * as scout_readback from "../scout/readback.js";
 import type * as scout_sampler from "../scout/sampler.js";
 import type * as scout_scout from "../scout/scout.js";
+import type * as scout_sounds from "../scout/sounds.js";
 import type * as scout_sweep from "../scout/sweep.js";
 import type * as taste_affinities from "../taste/affinities.js";
 import type * as taste_events from "../taste/events.js";
@@ -202,6 +203,7 @@ declare const fullApi: ApiFromModules<{
   "scout/readback": typeof scout_readback;
   "scout/sampler": typeof scout_sampler;
   "scout/scout": typeof scout_scout;
+  "scout/sounds": typeof scout_sounds;
   "scout/sweep": typeof scout_sweep;
   "taste/affinities": typeof taste_affinities;
   "taste/events": typeof taste_events;

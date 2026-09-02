@@ -82,6 +82,10 @@ export const railsFor = internalQuery({
     let worthSeeingPassed = 0;
     for (const s of fresh) {
       // §13.12 rail: a transfer candidate needs the screener's mark, and at most one a day reaches the scout.
+      if (s.kind === "sound" && !(s.corroboration.soundRising && s.corroboration.accounts >= 2)) {
+        tasteDropped.push({ signalId: s._id, why: "rail: sound not rising across the lane" });
+        continue;
+      }
       if (s.kind === "worth_seeing") {
         if (!s.formatFingerprint) {
           tasteDropped.push({ signalId: s._id, why: "rail: no transferable format marked" });

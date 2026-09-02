@@ -98,7 +98,7 @@ describe("oauth: the state token is the auth", () => {
     const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { clerkUserId: "user_a" }));
     const asA = t.withIdentity({ subject: "user_a" });
     const { token } = await asA.mutation(api.calendar.oauth.issueState, {});
-    expect(await t.mutation(internal.calendar.oauth.claimState, { token })).toBe(creatorId);
+    expect((await t.mutation(internal.calendar.oauth.claimState, { token }))?.creatorId).toBe(creatorId);
     expect(await t.mutation(internal.calendar.oauth.claimState, { token })).toBeNull();
     expect(await t.mutation(internal.calendar.oauth.claimState, { token: "nope" })).toBeNull();
     await t.run(async (ctx) => {

@@ -28,13 +28,15 @@ function mintToken(): string {
 }
 
 export const issueState = mutation({
-  args: {},
-  handler: async (ctx): Promise<{ token: string }> => {
+  args: { returnTo: v.optional(v.string()) },
+  handler: async (ctx, a): Promise<{ token: string }> => {
     const c = await creatorForIdentity(ctx);
     if (!c) throw new Error("no creator for this session");
     const now = Date.now();
     const token = mintToken();
-    await ctx.db.insert("oauthStates", { creatorId: c._id, provider: "google", token, expiresAt: now + STATE_TTL_MS, createdAt: now });
+    // Only our own paths may be a return target; never an outside URL from a query string.
+    const returnTo = a.returnTo && /^\/[a-z0-9/?=&_-]*$/i.test(a.returnTo) ? a.returnTo : undefined;
+    await ctx.db.insert("oauthStates", { creatorId: c._id, provider: "google", token, returnTo, expiresAt: now + STATE_TTL_MS, createdAt: now });
     return { token };
   },
 });
@@ -50,21 +52,22 @@ export const authUrl = query({
 
 export const claimState = internalMutation({
   args: { token: v.string() },
-  handler: async (ctx, a): Promise<Id<"creators"> | null> => {
+  handler: async (ctx, a): Promise<{ creatorId: Id<"creators">; returnTo: string | null } | null> => {
     const row = (await ctx.db.query("oauthStates").withIndex("by_token", (q) => q.eq("token", a.token)).first()) as Doc<"oauthStates"> | null;
     const now = Date.now();
     if (!row || row.expiresAt <= now || row.claimedAt) return null;
     await ctx.db.patch(row._id, { claimedAt: now });
-    return row.creatorId;
+    return { creatorId: row.creatorId, returnTo: row.returnTo ?? null };
   },
 });
 
 /** Public by design: the single-use state token is the authentication. */
 export const exchange = action({
   args: { code: v.string(), state: v.string(), redirectUri: v.string() },
-  handler: async (ctx, a): Promise<{ ok: true } | { ok: false; reason: string }> => {
-    const creatorId = await ctx.runMutation(internal.calendar.oauth.claimState, { token: a.state });
-    if (!creatorId) return { ok: false, reason: "bad_state" };
+  handler: async (ctx, a): Promise<{ ok: true; returnTo: string | null } | { ok: false; reason: string }> => {
+    const claim = await ctx.runMutation(internal.calendar.oauth.claimState, { token: a.state });
+    if (!claim) return { ok: false, reason: "bad_state" };
+    const { creatorId, returnTo } = claim;
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
     if (!clientId || !clientSecret) return { ok: false, reason: "not_configured" };
@@ -86,7 +89,7 @@ export const exchange = action({
     }
     await ctx.runMutation(internal.calendar.oauth.storeConnection, { creatorId, tokenRef: await encrypt(JSON.stringify(bundle)), calendars, keepRefresh: !tokens.refresh_token });
     await ctx.scheduler.runAfter(0, internal.calendar.sync.syncOne, { creatorId });
-    return { ok: true };
+    return { ok: true, returnTo };
   },
 });
 

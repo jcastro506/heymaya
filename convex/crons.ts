@@ -44,4 +44,7 @@ crons.daily("eval recent outbound", { hourUTC: 4, minuteUTC: 0 }, internal.eval.
 // The format watch (§13.12): the platform's trending feeds once a day, fleet-wide; formats travel, topics don't.
 crons.daily("format watch", { hourUTC: 12, minuteUTC: 0 }, internal.scout.formats.run, {});
 
+// Sound signals (§13.8): a sound two or more lane accounts used this week, once a day, after the sweep.
+crons.daily("sound signals", { hourUTC: 12, minuteUTC: 30 }, internal.scout.sounds.run, {});
+
 export default crons;

@@ -135,6 +135,7 @@ export default defineSchema({
     comments: v.number(),
     shares: v.number(),
     saves: v.optional(v.number()),
+    clipId: v.optional(v.string()), // the sound, when the platform exposes one (§13.4 sound signals)
     keywords: v.array(v.string()), // which lane keywords surfaced it
     source: v.string(), // read kind that produced it
     paidPromotion: v.optional(v.boolean()),
@@ -387,6 +388,7 @@ export default defineSchema({
     creatorId: v.id("creators"),
     provider: v.literal("google"),
     token: v.string(),
+    returnTo: v.optional(v.string()), // where to land after the round trip (onboarding step 5, or Settings)
     expiresAt: v.number(),
     claimedAt: v.optional(v.number()),
     createdAt: v.number(),

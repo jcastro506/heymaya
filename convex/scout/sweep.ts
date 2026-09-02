@@ -67,6 +67,7 @@ export const recordSearch = internalMutation({
         comments: p.metrics.commentCount ?? 0,
         shares: p.metrics.shareCount ?? 0,
         saves: p.metrics.saveCount ?? undefined,
+        clipId: (p as { clipId?: string | null }).clipId ?? undefined,
         keywords: [a.keyword],
         source: `search.${a.platform}`,
         paidPromotion: false,

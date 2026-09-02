@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { LandingAnalytics } from "./analytics";
+import { CtaLink } from "./cta";
 
 /**
  * The landing page (plan §7 S1): the product shown, not described. A real scout
@@ -17,12 +19,13 @@ want the shot list?`;
 export default function Home() {
   return (
     <main className="min-h-dvh">
+      <LandingAnalytics />
       <section className="max-w-5xl mx-auto px-6 pt-14 pb-10 grid md:grid-cols-2 gap-10 items-center">
         <div className="flex flex-col gap-5">
           <h1 className="text-4xl md:text-5xl font-semibold leading-[1.05] tracking-tight">She watches the accounts you wish you were. Then she texts you.</h1>
           <p className="text-lg opacity-75 max-w-md">Maya is a creator&apos;s assistant for TikTok and Instagram. She watches your posts, the ones you admire, and your lane every day, knows your calendar, and gives you a straight opinion on anything you send her.</p>
           <div className="flex gap-3">
-            <Link className="btn" href="/sign-up">Start the 7-day trial</Link>
+            <CtaLink className="btn" href="/sign-up" where="hero">Start the 7-day trial</CtaLink>
             <Link className="btn-secondary" href="/sign-in">Sign in</Link>
           </div>
           <p className="text-xs opacity-50">$19 a month while founding seats last. Card required, charged on day seven, cancel in one tap.</p>
@@ -67,7 +70,7 @@ export default function Home() {
             <li>Every idea comes with the evidence and a link.</li>
             <li>Cancel from Settings, one tap. No questions.</li>
           </ul>
-          <Link className="btn mt-2 self-start" href="/sign-up">Start the trial</Link>
+          <CtaLink className="btn mt-2 self-start" href="/sign-up" where="pricing">Start the trial</CtaLink>
         </div>
         <div className="flex flex-col gap-3">
           <h2 className="font-semibold text-lg">What she can&apos;t do</h2>
