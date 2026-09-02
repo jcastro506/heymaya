@@ -783,6 +783,22 @@ Order of checks, each producing the verdict reason if it fails: quiet hours → 
 
 **7. The tests, because "she learns" is not observable.** Decay and weight arithmetic · three "not me" on one account → that account's next breakout is rail-dropped with the reason · a posted idea outweighs any number of hearts · a reaction on an idea message writes exactly one event and flips the idea to `hearted` · ignored ideas expire at 72 h with a −0.3 event · a correction in Settings changes the next profile · cross-tenant: an event can never attach to another creator's idea · the day-1 → day-30 simulation in §15.7 extended with taste: a pass on day 1 shapes ranking on day 30.
 
+### 13.11 Investigation — how she uses the whole catalogue, one call at a time
+
+**The claim.** A fixed pipeline (sample → rank → transcript → write) cannot get specific. When a post is worth a second look, the questions that decide "is this theirs to take" are different every time: is the sound rising or is it the account; what are the comments reacting to; is this the author's normal or a breakout; are three other accounts doing the same shape this week; does the creator already have a post that rhymes with it. Those are reads, and the model should choose them.
+
+**1. A tool belt, not a pipeline.** Every read kind in §4 that is useful mid-judgment is exposed to the model as a typed tool with a one-line purpose and its credit cost: `post_info` (stats, sound, author, length), `post_transcript`, `post_comments` (what people react to; 15 credits on Instagram), `sound_info` and `sound_videos` (is it rising, who used it), `profile` (size, normal), `account_posts` (the author's recent, to compute above-their-normal), `search_keyword` / `search_hashtag` / `search_top` (is this a wave this week), `own_rhymes` (their own posts that rhyme, from the catalogue), `taste` (their history with things like it), `calendar_upcoming` (what in their life this could ride). Every tool goes through `read()`, so the cache, the in-flight claim and the credit ledger apply exactly as before; the model cannot spend outside it.
+
+**2. A bounded loop.** `investigate(goal, seed, budget)`: the writer gets the goal ("decide if this is notable and theirs; gather what you need to say why"), the seed (the candidate with its numbers), the tool belt, and a budget of calls and credits (default 6 calls, 40 credits, one minute *(tune)*). It calls tools until it answers or the budget is gone; the answer is the same JSON the skill already produces. Rung and taste stay computed facts in the prompt. A tool result is summarised by code before it goes back to the model (counts, ids, the first 600 characters of a transcript), never the raw payload.
+
+**3. The trace is a row.** Every call in an investigation is written to the signal or the idea as `investigation[]`: `{ tool, params, why (the model's one line), creditsCharged, ms }`. The operator can read how she reasoned and what it cost; the Ideas tab can show "she checked the sound and the comments". Budgets are enforced by code; the model is told the remaining budget on every turn.
+
+**4. Where it runs.** `scout`: for the top three candidates after the rails (not all ten) · `opinion`: on a link (sound, comments, the author's normal) · `profile-creator`: the author's recent, the transcripts of the outliers, the sound of the biggest · `explain-post`: their own post beside the lane's top for the same keyword this week · the weekly review: the one post she cannot explain.
+
+**5. The tests.** The budget cap holds (the seventh call is refused and the model is told) · a tool can never read outside the cache layer (static: the executor only calls `read()`) · a tenant's own-catalogue tool never returns another creator's post · a summarised tool result never exceeds its size cap · a trace row exists for every call made · the loop ends on a final answer, on the budget, or on a model error, and says which.
+
+**Cost.** An investigated candidate costs about 3–8 credits and two to four writer turns; at three per day per creator that is inside the §3 budget, and the cache means the fleet shares the reads.
+
 ## 14. Data contracts
 
 Contracts are Zod schemas in `contracts/`; the same schemas are handed to Gemini and OpenRouter as `responseSchema`. Prose fields have length caps. Any field that can be unknown has an explicit `unknown` value; nulls are not used for "we don't know".

@@ -15,6 +15,7 @@ import { REGISTRY } from "./registry";
 import { buildPrefix, producedStamp } from "./context";
 import { critique, tooLong } from "./critic";
 import { deliverNow } from "../core/scheduler";
+import { investigate } from "./investigate";
 
 export const PROFILE_SKILL = `profile-creator
 When: they asked why an account is growing, or what an account is doing. You have that account's recent posts with numbers and the transcripts of its top three. You have NOT watched anything, so say nothing about visuals.
@@ -76,7 +77,8 @@ export const run = internalAction({
     const evidence = { handle: `@${handle}`, platform: a.platform, theirQuestion: target.body.slice(0, 300), facts: f, recentCaptions: posts.slice(0, 12).map((p) => ({ when: p.createTime ? new Date(p.createTime).toISOString().slice(0, 10) : null, views: p.metrics?.viewCount ?? null, caption: (p.caption ?? "").slice(0, 140) })), transcripts };
     const prefix = buildPrefix({ creator, directives, skill: PROFILE_SKILL });
     const spec = REGISTRY.writer;
-    const r = await callModel(ctx, { creatorId: creator._id, purpose: "profile_creator", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `Evidence (everything you may cite):\n${JSON.stringify(evidence)}` }], temperature: 0.4, maxTokens: 1200, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+    const inv = await investigate(ctx, { creatorId: creator._id, purpose: "profile_creator", prefix, user: `Evidence (everything you may cite):\n${JSON.stringify(evidence)}`, budget: { calls: 4, credits: 20, deadlineAt: Date.now() + 45_000 }, temperature: 0.4, maxTokens: 1200 });
+    const r = inv.content ? { ok: true as const, content: inv.content } : { ok: false as const, content: "" };
     let out: { message?: string } | null = null;
     if (r.ok) {
       try {

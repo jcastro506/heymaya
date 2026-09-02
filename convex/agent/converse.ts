@@ -12,7 +12,7 @@ import { callModel } from "../core/llm";
 import { REGISTRY } from "./registry";
 import { buildPrefix, buildSuffix, producedStamp } from "./context";
 import { deliverNow } from "../core/scheduler";
-import { classifyInbound, type Route } from "./inbound";
+import { asksToRecall, classifyInbound, type Route } from "./inbound";
 import { internalMutation, internalQuery } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 
@@ -172,6 +172,8 @@ export const run = internalAction({
         }
         if (op === "save") {
           await ctx.runMutation(internal.agent.converse.markIdea, { ideaId, savedAt: Date.now() });
+          const saved = await ctx.runQuery(internal.agent.converse.ideaById, { ideaId });
+          if (saved) await ctx.scheduler.runAfter(0, internal.agent.memory.index, { creatorId: creator._id, kind: "swipe", refId: String(ideaId), text: `${(saved.version as { hook?: string } | undefined)?.hook ?? ""}\n${saved.messageText}` });
           await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: "saved. it's in your swipe file.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
           await deliverNow(ctx as never);
           return { ok: true };
@@ -196,8 +198,16 @@ export const run = internalAction({
       if (w.startsWith("warm") || w.startsWith("cold")) await ctx.runMutation(internal.taste.events.record, { creatorId: creator._id, kind: w.startsWith("warm") ? "reply_pos" : "reply_neg", ideaId: lastOut.ideaId, messageId: target._id });
     }
 
+    // §15.7 (4): a look back runs the vector search; the passages ride into the turn, the prefix stays the same size.
+    let recalled = "";
+    if (target.kind === "inbound" && asksToRecall(target.body)) {
+      const hits = await ctx.runAction(internal.agent.memory.recall, { creatorId: creator._id, query: target.body, k: 4 }).catch(() => []);
+      if (hits.length) recalled = `\n\n# From memory (their own saved ideas and notes; quote, don't invent)\n${hits.map((h) => `- [${h.kind}, ${new Date(h.at).toISOString().slice(0, 10)}] ${h.text.slice(0, 400)}`).join("\n")}`;
+      else recalled = "\n\n# From memory\n- nothing close enough; say so plainly";
+    }
+
     const prefix = buildPrefix({ creator, directives, skill: CONVERSE_SKILL });
-    const suffix = buildSuffix({ recent: recent.filter((m) => m._id !== target._id), target });
+    const suffix = buildSuffix({ recent: recent.filter((m) => m._id !== target._id), target }) + recalled;
     const apiKey = process.env.OPENROUTER_API_KEY ?? "";
     const spec = REGISTRY.writer;
 

@@ -73,3 +73,8 @@ export function parseProfileAsk(text: string, handles: { tiktok?: string; instag
   const platform: "tiktok" | "instagram" = /\b(ig|insta|instagram|reels?)\b/i.test(text) ? "instagram" : "tiktok";
   return { platform, handle };
 }
+
+/** "what was that idea about…", "remember the one where…", "did i save…": a look back through their own memory. */
+export function asksToRecall(text: string): boolean {
+  return /\b(what was (that|the) (idea|one)|remember (that|the) (idea|one|thing)|the one (where|about|with)|did (i|you) save|what did you (send|say) about|find (me )?(that|the) (idea|one)|from my (saved|swipe))\b/i.test(text);
+}

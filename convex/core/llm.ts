@@ -24,8 +24,7 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type {
   OpenRouterMessage,
-  OpenRouterResult,
-} from "../integrations/openrouter/client";
+  OpenRouterResult, OpenRouterTool } from "../integrations/openrouter/client";
 
 export interface CallModelInput {
   /** Whose bill this lands on. Required — spend with no owner is unpriceable. */
@@ -41,6 +40,8 @@ export interface CallModelInput {
   purpose: string;
   model: string;
   messages: OpenRouterMessage[];
+  tools?: OpenRouterTool[];
+  toolChoice?: "auto" | "none" | "required";
   temperature?: number;
   maxTokens?: number;
   apiKey: string;
@@ -108,6 +109,8 @@ export async function callModel(
   const result = await callOpenRouter({
     model: input.model,
     messages: input.messages,
+    tools: input.tools,
+    toolChoice: input.toolChoice,
     temperature: input.temperature,
     maxTokens: budgetFor(input.model, input.maxTokens),
     apiKey: input.apiKey,

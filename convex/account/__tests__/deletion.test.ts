@@ -34,6 +34,7 @@ async function oneRowEverywhere(t: ReturnType<typeof convexTest>, creatorId: Id<
     await ctx.db.insert("jobs", { creatorId, kind: "converse", idempotencyKey: `j_${creatorId}`, status: "succeeded", attempts: 1, maxAttempts: 3, runAfter: now, deadlineAt: now + 1000, createdAt: now, updatedAt: now });
     await ctx.db.insert("budgets", { creatorId, day: "2026-09-02", screenerTokens: 0, writerTokens: 0, watches: 0, marginalCredits: 0, messages: 0, spentUsd: 0 });
     await ctx.db.insert("costEvents", { creatorId, vendor: "openrouter", kind: "m", units: 1, costUsd: 0.001, costSource: "endpoint_table", environment: "test", at: now });
+    await ctx.db.insert("memories", { creatorId, kind: "note", refId: `n_${creatorId}`, text: "x", embedding: Array.from({ length: 768 }, () => 0.01), at: now });
   });
 }
 

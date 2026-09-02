@@ -45,6 +45,8 @@ import { internalAction } from "../_generated/server";
 export const COSINE_CLUSTER_THRESHOLD = 0.68;
 
 const MODEL = "gemini-embedding-2";
+/** Fixed so the vector index (schema `memories.by_embedding`) and every stored row agree. */
+export const EMBEDDING_DIMENSIONS = 768;
 
 /** Cosine similarity. Pure — the reason clustering stays testable offline. */
 export function cosineSimilarity(
@@ -97,7 +99,7 @@ export const embedTexts = internalAction({
     _ctx,
     args
   ): Promise<{ vectors: Array<{ text: string; values: number[] }>; failed: number }> => {
-    const key = process.env.GEMINI_API_KEY;
+    const key = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
     if (!key) {
       console.error("[maya.embeddings] GEMINI_API_KEY missing — falling back to word overlap");
       return { vectors: [], failed: args.texts.length };
@@ -116,7 +118,7 @@ export const embedTexts = internalAction({
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ content: { parts: [{ text }] } }),
+            body: JSON.stringify({ content: { parts: [{ text }] }, outputDimensionality: EMBEDDING_DIMENSIONS }),
           }
         );
         if (!response.ok) {

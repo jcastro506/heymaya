@@ -13,6 +13,7 @@ import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
 import { buildPrefix, producedStamp } from "../agent/context";
 import { localDateKey, zonedTimeToEpoch } from "../calendar/time";
+import { investigate } from "../agent/investigate";
 import { deliverNow } from "../core/scheduler";
 import { THRESHOLDS } from "../config/thresholds";
 import { critique, tooLong } from "../agent/critic";
@@ -107,8 +108,11 @@ export const run = internalAction({
     const prefix = buildPrefix({ creator: gathered.creator, directives: gathered.directives, skill: SCOUT_SKILL });
     const spec = REGISTRY.writer;
     const user = `Candidates (kind: breakout / shape / win / calendar), ranked; for posts, ratio is how far above that account's own normal:\n${JSON.stringify(evidence)}\n\nToday on their clock: ${localDateKey(now, g.creator.timezone)}, ${g.rails.localHour}:00 (${g.creator.timezone}). Messages already sent today: ${g.rails.sentToday}.${g.exploreOpen ? " The explore slot is open: one idea in five may be outside their usual, flagged newForYou." : ""}`;
-    const result = await callModel(ctx, { creatorId: args.creatorId, purpose: "scout", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: user }], temperature: 0.5, maxTokens: 900, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
-    if (!result.ok) return { sent: false, reason: `scout model failed: ${result.reason}` };
+    // §13.11: the writer may look things up (the sound, the comments, the author's normal, their own rhymes) before judging.
+    const inv = await investigate(ctx, { creatorId: args.creatorId, purpose: "scout", prefix, user, temperature: 0.5, maxTokens: 1400 });
+    if (!inv.content) return { sent: false, reason: `scout ${inv.ended === "model_error" ? "model failed" : "gave no answer"} after ${inv.trace.length} lookups` };
+    const result = { ok: true as const, content: inv.content };
+    if (inv.trace.length) await ctx.runMutation(internal.scout.gate.setInvestigation, { signalIds: g.candidates.map((s) => s._id), trace: inv.trace });
 
     let parsed: { pick: null | { postId: string; notable: boolean; fit: "yes" | "maybe" | "no"; fitWhy: string; message: string; version: unknown; newForYou?: boolean; features?: { format?: string; topics?: string[]; tone?: string; lengthBucket?: string; sound?: string } }; rejected?: Array<{ postId: string; why: string }> };
     try {
@@ -199,6 +203,7 @@ export const run = internalAction({
       criticSkipped,
     });
     if (messageId) await ctx.runMutation(internal.scout.scout.linkIdeaMessage, { ideaId, messageId, sentAt: now });
+    await ctx.scheduler.runAfter(0, internal.agent.memory.index, { creatorId: args.creatorId, kind: "idea", refId: String(ideaId), text: `${(pick.version as { hook?: string } | undefined)?.hook ?? ""}\n${pick.message}` });
     verdicts.push({ signalId: signal._id, verdict: "sent", why: `sent: ${pick.fitWhy}` });
     await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: args.creatorId, step: "first_scout" });
     if (signal.kind === "calendar" || signal.kind === "worth_seeing") await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: args.creatorId, step: "first_calendar_or_worth_seeing" });

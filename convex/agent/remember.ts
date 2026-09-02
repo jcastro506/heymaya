@@ -77,8 +77,10 @@ export const addNote = internalMutation({
       await ctx.db.patch(c._id, { notes, updatedAt: now });
       return { added: false };
     }
-    notes.push({ id: `n_${now}_${Math.floor(Math.random() * 1e6)}`, text: a.text, kind: a.kind, sourceMessageId: a.sourceMessageId, at: now, expiresHint: a.expiresDays ? now + a.expiresDays * 86_400_000 : undefined });
+    const id = `n_${now}_${Math.floor(Math.random() * 1e6)}`;
+    notes.push({ id, text: a.text, kind: a.kind, sourceMessageId: a.sourceMessageId, at: now, expiresHint: a.expiresDays ? now + a.expiresDays * 86_400_000 : undefined });
     await ctx.db.patch(c._id, { notes: notes.slice(-60), updatedAt: now }); // a bounded memory; the oldest fall off, the dossier keeps what mattered
+    await ctx.scheduler.runAfter(0, internal.agent.memory.index, { creatorId: c._id, kind: "note", refId: id, text: a.text });
     return { added: true };
   },
 });

@@ -19,6 +19,7 @@ import { deliverNow } from "../core/scheduler";
 import { fetchMedia, watchMedia } from "../integrations/gemini/client";
 import { WATCH_PROMPT } from "../onboarding/watch";
 import type { ParsedLink } from "./inbound";
+import { investigate } from "./investigate";
 
 export const CONFIDENCE_MULTIPLE: Record<string, number> = { strong: 1.8, solid: 1.3, fine: 1.0, weak: 0.7, broken: 0.4 }; // §13.6 (tune)
 
@@ -196,10 +197,19 @@ export const run = internalAction({
     const user = `Evidence (everything you may cite is here; nothing else):\n${JSON.stringify(evidence)}`;
     const ask = async (purpose: string, extra = "") => callModel(ctx, { creatorId: creator._id, purpose, model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: user + extra }], temperature: 0.4, maxTokens: 1600, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
     type Out = { message: string; biggest: string; second: string; fine: string; confidence: string; citations: Array<{ stat: string; value: string | number; sampleSize?: number }>; cannotKnow: string };
-    let r = await ask("opinion");
+    // §13.11: for a link she may look up the sound, the comments and the author's normal before the read.
+    let r: { ok: boolean; content: string; reason?: string };
+    if (a.mode === "link") {
+      const inv = await investigate(ctx, { creatorId: creator._id, purpose: "opinion", prefix, user, budget: { calls: 4, credits: 20, deadlineAt: Date.now() + 45_000 }, temperature: 0.4, maxTokens: 1600 });
+      r = inv.content ? { ok: true, content: inv.content } : { ok: false, content: "", reason: inv.ended };
+    } else {
+      const first = await ask("opinion");
+      r = first.ok ? { ok: true, content: first.content } : { ok: false, content: "", reason: first.reason };
+    }
     let out = r.ok ? parseJson<Out>(r.content) : null;
     if (!out || !Array.isArray(out.citations) || out.citations.length === 0 || !out.message?.trim()) {
-      r = await ask("opinion_retry", "\n\nYour previous answer had no citation or no message. Cite at least one number from the evidence, and output the JSON only.");
+      const retry = await ask("opinion_retry", "\n\nYour previous answer had no citation or no message. Cite at least one number from the evidence, and output the JSON only.");
+      r = retry.ok ? { ok: true, content: retry.content } : { ok: false, content: "", reason: retry.reason };
       out = r.ok ? parseJson<Out>(r.content) : null;
     }
     if (!out || !out.citations?.length || !out.message?.trim()) {

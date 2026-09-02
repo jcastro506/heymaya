@@ -112,3 +112,12 @@ export const setVerdicts = internalMutation({
     return null;
   },
 });
+
+/** §13.11 (3): the trace of one scout pass, written to every candidate it judged. */
+export const setInvestigation = internalMutation({
+  args: { signalIds: v.array(v.id("signals")), trace: v.array(v.object({ tool: v.string(), params: v.any(), why: v.string(), credits: v.optional(v.number()), ms: v.number(), ok: v.boolean() })) },
+  handler: async (ctx, a): Promise<null> => {
+    for (const id of a.signalIds) await ctx.db.patch(id, { investigation: a.trace });
+    return null;
+  },
+});

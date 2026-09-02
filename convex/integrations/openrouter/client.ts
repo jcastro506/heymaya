@@ -25,10 +25,20 @@ const OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
 /** A model that hangs must not hold an onboarding screen open forever. */
 export const OPENROUTER_TIMEOUT_MS = 45_000;
 
+export interface OpenRouterToolCall { id: string; name: string; arguments: string }
+
 export interface OpenRouterMessage {
-  role: "system" | "user" | "assistant";
+  role: "system" | "user" | "assistant" | "tool";
   content: string;
+  /** Assistant turn that asked for tools (echoed back verbatim on the next request). */
+  tool_calls?: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }>;
+  /** Tool turn: which call this answers. */
+  tool_call_id?: string;
+  name?: string;
 }
+
+/** A tool as OpenRouter/OpenAI expect it. */
+export interface OpenRouterTool { type: "function"; function: { name: string; description: string; parameters: Record<string, unknown> } }
 
 export interface OpenRouterRequest {
   model: string;
@@ -49,12 +59,17 @@ export interface OpenRouterRequest {
    */
   maxTokens?: number;
   apiKey: string;
+  /** §13.11: the tool belt; the model may answer with tool_calls instead of content. */
+  tools?: OpenRouterTool[];
+  toolChoice?: "auto" | "none" | "required";
 }
 
 export type OpenRouterResult =
   | {
       ok: true;
       content: string;
+      /** Present when the model asked for tools; content may then be empty. */
+      toolCalls?: OpenRouterToolCall[];
       usage?: {
         promptTokens: number;
         completionTokens: number;
@@ -104,6 +119,7 @@ export async function callOpenRouter(
         messages: request.messages,
         temperature: request.temperature ?? 0.2,
         max_tokens: request.maxTokens ?? 4_000,
+        ...(request.tools && request.tools.length ? { tools: request.tools, tool_choice: request.toolChoice ?? "auto" } : {}),
         // Opt in to cost reporting. Without this the response carries token
         // counts and no price, which is the half that can't be budgeted.
         usage: { include: true },
@@ -117,7 +133,7 @@ export async function callOpenRouter(
     }
 
     let parsed: {
-      choices?: Array<{ message?: { content?: string } }>;
+      choices?: Array<{ message?: { content?: string | null; tool_calls?: Array<{ id?: string; type?: string; function?: { name?: string; arguments?: string } }> } }>;
       usage?: {
         prompt_tokens?: number;
         completion_tokens?: number;
@@ -130,14 +146,17 @@ export async function callOpenRouter(
       return { ok: false, reason: "openrouter returned non-JSON" };
     }
 
-    const content = parsed.choices?.[0]?.message?.content;
-    if (typeof content !== "string" || content.trim().length === 0) {
+    const message = parsed.choices?.[0]?.message;
+    const content = message?.content;
+    const toolCalls = (message?.tool_calls ?? []).filter((t) => t.function?.name).map((t, i) => ({ id: t.id ?? `call_${i}`, name: t.function!.name!, arguments: t.function!.arguments ?? "{}" }));
+    if ((typeof content !== "string" || content.trim().length === 0) && toolCalls.length === 0) {
       return { ok: false, reason: "openrouter returned an empty completion" };
     }
 
     return {
       ok: true,
-      content,
+      content: typeof content === "string" ? content : "",
+      ...(toolCalls.length ? { toolCalls } : {}),
       usage: parsed.usage
         ? {
             promptTokens: parsed.usage.prompt_tokens ?? 0,

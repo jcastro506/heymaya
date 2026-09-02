@@ -225,6 +225,8 @@ export default defineSchema({
     score: v.number(),
     corroboration: v.object({ accounts: v.number(), soundRising: v.boolean() }),
     formatFingerprint: v.optional(v.string()),
+    // §13.11: the trace of what she looked up before judging, and what it cost
+    investigation: v.optional(v.array(v.object({ tool: v.string(), params: v.any(), why: v.string(), credits: v.optional(v.number()), ms: v.number(), ok: v.boolean() }))),
     verdict: v.union(v.literal("pending"), v.literal("sent"), v.literal("held"), v.literal("dropped")),
     why: v.string(),
     thresholdsVersion: v.string(),
@@ -335,6 +337,19 @@ export default defineSchema({
     customerId: v.optional(v.string()),
     receivedAt: v.number(),
   }).index("by_event_id", ["eventId"]),
+
+  // ------------------------------------------------------------------ memories
+  // §15.7 (4): retrieval on demand. Saved ideas, notes and the swipe file, embedded once.
+  memories: defineTable({
+    creatorId: v.id("creators"),
+    kind: v.union(v.literal("idea"), v.literal("note"), v.literal("swipe")),
+    refId: v.string(), // the idea id or note id
+    text: v.string(),
+    embedding: v.array(v.float64()),
+    at: v.number(),
+  })
+    .index("by_creator_ref", ["creatorId", "refId"])
+    .vectorIndex("by_embedding", { vectorField: "embedding", dimensions: 768, filterFields: ["creatorId"] }),
 
   // -------------------------------------------------------------- oauthStates
   // Single-use, 15-minute state tokens for OAuth round trips; the token is the auth.
