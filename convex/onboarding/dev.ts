@@ -21,7 +21,7 @@ export const seed = internalMutation({
       handles: { tiktok: a.tiktok, instagram: a.instagram },
       ownership: "unverified",
       niche: a.niche ?? "",
-      timezone: a.timezone ?? "America/Los_Angeles",
+      timezone: a.timezone ?? "UTC",
       quietHours: { start: "22:00", end: "07:00" },
       tone: "friend",
       mode: "full",
@@ -253,5 +253,14 @@ export const clearMessages = internalMutation({
     const rows = await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId)).collect();
     for (const r of rows) await ctx.db.delete(r._id);
     return { deleted: rows.length };
+  },
+});
+
+/** Dev only: put a creator on the right clock. Quiet hours and send times are all local. */
+export const setTimezone = internalMutation({
+  args: { creatorId: v.id("creators"), timezone: v.string() },
+  handler: async (ctx, a): Promise<{ timezone: string }> => {
+    await ctx.db.patch(a.creatorId, { timezone: a.timezone, updatedAt: Date.now() });
+    return { timezone: a.timezone };
   },
 });

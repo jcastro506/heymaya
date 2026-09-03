@@ -51,7 +51,15 @@ export const start = mutation({
       handles,
       ownership: "unverified",
       niche: "",
-      timezone: args.timezone ?? "America/Los_Angeles",
+      /**
+       * ⚠️ UTC, not a plausible-looking guess. This defaulted to America/Los_Angeles, which
+       * is the worst kind of default: it looks right, so nobody checks it, and every quiet
+       * hour and send time is then wrong by up to three hours for a creator who is not in
+       * California. Caught live when the operator in New York had a creator record on
+       * Pacific and the scout refused all morning for "quiet hours". UTC is obviously a
+       * default, so it gets noticed and corrected.
+       */
+      timezone: args.timezone ?? "UTC",
       quietHours: { start: "22:00", end: "07:00" },
       tone: "friend",
       mode: "full",

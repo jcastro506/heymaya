@@ -46,3 +46,13 @@ describe("an open question always gets closed", () => {
     expect(crons).toMatch(/expireStaleQuestionsAll/);
   });
 });
+
+describe("a creator's clock is never guessed", () => {
+  it("onboarding falls back to UTC, not to a plausible US timezone", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync(new URL("../../onboarding/start.ts", import.meta.url), "utf8");
+    expect(src).toMatch(/timezone: args\.timezone \?\? "UTC"/);
+    // A wrong-but-plausible default is worse than an obvious one: it never gets questioned.
+    expect(src.replace(/⚠️[\s\S]*?\*\//, ""), "no US timezone as a silent fallback").not.toMatch(/\?\? "America\//);
+  });
+});

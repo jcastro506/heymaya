@@ -354,6 +354,24 @@ export default defineSchema({
 
   // ------------------------------------------------------------------ evalRuns
   // Sprint 3c: one row per evaluated message; the checks are code, the judge is a second family.
+  /**
+   * A frozen reading of the eval suite, to compare later runs against (§18 gate 9).
+   * Without one, "the new prompt is better" is an anecdote. I shipped a voice change on
+   * 2026-09-02 claiming an improvement from two hand-picked examples and no measurement,
+   * which is exactly the failure this table exists to prevent.
+   */
+  evalBaselines: defineTable({
+    suite: v.string(),
+    gitSha: v.string(),
+    note: v.string(),
+    n: v.number(),              // total dry runs behind the numbers
+    scenarios: v.array(v.string()),
+    passRate: v.number(),       // 0..1
+    sent: v.number(),           // how often she chose to say anything at all
+    judge: v.object({ corny: v.number(), generic: v.number(), specific: v.number(), wouldSend: v.number(), soundsLikeThem: v.number() }),
+    at: v.number(),
+  }).index("by_suite_at", ["suite", "at"]),
+
   evalRuns: defineTable({
     suite: v.string(), // recent | scout | manual
     skill: v.string(),

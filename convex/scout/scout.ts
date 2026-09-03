@@ -74,12 +74,20 @@ export const linkIdeaMessage = internalMutation({
 
 /** One creator's scout pass. Rails → candidates → the skill → at most one message. */
 export const run = internalAction({
-  args: { creatorId: v.id("creators"), dryRun: v.optional(v.boolean()) },
+  args: { creatorId: v.id("creators"), dryRun: v.optional(v.boolean()), ignoreRails: v.optional(v.boolean()) },
   handler: async (ctx, args): Promise<{ sent: boolean; reason: string; dry?: { message: string; pick: unknown; rejected?: unknown; evidence: unknown; trace: unknown } }> => {
     const now = Date.now();
     const g = await ctx.runQuery(internal.scout.gate.railsFor, { creatorId: args.creatorId, now });
     if (!g) return { sent: false, reason: "creator not found" };
-    if (!g.rails.ok) return { sent: false, reason: g.rails.reason ?? "rails" };
+    /**
+     * ⚠️ `ignoreRails` is for MEASUREMENT ONLY, and only alongside `dryRun`, which cannot
+     * send. The rails are environmental — quiet hours, the daily cap, an open question — so
+     * a regression suite run at 1am for a Los Angeles creator measures nothing at all, which
+     * is exactly what happened the first time this gate ran. The rails have their own tests;
+     * this path exists to test the writer, not the delivery policy.
+     */
+    const skipRails = args.ignoreRails === true && args.dryRun === true;
+    if (!g.rails.ok && !skipRails) return { sent: false, reason: g.rails.reason ?? "rails" };
     if (g.tasteDropped.length && !args.dryRun) await ctx.runMutation(internal.scout.gate.setVerdicts, { verdicts: g.tasteDropped.map((d) => ({ signalId: d.signalId, verdict: "dropped" as const, why: d.why })) });
     // §13.9 / §13.10 (5): after three passes on one account she asks once whether to stop watching it.
     for (const ask of args.dryRun ? [] : g.askStop) {

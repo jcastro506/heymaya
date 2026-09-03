@@ -65,6 +65,7 @@ import type * as core_telegram from "../core/telegram.js";
 import type * as core_telegramFiles from "../core/telegramFiles.js";
 import type * as crons from "../crons.js";
 import type * as eval_checks from "../eval/checks.js";
+import type * as eval_gate from "../eval/gate.js";
 import type * as eval_judge from "../eval/judge.js";
 import type * as eval_run from "../eval/run.js";
 import type * as http from "../http.js";
@@ -179,6 +180,7 @@ declare const fullApi: ApiFromModules<{
   "core/telegramFiles": typeof core_telegramFiles;
   crons: typeof crons;
   "eval/checks": typeof eval_checks;
+  "eval/gate": typeof eval_gate;
   "eval/judge": typeof eval_judge;
   "eval/run": typeof eval_run;
   http: typeof http;

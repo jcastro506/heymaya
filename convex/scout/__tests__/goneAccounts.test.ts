@@ -44,3 +44,14 @@ describe("a deleted account is retired", () => {
     expect((await t.query(internal.scout.sampler.distinctTracked, {})).length).toBe(0);
   });
 });
+
+describe("ignoreRails is measurement-only", () => {
+  it("never lets anything send: it is refused unless dryRun is also set", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync(new URL("../scout.ts", import.meta.url), "utf8");
+    // The guard must require BOTH flags, so no live path can ever skip the rails.
+    expect(src).toMatch(/args\.ignoreRails === true && args\.dryRun === true/);
+    const evalSrc = readFileSync(new URL("../../eval/run.ts", import.meta.url), "utf8");
+    expect(evalSrc, "the suite must pass dryRun alongside it").toMatch(/dryRun: true, ignoreRails: true/);
+  });
+});

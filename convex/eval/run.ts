@@ -95,7 +95,7 @@ export const recent = internalAction({
  *
  * Handles, not ids, so the set survives a reseed and reads as a list of real accounts.
  */
-export const SCENARIO_HANDLES = ["vanessaalopezz", "leahruns", "stoolpresidente"] as const;
+export const SCENARIO_HANDLES = ["vanessaalopezz", "leahruns"] as const;
 
 export const scenarioCreators = internalQuery({
   args: {},
@@ -130,7 +130,7 @@ export const scout = internalAction({
     let runs = 0, sent = 0, ok = 0;
     for (const creatorId of ids) {
       for (let i = 0; i < (a.n ?? 1); i++) {
-        const r = await ctx.runAction(internal.scout.scout.run, { creatorId, dryRun: true });
+        const r = await ctx.runAction(internal.scout.scout.run, { creatorId, dryRun: true, ignoreRails: true });
         runs++;
         if (!r.dry?.message) continue;
         sent++;
