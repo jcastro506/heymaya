@@ -91,6 +91,10 @@ export const retryNow = internalMutation({
 export const pairChat = internalMutation({
   args: { creatorId: v.id("creators"), chatId: v.string() },
   handler: async (ctx, a): Promise<{ paired: boolean }> => {
+    // Same exclusivity rule as the real pairing path: one chat, one creator.
+    for (const other of await ctx.db.query("creators").withIndex("by_telegram_chat", (q) => q.eq("telegramChatId", a.chatId)).collect()) {
+      if (other._id !== a.creatorId) await ctx.db.patch(other._id, { telegramChatId: undefined, channel: { paired: false }, updatedAt: Date.now() });
+    }
     await ctx.db.patch(a.creatorId, { telegramChatId: a.chatId, channel: { paired: true, pairedAt: Date.now() }, updatedAt: Date.now() });
     const jobs = (await ctx.db.query("jobs").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"jobs">[];
     for (const j of jobs) if (j.kind === "deliver_message" && j.status !== "succeeded") await ctx.db.patch(j._id, { status: "queued", runAfter: Date.now(), updatedAt: Date.now() });

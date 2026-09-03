@@ -133,6 +133,23 @@ export const claimPairing = internalMutation({
       return { paired: false, reason: "that link expired — generate a new one" };
     }
 
+    /**
+     * ⚠️ A Telegram chat belongs to exactly ONE creator. Inbound routing resolves a chat
+     * with `.first()`, so a second creator on the same chat means their replies land on
+     * whichever row the index happens to return, and BOTH send proactive messages to the
+     * same person. Found on the dev deployment with two creators sharing one chat and the
+     * operator getting a jumble of both. Re-pairing moves the chat; it never shares it.
+     */
+    const others = (await ctx.db
+      .query("creators")
+      .withIndex("by_telegram_chat", (q) => q.eq("telegramChatId", args.chatId))
+      .collect()) as Doc<"creators">[];
+    for (const other of others) {
+      if (other._id === creator._id) continue;
+      console.warn(`[pairing] chat ${args.chatId} moved from creator ${other._id} to ${creator._id}`);
+      await ctx.db.patch(other._id, { telegramChatId: undefined, channel: { paired: false }, updatedAt: now });
+    }
+
     await ctx.db.patch(creator._id, {
       telegramChatId: args.chatId,
       channel: { paired: true, pairedAt: now },
