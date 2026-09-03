@@ -85,19 +85,48 @@ export const recent = internalAction({
   },
 });
 
+/**
+ * The scenario set, DECLARED rather than discovered.
+ *
+ * ⚠️ This used to return "every paired creator with a dossier", which means the eval's
+ * dataset changed every time anyone signed up, onboarded, or paired. A baseline whose
+ * membership moves between runs measures nothing, so the regression gate this feeds was
+ * unbuildable until the set was frozen. Adding a creator to the suite is now a commit.
+ *
+ * Handles, not ids, so the set survives a reseed and reads as a list of real accounts.
+ */
+export const SCENARIO_HANDLES = ["vanessaalopezz", "leahruns", "stoolpresidente"] as const;
+
 export const scenarioCreators = internalQuery({
   args: {},
-  handler: async (ctx): Promise<Id<"creators">[]> => {
+  handler: async (ctx): Promise<{ ids: Id<"creators">[]; missing: string[] }> => {
     const rows = (await ctx.db.query("creators").collect()) as Doc<"creators">[];
-    return rows.filter((c) => c.channel.paired && c.dossier).map((c) => c._id);
+    const ids: Id<"creators">[] = [];
+    const missing: string[] = [];
+    for (const handle of SCENARIO_HANDLES) {
+      const match = rows.find((c) => c.handles.tiktok === handle || c.handles.instagram === handle);
+      // Loud, not silent: a scenario that quietly vanishes turns a regression into a smaller suite.
+      if (!match) { missing.push(handle); continue; }
+      if (!match.dossier) { missing.push(`${handle} (no dossier yet)`); continue; }
+      ids.push(match._id);
+    }
+    return { ids, missing };
   },
 });
 
 /** Dry runs of the scout over the scenario creators, N times each: variance is the point. */
 export const scout = internalAction({
   args: { n: v.optional(v.number()), creatorId: v.optional(v.id("creators")) },
-  handler: async (ctx, a): Promise<{ runs: number; sent: number; passed: number }> => {
-    const ids = a.creatorId ? [a.creatorId] : await ctx.runQuery(internal.eval.run.scenarioCreators, {});
+  handler: async (ctx, a): Promise<{ runs: number; sent: number; passed: number; missing: string[]; comparable: boolean }> => {
+    let missing: string[] = [];
+    let ids: Id<"creators">[];
+    if (a.creatorId) ids = [a.creatorId];
+    else {
+      const set = await ctx.runQuery(internal.eval.run.scenarioCreators, {});
+      ids = set.ids;
+      missing = set.missing;
+      if (missing.length) console.warn(`[eval] scenario set incomplete, baseline not comparable: missing ${missing.join(", ")}`);
+    }
     let runs = 0, sent = 0, ok = 0;
     for (const creatorId of ids) {
       for (let i = 0; i < (a.n ?? 1); i++) {
@@ -109,7 +138,8 @@ export const scout = internalAction({
         if (res.pass) ok++;
       }
     }
-    return { runs, sent, passed: ok };
+    // A run with a missing scenario is a number, not a baseline. Say which it is.
+    return { runs, sent, passed: ok, missing, comparable: missing.length === 0 };
   },
 });
 
