@@ -76,3 +76,18 @@ describe("the allowance scales with the answer", () => {
     expect(budgetFor("openai/gpt-oss-120b", 3000)).toBe(3000);
   });
 });
+
+describe("a timeout is not the token bug", () => {
+  it("the critic fails over fast, because a person is waiting on the reply", async () => {
+    const { CRITIC_TIMEOUT_MS } = await import("../../agent/critic");
+    const { OPENROUTER_TIMEOUT_MS } = await import("../../integrations/openrouter/client");
+    expect(CRITIC_TIMEOUT_MS).toBeLessThan(OPENROUTER_TIMEOUT_MS);
+    expect(CRITIC_TIMEOUT_MS).toBeLessThanOrEqual(15_000);
+  });
+
+  it("both critic calls carry the short budget, or only half the failover is fast", async () => {
+    const { readFileSync } = await import("node:fs");
+    const critic = readFileSync(new URL("../../agent/critic.ts", import.meta.url), "utf8");
+    expect((critic.match(/timeoutMs: CRITIC_TIMEOUT_MS/g) ?? []).length).toBe(2);
+  });
+});

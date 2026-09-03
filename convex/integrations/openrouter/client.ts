@@ -43,6 +43,15 @@ export interface OpenRouterTool { type: "function"; function: { name: string; de
 export interface OpenRouterRequest {
   model: string;
   messages: OpenRouterMessage[];
+  /**
+   * How long to wait before giving up, in ms. Defaults to OPENROUTER_TIMEOUT_MS.
+   *
+   * ⚠️ Latency is a correctness property on the reply path. The critic's primary timed out
+   * on two consecutive live replies, and at the shared 45s default that is 45 seconds of
+   * silence before the fallback even starts, with a person watching the typing indicator.
+   * Roles a human waits on pass a short one and fail over fast.
+   */
+  timeoutMs?: number;
   /** Low for extraction. Variance is a feature when writing, a bug when reading. */
   temperature?: number;
   /**
@@ -106,7 +115,7 @@ export async function callOpenRouter(
   if (!request.apiKey) return { ok: false, reason: "no OpenRouter API key" };
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), OPENROUTER_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), request.timeoutMs ?? OPENROUTER_TIMEOUT_MS);
   try {
     const res = await fetch(OPENROUTER_CHAT_URL, {
       method: "POST",

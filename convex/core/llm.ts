@@ -40,6 +40,8 @@ export interface CallModelInput {
    */
   purpose: string;
   model: string;
+  /** Fail over after this long instead of the shared default. Set it wherever a person is waiting. */
+  timeoutMs?: number;
   messages: OpenRouterMessage[];
   tools?: OpenRouterTool[];
   toolChoice?: "auto" | "none" | "required";
@@ -140,6 +142,7 @@ export async function callModel(
     toolChoice: input.toolChoice,
     temperature: input.temperature,
     maxTokens: budgetFor(input.model, input.maxTokens),
+    timeoutMs: input.timeoutMs,
     apiKey: input.apiKey,
   });
 
@@ -148,11 +151,16 @@ export async function callModel(
    * and "openrouter returned an empty completion" sends whoever reads it
    * looking at the vendor instead of at the budget.
    */
-  if (!result.ok && isReasoningModel(input.model)) {
+  const timedOut = !result.ok && /timed out|abort/i.test(result.reason);
+  if (timedOut) {
+    // A timeout is NOT the budget bug. Saying so sent me looking at max_tokens for a
+    // latency problem; the two need opposite fixes.
+    console.error(`[llm] ${input.purpose}: ${input.model} timed out. This is latency, not the token budget — the fallback takes it from here.`);
+  } else if (!result.ok && isReasoningModel(input.model)) {
     console.error(
       `[llm] ${input.purpose}: ${result.reason} — ${input.model} reasons before ` +
         `answering and bills it to max_tokens. Requested ${input.maxTokens ?? "default"} ` +
-        `+ ${REASONING_ALLOWANCE} allowance. If this repeats, the content budget is too small.`
+        `+ ${reasoningAllowanceFor(input.maxTokens ?? 0)} allowance. If this repeats, the content budget is too small.`
     );
   }
 

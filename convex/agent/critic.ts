@@ -20,6 +20,14 @@ export interface CritiqueResult {
   skipped?: boolean; // the critic vendor was unavailable; the artifact went out flagged, not unchecked-and-silent
 }
 
+/**
+ * The critic judges ~50 tokens of JSON. If it has not answered in twelve seconds it is not
+ * going to be useful: on the reply path a person is watching a typing indicator, and the
+ * shared 45s default meant 45 seconds of nothing before the fallback started. Fail fast,
+ * fall back, and if both are slow the message still goes out ungated rather than late.
+ */
+export const CRITIC_TIMEOUT_MS = 12_000;
+
 const CRITIC_PROMPT = `You are the critic for a creator's assistant named Maya. Read one outbound message and judge it against the standard below. Return ONLY JSON: {"pass": true|false, "problems": ["slop"|"invented_number"|"leak"|"off_voice"|"unsafe"|"no_link"|"no_action"|"directive_violation"|"too_long"|"generic_line"|"vague_sound"|"invented_sound"], "note": "≤160 chars, what to fix"}.
 
 Fail it if ANY of these is true:
@@ -44,8 +52,8 @@ export async function critique(
 ): Promise<CritiqueResult> {
   const spec = REGISTRY.critic;
   const user = `Kind: ${input.kind}\n\nHouse rules:\n${input.directives.map((d) => `- ${d}`).join("\n") || "- none"}\n\nCreator voice block:\n${JSON.stringify(input.voice ?? {})}\n\nEvidence the message may cite:\n${JSON.stringify(input.evidence ?? {})}\n\nMessage:\n"""\n${input.text}\n"""`;
-  let result = await callModel(ctx, { creatorId: input.creatorId, purpose: "critic", model: spec.primary, messages: [{ role: "system", content: CRITIC_PROMPT }, { role: "user", content: user }], temperature: 0, maxTokens: spec.maxTokens, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
-  if (!result.ok) result = await callModel(ctx, { creatorId: input.creatorId, purpose: "critic_fallback", model: spec.fallback, messages: [{ role: "system", content: CRITIC_PROMPT }, { role: "user", content: user }], temperature: 0, maxTokens: spec.maxTokens, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+  let result = await callModel(ctx, { creatorId: input.creatorId, purpose: "critic", model: spec.primary, timeoutMs: CRITIC_TIMEOUT_MS, messages: [{ role: "system", content: CRITIC_PROMPT }, { role: "user", content: user }], temperature: 0, maxTokens: spec.maxTokens, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+  if (!result.ok) result = await callModel(ctx, { creatorId: input.creatorId, purpose: "critic_fallback", model: spec.fallback, timeoutMs: CRITIC_TIMEOUT_MS, messages: [{ role: "system", content: CRITIC_PROMPT }, { role: "user", content: user }], temperature: 0, maxTokens: spec.maxTokens, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
   if (!result.ok) return { pass: true, problems: [], note: `critic unavailable: ${result.reason}`, skipped: true };
   try {
     const m = result.content.match(/\{[\s\S]*\}/);
