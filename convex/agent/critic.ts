@@ -21,12 +21,17 @@ export interface CritiqueResult {
 }
 
 /**
- * The critic judges ~50 tokens of JSON. If it has not answered in twelve seconds it is not
- * going to be useful: on the reply path a person is watching a typing indicator, and the
- * shared 45s default meant 45 seconds of nothing before the fallback started. Fail fast,
- * fall back, and if both are slow the message still goes out ungated rather than late.
+ * How long the critic gets, per attempt, before failing over.
+ *
+ * ⚠️ TUNED THE HARD WAY, TWICE. The shared 45s default meant 45 seconds of silence on the
+ * reply path before the fallback even started. I cut it to 12s and BOTH models then missed
+ * it, so a live reply went out ungated carrying the exact vague sound ("low-key trending
+ * audio") the critic exists to reject. A gate that never runs is worse than a slow one.
+ *
+ * 25s is what the fallback was actually measured completing in. Raise it if the skip rate
+ * on `criticSkipped` climbs; do not lower it without measuring that rate first.
  */
-export const CRITIC_TIMEOUT_MS = 12_000;
+export const CRITIC_TIMEOUT_MS = 25_000;
 
 const CRITIC_PROMPT = `You are the critic for a creator's assistant named Maya. Read one outbound message and judge it against the standard below. Return ONLY JSON: {"pass": true|false, "problems": ["slop"|"invented_number"|"leak"|"off_voice"|"unsafe"|"no_link"|"no_action"|"directive_violation"|"too_long"|"generic_line"|"vague_sound"|"invented_sound"], "note": "≤160 chars, what to fix"}.
 
