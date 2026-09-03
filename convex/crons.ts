@@ -29,7 +29,13 @@ crons.interval("sync calendars", { minutes: 30 }, internal.calendar.sync.runAll,
 crons.daily("expire ignored ideas", { hourUTC: 2, minuteUTC: 0 }, internal.taste.events.expireIgnored, {});
 // An unanswered question stops being askable when their day ends; without this the
 // open-question rail mutes the scout forever (the function existed with no caller).
-crons.daily("expire stale questions", { hourUTC: 2, minuteUTC: 10 }, internal.core.messages.expireStaleQuestionsAll, {});
+/**
+ * ⚠️ HOURLY, not daily. The per-creator logic expires a question only once THEIR day has
+ * ended, so running it once at a fixed UTC hour meant the sweep landed at 10pm for an
+ * Eastern creator: a question asked on Monday evening blocked the scout for the whole of
+ * Tuesday. Hourly makes it land just after each creator's own midnight, wherever they are.
+ */
+crons.hourly("expire stale questions", { minuteUTC: 10 }, internal.core.messages.expireStaleQuestionsAll, {});
 crons.daily("taste profiles", { hourUTC: 9, minuteUTC: 0 }, internal.taste.profile.runAll, {});
 
 // The weekly review: Sunday morning on each creator's clock; the hourly check finds who is due (§11.2 #14).

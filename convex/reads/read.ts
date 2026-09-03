@@ -59,6 +59,61 @@ export class ReadFailed extends Error {
   }
 }
 
+
+/**
+ * ⚠️ Cache what the readers use, not what the vendor sent.
+ *
+ * The whole vendor payload was being stored, and a live keyword search is ~2.2 MiB against
+ * Convex's 1 MiB document limit, so EVERY lane sweep failed with "Value is too large" and
+ * the "shape" signal source had never once worked in production. It passed on fixtures only
+ * because the recorded fixtures are trimmed to six posts.
+ *
+ * Downstream code touches exactly three fields of a post's `raw`: `is_ad`, `music.id/id_str`
+ * (the sound), and `author.unique_id`. Everything else is bitrate ladders and cover images.
+ */
+const CACHE_MAX_BYTES = 900_000; // under Convex's 1 MiB, with room for the wrapper
+
+function slimRaw(raw: unknown): unknown {
+  const r = raw as { is_ad?: unknown; music?: { id?: unknown; id_str?: unknown }; author?: { unique_id?: unknown } } | null;
+  if (!r || typeof r !== "object") return undefined;
+  return {
+    is_ad: r.is_ad,
+    music: r.music ? { id: r.music.id, id_str: r.music.id_str } : undefined,
+    author: r.author ? { unique_id: r.author.unique_id } : undefined,
+  };
+}
+
+function slimPost(p: unknown): unknown {
+  if (!p || typeof p !== "object") return p;
+  const post = p as { raw?: unknown };
+  return post.raw === undefined ? p : { ...post, raw: slimRaw(post.raw) };
+}
+
+export function slimForCache(value: unknown): unknown {
+  let out: unknown = value;
+  if (Array.isArray(value)) out = value.map(slimPost);
+  else if (value && typeof value === "object") {
+    const v = value as { posts?: unknown; raw?: unknown };
+    // Drop the top-level raw entirely: only `creditsCharged` reads it, and that happens
+    // before we ever get here.
+    if (Array.isArray(v.posts)) out = { ...v, posts: v.posts.map(slimPost), raw: undefined };
+    else if (v.raw !== undefined) out = { ...v, raw: undefined };
+  }
+  // Last resort: a payload still over the limit loses its tail rather than the whole read.
+  let json = JSON.stringify(out) ?? "";
+  if (json.length > CACHE_MAX_BYTES && out && typeof out === "object") {
+    const v = out as { posts?: unknown[] };
+    if (Array.isArray(v.posts)) {
+      while (v.posts.length > 1 && json.length > CACHE_MAX_BYTES) {
+        v.posts = v.posts.slice(0, Math.floor(v.posts.length / 2));
+        json = JSON.stringify(out) ?? "";
+      }
+      console.warn(`[read] payload over ${CACHE_MAX_BYTES} bytes; kept ${v.posts.length} posts`);
+    }
+  }
+  return out;
+}
+
 export const read = internalAction({
   args: {
     kind: v.string(),
@@ -94,7 +149,7 @@ export const read = internalAction({
           await ctx.runMutation(internal.reads.cache.store, {
             kind: k,
             key,
-            value,
+            value: slimForCache(value),
             now: Date.now(),
             ttlMs: specEntry.ttlMs,
             credits,

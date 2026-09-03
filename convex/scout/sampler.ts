@@ -59,7 +59,9 @@ export const markGone = internalMutation({
         creatorId: row.creatorId,
         surface: "telegram",
         body: `@${a.handle} isn't up anymore, so i've stopped watching them. tell me who to watch instead and i'll pick it up.`,
-        dedupeKey: `gone:${id}`,
+        // Keyed by handle, not by row: duplicate tracked rows for one handle sent the
+        // operator the same "isn't up anymore" message twice.
+        dedupeKey: `gone:${a.platform}:${a.handle}`,
         proactive: true,
         kind: "status",
       });
@@ -194,5 +196,35 @@ export const run = internalAction({
       }
     }
     return { accounts: accounts.length, signals, failed, gone };
+  },
+});
+
+/**
+ * One-off repair for signals written before `url` existed on the row.
+ *
+ * Their URL was parsed out of `why`, and recording a verdict overwrote `why`, so the link
+ * is unrecoverable from the row itself. It IS reconstructable from the post id plus the
+ * handle we were watching, which is what this does. Signals it cannot repair are marked
+ * dropped rather than left as candidates, because a breakout nobody can open is not an idea.
+ */
+export const backfillSignalUrls = internalMutation({
+  args: {},
+  handler: async (ctx): Promise<{ repaired: number; unfixable: number }> => {
+    const rows = (await ctx.db.query("signals").take(500)) as Doc<"signals">[];
+    let repaired = 0, unfixable = 0;
+    for (const r of rows) {
+      if (r.url?.startsWith("http")) continue;
+      const postId = r.sourcePostIds[0];
+      const tracked = r.trackedAccountId ? ((await ctx.db.get(r.trackedAccountId)) as Doc<"trackedAccounts"> | null) : null;
+      if (postId && tracked?.handle && tracked.platform === "tiktok") {
+        await ctx.db.patch(r._id, { url: `https://www.tiktok.com/@${tracked.handle}/video/${postId}` });
+        repaired++;
+        continue;
+      }
+      // Nothing to link: retire it rather than let her write about a post they cannot open.
+      if (r.verdict === "pending") await ctx.db.patch(r._id, { verdict: "dropped", why: "link lost before it could be used" });
+      unfixable++;
+    }
+    return { repaired, unfixable };
   },
 });

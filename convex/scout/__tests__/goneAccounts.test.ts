@@ -37,6 +37,16 @@ describe("a deleted account is retired", () => {
     expect((await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out")).toHaveLength(1);
   });
 
+  it("duplicate tracked rows for one handle say it once, not twice", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { channel: { paired: true } }));
+    const mk = () => t.run((ctx) => ctx.db.insert("trackedAccounts", { creatorId, platform: "tiktok", handle: "runwithcarly", status: "active", addedBy: "creator", baselineN: 0, createdAt: Date.now() } as never));
+    const ids = [await mk(), await mk()];
+    await t.mutation(internal.scout.sampler.markGone, { ids, handle: "runwithcarly", platform: "tiktok" });
+    const out = (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out");
+    expect(out, "the operator got this twice on the live pilot").toHaveLength(1);
+  });
+
   it("a retired account is never sampled again", async () => {
     const { t, id } = await withTracked();
     expect((await t.query(internal.scout.sampler.distinctTracked, {})).length).toBe(1);

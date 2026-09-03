@@ -264,3 +264,11 @@ The gate's `has_link` failure was real, and pulling on it found a chain.
 **And a second time bomb, this one a real production bug.** `plan.applyEvent` stamped `pastDueSince` from wall-clock time instead of Stripe's event time, so a webhook Stripe retried for two days started the grace period two days late and a delinquent creator silently got five days of proactive work instead of three. Found because it made a billing test fail the moment real UTC time crossed a fixed date. 373 tests.
 
 ⚠️ Known limit: recording a baseline at n≥2 exceeds the action budget now that dry runs are critiqued. n:1 works. Split the suite from the summary if we need more samples.
+
+### Why the pilot went quiet: four causes, one of them serious
+1. **My fault:** I left `SCRAPE_FIXTURES=recorded` on after the gate run, so she was reading replayed fixtures, not the live world. Off again.
+2. **An unanswered question blocked her for a whole day.** The nightly expiry runs at a fixed UTC hour, which is 10pm Eastern, so a question asked Tuesday evening blocked all of Wednesday. Now hourly, so it lands just after each creator's own midnight wherever they are.
+3. **She said the same thing twice.** The retirement message was keyed by tracked-account row, and duplicate rows exist for one handle, so the operator got "@runwithcarly isn't up anymore" twice. Keyed by handle now.
+4. **⭐ The lane sweep had NEVER worked in production.** Every keyword read failed with "Value is too large (2.19 MiB > maximum 1 MiB)" because the entire vendor payload was being cached. It passed on fixtures only because those are trimmed to six posts. Downstream code reads exactly three fields of a post's raw payload (`is_ad`, `music.id`, `author.unique_id`); everything else is bitrate ladders and avatars. The cache now stores what readers use, with a size guard that trims rather than losing the read. **The "shape" signal source came online for the first time: 6 keywords, 0 failures, 12 signals.**
+
+Follow-on: lane signals come from accounts nobody tracks, so there is no per-account normal and their score is not a multiple. The writer cited one and the critic caught it as `invented_number`. The skill now forbids a multiple for a shape candidate and the evidence carries a null ratio rather than a number the model will read as one. 379 tests.

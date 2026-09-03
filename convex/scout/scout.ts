@@ -25,6 +25,8 @@ export const SCOUT_SKILL = `scout
 When: the gate has passed and there are candidates. Six kinds: "breakout" (an account they admire, above its own normal), "shape" (the top of their lane for one of their keywords this week; the account is not one they named), "win" (THEIR OWN post crossing 3× their normal; the message is a real, specific celebration and one thing to do while it's moving, nothing else), "sound" (a sound two or more accounts in their lane used this week; look it up with sound_info and sound_videos before judging: is it rising, is it the kind of sound they use, what would THEIR video on it be), "worth_seeing" (a post from outside their lane, often from the platform's trending feed, whose FORMAT the screener marked as transferable; the topic is not theirs and that is fine; at most one of these a day), and "calendar" (something on THEIR OWN calendar two or more days out that a post could ride: the message names the event, the shape of the post it makes possible, and proposes ONE filming block before it, with a day and a time on their clock; "version.block" carries that block and the question at the end is whether to block it).
 The judgment: which of these, if any, is notable (a real breakout above that account's own normal, not just a big account being big) AND fits this creator. Fit is two questions, and either can carry it: does the TOPIC belong to them, and does the FORMAT transfer (the structure, the hook shape, the angle, the humor, the pacing) to their subject even though the topic is somebody else's. A comedy bit, a list with a cut to an object on every point, a hook that opens on a thing instead of a face: those travel. Never reject a candidate only because it is outside their lane; reject it because neither the topic nor the format is theirs, and say which. When the pick is a transfer, the message says the source is not their world, names exactly what transfers (the structure, not the joke), and gives their version on their subject in one line. Default is still no. Pick at most one. If one fits, write the message: the evidence (who, how far above their normal, how old), the link, what the post does (from the transcript; you have NOT watched it, so say nothing about visuals), and their version: a hook line, the length, the sound if known, one line of on-screen text. End with exactly one question that has a decision behind it.
 
+⚠️ A "shape" candidate is the top of their lane from an account nobody is tracking, so there IS NO per-account normal for it and its ratio is not a real multiple. Never write "Nx their normal" for a shape. Say the plain view count and, if you have it, how it compares to their lane's median this week. The same goes for any candidate whose ratio you were not given. Inventing a multiple to make a sentence land is the one thing that ends this job.
+
 Sound: name a real one or say original audio. If you name a sound it must be one a lookup actually returned (sound_info, sound_videos, or the candidate's own sound), and you say in three words why it fits. "a trending sound", "whatever is on your fyp" or "an upbeat track" is a refusal to do the work: say "your own audio" instead, which is honest and often right.
 
 The on-screen text and the hook are the part they will actually read on the screen, so they are held to the voice rules above: their length, their case, their kind of joke, one concrete noun from their life, and a line no other creator in the niche could post word for word.
@@ -96,7 +98,9 @@ export const run = internalAction({
     if (g.candidates.length === 0) return { sent: false, reason: g.tasteDropped.length ? "no candidates (taste dropped the rest)" : "no candidates" };
 
     // Evidence for the model: the candidate posts with transcripts (a credit each, cached fleet-wide).
-    const evidence: Array<{ postId: string; kind: string; url: string; ratio: number; why: string; transcript: string | null; handle: string | null; taste: string }> = [];
+    // ⚠️ `ratio` is meaningless for a "shape" candidate (no tracked account, so no normal).
+    // It is sent as null rather than a number the model will read as a multiple and cite.
+    const evidence: Array<{ postId: string; kind: string; url: string; ratio: number | null; why: string; transcript: string | null; handle: string | null; taste: string }> = [];
     for (const s of g.candidates) {
       /**
        * The stored URL first. Parsing it back out of `why` was the old way, and `why` gets
@@ -118,7 +122,7 @@ export const run = internalAction({
           transcript = null;
         }
       }
-      evidence.push({ postId: s.sourcePostIds[0], kind: s.kind, url, ratio: s.score, why: s.why, transcript, handle, taste: g.tasteHints[s._id] ?? "" });
+      evidence.push({ postId: s.sourcePostIds[0], kind: s.kind, url, ratio: s.kind === "shape" ? null : s.score, why: s.why, transcript, handle, taste: g.tasteHints[s._id] ?? "" });
     }
 
     const gathered = await ctx.runQuery(internal.agent.context.gather, { creatorId: args.creatorId });
