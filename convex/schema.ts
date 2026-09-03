@@ -361,7 +361,7 @@ export default defineSchema({
     messageId: v.optional(v.id("messages")),
     text: v.string(),
     checks: v.array(v.object({ name: v.string(), pass: v.boolean(), detail: v.string() })),
-    judge: v.optional(v.object({ corny: v.number(), generic: v.number(), flattering: v.number(), toolSpeak: v.number(), specific: v.number(), wouldSend: v.number(), note: v.string(), model: v.string() })),
+    judge: v.optional(v.object({ corny: v.number(), generic: v.number(), flattering: v.number(), toolSpeak: v.number(), specific: v.number(), wouldSend: v.number(), soundsLikeThem: v.optional(v.number()), note: v.string(), model: v.string() })),
     pass: v.boolean(),
     trace: v.optional(v.any()),
     at: v.number(),

@@ -15,7 +15,7 @@ import { judge, judgePass } from "./judge";
 const EVAL_KINDS = new Set(["scout", "opinion", "explain", "review", "reply", "status"]);
 
 export const record = internalMutation({
-  args: { suite: v.string(), skill: v.string(), creatorId: v.optional(v.id("creators")), messageId: v.optional(v.id("messages")), text: v.string(), checks: v.array(v.object({ name: v.string(), pass: v.boolean(), detail: v.string() })), judge: v.optional(v.object({ corny: v.number(), generic: v.number(), flattering: v.number(), toolSpeak: v.number(), specific: v.number(), wouldSend: v.number(), note: v.string(), model: v.string() })), pass: v.boolean(), trace: v.optional(v.any()) },
+  args: { suite: v.string(), skill: v.string(), creatorId: v.optional(v.id("creators")), messageId: v.optional(v.id("messages")), text: v.string(), checks: v.array(v.object({ name: v.string(), pass: v.boolean(), detail: v.string() })), judge: v.optional(v.object({ corny: v.number(), generic: v.number(), flattering: v.number(), toolSpeak: v.number(), specific: v.number(), wouldSend: v.number(), soundsLikeThem: v.optional(v.number()), note: v.string(), model: v.string() })), pass: v.boolean(), trace: v.optional(v.any()) },
   handler: async (ctx, a): Promise<Id<"evalRuns">> => await ctx.db.insert("evalRuns", { ...a, at: Date.now() }),
 });
 
@@ -119,9 +119,9 @@ export const report = query({
   handler: async (ctx, a) => {
     if (!process.env.OPS_TOKEN || a.token !== process.env.OPS_TOKEN) return null;
     const rows = (await ctx.db.query("evalRuns").withIndex("by_at").order("desc").take(a.limit ?? 200)) as Doc<"evalRuns">[];
-    const bySkill = new Map<string, { n: number; pass: number; corny: number; generic: number; specific: number; wouldSend: number; judged: number }>();
+    const bySkill = new Map<string, { n: number; pass: number; corny: number; generic: number; specific: number; wouldSend: number; soundsLikeThem: number; judged: number }>();
     for (const r of rows) {
-      const s = bySkill.get(r.skill) ?? { n: 0, pass: 0, corny: 0, generic: 0, specific: 0, wouldSend: 0, judged: 0 };
+      const s = bySkill.get(r.skill) ?? { n: 0, pass: 0, corny: 0, generic: 0, specific: 0, wouldSend: 0, soundsLikeThem: 0, judged: 0 };
       s.n++;
       if (r.pass) s.pass++;
       if (r.judge) {
@@ -130,6 +130,7 @@ export const report = query({
         s.generic += r.judge.generic;
         s.specific += r.judge.specific;
         s.wouldSend += r.judge.wouldSend;
+        s.soundsLikeThem += r.judge.soundsLikeThem ?? 3;
       }
       bySkill.set(r.skill, s);
     }

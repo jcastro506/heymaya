@@ -186,7 +186,7 @@ export const run = internalAction({
     // ── the read ─────────────────────────────────────────────────────────
     const history = await ctx.runQuery(internal.agent.opinion.ownHistory, { creatorId: creator._id });
     const skill = a.mode === "own" ? EXPLAIN_POST_SKILL : OPINION_SKILL;
-    const prefix = buildPrefix({ creator, directives, skill, personal: g.personal });
+    const prefix = buildPrefix({ creator, directives, skill, personal: g.personal, voice: g.voice });
     const spec = REGISTRY.writer;
     const evidence = {
       what: a.mode === "own" ? "their own post" : a.mode === "video" ? "a draft they sent as a file" : "a link they sent",

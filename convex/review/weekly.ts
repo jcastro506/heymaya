@@ -14,6 +14,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
 import { buildPrefix, personalFor, producedStamp } from "../agent/context";
+import { voiceFor, voiceSection } from "../agent/voice";
 import { critique, tooLong } from "../agent/critic";
 import { computeRung, engagement, type RungFacts } from "./rung";
 import { localHourMinute } from "../scout/gate";
@@ -86,6 +87,7 @@ export const inputs = internalQuery({
       creator,
       directives,
       personal: await personalFor(ctx, creator),
+      voice: voiceSection(await voiceFor(ctx, creator._id)),
       rung,
       lane,
       week: week.map((p) => ({ url: p.url, daysAgo: Math.round((a.now - p.createTime) / 86_400_000), views: p.metrics.views, multiple: p.multiple ?? null, engagementPerView: engagement({ views: p.metrics.views, comments: p.metrics.comments, shares: p.metrics.shares, saves: p.metrics.saves ?? 0 }), caption: p.caption.slice(0, 100), card: cardFor.get(p._id) ?? null, sampled: a.now - p.createTime >= 48 * 3_600_000 })),
@@ -126,7 +128,7 @@ export const run = internalAction({
     if (!inp) return { sent: false, reason: "creator not found" };
     const record = await ctx.runQuery(internal.review.predictions.trackRecord, { creatorId: a.creatorId });
     const pulse = await ctx.runQuery(internal.review.pulse.pulseFor, { creatorId: a.creatorId, now });
-    const prefix = buildPrefix({ creator: inp.creator, directives: inp.directives, skill: WEEKLY_REVIEW_SKILL, personal: inp.personal });
+    const prefix = buildPrefix({ creator: inp.creator, directives: inp.directives, skill: WEEKLY_REVIEW_SKILL, personal: inp.personal, voice: inp.voice });
     const spec = REGISTRY.writer;
     const evidence = { rung: inp.rung, lane: inp.lane, week: inp.week, liked: inp.liked, passed: inp.passed, worked: inp.worked, taste: inp.taste, ideasSent: inp.ideasSent, lastExperiment: inp.lastExperiment, trackRecord: record.filter((r) => r.n >= 3), pulse: pulse ? { word: pulse.word, why: pulse.why } : null };
     const user = `This week's evidence (everything you may cite is here):\n${JSON.stringify(evidence)}`;
