@@ -245,3 +245,13 @@ export const resetBudget = internalMutation({
     return { cleared: rows.length };
   },
 });
+
+/** Dev only: drop this creator's messages so a pilot starts from zero. Never in production. */
+export const clearMessages = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ deleted: number }> => {
+    const rows = await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId)).collect();
+    for (const r of rows) await ctx.db.delete(r._id);
+    return { deleted: rows.length };
+  },
+});

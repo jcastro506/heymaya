@@ -43,6 +43,31 @@ export const distinctTracked = internalQuery({
   },
 });
 
+/** Retire a handle that the platform says no longer exists, and tell each creator who watched it. */
+export const markGone = internalMutation({
+  args: { ids: v.array(v.id("trackedAccounts")), handle: v.string(), platform: v.string() },
+  handler: async (ctx, a): Promise<{ retired: number }> => {
+    let retired = 0;
+    for (const id of a.ids) {
+      const row = (await ctx.db.get(id)) as Doc<"trackedAccounts"> | null;
+      if (!row || row.status !== "active") continue;
+      await ctx.db.patch(id, { status: "gone" });
+      retired += 1;
+      // Said once per account, by the dedupe key: they chose this handle, so its
+      // disappearance is theirs to know rather than a silent hole in her watching.
+      await ctx.runMutation(internal.core.messages.send, {
+        creatorId: row.creatorId,
+        surface: "telegram",
+        body: `@${a.handle} isn't up anymore, so i've stopped watching them. tell me who to watch instead and i'll pick it up.`,
+        dedupeKey: `gone:${id}`,
+        proactive: true,
+        kind: "status",
+      });
+    }
+    return { retired };
+  },
+});
+
 /** Write observations for one account's page and compute its baseline. Returns candidates above it. */
 export const recordAccountPage = internalMutation({
   args: { platform: v.union(v.literal("tiktok"), v.literal("instagram")), handle: v.string(), posts: v.any(), now: v.number() },
@@ -135,11 +160,11 @@ export const writeBreakouts = internalMutation({
 /** The fleet job: sample every distinct tracked account once, fan out to its admirers. */
 export const run = internalAction({
   args: { slot: v.optional(v.string()) },
-  handler: async (ctx): Promise<{ accounts: number; signals: number; failed: number }> => {
+  handler: async (ctx): Promise<{ accounts: number; signals: number; failed: number; gone: number }> => {
     const now = Date.now();
     const slot = `sample-${Math.floor(now / (6 * 3_600_000))}`; // one read per account per 6 h bucket
     const accounts = await ctx.runQuery(internal.scout.sampler.distinctTracked, {});
-    let signals = 0, failed = 0;
+    let signals = 0, failed = 0, gone = 0;
     for (const acct of accounts) {
       try {
         const r = await ctx.runAction(internal.reads.read.read, { kind: "account.posts", params: { platform: acct.platform, handle: acct.handle, sort: "latest", slot } });
@@ -153,9 +178,20 @@ export const run = internalAction({
         }
       } catch (error) {
         failed += 1;
-        console.error(`[sampler] ${acct.platform}/${acct.handle}: ${error instanceof Error ? error.message : String(error)}`);
+        const detail = error instanceof Error ? error.message : String(error);
+        console.error(`[sampler] ${acct.platform}/${acct.handle}: ${detail}`);
+        /**
+         * An account that no longer exists never will again. `status: "gone"` was in the
+         * schema from the start and nothing ever set it, so two deleted handles failed
+         * every six-hour sweep forever, burning a request each time and filling the
+         * operator alerts with noise. Retire it and tell whoever was watching it.
+         */
+        if (/account_deactivated|"error":"not_found"|HTTP 404/.test(detail)) {
+          const { retired } = await ctx.runMutation(internal.scout.sampler.markGone, { ids: acct.rows.map((x) => x.id), handle: acct.handle, platform: acct.platform });
+          if (retired) gone += retired;
+        }
       }
     }
-    return { accounts: accounts.length, signals, failed };
+    return { accounts: accounts.length, signals, failed, gone };
   },
 });
