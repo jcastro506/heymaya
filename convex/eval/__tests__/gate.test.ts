@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { compare, summarize, TOLERANCE, type Summary } from "../gate";
 
 const base = (over: Partial<Summary> = {}): Summary => ({
-  n: 10, sent: 10, passRate: 0.8, sentRate: 1, scenarios: ["a"],
+  n: 10, sent: 10, judged: 10, passRate: 0.8, sentRate: 1, scenarios: ["a"],
   judge: { corny: 0.5, generic: 0.5, specific: 2.5, wouldSend: 2.5, soundsLikeThem: 2.5 },
   ...over,
 });
@@ -85,5 +85,51 @@ describe("compare", () => {
     const r = compare(base(), quiet);
     expect(r.pass).toBe(false);
     expect(r.deltas.find((d) => d.name === "sentRate")?.regressed).toBe(true);
+  });
+});
+
+describe("the scout link check", () => {
+  it("a link only in the evidence is a FAILURE, because nobody can click the evidence", async () => {
+    const { runChecks } = await import("../checks");
+    const c = runChecks({ text: "look at this post, it did 10x", evidence: { url: "https://tiktok.com/@a/video/1" }, kind: "scout" } as never).find((x) => x.name === "has_link");
+    expect(c?.pass).toBe(false);
+    expect(c?.detail).toMatch(/NOT in the message/);
+  });
+
+  it("a link in the message passes", async () => {
+    const { runChecks } = await import("../checks");
+    const c = runChecks({ text: "look https://tiktok.com/@a/video/1", evidence: { url: "https://tiktok.com/@a/video/1" }, kind: "scout" } as never).find((x) => x.name === "has_link");
+    expect(c?.pass).toBe(true);
+  });
+
+  it("no link anywhere fails too, and says so instead of blaming the evidence", async () => {
+    const { runChecks } = await import("../checks");
+    const c = runChecks({ text: "look at this post", evidence: { handle: "a" }, kind: "scout" } as never).find((x) => x.name === "has_link");
+    // Whatever the cause, a scout message the creator cannot open is a failure for them.
+    expect(c?.pass).toBe(false);
+    expect(c?.detail, "the old message lied and cost real debugging time").toMatch(/no link anywhere/);
+  });
+});
+
+
+describe("the judge's absence is not a quality change", () => {
+  it("skips judge dimensions when a run had no judge at all", () => {
+    const unjudged = base({ judged: 0 });
+    unjudged.judge = { corny: 0, generic: 0, specific: 0, wouldSend: 0, soundsLikeThem: 0 };
+    const r = compare(base(), unjudged);
+    // specific 3 -> 0 would look catastrophic; it only means nothing was scored.
+    expect(r.deltas.map((d) => d.name)).toEqual(["passRate", "sentRate"]);
+    expect(r.pass).toBe(true);
+  });
+
+  it("compares them when both sides were judged", () => {
+    const r = compare(base(), base());
+    expect(r.deltas.map((d) => d.name)).toContain("soundsLikeThem");
+  });
+
+  it("summarize counts how many were judged", async () => {
+    const j = { corny: 0, generic: 0, flattering: 0, toolSpeak: 0, specific: 3, wouldSend: 3, soundsLikeThem: 3, note: "", model: "m" };
+    const s = summarize([{ pass: true, judge: j }, { pass: true, judge: undefined }], 2, ["a"]);
+    expect(s.judged).toBe(1);
   });
 });

@@ -102,3 +102,17 @@ describe("applyEvent", () => {
     expect(await t.query(internal.billing.plan.seatsLeft, {})).toBe(99);
   });
 });
+
+describe("the grace period runs on Stripe's clock", () => {
+  it("starts when the payment failed, not when we processed the webhook", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await creatorWithCustomer(t);
+    // A webhook Stripe retried for two days before we saw it.
+    const failedAt = NOON_UTC;
+    await t.mutation(internal.billing.plan.applyEvent, { eventId: "evt_late", type: "customer.subscription.updated", livemode: false, createdAt: failedAt, customerId: "cus_1", subscription: sub("past_due") });
+    const c = await t.run((ctx) => ctx.db.get(creatorId));
+    expect(c?.plan.pastDueSince, "wall-clock time would give them extra grace for free").toBe(failedAt * 1000);
+    // Four days after the failure, proactive is paused however late the webhook arrived.
+    expect((await rails(t, creatorId, failedAt + 4 * 86_400)).ok).toBe(false);
+  });
+});

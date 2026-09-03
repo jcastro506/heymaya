@@ -38,6 +38,7 @@ export const writeWins = internalMutation({
         score: p.multiple,
         corroboration: { accounts: 0, soundRising: false },
         verdict: "pending",
+        url: p.url,
         why: `their own post is at ${p.multiple}× their normal (${p.metrics.views.toLocaleString()} views, ${Math.round(ageHours)}h old); ${p.url}`,
         thresholdsVersion: THRESHOLDS.version,
         createdAt: a.now,

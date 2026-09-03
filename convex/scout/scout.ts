@@ -98,7 +98,12 @@ export const run = internalAction({
     // Evidence for the model: the candidate posts with transcripts (a credit each, cached fleet-wide).
     const evidence: Array<{ postId: string; kind: string; url: string; ratio: number; why: string; transcript: string | null; handle: string | null; taste: string }> = [];
     for (const s of g.candidates) {
-      const url = s.why.split("; ").pop() ?? "";
+      /**
+       * The stored URL first. Parsing it back out of `why` was the old way, and `why` gets
+       * overwritten with the model's reason when a verdict is recorded, so a re-judged
+       * signal lost its link entirely and she wrote about a post nobody could open.
+       */
+      const url = s.url ?? s.why.split("; ").pop() ?? "";
       let transcript: string | null = null;
       let handle: string | null = null;
       if (s.trackedAccountId) {
@@ -151,10 +156,8 @@ export const run = internalAction({
       await ctx.runMutation(internal.scout.gate.setVerdicts, { verdicts });
       return { sent: false, reason: "nothing worth their time today" };
     }
-    // A dry run stops here: the message as she would have sent it, nothing written (Sprint 3c).
-    if (args.dryRun) return { sent: false, reason: "dry run", dry: { message: pick.message.trim(), pick, evidence, trace: inv.trace } };
     const signal = g.candidates.find((s) => s.sourcePostIds[0] === pick.postId)!;
-    if (pick.fit === "maybe") {
+    if (pick.fit === "maybe" && !args.dryRun) {
       verdicts.push({ signalId: signal._id, verdict: "held", why: `maybe: ${pick.fitWhy}` });
       await ctx.runMutation(internal.scout.gate.setVerdicts, { verdicts });
       return { sent: false, reason: "held for the weekly review" };
@@ -178,11 +181,23 @@ export const run = internalAction({
         criticSkipped = criticSkipped || Boolean(verdict.skipped);
       }
       if (!verdict.pass) {
+        if (args.dryRun) return { sent: false, reason: `dropped by the critic: ${verdict.problems.join(", ")}`, dry: { message: "", pick, evidence, trace: inv.trace } };
         verdicts.push({ signalId: signal._id, verdict: "dropped", why: `critic: ${verdict.problems.join(", ")}; ${verdict.note}` });
         await ctx.runMutation(internal.scout.gate.setVerdicts, { verdicts });
         return { sent: false, reason: `dropped by the critic: ${verdict.problems.join(", ")}` };
       }
     }
+
+    /**
+     * ⚠️ The dry run stops HERE, after the critic, not before it.
+     *
+     * It used to return the raw writer output, so the eval suite measured a draft that
+     * production would never send. The gate's very first finding was a missing link, which
+     * the critic's `no_link` rule catches every time — the defect was only ever visible
+     * because the measurement skipped the gate the real path goes through. An eval that
+     * measures something other than what ships is worse than no eval.
+     */
+    if (args.dryRun) return { sent: false, reason: "dry run", dry: { message: text, pick, evidence, trace: inv.trace } };
     pick.message = text;
     const f = pick.features ?? {};
     const features = { format: String(f.format ?? "other"), topics: (f.topics ?? []).map(String).slice(0, 3), tone: String(f.tone ?? "unknown"), lengthBucket: String(f.lengthBucket ?? "unknown"), sound: String(f.sound ?? "unknown"), source: signal.kind, account: ev?.handle ?? undefined };

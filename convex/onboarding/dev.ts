@@ -166,7 +166,7 @@ export const seedBreakout = internalMutation({
       const id = await ctx.db.insert("trackedAccounts", { creatorId: a.creatorId, platform: "tiktok", handle: a.handle, status: "active", addedBy: "creator", baselineN: 12, medianPace24h: 4000, createdAt: now } as never);
       tracked = (await ctx.db.get(id)) as Doc<"trackedAccounts">;
     }
-    const signalId = await ctx.db.insert("signals", { creatorId: a.creatorId, kind: "breakout", sourcePostIds: [a.url.split("/").pop() ?? "p"], trackedAccountId: tracked._id, score: a.ratio, corroboration: { accounts: 2, soundRising: false }, verdict: "pending", why: `${a.ratio}x their normal after 9h (${Math.round(a.ratio * 4000 * 9).toLocaleString()} views vs a normal of ${(4000 * 9).toLocaleString()} at this age); ${a.url}`, thresholdsVersion: "dev", createdAt: now });
+    const signalId = await ctx.db.insert("signals", { creatorId: a.creatorId, url: a.url, kind: "breakout", sourcePostIds: [a.url.split("/").pop() ?? "p"], trackedAccountId: tracked._id, score: a.ratio, corroboration: { accounts: 2, soundRising: false }, verdict: "pending", why: `${a.ratio}x their normal after 9h (${Math.round(a.ratio * 4000 * 9).toLocaleString()} views vs a normal of ${(4000 * 9).toLocaleString()} at this age); ${a.url}`, thresholdsVersion: "dev", createdAt: now });
     return { signalId };
   },
 });

@@ -7,6 +7,19 @@
 
 import { checkPlainLanguage } from "../core/plainLanguage";
 
+/**
+ * The RULER's version. Bump it whenever a check is added, removed, or its meaning changes.
+ *
+ * ⚠️ A baseline is only comparable to a run measured the same way. I tightened `has_link`
+ * and the gate immediately reported a 25-point "regression" that was purely the ruler
+ * changing — exactly the false alarm that teaches people to ignore a gate. The gate now
+ * refuses to compare across versions and asks for a fresh baseline instead.
+ *
+ * `rubric.test.ts` fails if the checks change without this being bumped.
+ */
+export const RUBRIC_VERSION = "2";
+
+
 export interface Check { name: string; pass: boolean; detail: string }
 
 /** The exact tells (§21.4): deliberately short, because over-blocking is the worse failure. */
@@ -95,7 +108,31 @@ export function runChecks(input: { text: string; evidence: unknown; kind: string
     checks.push({ name: "no_claimed_action", pass: !claim, detail: claim ? "claims an action no tool took" : "no action claimed" });
   }
 
-  if (input.kind === "scout") checks.push({ name: "has_link", pass: /https?:\/\//.test(text) || /https?:\/\//.test(evidence), detail: /https?:\/\//.test(text) ? "link in message" : "link only in evidence" });
+  /**
+   * A scout message is about SOMEONE ELSE'S post, so the creator has to be able to go and
+   * look at it. Two bugs lived here:
+   *  - a link present only in the evidence PASSED, and nobody can click the evidence;
+   *  - the failure detail said "link only in evidence" even when there was no link
+   *    anywhere, which sent me looking in the wrong place for half an hour.
+   * The rule now: if there is a post to link, the message must carry the link.
+   */
+  if (input.kind === "scout") {
+    const inText = /https?:\/\//.test(text);
+    const inEvidence = /https?:\/\//.test(evidence);
+    // A scout message is useless without the link, whatever the reason. The two details
+    // below separate "the writer dropped it" from "nothing upstream had one", because those
+    // need different fixes, but both are failures for the creator holding the phone.
+    const pass = inText;
+    checks.push({
+      name: "has_link",
+      pass,
+      detail: inText
+        ? "link in message"
+        : inEvidence
+          ? "the post's link is in the evidence but NOT in the message — they cannot open it"
+          : "no link anywhere: nothing for them to look at",
+    });
+  }
 
   return checks;
 }

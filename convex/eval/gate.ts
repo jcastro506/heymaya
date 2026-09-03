@@ -24,6 +24,7 @@ import { internalAction, internalMutation, internalQuery } from "../_generated/s
 import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { SCENARIO_HANDLES } from "./run";
+import { RUBRIC_VERSION } from "./checks";
 
 /**
  * How far each number may move before it counts as a regression rather than noise.
@@ -42,6 +43,13 @@ export const TOLERANCE = {
 export interface Summary {
   n: number;
   sent: number;
+  /**
+   * How many messages a judge actually scored. Load-bearing: an unavailable judge yields
+   * zeros, and a zero reads as "not corny" AND as "not specific at all". Comparing those
+   * against a judged baseline reports a swing in either direction that is purely the
+   * judge's availability. Judge dimensions are only compared when both sides were judged.
+   */
+  judged: number;
   passRate: number;
   sentRate: number;
   scenarios: string[];
@@ -59,9 +67,11 @@ export function summarize(rows: Array<Pick<Doc<"evalRuns">, "pass" | "judge">>, 
     const judged = rows.map((r) => r.judge).filter(Boolean) as Array<NonNullable<Doc<"evalRuns">["judge"]>>;
     return judged.length ? round(judged.reduce((s, j) => s + pick(j), 0) / judged.length) : 0;
   };
+  const judgedCount = rows.filter((r) => r.judge).length;
   return {
     n: runs,
     sent: n,
+    judged: judgedCount,
     // Of the messages she actually wrote, how many were clean.
     passRate: n ? round(rows.filter((r) => r.pass).length / n) : 0,
     // Of the chances she had, how often she said anything. Falling silent is not a pass.
@@ -87,12 +97,17 @@ export function compare(before: Summary, after: Summary): { pass: boolean; delta
   const deltas = [
     d("passRate", before.passRate, after.passRate, TOLERANCE.passRate, true),
     d("sentRate", before.sentRate, after.sentRate, TOLERANCE.sentRate, true),
-    d("corny", before.judge.corny, after.judge.corny, TOLERANCE.judgeBad, false),
-    d("generic", before.judge.generic, after.judge.generic, TOLERANCE.judgeBad, false),
-    d("specific", before.judge.specific, after.judge.specific, TOLERANCE.judgeGood, true),
-    d("wouldSend", before.judge.wouldSend, after.judge.wouldSend, TOLERANCE.judgeGood, true),
-    d("soundsLikeThem", before.judge.soundsLikeThem, after.judge.soundsLikeThem, TOLERANCE.judgeGood, true),
   ];
+  // Only compare the judge when a judge was actually there on both sides.
+  if (before.judged > 0 && after.judged > 0) {
+    deltas.push(
+      d("corny", before.judge.corny, after.judge.corny, TOLERANCE.judgeBad, false),
+      d("generic", before.judge.generic, after.judge.generic, TOLERANCE.judgeBad, false),
+      d("specific", before.judge.specific, after.judge.specific, TOLERANCE.judgeGood, true),
+      d("wouldSend", before.judge.wouldSend, after.judge.wouldSend, TOLERANCE.judgeGood, true),
+      d("soundsLikeThem", before.judge.soundsLikeThem, after.judge.soundsLikeThem, TOLERANCE.judgeGood, true),
+    );
+  }
   return { pass: !deltas.some((x) => x.regressed), deltas };
 }
 
@@ -111,10 +126,31 @@ export const rowsSince = internalQuery({
 });
 
 export const saveBaseline = internalMutation({
-  args: { suite: v.string(), gitSha: v.string(), note: v.string(), summary: v.any() },
+  args: { suite: v.string(), rubricVersion: v.string(), gitSha: v.string(), note: v.string(), summary: v.any() },
   handler: async (ctx, a): Promise<{ id: string }> => {
     const s = a.summary as Summary;
-    const id = await ctx.db.insert("evalBaselines", { suite: a.suite, gitSha: a.gitSha, note: a.note, n: s.n, scenarios: s.scenarios, passRate: s.passRate, sent: s.sent, judge: s.judge, at: Date.now() });
+    // Write only the fields the table declares, and coerce them: `summary` arrives through
+    // v.any(), so a stray undefined or an extra key from a future Summary field would be
+    // rejected by the schema validator as an opaque failure at insert time.
+    const id = await ctx.db.insert("evalBaselines", {
+      suite: a.suite,
+      rubricVersion: a.rubricVersion,
+      gitSha: a.gitSha,
+      note: a.note,
+      n: Number(s.n ?? 0),
+      scenarios: (s.scenarios ?? []).map(String),
+      passRate: Number(s.passRate ?? 0),
+      sent: Number(s.sent ?? 0),
+      judged: Number(s.judged ?? 0),
+      judge: {
+        corny: Number(s.judge?.corny ?? 0),
+        generic: Number(s.judge?.generic ?? 0),
+        specific: Number(s.judge?.specific ?? 0),
+        wouldSend: Number(s.judge?.wouldSend ?? 0),
+        soundsLikeThem: Number(s.judge?.soundsLikeThem ?? 0),
+      },
+      at: Date.now(),
+    });
     return { id };
   },
 });
@@ -159,15 +195,32 @@ export const run = internalAction({
       return { ok: false, comparable: false, reason: `scenario set incomplete: missing ${r.missing.join(", ")}`, summary, baseline: null, deltas: [] };
     }
 
+    /**
+     * A reading nothing judged is not a baseline. Recording one would freeze zeros that
+     * later read as a collapse in specificity the moment the judge is back.
+     */
+    if (a.record && summary.sent > 0 && summary.judged === 0) {
+      return { ok: false, comparable: false, reason: "the judge scored nothing this run — fix the judge before freezing a baseline", summary, baseline: null, deltas: [] };
+    }
+
     if (a.record) {
-      await ctx.runMutation(internal.eval.gate.saveBaseline, { suite, gitSha: a.gitSha ?? "unknown", note: a.note ?? "", summary });
+      await ctx.runMutation(internal.eval.gate.saveBaseline, { suite, rubricVersion: RUBRIC_VERSION, gitSha: a.gitSha ?? "unknown", note: a.note ?? "", summary });
       return { ok: true, comparable: true, reason: "recorded as the new baseline", summary, baseline: null, deltas: [] };
     }
 
     const b = await ctx.runQuery(internal.eval.gate.latestBaseline, { suite });
     if (!b) return { ok: true, comparable: false, reason: "no baseline yet — run with record:true on a commit you trust", summary, baseline: null, deltas: [] };
 
-    const before: Summary = { n: b.n, sent: b.sent, passRate: b.passRate, sentRate: b.n ? round(b.sent / b.n) : 0, scenarios: b.scenarios, judge: b.judge };
+    /**
+     * ⚠️ Same ruler, or no comparison. A baseline taken with different checks will report a
+     * change in the checks as a change in quality, which is the fastest way to make a gate
+     * worthless.
+     */
+    if ((b.rubricVersion ?? "1") !== RUBRIC_VERSION) {
+      return { ok: true, comparable: false, reason: `baseline was measured with rubric ${b.rubricVersion ?? "1"}, this run is rubric ${RUBRIC_VERSION} — re-record a baseline before comparing`, summary, baseline: { at: b.at, gitSha: b.gitSha, note: b.note }, deltas: [] };
+    }
+
+    const before: Summary = { n: b.n, sent: b.sent, judged: b.judged ?? 0, passRate: b.passRate, sentRate: b.n ? round(b.sent / b.n) : 0, scenarios: b.scenarios, judge: b.judge };
     const { pass, deltas } = compare(before, summary);
     const moved = deltas.filter((x) => x.regressed).map((x) => `${x.name} ${x.before}→${x.after}`);
     return {

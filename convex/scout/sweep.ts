@@ -93,6 +93,7 @@ export const writeShapes = internalMutation({
         score: Math.min(10, Number((p.velocity / 1000).toFixed(2))), // views per hour, in thousands; a lane-relative score arrives with benchmarks
         corroboration: { accounts: 0, soundRising: false },
         verdict: "pending",
+        url: p.url,
         why: `top of the lane for "${a.keyword}" this week: ${p.views.toLocaleString()} views at ${p.ageHours}h by @${p.author}; ${p.url}`,
         thresholdsVersion: THRESHOLDS.version,
         createdAt: a.now,

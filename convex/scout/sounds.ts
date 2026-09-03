@@ -73,6 +73,7 @@ export const writeSoundSignals = internalMutation({
         score: 1 + a.sound.accounts.length * 0.5,
         corroboration: { accounts: a.sound.accounts.length, soundRising: true },
         verdict: "pending",
+        url: top.url,
         why: `a sound ${a.sound.accounts.length} accounts in their lane used this week (${a.sound.accounts.map((h) => "@" + h).join(", ")}); biggest: ${top.views.toLocaleString()} views by @${top.authorHandle}; ${top.url}`,
         thresholdsVersion: THRESHOLDS.version,
         createdAt: a.now,

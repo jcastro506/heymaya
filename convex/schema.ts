@@ -211,6 +211,15 @@ export default defineSchema({
   // ------------------------------------------------------------------- signals
   signals: defineTable({
     creatorId: v.id("creators"),
+    /**
+     * ⚠️ The post's URL, set at detection and NEVER overwritten.
+     *
+     * This used to be parsed back out of `why` by splitting the sentence on "; ". Then
+     * recording a verdict patches `why` with the model's reason, which destroyed the URL
+     * permanently — so a re-judged signal produced a scout message with no link for the
+     * creator to open. Found by the eval gate's `has_link` check on 2026-09-03.
+     */
+    url: v.optional(v.string()),
     kind: v.union(
       v.literal("breakout"),
       v.literal("shape"),
@@ -362,12 +371,15 @@ export default defineSchema({
    */
   evalBaselines: defineTable({
     suite: v.string(),
+    /** The ruler this reading was taken with; a run measured differently is not comparable. */
+    rubricVersion: v.optional(v.string()),
     gitSha: v.string(),
     note: v.string(),
     n: v.number(),              // total dry runs behind the numbers
     scenarios: v.array(v.string()),
     passRate: v.number(),       // 0..1
     sent: v.number(),           // how often she chose to say anything at all
+    judged: v.optional(v.number()), // how many a judge actually scored; zero means the judge dims are meaningless
     judge: v.object({ corny: v.number(), generic: v.number(), specific: v.number(), wouldSend: v.number(), soundsLikeThem: v.number() }),
     at: v.number(),
   }).index("by_suite_at", ["suite", "at"]),

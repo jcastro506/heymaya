@@ -136,7 +136,14 @@ export const applyEvent = internalMutation({
         founding: creator.plan.founding || Boolean(a.subscription.founding),
         trialEndsAt: a.subscription.trial_end ? a.subscription.trial_end * 1000 : creator.plan.trialEndsAt,
         currentPeriodEnd: a.subscription.current_period_end ? a.subscription.current_period_end * 1000 : creator.plan.currentPeriodEnd,
-        pastDueSince: next === "past_due" ? (creator.plan.pastDueSince ?? now) : undefined,
+        /**
+         * ⚠️ STRIPE'S clock, not ours. The three-day grace period is measured from when the
+         * payment actually failed, and `eventMs` is when Stripe says it did. Using wall-clock
+         * time meant a webhook delivered late started the grace late, so a creator whose
+         * event was retried for two days silently got five days of proactive work instead of
+         * three. Also made a billing test a time bomb, which is how it was found.
+         */
+        pastDueSince: next === "past_due" ? (creator.plan.pastDueSince ?? eventMs) : undefined,
         lastEventAt: eventMs,
       },
       updatedAt: now,

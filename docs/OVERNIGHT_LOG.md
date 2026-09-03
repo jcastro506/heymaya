@@ -252,3 +252,15 @@ Fixtures OFF, live vendor, all 19 crons running on `impressive-roadrunner-997`, 
 - **A creator's timezone defaulted to `America/Los_Angeles`.** The worst kind of default: plausible enough that nobody checks it, and every quiet hour and send time then wrong by hours. Found because the operator in New York had a Pacific creator record and the scout refused all morning. Now UTC, which is obviously a default and gets corrected.
 
 **First baseline:** pass rate 0.5–0.67 across runs, sent rate 1.0, judge clean (corny 0, generic 0, specific 3, wouldSend 3, soundsLikeThem 3). The failing check is real and actionable: `has_link`, "link only in evidence" — a scout message about someone else's post that never included the link.
+
+### Chasing the gate's first finding: five more bugs
+The gate's `has_link` failure was real, and pulling on it found a chain.
+1. **The check itself was wrong twice.** A link present only in the evidence PASSED, though nobody can click evidence; and when there was no link anywhere the failure detail read "link only in evidence", a lie that cost real debugging time. A scout message must carry its link, full stop.
+2. **Recording a verdict destroyed the link.** The URL was parsed back out of the `why` sentence, and `setVerdicts` overwrites `why` with the model's reason. So a re-judged signal lost its link permanently and she wrote about a post the creator could not open. Signals now carry a durable `url` set at detection, on all six writers, with a test that no writer can omit it.
+3. **The eval measured something production never sends.** The scout's dry run returned BEFORE the critic, so the suite scored raw writer output. The critic's `no_link` rule catches a missing link every time; the defect was only visible because the measurement skipped the gate the real path goes through. Dry runs are critiqued now, and the pass rate went from 0.25 to 1.0 — the fix and the measurement arriving together.
+4. **The gate reported a regression that was its own ruler moving.** Tightening a check made the pass rate "drop" 25 points against a baseline measured the old way. Baselines now record a `RUBRIC_VERSION`, the gate refuses to compare across versions, and `rubric.test.ts` hashes the checks and the judge prompt so the ruler cannot change silently.
+5. **A missing judge looked like a quality collapse.** Unjudged runs yield zeros, and a zero reads as both "not corny" (good) and "not specific at all" (bad). Judge dimensions are only compared when both sides were judged, and the gate refuses to freeze a baseline nothing judged.
+
+**And a second time bomb, this one a real production bug.** `plan.applyEvent` stamped `pastDueSince` from wall-clock time instead of Stripe's event time, so a webhook Stripe retried for two days started the grace period two days late and a delinquent creator silently got five days of proactive work instead of three. Found because it made a billing test fail the moment real UTC time crossed a fixed date. 373 tests.
+
+⚠️ Known limit: recording a baseline at n≥2 exceeds the action budget now that dry runs are critiqued. n:1 works. Split the suite from the summary if we need more samples.

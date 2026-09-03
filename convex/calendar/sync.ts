@@ -193,6 +193,7 @@ export const writeSignals = internalMutation({
         score: Math.max(1, 14 - daysOut) / 14 + 1, // sooner sorts higher, and above the 1× breakout floor
         corroboration: { accounts: 0, soundRising: false },
         verdict: "pending",
+        url: e.htmlLink ?? undefined,
         why: `their calendar: "${e.title}" ${e.allDay ? "on" : "at"} ${formatLocal(e.start, a.timezone, { withTime: !e.allDay })} (${daysOut} days out); ${e.htmlLink ?? ""}`.trim(),
         thresholdsVersion: THRESHOLDS.version,
         createdAt: a.now,
