@@ -17,7 +17,13 @@ describe("consolidate", () => {
 
   it("tombstones expired, unconfirmed notes; keeps confirmed ones; learns the hour", async () => {
     const t = convexTest(schema, modules);
-    const now = Date.now();
+    /**
+     * ⚠️ The same clock for the fixture and the run. This used to seed `expiresHint` from
+     * the real `Date.now()` while running the job at a fixed simulated date, so the test
+     * silently stopped testing anything the moment real time passed 2026-09-03 03:00 UTC,
+     * which it did mid-session. A test whose meaning depends on today's date is a bomb.
+     */
+    const now = Date.UTC(2026, 8, 3, 3, 0);
     const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { timezone: "UTC", notes: [
       { id: "old", text: "trip in june", kind: "life", at: 1, expiresHint: now - 1 },
       { id: "kept", text: "sister runs the account", kind: "fact", at: 1, expiresHint: now - 1, confirmedAt: 2 },

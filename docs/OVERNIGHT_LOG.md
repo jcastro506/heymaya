@@ -235,3 +235,8 @@ Fixtures OFF, live vendor, all 19 crons running on `impressive-roadrunner-997`, 
 
 ### Eval scenario set frozen (found by the tooling research)
 `eval.run.scenarioCreators` returned "every paired creator with a dossier", so the eval's dataset changed every time anyone signed up or paired. A baseline whose membership moves between runs measures nothing, which made the regression gate unbuildable regardless of tooling. The set is now declared by handle in `SCENARIO_HANDLES`, a missing scenario is loud, and the run reports `comparable: false` rather than quietly returning a smaller suite. Also noted: `eval.run.scout` still has no cron and no CI caller, so it only runs by hand.
+
+### Two bugs the running pilot surfaced
+- **She apologised for an outage that never happened.** The creator-facing "i couldn't see tiktok today" took the newest ScrapeCreators health row of ANY kind, so a nightly COST RECONCILIATION mismatch ("vendor 50 vs ledger 114") reached a live creator as an outage. An accounting discrepancy is an operator problem and has nothing to do with whether she can see the platform. Only read-health checks can trigger it now.
+- **A time-bomb test.** `consolidate.test.ts` seeded a note's expiry from the real `Date.now()` while running the job at a fixed simulated date, so it silently stopped testing anything the moment real time passed 2026-09-03 03:00 UTC, which happened mid-session. Both now use one clock. ⚠️ Five other test files mix a real clock with fixed dates (`jobs`, `recordedShapes`, `review`, `simulatedDay`, `taste`); they pass today and were not audited.
+- Pilot health at this point: fixtures off, crons running, credits 930 → 884, own posts 10 → 16, two messages delivered to the operator's phone, spend $0.57 for the day.

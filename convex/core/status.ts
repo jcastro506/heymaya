@@ -22,7 +22,16 @@ export const dueStatus = internalQuery({
     const out: Array<{ creatorId: Id<"creators">; kind: "behind" | "cannot_see"; day: string }> = [];
     const creators = (await ctx.db.query("creators").collect()) as Doc<"creators">[];
     const since = a.now - 6 * 3_600_000;
-    const scrapeDown = (await ctx.db.query("vendorHealth").withIndex("by_vendor_at", (q) => q.eq("vendor", "scrapecreators").gte("at", since)).order("desc").first()) as Doc<"vendorHealth"> | null;
+    /**
+     * ⚠️ Only checks that mean READS ARE FAILING may tell a creator she cannot see their
+     * lane. This took the newest scrapecreators health row of any kind, so a nightly COST
+     * RECONCILIATION mismatch ("vendor 50 vs ledger 114") made her apologise to a real
+     * creator for an outage that never happened. An accounting discrepancy is an operator
+     * problem; it has nothing to do with whether she can see TikTok.
+     */
+    const readChecks = new Set(["credit-balance", "read", "tiktok", "instagram"]);
+    const recent = (await ctx.db.query("vendorHealth").withIndex("by_vendor_at", (q) => q.eq("vendor", "scrapecreators").gte("at", since)).order("desc").take(20)) as Doc<"vendorHealth">[];
+    const scrapeDown = recent.find((r) => readChecks.has(r.check)) ?? null;
     for (const c of creators) {
       if (!c.channel.paired || c.plan.status === "paused" || c.plan.status === "canceled" || c.plan.status === "deleting") continue;
       const { hour } = localHourMinute(a.now, c.timezone);
