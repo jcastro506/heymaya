@@ -14,6 +14,8 @@ crons.interval("drain jobs", { minutes: 1 }, internal.core.scheduler.drainJobs, 
 crons.interval("sample tracked accounts", { hours: 6 }, internal.scout.sampler.run, {});
 
 // The niche sweep: one search per distinct lane keyword per day, shared across creators (§3.2).
+// After the sweep, so the lane is fresh: offer one recurring account to watch (§13.9).
+crons.daily("grow the roster", { hourUTC: 15, minuteUTC: 30 }, internal.scout.roster.run, {});
 crons.daily("sweep lane keywords", { hourUTC: 11, minuteUTC: 30 }, internal.scout.sweep.run, {});
 
 // The daily readback: their own posts and numbers, and a `win` signal when one crosses 3× (§21.5).

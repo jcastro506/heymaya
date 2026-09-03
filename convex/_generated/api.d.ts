@@ -106,6 +106,7 @@ import type * as scout_formats from "../scout/formats.js";
 import type * as scout_gate from "../scout/gate.js";
 import type * as scout_matchPost from "../scout/matchPost.js";
 import type * as scout_readback from "../scout/readback.js";
+import type * as scout_roster from "../scout/roster.js";
 import type * as scout_sampler from "../scout/sampler.js";
 import type * as scout_scout from "../scout/scout.js";
 import type * as scout_sounds from "../scout/sounds.js";
@@ -221,6 +222,7 @@ declare const fullApi: ApiFromModules<{
   "scout/gate": typeof scout_gate;
   "scout/matchPost": typeof scout_matchPost;
   "scout/readback": typeof scout_readback;
+  "scout/roster": typeof scout_roster;
   "scout/sampler": typeof scout_sampler;
   "scout/scout": typeof scout_scout;
   "scout/sounds": typeof scout_sounds;

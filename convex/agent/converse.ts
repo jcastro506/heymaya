@@ -160,6 +160,19 @@ export const run = internalAction({
         await deliverNow(ctx as never);
         return { ok: true };
       }
+      // "@x keeps coming up — watch them?" (§13.9): their yes grows the roster from their own lane.
+      const rw = target.body.match(/^roster:([a-z0-9_.-]+):(yes|no)$/);
+      if (rw) {
+        const handle = rw[1];
+        let body = "noted, i'll leave them out.";
+        if (rw[2] === "yes") {
+          const r = await ctx.runMutation(internal.scout.roster.accept, { creatorId: creator._id, handle });
+          body = r.ok ? `watching @${handle} now. i'll tell you when they do something worth copying.` : `couldn't add @${handle}: ${r.error ?? "not found"}.`;
+        }
+        await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body, dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
+        await deliverNow(ctx as never);
+        return { ok: true };
+      }
       // "maybe this one?" (§13.5 unsure): their yes is the match; their no is a negative example for the skill, not for taste.
       const mm = target.body.match(/^match:([a-z0-9]+):([a-z0-9]+):(yes|no)$/);
       if (mm) {
