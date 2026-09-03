@@ -87,10 +87,16 @@ describe("every skill sees it", () => {
     }
   });
 
-  it("the critic can name a generic line and a vague sound", () => {
+  it("the critic can name a generic line, a vague sound and an invented one", () => {
     const critic = readFileSync(new URL("../critic.ts", import.meta.url), "utf8");
-    expect(critic).toContain("generic_line");
-    expect(critic).toContain("vague_sound");
+    for (const tell of ["generic_line", "vague_sound", "invented_sound"]) expect(critic).toContain(tell);
     expect(critic, "the tells must be spelled out, not just named").toMatch(/pov:/);
+  });
+
+  it("the critic is told what was actually looked up, or it cannot catch an invented sound", () => {
+    const converse = readFileSync(new URL("../converse.ts", import.meta.url), "utf8");
+    expect(converse).toMatch(/toolsUsedThisTurn/);
+    const critic = readFileSync(new URL("../critic.ts", import.meta.url), "utf8");
+    expect(critic).toMatch(/toolsUsedThisTurn/);
   });
 });

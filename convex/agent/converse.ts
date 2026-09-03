@@ -304,7 +304,15 @@ export const run = internalAction({
      * critique costs one rewrite and then sends regardless; a swallowed reply is worse
      * than an ugly one.
      */
-    const verdict = await critique(ctx, { creatorId: creator._id, kind: "reply", text, evidence: { theirMessage: target.body.slice(0, 400) }, voice: (creator.dossier as { voice?: unknown; persona?: unknown } | undefined) ?? {}, directives: directives.map((d) => d.verbatim) });
+    /**
+     * ⚠️ The critic is told WHAT WAS ACTUALLY LOOKED UP this turn. Without it, it cannot
+     * tell a named sound that came from a lookup from one the writer remembered from
+     * training data — and on the first live run it could not: she named a real Taylor
+     * Swift track having made no sound call at all. Plausible, on-brand, and unevidenced,
+     * which is the one thing this product must never do.
+     */
+    const toolsUsed = (inv.trace ?? []).map((t) => String((t as { tool?: unknown }).tool ?? "")).filter(Boolean);
+    const verdict = await critique(ctx, { creatorId: creator._id, kind: "reply", text, evidence: { theirMessage: target.body.slice(0, 400), toolsUsedThisTurn: toolsUsed }, voice: (creator.dossier as { voice?: unknown; persona?: unknown } | undefined) ?? {}, directives: directives.map((d) => d.verbatim) });
     let criticSkipped = verdict.skipped === true;
     if (!verdict.pass) {
       const rewrite = await callModel(ctx, {
