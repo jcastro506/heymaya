@@ -136,6 +136,38 @@ export const run = internalAction({
 
     // One-tap options on an idea (§7 S3). Handled here without a model call where the answer is code.
     if (target.kind === "button") {
+      // Lane drift (Sprint 4d): widen it, or leave it as a phase.
+      const ld = target.body.match(/^lanedrift:widen:(yes|no)$/);
+      if (ld) {
+        let body = "kept as it is. tell me if that changes.";
+        if (ld[1] === "yes") {
+          const li = await ctx.runQuery(internal.onboarding.lane.inputsFor, { creatorId: creator._id });
+          const r = li ? await ctx.runMutation(internal.onboarding.lane.confirm, { creatorId: creator._id, keywords: li.keywords }) : { ok: false, keywords: [] as string[] };
+          body = r.ok ? `widened. i'll watch ${r.keywords.slice(0, 4).join(", ")} from the next pass.` : "couldn't widen it; tell me your lane in your own words.";
+        }
+        await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body, dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
+        await deliverNow(ctx as never);
+        return { ok: true };
+      }
+      // The lane she read from their posts (Sprint 4d): a tap confirms it and repoints the
+      // sweep and the roster; "not quite" hands them the two nearest neighbours, never a blank field.
+      const ln = target.body.match(/^lane:([a-z0-9-]+):(yes|no)$/);
+      if (ln) {
+        let body: string;
+        const stash = await ctx.runQuery(internal.onboarding.lane.readByToken, { creatorId: creator._id, token: ln[1] });
+        if (ln[2] === "yes" && stash) {
+          const r = await ctx.runMutation(internal.onboarding.lane.confirm, { creatorId: creator._id, keywords: stash.keywords });
+          body = r.ok ? `good. i'll watch ${r.keywords.slice(0, 3).join(", ")} for you.` : "couldn't save that; tell me your lane in your own words and i'll use it.";
+        } else if (stash) {
+          const alt = stash.keywords.slice(3, 5);
+          body = alt.length ? `fair. closer to ${alt.join(" or ")}, or something else? say it however you like.` : "fair. what would you call it? your words, one line.";
+        } else {
+          body = "tell me your lane in your own words and i'll use it.";
+        }
+        await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body, dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply", awaitingAnswer: ln[2] === "no" });
+        await deliverNow(ctx as never);
+        return { ok: true };
+      }
       // The week plan (Sprint 4b): one tap books every block; "not this week" drops them all.
       const pl = target.body.match(/^plan:(week:[0-9-]+):(book|skip)$/);
       if (pl) {

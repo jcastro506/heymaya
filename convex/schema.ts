@@ -32,7 +32,11 @@ export default defineSchema({
     /** Sprint 4b: "i don't edit", said once, turns the editing block off for good. */
     noEditBlock: v.optional(v.boolean()),
     /** Sprint 4c: milestones already said, so each is said once, ever. */
-    milestonesSaid: v.optional(v.array(v.string())), // §13.10 (5) cadence: the local hour they tend to reply in, learned nightly // "22:00" / "07:00" local
+    milestonesSaid: v.optional(v.array(v.string())),
+    /** Sprint 4d: they confirmed the lane she read from their posts. */
+    laneConfirmedAt: v.optional(v.number()),
+    /** Sprint 4d: drift asked about once per rewrite, not every week. */
+    laneDriftAskedAt: v.optional(v.number()), // §13.10 (5) cadence: the local hour they tend to reply in, learned nightly // "22:00" / "07:00" local
     tone: v.union(v.literal("coach"), v.literal("friend"), v.literal("blunt")),
     mode: v.union(v.literal("full"), v.literal("thin"), v.literal("newCreator")),
     dossier: v.optional(v.any()), // Dossier (§14.1), zod-validated at write time
@@ -348,6 +352,15 @@ export default defineSchema({
     features: v.array(v.string()), // "format:skit", "account:@x", "source:breakout", …
     at: v.number(),
   }).index("by_creator", ["creatorId", "at"]),
+
+  // ---------------------------------------------------------------- laneReads
+  // Sprint 4d: the lane she proposed, kept so the tap confirms what she actually said.
+  laneReads: defineTable({
+    creatorId: v.id("creators"),
+    token: v.string(),
+    keywords: v.array(v.string()),
+    at: v.number(),
+  }).index("by_token", ["creatorId", "token"]),
 
   // ------------------------------------------------------- stripeWebhookEvents
   // §19.3: every event once; replays are audited as rows and change nothing.

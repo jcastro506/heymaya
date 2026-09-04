@@ -12,6 +12,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
 import { DossierSchema, DOSSIER_JSON_SHAPE } from "../contracts/dossier";
+import { driftShare, LANE } from "./lane";
 import { SOUL } from "../agent/soul";
 import { summarize, type Affinity } from "../taste/affinities";
 
@@ -276,6 +277,21 @@ export const synthesize = internalAction({
     }
     if (!parsed.ok) return { ok: false, reason: `dossier did not validate: ${parsed.error}` };
     await ctx.runMutation(internal.onboarding.ingest.writeDossier, { creatorId: creator._id, dossier: parsed.dossier, mode });
+
+    /**
+     * Sprint 4d — lane drift. A lane that was right in March is wrong in September, and
+     * everything downstream reads these keywords. Asked ONCE per rewrite, and only when most
+     * of the lane has actually moved; a keyword or two shifting is not a change of subject.
+     */
+    if (args.reason !== "onboarding") {
+      const before = ((creator.dossier as { keywords?: string[] } | undefined)?.keywords ?? []).map(String);
+      const after = ((parsed.dossier as { keywords?: string[] } | undefined)?.keywords ?? []).map(String);
+      if (before.length >= 3 && driftShare(before, after) >= LANE.driftShare) {
+        const fresh = after.filter((k) => !before.map((b) => b.toLowerCase()).includes(k.toLowerCase())).slice(0, 3);
+        await ctx.runMutation(internal.onboarding.lane.stashRead, { creatorId: creator._id, token: `drift-${Date.now().toString(36)}`, keywords: after });
+        await ctx.runMutation(internal.onboarding.ingest.noteDriftAsked, { creatorId: creator._id, fresh });
+      }
+    }
     return { ok: true };
   },
 });
@@ -313,3 +329,29 @@ export function parseDossier(content: string, fill: { readFrom: Record<string, n
   if (!r.success) return { ok: false, error: r.error.issues.slice(0, 5).map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };
   return { ok: true, dossier: r.data };
 }
+
+/**
+ * One question about drift, at most once per rewrite. The message is hers to send from the
+ * weekly review path; this records that it is due and keeps the ask idempotent.
+ */
+export const noteDriftAsked = internalMutation({
+  args: { creatorId: v.id("creators"), fresh: v.array(v.string()) },
+  handler: async (ctx, a): Promise<{ asked: boolean }> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!c) return { asked: false };
+    const week = 7 * 86_400_000;
+    if (c.laneDriftAskedAt && Date.now() - c.laneDriftAskedAt < week) return { asked: false };
+    await ctx.db.patch(a.creatorId, { laneDriftAskedAt: Date.now(), updatedAt: Date.now() });
+    const words = a.fresh.slice(0, 2).join(" and ") || "something new";
+    await ctx.runMutation(internal.core.messages.send, {
+      creatorId: a.creatorId,
+      surface: "telegram",
+      body: `you've been posting more ${words} than usual for a few weeks. want me to widen your lane to include it, or is that a phase?`,
+      dedupeKey: `lanedrift:${new Date().toISOString().slice(0, 10)}`,
+      proactive: true,
+      kind: "status",
+      buttons: [{ id: `lanedrift:widen:yes`, label: "widen it" }, { id: `lanedrift:widen:no`, label: "just a phase" }],
+    });
+    return { asked: true };
+  },
+});

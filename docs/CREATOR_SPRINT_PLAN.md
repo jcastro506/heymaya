@@ -344,7 +344,7 @@ The manifest also carries **the scar tissue**, as a numbered list with the incid
 
 **Cost gate.** Zernio cost per creator matches §3.8 within 10%; weekly review and dossier rewrite run through batch.
 
-### Sprint 4b — She runs your week · *designed 2026-09-04, not built* · pairs with S4
+### Sprint 4b — She runs your week · *built 2026-09-04, verified live* · pairs with S4
 
 **Goal.** An idea stops being a swipe-file entry and becomes a commitment with a day on it. This is the sprint where she stops being a very good notification feed and starts being someone who runs the thing.
 
@@ -384,7 +384,7 @@ The manifest also carries **the scar tissue**, as a numbered list with the incid
 
 **Cost gate.** Reminders add no vendor reads and at most one cheap model call each; a booked week must not raise per-creator daily spend by more than $0.02.
 
-### Sprint 4c — She grows with you · *designed 2026-09-04, not built*
+### Sprint 4c — She grows with you · *built 2026-09-04*
 
 **Goal.** She talks differently at six months than at week two, because she knows more, and the difference is visible to the creator.
 
@@ -403,7 +403,7 @@ The manifest also carries **the scar tissue**, as a numbered list with the incid
 
 **Exit criterion (live).** After four weeks of pilot, a diff of her week-one and week-four messages to the same creator shows her citing their own outcomes, and the prompt is no larger.
 
-### Sprint 4d — Finding the lane · *designed 2026-09-04, not built*
+### Sprint 4d — Finding the lane · *built 2026-09-04*
 
 **Goal.** A creator who cannot name their niche still gets a right one, because she reads it rather than asking.
 

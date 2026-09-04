@@ -15,6 +15,7 @@ import { REGISTRY } from "../agent/registry";
 import { buildPrefix, producedStamp } from "../agent/context";
 import { deliverNow } from "../core/scheduler";
 import { critique, tooLong } from "../agent/critic";
+import { laneQuestion, readLane } from "./lane";
 
 export const FIRST_READ_SKILL = `first-read
 When: once, the first message after the dossier exists.
@@ -64,7 +65,7 @@ export const run = internalAction({
       apiKey: process.env.OPENROUTER_API_KEY ?? "",
     });
     if (!result.ok) return { ok: false, reason: result.reason };
-    let text = result.content.trim();
+    let text: string = result.content.trim();
     if (!text) return { ok: false, reason: "empty completion" };
 
     const d = creator.dossier as { voice?: unknown; persona?: unknown; works?: unknown } | undefined;
@@ -78,6 +79,22 @@ export const run = internalAction({
         criticSkipped = criticSkipped || Boolean(verdict.skipped);
       }
       if (!verdict.pass) return { ok: false, reason: `dropped by the critic: ${verdict.problems.join(", ")} (${verdict.note})` };
+    }
+
+    /**
+     * Sprint 4d: she states the lane she read from their posts, for one tap, rather than
+     * asking them to name a niche. A creator who cannot write that sentence otherwise gets a
+     * weak lane, and the sweep, the roster and the fit test all inherit it.
+     */
+    let laneAsk: { token: string; keywords: string[] } | null = null;
+    if (!creator.laneConfirmedAt) {
+      const li = await ctx.runQuery(internal.onboarding.lane.inputsFor, { creatorId: creator._id });
+      const read = li ? readLane(li.posts) : null;
+      if (read && read.confidence !== "none") {
+        laneAsk = { token: read.keywords.slice(0, 5).join("-").replace(/[^a-z0-9-]/g, "").slice(0, 60), keywords: read.keywords };
+        await ctx.runMutation(internal.onboarding.lane.stashRead, { creatorId: creator._id, token: laneAsk.token, keywords: read.keywords });
+        text = `${text}\n\n${laneQuestion(read.keywords, li?.hooks ?? [])}`;
+      }
     }
 
     await ctx.runMutation(internal.core.messages.send, {
@@ -95,7 +112,8 @@ export const run = internalAction({
       dedupeKey: `first_read:${creator._id}`,
       proactive: true,
       kind: "first_read",
-      awaitingAnswer: /\?\s*$/.test(text),
+      awaitingAnswer: Boolean(laneAsk) || /\?\s*$/.test(text),
+      ...(laneAsk ? { buttons: [{ id: `lane:${laneAsk.token}:yes`, label: "that's it" }, { id: `lane:${laneAsk.token}:no`, label: "not quite" }] } : {}),
       produced: producedStamp(spec.primary),
     });
     await deliverNow(ctx as never);

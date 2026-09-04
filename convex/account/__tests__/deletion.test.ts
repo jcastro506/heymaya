@@ -35,6 +35,7 @@ async function oneRowEverywhere(t: ReturnType<typeof convexTest>, creatorId: Id<
     await ctx.db.insert("budgets", { creatorId, day: "2026-09-02", screenerTokens: 0, writerTokens: 0, watches: 0, marginalCredits: 0, messages: 0, spentUsd: 0 });
     await ctx.db.insert("costEvents", { creatorId, vendor: "openrouter", kind: "m", units: 1, costUsd: 0.001, costSource: "endpoint_table", environment: "test", at: now });
     await ctx.db.insert("memories", { creatorId, kind: "note", refId: `n_${creatorId}`, text: "x", embedding: Array.from({ length: 768 }, () => 0.01), at: now });
+    await ctx.db.insert("laneReads", { creatorId, token: "t1", keywords: ["running"], at: now });
     const run = await ctx.db.insert("evalRuns", { suite: "recent", skill: "reply", creatorId, text: "x", checks: [], pass: true, at: now });
     await ctx.db.insert("evalLabels", { evalRunId: run, creatorId, skill: "reply", label: "good", reason: "", by: "operator", at: now });
   });

@@ -96,6 +96,7 @@ import type * as onboarding_admired from "../onboarding/admired.js";
 import type * as onboarding_dev from "../onboarding/dev.js";
 import type * as onboarding_firstRead from "../onboarding/firstRead.js";
 import type * as onboarding_ingest from "../onboarding/ingest.js";
+import type * as onboarding_lane from "../onboarding/lane.js";
 import type * as onboarding_start from "../onboarding/start.js";
 import type * as onboarding_watch from "../onboarding/watch.js";
 import type * as ops from "../ops.js";
@@ -220,6 +221,7 @@ declare const fullApi: ApiFromModules<{
   "onboarding/dev": typeof onboarding_dev;
   "onboarding/firstRead": typeof onboarding_firstRead;
   "onboarding/ingest": typeof onboarding_ingest;
+  "onboarding/lane": typeof onboarding_lane;
   "onboarding/start": typeof onboarding_start;
   "onboarding/watch": typeof onboarding_watch;
   ops: typeof ops;
