@@ -215,6 +215,27 @@ function apiUrl(token: string, method: string): string {
 }
 
 /**
+ * Send a small file (a calendar .ics, say) as a document. Multipart, so it goes as bytes
+ * rather than a URL Telegram would have to fetch. Used for the no-OAuth booking path.
+ */
+export async function sendTelegramDocument(
+  identity: TelegramBotIdentity,
+  args: { chatId: string | number; filename: string; content: string; mimeType?: string; caption?: string },
+  fetchImpl: typeof fetch = fetch
+): Promise<boolean> {
+  try {
+    const form = new FormData();
+    form.set("chat_id", String(args.chatId));
+    if (args.caption) form.set("caption", args.caption.slice(0, 1000));
+    form.set("document", new Blob([args.content], { type: args.mimeType ?? "text/calendar" }), args.filename);
+    const res = await fetchImpl(apiUrl(identity.token, "sendDocument"), { method: "POST", body: form });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Send a text message. Returns the parsed Telegram envelope.
  */
 export async function sendTelegramMessage(

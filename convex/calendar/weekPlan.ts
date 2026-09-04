@@ -14,6 +14,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { buildPostTimeModel } from "./postTime";
 import { draftWeek, editMinutesFor, pickIdeas, type Slot } from "./planning";
 import { localDateKey } from "./time";
+import { buildIcs } from "./ics";
 import { localHourMinute } from "../scout/gate";
 
 const WEEKDAY: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
@@ -140,7 +141,32 @@ export const book = internalAction({
       if (r.ok) written++;
       if (b.kind === "film" || b.kind === "post") await ctx.runAction(internal.calendar.reminders.scheduleFor, { blockId: b._id });
     }
+    /**
+     * No calendar connected: the blocks travel as a calendar file instead (the no-OAuth path;
+     * this is why Apple Calendar via CalDAV is cut). Best effort, and only when there is a
+     * real chat to send it to; the reminders work either way.
+     */
+    if (written === 0) {
+      const chat = await ctx.runQuery(internal.calendar.weekPlan.chatFor, { creatorId: a.creatorId });
+      if (chat?.telegramChatId) {
+        const { resolveTelegramBotIdentity, sendTelegramDocument } = await import("../integrations/telegram/client");
+        const identity = resolveTelegramBotIdentity();
+        if (identity) {
+          const ics = buildIcs(blocks.map((b) => ({ id: String(b._id), kind: b.kind, title: b.title, start: b.start, end: b.end })), Date.now());
+          const ok = await sendTelegramDocument(identity, { chatId: chat.telegramChatId, filename: `maya-${a.planKey.replace("week:", "")}.ics`, content: ics, caption: "tap to add the week to your calendar. move anything and tell me; i'll follow." });
+          if (ok) await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: "sent you the week as a calendar file.", dedupeKey: `plan:${a.planKey}:ics`, proactive: false, kind: "status" });
+        }
+      }
+    }
     return { booked: blocks.length, written };
+  },
+});
+
+export const chatFor = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ telegramChatId: string | null } | null> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    return c ? { telegramChatId: c.telegramChatId ?? null } : null;
   },
 });
 
