@@ -344,6 +344,89 @@ The manifest also carries **the scar tissue**, as a numbered list with the incid
 
 **Cost gate.** Zernio cost per creator matches §3.8 within 10%; weekly review and dossier rewrite run through batch.
 
+### Sprint 4b — She runs your week · *designed 2026-09-04, not built* · pairs with S4
+
+**Goal.** An idea stops being a swipe-file entry and becomes a commitment with a day on it. This is the sprint where she stops being a very good notification feed and starts being someone who runs the thing.
+
+**The organizing idea.** The terminal state of an idea you both like is a **commitment on the calendar**: a filming block, an editing block, and a post time. Everything else lines up behind it. The morning message is about today's commitment. The Sunday review is about which commitments shipped and how they did. The weekly experiment is one of the week's commitments with a flag on it. She proposes, you decide, and only then does she book: never the reverse, and the consent row already enforces it.
+
+**What she books per commitment, and where each number comes from.** The filming block goes in a real gap on the calendar, at an hour they have filmed before where their post history shows one. The **editing block is default on** — sized from their own fingerprint (a single-shot creator gets ~20 minutes, a vlogger ~90) and placed straight after filming or the next morning depending on the gap. A creator who says "I don't edit" turns it off in that sentence, once, and it stays off. The post time comes from their own analytics: which hours their posts went up and how those did against their normal. Every number is a fact from a row; nothing here is a guess dressed as advice.
+
+**The day, as the creator sees it.**
+
+```
+8:40   today's the shoe rack one, filming at 4. shot list:
+       open on the rack, hand enters, five pairs, one line each,
+       cut on the last pair. under 30s.
+3:45   still good for 4? i still like this one.   [yes] [push it] [skip]
+3:45   6:30 is open tonight, or tomorrow at 4. which?   [6:30] [tomorrow] [i'll pick]
+3:46   moved. filming 6:30, posting at 8:15, your best hour on a tuesday.
+6:15   30 min. rack, hand, five pairs, cut on the last one.
+8:05   8:15 is your hour. go when it's ready.
+```
+
+**What each answer does.** *Yes, a thumbs up, or silence* — nothing further until the post-time nudge; silence is a yes. *Push it* — she reads the calendar for the next real gap today, proposes one concrete time with tomorrow as the alternative, and the post time moves to their next best hour rather than by a fixed offset; a move they asked for is written immediately and confirmed in one line, because asking "are you sure?" after they asked is friction. *Skip* — the block is removed, the idea returns to saved with a mild negative taste signal (booked, then dropped), and she says nothing more; if it was the experiment, Sunday notes it went unfilmed, once. *A vague reply* — one clarifying tap, never a second question. *Words* ("make it thursday", "swap it with the sunday one", "clear this week", "what's on this week") — full CRUD by chat, times parsed by the model, no regex, every calendar control reachable from chat per the completeness test.
+
+**Producer mode.** During a filming block she knows what is being shot, so a clip or photo sent inside that window is read against the shot list rather than cold: "that's the one, get the last pair tighter." This is the existing moment skill gaining context it never had.
+
+**Rules in code, because prompts drift.**
+- Block reminders are **their own budget, not the proactive cap**: they exist only because the creator committed to something. At most two touches per block, exempt from the daily cap of three, still silent inside quiet hours.
+- **The check-in supersedes an open question.** This afternoon beats this morning's idea.
+- **One shot list, ever** — the morning message or the check-in, whichever comes first, never both.
+- **Idempotent per block per touch**, with a dedupe key, because a doubled message is the defect class this pilot has produced three times.
+- **The calendar and the chat are the same rows.** She says "moved to 6:30" only after the row moved.
+- The **post-time nudge fires only if she knows they filmed** — from their yes or from a clip — so it never lands on a skipped day.
+- Without a connected calendar the identical flow runs and "book it" becomes "I'll remind you"; blocks travel as a calendar file, which works on Apple and everything else with no OAuth (and is why **Apple Calendar via CalDAV is cut**).
+
+**Named tests.** A block never books without a consent row · at most two reminder touches per block, dedupe-keyed, and reminders never consume the daily cap · a reminder inside quiet hours is refused · the check-in supersedes an open question, and only one question is ever open · "push it" proposes a real gap and moves the post time to the next best hour, not a fixed offset · skip removes the block, writes the negative taste event, and says nothing further · the post-time nudge is refused when nothing marked the shoot as done · the shot list is sent once per commitment · chat CRUD covers read, move, swap, create, drop, and the completeness test fails if any calendar control has no chat path · cross-tenant: creator A's blocks never appear in B's week.
+
+**Exit criterion (live).** A real creator is offered a week on Sunday, taps once to book it, is checked in on before a block, pushes one, and the moved block and its post time are correct in their own calendar — verified by reading their calendar, not our rows.
+
+**Cost gate.** Reminders add no vendor reads and at most one cheap model call each; a booked week must not raise per-creator daily spend by more than $0.02.
+
+### Sprint 4c — She grows with you · *designed 2026-09-04, not built*
+
+**Goal.** She talks differently at six months than at week two, because she knows more, and the difference is visible to the creator.
+
+**What exists already:** house rules, notes, decayed taste affinities, a vector memory, their own lines quoted back, a dossier rewritten weekly. That is a good memory. It is not yet a relationship, and the missing ingredient is time and outcomes.
+
+**Build.**
+1. **Outcomes write back.** Today an idea they posted is scored against their numbers and stops there. It should flow: a hook shape that beat their normal moves up in the voice exemplars; a format that flopped twice moves down in taste with nothing said; the dossier's "what works" is rewritten from results rather than from her reading. This is the biggest lever, because it learns from what happened rather than from what they tapped.
+2. **Shared history she can reach for**, with decay so March is not raised in September unless it earns it: "third time an object-open has beaten your normal", "same week last year you did the marathon countdown".
+3. **Milestones, said once, quietly** — first post over 100k, a month together, fifty ideas. One line in her register, never confetti.
+4. **Her confidence about them, stated as it changes.** "Thin read" in week one becomes "I've seen forty of yours now" by week six, and her claims get bolder only as the evidence does.
+5. **A learning rate that slows.** One reaction moves her a lot early and a little later; the existing decay pairs with a confidence weight so a bad week cannot erase six good months.
+
+⚠️ **A finding from the live pilot that shapes this.** `remember` ran four times in three days and correctly kept nothing: every message was a question or logistics ("a clip or pics?", "yes"), which its prompt rightly excludes. So a creator who mostly asks questions teaches her nothing through that path. Outcomes and taste have to carry the learning, which is exactly what item 1 is for. `notes` was empty, `experiments` empty, `preferredSendHour` unset (needs six replies), and only **one** taste event existed across nine sent ideas, because ideas are not being tapped. **The learning loop is starved of input, not broken.** Booked commitments fix this at the source: a booked, filmed, posted idea is a far stronger signal than a heart.
+
+**Named tests.** A posted idea that beat their normal raises its hook shape in the exemplars · two flops move a format down in taste without any explicit signal · a milestone is said once, ever · confidence language changes with the count of posts read · an old affinity survives one bad week · the prompt does not grow as history grows (the size assertion holds at simulated month six).
+
+**Exit criterion (live).** After four weeks of pilot, a diff of her week-one and week-four messages to the same creator shows her citing their own outcomes, and the prompt is no larger.
+
+### Sprint 4d — Finding the lane · *designed 2026-09-04, not built*
+
+**Goal.** A creator who cannot name their niche still gets a right one, because she reads it rather than asking.
+
+**Two cases.** *They have posts, even five:* she does not ask. She reads what they have made, weights it by what performed, adds what they watch where that is public, and states it back for one tap: "you're runtok, the dry kind, not the gear kind. right?" A no offers the two nearest neighbours. No survey — the signal comes from behaviour (§13.10). *They have nothing yet:* "send me three posts you wish you'd made." The intersection of those three names a better lane than a sentence written cold, and the first week runs three different shapes with the numbers picking the lane by Sunday.
+
+**Drift.** The weekly dossier rewrite already diffs keywords. When they move, she says so once: "you've been posting more travel than running for three weeks. want me to widen the lane, or is that a phase?" One tap.
+
+⚠️ This matters more than it looks: the lane feeds the sweep keywords, the roster candidates and the scout's fit test, so a weak lane makes everything downstream weak. It is the same failure shape as the thin roster.
+
+**Named tests.** A creator with five posts is never asked for a niche sentence · the stated lane cites the posts it came from · a "no" offers alternatives rather than a blank field · three admired posts produce a lane and at least three sweep keywords · drift is surfaced once per rewrite, not weekly · a lane change repoints the sweep keywords and the roster filter.
+
+**Exit criterion (live).** A creator onboarded without typing a niche sentence receives a scout message whose fit reasoning cites their own posts.
+
+### Zernio — what it is actually for · *decision, 2026-09-04*
+
+**Current state, verified:** the client can create profiles, connect accounts, list them, fetch `postAnalytics` and `followerStats`, and take webhooks. **Nothing consumes any of it.** All 30 own-post rows on the live deployment are `source: "scrape"`, and `avgWatchTimeMs` and `skipRate` have never been written. Nothing records Zernio cost either, though the ledger accepts the vendor.
+
+**Why it matters to the relationship, not just the data.** Public scraping gives views, likes, comments, shares. It cannot give **watch time or retention**, which is the only number that explains *why* a short video worked. Today she can say "that did 3× your normal" and must say "I can't see watch time" — honest, and a ceiling on how useful her advice can be. With it connected she can say "they watched 71% of it, the drop is at second three, your hook is a second late", which is the difference between a reporter and a coach.
+
+**So the rule:** connected numbers win over public ones and are labelled as such; `metricsAsOf` is always shown; she never mixes the two in one claim. Watch time unlocks a real retention read in the weekly review and in explain-post, and the post-time model in Sprint 4b gets much sharper.
+
+**What to build when the throwaway account exists:** merge `postAnalytics` into `ownPosts` with `source: "zernio"`, write a Zernio cost row at connect time from the tier table and reconcile monthly against the invoice, and add a retention line to the review and explain-post that appears only when the data is there.
+
 ### Sprint 5 — Money, channel, and cutover · pairs with S5
 
 **Goal.** First paid creator; the US channel decision made from pilot data; the old product turned off.
