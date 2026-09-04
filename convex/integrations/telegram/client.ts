@@ -394,6 +394,32 @@ export async function fetchTelegramFile(
  * Acknowledge a button tap immediately so the client stops its spinner; the real
  * work happens in a job. Best-effort, never throws.
  */
+/**
+ * Take the buttons off a message after it has been answered.
+ *
+ * ⚠️ Without this a tap looks like nothing happened: Telegram leaves the keyboard in place,
+ * the work runs server-side, and the confirmation arrives seconds later as a separate
+ * message. The operator tapped twice and then typed "yes" because the UI never acknowledged
+ * the first tap (2026-09-03).
+ */
+export async function clearMessageButtons(
+  identity: TelegramBotIdentity,
+  chatId: string,
+  messageId: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<boolean> {
+  try {
+    const res = await fetchImpl(apiUrl(identity.token, "editMessageReplyMarkup"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, message_id: Number(messageId), reply_markup: { inline_keyboard: [] } }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function answerCallbackQuery(
   identity: TelegramBotIdentity,
   callbackQueryId: string,

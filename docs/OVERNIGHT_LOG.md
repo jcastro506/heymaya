@@ -279,3 +279,10 @@ Follow-on: lane signals come from accounts nobody tracks, so there is no per-acc
 **The fix, from evidence we already collect.** The lane sweep records every top-of-lane post for their keywords, with its author. `convex/scout/roster.ts` counts those authors and, when one recurs with real numbers, offers it once with a button: "@x keeps coming up in your lane — 3 posts on 3 different days, median 70,952 views. want me to watch them?" Their yes goes through the same `addTracked` the web control and the chat use. Conservative by design: one offer at a time, never while another question is open, never someone they already removed, and it stops growing on its own at 15.
 
 **A bug it had within a minute of running live.** The first real candidate was a single 1.28M-view post that had been sampled on two consecutive sweeps, which my "one viral post is luck" filter counted as two days. Recurrence now means the day they POSTED and two distinct posts, so no amount of sampling can fake it. The next run found a genuine recurring creator instead. 387 tests.
+
+### "I tapped the button and nothing happened"
+The work HAD run — twice. `@andi.renay` was added to the roster and both confirmations were delivered. What was missing was any sign that the tap registered: `answerCallbackQuery` was called with no text, and the inline keyboard stayed on the message, so the only feedback was a new message arriving seconds later after the whole converse path had run. The operator tapped, saw nothing, tapped again, then typed "yes" — three inputs for one decision, and two identical replies.
+
+Fixed at the webhook, before the work is scheduled: the tap gets a toast ("on it" / "ok, noted") and the buttons are removed from the message immediately, so it cannot be tapped twice. Three tests assert the acknowledgement happens BEFORE the job is scheduled. 390 tests.
+
+⚠️ Worth noting for the roster: the offer message carries `awaitingAnswer: true`, and the roster reply path does not close it explicitly — it closes because any inbound message closes the open question. That is fine, but it means a tap costs the day's one open-question slot until answered.

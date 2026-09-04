@@ -47,9 +47,19 @@ export const telegramWebhookHttp = httpAction(async (ctx, request) => {
   const cb = update.callback_query;
   if (cb?.data && cb.message) {
     const chatId = String(cb.message.chat.id);
-    const { resolveTelegramBotIdentity, answerCallbackQuery } = await import("../integrations/telegram/client");
+    const { resolveTelegramBotIdentity, answerCallbackQuery, clearMessageButtons } = await import("../integrations/telegram/client");
     const identity = resolveTelegramBotIdentity();
-    if (identity) await answerCallbackQuery(identity, cb.id); // stops the spinner; the work is a job
+    if (identity) {
+      /**
+       * ⚠️ Answer the tap IMMEDIATELY and visibly. The real work runs as a job and its
+       * reply lands seconds later, so without a toast and without taking the buttons off,
+       * a tap looks like nothing happened — the operator tapped twice and then typed "yes"
+       * before the first confirmation arrived.
+       */
+      const label = cb.data.endsWith(":no") ? "ok, noted" : "on it";
+      await answerCallbackQuery(identity, cb.id, label);
+      await clearMessageButtons(identity, chatId, String(cb.message.message_id));
+    }
     await ctx.scheduler.runAfter(0, internal.core.telegram.handleInbound, {
       chatId,
       text: cb.data,
