@@ -269,7 +269,10 @@ export default defineSchema({
     // §13.10 (2): named by the writer in the same call that wrote the idea
     features: v.optional(v.object({ format: v.string(), topics: v.array(v.string()), tone: v.string(), lengthBucket: v.string(), sound: v.string(), source: v.string(), account: v.optional(v.string()) })),
     newForYou: v.optional(v.boolean()),
-    savedAt: v.optional(v.number()), // the swipe file (§11.3 save): kept, filterable, never expires
+    savedAt: v.optional(v.number()),
+    /** Sprint 4c: the outcome has been folded into taste, once, ever. */
+    outcomeLearnedAt: v.optional(v.number()),
+    outcomeMultiple: v.optional(v.number()), // the swipe file (§11.3 save): kept, filterable, never expires
     produced,
     createdAt: v.number(),
   })
@@ -338,7 +341,7 @@ export default defineSchema({
     creatorId: v.id("creators"),
     ideaId: v.optional(v.id("ideas")),
     messageId: v.optional(v.id("messages")),
-    kind: v.string(), // posted | blocked | shotlist | heart | save | reply_pos | reply_neg | idea_only | ignored | thumbs_down | notme | unlinked
+    kind: v.string(), // posted | blocked | shotlist | heart | save | reply_pos | reply_neg | idea_only | ignored | thumbs_down | notme | unlinked | outcome_win | outcome_flop
     weight: v.number(),
     features: v.array(v.string()), // "format:skit", "account:@x", "source:breakout", …
     at: v.number(),

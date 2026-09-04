@@ -119,6 +119,7 @@ import type * as scout_sounds from "../scout/sounds.js";
 import type * as scout_sweep from "../scout/sweep.js";
 import type * as taste_affinities from "../taste/affinities.js";
 import type * as taste_events from "../taste/events.js";
+import type * as taste_outcomes from "../taste/outcomes.js";
 import type * as taste_profile from "../taste/profile.js";
 import type * as telegram_webhook from "../telegram/webhook.js";
 import type * as ui from "../ui.js";
@@ -241,6 +242,7 @@ declare const fullApi: ApiFromModules<{
   "scout/sweep": typeof scout_sweep;
   "taste/affinities": typeof taste_affinities;
   "taste/events": typeof taste_events;
+  "taste/outcomes": typeof taste_outcomes;
   "taste/profile": typeof taste_profile;
   "telegram/webhook": typeof telegram_webhook;
   ui: typeof ui;

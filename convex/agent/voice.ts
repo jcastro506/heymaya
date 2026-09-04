@@ -99,8 +99,13 @@ export async function voiceFor(ctx: QueryCtx, creatorId: Id<"creators">): Promis
 
   const style = styleFacts(posts.map((p) => p.caption), posts.map((p) => p.hashtags.length));
 
-  // Ranked by how far above their own normal each post went. A post with no multiple yet
-  // is not evidence of anything, so it sorts last rather than being dropped.
+  /**
+   * Ranked by how far above their own normal each post went. A post with no multiple yet is
+   * not evidence of anything, so it sorts last rather than being dropped.
+   *
+   * Sprint 4c: a line that BEAT their normal is worth more than a line that merely exists,
+   * so the ranking is the outcome itself. Nothing here needs a tap from the creator.
+   */
   const ranked = [...posts].sort((a, b) => (b.multiple ?? -1) - (a.multiple ?? -1));
   const cards = (await ctx.db
     .query("ownPostReads")
