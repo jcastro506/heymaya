@@ -97,7 +97,7 @@ describe("roster candidates", () => {
 });
 
 describe("the offer", () => {
-  it("asks once, with buttons, and holds the open question", async () => {
+  it("asks once, with buttons, and never twice about the same account", async () => {
     const { t, creatorId } = await laneWith([
       { handle: "leahruns", day: 1, views: 40_000 },
       { handle: "leahruns", day: 3, views: 60_000 },
@@ -108,11 +108,15 @@ describe("the offer", () => {
     const out = (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out");
     expect(out).toHaveLength(1);
     expect(out[0].buttons?.map((b) => b.id)).toEqual(["roster:leahruns:yes", "roster:leahruns:no"]);
-    expect(out[0].awaitingAnswer).toBe(true);
+    // An optional offer must not hold the day's one open-question slot; an idea outranks it.
+    expect(out[0].awaitingAnswer).toBe(false);
 
-    // Never twice: the open question blocks it, and the dedupe key would anyway.
+    // Never twice: the dedupe key writes nothing, and the offer must say so rather than
+    // reporting a send that did not happen.
     const second = await t.action(internal.scout.roster.offer, { creatorId, now: NOW + 60_000 });
     expect(second.offered).toBeNull();
+    expect(second.reason).toMatch(/already asked/);
+    expect((await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out")).toHaveLength(1);
   });
 
   it("their yes puts the account on the list", async () => {
@@ -138,5 +142,33 @@ describe("the offer", () => {
     const r = await t.action(internal.scout.roster.offer, { creatorId, now: NOW });
     expect(r.offered).toBeNull();
     expect(r.reason).toMatch(/already watching/);
+  });
+});
+
+describe("weight class", () => {
+  it("a tiny account posting often does not outrank a big one posting twice", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await t.run((ctx) => seedCreator(ctx, "a", {
+      timezone: "UTC", channel: { paired: true },
+      dossier: { persona: { summary: "runner" }, keywords: ["running"], cadence: { postsPerWeek: 2 } },
+      handles: { tiktok: "vanessaalopezz" },
+    }));
+    // Her own normal is ~60k, so a 6k account is not in her weight class.
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 5; i++) {
+        await ctx.db.insert("ownPosts", { creatorId, platform: "tiktok", postId: `own${i}`, url: `https://tiktok.com/@vanessaalopezz/video/${i}`, createTime: NOW - i * DAY, contentType: "video", caption: "x", hashtags: [], metrics: { views: 60_000, likes: 1, comments: 1, shares: 1 }, metricsAsOf: NOW, source: "scrape" } as never);
+      }
+      let n = 0;
+      const add = (handle: string, day: number, views: number) => ctx.db.insert("observations", {
+        postId: `p${n++}`, platform: "tiktok", authorHandle: handle, url: `https://tiktok.com/@${handle}/video/${n}`,
+        createTime: NOW - day * DAY, sampledAt: NOW - day * DAY, ageHours: 20, views, likes: 5, comments: 1, shares: 1,
+        keywords: ["running"], source: "sweep",
+      } as never);
+      for (const d of [1, 2, 3, 4]) await add("tinybutbusy", d, 6_474);
+      for (const d of [1, 3]) await add("bigandrelevant", d, 955_927);
+    });
+    const r = await t.query(internal.scout.roster.candidatesFor, { creatorId, now: NOW });
+    expect(r.candidates[0].handle, "reach has to count for something").toBe("bigandrelevant");
+    expect(r.candidates.map((c) => c.handle), "and the tiny one is out of her weight class entirely").not.toContain("tinybutbusy");
   });
 });

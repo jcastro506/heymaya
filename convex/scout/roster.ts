@@ -32,6 +32,14 @@ export const ROSTER = {
   /** Distinct days an author must appear on before being offered. One viral post is luck. */
   minDays: 2,
   windowDays: 14,
+  /**
+   * The candidate's median must be at least this fraction of the creator's own normal.
+   *
+   * ⚠️ Without it, ranking by consistency alone put a 6,474-view account above a 955,927-view
+   * one, because the small account posted on four days and the big one on two. An account
+   * doing a fraction of your numbers has nothing to teach you, however reliably it posts.
+   */
+  minScaleOfOwn: 0.5,
 } as const;
 
 export interface Candidate { handle: string; posts: number; days: number; medianViews: number }
@@ -78,11 +86,19 @@ export const candidatesFor = internalQuery({
       byAuthor.set(handle, e);
     }
 
+    // Their own normal, to judge whether a candidate is even in their weight class.
+    const ownPosts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(20)) as Doc<"ownPosts">[];
+    const ownNormal = median(ownPosts.map((p) => p.metrics.views).filter((v) => v > 0));
+    const floor = ownNormal > 0 ? ownNormal * ROSTER.minScaleOfOwn : 0;
+
     const candidates = [...byAuthor.entries()]
       .map(([handle, e]) => ({ handle, posts: e.posts.size, days: e.days.size, medianViews: median(e.views) }))
       // Both: two posts on two different days. One post cannot satisfy this however it is sampled.
       .filter((c) => c.days >= ROSTER.minDays && c.posts >= ROSTER.minDays)
-      .sort((x, y) => y.days - x.days || y.medianViews - x.medianViews);
+      .filter((c) => c.medianViews >= floor)
+      // Consistency AND reach: days as the primary weight, but scaled by how big they are,
+      // so four small posts do not beat two that actually landed.
+      .sort((x, y) => y.days * Math.log10(1 + y.medianViews) - x.days * Math.log10(1 + x.medianViews));
 
     return { candidates, tracked: active.length };
   },
@@ -114,7 +130,7 @@ export const offer = internalAction({
     const pick = tracked < ROSTER.thin ? candidates[0] : candidates.find((c) => c.days >= 3) ?? null;
     if (!pick) return { offered: null, reason: `roster is healthy (${tracked}) and nobody stands out` };
 
-    await ctx.runMutation(internal.core.messages.send, {
+    const sent = await ctx.runMutation(internal.core.messages.send, {
       creatorId: a.creatorId,
       surface: "telegram",
       body: `@${pick.handle} keeps coming up in your lane — ${pick.posts} posts on ${pick.days} different days, median ${pick.medianViews.toLocaleString()} views. want me to watch them?`,
@@ -122,9 +138,22 @@ export const offer = internalAction({
       dedupeKey: `roster:${pick.handle}`,
       proactive: true,
       kind: "status",
-      awaitingAnswer: true,
+      /**
+       * ⚠️ NOT an open question. "At most one open question" exists so the creator is never
+       * holding two pending decisions, and an optional offer is not a pending decision: if
+       * they never tap it, nothing is lost, and the dedupe key means it is asked once. It
+       * held the slot until 2026-09-04, which blocked the next offer behind an unanswered
+       * idea and inverted the priority — the idea matters, this does not.
+       */
+      awaitingAnswer: false,
       buttons: [{ id: `roster:${pick.handle}:yes`, label: "watch them" }, { id: `roster:${pick.handle}:no`, label: "no" }],
     });
+    /**
+     * The dedupe key means asking twice writes nothing, so trust `sent` rather than the
+     * fact that we called send. Reporting an offer that was silently deduped made the
+     * caller's count a lie.
+     */
+    if (!sent.sent) return { offered: null, reason: `already asked about @${pick.handle}` };
     return { offered: pick.handle, reason: `seen on ${pick.days} days` };
   },
 });

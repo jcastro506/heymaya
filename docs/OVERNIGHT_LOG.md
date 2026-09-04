@@ -286,3 +286,8 @@ The work HAD run — twice. `@andi.renay` was added to the roster and both confi
 Fixed at the webhook, before the work is scheduled: the tap gets a toast ("on it" / "ok, noted") and the buttons are removed from the message immediately, so it cannot be tapped twice. Three tests assert the acknowledgement happens BEFORE the job is scheduled. 390 tests.
 
 ⚠️ Worth noting for the roster: the offer message carries `awaitingAnswer: true`, and the roster reply path does not close it explicitly — it closes because any inbound message closes the open question. That is fine, but it means a tap costs the day's one open-question slot until answered.
+
+### Roster ranking and the question slot (2026-09-04)
+- **Ranking flaw, found on the real lane.** Sorting by consistency alone put a 6,474-view account above a 955,927-view one, because the small one posted on four days and the big one on two. An account doing a fraction of your numbers teaches you nothing however reliably it posts. Candidates now need a median of at least half the creator's own normal, and rank on days × log(views). The 955k account now tops the list.
+- **The offer was holding the one open-question slot.** "At most one open question" exists so a creator never carries two pending decisions, and an optional button offer is not a pending decision — if they never tap it, nothing is lost and the dedupe key means it is asked once. It was blocking the next offer behind an unanswered idea, which inverts the priority: the idea matters, the offer does not.
+- **`offer` reported sends that never happened.** The dedupe key writes nothing on a repeat, but the action still returned the handle as offered, making the fleet counter a lie. It now trusts the send result. 391 tests.
