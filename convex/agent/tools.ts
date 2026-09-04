@@ -19,7 +19,7 @@ export interface ToolBudget { calls: number; credits: number; deadlineAt: number
 export const DEFAULT_BUDGET = (): ToolBudget => ({ calls: 6, credits: 40, deadlineAt: Date.now() + 60_000 });
 
 /** Approximate credit prices per call (the ledger records the vendor's real number). */
-export const TOOL_CREDITS: Record<string, number> = { post_info: 10, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, sound_reels: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, search_reels: 1, search_ig_hashtag: 1, ig_popular: 1, trending_tiktok: 1, trending_reels: 1, suggestions: 1, discover_creators: 1, discover_profiles: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0, recall: 0, lane_benchmark: 0 };
+export const TOOL_CREDITS: Record<string, number> = { post_info: 10, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, sound_reels: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, search_reels: 1, search_ig_hashtag: 1, ig_popular: 1, trending_tiktok: 1, trending_reels: 1, suggestions: 1, discover_creators: 1, discover_profiles: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0, recall: 0, lane_benchmark: 0, week_plan: 0, block_move: 0, block_drop: 0, block_add: 0, week_replan: 0 };
 
 const str = { type: "string" } as const;
 
@@ -46,6 +46,12 @@ export const TOOLS: OpenRouterTool[] = [
   { type: "function", function: { name: "lane_benchmark", description: "This week's median and top-quarter views across the creator's lane (their keywords and the accounts they watch), or why it is unusable. Free. Use to say whether a number is good, not just big.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
   { type: "function", function: { name: "recall", description: "Search the creator's own memory: ideas she sent, ideas they saved, things they told her. Free. Use when they refer to something from before.", parameters: { type: "object", properties: { query: str, why: str }, required: ["query", "why"] } } },
   { type: "function", function: { name: "calendar_upcoming", description: "What is on the creator's calendar in the next two weeks (titles and times only). Free.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
+  // Sprint 4b — the plan is theirs to manage by text. These WRITE. Say what you did only after the tool says ok.
+  { type: "function", function: { name: "week_plan", description: "Their week's plan as rows: every film, edit and post block with its time, hook, whether it is booked or only proposed, whether it was filmed, and its id. Free. Read this before moving or dropping anything.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
+  { type: "function", function: { name: "block_move", description: "Move one block to a new time on THEIR clock. whenLocal is YYYY-MM-DDTHH:MM in their timezone (the prefix tells you the current local time). The calendar event follows. Free. Use when they say 'make it thursday', 'push it to 6:30', 'swap'. Move the post block too if the film moves past it.", parameters: { type: "object", properties: { blockId: str, whenLocal: str, why: str }, required: ["blockId", "whenLocal", "why"] } } },
+  { type: "function", function: { name: "block_drop", description: "Drop one block (and its calendar event). The idea goes back to Ideas. Free. Use for 'skip that one', 'clear thursday'.", parameters: { type: "object", properties: { blockId: str, why: str }, required: ["blockId", "why"] } } },
+  { type: "function", function: { name: "block_add", description: "Add a block they asked for: kind film|edit|post, whenLocal YYYY-MM-DDTHH:MM on their clock, minutes, and a short title (what it is for). It is booked immediately because they asked. Free.", parameters: { type: "object", properties: { kind: { type: "string", enum: ["film", "edit", "post"] }, whenLocal: str, minutes: { type: "number" }, title: str, why: str }, required: ["kind", "whenLocal", "minutes", "title", "why"] } } },
+  { type: "function", function: { name: "week_replan", description: "Lay the coming week out again from their ideas, their cadence and their free time, and send it to them with a book-it button. Free. Use when they ask for a plan, or after they cleared the week.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
 ];
 
 /** The vendor's price, platform-aware where it matters (docs/scrapecreators-credits.json). */
@@ -170,6 +176,22 @@ export async function runTool(ctx: ActionCtx, creatorId: Id<"creators">, call: {
       const hits = await ctx.runAction(internal.agent.memory.recall, { creatorId, query: String(call.args.query ?? ""), k: 4 });
       record(true, 0);
       return hits.length ? cap(hits.map((h) => `[${h.kind}, ${new Date(h.at).toISOString().slice(0, 10)}] ${h.text.slice(0, 300)}`).join("\n")) : "nothing close enough in their memory";
+    }
+    if (call.name === "week_plan") {
+      const rows = await ctx.runQuery(internal.calendar.tools.weekRows, { creatorId, now: Date.now() });
+      record(true, 0);
+      return rows.length ? cap(rows.map((r) => `${r.id} · ${r.when} · ${r.kind}: ${r.title} · ${r.state}`).join("\n")) : "no plan this week; week_replan lays one out";
+    }
+    if (call.name === "block_move" || call.name === "block_drop" || call.name === "block_add") {
+      const r = await ctx.runAction(internal.calendar.tools.write, { creatorId, op: call.name, args: call.args });
+      record(r.ok, 0, r.ok ? undefined : r.reason);
+      // A refusal is an answer, not an exception: she tells them what she could not do.
+      return r.ok ? `done: ${r.detail}` : `refused: ${r.reason}`;
+    }
+    if (call.name === "week_replan") {
+      const r = await ctx.runAction(internal.calendar.weekPlan.draft, { creatorId, force: true });
+      record(r.sent, 0, r.sent ? undefined : r.reason);
+      return r.sent ? `done: the week is laid out and sent to them with a book-it button (${r.slots} slots). do not restate it; tell them to tap.` : `refused: ${r.reason}`;
     }
     if (call.name === "calendar_upcoming") {
       value = await ctx.runQuery(internal.calendar.sync.upcoming, { creatorId, now: Date.now() });

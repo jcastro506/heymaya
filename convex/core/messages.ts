@@ -387,6 +387,19 @@ export const closeQuestionFor = internalMutation({
   },
 });
 
+/**
+ * Close whatever question is open, because a more urgent one is about to be asked. Used by
+ * the week plan and the block check-in (Sprint 4b): this afternoon beats this morning's idea.
+ */
+export const closeOpen = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ closed: number }> => {
+    const open = (await ctx.db.query("messages").withIndex("by_creator_and_awaiting", (q) => q.eq("creatorId", a.creatorId).eq("awaitingAnswer", true)).collect()) as Doc<"messages">[];
+    for (const m of open) await ctx.db.patch(m._id, { awaitingAnswer: false });
+    return { closed: open.length };
+  },
+});
+
 /** The one open question, if there is one. */
 export const openQuestion = internalQuery({
   args: { creatorId: v.id("creators") },

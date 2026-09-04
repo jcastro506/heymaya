@@ -42,6 +42,8 @@ crons.daily("taste profiles", { hourUTC: 9, minuteUTC: 0 }, internal.taste.profi
 
 // The weekly review: Sunday morning on each creator's clock; the hourly check finds who is due (§11.2 #14).
 crons.hourly("weekly review", { minuteUTC: 35 }, internal.review.weekly.runAll, {});
+// Sprint 4b: the week plan, Sunday evening on each creator's clock, after the review.
+crons.hourly("week plan", { minuteUTC: 40 }, internal.calendar.weekPlan.runAll, {});
 
 // Nightly consolidation (§15.7 layer 3, code half): expired notes tombstoned, the reply hour learned.
 crons.daily("consolidate", { hourUTC: 3, minuteUTC: 0 }, internal.agent.consolidate.nightly, {});

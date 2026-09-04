@@ -53,14 +53,21 @@ export async function personalFor(ctx: QueryCtx, creator: Doc<"creators">): Prom
   const now = Date.now();
   const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).order("desc").take(6)) as Doc<"ownPosts">[];
   const events = (await ctx.db.query("calendarEvents").withIndex("by_creator_start", (q) => q.eq("creatorId", creator._id).gte("start", now).lte("start", now + 7 * 86_400_000)).take(8)) as Doc<"calendarEvents">[];
-  const blocks = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", creator._id).gte("start", now).lte("start", now + 7 * 86_400_000)).take(4)) as Doc<"calendarBlocks">[];
+  // The plan, as rows: every block from an hour ago to eight days out, so she knows what is
+  // booked, what is only proposed, what has been filmed, and what is happening RIGHT NOW.
+  const blocks = ((await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", creator._id).gte("start", now - 3_600_000).lte("start", now + 8 * 86_400_000)).take(40)) as Doc<"calendarBlocks">[]).filter((b) => b.status !== "deleted").sort((a, b) => a.start - b.start);
   const day = (t: number) => new Intl.DateTimeFormat("en-US", { timeZone: creator.timezone, weekday: "short", month: "short", day: "numeric" }).format(t);
+  const time = (t: number) => new Intl.DateTimeFormat("en-US", { timeZone: creator.timezone, hour: "numeric", minute: "2-digit" }).format(t).toLowerCase().replace(":00", "");
   const week = posts.map((p) => `- ${day(p.createTime)} · ${p.metrics.views.toLocaleString()} views${p.multiple !== undefined ? ` (${p.multiple}× their normal)` : ""} · "${p.caption.slice(0, 70)}"${p.url ? ` · ${p.url}` : ""}`);
-  const life = [
-    ...events.filter((e) => e.status === "active" && e.class !== "private" && e.title).map((e) => `- ${day(e.start)} · ${e.title}${e.class === "filmable" ? " (could film around this)" : ""}`),
-    ...blocks.filter((b) => b.status !== "deleted").map((b) => `- ${day(b.start)} · your block: ${b.title} (${b.status})`),
-  ];
-  return `# Their recent posts (newest first; the numbers you may cite about them)\n${week.join("\n") || "- none read yet"}\n\n# Their next few days (titles only; never private events)\n${life.join("\n") || "- nothing on the calendar, or no calendar connected"}`;
+  const life = events.filter((e) => e.status === "active" && e.class !== "private" && e.title).map((e) => `- ${day(e.start)} · ${e.title}${e.class === "filmable" ? " (could film around this)" : ""}`);
+  const plan = blocks.slice(0, 15).map((b) => {
+    // Booked means consent. A creator with no calendar connected still books; only the Google id is missing.
+    const state = !b.consentAt ? "proposed, not booked" : b.filmedAt ? "booked, filmed" : b.status === "moved" ? "booked, moved once" : "booked";
+    const live = now >= b.start && now < b.end ? " · HAPPENING NOW" : "";
+    return `- ${day(b.start)} ${time(b.start)}–${time(b.end)} · ${b.title} (${state}; id ${b._id})${live}`;
+  });
+  const nowLocal = new Intl.DateTimeFormat("en-US", { timeZone: creator.timezone, weekday: "short", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(now);
+  return `# Their recent posts (newest first; the numbers you may cite about them)\n${week.join("\n") || "- none read yet"}\n\n# Their week's plan (film / edit / post blocks; the ids are for the block tools)\nNow on their clock: ${nowLocal} (${creator.timezone}).\n${plan.join("\n") || "- no plan yet this week; you can lay one out with week_replan, or they can ask for one"}\n\n# Their next few days (titles only; never private events)\n${life.join("\n") || "- nothing on the calendar, or no calendar connected"}`;
 }
 
 /** Build the stable prefix: soul → register → skill → dossier → directives → live notes. */

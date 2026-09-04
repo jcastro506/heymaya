@@ -18,7 +18,9 @@ import { critique, tooLong } from "./critic";
 import { deliverNow } from "../core/scheduler";
 import { watchMedia } from "../integrations/gemini/client";
 
-export const MOMENT_SKILL = `moment
+export const MOMENT_SKILL = `If the plan in the prefix shows a film block HAPPENING NOW, you are the producer on set: read what they sent against that block's hook and shot list, say what is working and the one thing to get before they wrap, and skip the general idea-finding. Mark nothing as filmed yourself; their clip is the sign.
+
+moment
 When: they are somewhere or something just happened and they want to make content about it now. You may have a photo or a clip of the scene (described in the evidence as what is visible, not judged) and their words.
 The judgment: what is actually here that is worth a post FOR THEM: their formats, their register, what they take, what they've posted before that rhymes, what's on their calendar. Give two angles, both shot in the next twenty minutes with a phone: each with a hook line (≤ 100), three to five shots (≤ 60 each, in order), a length in seconds, and the on-screen text if any. Pick the one you'd make and say why in one line. If the place or the moment is a bad fit, say so and offer the one thing that would work. Never invent what is in the scene beyond the description.
 Output ONLY JSON:
