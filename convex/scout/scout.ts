@@ -12,6 +12,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
 import { buildPrefix, producedStamp } from "../agent/context";
+import { pickMilestone } from "../agent/history";
 import { localDateKey, zonedTimeToEpoch } from "../calendar/time";
 import { investigate } from "../agent/investigate";
 import { deliverNow } from "../core/scheduler";
@@ -127,7 +128,7 @@ export const run = internalAction({
 
     const gathered = await ctx.runQuery(internal.agent.context.gather, { creatorId: args.creatorId });
     if (!gathered) return { sent: false, reason: "creator not found" };
-    const prefix = buildPrefix({ creator: gathered.creator, directives: gathered.directives, skill: SCOUT_SKILL, personal: gathered.personal, voice: gathered.voice });
+    const prefix = buildPrefix({ creator: gathered.creator, directives: gathered.directives, skill: SCOUT_SKILL, personal: gathered.personal, voice: gathered.voice, history: gathered.history });
     const spec = REGISTRY.writer;
     const user = `Candidates (kind: breakout / shape / win / calendar), ranked; for posts, ratio is how far above that account's own normal:\n${JSON.stringify(evidence)}\n\nToday on their clock: ${localDateKey(now, g.creator.timezone)}, ${g.rails.localHour}:00 (${g.creator.timezone}). Messages already sent today: ${g.rails.sentToday}.${g.exploreOpen ? " The explore slot is open: one idea in five may be outside their usual, flagged newForYou." : ""}`;
     // §13.11: the writer may look things up (the sound, the comments, the author's normal, their own rhymes) before judging.
@@ -183,6 +184,18 @@ export const run = internalAction({
      * Never the other way round: a link the evidence lacks is not invented.
      */
     if (links[0] && !/https?:\/\//.test(text)) text = `${text}\n\n${links[0]}`;
+
+    /**
+     * A milestone rides an existing message, never its own touch (Sprint 4c). Only on a win,
+     * because that is the one message where a line of "and by the way" belongs, and it is
+     * said once ever: `markSaid` is the record, not her memory.
+     */
+    let milestoneKey: string | null = null;
+    if (signal.kind === "win" && !args.dryRun) {
+      const mi = await ctx.runQuery(internal.agent.history.milestoneInputs, { creatorId: args.creatorId });
+      const m = mi ? pickMilestone(mi) : null;
+      if (m) { text = `${text}\n\n${m.line}`; milestoneKey = m.key; }
+    }
     let verdict = tooLong(text) ? { pass: false, problems: ["too_long" as const], note: "over the length cap" } : await critique(ctx, { creatorId: args.creatorId, kind: "scout", text, evidence: ev, voice: { voice: dossierVoice?.voice, persona: dossierVoice?.persona }, directives: directiveTexts });
     let criticSkipped = Boolean(verdict.skipped);
     if (!verdict.pass) {
@@ -252,7 +265,8 @@ export const run = internalAction({
     verdicts.push({ signalId: signal._id, verdict: "sent", why: `sent: ${pick.fitWhy}` });
     await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: args.creatorId, step: "first_scout" });
     if (signal.kind === "calendar" || signal.kind === "worth_seeing") await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: args.creatorId, step: "first_calendar_or_worth_seeing" });
-    await ctx.runMutation(internal.scout.gate.setVerdicts, { verdicts });
+if (milestoneKey) await ctx.runMutation(internal.agent.history.markSaid, { creatorId: args.creatorId, key: milestoneKey });
+        await ctx.runMutation(internal.scout.gate.setVerdicts, { verdicts });
     await deliverNow(ctx as never);
     return { sent: true, reason: pick.fitWhy };
   },

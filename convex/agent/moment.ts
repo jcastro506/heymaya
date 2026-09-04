@@ -82,7 +82,7 @@ export const run = internalAction({
   handler: async (ctx, a): Promise<{ ok: boolean; reason?: string }> => {
     const g = await ctx.runQuery(internal.agent.context.gather, { creatorId: a.creatorId, messageId: a.messageId });
     if (!g?.target) return { ok: false, reason: "message not found" };
-    const { creator, directives, target, personal, voice } = g;
+    const { creator, directives, target, personal, voice, history } = g;
     const reply = async (body: string, extra: Record<string, unknown> = {}) => {
       await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body, dedupeKey: `moment:${a.messageId}`, proactive: false, kind: "moment", ...extra });
       await deliverNow(ctx as never);
@@ -104,7 +104,7 @@ export const run = internalAction({
       return { ok: true, reason: "asked for the scene" };
     }
 
-    const prefix = buildPrefix({ creator, directives, skill: MOMENT_SKILL, personal, voice });
+    const prefix = buildPrefix({ creator, directives, skill: MOMENT_SKILL, personal, voice, history });
     const spec = REGISTRY.writer;
     const evidence = { theirWords: theirWords.slice(0, 500), scene: scene ?? "no photo or clip; only their words", localTime: new Intl.DateTimeFormat("en-US", { timeZone: creator.timezone, weekday: "short", hour: "numeric", minute: "2-digit" }).format(Date.now()) };
     const r = await callModel(ctx, { creatorId: creator._id, purpose: "moment", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `The moment:\n${JSON.stringify(evidence)}` }], temperature: 0.6, maxTokens: 1400, apiKey: process.env.OPENROUTER_API_KEY ?? "" });

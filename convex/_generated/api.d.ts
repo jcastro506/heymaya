@@ -15,6 +15,7 @@ import type * as agent_consolidate from "../agent/consolidate.js";
 import type * as agent_context from "../agent/context.js";
 import type * as agent_converse from "../agent/converse.js";
 import type * as agent_critic from "../agent/critic.js";
+import type * as agent_history from "../agent/history.js";
 import type * as agent_inbound from "../agent/inbound.js";
 import type * as agent_investigate from "../agent/investigate.js";
 import type * as agent_manage from "../agent/manage.js";
@@ -138,6 +139,7 @@ declare const fullApi: ApiFromModules<{
   "agent/context": typeof agent_context;
   "agent/converse": typeof agent_converse;
   "agent/critic": typeof agent_critic;
+  "agent/history": typeof agent_history;
   "agent/inbound": typeof agent_inbound;
   "agent/investigate": typeof agent_investigate;
   "agent/manage": typeof agent_manage;

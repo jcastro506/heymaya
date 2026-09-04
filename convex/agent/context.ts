@@ -10,6 +10,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { SOUL, SOUL_VERSION, REGISTER_ADDENDA } from "./soul";
 import { summarize, type Affinity } from "../taste/affinities";
 import { voiceFor, voiceSection } from "./voice";
+import { historyFor, historySection } from "./history";
 
 export const RECENT_MESSAGES = 20;
 export const CONTEXT_VERSION = "ctx-2026-09-02.1";
@@ -24,7 +25,7 @@ export interface AssembledContext {
 
 export const gather = internalQuery({
   args: { creatorId: v.id("creators"), messageId: v.optional(v.id("messages")) },
-  handler: async (ctx, args): Promise<{ creator: Doc<"creators">; directives: Doc<"directives">[]; recent: Doc<"messages">[]; target: Doc<"messages"> | null; personal: string; voice: string } | null> => {
+  handler: async (ctx, args): Promise<{ creator: Doc<"creators">; directives: Doc<"directives">[]; recent: Doc<"messages">[]; target: Doc<"messages"> | null; personal: string; voice: string; history: string } | null> => {
     const creator = (await ctx.db.get(args.creatorId)) as Doc<"creators"> | null;
     if (!creator) return null;
     const directives = (await ctx.db
@@ -40,7 +41,9 @@ export const gather = internalQuery({
     const personal = await personalFor(ctx, creator);
     // Their own sentences, on every turn. Describing a voice does not reproduce it.
     const voice = voiceSection(await voiceFor(ctx, creator._id));
-    return { creator, directives, recent: recent.reverse(), target, personal, voice };
+    // How well she knows them, so her claims are only as bold as the evidence (Sprint 4c).
+    const history = historySection(await historyFor(ctx, creator));
+    return { creator, directives, recent: recent.reverse(), target, personal, voice, history };
   },
 });
 
@@ -71,7 +74,7 @@ export async function personalFor(ctx: QueryCtx, creator: Doc<"creators">): Prom
 }
 
 /** Build the stable prefix: soul → register → skill → dossier → directives → live notes. */
-export function buildPrefix(input: { creator: Doc<"creators">; directives: Doc<"directives">[]; skill: string; personal?: string; voice?: string }): string {
+export function buildPrefix(input: { creator: Doc<"creators">; directives: Doc<"directives">[]; skill: string; personal?: string; voice?: string; history?: string }): string {
   const c = input.creator;
   const notes = (c.notes ?? []).filter((n) => !n.tombstonedAt && (!n.expiresHint || n.expiresHint > Date.now()));
   const dossier = c.dossier ? JSON.stringify(c.dossier) : `{"mode":"newCreator","note":"no dossier yet — the catalogue read has not finished"}`;
@@ -82,6 +85,7 @@ export function buildPrefix(input: { creator: Doc<"creators">; directives: Doc<"
     `# The creator (their dossier, evidence-backed; say "unknown" for anything not in it)\nHandles: ${JSON.stringify(c.handles)}\nTheir words about what they make: ${JSON.stringify(c.niche)}\nTimezone: ${c.timezone}\n${dossier}`,
     tasteSection(c),
     ...(input.voice ? [input.voice] : []),
+    ...(input.history ? [input.history] : []),
     ...(input.personal ? [input.personal] : []),
     `# House rules, verbatim (${input.directives.length})\n${input.directives.map((d) => `- ${d.verbatim}`).join("\n") || "- none yet"}`,
     `# Things they told you (${notes.length})\n${notes.map((n) => `- ${n.text}`).join("\n") || "- nothing yet"}`,

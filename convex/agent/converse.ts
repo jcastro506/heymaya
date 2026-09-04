@@ -277,7 +277,7 @@ export const run = internalAction({
         }
         // shotlist: a short writer call with the idea in context
         const idea = await ctx.runQuery(internal.agent.converse.ideaById, { ideaId });
-        const prefix = buildPrefix({ creator, directives, skill: SHOTLIST_SKILL, personal: gathered.personal, voice: gathered.voice });
+        const prefix = buildPrefix({ creator, directives, skill: SHOTLIST_SKILL, personal: gathered.personal, voice: gathered.voice, history: gathered.history });
         const spec = REGISTRY.writer;
         const r = await callModel(ctx, { creatorId: creator._id, purpose: "shot_list", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `The idea you sent them:\n${JSON.stringify(idea)}\n\nWrite the shot list.` }], temperature: 0.5, maxTokens: 500, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
         const text = r.ok ? r.content.trim() : "";
@@ -344,7 +344,7 @@ export const run = internalAction({
       else recalled = "\n\n# From memory\n- nothing close enough; say so plainly";
     }
 
-    const prefix = buildPrefix({ creator, directives, skill: CONVERSE_SKILL, personal: gathered.personal, voice: gathered.voice });
+    const prefix = buildPrefix({ creator, directives, skill: CONVERSE_SKILL, personal: gathered.personal, voice: gathered.voice, history: gathered.history });
     const suffix = buildSuffix({ recent: recent.filter((m) => m._id !== target._id), target }) + recalled;
     const apiKey = process.env.OPENROUTER_API_KEY ?? "";
     const spec = REGISTRY.writer;

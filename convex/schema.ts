@@ -30,7 +30,9 @@ export default defineSchema({
     quietHours: v.object({ start: v.string(), end: v.string() }),
     preferredSendHour: v.optional(v.number()),
     /** Sprint 4b: "i don't edit", said once, turns the editing block off for good. */
-    noEditBlock: v.optional(v.boolean()), // §13.10 (5) cadence: the local hour they tend to reply in, learned nightly // "22:00" / "07:00" local
+    noEditBlock: v.optional(v.boolean()),
+    /** Sprint 4c: milestones already said, so each is said once, ever. */
+    milestonesSaid: v.optional(v.array(v.string())), // §13.10 (5) cadence: the local hour they tend to reply in, learned nightly // "22:00" / "07:00" local
     tone: v.union(v.literal("coach"), v.literal("friend"), v.literal("blunt")),
     mode: v.union(v.literal("full"), v.literal("thin"), v.literal("newCreator")),
     dossier: v.optional(v.any()), // Dossier (§14.1), zod-validated at write time
