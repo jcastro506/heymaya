@@ -277,3 +277,35 @@ export const modelPrices = internalAction({
       .sort((x, y) => x.inPerM - y.inPerM);
   },
 });
+
+/** Dev only: fetch a URL from inside the deployment, where outbound network works. */
+export const fetchText = internalAction({
+  args: { url: v.string(), max: v.optional(v.number()), from: v.optional(v.number()) },
+  handler: async (_ctx, a): Promise<{ status: number; body: string; total: number }> => {
+    const res = await fetch(a.url, { headers: { "User-Agent": "heymaya-dev/1.0" } });
+    const body = await res.text();
+    // `from` lets a caller page through a long spec without blowing the action's return size.
+    const from = a.from ?? 0;
+    return { status: res.status, body: body.slice(from, from + (a.max ?? 6000)), total: body.length };
+  },
+});
+
+/** Dev only: fetch a large doc and return only the lines around a match, so a 2.5 MB spec is readable. */
+export const fetchGrep = internalAction({
+  args: { url: v.string(), pattern: v.string(), before: v.optional(v.number()), after: v.optional(v.number()), max: v.optional(v.number()) },
+  handler: async (_ctx, a): Promise<{ total: number; hits: number; text: string }> => {
+    const res = await fetch(a.url, { headers: { "User-Agent": "heymaya-dev/1.0" } });
+    const lines = (await res.text()).split("\n");
+    const re = new RegExp(a.pattern, "i");
+    const before = a.before ?? 0, after = a.after ?? 40;
+    const out: string[] = [];
+    let hits = 0;
+    for (let i = 0; i < lines.length; i++) {
+      if (!re.test(lines[i])) continue;
+      hits++;
+      out.push(`--- line ${i}`, ...lines.slice(Math.max(0, i - before), i + after));
+      if (out.join("\n").length > (a.max ?? 5000)) break;
+    }
+    return { total: lines.length, hits, text: out.join("\n").slice(0, a.max ?? 5000) };
+  },
+});

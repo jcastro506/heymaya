@@ -417,15 +417,39 @@ The manifest also carries **the scar tissue**, as a numbered list with the incid
 
 **Exit criterion (live).** A creator onboarded without typing a niche sentence receives a scout message whose fit reasoning cites their own posts.
 
-### Zernio — what it is actually for · *decision, 2026-09-04*
+### Sprint 4e — Connected numbers · *designed 2026-09-04 from Zernio's OpenAPI spec, not built*
 
-**Current state, verified:** the client can create profiles, connect accounts, list them, fetch `postAnalytics` and `followerStats`, and take webhooks. **Nothing consumes any of it.** All 30 own-post rows on the live deployment are `source: "scrape"`, and `avgWatchTimeMs` and `skipRate` have never been written. Nothing records Zernio cost either, though the ledger accepts the vendor.
+**Decision.** Zernio is in. Its value is uneven across platforms and the design has to be honest about that, in code, not in prompt.
 
-**Why it matters to the relationship, not just the data.** Public scraping gives views, likes, comments, shares. It cannot give **watch time or retention**, which is the only number that explains *why* a short video worked. Today she can say "that did 3× your normal" and must say "I can't see watch time" — honest, and a ceiling on how useful her advice can be. With it connected she can say "they watched 71% of it, the drop is at second three, your hook is a second late", which is the difference between a reporter and a coach.
+**What it gives, exactly (spec v1.0.4, read 2026-09-04).** Per post from `/v1/analytics`: `views`, `likes`, `comments`, `shares`, `saves`, **`impressions`, `reach`, `clicks`** (the three nobody can scrape), `engagementRate` (theirs; the denominator shifts per post, so we never use it), `lastUpdated`, per-platform `syncStatus` (synced | pending | unavailable) and a `dataStaleness` block. **Instagram Reels only:** `igReelsAvgWatchTime` (ms), `igReelsVideoViewTotalTime` (ms), `reelsSkipRate` (% leaving in the first 3 s; Meta labels it estimated), `videoDurationSeconds`. **TikTok gets no watch time, no retention, no skip rate.** Per account from `/v1/accounts/follower-stats`: current followers, growth, growth %, a daily/weekly/monthly series, refreshed daily — **requires their analytics add-on**, a cost line to price. Also `/v1/analytics/delta`, a cursor feed of only what changed across every account (their figure: 1,599 calls/hour → 205), and an `analytics.synced` webhook.
 
-**So the rule:** connected numbers win over public ones and are labelled as such; `metricsAsOf` is always shown; she never mixes the two in one claim. Watch time unlocks a real retention read in the weekly review and in explain-post, and the post-time model in Sprint 4b gets much sharper.
+**Against scraping, verified on our recorded payloads.** TikTok public data already carries views, likes, comments, shares and saves (`collect_count`), so Zernio's TikTok upgrade is impressions, reach and clicks: real, because views alone cannot separate "the algorithm barely showed it" from "it showed it and they scrolled", which need opposite fixes. Instagram public data carries likes and comments and a wall of permission flags, no views; **for Instagram, Zernio is the difference between having numbers and not.**
 
-**What to build when the throwaway account exists:** merge `postAnalytics` into `ownPosts` with `source: "zernio"`, write a Zernio cost row at connect time from the tier table and reconcile monthly against the invoice, and add a retention line to the review and explain-post that appears only when the data is there.
+**⚠️ The gotcha that will bite first.** Zernio's convention is `0` for "not applicable on this platform": `igReelsAvgWatchTime: 0` on a TikTok means *unavailable*, not *nobody watched*. Ingestion maps platform-inapplicable zeros to **null** before any model sees them. A named test guards it.
+
+**Ingestion, all code (law 3).**
+1. On connect: bootstrap from `/v1/analytics` (90 days) into `ownPosts` with `source: "zernio"`, keeping the scraped counters alongside as `publicMetrics` so both can be cited. `metricsAsOf` from `lastUpdated`; `syncStatus` stored.
+2. Stay in sync with the **delta cursor** on an hourly cron (one cursor for the fleet, stored), and pull immediately on `analytics.synced`. Never per-account polling.
+3. Follower series daily into `followerSnapshots`; a Zernio cost row written at connect from the tier table plus the add-on, reconciled monthly against the invoice.
+4. Connected wins over public, always labelled; stale (`pending`, `unavailable`, or `asOf` > 48 h) falls back to public and says so.
+
+**Derived facts, computed in code so she never does arithmetic.** distribution = views ÷ reach (how many times each person saw it) · reach vs *their* normal reach · engagement ÷ reach on one consistent basis · follower delta in the 48 h after a post · **retention** (Reels only): avg watch ÷ duration, and the 3-second skip against their own normal · **cross-post transfer**: when `crossPostOf` links a TikTok and a Reel of the same video, the Reel's retention is the *video's* retention, labelled `basis: reel`, and may be used to explain the TikTok; never without that link. From these, one of four named **diagnoses** per post: *not distributed* (reach far under normal) · *distributed, scrolled* (reach normal, engagement low) · *hook lost them* (skip rate high, Reels or transferred) · *held them* (watch ÷ duration high). The weekly review's rung is re-based on reach where it exists.
+
+**Tools in the belt** (each returns `{ok, data, next, why}` and names what is unknown): `own_post_numbers(url)` connected counters + derived facts + labels · `own_reach_normal()` · `own_retention(url)` Reels only, answers "not available for TikTok" explicitly · `follower_trend(days)` · `post_diagnosis(url)` the four-way read. `post_info` stays for other people's posts.
+
+**Skill knowledge (a playbook `.md`, per law "platform expertise lives in .md files").** Which metric answers which question; reach vs views in plain words; the four diagnoses and the fix each implies; skip rate is Meta's estimate and is cited with a hedge; never compare a TikTok number to a Reels retention number in one claim; when to say "I can't see that" and, once, "connect Instagram and I can". Loaded into explain-post, opinion-on-own, the weekly review, the readback on a win, and the morning message.
+
+**When she reaches for it (choreography in tool responses, law 8).** Explain-post and "how did X do": connected first when the account is connected, public otherwise, with the one-time pointer. Weekly review: rung from reach; a retention line only when Reels data exists; one follower line. Readback on a win: connected numbers. Opinion on a draft: their own hook-drop history informs the prediction. Sprint 4b's post-time model: hour vs reach, not hour vs views. `analytics.synced` does **not** create a new touch; it lands in the existing readback path, under the daily cap.
+
+**Product rule.** Zernio is offered at connect when the creator has an Instagram handle; TikTok-only creators get it as optional with the honest framing ("reach and impressions; no watch time on TikTok"). **No account-count tiers**: the first two accounts are free from Zernio, so gating the second is friction with no margin behind it.
+
+**Named tests.** platform-inapplicable zeros become null · connected wins and is labelled; stale falls back and says so · a claim mixing a TikTok counter with a Reels retention fails a `mixed_basis` check · retention transfers across a `crossPostOf` link and never without one · the four diagnoses on fixture posts · delta cursor is idempotent on replay and never re-reads per account · cost row at connect, add-on included · cross-tenant: A's connected numbers never enter B's context · the dossier and review cite `metricsAsOf`.
+
+**Exit criterion (live).** A creator with Instagram connected asks "why did that one die" and gets one of the four diagnoses citing reach against their normal and, for a Reel, the second the drop happened — read back against their own Instagram insights.
+
+**Cost gate.** Sync cost per connected creator per month under $0.10 via the delta feed; the add-on priced into §3.8.
+
+**Operator-gated:** the throwaway Zernio account with one TikTok and one Instagram connected, so the response shape is recorded as a fixture before a line of this ships (`connections/zernio:probeAnalytics`).
 
 ### Sprint 5 — Money, channel, and cutover · pairs with S5
 
