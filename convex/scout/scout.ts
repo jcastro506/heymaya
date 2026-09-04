@@ -175,6 +175,14 @@ export const run = internalAction({
     const dossierVoice = (gathered.creator.dossier as { voice?: unknown; persona?: unknown } | undefined);
     const directiveTexts = gathered.directives.map((d) => d.verbatim);
     let text = pick.message.trim();
+    /**
+     * ⭐ The link is a FACT, not prose, so code guarantees it — and BEFORE the critic, so the
+     * critic judges the message as it will actually be sent. With the append after the critic,
+     * the critic failed the linkless draft for no_link, the rewrite was linkless too, and the
+     * whole idea was dropped: the second eval scenario sent nothing every run for that reason.
+     * Never the other way round: a link the evidence lacks is not invented.
+     */
+    if (links[0] && !/https?:\/\//.test(text)) text = `${text}\n\n${links[0]}`;
     let verdict = tooLong(text) ? { pass: false, problems: ["too_long" as const], note: "over the length cap" } : await critique(ctx, { creatorId: args.creatorId, kind: "scout", text, evidence: ev, voice: { voice: dossierVoice?.voice, persona: dossierVoice?.persona }, directives: directiveTexts });
     let criticSkipped = Boolean(verdict.skipped);
     if (!verdict.pass) {
@@ -201,14 +209,6 @@ export const run = internalAction({
      * because the measurement skipped the gate the real path goes through. An eval that
      * measures something other than what ships is worse than no eval.
      */
-    /**
-     * ⭐ The link is a FACT, not prose, so code guarantees it. The critic's no_link rule is a
-     * model's judgment and the model times out; the deterministic check then failed a scout
-     * message whose link sat right there in the evidence. Anything promised to the creator is
-     * enforced by the server: if the post has a URL and the message does not carry one, the
-     * URL goes on the end. Never the other way round: a link the evidence lacks is not invented.
-     */
-    if (links[0] && !/https?:\/\//.test(text)) text = `${text}\n\n${links[0]}`;
     if (args.dryRun) return { sent: false, reason: "dry run", dry: { message: text, pick, evidence, trace: inv.trace } };
     pick.message = text;
     const f = pick.features ?? {};
