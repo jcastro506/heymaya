@@ -71,6 +71,9 @@ describe("the allowance scales with the answer", () => {
   it("a long structured answer gets room to think in proportion", () => {
     // The live dossier: 3000 + 1500 truncated the JSON twice. It now gets 3000 to think in.
     expect(budgetFor("google/gemini-3.7-flash", 3000)).toBe(6000);
+    // And a short answer's floor must clear the worst thinker we route to: DeepSeek returned
+    // an empty completion judging one message inside 1500.
+    expect(REASONING_ALLOWANCE).toBeGreaterThanOrEqual(3_000);
   });
   it("a non-reasoning model is untouched at every size", () => {
     expect(budgetFor("openai/gpt-oss-120b", 3000)).toBe(3000);

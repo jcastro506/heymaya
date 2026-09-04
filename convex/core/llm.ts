@@ -97,10 +97,13 @@ export const REASONING_MODELS = [
  * be"*. Callers reason about output length; none of them can reason about how
  * long a model will deliberate, and requiring them to would put the trap back.
  *
- * 1500 covers the observed spread on SHORT answers — the measured cases ran 188
- * and 892 reasoning tokens on a few hundred tokens of output.
+ * ⚠️ Raised from 1500 to 3000 on 2026-09-04, after the critic's DeepSeek fallback returned
+ * an EMPTY completion on a live turn: it out-thought 1500 tokens judging one short message,
+ * so the reply shipped with no critic at all. `max_tokens` is a ceiling, not a charge — an
+ * unused allowance costs nothing — so the floor should sit above the worst thinker we route
+ * to, not at the average. Measured cases before this ran 188 and 892 tokens.
  */
-export const REASONING_ALLOWANCE = 1_500;
+export const REASONING_ALLOWANCE = 3_000;
 
 /**
  * ⚠️ The floor is not enough on its own: how long a model deliberates scales with
