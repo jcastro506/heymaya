@@ -448,6 +448,10 @@ export const proactiveSentToday = internalQuery({
       (row) =>
         row.direction === "out" &&
         row.proactive === true &&
+        // Reminders about a block THEY booked, and status notes, are not her spending the
+        // day's allowance on ideas (Sprint 4b: reminders have their own per-block budget).
+        row.kind !== "reminder" &&
+        row.kind !== "status" &&
         isSameDayInZone(row.ts, now, timezone),
     ).length;
   },

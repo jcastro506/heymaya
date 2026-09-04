@@ -28,7 +28,9 @@ export default defineSchema({
     niche: v.string(), // their one sentence, verbatim
     timezone: v.string(),
     quietHours: v.object({ start: v.string(), end: v.string() }),
-    preferredSendHour: v.optional(v.number()), // §13.10 (5) cadence: the local hour they tend to reply in, learned nightly // "22:00" / "07:00" local
+    preferredSendHour: v.optional(v.number()),
+    /** Sprint 4b: "i don't edit", said once, turns the editing block off for good. */
+    noEditBlock: v.optional(v.boolean()), // §13.10 (5) cadence: the local hour they tend to reply in, learned nightly // "22:00" / "07:00" local
     tone: v.union(v.literal("coach"), v.literal("friend"), v.literal("blunt")),
     mode: v.union(v.literal("full"), v.literal("thin"), v.literal("newCreator")),
     dossier: v.optional(v.any()), // Dossier (§14.1), zod-validated at write time
@@ -295,6 +297,12 @@ export default defineSchema({
     end: v.number(),
     title: v.string(),
     ideaId: v.optional(v.id("ideas")),
+    /** Sprint 4b: the week plan a block belongs to, so one tap books all of it. */
+    planKey: v.optional(v.string()),
+    /** Which reminder touches went out for this block; at most two, ever (Sprint 4b). */
+    touches: v.optional(v.array(v.string())),
+    /** Set when they said yes to the check-in or sent a clip during the block: the post-time nudge needs it. */
+    filmedAt: v.optional(v.number()),
     status: v.union(v.literal("proposed"), v.literal("confirmed"), v.literal("moved"), v.literal("deleted")),
     consentAt: v.optional(v.number()), // required before any external write
     externalEventId: v.optional(v.string()),
