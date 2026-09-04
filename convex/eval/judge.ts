@@ -7,6 +7,7 @@
 import type { ActionCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
+import { CRITIC_TIMEOUT_MS } from "../agent/critic";
 import { REGISTRY } from "../agent/registry";
 
 export interface Judgement { corny: number; generic: number; flattering: number; toolSpeak: number; specific: number; wouldSend: number; soundsLikeThem: number; note: string; model: string }
@@ -25,18 +26,18 @@ Output ONLY JSON: {"corny": 0, "generic": 0, "flattering": 0, "toolSpeak": 0, "s
 
 export async function judge(ctx: ActionCtx, input: { creatorId?: Id<"creators">; text: string; kind: string; evidence: unknown }): Promise<Judgement | null> {
   const spec = REGISTRY.critic; // a different family from the writer, by registry rule
-  const r = await callModel(ctx, {
-    creatorId: input.creatorId ?? ("" as Id<"creators">),
-    purpose: "eval_judge",
-    model: spec.primary,
-    messages: [
-      { role: "system", content: JUDGE_PROMPT },
-      { role: "user", content: `Purpose: ${input.kind}\n\nMessage:\n${input.text}\n\nEvidence she had:\n${JSON.stringify(input.evidence ?? null).slice(0, 4000)}` },
-    ],
-    temperature: 0,
-    maxTokens: 300,
-    apiKey: process.env.OPENROUTER_API_KEY ?? "",
-  });
+  const messages = [
+    { role: "system" as const, content: JUDGE_PROMPT },
+    { role: "user" as const, content: `Purpose: ${input.kind}\n\nMessage:\n${input.text}\n\nEvidence she had:\n${JSON.stringify(input.evidence ?? null).slice(0, 4000)}` },
+  ];
+  /**
+   * ⚠️ Same fallback and the same short timeout as the critic. The judge had neither, so
+   * every time the primary timed out (which on this deployment is every time) it returned
+   * null, the run scored "judged 0", and the gate went blind on exactly the dimensions a
+   * voice change is about. A soul rewrite passed the gate with corny and generic unmeasured.
+   */
+  let r = await callModel(ctx, { creatorId: input.creatorId ?? ("" as Id<"creators">), purpose: "eval_judge", model: spec.primary, messages, temperature: 0, maxTokens: 300, timeoutMs: CRITIC_TIMEOUT_MS, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+  if (!r.ok) r = await callModel(ctx, { creatorId: input.creatorId ?? ("" as Id<"creators">), purpose: "eval_judge_fallback", model: spec.fallback, messages, temperature: 0, maxTokens: 300, timeoutMs: CRITIC_TIMEOUT_MS, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
   if (!r.ok) return null;
   try {
     const m = r.content.match(/\{[\s\S]*\}/);

@@ -264,3 +264,16 @@ export const setTimezone = internalMutation({
     return { timezone: a.timezone };
   },
 });
+
+/** Dev only: the vendor's live price list for one family, because a price in a comment rots. */
+export const modelPrices = internalAction({
+  args: { match: v.string() },
+  handler: async (_ctx, a): Promise<Array<{ id: string; inPerM: number; outPerM: number }>> => {
+    const res = await fetch("https://openrouter.ai/api/v1/models", { headers: { Authorization: `Bearer ${process.env.OPENROUTER_API_KEY ?? ""}` } });
+    const body = (await res.json()) as { data?: Array<{ id: string; pricing?: { prompt?: string; completion?: string } }> };
+    return (body.data ?? [])
+      .filter((m) => m.id.includes(a.match) && !m.id.endsWith(":free"))
+      .map((m) => ({ id: m.id, inPerM: Math.round(Number(m.pricing?.prompt ?? 0) * 1e6 * 1000) / 1000, outPerM: Math.round(Number(m.pricing?.completion ?? 0) * 1e6 * 1000) / 1000 }))
+      .sort((x, y) => x.inPerM - y.inPerM);
+  },
+});

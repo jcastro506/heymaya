@@ -184,7 +184,14 @@ export const run = internalAction({
     const set = await ctx.runQuery(internal.eval.run.scenarioCreators, {});
     for (const creatorId of set.ids) await ctx.runMutation(internal.onboarding.dev.reopenSignals, { creatorId });
 
-    const started = Date.now();
+    /**
+     * ⚠️ A minute of slack. An action's clock and a mutation's clock are not the same clock
+     * in Convex (a mutation's Date.now() is its transaction timestamp), and on one run every
+     * eval row landed a few milliseconds BEFORE `started`, so the gate read zero of its own
+     * rows and reported "sent 0/0" as a total regression. Rows from an earlier run cannot
+     * sneak in: the suite is the only writer of this suite name and runs serially.
+     */
+    const started = Date.now() - 60_000;
     const r = await ctx.runAction(internal.eval.run.scout, { n: a.n ?? 2 });
 
     const rows = await ctx.runQuery(internal.eval.gate.rowsSince, { since: started, suite });
