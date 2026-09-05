@@ -128,7 +128,7 @@ export async function followerStats(c: ZernioClient, accountIds: string[], profi
 }
 
 /** The events we care about for connections; publishing events are not subscribed. */
-export const CONNECTION_EVENTS = ["account.connected", "account.disconnected"] as const;
+export const CONNECTION_EVENTS = ["account.connected", "account.disconnected", "analytics.synced"] as const;
 
 export async function subscribeWebhook(c: ZernioClient, args: { name: string; url: string; secret: string; events?: string[] }): Promise<{ id: string }> {
   const raw = await c.request<{ _id?: string; id?: string }>("/api/v1/webhooks/settings", { method: "POST", body: { name: args.name, url: args.url, events: args.events ?? [...CONNECTION_EVENTS], secret: args.secret, isActive: true } });

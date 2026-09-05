@@ -214,6 +214,9 @@ export const zernioWebhook = httpAction(async (ctx, request) => {
     return new Response("bad json", { status: 400 });
   }
   const type = body.type ?? body.event ?? "";
+  // Sprint 4e: numbers landed somewhere; pull the delta now rather than at the next hour.
+  // Scheduled, so the webhook answers fast and a slow pull can never make Zernio retry it.
+  if (type === "analytics.synced") await ctx.scheduler.runAfter(0, internal.connections.sync.delta, {});
   const profileId = String(body.profileId ?? body.data?.profileId ?? (body.data?.account as { profileId?: string } | undefined)?.profileId ?? "");
   if (!type.startsWith("account.") || !profileId) return new Response("ignored", { status: 200 });
   const conn = await ctx.runQuery(internal.connections.zernio.byProfile, { zernioProfileId: profileId });

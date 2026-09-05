@@ -72,6 +72,9 @@ crons.daily("retention", { hourUTC: 3, minuteUTC: 30 }, internal.core.retention.
 crons.hourly("creator status", { minuteUTC: 25 }, internal.core.status.run, {});
 
 // Cost reconciliation (§16.4): the vendor's count of credits used today against our ledger, within ten percent.
+// Sprint 4e: connected numbers. The delta feed hourly (only what changed, fleet-wide), followers daily.
+crons.hourly("zernio delta", { minuteUTC: 25 }, internal.connections.sync.delta, {});
+crons.daily("zernio followers", { hourUTC: 4, minuteUTC: 40 }, internal.connections.sync.followers, {});
 crons.daily("cost reconcile", { hourUTC: 23, minuteUTC: 30 }, internal.core.reconcile.run, {});
 
 export default crons;

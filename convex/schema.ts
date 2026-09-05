@@ -377,6 +377,10 @@ export default defineSchema({
     at: v.number(),
   }).index("by_creator", ["creatorId", "at"]),
 
+  // ------------------------------------------------------------------ syncState
+  // Sprint 4e: fleet-wide cursors (the Zernio delta feed). Not per creator; never purged.
+  syncState: defineTable({ key: v.string(), value: v.string(), updatedAt: v.number() }).index("by_key", ["key"]),
+
   // --------------------------------------------------------- followerSnapshots
   // Sprint 4e: one row per account per day from Zernio's follower stats (needs their add-on).
   followerSnapshots: defineTable({
