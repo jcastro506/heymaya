@@ -16,6 +16,7 @@ Before you judge a candidate that might be notable, answer these with tools (ski
 4. Is this shape a wave this week? search_keyword with the shape's plainest keyword; three or more accounts doing it this week means "get in now or skip", one account means "their thing". Trends are region-specific: the trending feeds are for the creator's country, and one post is never a trend.
 5. Is it theirs to take? own_rhymes with the topic or format; if they have done it and it beat their normal, say so with the number; if they have done it and it fell flat, say that too.
 6. Does something in their life fit it? calendar_upcoming, once, when the idea could ride an event.
+7. Have they told you anything about this, or saved something like it? recall (free) with the idea's plainest words: a saved idea or a note they gave you beats your guess about their taste.
 Spend on at most two candidates. If the budget is gone, answer with what you have and say what you could not check.`,
 
   opinion: `
@@ -25,6 +26,7 @@ For a link, before the read:
 3. account_posts on the author to know whether this is their normal; a read against a fluke is worthless.
 4. post_comments only when the reaction changes a fix (people asking the same question is a fix; "fire" fifty times is not).
 5. own_rhymes for their own history with this structure; cite their multiple when they have one. lane_benchmark is free: a number is only good or bad next to the lane's median.
+6. recall (free) for what they have said about this kind of post before, or an idea of yours they saved that it resembles; their own words outrank your read.
 For a draft file there is nothing to look up except own_rhymes; the card and their history are the evidence.`,
 
   explainPost: `
@@ -32,6 +34,7 @@ Before explaining their own post:
 1. own_rhymes for what they did last time with this structure, and how it did; lane_benchmark (free) so the number sits next to the lane's median, not in a vacuum.
 2. search_keyword for the post's plainest keyword this week: if the lane's top post on it is theirs, say so; if someone else's did five times better, that is the thing to name.
 3. post_comments on their own post if the comments carry the reason (a question, a correction, a bit that landed).
+4. recall (free): was this one of your ideas, or something they told you they wanted to try? Say so when it was.
 No more than three lookups; under 48 hours old the numbers are too fresh, say when you will know, and look nothing up.`,
 
   profile: `
@@ -40,10 +43,10 @@ Before answering why an account is growing:
 2. post_transcript on the top two outliers if you don't already have them; the words are the format. Segment each: hook, setup, the claim, the evidence, the payoff, the ask. Repeated hook formulas across outliers are the lesson.
 3. sound_info on the biggest outlier's sound if it has one: growth on a borrowed sound is a different lesson from growth on a premise.
 4. search_keyword for their plainest topic: are they the lane's top, or riding a wave?
-5. own_rhymes to decide what of it is this creator's to take. Four lookups at most.`,
+5. own_rhymes to decide what of it is this creator's to take, and recall (free) for anything they have said about this account or this kind of format. Four paid lookups at most.`,
 
   review: `
-You have the week's numbers, cards and the lane's median (say it: "your normal is X, the lane's median is Y"). One lookup is worth it, at most two: for the post you cannot explain (the one furthest from their normal, up or down), search_keyword for its plainest keyword to see whether the lane moved that week, or own_rhymes to see whether they have done it before. Everything else in the review comes from what you were given.`,
+You have the week's numbers, cards and the lane's median (say it: "your normal is X, the lane's median is Y"). One lookup is worth it, at most two: for the post you cannot explain (the one furthest from their normal, up or down), search_keyword for its plainest keyword to see whether the lane moved that week, or own_rhymes to see whether they have done it before. recall is free and does not count: use it for what they told you this week that the numbers don't show. Everything else in the review comes from what you were given.`,
 } as const;
 
 export type LookupSkill = keyof typeof LOOKUPS;

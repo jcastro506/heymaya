@@ -449,6 +449,27 @@ The manifest also carries **the scar tissue**, as a numbered list with the incid
 
 **Cost gate.** Sync cost per connected creator per month under $0.10 via the delta feed; the add-on priced into §3.8.
 
+**The audit (2026-09-05): does anything use connected numbers today? No.** Every one of the 21 modules that reads a number about the creator's own posts reads the scraped counters (`metrics.views`, `multiple`); nothing reads reach, impressions, clicks, watch time or skip rate, and the only place "watch time" appears in a skill is opinion's list of what she *cannot* know. The Results tab already carries `source` and `metricsAsOf` per post, which is the one piece of labelling that exists. This table is the 4e build list: what each consumer does now, and what it must do when connected numbers are present.
+
+| Consumer | Reads today | With connected numbers |
+|---|---|---|
+| `onboarding/ingest` (multiples, baseline) | scraped views | baseline and `multiple` on **reach** where present, views otherwise; the basis stored on the row |
+| `scout/readback` (win at 3×) | views multiple | reach multiple; a win says "reached 14k people, 3× your normal" |
+| `review/rung` (L0/L1/L2) | views + engagement per view | **reach** separates "not distributed" from "distributed, scrolled" — the two rungs this logic guesses at today; engagement on one basis (÷ reach) |
+| `review/weekly` (the Sunday read) | views, multiples | + one retention line when Reels data exists; + follower delta; every number labelled connected/public |
+| `review/predictions` (her track record) | outcome multiple on views | outcome on reach where present, so her calls are scored on what people saw, not on what the algorithm showed |
+| `agent/opinion` (draft + own-post verdicts) | views, multiple, "cannot know watch time" | their own hook-drop history informs the prediction; on a Reel, retention and the drop second; the "cannot know" line becomes platform-aware |
+| `agent/voice` (exemplars by outcome) | multiple | multiple on reach where present, so a line that *reached* people ranks above one the algorithm merely pushed |
+| `taste/outcomes` (win/flop write-back) | multiple | reach-based multiple where present; a `hook lost them` diagnosis (skip rate) becomes its own negative event on the hook feature |
+| `calendar/postTime` (best hours) | hour vs views multiple | hour vs **reach**: when people were actually shown it, which is the question |
+| `calendar/weekPlan` / `history` / `context` (what she cites) | views | cite reach when connected and say which; never mix bases in one sentence |
+| `onboarding/lane` (keywords by performance) | multiple | unchanged in shape; reach-weighted where present |
+| `scout/roster`, `scout/matchPost`, `agent/tools`, `agent/toolsData`, `agent/profile` | views / multiple as evidence | pass the basis through; `own_post_numbers` and `post_diagnosis` tools added (§4e) |
+| `ui` (Results, Ideas) | views, `source`, `metricsAsOf` | reach and retention columns when present; source label already exists |
+| `eval/checks` `numbers_grounded` | any number ≥100 must be in evidence | + `mixed_basis`: a TikTok counter and a Reels retention in one claim fails |
+
+Two rules across all of it: **connected wins, labelled, and stale falls back to public and says so**; and **platform-inapplicable zeros become null at ingestion**, so no consumer ever sees a TikTok "watch time" of 0.
+
 **Operator-gated:** the throwaway Zernio account with one TikTok and one Instagram connected, so the response shape is recorded as a fixture before a line of this ships (`connections/zernio:probeAnalytics`).
 
 ### Sprint 5 — Money, channel, and cutover · pairs with S5
