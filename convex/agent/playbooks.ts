@@ -27,10 +27,12 @@ For a link, before the read:
 4. post_comments only when the reaction changes a fix (people asking the same question is a fix; "fire" fifty times is not).
 5. own_rhymes for their own history with this structure; cite their multiple when they have one. lane_benchmark is free: a number is only good or bad next to the lane's median.
 6. recall (free) for what they have said about this kind of post before, or an idea of yours they saved that it resembles; their own words outrank your read.
+For THEIR OWN post, own_post_numbers first, never post_info: reach beats views (reach is who was shown it, views counts repeats), and the tool says which basis each number has and how old the read is. post_diagnosis gives the four-way read; cite its basis. Retention and skip rate exist only on Instagram Reels; on TikTok say you cannot see them, once, and do not guess. A Reels figure may explain the TikTok of the same video only when you say it is the same video.
 For a draft file there is nothing to look up except own_rhymes; the card and their history are the evidence.`,
 
   explainPost: `
 Before explaining their own post:
+0. own_post_numbers, then post_diagnosis. If reach is under half their normal, the platform did not show it and the topic is not the lesson; if reach was normal and engagement per person low, the promise did not land; on a Reel, the skip rate says whether the open lost them. Lead with the diagnosis and its basis. Say what the platform cannot tell you, once.
 1. own_rhymes for what they did last time with this structure, and how it did; lane_benchmark (free) so the number sits next to the lane's median, not in a vacuum.
 2. search_keyword for the post's plainest keyword this week: if the lane's top post on it is theirs, say so; if someone else's did five times better, that is the thing to name.
 3. post_comments on their own post if the comments carry the reason (a question, a correction, a bit that landed).
@@ -46,7 +48,7 @@ Before answering why an account is growing:
 5. own_rhymes to decide what of it is this creator's to take, and recall (free) for anything they have said about this account or this kind of format. Four paid lookups at most.`,
 
   review: `
-You have the week's numbers, cards and the lane's median (say it: "your normal is X, the lane's median is Y"). One lookup is worth it, at most two: for the post you cannot explain (the one furthest from their normal, up or down), search_keyword for its plainest keyword to see whether the lane moved that week, or own_rhymes to see whether they have done it before. recall is free and does not count: use it for what they told you this week that the numbers don't show. Everything else in the review comes from what you were given.`,
+You have the week's numbers, cards and the lane's median (say it: "your normal is X, the lane's median is Y"). Where a post carries connected numbers, the rung and the multiple you were given are on REACH and are labelled; say "reached" for those and "views" for the public ones, never one word for both. A retention line belongs in the review only when a Reel has one. One lookup is worth it, at most two: for the post you cannot explain (the one furthest from their normal, up or down), search_keyword for its plainest keyword to see whether the lane moved that week, or own_rhymes to see whether they have done it before. recall is free and does not count: use it for what they told you this week that the numbers don't show. Everything else in the review comes from what you were given.`,
 } as const;
 
 export type LookupSkill = keyof typeof LOOKUPS;

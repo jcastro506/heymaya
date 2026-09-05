@@ -17,7 +17,7 @@ import { checkPlainLanguage } from "../core/plainLanguage";
  *
  * `rubric.test.ts` fails if the checks change without this being bumped.
  */
-export const RUBRIC_VERSION = "2";
+export const RUBRIC_VERSION = "3";
 
 
 export interface Check { name: string; pass: boolean; detail: string }
@@ -116,6 +116,17 @@ export function runChecks(input: { text: string; evidence: unknown; kind: string
    *    anywhere, which sent me looking in the wrong place for half an hour.
    * The rule now: if there is a post to link, the message must carry the link.
    */
+  /**
+   * Sprint 4e: a TikTok counter and a Reels retention number in one claim is a category
+   * error — TikTok exposes no retention to anyone — unless the message says the retention is
+   * from the Reel of the same video. Measured, not enforced; the critic carries the tell.
+   */
+  const retentionClaim = /watched \d+%|left in the first 3 seconds|skip rate|retention/i.test(text);
+  const tiktokClaim = /tiktok/i.test(text);
+  const transferred = /same video|the reel of|on the reel|cross-?post/i.test(text);
+  if (retentionClaim && tiktokClaim && !transferred) checks.push({ name: "mixed_basis", pass: false, detail: "a TikTok number and a retention figure in one claim with no cross-post link named" });
+  else if (retentionClaim) checks.push({ name: "mixed_basis", pass: true, detail: transferred ? "retention transferred with the link named" : "retention cited on its own platform" });
+
   if (input.kind === "scout") {
     const inText = /https?:\/\//.test(text);
     const inEvidence = /https?:\/\//.test(evidence);
