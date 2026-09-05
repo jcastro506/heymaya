@@ -37,6 +37,7 @@ export const TABLES_BY_CREATOR = [
   "costEvents",
   "memories",
   "laneReads",
+  "followerSnapshots",
   "evalRuns",
   "evalLabels",
 ] as const;

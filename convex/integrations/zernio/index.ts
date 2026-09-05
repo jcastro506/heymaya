@@ -94,7 +94,12 @@ export async function connectUrl(c: ZernioClient, platform: ZernioPlatform, prof
 }
 
 export async function listAccounts(c: ZernioClient, profileId: string): Promise<ZernioAccount[]> {
-  const raw = await c.request<{ accounts?: Array<Record<string, unknown>>; hasAnalyticsAccess?: boolean } | Array<Record<string, unknown>>>("/api/v1/accounts", { query: { profileId, limit: 50 } });
+  const raw = await c.request<{ accounts?: Array<Record<string, unknown>>; hasAnalyticsAccess?: boolean } | Array<Record<string, unknown>>>("/api/v1/accounts", {
+    // ⚠️ `limit` without `page` is a 400 ("page and limit must be provided together"), so
+    // every reconcile came back "unreadable" until this was tested against the live API
+    // (2026-09-05). The spec does not say so; the recording did.
+    query: { profileId, page: 1, limit: 50 },
+  });
   const rows = Array.isArray(raw) ? raw : (raw?.accounts ?? []);
   const access = Array.isArray(raw) ? undefined : raw?.hasAnalyticsAccess;
   return rows.map((r) => normalizeAccount(r, access)).filter((x): x is ZernioAccount => x !== null);

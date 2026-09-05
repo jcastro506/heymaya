@@ -309,3 +309,39 @@ export const fetchGrep = internalAction({
     return { total: lines.length, hits, text: out.join("\n").slice(0, a.max ?? 5000) };
   },
 });
+
+/** Dev only: what the Zernio key can see — profiles, accounts, and a first analytics page per account. Truncated bodies, no secrets. */
+export const zernioInventory = internalAction({
+  args: { analyticsLimit: v.optional(v.number()) },
+  handler: async (_ctx, a): Promise<{ profiles: unknown; accounts: unknown; analytics: Record<string, unknown>; followers: unknown }> => {
+    const key = process.env.ZERNIO_API_KEY ?? "";
+    const base = process.env.ZERNIO_BASE_URL ?? "https://zernio.com";
+    const get = async (path: string): Promise<unknown> => {
+      const res = await fetch(`${base}${path}`, { headers: { Authorization: `Bearer ${key}` } });
+      const text = await res.text();
+      try { return { status: res.status, body: JSON.parse(text) }; } catch { return { status: res.status, body: text.slice(0, 400) }; }
+    };
+    const profiles = await get("/api/v1/profiles");
+    const accounts = await get("/api/v1/accounts");
+    const analytics: Record<string, unknown> = {};
+    const rows = ((accounts as { body?: { data?: unknown[]; accounts?: unknown[] } }).body?.data ?? (accounts as { body?: { accounts?: unknown[] } }).body?.accounts ?? []) as Array<Record<string, unknown>>;
+    const ids: string[] = [];
+    for (const r of rows.slice(0, 4)) {
+      const id = String(r._id ?? r.id ?? r.accountId ?? "");
+      if (!id) continue;
+      ids.push(id);
+      analytics[`${String(r.platform ?? "?")}:${id}`] = await get(`/api/v1/analytics?accountId=${encodeURIComponent(id)}&limit=${a.analyticsLimit ?? 3}`);
+    }
+    const followers = ids.length ? await get(`/api/v1/accounts/follower-stats?accountIds=${encodeURIComponent(ids.join(","))}`) : null;
+    return { profiles, accounts, analytics, followers };
+  },
+});
+
+/** Dev only: one authenticated GET against Zernio, body truncated. */
+export const zernioGet = internalAction({
+  args: { path: v.string(), max: v.optional(v.number()) },
+  handler: async (_ctx, a): Promise<{ status: number; body: string }> => {
+    const res = await fetch(`${process.env.ZERNIO_BASE_URL ?? "https://zernio.com"}${a.path}`, { headers: { Authorization: `Bearer ${process.env.ZERNIO_API_KEY ?? ""}` } });
+    return { status: res.status, body: (await res.text()).slice(0, a.max ?? 600) };
+  },
+});

@@ -45,6 +45,7 @@ import type * as calendar_time from "../calendar/time.js";
 import type * as calendar_tools from "../calendar/tools.js";
 import type * as calendar_weekPlan from "../calendar/weekPlan.js";
 import type * as config_thresholds from "../config/thresholds.js";
+import type * as connections_analytics from "../connections/analytics.js";
 import type * as connections_zernio from "../connections/zernio.js";
 import type * as contracts_dossier from "../contracts/dossier.js";
 import type * as core_alerts from "../core/alerts.js";
@@ -170,6 +171,7 @@ declare const fullApi: ApiFromModules<{
   "calendar/tools": typeof calendar_tools;
   "calendar/weekPlan": typeof calendar_weekPlan;
   "config/thresholds": typeof config_thresholds;
+  "connections/analytics": typeof connections_analytics;
   "connections/zernio": typeof connections_zernio;
   "contracts/dossier": typeof contracts_dossier;
   "core/alerts": typeof core_alerts;

@@ -193,6 +193,30 @@ export default defineSchema({
     }),
     metricsAsOf: v.number(),
     source: v.union(v.literal("scrape"), v.literal("zernio"), v.literal("official"), v.literal("screenshot")),
+    /**
+     * Sprint 4e: the owner-only numbers from a connected account, kept BESIDE the public
+     * counters so both can be cited and labelled. Null means the platform does not expose it
+     * or it has not synced; never zero-for-unavailable (see connections/analytics.ts).
+     */
+    connected: v.optional(v.object({
+      asOf: v.union(v.number(), v.null()),
+      syncStatus: v.string(),
+      views: v.union(v.number(), v.null()),
+      likes: v.union(v.number(), v.null()),
+      comments: v.union(v.number(), v.null()),
+      shares: v.union(v.number(), v.null()),
+      saves: v.union(v.number(), v.null()),
+      impressions: v.union(v.number(), v.null()),
+      reach: v.union(v.number(), v.null()),
+      clicks: v.union(v.number(), v.null()),
+      follows: v.union(v.number(), v.null()),
+      avgWatchMs: v.union(v.number(), v.null()),
+      totalWatchMs: v.union(v.number(), v.null()),
+      skipRatePct: v.union(v.number(), v.null()),
+      durationSec: v.union(v.number(), v.null()),
+    })),
+    /** Sprint 4e: reach ÷ their normal reach, where reach exists. The multiple on views stays as `multiple`. */
+    reachMultiple: v.optional(v.number()),
     multiple: v.optional(v.number()), // views / creator baseline at capture
     matchCheckedAt: v.optional(v.number()), // §13.5: match-post has judged this post against recent ideas
     transcript: v.optional(v.string()),
@@ -352,6 +376,17 @@ export default defineSchema({
     features: v.array(v.string()), // "format:skit", "account:@x", "source:breakout", …
     at: v.number(),
   }).index("by_creator", ["creatorId", "at"]),
+
+  // --------------------------------------------------------- followerSnapshots
+  // Sprint 4e: one row per account per day from Zernio's follower stats (needs their add-on).
+  followerSnapshots: defineTable({
+    creatorId: v.id("creators"),
+    platform: v.string(),
+    accountId: v.string(),
+    day: v.string(),          // YYYY-MM-DD UTC
+    followers: v.number(),
+    at: v.number(),
+  }).index("by_creator_day", ["creatorId", "day"]),
 
   // ---------------------------------------------------------------- laneReads
   // Sprint 4d: the lane she proposed, kept so the tap confirms what she actually said.

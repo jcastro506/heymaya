@@ -1,0 +1,577 @@
+{
+ "recordedAt": "2026-09-05",
+ "note": "real Zernio responses from the throwaway profile; media/thumbnail urls replaced with <url>, platformPostUrl kept; metadata and credentials dropped",
+ "/api/v1/profiles": {
+  "profiles": [
+   {
+    "_id": "69efc400ef4ae79c0fd3ce38",
+    "accountUsernames": [
+     "kevin.castro9996",
+     "heymaya182"
+    ],
+    "color": "#ffeda0",
+    "createdAt": "2026-04-27T20:16:00.128Z",
+    "isDefault": true,
+    "name": "Default",
+    "updatedAt": "2026-04-27T20:16:00.128Z",
+    "userId": "69efc400ef4ae79c0fd3ce36"
+   },
+   {
+    "_id": "6a1f367f2490baa3a41b8f19",
+    "accountUsernames": [],
+    "color": "#ffeda0",
+    "createdAt": "2026-06-02T20:01:03.581Z",
+    "description": "S1 live-smoke de-risk (delete after).",
+    "isDefault": false,
+    "name": "Maya S1 smoke profile",
+    "updatedAt": "2026-06-02T20:01:03.581Z",
+    "userId": "69efc400ef4ae79c0fd3ce36"
+   },
+   {
+    "_id": "6a21fb9bdb636d5484c5a068",
+    "accountUsernames": [],
+    "color": "#ffeda0",
+    "createdAt": "2026-06-04T22:26:35.879Z",
+    "description": "HeyMaya managed profile",
+    "isDefault": false,
+    "name": "maya-agent-ws7bkxt2710wxed8grf45bb8v1880w8p",
+    "updatedAt": "2026-06-04T22:26:35.879Z",
+    "userId": "69efc400ef4ae79c0fd3ce36"
+   },
+   {
+    "_id": "6a228c444d4795482bc66877",
+    "accountUsernames": [],
+    "color": "#ffeda0",
+    "createdAt": "2026-06-05T08:43:48.886Z",
+    "description": "HeyMaya managed profile",
+    "isDefault": false,
+    "name": "maya-agent-ws74ffhm715essvpejs45tbmtx8839bh",
+    "updatedAt": "2026-06-05T08:43:48.886Z",
+    "userId": "69efc400ef4ae79c0fd3ce36"
+   },
+   {
+    "_id": "6a25b5cc1798c82672dbf7be",
+    "accountUsernames": [],
+    "color": "#ffeda0",
+    "createdAt": "2026-06-07T18:17:48.237Z",
+    "description": "HeyMaya managed profile",
+    "isDefault": false,
+    "name": "maya-agent-ws79kbsprtb1bx1ardeaemesj98875kp",
+    "updatedAt": "2026-06-07T18:17:48.237Z",
+    "userId": "69efc400ef4ae79c0fd3ce36"
+   },
+   {
+    "_id": "6a25c29723f2605e10cda9d4",
+    "accountUsernames": [],
+    "color": "#ffeda0",
+    "createdAt": "2026-06-07T19:12:23.212Z",
+    "description": "HeyMaya managed profile",
+    "isDefault": false,
+    "name": "maya-agent-ws79qrpsj7vjqbwawnan4wey8h886t53",
+    "updatedAt": "2026-06-07T19:12:23.212Z",
+    "userId": "69efc400ef4ae79c0fd3ce36"
+   }
+  ]
+ },
+ "/api/v1/accounts": {
+  "accounts": [
+   {
+    "__v": 0,
+    "_id": "6a9c9de477555aae01e25d5b",
+    "adsNextSyncDueAt": "1970-01-01T00:00:00.000Z",
+    "adsStatus": "connected",
+    "adsSyncFailureCount": 0,
+    "analyticsLastEnqueuedAt": "1970-01-01T00:00:00.000Z",
+    "analyticsLastRequestedAt": null,
+    "analyticsLastSyncError": null,
+    "analyticsLastSyncedAt": "2026-09-05T22:55:34.189Z",
+    "analyticsSyncFailureCount": 0,
+    "createdAt": "2026-09-05T22:55:32.799Z",
+    "displayName": "HeyMaya",
+    "dmHistoryBackfillAt": "2026-09-05T22:55:34.605Z",
+    "dmHistoryBackfillStatus": "done",
+    "enabled": true,
+    "externalPostCount": 3,
+    "followersCount": 0,
+    "followersLastUpdated": "2026-09-05T22:55:32.755Z",
+    "inboxAuthErrorAt": null,
+    "inboxConversationsSyncedAt": null,
+    "inboxSyncFailCount": 0,
+    "inboxSyncFailedAt": null,
+    "intentionalDisconnectAt": null,
+    "isActive": true,
+    "lastSyncDurationMs": null,
+    "needsReconnection": false,
+    "parentAccountId": null,
+    "permissions": [
+     "instagram_business_basic",
+     "instagram_business_content_publish",
+     "instagram_business_manage_insights",
+     "instagram_business_manage_comments",
+     "instagram_business_manage_messages"
+    ],
+    "platform": "instagram",
+    "platformStatus": "active",
+    "platformStatusAt": null,
+    "platformStatusReason": null,
+    "platformUserId": "27546920341662621",
+    "profileId": {
+     "_id": "69efc400ef4ae79c0fd3ce38",
+     "name": "Default"
+    },
+    "profileUrl": "https://instagram.com/heymaya182",
+    "rateLimitCount": 0,
+    "tokenExpiresAt": "2026-11-04T22:55:32.755Z",
+    "updatedAt": "2026-09-05T22:55:34.925Z",
+    "userId": "69efc400ef4ae79c0fd3ce36",
+    "username": "heymaya182",
+    "xCapabilities": {
+     "analytics": false,
+     "inbox": false
+    },
+    "xCapabilitiesAutoDisabled": {
+     "analytics": false,
+     "inbox": false
+    },
+    "youtubeCanUploadThumbnails": null,
+    "youtubeThumbnailCapCheckedAt": null
+   },
+   {
+    "__v": 0,
+    "_id": "6a9c9dd377555aae01e25d16",
+    "adsNextSyncDueAt": "1970-01-01T00:00:00.000Z",
+    "adsStatus": "not_connected",
+    "adsSyncFailureCount": 0,
+    "analyticsLastEnqueuedAt": "1970-01-01T00:00:00.000Z",
+    "analyticsLastRequestedAt": null,
+    "analyticsLastSyncError": null,
+    "analyticsLastSyncedAt": "2026-09-05T22:55:16.644Z",
+    "analyticsSyncFailureCount": 0,
+    "createdAt": "2026-09-05T22:55:15.569Z",
+    "displayName": "Kevin Castro",
+    "enabled": true,
+    "externalPostCount": 7,
+    "followersCount": 2,
+    "followersLastUpdated": "2026-09-05T22:55:15.520Z",
+    "inboxAuthErrorAt": null,
+    "inboxConversationsSyncedAt": null,
+    "inboxSyncFailCount": 0,
+    "inboxSyncFailedAt": null,
+    "intentionalDisconnectAt": null,
+    "isActive": true,
+    "lastSyncDurationMs": null,
+    "needsReconnection": false,
+    "parentAccountId": null,
+    "permissions": [
+     "video.upload",
+     "user.info.basic",
+     "user.info.profile",
+     "user.info.stats",
+     "video.list",
+     "video.publish"
+    ],
+    "platform": "tiktok",
+    "platformStatus": "active",
+    "platformStatusAt": null,
+    "platformStatusReason": null,
+    "platformUserId": "-000cB0W31VFNL-3Q6HhcGg9bGhSLbZFTgor",
+    "profileId": {
+     "_id": "69efc400ef4ae79c0fd3ce38",
+     "name": "Default"
+    },
+    "profileUrl": "https://tiktok.com/@kevin.castro9996",
+    "rateLimitCount": 0,
+    "tokenExpiresAt": "2026-09-06T22:55:15.520Z",
+    "updatedAt": "2026-09-05T22:55:17.055Z",
+    "userId": "69efc400ef4ae79c0fd3ce36",
+    "username": "kevin.castro9996",
+    "xCapabilities": {
+     "analytics": false,
+     "inbox": false
+    },
+    "xCapabilitiesAutoDisabled": {
+     "analytics": false,
+     "inbox": false
+    },
+    "youtubeCanUploadThumbnails": null,
+    "youtubeThumbnailCapCheckedAt": null
+   }
+  ],
+  "hasAnalyticsAccess": true
+ },
+ "/api/v1/accounts/follower-stats": {
+  "accounts": [
+   {
+    "_id": "6a9c9dd377555aae01e25d16",
+    "currentFollowers": 2,
+    "dataPoints": 0,
+    "displayName": "Kevin Castro",
+    "growth": 0,
+    "growthPercentage": 0,
+    "isActive": true,
+    "lastUpdated": "2026-09-05T22:55:15.520Z",
+    "platform": "tiktok",
+    "profileId": "69efc400ef4ae79c0fd3ce38",
+    "username": "kevin.castro9996"
+   },
+   {
+    "_id": "6a9c9de477555aae01e25d5b",
+    "currentFollowers": 0,
+    "dataPoints": 0,
+    "displayName": "HeyMaya",
+    "growth": 0,
+    "growthPercentage": 0,
+    "isActive": true,
+    "lastUpdated": "2026-09-05T22:55:32.755Z",
+    "platform": "instagram",
+    "profileId": "69efc400ef4ae79c0fd3ce38",
+    "username": "heymaya182"
+   }
+  ],
+  "dateRange": {
+   "from": "2025-01-01T00:00:00.000Z",
+   "to": "2026-09-05T23:59:59.999Z"
+  },
+  "granularity": "daily",
+  "stats": {
+   "6a9c9dd377555aae01e25d16": [],
+   "6a9c9de477555aae01e25d5b": []
+  }
+ },
+ "/api/v1/analytics?accountId=6a9c9de477555aae01e25d5b": {
+  "accounts": [
+   {
+    "_id": "6a9c9dd377555aae01e25d16",
+    "displayName": "Kevin Castro",
+    "followersCount": 2,
+    "followersLastUpdated": "2026-09-05T22:55:15.520Z",
+    "platform": "tiktok",
+    "profileId": "69efc400ef4ae79c0fd3ce38",
+    "username": "kevin.castro9996"
+   },
+   {
+    "_id": "6a9c9de477555aae01e25d5b",
+    "displayName": "HeyMaya",
+    "followersCount": 0,
+    "followersLastUpdated": "2026-09-05T22:55:32.755Z",
+    "platform": "instagram",
+    "profileId": "69efc400ef4ae79c0fd3ce38",
+    "username": "heymaya182"
+   }
+  ],
+  "hasAnalyticsAccess": true,
+  "overview": {
+   "dataStaleness": {
+    "staleAccountCount": 0,
+    "syncTriggered": false
+   },
+   "lastSync": "2026-09-05T22:55:34.189Z",
+   "publishedPosts": 3,
+   "scheduledPosts": 0,
+   "totalPosts": 3
+  },
+  "pagination": {
+   "limit": 5,
+   "page": 1,
+   "pages": 1,
+   "total": 3
+  },
+  "posts": [
+   {
+    "_id": "6a9c9de60d146b19a66ecfcf",
+    "analytics": {
+     "clicks": 0,
+     "comments": 0,
+     "engagementRate": 0,
+     "follows": 0,
+     "igReelsAvgWatchTime": 0,
+     "igReelsVideoViewTotalTime": 0,
+     "impressions": 3,
+     "lastUpdated": "2026-09-05 22:55:34",
+     "likes": 0,
+     "reach": 3,
+     "reelsSkipRate": 0,
+     "reposts": 0,
+     "saves": 0,
+     "shares": 0,
+     "videoDurationSeconds": null,
+     "views": 3
+    },
+    "content": "third pipeline test, this one should get its link back",
+    "isAd": false,
+    "isAiGenerated": false,
+    "isExternal": true,
+    "latePostId": null,
+    "mediaProductType": "FEED",
+    "mediaType": "image",
+    "platform": "instagram",
+    "platformPostUrl": "https://www.instagram.com/p/DbrZ8lIlxma/",
+    "platforms": [
+     {
+      "accountId": "6a9c9de477555aae01e25d5b",
+      "accountUsername": "heymaya182",
+      "analytics": {
+       "clicks": 0,
+       "comments": 0,
+       "engagementRate": 0,
+       "follows": 0,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "impressions": 3,
+       "lastUpdated": "2026-09-05 22:55:34",
+       "likes": 0,
+       "reach": 3,
+       "reelsSkipRate": 0,
+       "reposts": 0,
+       "saves": 0,
+       "shares": 0,
+       "videoDurationSeconds": null,
+       "views": 3
+      },
+      "errorMessage": null,
+      "platform": "instagram",
+      "platformPostId": "18126394246784607",
+      "platformPostUrl": "https://www.instagram.com/p/DbrZ8lIlxma/",
+      "status": "published",
+      "syncStatus": "synced"
+     }
+    ],
+    "profileId": "69efc400ef4ae79c0fd3ce38",
+    "publishedAt": "2026-08-06T00:16:34.000Z",
+    "scheduledFor": "2026-08-06T00:16:34.000Z",
+    "status": "published"
+   },
+   {
+    "_id": "6a9c9de60d146b19a66ecfce",
+    "analytics": {
+     "clicks": 0,
+     "comments": 0,
+     "engagementRate": 0,
+     "follows": 0,
+     "igReelsAvgWatchTime": 0,
+     "igReelsVideoViewTotalTime": 0,
+     "impressions": 4,
+     "lastUpdated": "2026-09-05 22:55:34",
+     "likes": 0,
+     "reach": 3,
+     "reelsSkipRate": 0,
+     "reposts": 0,
+     "saves": 0,
+     "shares": 0,
+     "videoDurationSeconds": null,
+     "views": 4
+    },
+    "content": "second pipeline test, checking the link comes back",
+    "isAd": false,
+    "isAiGenerated": false,
+    "isExternal": true,
+    "latePostId": null,
+    "mediaProductType": "FEED",
+    "mediaType": "image",
+    "platform": "instagram",
+    "platformPostUrl": "https://www.instagram.com/p/DbrZs7kjIvF/",
+    "platforms": [
+     {
+      "accountId": "6a9c9de477555aae01e25d5b",
+      "accountUsername": "heymaya182",
+      "analytics": {
+       "clicks": 0,
+       "comments": 0,
+       "engagementRate": 0,
+       "follows": 0,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "impressions": 4,
+       "lastUpdated": "2026-09-05 22:55:34",
+       "likes": 0,
+       "reach": 3,
+       "reelsSkipRate": 0,
+       "reposts": 0,
+       "saves": 0,
+       "shares": 0,
+       "videoDurationSeconds": null,
+       "views": 4
+      },
+      "errorMessage": null,
+      "platform": "instagram",
+      "platformPostId": "17872164114562146",
+      "platformPostUrl": "https://www.instagram.com/p/DbrZs7kjIvF/",
+      "status": "published",
+      "syncStatus": "synced"
+     }
+    ],
+    "profileId": "69efc400ef4ae79c0fd3ce38",
+    "publishedAt": "2026-08-06T00:14:46.000Z",
+    "scheduledFor": "2026-08-06T00:14:46.000Z",
+    "status": "published"
+   },
+   {
+    "_id": "6a9c9de60d146b19a66ecfd0",
+    "analytics": {
+     "clicks": 0,
+     "comments": 0,
+     "engagementRate": 0,
+     "follows": 0,
+     "igReelsAvgWatchTime": 0,
+     "igReelsVideoViewTotalTime": 0,
+     "impressions": 4,
+     "lastUpdated": "2026-09-05 22:55:34",
+     "likes": 0,
+     "reach": 3,
+     "reelsSkipRate": 0,
+     "reposts": 0,
+     "saves": 0,
+     "shares": 0,
+     "videoDurationSeconds": null,
+     "views": 4
+    },
+    "content": "testing the media pipeline end to end",
+    "isAd": false,
+    "isAiGenerated": false,
+    "isExternal": true,
+    "latePostId": null,
+    "mediaProductType": "FEED",
+    "mediaType": "image",
+    "platform": "instagram",
+    "platformPostUrl": "https://www.instagram.com/p/DbrZX_HDLhk/",
+    "platforms": [
+     {
+      "accountId": "6a9c9de477555aae01e25d5b",
+      "accountUsername": "heymaya182",
+      "analytics": {
+       "clicks": 0,
+       "comments": 0,
+       "engagementRate": 0,
+       "follows": 0,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "impressions": 4,
+       "lastUpdated": "2026-09-05 22:55:34",
+       "likes": 0,
+       "reach": 3,
+       "reelsSkipRate": 0,
+       "reposts": 0,
+       "saves": 0,
+       "shares": 0,
+       "videoDurationSeconds": null,
+       "views": 4
+      },
+      "errorMessage": null,
+      "platform": "instagram",
+      "platformPostId": "18152007736452022",
+      "platformPostUrl": "https://www.instagram.com/p/DbrZX_HDLhk/",
+      "status": "published",
+      "syncStatus": "synced"
+     }
+    ],
+    "profileId": "69efc400ef4ae79c0fd3ce38",
+    "publishedAt": "2026-08-06T00:11:33.000Z",
+    "scheduledFor": "2026-08-06T00:11:33.000Z",
+    "status": "published"
+   }
+  ]
+ },
+ "/api/v1/analytics?accountId=6a9c9dd377555aae01e25d16": {
+  "accounts": [
+   {
+    "_id": "6a9c9dd377555aae01e25d16",
+    "displayName": "Kevin Castro",
+    "followersCount": 2,
+    "followersLastUpdated": "2026-09-05T22:55:15.520Z",
+    "platform": "tiktok",
+    "profileId": "69efc400ef4ae79c0fd3ce38",
+    "username": "kevin.castro9996"
+   },
+   {
+    "_id": "6a9c9de477555aae01e25d5b",
+    "displayName": "HeyMaya",
+    "followersCount": 0,
+    "followersLastUpdated": "2026-09-05T22:55:32.755Z",
+    "platform": "instagram",
+    "profileId": "69efc400ef4ae79c0fd3ce38",
+    "username": "heymaya182"
+   }
+  ],
+  "hasAnalyticsAccess": true,
+  "overview": {
+   "dataStaleness": {
+    "staleAccountCount": 0,
+    "syncTriggered": false
+   },
+   "lastSync": "2026-09-05T22:55:34.189Z",
+   "publishedPosts": 1,
+   "scheduledPosts": 0,
+   "totalPosts": 1
+  },
+  "pagination": {
+   "limit": 5,
+   "page": 1,
+   "pages": 1,
+   "total": 1
+  },
+  "posts": [
+   {
+    "_id": "6a9c9dd40d146b19a66ecfcd",
+    "analytics": {
+     "clicks": 0,
+     "comments": 0,
+     "engagementRate": 1.87,
+     "follows": 0,
+     "igReelsAvgWatchTime": 0,
+     "igReelsVideoViewTotalTime": 0,
+     "impressions": 0,
+     "lastUpdated": "2026-09-05 22:55:16",
+     "likes": 1,
+     "reach": 0,
+     "reelsSkipRate": 0,
+     "reposts": 0,
+     "saves": 0,
+     "shares": 1,
+     "videoDurationSeconds": null,
+     "views": 107
+    },
+    "content": "Building solo means every extra step counts. Paste a CSV, get a dashboard.",
+    "isAd": false,
+    "isExternal": true,
+    "latePostId": null,
+    "mediaType": "video",
+    "platform": "tiktok",
+    "platformPostUrl": "https://www.tiktok.com/@kevin.castro9996/video/7670709537535544590?utm_campaign=tt4d_open_api&utm_source=aw4smjxfftapkprm",
+    "platforms": [
+     {
+      "accountId": "6a9c9dd377555aae01e25d16",
+      "accountUsername": "kevin.castro9996",
+      "analytics": {
+       "clicks": 0,
+       "comments": 0,
+       "engagementRate": 1.87,
+       "follows": 0,
+       "igReelsAvgWatchTime": 0,
+       "igReelsVideoViewTotalTime": 0,
+       "impressions": 0,
+       "lastUpdated": "2026-09-05 22:55:16",
+       "likes": 1,
+       "reach": 0,
+       "reelsSkipRate": 0,
+       "reposts": 0,
+       "saves": 0,
+       "shares": 1,
+       "videoDurationSeconds": null,
+       "views": 107
+      },
+      "errorMessage": null,
+      "platform": "tiktok",
+      "platformPostId": "7670709537535544590",
+      "platformPostUrl": "https://www.tiktok.com/@kevin.castro9996/video/7670709537535544590?utm_campaign=tt4d_open_api&utm_source=aw4smjxfftapkprm",
+      "status": "published",
+      "syncStatus": "synced"
+     }
+    ],
+    "profileId": "69efc400ef4ae79c0fd3ce38",
+    "publishedAt": "2026-08-06T00:30:57.000Z",
+    "scheduledFor": "2026-08-06T00:30:57.000Z",
+    "status": "published"
+   }
+  ]
+ }
+}
