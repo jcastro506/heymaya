@@ -324,3 +324,7 @@ Sprint 4e done; rubric-3 baseline recorded (needed a retry: the scout sent nothi
 Result: 10 own posts, 4 carrying connected numbers, photos typed as photos, no errors on a fresh read. The belt answers "how did the reel do" with reach 3 connected, read 0h ago, and says what Instagram will not tell her.
 
 Lesson, again: a recording of one account is one account. The second real account broke the shapes.
+
+## 2026-09-06 — the backfill had no caller
+
+Mapping the onboarding flow for the operator found that `connections/sync.bootstrap` (ninety days of connected history) was never called from product code: connecting from Settings registered the account and started the hourly delta, and the past stayed empty. Zero-caller machinery, the dominant defect class in this product's history, one more time. It is now scheduled where "connected" is decided (`applyAccounts`), once per newly reporting account, with a test. Also recorded: the "three posts you wish you'd made" opener for a creator with no posts is not built; connecting accounts is paid-only, so no creator has connected numbers during onboarding by design.

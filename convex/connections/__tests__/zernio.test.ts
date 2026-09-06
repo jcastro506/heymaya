@@ -50,3 +50,16 @@ describe("connections rows", () => {
     expect(after?.zernioProfileId).toBeUndefined();
   });
 });
+
+describe("connecting pulls the history once (the backfill had no caller until 2026-09-06)", () => {
+  it("a newly reporting account schedules the backfill; the same account again does not; a second new one does", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { channel: { paired: true } }));
+    await t.mutation(internal.connections.zernio.ensureProfileRow, { creatorId, zernioProfileId: "p1" });
+    const acct = (id: string, over: Partial<{ needsReconnect: boolean; canFetchAnalytics: boolean }> = {}) => ({ accountId: id, platform: "tiktok", username: "leah", needsReconnect: false, canFetchAnalytics: true, ...over });
+    expect((await t.mutation(internal.connections.zernio.applyAccounts, { creatorId, accounts: [acct("a1")] })).backfill).toBe(true);
+    expect((await t.mutation(internal.connections.zernio.applyAccounts, { creatorId, accounts: [acct("a1")] })).backfill, "idempotent").toBe(false);
+    expect((await t.mutation(internal.connections.zernio.applyAccounts, { creatorId, accounts: [acct("a1"), acct("a2", { needsReconnect: true })] })).backfill, "needs_reconnect is not connected").toBe(false);
+    expect((await t.mutation(internal.connections.zernio.applyAccounts, { creatorId, accounts: [acct("a1"), acct("a2")] })).backfill, "the second account, once it can report").toBe(true);
+  });
+});

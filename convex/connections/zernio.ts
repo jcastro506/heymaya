@@ -58,13 +58,19 @@ export const ensureProfileRow = internalMutation({
 /** Accounts as Zernio reports them become the row; status follows needsReconnect, never a token date. */
 export const applyAccounts = internalMutation({
   args: { creatorId: v.id("creators"), accounts: v.array(v.object({ accountId: v.string(), platform: v.string(), username: v.union(v.string(), v.null()), needsReconnect: v.boolean(), canFetchAnalytics: v.boolean() })), detail: v.optional(v.string()) },
-  handler: async (ctx, a): Promise<{ status: Doc<"connections">["status"] }> => {
+  handler: async (ctx, a): Promise<{ status: Doc<"connections">["status"]; backfill: boolean }> => {
     const conn = (await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).eq("provider", "zernio")).first()) as Doc<"connections"> | null;
-    if (!conn) return { status: "disconnected" };
+    if (!conn) return { status: "disconnected", backfill: false };
     const accounts = a.accounts.filter((x) => x.platform === "tiktok" || x.platform === "instagram").map((x) => ({ accountId: x.accountId, platform: x.platform as "tiktok" | "instagram", canFetchAnalytics: x.canFetchAnalytics, needsReconnect: x.needsReconnect, username: x.username ?? undefined }));
     const status: Doc<"connections">["status"] = accounts.length === 0 ? "attention" : accounts.some((x) => x.needsReconnect) ? "needs_reconnect" : "connected";
     await ctx.db.patch(conn._id, { zernioAccounts: accounts, status, detail: a.detail ?? (accounts.length === 0 ? "no account attached yet" : accounts.some((x) => x.needsReconnect) ? "an account needs reconnecting" : undefined), lastSyncedAt: Date.now(), updatedAt: Date.now() });
-    return { status };
+    // 2026-09-06: the history backfill had no caller. An account that is newly able to report
+    // gets its ninety days pulled once, here, where "connected" is decided; the hourly delta
+    // only carries what changes after that.
+    const before = new Set((conn.zernioAccounts ?? []).filter((x) => x.canFetchAnalytics && !x.needsReconnect).map((x) => x.accountId));
+    const backfill = status === "connected" && accounts.some((x) => x.canFetchAnalytics && !x.needsReconnect && !before.has(x.accountId));
+    if (backfill) await ctx.scheduler.runAfter(0, internal.connections.sync.bootstrap, { creatorId: a.creatorId });
+    return { status, backfill };
   },
 });
 
