@@ -150,6 +150,7 @@ export const writeBreakouts = internalMutation({
         corroboration: { accounts: 0, soundRising: false },
         verdict: "pending",
         url: c.url,
+        detected: `${c.ratio}× this account's normal at ${c.ageHours}h (${c.views.toLocaleString()} views); ${c.url}`,
         why: `${c.ratio}× this account's normal at ${c.ageHours}h (${c.views.toLocaleString()} views); ${c.url}`,
         thresholdsVersion: THRESHOLDS.version,
         createdAt: a.now,

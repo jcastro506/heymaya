@@ -94,6 +94,7 @@ export const writeShapes = internalMutation({
         corroboration: { accounts: 0, soundRising: false },
         verdict: "pending",
         url: p.url,
+        detected: `top of the lane for "${a.keyword}" this week: ${p.views.toLocaleString()} views at ${p.ageHours}h by @${p.author}; ${p.url}`,
         why: `top of the lane for "${a.keyword}" this week: ${p.views.toLocaleString()} views at ${p.ageHours}h by @${p.author}; ${p.url}`,
         thresholdsVersion: THRESHOLDS.version,
         createdAt: a.now,

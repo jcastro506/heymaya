@@ -70,6 +70,7 @@ export const writeWorthSeeing = internalMutation({
           formatFingerprint: fp,
           verdict: "pending",
           url: l.url,
+          detected: `format worth stealing, not their topic: ${l.format}; angle: ${l.angle}${l.humor ? `; humor: ${l.humor}` : ""}; why it works: ${l.why}; on another subject: ${l.onAnotherSubject}; from @${l.authorHandle ?? "?"} (${l.views.toLocaleString()} views); ${l.url}`,
           why: `format worth stealing, not their topic: ${l.format}; angle: ${l.angle}${l.humor ? `; humor: ${l.humor}` : ""}; why it works: ${l.why}; on another subject: ${l.onAnotherSubject}; from @${l.authorHandle ?? "?"} (${l.views.toLocaleString()} views); ${l.url}`,
           thresholdsVersion: THRESHOLDS.version,
           createdAt: a.now,

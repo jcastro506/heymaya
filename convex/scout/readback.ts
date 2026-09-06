@@ -42,6 +42,9 @@ export const writeWins = internalMutation({
         corroboration: { accounts: 0, soundRising: false },
         verdict: "pending",
         url: p.url,
+        detected: onReach && p.connected?.reach != null
+          ? `their own post reached ${p.connected.reach.toLocaleString()} people, ${mult}× their normal reach (connected; ${p.metrics.views.toLocaleString()} views, ${Math.round(ageHours)}h old); ${p.url}`
+          : `their own post is at ${mult}× their normal (${p.metrics.views.toLocaleString()} views, ${Math.round(ageHours)}h old); ${p.url}`,
         why: onReach && p.connected?.reach != null
           ? `their own post reached ${p.connected.reach.toLocaleString()} people, ${mult}× their normal reach (connected; ${p.metrics.views.toLocaleString()} views, ${Math.round(ageHours)}h old); ${p.url}`
           : `their own post is at ${mult}× their normal (${p.metrics.views.toLocaleString()} views, ${Math.round(ageHours)}h old); ${p.url}`,

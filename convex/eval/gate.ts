@@ -212,7 +212,7 @@ export const run = internalAction({
     // A run in which she said nothing is not a baseline either: it froze "sent 0/0" once,
     // after a broken deploy, and every later run would have read as an improvement.
     if (a.record && summary.sent === 0) {
-      return { ok: false, comparable: false, reason: "she sent nothing this run — a baseline needs at least one message", summary, baseline: null, deltas: [] };
+      return { ok: false, comparable: false, reason: `she sent nothing this run — a baseline needs at least one message (${r.reasons.join("; ") || "no reasons reported"})`, summary, baseline: null, deltas: [] };
     }
 
     if (a.record) {

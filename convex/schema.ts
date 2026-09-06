@@ -252,6 +252,15 @@ export default defineSchema({
      * creator to open. Found by the eval gate's `has_link` check on 2026-09-03.
      */
     url: v.optional(v.string()),
+    /**
+     * The sentence written at DETECTION ("6.2× this account's normal at 9h (12,400 views)"),
+     * never overwritten. `why` is patched with the verdict's reason when a signal is judged,
+     * which is right for a human reading the row and wrong for a model reading the
+     * evidence: after a reopen the writer saw "topic is local restaurant reviews" as the
+     * evidence for a 450× candidate, cited the ratio anyway, and the critic dropped it as an
+     * invented number. Same defect class as the URL that a verdict used to destroy.
+     */
+    detected: v.optional(v.string()),
     kind: v.union(
       v.literal("breakout"),
       v.literal("shape"),

@@ -74,6 +74,7 @@ export const writeSoundSignals = internalMutation({
         corroboration: { accounts: a.sound.accounts.length, soundRising: true },
         verdict: "pending",
         url: top.url,
+        detected: `a sound ${a.sound.accounts.length} accounts in their lane used this week (${a.sound.accounts.map((h) => "@" + h).join(", ")}); biggest: ${top.views.toLocaleString()} views by @${top.authorHandle}; ${top.url}`,
         why: `a sound ${a.sound.accounts.length} accounts in their lane used this week (${a.sound.accounts.map((h) => "@" + h).join(", ")}); biggest: ${top.views.toLocaleString()} views by @${top.authorHandle}; ${top.url}`,
         thresholdsVersion: THRESHOLDS.version,
         createdAt: a.now,
