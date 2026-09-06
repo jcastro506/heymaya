@@ -310,3 +310,17 @@ Two throwaway accounts connected on Zernio (one TikTok, one Instagram). Their re
 - **One rule for citing their numbers** (`connections/numbers.ts`): connected wins and is labelled with its age; stale (>48h) falls back to the public count and says so; what a platform hides is said once, never guessed. Two belt tools (`own_post_numbers`, `post_diagnosis`) and the four diagnoses worded once. A `mixed_basis` check and critic tell: a TikTok number and a retention figure in one claim fail unless the message names the same video cross-posted. Rubric 3.
 - **Consumers re-based on reach where it exists, per the audit:** the win, the rung's multiple (with its basis), the review evidence (reach, retention, skip rate per post), the opinion on their own post (labelled numbers + what the platform hides), the post-time model, outcomes, voice ranking, and the personal prefix.
 - **Gate:** it recorded an empty baseline once after a broken deploy; it now refuses to freeze a run in which she sent nothing, and the bad baseline was dropped. 475 tests.
+
+## 2026-09-05, late — the pilot moves onto the operator's own connected accounts
+
+Sprint 4e done; rubric-3 baseline recorded (needed a retry: the scout sent nothing on the first sample, then sent; n=1 is thin and the action budget blocks n=2). Then the pilot creator was re-seeded on the two accounts the operator actually connected (tiktok kevin.castro9996, instagram heymaya182), so scraping and Zernio point at the same content. Reading those accounts live found five bugs in forty minutes that 477 green tests and a recorded fixture never showed:
+
+1. Instagram returned `pk` as a number on this account; the schema demanded a string, so the whole catalogue read failed. Ids now accept either and become strings.
+2. A TikTok photo carousel came back from the video endpoint with a `/photo/` share url; the normaliser called it a video and the transcript endpoint refused it. Photos are photos.
+3. One post, two rows: the connected feed created the row keyed by the id in the URL, the scrape keyed Instagram by the numeric pk, and neither joined the other. The scrape now claims a row with the same URL and keeps its connected numbers; a dev helper merged the twins.
+4. `contentType: c.durationSec ? "video" : "video"`: a row the connected feed created was always a video. An Instagram row without a duration is a photo.
+5. A corrected normaliser did nothing for seven days: the read cache served the old shape and the ingest only refreshed metrics on an existing row. Identity-level facts now follow the latest read; a batched `forgetReads` helper exists (a whole kind at once trips the 16 MB read limit).
+
+Result: 10 own posts, 4 carrying connected numbers, photos typed as photos, no errors on a fresh read. The belt answers "how did the reel do" with reach 3 connected, read 0h ago, and says what Instagram will not tell her.
+
+Lesson, again: a recording of one account is one account. The second real account broke the shapes.
