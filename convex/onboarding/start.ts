@@ -5,9 +5,11 @@
  */
 
 import { v } from "convex/values";
-import { mutation, query } from "../_generated/server";
+import { internalMutation, mutation, query, type MutationCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
-import type { Doc } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
+import { addTracked } from "../agent/manage";
+import { mintPairing } from "../core/pairing";
 
 const handleShape = v.object({ tiktok: v.optional(v.string()), instagram: v.optional(v.string()) });
 
@@ -22,6 +24,17 @@ export const start = mutation({
   handler: async (ctx, args): Promise<{ ok: boolean; creatorId?: string; error?: string }> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return { ok: false, error: "sign in first" };
+    return await startCreator(ctx, { subject: identity.subject, email: identity.email ?? "", handles: args.handles, timezone: args.timezone });
+  },
+});
+
+/**
+ * Screen 1, as one function the web form and the simulated run both call, so a rehearsal
+ * drives the same rows and the same job the browser would.
+ */
+export async function startCreator(ctx: MutationCtx, args: { subject: string; email: string; handles: { tiktok?: string; instagram?: string }; timezone?: string }): Promise<{ ok: boolean; creatorId?: string; error?: string }> {
+  {
+    const identity = { subject: args.subject, email: args.email };
     const handles = { tiktok: cleanHandle(args.handles.tiktok), instagram: cleanHandle(args.handles.instagram) };
     if (!handles.tiktok && !handles.instagram) return { ok: false, error: "one handle is required" };
 
@@ -79,8 +92,20 @@ export const start = mutation({
       payloadJson: JSON.stringify({ reason: "onboarding" }),
     });
     return { ok: true, creatorId };
-  },
-});
+  }
+}
+
+type DescribeArgs = { niche?: string; timezone?: string; quietHours?: { start: string; end: string }; tone?: "coach" | "friend" | "blunt" };
+
+export async function describeCreator(ctx: MutationCtx, creator: Doc<"creators">, args: DescribeArgs): Promise<{ ok: boolean; error?: string }> {
+  const patch: Partial<Doc<"creators">> = { updatedAt: Date.now() };
+  if (args.niche !== undefined) patch.niche = args.niche.trim().slice(0, 300);
+  if (args.timezone) patch.timezone = args.timezone;
+  if (args.quietHours) patch.quietHours = args.quietHours;
+  if (args.tone) patch.tone = args.tone;
+  await ctx.db.patch(creator._id, patch);
+  return { ok: true };
+}
 
 /** Screen 4: their sentence. Screen 7: timezone and quiet hours. */
 export const describe = mutation({
@@ -90,13 +115,32 @@ export const describe = mutation({
     if (!identity) return { ok: false, error: "sign in first" };
     const creator = (await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject)).first()) as Doc<"creators"> | null;
     if (!creator) return { ok: false, error: "start with your handles first" };
-    const patch: Partial<Doc<"creators">> = { updatedAt: Date.now() };
-    if (args.niche !== undefined) patch.niche = args.niche.trim().slice(0, 300);
-    if (args.timezone) patch.timezone = args.timezone;
-    if (args.quietHours) patch.quietHours = args.quietHours;
-    if (args.tone) patch.tone = args.tone;
-    await ctx.db.patch(creator._id, patch);
-    return { ok: true };
+    return await describeCreator(ctx, creator, args);
+  },
+});
+
+/**
+ * The whole web onboarding as one call, for a rehearsal without a browser: screen 1
+ * (handles → the catalogue job), screen 2 (admired), screen 3 (the sentence), screen 5
+ * (timezone), and the pairing token the done screen would mint. Same functions, same rows,
+ * same jobs as the form. Dev only; the operator taps the pairing link, or claims it by chat id.
+ */
+export const onboardAsUser = internalMutation({
+  args: { subject: v.string(), email: v.string(), handles: handleShape, timezone: v.string(), niche: v.string(), admired: v.array(v.object({ platform: v.union(v.literal("tiktok"), v.literal("instagram")), handle: v.string() })) },
+  handler: async (ctx, a): Promise<{ ok: boolean; creatorId?: string; token?: string; admired?: number; error?: string }> => {
+    const started = await startCreator(ctx, { subject: a.subject, email: a.email, handles: a.handles, timezone: a.timezone });
+    if (!started.ok || !started.creatorId) return { ok: false, error: started.error };
+    const creatorId = started.creatorId as Id<"creators">;
+    const creator = (await ctx.db.get(creatorId)) as Doc<"creators">;
+    let admired = 0;
+    for (const x of a.admired) {
+      const existing = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", creatorId)).collect()) as Doc<"trackedAccounts">[];
+      const r = await addTracked(ctx as never, creatorId, x.platform, x.handle, existing);
+      if (r.ok) admired += 1;
+    }
+    await describeCreator(ctx, creator, { niche: a.niche, timezone: a.timezone });
+    const link = await mintPairing(ctx, (await ctx.db.get(creatorId)) as Doc<"creators">);
+    return { ok: true, creatorId, token: link.ok ? link.token : undefined, admired };
   },
 });
 

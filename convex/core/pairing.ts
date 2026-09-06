@@ -21,7 +21,7 @@
 
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
-import { internalMutation, mutation } from "../_generated/server";
+import { internalMutation, mutation, type MutationCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 
 /**
@@ -65,38 +65,27 @@ export const createPairingLink = mutation({
     if (!creator) return { ok: false, error: "tell me about your product first" };
 
 
-    const botUsername = process.env.TELEGRAM_BOT_USERNAME;
-    if (!botUsername) {
-      // Named, not silent. A pairing screen that renders a broken link is worse
-      // than one that says the bot isn't configured.
-      return { ok: false, error: "the Telegram bot isn't configured on this deployment" };
-    }
-
-    const now = Date.now();
-    const live =
-      creator.pairingToken &&
-      creator.pairingExpiresAt &&
-      creator.pairingExpiresAt > now;
-
-    const token = live ? creator.pairingToken! : mintToken();
-    const expiresAt = live ? creator.pairingExpiresAt! : now + PAIRING_TTL_MS;
-
-    if (!live) {
-      await ctx.db.patch(creator._id, {
-        pairingToken: token,
-        pairingExpiresAt: expiresAt,
-        updatedAt: now,
-      });
-    }
-
-    return {
-      ok: true,
-      deepLink: `https://t.me/${botUsername}?start=pair_${encodeURIComponent(token)}`,
-      botUsername,
-      expiresAt,
-    };
+    const minted = await mintPairing(ctx, creator);
+    if (!minted.ok) return { ok: false, error: minted.error };
+    return { ok: true, deepLink: minted.deepLink, botUsername: minted.botUsername, expiresAt: minted.expiresAt };
   },
 });
+
+/** The token the done screen mints, as one function the form and a rehearsal both call. */
+export async function mintPairing(ctx: MutationCtx, creator: Doc<"creators">): Promise<{ ok: true; token: string; deepLink: string; botUsername: string; expiresAt: number } | { ok: false; error: string }> {
+  const botUsername = process.env.TELEGRAM_BOT_USERNAME;
+  if (!botUsername) {
+    // Named, not silent. A pairing screen that renders a broken link is worse
+    // than one that says the bot isn't configured.
+    return { ok: false, error: "the Telegram bot isn't configured on this deployment" };
+  }
+  const now = Date.now();
+  const live = creator.pairingToken && creator.pairingExpiresAt && creator.pairingExpiresAt > now;
+  const token = live ? creator.pairingToken! : mintToken();
+  const expiresAt = live ? creator.pairingExpiresAt! : now + PAIRING_TTL_MS;
+  if (!live) await ctx.db.patch(creator._id, { pairingToken: token, pairingExpiresAt: expiresAt, updatedAt: now });
+  return { ok: true, token, deepLink: `https://t.me/${botUsername}?start=pair_${encodeURIComponent(token)}`, botUsername, expiresAt };
+}
 
 /**
  * Claim a pairing token. Called from the Telegram webhook.

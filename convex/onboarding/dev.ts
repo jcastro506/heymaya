@@ -461,3 +461,14 @@ export const fleetSpend = internalQuery({
     return { events: costs.length, totalUsd: Math.round(costs.reduce((s, e) => s + e.costUsd, 0) * 100) / 100, byDay, byVendorKind: by, health: health.map((h) => `${new Date(h.at).toISOString().slice(0, 16)} ${h.vendor} ${h.check} ${h.ok ? "ok" : "FAIL"} ${JSON.stringify(h.detail ?? "").slice(0, 80)}`) };
   },
 });
+
+/** Freeze a creator for deletion, the way requestDelete does from the web, so the real deletion path can run. Dev only. */
+export const freezeForDelete = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ ok: boolean }> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!c) return { ok: false };
+    await ctx.db.patch(a.creatorId, { plan: { ...c.plan, status: "deleting" }, updatedAt: Date.now() });
+    return { ok: true };
+  },
+});
