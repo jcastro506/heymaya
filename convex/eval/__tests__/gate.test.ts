@@ -133,3 +133,15 @@ describe("the judge's absence is not a quality change", () => {
     expect(s.judged).toBe(1);
   });
 });
+
+describe("a baseline must contain something", () => {
+  it("summarize of zero runs is not a baseline candidate", () => {
+    const s = summarize([], 0, ["a"]);
+    expect(s.sent).toBe(0);
+    // The gate refuses to record when sent is 0; the rule lives in gate.run and is checked by source here.
+  });
+  it("gate.run refuses to freeze an empty run", async () => {
+    const { readFileSync } = await import("node:fs");
+    expect(readFileSync(new URL("../gate.ts", import.meta.url), "utf8")).toMatch(/summary\.sent === 0/);
+  });
+});

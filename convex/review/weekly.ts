@@ -74,7 +74,8 @@ export const inputs = internalQuery({
     const cardFor = new Map(reads.map((r) => [r.ownPostId, r.card]));
     const planned = (creator.dossier as { cadence?: { postsPerWeek?: number } } | undefined)?.cadence?.postsPerWeek ?? null;
     const rung: RungFacts = computeRung({
-      week: week.map((p) => ({ views: p.metrics.views, multiple: p.multiple ?? null, likes: p.metrics.likes, comments: p.metrics.comments, shares: p.metrics.shares, saves: p.metrics.saves ?? 0, ageHours: (a.now - p.createTime) / 3_600_000 })),
+      // Sprint 4e: the rung runs on reach where the account is connected; the basis rides along so the review can say which.
+      week: week.map((p) => ({ views: p.metrics.views, multiple: p.reachMultiple ?? p.multiple ?? null, basis: (p.reachMultiple !== undefined ? "reach" : "views") as "reach" | "views", likes: p.metrics.likes, comments: p.metrics.comments, shares: p.metrics.shares, saves: p.metrics.saves ?? 0, ageHours: (a.now - p.createTime) / 3_600_000 })),
       planned: planned && planned > 0 ? planned : null,
       history: history.map((p) => ({ views: p.metrics.views, comments: p.metrics.comments, shares: p.metrics.shares, saves: p.metrics.saves ?? 0 })),
     });
@@ -92,10 +93,10 @@ export const inputs = internalQuery({
       history: historySection(await historyFor(ctx, creator)),
       rung,
       lane,
-      week: week.map((p) => ({ url: p.url, daysAgo: Math.round((a.now - p.createTime) / 86_400_000), views: p.metrics.views, multiple: p.multiple ?? null, engagementPerView: engagement({ views: p.metrics.views, comments: p.metrics.comments, shares: p.metrics.shares, saves: p.metrics.saves ?? 0 }), caption: p.caption.slice(0, 100), card: cardFor.get(p._id) ?? null, sampled: a.now - p.createTime >= 48 * 3_600_000 })),
+      week: week.map((p) => ({ url: p.url, daysAgo: Math.round((a.now - p.createTime) / 86_400_000), views: p.metrics.views, multiple: p.reachMultiple ?? p.multiple ?? null, basis: p.reachMultiple !== undefined ? "reach" : "views", reach: p.connected?.reach ?? null, retention: p.connected?.avgWatchMs != null && p.connected?.durationSec ? Math.round((p.connected.avgWatchMs / (p.connected.durationSec * 1000)) * 100) / 100 : null, skipRatePct: p.connected?.skipRatePct ?? null, engagementPerView: engagement({ views: p.metrics.views, comments: p.metrics.comments, shares: p.metrics.shares, saves: p.metrics.saves ?? 0 }), caption: p.caption.slice(0, 100), card: cardFor.get(p._id) ?? null, sampled: a.now - p.createTime >= 48 * 3_600_000 })),
       liked: ideas.filter((i) => i.status === "hearted" || i.status === "posted" || i.reaction).map((i) => ({ hook: (i.version as { hook?: string } | undefined)?.hook ?? i.messageText.slice(0, 80), status: i.status, features: i.features ?? null })),
       passed: ideas.filter((i) => i.status === "passed").map((i) => ({ hook: (i.version as { hook?: string } | undefined)?.hook ?? i.messageText.slice(0, 80), features: i.features ?? null })),
-      worked: posted.map((i) => ({ hook: (i.version as { hook?: string } | undefined)?.hook ?? i.messageText.slice(0, 80), multiple: i.matchedPostId ? (postFor.get(i.matchedPostId)?.multiple ?? null) : null })),
+      worked: posted.map((i) => ({ hook: (i.version as { hook?: string } | undefined)?.hook ?? i.messageText.slice(0, 80), multiple: i.matchedPostId ? (postFor.get(i.matchedPostId)?.reachMultiple ?? postFor.get(i.matchedPostId)?.multiple ?? null) : null })),
       taste: summarize((creator.affinities ?? []) as Affinity[], a.now, 4),
       lastExperiment,
       ideasSent: ideas.filter((i) => i.sentAt && i.sentAt >= since).length,

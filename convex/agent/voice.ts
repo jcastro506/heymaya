@@ -106,7 +106,7 @@ export async function voiceFor(ctx: QueryCtx, creatorId: Id<"creators">): Promis
    * Sprint 4c: a line that BEAT their normal is worth more than a line that merely exists,
    * so the ranking is the outcome itself. Nothing here needs a tap from the creator.
    */
-  const ranked = [...posts].sort((a, b) => (b.multiple ?? -1) - (a.multiple ?? -1));
+  const ranked = [...posts].sort((a, b) => (b.reachMultiple ?? b.multiple ?? -1) - (a.reachMultiple ?? a.multiple ?? -1));
   const cards = (await ctx.db
     .query("ownPostReads")
     .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))

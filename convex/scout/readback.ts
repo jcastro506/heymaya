@@ -30,16 +30,21 @@ export const writeWins = internalMutation({
     let written = 0;
     for (const p of posts) {
       const ageHours = (a.now - p.createTime) / 3_600_000;
-      if (seen.has(p.postId) || p.multiple === undefined || p.multiple < WIN_MULTIPLE || ageHours > 7 * 24) continue;
+      // Sprint 4e: a win is judged on reach where the account is connected, and says so.
+      const onReach = p.reachMultiple !== undefined;
+      const mult = p.reachMultiple ?? p.multiple;
+      if (seen.has(p.postId) || mult === undefined || mult < WIN_MULTIPLE || ageHours > 7 * 24) continue;
       await ctx.db.insert("signals", {
         creatorId: a.creatorId,
         kind: "win",
         sourcePostIds: [p.postId],
-        score: p.multiple,
+        score: mult,
         corroboration: { accounts: 0, soundRising: false },
         verdict: "pending",
         url: p.url,
-        why: `their own post is at ${p.multiple}× their normal (${p.metrics.views.toLocaleString()} views, ${Math.round(ageHours)}h old); ${p.url}`,
+        why: onReach && p.connected?.reach != null
+          ? `their own post reached ${p.connected.reach.toLocaleString()} people, ${mult}× their normal reach (connected; ${p.metrics.views.toLocaleString()} views, ${Math.round(ageHours)}h old); ${p.url}`
+          : `their own post is at ${mult}× their normal (${p.metrics.views.toLocaleString()} views, ${Math.round(ageHours)}h old); ${p.url}`,
         thresholdsVersion: THRESHOLDS.version,
         createdAt: a.now,
       });

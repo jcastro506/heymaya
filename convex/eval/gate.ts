@@ -209,6 +209,11 @@ export const run = internalAction({
     if (a.record && summary.sent > 0 && summary.judged === 0) {
       return { ok: false, comparable: false, reason: "the judge scored nothing this run — fix the judge before freezing a baseline", summary, baseline: null, deltas: [] };
     }
+    // A run in which she said nothing is not a baseline either: it froze "sent 0/0" once,
+    // after a broken deploy, and every later run would have read as an improvement.
+    if (a.record && summary.sent === 0) {
+      return { ok: false, comparable: false, reason: "she sent nothing this run — a baseline needs at least one message", summary, baseline: null, deltas: [] };
+    }
 
     if (a.record) {
       await ctx.runMutation(internal.eval.gate.saveBaseline, { suite, rubricVersion: RUBRIC_VERSION, gitSha: a.gitSha ?? "unknown", note: a.note ?? "", summary });

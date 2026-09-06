@@ -85,6 +85,7 @@ export const modelFor = internalQuery({
     const creator = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!creator) return { hours: [], confidence: "none", defaultHour: DEFAULT_HOUR };
     const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(60)) as Doc<"ownPosts">[];
-    return buildPostTimeModel(posts.map((p) => ({ createTime: p.createTime, multiple: p.multiple ?? null })), creator.timezone);
+    // Sprint 4e: hour vs REACH where it exists — when people were shown it is the question.
+    return buildPostTimeModel(posts.map((p) => ({ createTime: p.createTime, multiple: p.reachMultiple ?? p.multiple ?? null })), creator.timezone);
   },
 });

@@ -26,7 +26,7 @@ export const CONFIDENCE_MULTIPLE: Record<string, number> = { strong: 1.8, solid:
 
 export const OPINION_SKILL = `opinion
 When: they sent a draft, a link, or asked "will this go viral". You are giving a read, not a verdict, and you never promise a number.
-The judgment: what the video does in its first three seconds against what has worked for THEM (their own top posts, the dossier) and what you know of their lane; their own history with this structure; the three highest-leverage fixes in order; a confidence in one word from strong | solid | fine | weak | broken, calibrated to their own baseline (fine = about their normal); and what you cannot know (watch time, the algorithm's mood, whether the sound is cleared).
+The judgment: what the video does in its first three seconds against what has worked for THEM (their own top posts, the dossier) and what you know of their lane; their own history with this structure; the three highest-leverage fixes in order; a confidence in one word from strong | solid | fine | weak | broken, calibrated to their own baseline (fine = about their normal); and what you cannot know: the evidence's numbers.cannotKnow says what THIS platform hides (TikTok hides watch time and retention from everyone; an Instagram Reel with a connected account shows them, and then you cite them with their basis). Never guess a hidden number.
 Tone: the same as always. If the card says one thing and their caption implies another (an ironic caption on a straight video is a bit, not a mistake), read it as the bit. A draft with a copyrighted sound: "fine if it's in the app's library".
 Cite: at least one number you were actually given (their multiple on a comparable post, a stat from the card, their normal). No number you weren't given.
 Output ONLY JSON:
@@ -193,7 +193,8 @@ export const run = internalAction({
       theirWords: target.body.slice(0, 400),
       card: card ?? (cannotWatch ? { unavailable: cannotWatch } : null),
       transcript,
-      ownPost: own ? { ...own, hoursOld: Math.round((Date.now() - own.createTime) / 3_600_000), metricsHoursOld: Math.round((Date.now() - own.metricsAsOf) / 3_600_000) } : null,
+      // Sprint 4e: the labelled numbers and the four-way read, or what the platform hides.
+      ownPost: own ? { ...own, hoursOld: Math.round((Date.now() - own.createTime) / 3_600_000), metricsHoursOld: Math.round((Date.now() - own.metricsAsOf) / 3_600_000), numbers: await ctx.runQuery(internal.connections.numbers.forPost, { ownPostId: own.id }) } : null,
       theirHistory: history,
     };
     const user = `Evidence (everything you may cite is here; nothing else):\n${JSON.stringify(evidence)}`;

@@ -61,7 +61,13 @@ export async function personalFor(ctx: QueryCtx, creator: Doc<"creators">): Prom
   const blocks = ((await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", creator._id).gte("start", now - 3_600_000).lte("start", now + 8 * 86_400_000)).take(40)) as Doc<"calendarBlocks">[]).filter((b) => b.status !== "deleted").sort((a, b) => a.start - b.start);
   const day = (t: number) => new Intl.DateTimeFormat("en-US", { timeZone: creator.timezone, weekday: "short", month: "short", day: "numeric" }).format(t);
   const time = (t: number) => new Intl.DateTimeFormat("en-US", { timeZone: creator.timezone, hour: "numeric", minute: "2-digit" }).format(t).toLowerCase().replace(":00", "");
-  const week = posts.map((p) => `- ${day(p.createTime)} · ${p.metrics.views.toLocaleString()} views${p.multiple !== undefined ? ` (${p.multiple}× their normal)` : ""} · "${p.caption.slice(0, 70)}"${p.url ? ` · ${p.url}` : ""}`);
+  // Sprint 4e: reach where connected and fresh, labelled; the view count stays as the public number.
+  const week = posts.map((p) => {
+    const c = p.connected;
+    const freshReach = c && c.reach !== null && c.asOf !== null && now - c.asOf < 48 * 3_600_000 ? c.reach : null;
+    const head = freshReach !== null ? `reached ${freshReach.toLocaleString()} (connected)${p.reachMultiple !== undefined ? ` (${p.reachMultiple}× their normal reach)` : ""} · ${p.metrics.views.toLocaleString()} views` : `${p.metrics.views.toLocaleString()} views${p.multiple !== undefined ? ` (${p.multiple}× their normal)` : ""}`;
+    return `- ${day(p.createTime)} · ${head} · "${p.caption.slice(0, 70)}"${p.url ? ` · ${p.url}` : ""}`;
+  });
   const life = events.filter((e) => e.status === "active" && e.class !== "private" && e.title).map((e) => `- ${day(e.start)} · ${e.title}${e.class === "filmable" ? " (could film around this)" : ""}`);
   const plan = blocks.slice(0, 15).map((b) => {
     // Booked means consent. A creator with no calendar connected still books; only the Google id is missing.

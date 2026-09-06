@@ -10,7 +10,7 @@ import { THRESHOLDS } from "../config/thresholds";
 
 export type Rung = "L0" | "L1" | "L2" | "healthy" | "unknown";
 
-export interface WeekPost { views: number; multiple: number | null; likes: number; comments: number; shares: number; saves: number; ageHours: number }
+export interface WeekPost { views: number; multiple: number | null; likes: number; comments: number; shares: number; saves: number; ageHours: number; /** Sprint 4e: what the multiple is on. */ basis?: "reach" | "views" }
 
 export interface RungFacts {
   rung: Rung;

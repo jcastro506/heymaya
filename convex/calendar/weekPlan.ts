@@ -29,7 +29,7 @@ export const inputsFor = internalQuery({
     const tz = creator.timezone;
     const dossier = creator.dossier as { cadence?: { postsPerWeek?: number; filmingDays?: string[]; bestHoursLocal?: number[] }; fingerprint?: { medianCutSeconds?: number | "unknown" } } | undefined;
     const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(60)) as Doc<"ownPosts">[];
-    const model = buildPostTimeModel(posts.map((p) => ({ createTime: p.createTime, multiple: p.multiple ?? null })), tz);
+    const model = buildPostTimeModel(posts.map((p) => ({ createTime: p.createTime, multiple: p.reachMultiple ?? p.multiple ?? null })), tz);
     const horizon = a.now + 9 * 86_400_000;
     const events = (await ctx.db.query("calendarEvents").withIndex("by_creator_start", (q) => q.eq("creatorId", a.creatorId).gte("start", a.now - 86_400_000).lte("start", horizon)).take(200)) as Doc<"calendarEvents">[];
     const blocks = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("start", a.now - 86_400_000)).take(200)) as Doc<"calendarBlocks">[];

@@ -59,7 +59,8 @@ export const pending = internalQuery({
       if (!i.matchedPostId || !i.postedAt) continue;
       const post = (await ctx.db.get(i.matchedPostId)) as Doc<"ownPosts"> | null;
       if (!post) continue;
-      rows.push({ ideaId: i._id, ownPostId: post._id, multiple: post.multiple ?? null, postedAt: i.postedAt, learnedAt: i.outcomeLearnedAt ?? null });
+      // Sprint 4e: a win is a win on reach where the account is connected.
+      rows.push({ ideaId: i._id, ownPostId: post._id, multiple: post.reachMultiple ?? post.multiple ?? null, postedAt: i.postedAt, learnedAt: i.outcomeLearnedAt ?? null });
     }
     return judgeOutcomes(rows, a.now);
   },
