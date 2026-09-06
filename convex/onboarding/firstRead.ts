@@ -117,7 +117,14 @@ export const run = internalAction({
         verdict = tooLong(text) ? { pass: false, problems: ["too_long" as const], note: "still over the length cap" } : await critique(ctx, { creatorId: creator._id, kind: "first_read", text, evidence: d, voice: { voice: d?.voice, persona: d?.persona }, directives: directives.map((x) => x.verbatim) });
         criticSkipped = criticSkipped || Boolean(verdict.skipped);
       }
-      if (!verdict.pass) return { ok: false, reason: `dropped by the critic: ${verdict.problems.join(", ")} (${verdict.note})` };
+      // Live 2026-09-06: first contact was dropped twice for "slop: remove the compliment", and
+      // the person who had just been told "first thoughts in about ten minutes" got silence.
+      // For first contact, as for replies, the critic advises and never blocks: one rewrite,
+      // then it goes, with the critic's note on the record.
+      if (!verdict.pass) {
+        console.error(`[first-read] sending over the critic's objection for ${creator._id}: ${verdict.problems.join(", ")} (${verdict.note})`);
+        criticSkipped = true;
+      }
     }
 
     // Live 2026-09-05: appending the lane line after the model had already asked its own
