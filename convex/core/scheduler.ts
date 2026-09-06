@@ -85,6 +85,30 @@ export async function deliverNow(ctx: { runAction: (ref: never, args: never) => 
  * a dead worker is back in the queue before we claim. Budget checks (§3.5) sit
  * at the point work actually happens, once `budgets` lands with the sweeps.
  */
+/** Jobs that take minutes. They never run inline in the drain. */
+export const LONG_KINDS: ReadonlySet<string> = new Set(["ingest_catalogue"]);
+
+/** One claimed job, in its own action, so the drain is never blocked by it. */
+export const runJob = internalAction({
+  args: { jobId: v.id("jobs") },
+  handler: async (ctx, args): Promise<{ ok: boolean }> => {
+    const job = await ctx.runQuery(internal.core.jobs.byId, { jobId: args.jobId });
+    if (!job || job.status !== "running") return { ok: false };
+    const handler = handlers[job.kind];
+    if (!handler) { await ctx.runMutation(internal.core.jobs.fail, { jobId: job._id, error: `no handler for job kind "${job.kind}"` }); return { ok: false }; }
+    try {
+      const outcome = await handler(ctx as never, job);
+      if (outcome.ok) await ctx.runMutation(internal.core.jobs.succeed, { jobId: job._id });
+      else if (outcome.defer) await ctx.runMutation(internal.core.jobs.defer, { jobId: job._id, delayMs: outcome.defer, reason: outcome.error });
+      else await ctx.runMutation(internal.core.jobs.fail, { jobId: job._id, error: outcome.error });
+      return { ok: Boolean(outcome.ok) };
+    } catch (error) {
+      await ctx.runMutation(internal.core.jobs.fail, { jobId: job._id, error: error instanceof Error ? error.message : String(error) });
+      return { ok: false };
+    }
+  },
+});
+
 export const drainJobs = internalAction({
   args: { max: v.optional(v.number()), kinds: v.optional(v.array(v.string())) },
   handler: async (ctx, args): Promise<{ claimed: number; succeeded: number; failed: number }> => {
@@ -96,6 +120,17 @@ export const drainJobs = internalAction({
       const job = await ctx.runMutation(internal.core.jobs.claimNext, { kinds: args.kinds });
       if (!job) break;
       claimed += 1;
+
+      /**
+       * Live 2026-09-06: the hello sat queued for four minutes behind the catalogue read.
+       * Convex skips a cron tick while the previous one is still running, and this loop ran
+       * the ingest inline, so the minute drain stopped ticking and nothing else moved. Long
+       * jobs run in their own action; the drain returns and keeps draining.
+       */
+      if (LONG_KINDS.has(job.kind)) {
+        await ctx.scheduler.runAfter(0, internal.core.scheduler.runJob, { jobId: job._id });
+        continue;
+      }
 
       const handler = handlers[job.kind];
       if (!handler || !HANDLED_KINDS.has(job.kind)) {

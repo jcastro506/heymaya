@@ -342,3 +342,8 @@ export const wakeDeliveries = internalMutation({
     return { woken };
   },
 });
+
+export const byId = internalQuery({
+  args: { jobId: v.id("jobs") },
+  handler: async (ctx, a): Promise<Doc<"jobs"> | null> => (await ctx.db.get(a.jobId)) as Doc<"jobs"> | null,
+});

@@ -163,8 +163,10 @@ export const claimPairing = internalMutation({
         kind: "status",
       });
     }
-    // Everything written while unpaired (the first read, at least) goes out now.
+    // Everything written while unpaired (the first read, at least) goes out now, not at the
+    // next minute tick, and not behind whatever long job the drain is on.
     await ctx.runMutation(internal.core.jobs.wakeDeliveries, { creatorId: creator._id });
+    await ctx.scheduler.runAfter(0, internal.core.scheduler.drainJobs, { kinds: ["deliver_message"] });
     return { paired: true, creatorId: creator._id };
   },
 });
