@@ -12,6 +12,7 @@
 import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
+import { splitParts } from "./envelope";
 import type { Doc, Id } from "../_generated/dataModel";
 
 /* -------------------------------------------------------------------------- */
@@ -87,23 +88,33 @@ export const deliverMessage = internalAction({
       return { delivered: false, reason };
     }
 
-    const result = await sendTelegramMessage(identity, {
-      chatId: target.chatId,
-      text: target.body,
-      buttons: target.buttons,
-    });
-
-    if (!result.ok) {
-      // Recorded, not swallowed. The job's own retry handles transience; this
-      // is what makes a permanent failure visible instead of invisible.
-      const reason = result.description ?? "Telegram rejected the message";
-      await ctx.runMutation(internal.core.telegram.markDelivered, { messageId: args.messageId, error: reason });
-      return { delivered: false, reason };
+    // One row may be several texts (a line of --- between them), the way a person texts.
+    // Buttons ride the last one. The first part failing is a failed delivery; a later
+    // part failing is recorded as partial rather than retried, because a retry would
+    // send the earlier parts twice.
+    const parts = splitParts(target.body);
+    let lastId: string | null = null;
+    for (let i = 0; i < parts.length; i++) {
+      const last = i === parts.length - 1;
+      const result = await sendTelegramMessage(identity, {
+        chatId: target.chatId,
+        text: parts[i],
+        buttons: last ? target.buttons : undefined,
+      });
+      if (!result.ok) {
+        // Recorded, not swallowed. The job's own retry handles transience; this
+        // is what makes a permanent failure visible instead of invisible.
+        const reason = `${result.description ?? "Telegram rejected the message"}${i > 0 ? ` (after ${i} of ${parts.length} texts)` : ""}`;
+        await ctx.runMutation(internal.core.telegram.markDelivered, { messageId: args.messageId, error: reason, ...(lastId ? { telegramMessageId: lastId } : {}) });
+        return i > 0 ? { delivered: true, reason } : { delivered: false, reason };
+      }
+      lastId = String(result.result.message_id);
+      if (!last) await new Promise((r) => setTimeout(r, 900));
     }
 
     await ctx.runMutation(internal.core.telegram.markDelivered, {
       messageId: args.messageId,
-      telegramMessageId: String(result.result.message_id),
+      telegramMessageId: lastId ?? undefined,
     });
     return { delivered: true };
   },

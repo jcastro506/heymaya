@@ -4,7 +4,7 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { unwrapModelEnvelope } from "../envelope";
+import { splitParts, unwrapModelEnvelope, MAX_PARTS } from "../envelope";
 import { HELLO } from "../pairing";
 
 describe("a person never receives a JSON envelope (live 2026-09-06)", () => {
@@ -40,5 +40,16 @@ describe("first contact", () => {
     expect(rows.filter((m) => m.creatorId === a && m.body === HELLO).length).toBe(1);
     expect(rows.filter((m) => m.creatorId === b && m.body === HELLO).length).toBe(0);
     expect(HELLO).toMatch(/maya/);
+  });
+});
+
+describe("several short texts from one row", () => {
+  it("splits on a --- line, keeps order, caps the count, and leaves a plain body alone", () => {
+    expect(splitParts("hey.\n---\nyour london clip landed.\n---\ntravel or running?")).toEqual(["hey.", "your london clip landed.", "travel or running?"]);
+    expect(splitParts("one block, no separator")).toEqual(["one block, no separator"]);
+    expect(splitParts("a --- b in prose")).toEqual(["a --- b in prose"]);
+    const many = Array.from({ length: 7 }, (_, i) => `t${i}`).join("\n---\n");
+    expect(splitParts(many).length).toBe(MAX_PARTS);
+    expect(splitParts(many)[MAX_PARTS - 1]).toContain("t6");
   });
 });

@@ -19,3 +19,18 @@ export function unwrapModelEnvelope(body: string): { text: string; unwrapped: bo
   }
   throw new Error("refusing to send a JSON envelope with no message field to a person");
 }
+
+/** At most this many texts from one message row. */
+export const MAX_PARTS = 4;
+
+/**
+ * Pure. A body may carry several texts, the way a person sends three short messages
+ * instead of one long one: a line containing only `---` separates them. Buttons and links
+ * ride the last. One text when there is no separator.
+ */
+export function splitParts(body: string): string[] {
+  const parts = body.split(/\n[ \t]*---[ \t]*\n/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length <= 1) return [body.trim()];
+  if (parts.length <= MAX_PARTS) return parts;
+  return [...parts.slice(0, MAX_PARTS - 1), parts.slice(MAX_PARTS - 1).join("\n\n")];
+}

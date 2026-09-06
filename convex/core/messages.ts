@@ -571,3 +571,10 @@ export const expireStaleQuestionsAll = internalMutation({
     return { creators: touched, expired };
   },
 });
+
+/** Has a message with this dedupe key been written for this creator? */
+export const exists = internalQuery({
+  args: { creatorId: v.id("creators"), dedupeKey: v.string() },
+  handler: async (ctx, a): Promise<boolean> =>
+    Boolean(await ctx.db.query("messages").withIndex("by_creator_and_dedupe", (q) => q.eq("creatorId", a.creatorId).eq("dedupeKey", a.dedupeKey)).first()),
+});

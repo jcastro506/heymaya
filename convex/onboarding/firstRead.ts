@@ -23,6 +23,7 @@ Shape, in this order:
 1. Hello, and what you are for them, in one or two lines in your own voice: you're Maya, their assistant for TikTok and Instagram. You watch their posts, the accounts they picked and their lane every day; you text only when something is actually worth their time; they can send you anything (a draft, a link, a question) for a straight opinion; on Sundays you lay out their week. No feature list, no bullets, no "I'm an AI".
 2. The read: name two of their real posts (by what they are, not by id) with something specific you noticed in each, and one true thing about how they make things (opening, pacing, setting, energy) with evidence. If the dossier says mode is thin or newCreator, say what you could and couldn't read, plainly.
 3. The one question you were given, if any; otherwise none.
+Send it the way a person texts: two or three short messages, not one block. Put a line containing only --- between them; the question is the last one on its own.
 Hard rules: no compliments without a specific. No claim without evidence in the dossier or the lane line you were given; no share or percentage that is not in that line. Under 150 words, and under 900 characters, which is the hard cap. Exactly one question at most.`;
 
 /** Pure: does the text name every button it will carry? Case-insensitive, whole label. */
@@ -91,13 +92,16 @@ export const run = internalAction({
       }
     }
 
+    // Live 2026-09-06: she introduced herself twice, once at pairing and again in the read.
+    const saidHello = await ctx.runQuery(internal.core.messages.exists, { creatorId: creator._id, dedupeKey: `hello:${creator._id}` });
+
     const result = await callModel(ctx, {
       creatorId: creator._id,
       purpose: "first_read",
       model: spec.primary,
       messages: [
         { role: "system", content: prefix },
-        { role: "user", content: `Write the first message. Address them directly. This is the first thing they will ever read from you.${laneLine ? ` This is the lane read from their rows; say it in your own words, keep every number and name in it, and let its question be the ONLY question in the message: "${laneLine}"` : ""}` },
+        { role: "user", content: `${saidHello ? "You already said hello when they paired (\"hey, i'm maya. i'm going through your posts…\"), so do NOT introduce yourself again: open straight with the read, and fold what you do for them into one short line at most." : "Write the first message. Address them directly. This is the first thing they will ever read from you."}${laneLine ? ` This is the lane read from their rows; say it in your own words, keep every number and name in it, and let its question be the ONLY question in the message: "${laneLine}"` : ""}` },
       ],
       temperature: 0.6,
       maxTokens: 900,
