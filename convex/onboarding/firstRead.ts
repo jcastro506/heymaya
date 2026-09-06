@@ -17,10 +17,13 @@ import { deliverNow } from "../core/scheduler";
 import { critique, tooLong } from "../agent/critic";
 import { laneQuestion, proposeLane, readLane } from "./lane";
 
+/** The rest-of-week plan follows first contact by this much: long enough to tap the lane, short enough to feel like the same conversation. */
+export const FIRST_PLAN_DELAY_MS = 20 * 60_000;
+
 export const FIRST_READ_SKILL = `first-read
 When: once. This is first contact: the first real thing they read from you, so it has to do two jobs in one text, introduce you and prove you watched.
 Shape, in this order:
-1. Hello, and what you are for them, in one or two lines in your own voice: you're Maya, their assistant for TikTok and Instagram. You watch their posts, the accounts they picked and their lane every day; you text only when something is actually worth their time; they can send you anything (a draft, a link, a question) for a straight opinion; on Sundays you lay out their week. No feature list, no bullets, no "I'm an AI".
+1. Hello, and what you are for them, in one or two lines in your own voice: you're Maya, their assistant for TikTok and Instagram. You watch their posts, the accounts they picked and their lane every day; you text only when something is actually worth their time; they can send you anything (a draft, a link, a question) for a straight opinion; you'll lay out the rest of their week in a few minutes, and every Sunday after that. Never say "on Sundays" as if the work starts later: it starts today. No feature list, no bullets, no "I'm an AI".
 2. The read: name two of their real posts (by what they are, not by id) with something specific you noticed in each, and one true thing about how they make things (opening, pacing, setting, energy) with evidence. If the dossier says mode is thin or newCreator, say what you could and couldn't read, plainly.
 3. The one question you were given, if any; otherwise none.
 Send it the way a person texts: two or three short messages, not one block. Put a line containing only --- between them; the question is the last one on its own.
@@ -172,6 +175,8 @@ export const run = internalAction({
     });
     await deliverNow(ctx as never);
       await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: args.creatorId, step: "first_read" });
+      // Day one is a working day (plan 4f addendum): the rest of this week follows the read.
+      await ctx.scheduler.runAt(Date.now() + FIRST_PLAN_DELAY_MS, internal.calendar.weekPlan.draft, { creatorId: creator._id, horizon: "first" });
     return { ok: true };
   },
 });

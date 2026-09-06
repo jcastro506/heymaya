@@ -14,7 +14,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { localHourMinute } from "./gate";
 
-export const STEPS = ["first_read", "first_scout", "first_calendar_or_worth_seeing", "invite_draft", "first_review"] as const;
+export const STEPS = ["first_read", "first_plan", "first_scout", "first_calendar_or_worth_seeing", "invite_draft", "first_review"] as const;
 export type Step = (typeof STEPS)[number];
 
 export const INVITE_DRAFT = "one thing i haven't said yet: send me a draft before you post it, or a link after, and i'll tell you what i actually think. three fixes, a confidence in words, and i keep score on myself. no pressure, whenever you have one.";

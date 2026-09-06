@@ -84,7 +84,7 @@ export const write = internalMutation({
 });
 
 /** The week, as she'd text it. Deterministic. */
-export function composeWeek(slots: Slot[], tz: string, fromHistory: boolean): string {
+export function composeWeek(slots: Slot[], tz: string, fromHistory: boolean, label = "next week"): string {
   const lines = slots.map((s) => {
     const day = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(s.film.start).toLowerCase();
     const t = (e: number) => new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(e).toLowerCase().replace(":00", "");
@@ -92,11 +92,17 @@ export function composeWeek(slots: Slot[], tz: string, fromHistory: boolean): st
     return `${day} ${t(s.film.start)} film${edit}, post ${t(s.post.at)} — ${s.hook}${s.experiment ? " (this week's experiment)" : ""}`;
   });
   const basis = fromHistory ? "post times are your best hours from your own numbers." : "post times are a default until i've seen more of your posts.";
-  return `next week, ${slots.length} post${slots.length === 1 ? "" : "s"}:\n\n${lines.join("\n")}\n\n${basis} book it and i'll put the blocks on your calendar and check in before each one. move any of them by telling me.`;
+  return `${label}, ${slots.length} post${slots.length === 1 ? "" : "s"}:\n\n${lines.join("\n")}\n\n${basis} book it and i'll put the blocks on your calendar and check in before each one. move any of them by telling me.`;
+}
+
+/** Days from tomorrow through the coming Sunday, inclusive, on their clock. Sunday → 7 (next week). */
+export function daysLeftInWeek(now: number, tz: string): number {
+  const weekday = new Date(new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(now)).getDay();
+  return weekday === 0 ? 7 : 7 - weekday;
 }
 
 export const draft = internalAction({
-  args: { creatorId: v.id("creators"), now: v.optional(v.number()), force: v.optional(v.boolean()) },
+  args: { creatorId: v.id("creators"), now: v.optional(v.number()), force: v.optional(v.boolean()), horizon: v.optional(v.union(v.literal("first"), v.literal("next_week"))) },
   handler: async (ctx, a): Promise<{ sent: boolean; reason: string; planKey?: string; slots?: number }> => {
     const now = a.now ?? Date.now();
     const g = await ctx.runQuery(internal.scout.gate.railsFor, { creatorId: a.creatorId, now });
@@ -109,11 +115,17 @@ export const draft = internalAction({
     if (inp.alreadyPlanned && !a.force) return { sent: false, reason: "this week is already planned" };
     const picked = pickIdeas(inp.ideas, Math.max(1, Math.min(5, Math.round(inp.postsPerWeek) || 1)), inp.experiment);
     if (picked.length === 0) return { sent: false, reason: "nothing to plan with: no ideas and no experiment" };
-    const slots = draftWeek({ now, timeZone: inp.timezone, postsPerWeek: inp.postsPerWeek, filmDays: inp.filmDays, filmHour: inp.filmHour, editMinutes: inp.editMinutes, busy: inp.busy, model: inp.model, ideas: picked });
+    // Day one is a working day: the first plan covers the rest of THIS week when at least
+    // two days are left, otherwise next week, right now rather than on Sunday.
+    const left = daysLeftInWeek(now, inp.timezone);
+    const restOfWeek = a.horizon === "first" && left >= 2 && left < 7;
+    const days = restOfWeek ? left : 7;
+    const slots = draftWeek({ now, timeZone: inp.timezone, postsPerWeek: inp.postsPerWeek, filmDays: inp.filmDays, filmHour: inp.filmHour, editMinutes: inp.editMinutes, busy: inp.busy, model: inp.model, ideas: picked, days });
     if (slots.length === 0) return { sent: false, reason: "no free time found in the week" };
     const planKey = planKeyFor(now, inp.timezone);
     await ctx.runMutation(internal.calendar.weekPlan.write, { creatorId: a.creatorId, planKey, slots });
-    const body = composeWeek(slots, inp.timezone, inp.model.hours.length > 0);
+    const body = composeWeek(slots, inp.timezone, inp.model.hours.length > 0, restOfWeek ? "the rest of this week" : "next week");
+    if (a.horizon === "first") await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: a.creatorId, step: "first_plan" });
     // One question for the whole week: this IS the open question, and it supersedes any other.
     await ctx.runMutation(internal.core.messages.closeOpen, { creatorId: a.creatorId });
     await ctx.runMutation(internal.core.messages.send, {

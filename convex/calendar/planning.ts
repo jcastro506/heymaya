@@ -88,21 +88,25 @@ export function draftWeek(input: {
   busy: Busy[];
   model: PostTimeModel;
   ideas: Array<{ ideaId: string | null; hook: string; experiment: boolean }>;
+  /** How many days the plan covers, from tomorrow. Seven for a week; fewer for the rest of a signup week. */
+  days?: number;
 }): Slot[] {
-  const slots = Math.max(PLAN.minSlots, Math.min(PLAN.maxSlots, Math.round(input.postsPerWeek) || 1));
+  const days = Math.max(1, Math.min(7, Math.round(input.days ?? 7)));
+  // The slot count scales with the horizon: two a week is one for the last three days.
+  const slots = Math.max(PLAN.minSlots, Math.min(PLAN.maxSlots, Math.ceil(((Math.round(input.postsPerWeek) || 1) * days) / 7)));
   const day0 = input.now + 86_400_000; // the plan starts tomorrow
-  const dayEpochs = Array.from({ length: 7 }, (_, i) => day0 + i * 86_400_000);
+  const dayEpochs = Array.from({ length: days }, (_, i) => day0 + i * 86_400_000);
   const weekday = (e: number) => new Date(new Intl.DateTimeFormat("en-US", { timeZone: input.timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(e)).getDay();
   // Preferred days first, then fill evenly across what is left.
   const preferred = dayEpochs.filter((e) => input.filmDays.includes(weekday(e)));
   const rest = dayEpochs.filter((e) => !input.filmDays.includes(weekday(e)));
   const evenly = (xs: number[], k: number) => (k <= 0 ? [] : xs.filter((_, i) => i % Math.max(1, Math.floor(xs.length / k)) === 0).slice(0, k));
-  const days = [...preferred.slice(0, slots), ...evenly(rest, slots - Math.min(slots, preferred.length))].slice(0, slots).sort((a, b) => a - b);
+  const days_ = [...preferred.slice(0, slots), ...evenly(rest, slots - Math.min(slots, preferred.length))].slice(0, slots).sort((a, b) => a - b);
 
   const busy = [...input.busy];
   const out: Slot[] = [];
   input.ideas.slice(0, slots).forEach((idea, i) => {
-    const day = days[i] ?? dayEpochs[i % 7];
+    const day = days_[i] ?? dayEpochs[i % dayEpochs.length];
     const film = freeSlotOn(day, PLAN.filmMinutes, busy, input.filmHour ?? PLAN.defaultFilmHour, input.timeZone);
     if (!film) return;
     busy.push(film);

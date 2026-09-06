@@ -217,3 +217,47 @@ describe("the plan by text (the belt tools)", () => {
     expect((await t.run((ctx) => ctx.db.get(blockId)))?.status).toBe("deleted");
   });
 });
+
+import { daysLeftInWeek } from "../weekPlan";
+import { draftWeek as draftWeekFn } from "../planning";
+import { buildPostTimeModel as buildModelFn } from "../postTime";
+
+describe("day one is a working day (2026-09-06)", () => {
+  const WEDNESDAY_3PM = atLocalHour(Date.UTC(2026, 8, 9, 12, 0), 15, TZ);
+
+  it("days left run from tomorrow through sunday; a sunday gets a whole week", () => {
+    expect(daysLeftInWeek(WEDNESDAY_3PM, TZ)).toBe(4);
+    expect(daysLeftInWeek(SUNDAY_6PM, TZ)).toBe(7);
+  });
+
+  it("a shorter horizon scales the slots and keeps every block inside it", () => {
+    const model = buildModelFn([], TZ);
+    const ideas = [1, 2, 3].map((i) => ({ ideaId: null, hook: `idea ${i}`, experiment: false }));
+    const slots = draftWeekFn({ now: WEDNESDAY_3PM, timeZone: TZ, postsPerWeek: 3, filmDays: [], filmHour: null, editMinutes: 0, busy: [], model, ideas, days: 4 });
+    expect(slots.length).toBe(2); // ceil(3 × 4 / 7)
+    for (const s of slots) expect(s.post.at).toBeLessThan(WEDNESDAY_3PM + 5 * 86_400_000);
+  });
+
+  it("the first plan on a wednesday covers the rest of this week and says so; on a sunday it plans next week and the sunday cron then stays quiet", async () => {
+    const t = convexTest(schema, modules);
+    const wed = await creatorWithIdeas(t);
+    const r = await t.action(internal.calendar.weekPlan.draft, { creatorId: wed, now: WEDNESDAY_3PM, horizon: "first" });
+    expect(r.sent).toBe(true);
+    const msg = (await t.run((ctx) => ctx.db.query("messages").collect())).find((m) => m.kind === "plan");
+    expect(msg?.body.startsWith("the rest of this week")).toBe(true);
+    const blocks = await t.run((ctx) => ctx.db.query("calendarBlocks").collect());
+    const nextMonday = atLocalHour(Date.UTC(2026, 8, 14, 12, 0), 0, TZ);
+    expect(blocks.every((b) => b.start < nextMonday), "nothing planned past sunday").toBe(true);
+    const c = await t.run((ctx) => ctx.db.get(wed));
+    expect(c?.firstWeek?.stepsDone).toContain("first_plan");
+
+    const t2 = convexTest(schema, modules);
+    const sun = await creatorWithIdeas(t2);
+    const first = await t2.action(internal.calendar.weekPlan.draft, { creatorId: sun, now: SUNDAY_6PM - 4 * 3_600_000, horizon: "first" });
+    expect(first.sent).toBe(true);
+    const body = (await t2.run((ctx) => ctx.db.query("messages").collect())).find((m) => m.kind === "plan")?.body ?? "";
+    expect(body.startsWith("next week")).toBe(true);
+    const cron = await t2.action(internal.calendar.weekPlan.draft, { creatorId: sun, now: SUNDAY_6PM });
+    expect(cron.sent, "the sunday cron sees the week as planned").toBe(false);
+  });
+});
