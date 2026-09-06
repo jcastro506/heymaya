@@ -122,3 +122,29 @@ describe("recorded vendor shapes", () => {
     expect(((t.raw as { reels?: unknown[] }).reels ?? []).length, "trending reels empty").toBeGreaterThan(0);
   });
 });
+
+/**
+ * Two shapes the recording never showed and a LIVE read of a connected account did
+ * (2026-09-05, the operator's own throwaway accounts). Both broke the catalogue read.
+ */
+describe("live shapes the recording missed", () => {
+  it("instagram: a numeric pk is still an id", async () => {
+    const body = structuredClone(R["/v2/instagram/user/posts"]) as { items: Record<string, unknown>[] };
+    for (const item of body.items) { item.pk = 3712345678901234567; item.id = 3712345678901234567; }
+    const deps = { client: { request: async () => structuredClone(body) } } as never;
+    const posts = await instagram.lastPosts("heymaya182", 30, deps);
+    assertUsablePosts(posts, "instagram numeric pk", { needViews: false });
+    for (const p of posts) expect(typeof p.postId).toBe("string");
+  });
+
+  it("tiktok: a photo carousel is an image, not a video to transcribe", async () => {
+    const body = structuredClone(R["/v3/tiktok/profile/videos"]) as { aweme_list: Record<string, unknown>[] };
+    const first = body.aweme_list[0];
+    first.share_url = "https://www.tiktok.com/@kevin.castro9996/photo/7603160253638741262?_r=1";
+    first.image_post_info = { images: [] };
+    const deps = { client: { request: async () => structuredClone(body) } } as never;
+    const posts = await tiktok.lastPosts("kevin.castro9996", 30, deps);
+    expect(posts[0].mediaType).toBe("image");
+    expect(posts.slice(1).every((p) => p.mediaType === "video")).toBe(true);
+  });
+});

@@ -408,14 +408,20 @@ function normalizeTikTokPosts(raw: unknown): NormalizedPost[] {
       v.video?.duration,
       v.video?.duration_ms
     );
+    const shareUrl =
+      str(v.share_url) ??
+      str(v.shareUrl) ??
+      str(v.shareInfo?.shareUrl) ??
+      str(v.shareInfo?.share_url);
+    // Live 2026-09-05: a photo carousel comes back from the same endpoint with a `/photo/`
+    // share url and an image_post_info block. Calling it a video sends it to the transcript
+    // endpoint, which refuses it. Photos are photos.
+    const raw = v as Record<string, unknown>;
+    const isPhoto = Boolean(raw.image_post_info ?? raw.imagePost) || /\/photo\//.test(shareUrl ?? "");
     return NormalizedPostSchema.parse({
       platform: "tiktok",
       postId,
-      url:
-        str(v.share_url) ??
-        str(v.shareUrl) ??
-        str(v.shareInfo?.shareUrl) ??
-        str(v.shareInfo?.share_url),
+      url: shareUrl,
       caption: str(v.desc ?? v.title),
       // `unique_id` is the @handle; `nickname` is the display name and changes.
       authorHandle: str(v.author?.unique_id) ?? str(v.author?.uniqueId),
@@ -427,7 +433,7 @@ function normalizeTikTokPosts(raw: unknown): NormalizedPost[] {
         shareCount: firstNum(stats?.shareCount, stats?.share_count),
         saveCount: firstNum(stats?.collectCount, stats?.collect_count),
       },
-      mediaType: "video",
+      mediaType: isPhoto ? "image" : "video",
       thumbnailUrl:
         mediaUrl(v.video?.cover) ??
         mediaUrl(v.video?.originCover) ??

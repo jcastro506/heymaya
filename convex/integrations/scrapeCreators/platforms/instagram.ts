@@ -47,8 +47,10 @@ const IgProfileResponseSchema = z
 
 const IgPostSchema = z
   .object({
-    id: z.string().optional(),
-    pk: z.string().optional(),
+    // Live 2026-09-05: a real connected account came back with `pk` as a NUMBER, which the
+    // spec-shaped fixture never showed. Ids are strings to us whatever the vendor sends.
+    id: z.union([z.string(), z.number()]).transform(String).optional(),
+    pk: z.union([z.string(), z.number()]).transform(String).optional(),
     code: z.string().optional(),
     shortcode: z.string().optional(),
     caption: z
