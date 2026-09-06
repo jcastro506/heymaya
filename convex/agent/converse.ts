@@ -149,6 +149,15 @@ export const run = internalAction({
         await deliverNow(ctx as never);
         return { ok: true };
       }
+      // Sprint 4f: a tap on a lane candidate writes the lane and starts the growth plan.
+      const lp = target.body.match(/^lanepick:([a-z0-9-]+):([0-9])$/);
+      if (lp) {
+        const r = await ctx.runMutation(internal.onboarding.lane.pick, { creatorId: creator._id, token: lp[1], index: Number(lp[2]) });
+        const body = r.ok && r.plan ? `${r.label} it is. ${r.plan.postsPerWeek} a week on it for the next month, the rest as backdrop; i'll lay the week out sunday and tell you on the ${new Intl.DateTimeFormat("en-US", { timeZone: creator.timezone, month: "short", day: "numeric" }).format(r.plan.reviewAt)} review whether it moved anything.` : "couldn't save that; tell me your lane in your own words and i'll use it.";
+        await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body, dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
+        await deliverNow(ctx as never);
+        return { ok: true };
+      }
       // The lane she read from their posts (Sprint 4d): a tap confirms it and repoints the
       // sweep and the roster; "not quite" hands them the two nearest neighbours, never a blank field.
       const ln = target.body.match(/^lane:([a-z0-9-]+):(yes|no)$/);
@@ -157,7 +166,8 @@ export const run = internalAction({
         const stash = await ctx.runQuery(internal.onboarding.lane.readByToken, { creatorId: creator._id, token: ln[1] });
         if (ln[2] === "yes" && stash) {
           const r = await ctx.runMutation(internal.onboarding.lane.confirm, { creatorId: creator._id, keywords: stash.keywords });
-          body = r.ok ? `good. i'll watch ${r.keywords.slice(0, 3).join(", ")} for you.` : "couldn't save that; tell me your lane in your own words and i'll use it.";
+          if (r.ok) await ctx.runMutation(internal.agent.growth.setPlan, { creatorId: creator._id, lane: r.keywords.slice(0, 2).join(" "), keywords: r.keywords, setBy: "tap" });
+          body = r.ok ? `good. i'll watch ${r.keywords.slice(0, 3).join(", ")} for you, and plan the month around it.` : "couldn't save that; tell me your lane in your own words and i'll use it.";
         } else if (stash) {
           const alt = stash.keywords.slice(3, 5);
           body = alt.length ? `fair. closer to ${alt.join(" or ")}, or something else? say it however you like.` : "fair. what would you call it? your words, one line.";

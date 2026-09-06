@@ -391,3 +391,73 @@ export const mergeDuplicateOwnPosts = internalMutation({
     return { merged };
   },
 });
+
+/** Audit of one creator's run, everything the pilot touched, as counts and short rows. Dev only. */
+export const audit = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<Record<string, unknown>> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!c) return { error: "no creator" };
+    const tz = c.timezone ?? "UTC";
+    const local = (t: number) => new Date(t).toLocaleString("en-US", { timeZone: tz, month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+    const count = <T,>(rows: T[], key: (r: T) => string) => { const m: Record<string, number> = {}; for (const r of rows) { const k = key(r); m[k] = (m[k] ?? 0) + 1; } return m; };
+    const msgs = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId)).order("asc").take(500)) as Doc<"messages">[];
+    const jobs = (await ctx.db.query("jobs").withIndex("by_creator_and_createdAt", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(400)) as Doc<"jobs">[];
+    const budgets = (await ctx.db.query("budgets").withIndex("by_creator_day", (q) => q.eq("creatorId", a.creatorId)).take(60)) as Doc<"budgets">[];
+    const costs = (await ctx.db.query("costEvents").withIndex("by_creator_at", (q) => q.eq("creatorId", a.creatorId)).take(3000)) as Doc<"costEvents">[];
+    const signals = (await ctx.db.query("signals").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(500)) as Doc<"signals">[];
+    const ideas = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(300)) as Doc<"ideas">[];
+    const blocks = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(200)) as Doc<"calendarBlocks">[];
+    const taste = (await ctx.db.query("tasteEvents").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(300)) as Doc<"tasteEvents">[];
+    const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(300)) as Doc<"ownPosts">[];
+    const reads = (await ctx.db.query("ownPostReads").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(300)) as Doc<"ownPostReads">[];
+    const directives = (await ctx.db.query("directives").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(100)) as Doc<"directives">[];
+    const tracked = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(100)) as Doc<"trackedAccounts">[];
+    const conn = (await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).first()) as Doc<"connections"> | null;
+    const costBy: Record<string, { usd: number; n: number }> = {};
+    for (const e of costs) { const k = `${e.vendor}:${e.kind}`; costBy[k] = { usd: Math.round(((costBy[k]?.usd ?? 0) + e.costUsd) * 10000) / 10000, n: (costBy[k]?.n ?? 0) + 1 }; }
+    const out = msgs.filter((m) => m.direction === "out");
+    return {
+      creator: { handles: c.handles, tz, created: local(c.createdAt), plan: c.plan, laneConfirmedAt: c.laneConfirmedAt ? local(c.laneConfirmedAt) : null, niche: c.niche, dossierVersion: (c as unknown as { dossierVersion?: number }).dossierVersion ?? null, roster: tracked.length },
+      messages: {
+        total: msgs.length, out: out.length, in: msgs.filter((m) => m.direction === "in").length,
+        outByKind: count(out, (m) => m.kind ?? "?"), proactive: out.filter((m) => m.proactive).length,
+        delivered: out.filter((m) => m.deliveredAt).length, deliveryErrors: out.filter((m) => m.deliveryError).map((m) => m.deliveryError).slice(0, 5),
+        openQuestions: out.filter((m) => m.awaitingAnswer).length, criticSkipped: out.filter((m) => m.criticSkipped).length,
+        withButtons: out.filter((m) => m.buttons?.length).length, reactions: count(out.filter((m) => m.reaction), (m) => m.reaction ?? "?"),
+        timeline: msgs.map((m) => `${local(m.ts)} ${m.direction === "out" ? "→" : "←"} ${m.kind ?? ""}${m.proactive ? "*" : ""}${m.buttons?.length ? ` [${m.buttons.map((b) => b.id.split(":")[0]).join(",")}]` : ""}${m.deliveryError ? " DELIVERY-ERROR" : ""} ${m.body.slice(0, 110).replace(/\n/g, " / ")}`),
+      },
+      jobs: { byKindStatus: count(jobs, (j) => `${j.kind}:${j.status}`), failed: jobs.filter((j) => j.status === "failed" || j.lastError).slice(0, 8).map((j) => `${local(j.createdAt)} ${j.kind} x${j.attempts}: ${(j.lastError ?? "").slice(0, 140)}`) },
+      spend: { totalUsd: Math.round(costs.reduce((s, e) => s + e.costUsd, 0) * 100) / 100, byVendorKind: costBy, budgetsByDay: budgets.sort((x, y) => x.day.localeCompare(y.day)).map((b) => `${b.day}: $${b.spentUsd.toFixed(2)} msgs ${b.messages} watches ${b.watches} onb ${b.onboardingWatches ?? 0} credits ${b.marginalCredits}`) },
+      signals: {
+        total: signals.length, byKindVerdict: count(signals, (s) => `${s.kind}:${(s as unknown as { verdict?: string }).verdict ?? "?"}`),
+        detectedByDay: count(signals, (s) => local(s.createdAt).slice(0, 6)),
+        investigatedByDay: count(signals.filter((s) => (s as unknown as { investigation?: unknown }).investigation), (s) => local(s.createdAt).slice(0, 6)),
+        topToday: signals.filter((s) => Date.now() - s.createdAt < 36 * 3_600_000).sort((x, y) => (y.score ?? 0) - (x.score ?? 0)).slice(0, 5).map((s) => `${local(s.createdAt)} ${s.kind} ${s.score ?? "?"}x ${(s.detected ?? s.why).slice(0, 90)}`),
+      },
+      ideas: { total: ideas.length, byStatus: count(ideas, (i) => i.status), withOutcome: ideas.filter((i) => i.outcomeMultiple !== undefined).length },
+      calendar: { blocks: blocks.length, byKindStatus: count(blocks, (b) => `${b.kind}:${b.status}`), next: blocks.filter((b) => b.start > Date.now()).sort((x, y) => x.start - y.start).slice(0, 4).map((b) => `${local(b.start)} ${b.kind} ${b.title} (${b.status})`) },
+      taste: { events: taste.length, byKind: count(taste, (t) => t.kind), affinities: ((c as unknown as { affinities?: unknown[] }).affinities ?? []).length, note: Boolean((c as unknown as { taste?: { text?: string } }).taste?.text) },
+      posts: { own: posts.length, connected: posts.filter((p) => p.connected).length, transcribed: posts.filter((p) => p.transcript).length, reads: reads.length, readsByDepth: count(reads, (r) => (r as unknown as { depth?: string }).depth ?? "?") },
+      directives: directives.filter((d) => d.active).map((d) => `${d.kind}: ${d.verbatim.slice(0, 80)}`),
+      connection: conn ? { status: conn.status, accounts: (conn.zernioAccounts ?? []).length, detail: conn.detail ?? null } : null,
+    };
+  },
+});
+
+/** Fleet spend by vendor and kind since a day, plus the latest vendor health. Dev only. */
+export const fleetSpend = internalQuery({
+  args: { sinceDay: v.string() },
+  handler: async (ctx, a): Promise<Record<string, unknown>> => {
+    const since = Date.parse(`${a.sinceDay}T00:00:00Z`);
+    const costs = (await ctx.db.query("costEvents").withIndex("by_at", (q) => q.gte("at", since)).take(8000)) as Doc<"costEvents">[];
+    const by: Record<string, { usd: number; n: number }> = {};
+    const byDay: Record<string, number> = {};
+    for (const e of costs) {
+      const k = `${e.vendor}:${e.kind}`; by[k] = { usd: Math.round(((by[k]?.usd ?? 0) + e.costUsd) * 10000) / 10000, n: (by[k]?.n ?? 0) + 1 };
+      const day = new Date(e.at).toISOString().slice(0, 10); byDay[day] = Math.round(((byDay[day] ?? 0) + e.costUsd) * 100) / 100;
+    }
+    const health = (await ctx.db.query("vendorHealth").order("desc").take(6)) as Doc<"vendorHealth">[];
+    return { events: costs.length, totalUsd: Math.round(costs.reduce((s, e) => s + e.costUsd, 0) * 100) / 100, byDay, byVendorKind: by, health: health.map((h) => `${new Date(h.at).toISOString().slice(0, 16)} ${h.vendor} ${h.check} ${h.ok ? "ok" : "FAIL"} ${JSON.stringify(h.detail ?? "").slice(0, 80)}`) };
+  },
+});

@@ -242,6 +242,9 @@ export const run = internalAction({
 
     const synth = await ctx.runAction(internal.onboarding.ingest.synthesize, { creatorId: creator._id, mode, readFrom, reason: "onboarding" });
     if (!synth.ok) return synth;
+    // Sprint 4f: what their posts are about, grouped, before she speaks. A failure here
+    // must not cost them the first message; the read is retried by the weekly rewrite.
+    try { await ctx.runAction(internal.onboarding.clusters.read, { creatorId: creator._id }); } catch (err) { console.error(`[ingest] cluster read failed: ${String(err)}`); }
     await ctx.runMutation(internal.core.jobs.enqueue, {
       kind: "first_read",
       idempotencyKey: `first_read:${creator._id}:after_ingest`,

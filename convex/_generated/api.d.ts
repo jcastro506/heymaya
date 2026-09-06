@@ -15,6 +15,7 @@ import type * as agent_consolidate from "../agent/consolidate.js";
 import type * as agent_context from "../agent/context.js";
 import type * as agent_converse from "../agent/converse.js";
 import type * as agent_critic from "../agent/critic.js";
+import type * as agent_growth from "../agent/growth.js";
 import type * as agent_history from "../agent/history.js";
 import type * as agent_inbound from "../agent/inbound.js";
 import type * as agent_investigate from "../agent/investigate.js";
@@ -96,6 +97,7 @@ import type * as integrations_telegram_client from "../integrations/telegram/cli
 import type * as integrations_zernio_index from "../integrations/zernio/index.js";
 import type * as lib_encryption from "../lib/encryption.js";
 import type * as onboarding_admired from "../onboarding/admired.js";
+import type * as onboarding_clusters from "../onboarding/clusters.js";
 import type * as onboarding_dev from "../onboarding/dev.js";
 import type * as onboarding_firstRead from "../onboarding/firstRead.js";
 import type * as onboarding_ingest from "../onboarding/ingest.js";
@@ -143,6 +145,7 @@ declare const fullApi: ApiFromModules<{
   "agent/context": typeof agent_context;
   "agent/converse": typeof agent_converse;
   "agent/critic": typeof agent_critic;
+  "agent/growth": typeof agent_growth;
   "agent/history": typeof agent_history;
   "agent/inbound": typeof agent_inbound;
   "agent/investigate": typeof agent_investigate;
@@ -224,6 +227,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/zernio/index": typeof integrations_zernio_index;
   "lib/encryption": typeof lib_encryption;
   "onboarding/admired": typeof onboarding_admired;
+  "onboarding/clusters": typeof onboarding_clusters;
   "onboarding/dev": typeof onboarding_dev;
   "onboarding/firstRead": typeof onboarding_firstRead;
   "onboarding/ingest": typeof onboarding_ingest;

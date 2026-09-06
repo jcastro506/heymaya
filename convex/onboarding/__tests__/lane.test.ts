@@ -127,3 +127,48 @@ describe("what a live first read taught the lane (2026-09-05)", () => {
     expect(q.endsWith("right?")).toBe(true);
   });
 });
+
+import { proposeLane } from "../lane";
+import type { Lanes } from "../clusters";
+
+const lanesOf = (clusters: Lanes["clusters"], posts: number, state: Lanes["state"]): Lanes => ({ readAt: 1, posts, scatter: 1 - (clusters[0]?.share ?? 0), state, clusters });
+const cl = (label: string, keywords: string[], n: number, share: number, medianMultiple: number | null) => ({ label, keywords, postIds: Array.from({ length: n }, (_, i) => `${label}${i}`), share, medianMultiple });
+
+describe("the lane proposal for an account that may have none (Sprint 4f)", () => {
+  it("rewarded and admired disagree: one question, two candidates, the rewarded one first", () => {
+    const lanes = lanesOf([cl("food reviews", ["food", "restaurant"], 3, 0.25, 0.8), cl("london runs", ["running", "london"], 2, 0.17, 2.4), cl("travel days", ["travel", "brisbane"], 2, 0.17, 0.9)], 12, "scattered");
+    const p = proposeLane({ lanes, laneKeywords: ["travel", "london"], admiredKeywords: ["travel", "backpacking"], stated: "", laneConfidence: "thin" });
+    expect(p.state).toBe("scattered");
+    expect(p.candidates[0].source).toBe("rewarded");
+    expect(p.candidates[0].label).toBe("london runs");
+    expect(p.candidates[1].source).toBe("admired");
+    expect(p.question).toMatch(/london runs/);
+    expect(p.question).toMatch(/travel days/);
+    expect(p.question).toMatch(/which one/);
+    expect(p.read).toMatch(/directions/);
+  });
+
+  it("rewarded and admired agree: a recommendation with a go-with-that question, never a quiz", () => {
+    const lanes = lanesOf([cl("food reviews", ["food"], 3, 0.25, 0.8), cl("london runs", ["running", "london"], 2, 0.17, 2.4)], 12, "scattered");
+    const p = proposeLane({ lanes, laneKeywords: [], admiredKeywords: ["running", "marathon"], stated: "", laneConfidence: "none" });
+    expect(p.candidates.length).toBe(1);
+    expect(p.recommendation?.label).toBe("london runs");
+    expect(p.question).toMatch(/go with that/);
+    expect(p.question).not.toMatch(/what's your niche/);
+  });
+
+  it("known: the sentence and the biggest group agree; unnamed: biggest group, no question", () => {
+    const lanes = lanesOf([cl("london runs", ["running", "london"], 8, 0.7, 1.3), cl("travel", ["travel"], 2, 0.17, 0.9)], 12, "unnamed");
+    expect(proposeLane({ lanes, laneKeywords: [], admiredKeywords: [], stated: "running content in london", laneConfidence: "solid" }).state).toBe("known");
+    const u = proposeLane({ lanes, laneKeywords: [], admiredKeywords: [], stated: "", laneConfidence: "solid" });
+    expect(u.state).toBe("unnamed");
+    expect(u.question).toBeNull();
+    expect(u.recommendation?.label).toBe("london runs");
+  });
+
+  it("nothing read is none, with no candidates invented", () => {
+    const p = proposeLane({ lanes: null, laneKeywords: [], admiredKeywords: ["x"], stated: "cooking", laneConfidence: "none" });
+    expect(p.state).toBe("none");
+    expect(p.candidates).toEqual([]);
+  });
+});

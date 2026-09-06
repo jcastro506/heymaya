@@ -15,7 +15,7 @@ import { REGISTRY } from "../agent/registry";
 import { buildPrefix, producedStamp } from "../agent/context";
 import { deliverNow } from "../core/scheduler";
 import { critique, tooLong } from "../agent/critic";
-import { laneQuestion, readLane } from "./lane";
+import { laneQuestion, proposeLane, readLane } from "./lane";
 
 export const FIRST_READ_SKILL = `first-read
 When: once, the first message after the dossier exists.
@@ -58,13 +58,20 @@ export const run = internalAction({
      * weak lane, and the sweep, the roster and the fit test all inherit it. Read before the
      * model writes, so the lane check is the message's one question.
      */
-    let laneAsk: { token: string; keywords: string[] } | null = null;
+    let laneAsk: { token: string; keywords: string[]; candidates: Array<{ label: string; keywords: string[] }> } | null = null;
     let laneLine = "";
     if (!creator.laneConfirmedAt) {
       const li = await ctx.runQuery(internal.onboarding.lane.inputsFor, { creatorId: creator._id });
       const read = li ? readLane(li.posts) : null;
-      if (read && read.confidence !== "none") {
-        laneAsk = { token: read.keywords.slice(0, 5).join("-").replace(/[^a-z0-9-]/g, "").slice(0, 60), keywords: read.keywords };
+      // Sprint 4f: the scattered account. She leads with the truth and a recommendation, and asks one thing.
+      const prop = li ? proposeLane({ lanes: li.lanes, laneKeywords: read?.keywords ?? [], admiredKeywords: li.admiredKeywords, stated: li.niche, laneConfidence: read?.confidence ?? "none" }) : null;
+      if (li && prop && prop.state === "scattered" && prop.recommendation && prop.question && li.laneQuestionsThisWeek < 2) {
+        const candidates = prop.candidates.map((c) => ({ label: c.label, keywords: c.keywords }));
+        laneAsk = { token: `pick-${candidates.map((c) => c.keywords[0] ?? c.label).join("-").replace(/[^a-z0-9-]/g, "").slice(0, 50)}`, keywords: prop.recommendation.keywords, candidates };
+        await ctx.runMutation(internal.onboarding.lane.stashRead, { creatorId: creator._id, token: laneAsk.token, keywords: prop.recommendation.keywords, candidates });
+        laneLine = `${prop.read}. ${prop.candidates.map((c) => `${c.label}: ${c.evidence}`).join("; ")}. ${prop.question}`;
+      } else if (read && read.confidence !== "none") {
+        laneAsk = { token: read.keywords.slice(0, 5).join("-").replace(/[^a-z0-9-]/g, "").slice(0, 60), keywords: read.keywords, candidates: [] };
         await ctx.runMutation(internal.onboarding.lane.stashRead, { creatorId: creator._id, token: laneAsk.token, keywords: read.keywords });
         laneLine = laneQuestion(read.keywords, li?.hooks ?? []);
       }
@@ -76,7 +83,7 @@ export const run = internalAction({
       model: spec.primary,
       messages: [
         { role: "system", content: prefix },
-        { role: "user", content: `Write the first message. Address them directly. This is the first thing they will ever read from you.${laneLine ? ` End with this one question, in your own words if you like, and ask no other question in the message: "${laneLine}"` : ""}` },
+        { role: "user", content: `Write the first message. Address them directly. This is the first thing they will ever read from you.${laneLine ? ` This is the lane read from their rows; say it in your own words, keep every number and name in it, and let its question be the ONLY question in the message: "${laneLine}"` : ""}` },
       ],
       temperature: 0.6,
       maxTokens: 900,
@@ -120,7 +127,11 @@ export const run = internalAction({
       proactive: true,
       kind: "first_read",
       awaitingAnswer: Boolean(laneAsk) || /\?\s*$/.test(text),
-      ...(laneAsk ? { buttons: [{ id: `lane:${laneAsk.token}:yes`, label: "that's it" }, { id: `lane:${laneAsk.token}:no`, label: "not quite" }] } : {}),
+      ...(laneAsk
+        ? laneAsk.candidates.length
+          ? { buttons: laneAsk.candidates.slice(0, 3).map((c, i) => ({ id: `lanepick:${laneAsk!.token}:${i}`, label: c.label.slice(0, 30) })) }
+          : { buttons: [{ id: `lane:${laneAsk.token}:yes`, label: "that's it" }, { id: `lane:${laneAsk.token}:no`, label: "not quite" }] }
+        : {}),
       produced: producedStamp(spec.primary),
     });
     await deliverNow(ctx as never);

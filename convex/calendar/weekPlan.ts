@@ -39,7 +39,8 @@ export const inputsFor = internalQuery({
     const medianCut = dossier?.fingerprint?.medianCutSeconds;
     return {
       timezone: tz,
-      postsPerWeek: dossier?.cadence?.postsPerWeek ?? 2,
+      // Sprint 4f: a running growth plan sets the cadence before the dossier does.
+      postsPerWeek: ((creator.growthPlan as { status?: string; postsPerWeek?: number } | undefined)?.status === "running" ? (creator.growthPlan as { postsPerWeek?: number }).postsPerWeek : undefined) ?? dossier?.cadence?.postsPerWeek ?? 2,
       filmDays: (dossier?.cadence?.filmingDays ?? []).map((d) => WEEKDAY[d.slice(0, 3).toLowerCase()]).filter((n): n is number => typeof n === "number"),
       filmHour: creator.preferredSendHour ?? null,
       editMinutes: editMinutesFor({ medianCutSeconds: typeof medianCut === "number" ? medianCut : null }, creator.noEditBlock),

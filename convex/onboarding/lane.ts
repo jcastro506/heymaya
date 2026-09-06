@@ -16,6 +16,8 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
+import type { Lanes } from "./clusters";
+import { GROWTH, type GrowthPlan } from "../agent/growth";
 
 export const LANE = {
   /** Enough posts to read a lane from behaviour rather than asking. */
@@ -95,18 +97,99 @@ export function driftShare(before: string[], after: string[]): number {
   return after.filter((k) => !known.has(k.toLowerCase())).length / after.length;
 }
 
+/**
+ * Sprint 4f: the lane proposal for an account that may have none. Three pieces of
+ * evidence in fixed priority: what their audience already rewards (the cluster with the
+ * best median multiple, at least two posts), who they wish they were (the admired roster's
+ * words), and what they said (lowest). Agreement is a recommendation; a split between
+ * rewarded and admired is the one question worth asking. Pure.
+ */
+export interface LaneCandidate { label: string; keywords: string[]; evidence: string; source: "rewarded" | "admired" | "stated" | "biggest" }
+export interface LaneProposal {
+  state: "known" | "unnamed" | "scattered" | "none";
+  candidates: LaneCandidate[];
+  /** What she would pick, and why, in one clause. */
+  recommendation: LaneCandidate | null;
+  /** The one question, or null when the evidence agrees. */
+  question: string | null;
+  /** The truth about the catalogue, one sentence, for the message. */
+  read: string;
+}
+
+const overlap = (a: string[], b: string[]) => { const B = new Set(b.map((x) => x.toLowerCase())); return a.filter((x) => B.has(x.toLowerCase())).length; };
+
+export function proposeLane(input: { lanes: Lanes | null; laneKeywords: string[]; admiredKeywords: string[]; stated: string; laneConfidence: "none" | "thin" | "solid" }): LaneProposal {
+  const lanes = input.lanes;
+  const statedWords = input.stated.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4);
+  if (!lanes || lanes.state === "none" || lanes.posts === 0) return { state: "none", candidates: [], recommendation: null, question: null, read: "no posts to read yet" };
+  const clusters = lanes.clusters;
+  const withM = clusters.filter((c) => c.medianMultiple !== null && c.postIds.length >= 2);
+  const rewarded = withM.length ? [...withM].sort((a, b) => (b.medianMultiple ?? 0) - (a.medianMultiple ?? 0))[0] : null;
+  const biggest = clusters[0] ?? null;
+  const admiredMatch = clusters.map((c) => ({ c, n: overlap(c.keywords, input.admiredKeywords) })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n)[0]?.c ?? null;
+  const statedMatch = clusters.map((c) => ({ c, n: overlap(c.keywords, statedWords) })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n)[0]?.c ?? null;
+
+  const cand = (c: NonNullable<typeof biggest>, source: LaneCandidate["source"]): LaneCandidate => ({
+    label: c.label, keywords: c.keywords, source,
+    evidence: source === "rewarded" ? `your ${c.label} posts run ${c.medianMultiple}× your normal (${c.postIds.length} posts)` : source === "admired" ? `it is what the accounts you admire make, and you have ${c.postIds.length} posts there` : source === "stated" ? `it is what you said you make, and you have ${c.postIds.length} posts there` : `it is most of what you post (${Math.round(c.share * 100)}%)`,
+  });
+  const read = lanes.state === "scattered"
+    ? `your posts pull in ${Math.max(2, clusters.length)} directions${biggest ? `; the biggest, ${biggest.label}, is only ${Math.round(biggest.share * 100)}% of them` : ""}`
+    : biggest ? `most of your posts are ${biggest.label} (${Math.round(biggest.share * 100)}%)` : "your posts do not group yet";
+
+  // Known: the sentence and the posts agree on the biggest group.
+  if (lanes.state !== "scattered" && statedMatch && biggest && statedMatch.label === biggest.label) {
+    const r = cand(biggest, "stated");
+    return { state: "known", candidates: [r], recommendation: r, question: null, read };
+  }
+  if (lanes.state !== "scattered" && biggest) {
+    const r = cand(biggest, rewarded && rewarded.label === biggest.label ? "rewarded" : "biggest");
+    return { state: "unnamed", candidates: [r], recommendation: r, question: null, read };
+  }
+  // Scattered: triangulate.
+  const candidates: LaneCandidate[] = [];
+  if (rewarded) candidates.push(cand(rewarded, "rewarded"));
+  if (admiredMatch && !candidates.some((x) => x.label === admiredMatch.label)) candidates.push(cand(admiredMatch, "admired"));
+  if (statedMatch && !candidates.some((x) => x.label === statedMatch.label)) candidates.push(cand(statedMatch, "stated"));
+  if (!candidates.length && biggest) candidates.push(cand(biggest, "biggest"));
+  if (!candidates.length && input.laneConfidence !== "none") candidates.push({ label: input.laneKeywords.slice(0, 2).join(" "), keywords: input.laneKeywords.slice(0, 5), evidence: "the words that repeat across your posts", source: "biggest" });
+  const recommendation = candidates[0] ?? null;
+  let question: string | null = null;
+  if (rewarded && admiredMatch && rewarded.label !== admiredMatch.label) {
+    question = `your best posts are the ${rewarded.label} ones, but the accounts you admire make ${admiredMatch.label}. which one do you want to be?`;
+  } else if (recommendation) {
+    question = `i'd make ${recommendation.label} the lane for the next month and keep the rest as backdrop. go with that?`;
+  }
+  return { state: "scattered", candidates: candidates.slice(0, 3), recommendation, question, read };
+}
+
 export const inputsFor = internalQuery({
   args: { creatorId: v.id("creators") },
-  handler: async (ctx, a): Promise<{ posts: PostLite[]; hooks: string[]; niche: string; keywords: string[] } | null> => {
+  handler: async (ctx, a): Promise<{ posts: PostLite[]; hooks: string[]; niche: string; keywords: string[]; lanes: Lanes | null; admiredKeywords: string[]; laneQuestionsThisWeek: number } | null> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c) return null;
     const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(60)) as Doc<"ownPosts">[];
     const ranked = [...posts].sort((x, y) => (y.multiple ?? -1) - (x.multiple ?? -1));
+    // Sprint 4f: who they wish they were, as the words of the roster's observed posts.
+    const tracked = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(20)) as Doc<"trackedAccounts">[];
+    const kw = new Map<string, number>();
+    for (const t of tracked.filter((t) => t.status !== "removed")) {
+      const obs = (await ctx.db.query("observations").withIndex("by_author", (q) => q.eq("platform", t.platform).eq("authorHandle", t.handle)).order("desc").take(12)) as Doc<"observations">[];
+      for (const o of obs) for (const k of o.keywords ?? []) kw.set(k.toLowerCase(), (kw.get(k.toLowerCase()) ?? 0) + 1);
+    }
+    const admiredKeywords = [...kw.entries()].sort((x, y) => y[1] - x[1]).slice(0, 12).map(([k]) => k);
+    // Bounded: at most two lane questions in the first week, ever.
+    const weekAgo = Date.now() - 7 * 86_400_000;
+    const recent = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId).gte("ts", weekAgo)).take(200)) as Doc<"messages">[];
+    const laneQuestionsThisWeek = recent.filter((m) => m.direction === "out" && (m.buttons ?? []).some((b) => /^lane(pick)?:/.test(b.id))).length;
     return {
       posts: posts.map((p) => ({ caption: p.caption, hashtags: p.hashtags, multiple: p.multiple ?? null })),
       hooks: ranked.slice(0, 2).map((p) => p.caption.replace(/#[\p{L}\p{N}_]+/gu, "").trim().slice(0, 70)).filter(Boolean),
       niche: c.niche,
       keywords: ((c.dossier as { keywords?: string[] } | undefined)?.keywords ?? []).map(String),
+      lanes: (c.lanes as Lanes | undefined) ?? null,
+      admiredKeywords,
+      laneQuestionsThisWeek,
     };
   },
 });
@@ -140,12 +223,36 @@ export type LaneCreatorId = Id<"creators">;
  * a fresh read that may differ by the time they tap.
  */
 export const stashRead = internalMutation({
-  args: { creatorId: v.id("creators"), token: v.string(), keywords: v.array(v.string()) },
+  args: { creatorId: v.id("creators"), token: v.string(), keywords: v.array(v.string()), candidates: v.optional(v.array(v.object({ label: v.string(), keywords: v.array(v.string()) }))) },
   handler: async (ctx, a): Promise<null> => {
     const existing = (await ctx.db.query("laneReads").withIndex("by_token", (q) => q.eq("creatorId", a.creatorId).eq("token", a.token)).first()) as Doc<"laneReads"> | null;
     if (existing) return null;
-    await ctx.db.insert("laneReads", { creatorId: a.creatorId, token: a.token, keywords: a.keywords, at: Date.now() });
+    await ctx.db.insert("laneReads", { creatorId: a.creatorId, token: a.token, keywords: a.keywords, candidates: a.candidates, at: Date.now() });
     return null;
+  },
+});
+
+/**
+ * Sprint 4f: a tap on a candidate. Writes the lane (repointing the sweep and the roster),
+ * and starts the growth plan from it. Scoped to the creator; another creator's token is
+ * simply not found.
+ */
+export const pick = internalMutation({
+  args: { creatorId: v.id("creators"), token: v.string(), index: v.number() },
+  handler: async (ctx, a): Promise<{ ok: boolean; label?: string; plan?: GrowthPlan }> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    const stash = (await ctx.db.query("laneReads").withIndex("by_token", (q) => q.eq("creatorId", a.creatorId).eq("token", a.token)).first()) as Doc<"laneReads"> | null;
+    const cand = stash?.candidates?.[a.index];
+    if (!c || !cand) return { ok: false };
+    const keywords = Array.from(new Set(cand.keywords.map((k) => k.toLowerCase().replace(/^#/, "").trim()).filter((k) => k.length >= 3))).slice(0, LANE.maxKeywords);
+    if (!keywords.length) return { ok: false };
+    const now = Date.now();
+    const dossier = { ...((c.dossier as Record<string, unknown> | undefined) ?? {}), keywords };
+    const cadence = (c.dossier as { cadence?: { postsPerWeek?: number } } | undefined)?.cadence?.postsPerWeek;
+    const postsPerWeek = Math.max(1, Math.min(7, Math.round(cadence ?? GROWTH.defaultPostsPerWeek)));
+    const plan: GrowthPlan = { lane: cand.label, keywords, formats: [], postsPerWeek, hypothesis: `${postsPerWeek} a week on ${cand.label} should lift reach against their normal and bring follows`, startedAt: now, reviewAt: now + GROWTH.planWeeks * 7 * 86_400_000, status: "running", setBy: "tap" };
+    await ctx.db.patch(a.creatorId, { dossier, niche: c.niche || cand.label, laneConfirmedAt: now, growthPlan: plan, updatedAt: now });
+    return { ok: true, label: cand.label, plan };
   },
 });
 

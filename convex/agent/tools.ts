@@ -20,7 +20,7 @@ export interface ToolBudget { calls: number; credits: number; deadlineAt: number
 export const DEFAULT_BUDGET = (): ToolBudget => ({ calls: 6, credits: 40, deadlineAt: Date.now() + 60_000 });
 
 /** Approximate credit prices per call (the ledger records the vendor's real number). */
-export const TOOL_CREDITS: Record<string, number> = { post_info: 10, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, sound_reels: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, search_reels: 1, search_ig_hashtag: 1, ig_popular: 1, trending_tiktok: 1, trending_reels: 1, suggestions: 1, discover_creators: 1, discover_profiles: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0, recall: 0, lane_benchmark: 0, week_plan: 0, block_move: 0, block_drop: 0, block_add: 0, week_replan: 0, own_post_numbers: 0, post_diagnosis: 0 };
+export const TOOL_CREDITS: Record<string, number> = { post_info: 10, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, sound_reels: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, search_reels: 1, search_ig_hashtag: 1, ig_popular: 1, trending_tiktok: 1, trending_reels: 1, suggestions: 1, discover_creators: 1, discover_profiles: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0, recall: 0, lane_benchmark: 0, week_plan: 0, block_move: 0, block_drop: 0, block_add: 0, week_replan: 0, own_post_numbers: 0, post_diagnosis: 0, growth_plan: 0 };
 
 const str = { type: "string" } as const;
 
@@ -53,6 +53,7 @@ export const TOOLS: OpenRouterTool[] = [
   { type: "function", function: { name: "block_drop", description: "Drop one block (and its calendar event). The idea goes back to Ideas. Free. Use for 'skip that one', 'clear thursday'.", parameters: { type: "object", properties: { blockId: str, why: str }, required: ["blockId", "why"] } } },
   { type: "function", function: { name: "block_add", description: "Add a block they asked for: kind film|edit|post, whenLocal YYYY-MM-DDTHH:MM on their clock, minutes, and a short title (what it is for). It is booked immediately because they asked. Free.", parameters: { type: "object", properties: { kind: { type: "string", enum: ["film", "edit", "post"] }, whenLocal: str, minutes: { type: "number" }, title: str, why: str }, required: ["kind", "whenLocal", "minutes", "title", "why"] } } },
   // Sprint 4e — THEIR OWN post, with the owner-only numbers where an account is connected. Free.
+  { type: "function", function: { name: "growth_plan", description: "Their growth plan: read it, set it (lane, keywords, formats, posts a week, one-line hypothesis), or drop it. Free. Set it when they confirm a lane or ask you to plan their growth; the week plan follows its cadence and the Sunday review scores it.", parameters: { type: "object", properties: { action: { type: "string", enum: ["read", "set", "drop"] }, lane: str, keywords: { type: "array", items: str }, formats: { type: "array", items: str }, postsPerWeek: { type: "number" }, hypothesis: str, why: str }, required: ["action", "why"] } } },
   { type: "function", function: { name: "own_post_numbers", description: "One of THE CREATOR'S OWN posts by url: reach, impressions, views per person, retention and skip rate where the platform gives them, each labelled connected or public with how old the read is, plus what this platform cannot tell you. Free. Use this, not post_info, for their own posts.", parameters: { type: "object", properties: { url: str, why: str }, required: ["url", "why"] } } },
   { type: "function", function: { name: "post_diagnosis", description: "Why one of their own posts did what it did, in one of four reads: not distributed, distributed but scrolled, the hook lost them, held them — or 'not enough connected data'. Free. Cite the basis it names.", parameters: { type: "object", properties: { url: str, why: str }, required: ["url", "why"] } } },
   { type: "function", function: { name: "week_replan", description: "Lay the coming week out again from their ideas, their cadence and their free time, and send it to them with a book-it button. Free. Use when they ask for a plan, or after they cleared the week.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
@@ -180,6 +181,22 @@ export async function runTool(ctx: ActionCtx, creatorId: Id<"creators">, call: {
       const hits = await ctx.runAction(internal.agent.memory.recall, { creatorId, query: String(call.args.query ?? ""), k: 4 });
       record(true, 0);
       return hits.length ? cap(hits.map((h) => `[${h.kind}, ${new Date(h.at).toISOString().slice(0, 10)}] ${h.text.slice(0, 300)}`).join("\n")) : "nothing close enough in their memory";
+    }
+    if (call.name === "growth_plan") {
+      const action = String(call.args.action ?? "read");
+      if (action === "set") {
+        const r = await ctx.runMutation(internal.agent.growth.setPlan, { creatorId, lane: String(call.args.lane ?? ""), keywords: Array.isArray(call.args.keywords) ? (call.args.keywords as unknown[]).map(String) : [], formats: Array.isArray(call.args.formats) ? (call.args.formats as unknown[]).map(String) : undefined, postsPerWeek: typeof call.args.postsPerWeek === "number" ? call.args.postsPerWeek : undefined, hypothesis: call.args.hypothesis ? String(call.args.hypothesis) : undefined, setBy: "chat" });
+        record(r.ok, 0, r.ok ? undefined : "needs a lane and at least one keyword");
+        return r.ok && r.plan ? `done: plan set. ${r.plan.lane} (${r.plan.keywords.join(", ")}), ${r.plan.postsPerWeek} a week, review on ${new Date(r.plan.reviewAt).toISOString().slice(0, 10)}. Say it back to them in one line.` : "refused: a plan needs a lane and at least one keyword.";
+      }
+      if (action === "drop") {
+        const r = await ctx.runMutation(internal.agent.growth.dropPlan, { creatorId });
+        record(r.ok, 0, r.ok ? undefined : "no plan to drop");
+        return r.ok ? "done: plan dropped." : "refused: there is no plan to drop.";
+      }
+      const p = await ctx.runQuery(internal.agent.growth.readPlan, { creatorId });
+      record(true, 0);
+      return p ? `plan (${p.status}): ${p.lane} (${p.keywords.join(", ")}), formats ${p.formats.join(", ") || "not fixed"}, ${p.postsPerWeek} a week, hypothesis: ${p.hypothesis}, review ${new Date(p.reviewAt).toISOString().slice(0, 10)}` : "no plan yet. Set one when the lane is confirmed.";
     }
     if (call.name === "own_post_numbers" || call.name === "post_diagnosis") {
       const n = await ctx.runQuery(internal.connections.numbers.forUrl, { creatorId, url: String(call.args.url ?? "") });

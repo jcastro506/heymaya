@@ -18,6 +18,7 @@ import { voiceFor, voiceSection } from "../agent/voice";
 import { historyFor, historySection } from "../agent/history";
 import { critique, tooLong } from "../agent/critic";
 import { computeRung, engagement, type RungFacts } from "./rung";
+import { growthFacts, type GrowthPlan } from "../agent/growth";
 import { localHourMinute } from "../scout/gate";
 import { summarize, type Affinity } from "../taste/affinities";
 import { laneBenchmarkFor } from "../scout/benchmarks";
@@ -28,7 +29,7 @@ const WEEK_MS = 7 * 86_400_000;
 
 export const WEEKLY_REVIEW_SKILL = `weekly-review
 When: Sunday. You are telling them what happened this week and why, in under 900 characters, no bullets, no headers, like a text from someone who watched every post.
-Order: (1) the week in one line with a number they were given (posts, median multiple); (2) the one thing that most explains it, from the cards and numbers, not from theory; (3) LIKED vs WORKED: which ideas they took and which posts actually performed, and if those disagree say so plainly, because results beat taste and you owe them that; (4) last week's experiment: held, failed, or unknown, with the number; (5) one new experiment for next week, small enough to do in one post; (6) if you have a scored prediction record, one honest line on how your calls have been running. (7) The pulse tells you how they've been with you this week, read from what they did, never from asking. If it is cooling or silent, end with ONE specific question about their content that a reply would answer in a sentence (which of two hooks, whether a post is still planned); never ask how they feel about you, whether they'd miss you, or whether anything was useless. If warm or steady, no question unless one is genuinely useful.
+Order: (1) the week in one line with a number they were given (posts, median multiple); (2) the one thing that most explains it, from the cards and numbers, not from theory; (3) LIKED vs WORKED: which ideas they took and which posts actually performed, and if those disagree say so plainly, because results beat taste and you owe them that; (4) last week's experiment: held, failed, or unknown, with the number; (5) one new experiment for next week, small enough to do in one post; (6) if you have a scored prediction record, one honest line on how your calls have been running. (7) The pulse tells you how they've been with you this week, read from what they did, never from asking. If it is cooling or silent, end with ONE specific question about their content that a reply would answer in a sentence (which of two hooks, whether a post is still planned); never ask how they feel about you, whether they'd miss you, or whether anything was useless. If warm or steady, no question unless one is genuinely useful. (8) If "growth" is present, one line on whether the plan is working: posts in lane vs out, their multiples, follows and the follower delta where you have them; if it says due, revise the plan out loud (keep, widen, switch) with those numbers.
 The rung is a computed fact you were given. You may disagree with it, but then say why in "rungOverride".
 Never invent a metric. If the week is thin (under three posts with a 48 h sample), say so and make the review about the one thing you can see.
 Output ONLY JSON:
@@ -85,7 +86,15 @@ export const inputs = internalQuery({
     const directives = (await ctx.db.query("directives").withIndex("by_creator_and_active", (q) => q.eq("creatorId", a.creatorId).eq("active", true)).collect()) as Doc<"directives">[];
     const lastExperiment = [...(creator.experiments ?? [])].sort((x, y) => y.proposedAt - x.proposedAt)[0] ?? null;
     const lane = await laneBenchmarkFor(ctx, a.creatorId, a.now);
+    // Sprint 4f: is the growth plan working, from rows.
+    const snaps = (await ctx.db.query("followerSnapshots").withIndex("by_creator_day", (q) => q.eq("creatorId", a.creatorId).gte("day", new Date(since).toISOString().slice(0, 10))).take(40)) as Doc<"followerSnapshots">[];
+    const growth = growthFacts({
+      plan: (creator.growthPlan as GrowthPlan | undefined) ?? null,
+      week: week.map((p) => ({ caption: p.caption, hashtags: p.hashtags, multiple: p.reachMultiple ?? p.multiple ?? null, follows: p.connected?.follows ?? null })),
+      followers: snaps.map((s) => ({ day: s.day, followers: s.followers })),
+    });
     return {
+      growth,
       creator,
       directives,
       personal: await personalFor(ctx, creator),
@@ -133,7 +142,7 @@ export const run = internalAction({
     const pulse = await ctx.runQuery(internal.review.pulse.pulseFor, { creatorId: a.creatorId, now });
     const prefix = buildPrefix({ creator: inp.creator, directives: inp.directives, skill: WEEKLY_REVIEW_SKILL, personal: inp.personal, voice: inp.voice, history: inp.history });
     const spec = REGISTRY.writer;
-    const evidence = { rung: inp.rung, lane: inp.lane, week: inp.week, liked: inp.liked, passed: inp.passed, worked: inp.worked, taste: inp.taste, ideasSent: inp.ideasSent, lastExperiment: inp.lastExperiment, trackRecord: record.filter((r) => r.n >= 3), pulse: pulse ? { word: pulse.word, why: pulse.why } : null };
+    const evidence = { rung: inp.rung, lane: inp.lane, growth: inp.growth, week: inp.week, liked: inp.liked, passed: inp.passed, worked: inp.worked, taste: inp.taste, ideasSent: inp.ideasSent, lastExperiment: inp.lastExperiment, trackRecord: record.filter((r) => r.n >= 3), pulse: pulse ? { word: pulse.word, why: pulse.why } : null };
     const user = `This week's evidence (everything you may cite is here):\n${JSON.stringify(evidence)}`;
     const inv = await investigate(ctx, { creatorId: a.creatorId, purpose: "weekly_review", prefix, user, budget: { calls: 2, credits: 10, deadlineAt: Date.now() + 45_000 }, temperature: 0.5, maxTokens: 1600 });
     const r = inv.content ? { ok: true as const, content: inv.content } : { ok: false as const, reason: `review ${inv.ended}` };

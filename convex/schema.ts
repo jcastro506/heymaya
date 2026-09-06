@@ -35,6 +35,9 @@ export default defineSchema({
     milestonesSaid: v.optional(v.array(v.string())),
     /** Sprint 4d: they confirmed the lane she read from their posts. */
     laneConfirmedAt: v.optional(v.number()),
+    // Sprint 4f: what their posts are about, grouped (onboarding/clusters.ts Lanes), and the growth plan (agent/growth.ts GrowthPlan). v.any(): the schema sits at the TS instantiation ceiling and both shapes are Zod/TS-typed at the edges.
+    lanes: v.optional(v.any()),
+    growthPlan: v.optional(v.any()),
     /** Sprint 4d: drift asked about once per rewrite, not every week. */
     laneDriftAskedAt: v.optional(v.number()), // §13.10 (5) cadence: the local hour they tend to reply in, learned nightly // "22:00" / "07:00" local
     tone: v.union(v.literal("coach"), v.literal("friend"), v.literal("blunt")),
@@ -407,6 +410,8 @@ export default defineSchema({
     creatorId: v.id("creators"),
     token: v.string(),
     keywords: v.array(v.string()),
+    // Sprint 4f: the candidates she offered, so a tap picks exactly what she said.
+    candidates: v.optional(v.array(v.object({ label: v.string(), keywords: v.array(v.string()) }))),
     at: v.number(),
   }).index("by_token", ["creatorId", "token"]),
 

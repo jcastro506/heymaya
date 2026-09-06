@@ -11,6 +11,7 @@ import { SOUL, SOUL_VERSION, REGISTER_ADDENDA } from "./soul";
 import { summarize, type Affinity } from "../taste/affinities";
 import { voiceFor, voiceSection } from "./voice";
 import { historyFor, historySection } from "./history";
+import { growthSection, type GrowthPlan } from "./growth";
 
 export const RECENT_MESSAGES = 20;
 export const CONTEXT_VERSION = "ctx-2026-09-02.1";
@@ -42,7 +43,10 @@ export const gather = internalQuery({
     // Their own sentences, on every turn. Describing a voice does not reproduce it.
     const voice = voiceSection(await voiceFor(ctx, creator._id));
     // How well she knows them, so her claims are only as bold as the evidence (Sprint 4c).
-    const history = historySection(await historyFor(ctx, creator));
+    const h = await historyFor(ctx, creator);
+    // Sprint 4f: growth expertise rides with the standing, only while it earns its place.
+    const growth = growthSection({ standing: h.standing.confidence, laneConfirmed: Boolean(creator.laneConfirmedAt), plan: (creator.growthPlan as GrowthPlan | undefined) ?? null, now: Date.now(), timeZone: creator.timezone });
+    const history = growth ? `${historySection(h)}\n\n${growth}` : historySection(h);
     return { creator, directives, recent: recent.reverse(), target, personal, voice, history };
   },
 });
