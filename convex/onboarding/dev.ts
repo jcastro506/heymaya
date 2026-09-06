@@ -472,3 +472,16 @@ export const freezeForDelete = internalMutation({
     return { ok: true };
   },
 });
+
+/** What is scheduled to fire for this creator (reminders, offers, plans). Dev only. */
+export const scheduledFor = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<Array<{ name: string; at: string; state: string; args: string }>> => {
+    const rows = await ctx.db.system.query("_scheduled_functions").order("desc").take(200);
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    const tz = c?.timezone ?? "UTC";
+    return rows
+      .filter((r) => JSON.stringify(r.args).includes(a.creatorId) || (r.state.kind === "pending" && /reminders|secure|weekPlan/.test(r.name)))
+      .map((r) => ({ name: r.name, at: new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(r.scheduledTime), state: r.state.kind, args: JSON.stringify(r.args).slice(0, 120) }));
+  },
+});
