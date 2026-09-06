@@ -11,7 +11,7 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { driftShare, LANE, laneQuestion, readLane } from "../lane";
+import { driftShare, hookPhrase, LANE, laneQuestion, readLane } from "../lane";
 
 const post = (caption: string, hashtags: string[], multiple: number | null = 1) => ({ caption, hashtags, multiple });
 
@@ -120,9 +120,8 @@ describe("what a live first read taught the lane (2026-09-05)", () => {
   });
 
   it("the hook she quotes is a short first clause, not a truncated caption", () => {
-    const { hookPhrase } = require("../lane") as typeof import("../lane");
-    expect(hookPhrase("Best part of traveling is seeing people who have no idea how kind strangers are. #travel")).toBe("best part of traveling is seeing people who have");
-    expect(hookPhrase("i run so i can rot the rest of the day, honestly")).toBe("i run so i can rot the rest");
+    expect(hookPhrase("Best part of traveling is seeing people who have no idea how kind strangers are. #travel")).toBe("best part of traveling is seeing people who have no idea");
+    expect(hookPhrase("i run so i can rot the rest of the day, honestly")).toBe("i run so i can rot the rest of the day");
     const q = laneQuestion(["travel", "londonlife"], ["Best part of traveling is seeing people who have no idea how kind strangers are."]);
     expect(q.length).toBeLessThan(160);
     expect(q.endsWith("right?")).toBe(true);

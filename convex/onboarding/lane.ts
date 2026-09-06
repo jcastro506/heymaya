@@ -78,10 +78,13 @@ export function laneQuestion(keywords: string[], topHooks: string[]): string {
   return `from your posts, your lane looks like ${lane}.${because} right?`;
 }
 
-/** The first clause of a caption, at most eight words, lowercased: something a person would quote. */
+/** The first clause of a caption, at most twelve words and never ending on glue, lowercased: something a person would quote. */
 export function hookPhrase(caption: string): string {
   const first = caption.replace(/#[\p{L}\p{N}_]+/gu, "").trim().split(/[.!?\n]|, /)[0] ?? "";
-  const words = first.trim().split(/\s+/).filter(Boolean).slice(0, 8);
+  const words = first.trim().split(/\s+/).filter(Boolean).slice(0, 12);
+  // A quote should not end on glue ("...seeing people who have no"). Trim trailing glue words.
+  const glue = new Set(["who", "is", "the", "and", "of", "to", "a", "an", "that", "which", "with", "for", "in", "on", "at", "or", "but", "so", "if", "my", "your", "i", "was", "are", "no", "not", "have", "has", "had", "what", "how", "why", "when", "where"]);
+  while (words.length > 3 && glue.has(words[words.length - 1].toLowerCase())) words.pop();
   return words.join(" ").toLowerCase().replace(/[",]+$/g, "");
 }
 
