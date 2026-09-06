@@ -351,11 +351,13 @@ export const zernioGet = internalAction({
  * when the TTL runs out (up to seven days). The next read spends real credits. Dev only.
  */
 export const forgetReads = internalMutation({
-  args: { kind: v.string() },
-  handler: async (ctx, a): Promise<{ forgotten: number }> => {
-    const rows = await ctx.db.query("readCache").withIndex("by_key", (q) => q.eq("kind", a.kind)).collect();
-    for (const r of rows) await ctx.db.delete(r._id);
-    return { forgotten: rows.length };
+  args: { kind: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, a): Promise<{ forgotten: number; more: boolean }> => {
+    // Cached payloads are large; a whole kind at once trips the 16 MB read limit. Batches.
+    const n = Math.min(Math.max(a.limit ?? 6, 1), 20);
+    const rows = await ctx.db.query("readCache").withIndex("by_key", (q) => q.eq("kind", a.kind)).take(n + 1);
+    for (const r of rows.slice(0, n)) await ctx.db.delete(r._id);
+    return { forgotten: Math.min(rows.length, n), more: rows.length > n };
   },
 });
 

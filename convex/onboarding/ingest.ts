@@ -62,7 +62,14 @@ export const upsertOwnPosts = internalMutation({
         saves: p.metrics.saveCount ?? undefined,
       };
       if (existing) {
-        await ctx.db.patch(existing._id, { metrics, metricsAsOf: a.now });
+        // The read's shape can be corrected after the row was first written (a photo that
+        // was called a video); identity-level facts follow the latest read, numbers too.
+        await ctx.db.patch(existing._id, {
+          metrics,
+          metricsAsOf: a.now,
+          contentType: p.mediaType === "carousel" ? "carousel" : p.mediaType === "image" ? "photo" : "video",
+          ...(p.videoDurationSec ? { durationSec: p.videoDurationSec } : {}),
+        });
         continue;
       }
       // TikTok's single-post, transcript and comment endpoints key on the public URL, so
