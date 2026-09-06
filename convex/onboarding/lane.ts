@@ -118,6 +118,18 @@ export interface LaneProposal {
 
 const overlap = (a: string[], b: string[]) => { const B = new Set(b.map((x) => x.toLowerCase())); return a.filter((x) => B.has(x.toLowerCase())).length; };
 
+/** Pure: the first n words that do not share a stem ("runner running runtok" → "runner"). Three letters over-merges on purpose: fewer, plainly different words. */
+export function distinctWords(words: string[], n: number): string[] {
+  const out: string[] = [];
+  for (const w of words) {
+    const stem = w.toLowerCase().slice(0, 3);
+    if (out.some((o) => o.toLowerCase().slice(0, 3) === stem)) continue;
+    out.push(w);
+    if (out.length >= n) break;
+  }
+  return out;
+}
+
 export function proposeLane(input: { lanes: Lanes | null; laneKeywords: string[]; admiredKeywords: string[]; stated: string; laneConfidence: "none" | "thin" | "solid" }): LaneProposal {
   const lanes = input.lanes;
   const statedWords = input.stated.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4);
@@ -156,7 +168,7 @@ export function proposeLane(input: { lanes: Lanes | null; laneKeywords: string[]
   const admiredLane: LaneCandidate | null = admiredMatch
     ? cand(admiredMatch, "admired")
     : input.admiredKeywords.length >= 2
-      ? { label: input.admiredKeywords.slice(0, 2).join(" "), keywords: input.admiredKeywords.slice(0, 5), evidence: "it is what the accounts you admire make, and you have no posts there yet", source: "admired" }
+      ? { label: distinctWords(input.admiredKeywords, 2).join(" "), keywords: input.admiredKeywords.slice(0, 5), evidence: "it is what the accounts you admire make, and you have no posts there yet", source: "admired" }
       : null;
   if (admiredLane && !candidates.some((x) => x.label === admiredLane.label)) candidates.push(admiredLane);
   if (statedMatch && !candidates.some((x) => x.label === statedMatch.label)) candidates.push(cand(statedMatch, "stated"));

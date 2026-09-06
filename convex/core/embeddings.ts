@@ -113,15 +113,24 @@ export const embedTexts = internalAction({
     // about — during the one job that was supposed to be cheap and quiet.
     for (const text of args.texts) {
       try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:embedContent?key=${key}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ content: { parts: [{ text }] }, outputDimensionality: EMBEDDING_DIMENSIONS }),
-          }
-        );
-        if (!response.ok) {
+        // Live 2026-09-06: one text in a batch of nine failed on every run and embedded fine
+        // alone, so the failure was the batch (a 429 or a blip), not the text, and the
+        // status was being swallowed. One retry after a pause, and the status is logged.
+        let response: Response | null = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:embedContent?key=${key}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ content: { parts: [{ text }] }, outputDimensionality: EMBEDDING_DIMENSIONS }),
+            }
+          );
+          if (response.ok || (response.status !== 429 && response.status < 500)) break;
+          await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
+        }
+        if (!response || !response.ok) {
+          console.error(`[maya.embeddings] ${response?.status ?? "no response"} for "${text.slice(0, 40)}": ${(await response?.text().catch(() => ""))?.slice(0, 160) ?? ""}`);
           failed += 1;
           continue;
         }

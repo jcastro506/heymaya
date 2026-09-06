@@ -128,7 +128,7 @@ describe("what a live first read taught the lane (2026-09-05)", () => {
   });
 });
 
-import { proposeLane } from "../lane";
+import { distinctWords, proposeLane } from "../lane";
 import type { Lanes } from "../clusters";
 
 const lanesOf = (clusters: Lanes["clusters"], posts: number, state: Lanes["state"]): Lanes => ({ readAt: 1, posts, scatter: 1 - (clusters[0]?.share ?? 0), state, clusters });
@@ -179,10 +179,11 @@ describe("what the live proposal taught it (2026-09-06)", () => {
     const p = proposeLane({ lanes, laneKeywords: [], admiredKeywords: ["running", "runtok", "marathon"], stated: "", laneConfidence: "thin" });
     expect(p.candidates.map((c) => c.source)).toEqual(["rewarded", "admired"]);
     expect(p.candidates[0].label).toBe("travel awe");
-    expect(p.candidates[1].label).toBe("running runtok");
+    expect(p.candidates[1].label).toBe("running marathon");
     expect(p.candidates[1].evidence).toMatch(/no posts there yet/);
     expect(p.question).toMatch(/travel awe/);
-    expect(p.question).toMatch(/running runtok/);
+    expect(p.question).toMatch(/running marathon/);
+    expect(distinctWords(["runner", "running", "runtok", "track", "injury"], 2)).toEqual(["runner", "track"]);
     const none = proposeLane({ lanes: lanesOf([cl("pipeline tests", ["pipeline"], 2, 0.2, 0)], 10, "scattered"), laneKeywords: [], admiredKeywords: [], stated: "", laneConfidence: "none" });
     expect(none.candidates[0].source, "with nothing rewarded and nothing admired, the biggest group is offered as what it is").toBe("biggest");
   });
