@@ -23,7 +23,7 @@ Shape, in this order:
 1. Hello, and what you are for them, in one or two lines in your own voice: you're Maya, their assistant for TikTok and Instagram. You watch their posts, the accounts they picked and their lane every day; you text only when something is actually worth their time; they can send you anything (a draft, a link, a question) for a straight opinion; on Sundays you lay out their week. No feature list, no bullets, no "I'm an AI".
 2. The read: name two of their real posts (by what they are, not by id) with something specific you noticed in each, and one true thing about how they make things (opening, pacing, setting, energy) with evidence. If the dossier says mode is thin or newCreator, say what you could and couldn't read, plainly.
 3. The one question you were given, if any; otherwise none.
-Hard rules: no compliments without a specific. No claim without evidence in the dossier or the lane line you were given; no share or percentage that is not in that line. Under 160 words. Exactly one question at most.`;
+Hard rules: no compliments without a specific. No claim without evidence in the dossier or the lane line you were given; no share or percentage that is not in that line. Under 150 words, and under 900 characters, which is the hard cap. Exactly one question at most.`;
 
 /** Pure: does the text name every button it will carry? Case-insensitive, whole label. */
 export function candidatesNamed(text: string, labels: string[]): boolean {
@@ -108,16 +108,18 @@ export const run = internalAction({
     if (!text) return { ok: false, reason: "empty completion" };
 
     const d = creator.dossier as { voice?: unknown; persona?: unknown; works?: unknown } | undefined;
-    let verdict = tooLong(text) ? { pass: false, problems: ["too_long" as const], note: "over the length cap" } : await critique(ctx, { creatorId: creator._id, kind: "first_read", text, evidence: d, voice: { voice: d?.voice, persona: d?.persona }, directives: directives.map((x) => x.verbatim) });
+    let verdict = tooLong(text, true) ? { pass: false, problems: ["too_long" as const], note: "over the length cap" } : await critique(ctx, { creatorId: creator._id, kind: "first_read", text, evidence: d, voice: { voice: d?.voice, persona: d?.persona }, directives: directives.map((x) => x.verbatim) });
     let criticSkipped = Boolean(verdict.skipped);
     if (!verdict.pass) {
       const rewrite = await callModel(ctx, { creatorId: creator._id, purpose: "first_read_rewrite", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `Your previous first message was rejected by the critic for: ${verdict.problems.join(", ")} (${verdict.note}). Rewrite it, fixing exactly that. Message text only.` }], temperature: 0.5, maxTokens: 900, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
       if (rewrite.ok && rewrite.content.trim()) {
         text = rewrite.content.trim();
-        verdict = tooLong(text) ? { pass: false, problems: ["too_long" as const], note: "still over the length cap" } : await critique(ctx, { creatorId: creator._id, kind: "first_read", text, evidence: d, voice: { voice: d?.voice, persona: d?.persona }, directives: directives.map((x) => x.verbatim) });
+        verdict = tooLong(text, true) ? { pass: false, problems: ["too_long" as const], note: "still over the length cap" } : await critique(ctx, { creatorId: creator._id, kind: "first_read", text, evidence: d, voice: { voice: d?.voice, persona: d?.persona }, directives: directives.map((x) => x.verbatim) });
         criticSkipped = criticSkipped || Boolean(verdict.skipped);
       }
-      // Live 2026-09-06: first contact was dropped twice for "slop: remove the compliment", and
+      // First contact carries an introduction AND the read, so it gets the character cap only
+    // (tooLong with detailRequested), not the 140-word reply cap; the skill says 150 words.
+    // Live 2026-09-06: first contact was dropped twice for "slop: remove the compliment", and
       // the person who had just been told "first thoughts in about ten minutes" got silence.
       // For first contact, as for replies, the critic advises and never blocks: one rewrite,
       // then it goes, with the critic's note on the record.
