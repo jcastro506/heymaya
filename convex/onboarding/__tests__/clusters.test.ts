@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clusterPosts, groupWords, lanesFrom, CLUSTERS, type ClusterIn } from "../clusters";
+import { clusterPosts, groupWords, lanesFrom, reuseLabels, CLUSTERS, type ClusterIn } from "../clusters";
 
 const STOP = new Set(["this", "that", "with"]);
 const v = (x: number, y: number) => { const n = Math.hypot(x, y); return [x / n, y / n]; };
@@ -38,5 +38,16 @@ describe("grouping their posts (Sprint 4f)", () => {
     const words = groupWords([post("a", "solo dev builds a dashboard", null, 1, ["buildinpublic", "indiehacker"]), post("b", "dashboard again", null, 1, ["buildinpublic"])], STOP);
     expect(words[0]).toBe("buildinpublic");
     expect(words).toContain("dashboard");
+  });
+});
+
+describe("a named group keeps its name", () => {
+  it("reuses the label when at least 80% of the posts are the same, and names a genuinely new group fresh", () => {
+    const prev = [{ label: "travel awe", keywords: ["travel"], postIds: ["t1", "t2", "t3"], share: 0.3, medianMultiple: 1.2 }];
+    const same = [{ members: ["t1", "t2", "t3", "t4"].map((id) => post(id, "", null, 1)) }];
+    const other = [{ members: ["r1", "r2", "t1"].map((id) => post(id, "", null, 1)) }];
+    expect(reuseLabels(prev, same)[0]?.label).toBe("travel awe");
+    expect(reuseLabels(prev, other)[0]?.label).toBeUndefined();
+    expect(reuseLabels(undefined, same)[0]?.label).toBeUndefined();
   });
 });

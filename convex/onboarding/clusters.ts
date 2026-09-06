@@ -73,6 +73,21 @@ export function lanesFrom(groups: Array<{ members: ClusterIn[]; label?: string; 
   return { readAt: now, posts: total, scatter, state, clusters };
 }
 
+/**
+ * Pure: a group that is mostly the same posts as a cluster she already named keeps that
+ * name. The lane they tapped must not be renamed under them by the next read.
+ */
+export function reuseLabels(previous: Cluster[] | undefined, groups: Array<{ members: ClusterIn[] }>): Array<{ label?: string; keywords?: string[] }> {
+  return groups.map((g) => {
+    const ids = new Set(g.members.map((m) => m.postId));
+    for (const c of previous ?? []) {
+      const shared = c.postIds.filter((id) => ids.has(id)).length;
+      if (shared >= Math.ceil(0.8 * Math.max(ids.size, c.postIds.length))) return { label: c.label, keywords: c.keywords };
+    }
+    return {};
+  });
+}
+
 const STOP = new Set(["this", "that", "with", "have", "from", "your", "just", "what", "when", "they", "them", "there", "here", "will", "about", "more", "some", "than", "then", "over", "only", "also", "very", "really", "much", "many", "make", "made", "know", "think", "thing", "things", "people", "because", "where", "which", "while", "still", "even", "ever", "never", "always", "every", "part", "best", "good", "great", "love", "time", "today", "want", "need", "going", "back", "down", "come", "came", "does", "doing", "done", "dont", "into", "like", "fyp", "foryou", "foryoupage", "viral", "trending", "tiktok", "reels", "instagram", "video", "post", "follow", "explore", "capcut"]);
 
 export const postsFor = internalQuery({
@@ -86,6 +101,11 @@ export const postsFor = internalQuery({
       return { rowId: String(p._id), postId: p.postId, text, multiple: p.reachMultiple ?? p.multiple ?? null, hashtags: p.hashtags, vector };
     });
   },
+});
+
+export const previousFor = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<Cluster[] | undefined> => ((await ctx.db.get(a.creatorId)) as Doc<"creators"> | null)?.lanes?.clusters as Cluster[] | undefined,
 });
 
 export const storeVectors = internalMutation({
@@ -128,13 +148,17 @@ export const read = internalAction({
     const input: ClusterIn[] = posts.map((p) => ({ postId: p.postId, text: p.text, multiple: p.multiple, hashtags: p.hashtags, vector: p.vector ?? vec.get(p.text) ?? null }));
     const groups = clusterPosts(input);
     const real = groups.filter((g) => g.members.length >= CLUSTERS.minPosts).slice(0, CLUSTERS.maxClusters);
-    // Name the groups once, from their own words; fall back to the words themselves.
+    // Name the groups once, from their own words; fall back to the words themselves. A group
+    // she already named keeps its name.
+    const previous = await ctx.runQuery(internal.onboarding.clusters.previousFor, { creatorId: a.creatorId });
+    const kept = reuseLabels(previous, real);
     let names: Array<{ label: string; keywords: string[] }> = [];
-    if (real.length) {
+    const toName = real.map((g, i) => ({ g, i })).filter(({ i }) => !kept[i]?.label);
+    if (toName.length) {
       const spec = REGISTRY.classifier;
       const messages = [
         { role: "system" as const, content: "You name groups of a creator's own posts. For each group, a two-to-four word label a person would use (\"solo dev builds\", \"london runs\", \"food reviews\") and up to four lowercase keywords. Output ONLY JSON: {\"groups\":[{\"label\":\"\",\"keywords\":[\"\"]}]} in the same order." },
-        { role: "user" as const, content: real.map((g, i) => `group ${i + 1} (${g.members.length} posts):\n${g.members.slice(0, 6).map((m) => `- ${m.text.slice(0, 140)}`).join("\n")}`).join("\n\n") },
+        { role: "user" as const, content: toName.map(({ g }, k) => `group ${k + 1} (${g.members.length} posts):\n${g.members.slice(0, 6).map((m) => `- ${m.text.slice(0, 140)}`).join("\n")}`).join("\n\n") },
       ];
       let r = await callModel(ctx, { creatorId: a.creatorId, purpose: "name_clusters", model: spec.primary, temperature: 0.2, maxTokens: 600, timeoutMs: 20_000, messages, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
       if (!r.ok) r = await callModel(ctx, { creatorId: a.creatorId, purpose: "name_clusters_fallback", model: spec.fallback, temperature: 0.2, maxTokens: 600, timeoutMs: 20_000, messages, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
@@ -142,7 +166,8 @@ export const read = internalAction({
         try { const j = JSON.parse(r.content.slice(r.content.indexOf("{"), r.content.lastIndexOf("}") + 1)) as { groups?: Array<{ label?: string; keywords?: string[] }> }; names = (j.groups ?? []).map((g) => ({ label: String(g.label ?? "").slice(0, 40), keywords: (g.keywords ?? []).map(String).slice(0, 4) })); } catch { names = []; }
       }
     }
-    const lanes = lanesFrom(real.map((g, i) => ({ members: g.members, label: names[i]?.label || undefined, keywords: names[i]?.keywords })), posts.length, now, STOP);
+    const named = new Map(toName.map(({ i }, k) => [i, names[k]]));
+    const lanes = lanesFrom(real.map((g, i) => ({ members: g.members, label: kept[i]?.label || named.get(i)?.label || undefined, keywords: kept[i]?.keywords ?? named.get(i)?.keywords })), posts.length, now, STOP);
     // Who they wish they were, in words, on day one: the roster's recent posts (cached reads,
     // one credit each at most), before the sweep has sampled anyone. A failed read is skipped.
     const roster = await ctx.runQuery(internal.onboarding.clusters.rosterFor, { creatorId: a.creatorId });
