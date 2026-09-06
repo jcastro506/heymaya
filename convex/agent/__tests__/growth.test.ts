@@ -53,6 +53,9 @@ describe("the plan row", () => {
     const r = await t.mutation(internal.agent.growth.setPlan, { creatorId, lane: "london runs", keywords: ["#Running", "london", "ab"], setBy: "chat", now: NOW });
     expect(r.ok).toBe(true);
     expect(r.plan?.postsPerWeek).toBe(4);
+    await t.run(async (ctx) => { await ctx.db.patch(creatorId, { dossier: { cadence: { postsPerWeek: 1 } } }); });
+    expect((await t.mutation(internal.agent.growth.setPlan, { creatorId, lane: "london runs", keywords: ["running"], setBy: "tap", now: NOW })).plan?.postsPerWeek, "a plan is a step up: never below the default").toBe(GROWTH.defaultPostsPerWeek);
+    expect((await t.mutation(internal.agent.growth.setPlan, { creatorId, lane: "london runs", keywords: ["running"], postsPerWeek: 1, setBy: "chat", now: NOW })).plan?.postsPerWeek, "unless they said so").toBe(1);
     expect(r.plan?.keywords).toEqual(["running", "london"]);
     expect(r.plan?.reviewAt).toBe(NOW + GROWTH.planWeeks * 7 * 86_400_000);
     expect((await t.mutation(internal.agent.growth.setPlan, { creatorId, lane: "", keywords: [], setBy: "chat" })).ok, "a plan needs a lane").toBe(false);

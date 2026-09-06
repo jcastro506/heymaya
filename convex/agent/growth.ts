@@ -61,7 +61,8 @@ export const setPlan = internalMutation({
     const dossier = c.dossier as { cadence?: { postsPerWeek?: number } } | undefined;
     const keywords = Array.from(new Set(a.keywords.map((k) => k.toLowerCase().replace(/^#/, "").trim()).filter((k) => k.length >= 3))).slice(0, 8);
     if (!a.lane.trim() || keywords.length === 0) return { ok: false, plan: null };
-    const postsPerWeek = Math.max(1, Math.min(7, Math.round(a.postsPerWeek ?? dossier?.cadence?.postsPerWeek ?? GROWTH.defaultPostsPerWeek)));
+    // Explicit from chat is theirs; inferred from the dossier is a floor, never below the default.
+    const postsPerWeek = a.postsPerWeek !== undefined ? Math.max(1, Math.min(7, Math.round(a.postsPerWeek))) : Math.max(GROWTH.defaultPostsPerWeek, Math.min(7, Math.round(dossier?.cadence?.postsPerWeek ?? GROWTH.defaultPostsPerWeek)));
     const plan: GrowthPlan = {
       lane: a.lane.trim().slice(0, 80),
       keywords,

@@ -154,7 +154,7 @@ export const run = internalAction({
       const lp = target.body.match(/^lanepick:([a-z0-9-]+):([0-9])$/);
       if (lp) {
         const r = await ctx.runMutation(internal.onboarding.lane.pick, { creatorId: creator._id, token: lp[1], index: Number(lp[2]) });
-        const body = r.ok && r.plan ? `${r.label} it is. ${r.plan.postsPerWeek} a week on it for the next month, the rest as backdrop; i'll lay the week out sunday and tell you on the ${new Intl.DateTimeFormat("en-US", { timeZone: creator.timezone, month: "short", day: "numeric" }).format(r.plan.reviewAt)} review whether it moved anything.` : "couldn't save that; tell me your lane in your own words and i'll use it.";
+        const body = r.ok && r.plan ? `${r.label} it is. ${r.plan.postsPerWeek} a week on it for the next month, the rest as backdrop; i'll lay the week out in a minute and tell you on the ${new Intl.DateTimeFormat("en-US", { timeZone: creator.timezone, month: "short", day: "numeric" }).format(r.plan.reviewAt)} review whether it moved anything.` : "couldn't save that; tell me your lane in your own words and i'll use it.";
         await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body, dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
         await deliverNow(ctx as never);
         return { ok: true };

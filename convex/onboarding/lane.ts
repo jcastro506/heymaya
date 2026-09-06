@@ -271,8 +271,10 @@ export const pick = internalMutation({
     if (!keywords.length) return { ok: false };
     const now = Date.now();
     const dossier = { ...((c.dossier as Record<string, unknown> | undefined) ?? {}), keywords };
+    // Live 2026-09-06: a ten-post account's cadence read as one a week and the plan took it.
+    // A growth plan is a step up from what they did, never a copy of it: at least the default.
     const cadence = (c.dossier as { cadence?: { postsPerWeek?: number } } | undefined)?.cadence?.postsPerWeek;
-    const postsPerWeek = Math.max(1, Math.min(7, Math.round(cadence ?? GROWTH.defaultPostsPerWeek)));
+    const postsPerWeek = Math.max(GROWTH.defaultPostsPerWeek, Math.min(7, Math.round(cadence ?? GROWTH.defaultPostsPerWeek)));
     const plan: GrowthPlan = { lane: cand.label, keywords, formats: [], postsPerWeek, hypothesis: `${postsPerWeek} a week on ${cand.label} should lift reach against their normal and bring follows`, startedAt: now, reviewAt: now + GROWTH.planWeeks * 7 * 86_400_000, status: "running", setBy: "tap" };
     await ctx.db.patch(a.creatorId, { dossier, niche: c.niche || cand.label, laneConfirmedAt: now, growthPlan: plan, updatedAt: now });
     return { ok: true, label: cand.label, plan };
