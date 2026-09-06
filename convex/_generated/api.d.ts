@@ -42,6 +42,7 @@ import type * as calendar_oauth from "../calendar/oauth.js";
 import type * as calendar_planning from "../calendar/planning.js";
 import type * as calendar_postTime from "../calendar/postTime.js";
 import type * as calendar_reminders from "../calendar/reminders.js";
+import type * as calendar_secure from "../calendar/secure.js";
 import type * as calendar_sync from "../calendar/sync.js";
 import type * as calendar_time from "../calendar/time.js";
 import type * as calendar_tools from "../calendar/tools.js";
@@ -174,6 +175,7 @@ declare const fullApi: ApiFromModules<{
   "calendar/planning": typeof calendar_planning;
   "calendar/postTime": typeof calendar_postTime;
   "calendar/reminders": typeof calendar_reminders;
+  "calendar/secure": typeof calendar_secure;
   "calendar/sync": typeof calendar_sync;
   "calendar/time": typeof calendar_time;
   "calendar/tools": typeof calendar_tools;

@@ -42,6 +42,7 @@ export const ideaById = internalQuery({
 
 export const CONVERSE_SKILL = `converse
 When: any message that is not a command, a file, a link to a post, or a button tap.
+Anything they agree to make gets a time. When they commit to an idea, yours or theirs ("will do", "love it", "filming that tomorrow", "let's do it"), and it is not already on the plan in the prefix, propose one specific slot from their free time and their posting hours ("thursday 5pm work?"); when they name a time, book it with block_add right then and say so in one line. A yes never ends without a when. If the plan already has a block for it, say which.
 Their week is yours to manage by text (Sprint 4b). The prefix shows the plan with block ids. "make it thursday", "push it to 6:30", "skip that one", "clear the week", "add an edit block sunday morning", "what's on this week": read week_plan first if you need ids, then block_move / block_drop / block_add, then say what happened in one line. If the film block moves past the post time, move the post block too. A tool answer that starts "refused" means it did not happen: say so plainly, never claim it. If they ask for a plan, or they cleared the week, week_replan sends it with a button; do not restate the plan yourself.
 
 The judgment: answer the thing they actually asked, in their register, with what you know from the dossier, the conversation, and what you can look up (you have the tools: a post's numbers and words, a sound, an account's normal, what a keyword or hashtag is doing this week, what people are typing next to a keyword, their own posts that rhyme, their calendar). Look something up when it changes the answer; don't when it doesn't. If they ask about numbers nobody outside the app can see (watch time), say so. If they ask for an idea, give one, shaped to them, with why. If nothing needs a question, don't ask one.
@@ -315,6 +316,8 @@ export const run = internalAction({
           if (saved) await ctx.scheduler.runAfter(0, internal.agent.memory.index, { creatorId: creator._id, kind: "swipe", refId: String(ideaId), text: `${(saved.version as { hook?: string } | undefined)?.hook ?? ""}\n${saved.messageText}` });
           await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: "saved. it's in your swipe file.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
           await deliverNow(ctx as never);
+          // A saved idea gets a time, or it is forgotten (2026-09-06).
+          await ctx.runAction(internal.calendar.secure.offer, { creatorId: creator._id, ideaId });
           return { ok: true };
         }
         // shotlist: a short writer call with the idea in context
@@ -335,6 +338,8 @@ export const run = internalAction({
       const screen = await callModel(ctx, { creatorId: creator._id, purpose: "taste_reply", model: REGISTRY.screener.primary, messages: [{ role: "system", content: `A creator was just sent a content idea. Read their reply and answer ONE word: warm (they like it, they're in, they're building on it), cold (they're passing, unconvinced, annoyed), or neutral (a question, a logistics detail, unclear).` }, { role: "user", content: `Idea message: ${lastOut.body.slice(0, 600)}\n\nTheir reply: ${target.body.slice(0, 400)}` }], temperature: 0, maxTokens: 5, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
       const w = screen.ok ? screen.content.trim().toLowerCase() : "";
       if (w.startsWith("warm") || w.startsWith("cold")) await ctx.runMutation(internal.taste.events.record, { creatorId: creator._id, kind: w.startsWith("warm") ? "reply_pos" : "reply_neg", ideaId: lastOut.ideaId, messageId: target._id });
+      // They're in: it gets a time. The offer follows her reply by a beat, one tap to block.
+      if (w.startsWith("warm")) await ctx.scheduler.runAfter(2_000, internal.calendar.secure.offer, { creatorId: creator._id, ideaId: lastOut.ideaId });
     }
 
     // §15.3: what do they want? The model decides (one cheap call); code has already taken commands, links and files.

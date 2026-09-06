@@ -64,6 +64,9 @@ export const recordInbound = internalMutation({
       surface: args.surface,
       body: args.body,
       turnId: args.turnId,
+      // 2026-09-06: the Telegram door writes kind "inbound" and the warm-reply read keys on
+      // it; this door wrote none, so a reply through the web or dev never counted as warm.
+      kind: "inbound",
       ts: args.ts ?? Date.now(),
     });
     /**
