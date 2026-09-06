@@ -108,3 +108,23 @@ describe("confirming it", () => {
     expect(await t.query(internal.onboarding.lane.readByToken, { creatorId: b, token: "tok" })).toBeNull();
   });
 });
+
+describe("what a live first read taught the lane (2026-09-05)", () => {
+  it("glue words never become a lane, however often they repeat", () => {
+    const posts = Array.from({ length: 6 }, (_, i) => ({ caption: `best part of traveling is seeing people who have no idea ${i}`, hashtags: ["travel", "londonlife"], multiple: 1 }));
+    const r = readLane(posts);
+    expect(r.keywords).not.toContain("have");
+    expect(r.keywords).not.toContain("best");
+    expect(r.keywords).not.toContain("part");
+    expect(r.keywords.slice(0, 2)).toEqual(["travel", "londonlife"]);
+  });
+
+  it("the hook she quotes is a short first clause, not a truncated caption", () => {
+    const { hookPhrase } = require("../lane") as typeof import("../lane");
+    expect(hookPhrase("Best part of traveling is seeing people who have no idea how kind strangers are. #travel")).toBe("best part of traveling is seeing people who have");
+    expect(hookPhrase("i run so i can rot the rest of the day, honestly")).toBe("i run so i can rot the rest");
+    const q = laneQuestion(["travel", "londonlife"], ["Best part of traveling is seeing people who have no idea how kind strangers are."]);
+    expect(q.length).toBeLessThan(160);
+    expect(q.endsWith("right?")).toBe(true);
+  });
+});

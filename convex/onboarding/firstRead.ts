@@ -52,13 +52,31 @@ export const run = internalAction({
 
     const prefix = buildPrefix({ creator, directives, skill: FIRST_READ_SKILL, personal: gathered.personal, voice: gathered.voice, history: gathered.history });
     const spec = REGISTRY.writer;
+    /**
+     * Sprint 4d: she states the lane she read from their posts, for one tap, rather than
+     * asking them to name a niche. A creator who cannot write that sentence otherwise gets a
+     * weak lane, and the sweep, the roster and the fit test all inherit it. Read before the
+     * model writes, so the lane check is the message's one question.
+     */
+    let laneAsk: { token: string; keywords: string[] } | null = null;
+    let laneLine = "";
+    if (!creator.laneConfirmedAt) {
+      const li = await ctx.runQuery(internal.onboarding.lane.inputsFor, { creatorId: creator._id });
+      const read = li ? readLane(li.posts) : null;
+      if (read && read.confidence !== "none") {
+        laneAsk = { token: read.keywords.slice(0, 5).join("-").replace(/[^a-z0-9-]/g, "").slice(0, 60), keywords: read.keywords };
+        await ctx.runMutation(internal.onboarding.lane.stashRead, { creatorId: creator._id, token: laneAsk.token, keywords: read.keywords });
+        laneLine = laneQuestion(read.keywords, li?.hooks ?? []);
+      }
+    }
+
     const result = await callModel(ctx, {
       creatorId: creator._id,
       purpose: "first_read",
       model: spec.primary,
       messages: [
         { role: "system", content: prefix },
-        { role: "user", content: "Write the first message. Address them directly. This is the first thing they will ever read from you." },
+        { role: "user", content: `Write the first message. Address them directly. This is the first thing they will ever read from you.${laneLine ? ` End with this one question, in your own words if you like, and ask no other question in the message: "${laneLine}"` : ""}` },
       ],
       temperature: 0.6,
       maxTokens: 900,
@@ -81,21 +99,10 @@ export const run = internalAction({
       if (!verdict.pass) return { ok: false, reason: `dropped by the critic: ${verdict.problems.join(", ")} (${verdict.note})` };
     }
 
-    /**
-     * Sprint 4d: she states the lane she read from their posts, for one tap, rather than
-     * asking them to name a niche. A creator who cannot write that sentence otherwise gets a
-     * weak lane, and the sweep, the roster and the fit test all inherit it.
-     */
-    let laneAsk: { token: string; keywords: string[] } | null = null;
-    if (!creator.laneConfirmedAt) {
-      const li = await ctx.runQuery(internal.onboarding.lane.inputsFor, { creatorId: creator._id });
-      const read = li ? readLane(li.posts) : null;
-      if (read && read.confidence !== "none") {
-        laneAsk = { token: read.keywords.slice(0, 5).join("-").replace(/[^a-z0-9-]/g, "").slice(0, 60), keywords: read.keywords };
-        await ctx.runMutation(internal.onboarding.lane.stashRead, { creatorId: creator._id, token: laneAsk.token, keywords: read.keywords });
-        text = `${text}\n\n${laneQuestion(read.keywords, li?.hooks ?? [])}`;
-      }
-    }
+    // Live 2026-09-05: appending the lane line after the model had already asked its own
+    // question gave them two questions in one message. The lane check is now the model's
+    // one question (told above); the line is appended only when the message carries none.
+    if (laneLine && !text.includes("?")) text = `${text}\n\n${laneLine}`;
 
     await ctx.runMutation(internal.core.messages.send, {
       creatorId: creator._id,

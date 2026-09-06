@@ -31,7 +31,12 @@ export const LANE = {
 
 export interface PostLite { caption: string; hashtags: string[]; multiple: number | null }
 
-const STOP = new Set(["the", "and", "for", "with", "you", "your", "this", "that", "just", "was", "are", "but", "not", "all", "get", "got", "out", "one", "day", "like", "when", "how", "why", "its", "it's", "fyp", "foryou", "foryoupage", "viral", "trending", "tiktok", "reels", "instagram"]);
+// Live 2026-09-05: "have" reached a creator as their lane. Caption words are the fallback
+// and English is mostly glue, so the glue is listed and the bar for a caption word is higher.
+const STOP = new Set(["the", "and", "for", "with", "you", "your", "this", "that", "just", "was", "are", "but", "not", "all", "get", "got", "out", "one", "day", "like", "when", "how", "why", "its", "it's", "fyp", "foryou", "foryoupage", "viral", "trending", "tiktok", "reels", "instagram",
+  "have", "has", "had", "been", "being", "from", "what", "who", "they", "them", "their", "there", "here", "will", "would", "could", "should", "into", "about", "more", "most", "some", "than", "then", "over", "only", "also", "very", "really", "much", "many", "make", "made", "know", "think", "thing", "things", "people", "because", "where", "which", "while", "still", "even", "ever", "never", "always", "every", "part", "best", "good", "great", "love", "time", "today", "yeah", "okay", "want", "need", "going", "back", "down", "come", "came", "does", "did", "doing", "done", "can", "can't", "dont", "don't", "our", "we", "me", "my", "i'm", "im", "is", "it", "in", "on", "at", "to", "of", "a", "an", "so", "if", "or", "as", "be", "by", "no", "up", "us", "do", "go", "see", "saw", "new", "now", "him", "her", "his", "she", "he", "am", "let", "lets", "let's", "way", "off", "too", "any", "own", "these", "those", "seeing", "idea", "kind"]);
+/** A caption word has to be at least this long; short English words are almost never a lane. */
+const MIN_CAPTION_WORD = 5;
 
 /**
  * The lane, from their own posts. Hashtags they actually use, weighted by how the post did,
@@ -56,7 +61,7 @@ export function readLane(posts: PostLite[]): { keywords: string[]; confidence: "
   let basis = `the hashtags they use most, weighted by how those posts did`;
   if (ranked.length < LANE.minKeywords) {
     // Fall back to caption words, same weighting.
-    for (const p of posts) for (const word of p.caption.split(/[^A-Za-z0-9']+/)) bump(word, weight(p.multiple) * 0.5);
+    for (const p of posts) for (const word of p.caption.split(/[^A-Za-z0-9']+/)) if (word.length >= MIN_CAPTION_WORD) bump(word, weight(p.multiple) * 0.5);
     ranked = [...score.entries()].filter(([, v]) => v.n >= LANE.minHashtagUses).sort((a, b) => b[1].w - a[1].w);
     basis = `the words and hashtags that repeat across their posts, weighted by how those did`;
   }
@@ -68,8 +73,16 @@ export function readLane(posts: PostLite[]): { keywords: string[]; confidence: "
 /** How she states it back, for one tap. Pure. */
 export function laneQuestion(keywords: string[], topHooks: string[]): string {
   const lane = keywords.slice(0, 3).join(", ");
-  const because = topHooks.length ? ` your best ones are the ${topHooks[0].slice(0, 60)} kind.` : "";
+  const hook = topHooks[0] ? hookPhrase(topHooks[0]) : "";
+  const because = hook ? ` your best ones are the "${hook}" kind.` : "";
   return `from your posts, your lane looks like ${lane}.${because} right?`;
+}
+
+/** The first clause of a caption, at most eight words, lowercased: something a person would quote. */
+export function hookPhrase(caption: string): string {
+  const first = caption.replace(/#[\p{L}\p{N}_]+/gu, "").trim().split(/[.!?\n]|, /)[0] ?? "";
+  const words = first.trim().split(/\s+/).filter(Boolean).slice(0, 8);
+  return words.join(" ").toLowerCase().replace(/[",]+$/g, "");
 }
 
 /** Drift: what share of the new keywords she has not seen before. Pure. */
