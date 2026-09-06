@@ -83,7 +83,9 @@ export const upsert = internalMutation({
       postId: c.postId,
       url: c.url,
       createTime: c.publishedAt ?? now,
-      contentType: c.durationSec ? "video" : "video",
+      // Zernio reports a duration only on video; an Instagram row without one is a photo or a
+      // carousel. TikTok analytics never carry a duration, and TikTok is mostly video.
+      contentType: c.durationSec ? "video" : c.platform === "instagram" ? "photo" : "video",
       caption,
       hashtags: Array.from(caption.matchAll(/#([\p{L}\p{N}_]+)/gu)).map((m) => m[1].toLowerCase()).slice(0, 20),
       metrics: { views: c.views ?? 0, likes: c.likes ?? 0, comments: c.comments ?? 0, shares: c.shares ?? 0, saves: c.saves ?? undefined },

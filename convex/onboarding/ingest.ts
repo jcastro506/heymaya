@@ -6,7 +6,7 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalMutation, internalQuery, type MutationCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
@@ -35,6 +35,14 @@ export const creatorHandles = internalQuery({
 });
 
 /** Upsert own posts from a normalized page; returns how many were new. */
+const normUrl = (u: string) => u.replace(/\?.*$/, "").replace(/\/$/, "").toLowerCase();
+
+async function sameUrlRow(ctx: MutationCtx, creatorId: Id<"creators">, platform: string, url: string): Promise<Doc<"ownPosts"> | null> {
+  const rows = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", creatorId)).order("desc").take(300)) as Doc<"ownPosts">[];
+  const want = normUrl(url);
+  return rows.find((r) => r.platform === platform && normUrl(r.url) === want) ?? null;
+}
+
 export const upsertOwnPosts = internalMutation({
   args: { creatorId: v.id("creators"), posts: v.any(), now: v.number(), handle: v.optional(v.string()) },
   handler: async (ctx, a): Promise<{ inserted: number; total: number }> => {
@@ -60,6 +68,23 @@ export const upsertOwnPosts = internalMutation({
       // TikTok's single-post, transcript and comment endpoints key on the public URL, so
       // a missing share_url is rebuilt from the handle and id rather than left empty.
       const url = p.url ?? (p.platform === "tiktok" && a.handle ? `https://www.tiktok.com/@${a.handle}/video/${p.postId}` : "");
+      // Live 2026-09-05: the connected feed can create the row first, keyed by the id in the
+      // platform URL, while the scrape keys Instagram by its numeric pk. Same post, two rows.
+      // A row with the same URL is the same post: it takes the scrape's identity and keeps
+      // its connected numbers.
+      const byUrl = url ? await sameUrlRow(ctx, a.creatorId, p.platform, url) : null;
+      if (byUrl) {
+        await ctx.db.patch(byUrl._id, {
+          postId: p.postId,
+          createTime: p.postedAt ? (p.postedAt < 1e12 ? p.postedAt * 1000 : p.postedAt) : byUrl.createTime,
+          contentType: p.mediaType === "carousel" ? "carousel" : p.mediaType === "image" ? "photo" : "video",
+          durationSec: p.videoDurationSec ?? byUrl.durationSec,
+          caption: p.caption ?? byUrl.caption,
+          hashtags: (p.caption ?? "").match(/#[\p{L}\p{N}_]+/gu)?.map((h) => h.slice(1).toLowerCase()) ?? byUrl.hashtags,
+          ...(byUrl.source === "zernio" && byUrl.connected ? {} : { metrics, metricsAsOf: a.now }),
+        });
+        continue;
+      }
       await ctx.db.insert("ownPosts", {
         creatorId: a.creatorId,
         platform: p.platform,

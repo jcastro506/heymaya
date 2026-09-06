@@ -345,3 +345,47 @@ export const zernioGet = internalAction({
     return { status: res.status, body: (await res.text()).slice(0, a.max ?? 600) };
   },
 });
+
+/**
+ * Forget every cached read of one kind, so a corrected normaliser applies now rather than
+ * when the TTL runs out (up to seven days). The next read spends real credits. Dev only.
+ */
+export const forgetReads = internalMutation({
+  args: { kind: v.string() },
+  handler: async (ctx, a): Promise<{ forgotten: number }> => {
+    const rows = await ctx.db.query("readCache").withIndex("by_key", (q) => q.eq("kind", a.kind)).collect();
+    for (const r of rows) await ctx.db.delete(r._id);
+    return { forgotten: rows.length };
+  },
+});
+
+/**
+ * One post, two rows: the connected feed created one keyed by the URL's id, the scrape
+ * created another keyed by the numeric pk, before the scrape learned to join by URL. Keep
+ * the scraped row (it has the caption and the hashtags), move the connected numbers onto
+ * it, drop the other. Idempotent.
+ */
+export const mergeDuplicateOwnPosts = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ merged: number }> => {
+    const rows = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"ownPosts">[];
+    const norm = (u: string) => u.replace(/\?.*$/, "").replace(/\/$/, "").toLowerCase();
+    const groups = new Map<string, Doc<"ownPosts">[]>();
+    for (const r of rows) { const k = `${r.platform}:${norm(r.url)}`; groups.set(k, [...(groups.get(k) ?? []), r]); }
+    let merged = 0;
+    for (const g of groups.values()) {
+      if (g.length < 2) continue;
+      const keep = g.find((r) => r.source === "scrape") ?? g[0];
+      for (const other of g) {
+        if (other._id === keep._id) continue;
+        await ctx.db.patch(keep._id, {
+          ...(other.connected && !keep.connected ? { connected: other.connected } : {}),
+          ...(other.reachMultiple !== undefined && keep.reachMultiple === undefined ? { reachMultiple: other.reachMultiple } : {}),
+        });
+        await ctx.db.delete(other._id);
+        merged += 1;
+      }
+    }
+    return { merged };
+  },
+});

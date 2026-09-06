@@ -114,3 +114,26 @@ describe("cursor and snapshots", () => {
     expect(hook).toMatch(/analytics\.synced/);
   });
 });
+
+describe("one post, one row, whoever sees it first (live 2026-09-05)", () => {
+  it("a row the connected feed created is claimed by the scrape, keeps its numbers, and is a photo without a duration", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await seedCreator(t);
+    const ig = conn({ platform: "instagram", postId: "DbrZ8lIlxma", url: "https://www.instagram.com/p/DbrZ8lIlxma/", views: 3, reach: 3, durationSec: null });
+    await t.mutation(internal.connections.sync.upsert, { creatorId, connected: ig });
+    const before = await t.run(async (ctx) => await ctx.db.query("ownPosts").collect());
+    expect(before.length).toBe(1);
+    expect(before[0].contentType, "no duration on Instagram means a photo, not a video to transcribe").toBe("photo");
+
+    await t.mutation(internal.onboarding.ingest.upsert, {
+      creatorId,
+      now: NOW,
+      posts: [{ platform: "instagram", postId: "3712345678901234567", url: "https://www.instagram.com/p/DbrZ8lIlxma/?igsh=x", caption: "first one #tea #matcha", mediaType: "image", postedAt: NOW - 86_400_000, videoDurationSec: null, metrics: { viewCount: null, likeCount: 2, commentCount: 0, shareCount: null, saveCount: null } }],
+    });
+    const after = await t.run(async (ctx) => await ctx.db.query("ownPosts").collect());
+    expect(after.length, "the scrape must join the connected row by URL, not create a twin").toBe(1);
+    expect(after[0].postId).toBe("3712345678901234567");
+    expect(after[0].hashtags).toEqual(["tea", "matcha"]);
+    expect(after[0].connected?.reach, "connected numbers survive the join").toBe(3);
+  });
+});
