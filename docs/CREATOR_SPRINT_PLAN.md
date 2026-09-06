@@ -417,7 +417,7 @@ The manifest also carries **the scar tissue**, as a numbered list with the incid
 
 **Exit criterion (live).** A creator onboarded without typing a niche sentence receives a scout message whose fit reasoning cites their own posts.
 
-### Sprint 4e — Connected numbers · *designed 2026-09-04 from Zernio's OpenAPI spec, not built*
+### Sprint 4e — Connected numbers · *built 2026-09-05 against a recording of the real responses; live on dev*
 
 **Decision.** Zernio is in. Its value is uneven across platforms and the design has to be honest about that, in code, not in prompt.
 

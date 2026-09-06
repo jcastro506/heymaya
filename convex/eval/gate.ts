@@ -245,3 +245,14 @@ export const run = internalAction({
     };
   },
 });
+
+/** Ops: drop the newest baseline for a suite (a bad reading must not stand as the standard). */
+export const dropLatestBaseline = internalMutation({
+  args: { suite: v.string() },
+  handler: async (ctx, a): Promise<{ dropped: boolean; note?: string }> => {
+    const b = (await ctx.db.query("evalBaselines").withIndex("by_suite_at", (q) => q.eq("suite", a.suite)).order("desc").first()) as Doc<"evalBaselines"> | null;
+    if (!b) return { dropped: false };
+    await ctx.db.delete(b._id);
+    return { dropped: true, note: b.note };
+  },
+});
