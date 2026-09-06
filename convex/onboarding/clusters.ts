@@ -28,7 +28,7 @@ export const CLUSTERS = {
 
 export interface ClusterIn { postId: string; text: string; vector: number[] | null; multiple: number | null; hashtags: string[] }
 export interface Cluster { label: string; keywords: string[]; postIds: string[]; share: number; medianMultiple: number | null }
-export interface Lanes { readAt: number; posts: number; scatter: number; state: "known" | "unnamed" | "scattered" | "none"; clusters: Cluster[]; /** The words of the accounts they admire, read at onboarding so the split question can fire on day one. */ admiredKeywords?: string[] }
+export interface Lanes { readAt: number; posts: number; scatter: number; state: "known" | "unnamed" | "scattered" | "none"; clusters: Cluster[]; /** How many posts the embedder failed on; a read with failures is a weaker read and says so. */ embedFailed?: number; /** The words of the accounts they admire, read at onboarding so the split question can fire on day one. */ admiredKeywords?: string[] }
 
 const med = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b); return s.length ? Math.round((s[Math.floor(s.length / 2)] ?? 0) * 100) / 100 : null; };
 
@@ -108,6 +108,7 @@ export const read = internalAction({
     const withText = posts.filter((p) => p.text.length >= 8);
     const emb = withText.length ? await ctx.runAction(internal.core.embeddings.embedTexts, { texts: withText.map((p) => p.text) }) : { vectors: [], failed: 0 };
     const vec = new Map(emb.vectors.map((x) => [x.text, x.values]));
+    if (emb.failed > 0) console.error(`[clusters] embedder failed on ${emb.failed} of ${withText.length} posts; those stand alone this read`);
     const input: ClusterIn[] = posts.map((p) => ({ ...p, vector: vec.get(p.text) ?? null }));
     const groups = clusterPosts(input);
     const real = groups.filter((g) => g.members.length >= CLUSTERS.minPosts).slice(0, CLUSTERS.maxClusters);
@@ -140,6 +141,7 @@ export const read = internalAction({
         console.error(`[clusters] roster read failed for @${acct.handle}: ${String(err).slice(0, 120)}`);
       }
     }
+    lanes.embedFailed = emb.failed;
     lanes.admiredKeywords = [...score.entries()].sort((x, y) => y[1] - x[1]).slice(0, 12).map(([k]) => k);
     await ctx.runMutation(internal.onboarding.clusters.write, { creatorId: a.creatorId, lanes });
     return lanes;

@@ -172,3 +172,18 @@ describe("the lane proposal for an account that may have none (Sprint 4f)", () =
     expect(p.candidates).toEqual([]);
   });
 });
+
+describe("what the live proposal taught it (2026-09-06)", () => {
+  it("a group at 0× is never rewarded; the admired lane is a candidate with no posts there yet, so the split question fires", () => {
+    const lanes = lanesOf([cl("pipeline tests", ["pipeline", "testing"], 2, 0.2, 0), cl("travel awe", ["travel", "sights"], 3, 0.3, 1.29)], 10, "scattered");
+    const p = proposeLane({ lanes, laneKeywords: [], admiredKeywords: ["running", "runtok", "marathon"], stated: "", laneConfidence: "thin" });
+    expect(p.candidates.map((c) => c.source)).toEqual(["rewarded", "admired"]);
+    expect(p.candidates[0].label).toBe("travel awe");
+    expect(p.candidates[1].label).toBe("running runtok");
+    expect(p.candidates[1].evidence).toMatch(/no posts there yet/);
+    expect(p.question).toMatch(/travel awe/);
+    expect(p.question).toMatch(/running runtok/);
+    const none = proposeLane({ lanes: lanesOf([cl("pipeline tests", ["pipeline"], 2, 0.2, 0)], 10, "scattered"), laneKeywords: [], admiredKeywords: [], stated: "", laneConfidence: "none" });
+    expect(none.candidates[0].source, "with nothing rewarded and nothing admired, the biggest group is offered as what it is").toBe("biggest");
+  });
+});

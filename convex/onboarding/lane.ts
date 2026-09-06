@@ -123,7 +123,9 @@ export function proposeLane(input: { lanes: Lanes | null; laneKeywords: string[]
   const statedWords = input.stated.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4);
   if (!lanes || lanes.state === "none" || lanes.posts === 0) return { state: "none", candidates: [], recommendation: null, question: null, read: "no posts to read yet" };
   const clusters = lanes.clusters;
-  const withM = clusters.filter((c) => c.medianMultiple !== null && c.postIds.length >= 2);
+  // Live 2026-09-06: a group of test posts at 0× was called "rewarded". Rewarded means it
+  // beats their normal, not that it is the least bad.
+  const withM = clusters.filter((c) => c.medianMultiple !== null && c.medianMultiple >= 1 && c.postIds.length >= 2);
   const rewarded = withM.length ? [...withM].sort((a, b) => (b.medianMultiple ?? 0) - (a.medianMultiple ?? 0))[0] : null;
   const biggest = clusters[0] ?? null;
   const admiredMatch = clusters.map((c) => ({ c, n: overlap(c.keywords, input.admiredKeywords) })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n)[0]?.c ?? null;
@@ -149,14 +151,21 @@ export function proposeLane(input: { lanes: Lanes | null; laneKeywords: string[]
   // Scattered: triangulate.
   const candidates: LaneCandidate[] = [];
   if (rewarded) candidates.push(cand(rewarded, "rewarded"));
-  if (admiredMatch && !candidates.some((x) => x.label === admiredMatch.label)) candidates.push(cand(admiredMatch, "admired"));
+  // Who they admire is a candidate even when they have no posts there yet: that is often
+  // exactly the case, and it is the lane they want.
+  const admiredLane: LaneCandidate | null = admiredMatch
+    ? cand(admiredMatch, "admired")
+    : input.admiredKeywords.length >= 2
+      ? { label: input.admiredKeywords.slice(0, 2).join(" "), keywords: input.admiredKeywords.slice(0, 5), evidence: "it is what the accounts you admire make, and you have no posts there yet", source: "admired" }
+      : null;
+  if (admiredLane && !candidates.some((x) => x.label === admiredLane.label)) candidates.push(admiredLane);
   if (statedMatch && !candidates.some((x) => x.label === statedMatch.label)) candidates.push(cand(statedMatch, "stated"));
   if (!candidates.length && biggest) candidates.push(cand(biggest, "biggest"));
   if (!candidates.length && input.laneConfidence !== "none") candidates.push({ label: input.laneKeywords.slice(0, 2).join(" "), keywords: input.laneKeywords.slice(0, 5), evidence: "the words that repeat across your posts", source: "biggest" });
   const recommendation = candidates[0] ?? null;
   let question: string | null = null;
-  if (rewarded && admiredMatch && rewarded.label !== admiredMatch.label) {
-    question = `your best posts are the ${rewarded.label} ones, but the accounts you admire make ${admiredMatch.label}. which one do you want to be?`;
+  if (rewarded && admiredLane && rewarded.label !== admiredLane.label) {
+    question = `your best posts are the ${rewarded.label} ones, but the accounts you admire make ${admiredLane.label}. which one do you want to be?`;
   } else if (recommendation) {
     question = `i'd make ${recommendation.label} the lane for the next month and keep the rest as backdrop. go with that?`;
   }
