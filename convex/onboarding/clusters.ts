@@ -11,7 +11,7 @@
 import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
-import type { Doc } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import { cosineSimilarity, COSINE_CLUSTER_THRESHOLD } from "../core/embeddings";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
@@ -77,9 +77,22 @@ const STOP = new Set(["this", "that", "with", "have", "from", "your", "just", "w
 
 export const postsFor = internalQuery({
   args: { creatorId: v.id("creators") },
-  handler: async (ctx, a): Promise<Array<{ postId: string; text: string; multiple: number | null; hashtags: string[] }>> => {
+  handler: async (ctx, a): Promise<Array<{ rowId: string; postId: string; text: string; multiple: number | null; hashtags: string[]; vector: number[] | null }>> => {
     const rows = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(80)) as Doc<"ownPosts">[];
-    return rows.map((p) => ({ postId: p.postId, text: `${p.caption.replace(/#[\p{L}\p{N}_]+/gu, "").trim()} ${(p.transcript ?? "").slice(0, 160)}`.trim().slice(0, CLUSTERS.textChars), multiple: p.reachMultiple ?? p.multiple ?? null, hashtags: p.hashtags }));
+    return rows.map((p) => {
+      const text = `${p.caption.replace(/#[\p{L}\p{N}_]+/gu, "").trim()} ${(p.transcript ?? "").slice(0, 160)}`.trim().slice(0, CLUSTERS.textChars);
+      // A stored vector counts only while the text it was made from is unchanged.
+      const vector = p.embedding && p.embeddedText === text ? p.embedding : null;
+      return { rowId: String(p._id), postId: p.postId, text, multiple: p.reachMultiple ?? p.multiple ?? null, hashtags: p.hashtags, vector };
+    });
+  },
+});
+
+export const storeVectors = internalMutation({
+  args: { rows: v.array(v.object({ rowId: v.id("ownPosts"), text: v.string(), vector: v.array(v.float64()) })) },
+  handler: async (ctx, a): Promise<null> => {
+    for (const r of a.rows) await ctx.db.patch(r.rowId, { embedding: r.vector, embeddedText: r.text });
+    return null;
   },
 });
 
@@ -105,11 +118,14 @@ export const read = internalAction({
   handler: async (ctx, a): Promise<Lanes> => {
     const posts = await ctx.runQuery(internal.onboarding.clusters.postsFor, { creatorId: a.creatorId });
     const now = Date.now();
-    const withText = posts.filter((p) => p.text.length >= 8);
-    const emb = withText.length ? await ctx.runAction(internal.core.embeddings.embedTexts, { texts: withText.map((p) => p.text) }) : { vectors: [], failed: 0 };
+    // Embed only what has no stored vector: each post spends the quota once, ever.
+    const need = posts.filter((p) => p.text.length >= 8 && !p.vector);
+    const emb = need.length ? await ctx.runAction(internal.core.embeddings.embedTexts, { texts: need.map((p) => p.text) }) : { vectors: [], failed: 0 };
     const vec = new Map(emb.vectors.map((x) => [x.text, x.values]));
-    if (emb.failed > 0) console.error(`[clusters] embedder failed on ${emb.failed} of ${withText.length} posts; those stand alone this read`);
-    const input: ClusterIn[] = posts.map((p) => ({ ...p, vector: vec.get(p.text) ?? null }));
+    if (emb.failed > 0) console.error(`[clusters] embedder failed on ${emb.failed} of ${need.length} posts; those stand alone this read and are retried next time`);
+    const fresh = need.filter((p) => vec.has(p.text)).map((p) => ({ rowId: p.rowId as Id<"ownPosts">, text: p.text, vector: vec.get(p.text)! }));
+    if (fresh.length) await ctx.runMutation(internal.onboarding.clusters.storeVectors, { rows: fresh });
+    const input: ClusterIn[] = posts.map((p) => ({ postId: p.postId, text: p.text, multiple: p.multiple, hashtags: p.hashtags, vector: p.vector ?? vec.get(p.text) ?? null }));
     const groups = clusterPosts(input);
     const real = groups.filter((g) => g.members.length >= CLUSTERS.minPosts).slice(0, CLUSTERS.maxClusters);
     // Name the groups once, from their own words; fall back to the words themselves.

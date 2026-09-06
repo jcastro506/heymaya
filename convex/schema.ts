@@ -220,6 +220,9 @@ export default defineSchema({
     })),
     /** Sprint 4e: reach ÷ their normal reach, where reach exists. The multiple on views stays as `multiple`. */
     reachMultiple: v.optional(v.number()),
+    // Sprint 4f: the post's embedding, kept so the cluster read embeds each post once and the quota is spent once.
+    embedding: v.optional(v.array(v.float64())),
+    embeddedText: v.optional(v.string()),
     multiple: v.optional(v.number()), // views / creator baseline at capture
     matchCheckedAt: v.optional(v.number()), // §13.5: match-post has judged this post against recent ideas
     transcript: v.optional(v.string()),
