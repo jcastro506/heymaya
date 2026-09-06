@@ -22,6 +22,17 @@ When: once, the first message after the dossier exists.
 The judgment: prove you actually watched. Name two of their real posts (by what they are, not by id) with something specific you noticed in each. Say one true thing about how they make things (their opening, their pacing, their setting, their energy) with evidence. Say what you'll do next: watch the accounts they named and their lane, and text when something is worth their time. If the dossier says mode is thin or newCreator, say what you could and couldn't read, plainly.
 Hard rules: no compliments without a specific. No claim without evidence in the dossier. Under 120 words. End with exactly one question that has a decision behind it, or none.`;
 
+/** Pure: does the text name every button it will carry? Case-insensitive, whole label. */
+export function candidatesNamed(text: string, labels: string[]): boolean {
+  const t = text.toLowerCase();
+  return labels.every((l) => t.includes(l.toLowerCase()));
+}
+
+/** Pure: when a label is still missing, the proposal line (which names them all) is appended and the stray question is not trusted to stand alone. */
+export function ensureCandidatesNamed(text: string, labels: string[], laneLine: string): string {
+  return candidatesNamed(text, labels) ? text : `${text}\n\n${laneLine}`;
+}
+
 export const run = internalAction({
   args: { creatorId: v.id("creators") },
   handler: async (ctx, args): Promise<{ ok: boolean; reason?: string }> => {
@@ -110,6 +121,15 @@ export const run = internalAction({
     // question gave them two questions in one message. The lane check is now the model's
     // one question (told above); the line is appended only when the message carries none.
     if (laneLine && !text.includes("?")) text = `${text}\n\n${laneLine}`;
+    // Live 2026-09-06: she kept the two candidate buttons and rewrote the question into one of
+    // her own, so a tap answered a question she never asked. Buttons and question must agree:
+    // one rewrite naming every candidate, then the proposal line itself.
+    if (laneAsk && laneAsk.candidates.length && !candidatesNamed(text, laneAsk.candidates.map((c) => c.label))) {
+      const labels = laneAsk.candidates.map((c) => `"${c.label}"`).join(" and ");
+      const rewrite = await callModel(ctx, { creatorId: creator._id, purpose: "first_read_rewrite", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `Your message will carry buttons labelled ${labels}. Rewrite it so its ONLY question is the one you were given, naming ${labels} exactly as written, and cite no share or percentage that is not in that line. Message text only.` }], temperature: 0.4, maxTokens: 900, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+      if (rewrite.ok && rewrite.content.trim() && candidatesNamed(rewrite.content, laneAsk.candidates.map((c) => c.label))) text = rewrite.content.trim();
+      text = ensureCandidatesNamed(text, laneAsk.candidates.map((c) => c.label), laneLine);
+    }
 
     await ctx.runMutation(internal.core.messages.send, {
       creatorId: creator._id,

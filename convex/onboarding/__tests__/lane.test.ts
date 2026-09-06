@@ -188,3 +188,16 @@ describe("what the live proposal taught it (2026-09-06)", () => {
     expect(none.candidates[0].source, "with nothing rewarded and nothing admired, the biggest group is offered as what it is").toBe("biggest");
   });
 });
+
+import { candidatesNamed, ensureCandidatesNamed } from "../firstRead";
+
+describe("buttons and the question agree (live 2026-09-06)", () => {
+  it("a message that names every candidate stands; one that dropped them gets the proposal line appended", () => {
+    const line = "your best posts are the travel moments ones, but the accounts you admire make runner track. which one do you want to be?";
+    expect(candidatesNamed("Travel Moments or runner track?", ["travel moments", "runner track"])).toBe(true);
+    expect(candidatesNamed("are we aiming to grow around the software builds?", ["travel moments", "runner track"])).toBe(false);
+    const fixed = ensureCandidatesNamed("i went through your feeds. are we aiming for software builds?", ["travel moments", "runner track"], line);
+    expect(fixed.endsWith(line)).toBe(true);
+    expect(ensureCandidatesNamed(`fine. ${line}`, ["travel moments", "runner track"], line)).toBe(`fine. ${line}`);
+  });
+});
