@@ -117,7 +117,7 @@ export const scenarioCreators = internalQuery({
 /** Dry runs of the scout over the scenario creators, N times each: variance is the point. */
 export const scout = internalAction({
   args: { n: v.optional(v.number()), creatorId: v.optional(v.id("creators")) },
-  handler: async (ctx, a): Promise<{ runs: number; sent: number; passed: number; missing: string[]; comparable: boolean }> => {
+  handler: async (ctx, a): Promise<{ runs: number; sent: number; passed: number; missing: string[]; comparable: boolean; reasons: string[] }> => {
     let missing: string[] = [];
     let ids: Id<"creators">[];
     if (a.creatorId) ids = [a.creatorId];
@@ -128,18 +128,21 @@ export const scout = internalAction({
       if (missing.length) console.warn(`[eval] scenario set incomplete, baseline not comparable: missing ${missing.join(", ")}`);
     }
     let runs = 0, sent = 0, ok = 0;
+    // Why a run sent nothing is part of the reading: a suite that says "sent 0" without
+    // saying why cannot tell a critic drop from an empty board from a broken deploy.
+    const reasons: string[] = [];
     for (const creatorId of ids) {
       for (let i = 0; i < (a.n ?? 1); i++) {
         const r = await ctx.runAction(internal.scout.scout.run, { creatorId, dryRun: true, ignoreRails: true });
         runs++;
-        if (!r.dry?.message) continue;
+        if (!r.dry?.message) { reasons.push(r.reason); continue; }
         sent++;
         const res = await ctx.runAction(internal.eval.run.evaluate, { suite: "scout", skill: "scout", text: r.dry.message, evidence: r.dry.evidence, creatorId, trace: r.dry.trace });
         if (res.pass) ok++;
       }
     }
     // A run with a missing scenario is a number, not a baseline. Say which it is.
-    return { runs, sent, passed: ok, missing, comparable: missing.length === 0 };
+    return { runs, sent, passed: ok, missing, comparable: missing.length === 0, reasons };
   },
 });
 
