@@ -82,7 +82,8 @@ export function reuseLabels(previous: Cluster[] | undefined, groups: Array<{ mem
     const ids = new Set(g.members.map((m) => m.postId));
     for (const c of previous ?? []) {
       const shared = c.postIds.filter((id) => ids.has(id)).length;
-      if (shared >= Math.ceil(0.8 * Math.max(ids.size, c.postIds.length))) return { label: c.label, keywords: c.keywords };
+      // Most of the smaller side: a group that grew by a post is still the same group.
+      if (shared >= 2 && shared >= Math.ceil(0.8 * Math.min(ids.size, c.postIds.length))) return { label: c.label, keywords: c.keywords };
     }
     return {};
   });
@@ -151,7 +152,7 @@ export const read = internalAction({
     // Name the groups once, from their own words; fall back to the words themselves. A group
     // she already named keeps its name.
     const previous = await ctx.runQuery(internal.onboarding.clusters.previousFor, { creatorId: a.creatorId });
-    const kept = reuseLabels(previous, real);
+    const kept = reuseLabels(previous ?? undefined, real);
     let names: Array<{ label: string; keywords: string[] }> = [];
     const toName = real.map((g, i) => ({ g, i })).filter(({ i }) => !kept[i]?.label);
     if (toName.length) {
