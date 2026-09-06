@@ -27,6 +27,9 @@ import { LOOKUPS } from "../agent/playbooks";
 
 const WEEK_MS = 7 * 86_400_000;
 
+/** No Sunday review before this many days together: there is no week to review. */
+export const MIN_DAYS_BEFORE_REVIEW = 5;
+
 export const WEEKLY_REVIEW_SKILL = `weekly-review
 When: Sunday. You are telling them what happened this week and why, in under 900 characters, no bullets, no headers, like a text from someone who watched every post.
 Order: (1) the week in one line with a number they were given (posts, median multiple); (2) the one thing that most explains it, from the cards and numbers, not from theory; (3) LIKED vs WORKED: which ideas they took and which posts actually performed, and if those disagree say so plainly, because results beat taste and you owe them that; (4) last week's experiment: held, failed, or unknown, with the number; (5) one new experiment for next week, small enough to do in one post; (6) if you have a scored prediction record, one honest line on how your calls have been running. (7) The pulse tells you how they've been with you this week, read from what they did, never from asking. If it is cooling or silent, end with ONE specific question about their content that a reply would answer in a sentence (which of two hooks, whether a post is still planned); never ask how they feel about you, whether they'd miss you, or whether anything was useless. If warm or steady, no question unless one is genuinely useful. (8) If "growth" is present, one line on whether the plan is working: posts in lane vs out, their multiples, follows and the follower delta where you have them; if it says due, revise the plan out loud (keep, widen, switch) with those numbers.
@@ -42,6 +45,9 @@ export const dueForReview = internalQuery({
     const due: Id<"creators">[] = [];
     for (const c of creators) {
       if (!c.channel.paired || c.plan.status === "paused" || c.plan.status === "canceled" || c.plan.status === "deleting") continue;
+      // Live 2026-09-06: a review fired on a three-hour-old account ("zero posts this week, we
+      // just started"). A week's review needs a week together.
+      if (a.now - c.createdAt < MIN_DAYS_BEFORE_REVIEW * 86_400_000) continue;
       const weekday = new Intl.DateTimeFormat("en-US", { timeZone: c.timezone, weekday: "short" }).format(a.now);
       const { hour } = localHourMinute(a.now, c.timezone);
       if (weekday !== "Sun" || hour < 9 || hour >= 20) continue;

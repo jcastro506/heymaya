@@ -21,6 +21,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
+import { unwrapModelEnvelope } from "./envelope";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 // ⚠️ Static. Convex MUTATIONS cannot do dynamic imports — only actions can, and
@@ -238,6 +239,10 @@ export const send = internalMutation({
       )
       .first();
     if (existing) return { messageId: existing._id, sent: false };
+    // A person never receives a JSON envelope. Unwrapped here, or refused loudly.
+    const envelope = unwrapModelEnvelope(args.body);
+    if (envelope.unwrapped) console.error(`[messages] unwrapped a JSON envelope for ${args.kind ?? "message"} ${args.dedupeKey}; the caller sent the raw model output`);
+    const body = envelope.text;
 
     // ⭐ One writer — the plain-language guard and the delivery job both live
     // in `writeOutbound`. `askFounder` skipped this block entirely when it was
@@ -245,7 +250,7 @@ export const send = internalMutation({
     const messageId = await writeOutbound(ctx, {
       creatorId: args.creatorId,
       surface: args.surface,
-      body: args.body,
+      body,
       dedupeKey: args.dedupeKey,
       proactive: args.proactive,
       awaitingAnswer: args.awaitingAnswer,

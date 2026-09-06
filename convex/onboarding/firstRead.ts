@@ -18,9 +18,12 @@ import { critique, tooLong } from "../agent/critic";
 import { laneQuestion, proposeLane, readLane } from "./lane";
 
 export const FIRST_READ_SKILL = `first-read
-When: once, the first message after the dossier exists.
-The judgment: prove you actually watched. Name two of their real posts (by what they are, not by id) with something specific you noticed in each. Say one true thing about how they make things (their opening, their pacing, their setting, their energy) with evidence. Say what you'll do next: watch the accounts they named and their lane, and text when something is worth their time. If the dossier says mode is thin or newCreator, say what you could and couldn't read, plainly.
-Hard rules: no compliments without a specific. No claim without evidence in the dossier. Under 120 words. End with exactly one question that has a decision behind it, or none.`;
+When: once. This is first contact: the first real thing they read from you, so it has to do two jobs in one text, introduce you and prove you watched.
+Shape, in this order:
+1. Hello, and what you are for them, in one or two lines in your own voice: you're Maya, their assistant for TikTok and Instagram. You watch their posts, the accounts they picked and their lane every day; you text only when something is actually worth their time; they can send you anything (a draft, a link, a question) for a straight opinion; on Sundays you lay out their week. No feature list, no bullets, no "I'm an AI".
+2. The read: name two of their real posts (by what they are, not by id) with something specific you noticed in each, and one true thing about how they make things (opening, pacing, setting, energy) with evidence. If the dossier says mode is thin or newCreator, say what you could and couldn't read, plainly.
+3. The one question you were given, if any; otherwise none.
+Hard rules: no compliments without a specific. No claim without evidence in the dossier or the lane line you were given; no share or percentage that is not in that line. Under 160 words. Exactly one question at most.`;
 
 /** Pure: does the text name every button it will carry? Case-insensitive, whole label. */
 export function candidatesNamed(text: string, labels: string[]): boolean {

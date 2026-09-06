@@ -59,6 +59,7 @@ import type * as core_costs from "../core/costs.js";
 import type * as core_delivery from "../core/delivery.js";
 import type * as core_directives from "../core/directives.js";
 import type * as core_embeddings from "../core/embeddings.js";
+import type * as core_envelope from "../core/envelope.js";
 import type * as core_fakeModel from "../core/fakeModel.js";
 import type * as core_identity from "../core/identity.js";
 import type * as core_jobs from "../core/jobs.js";
@@ -189,6 +190,7 @@ declare const fullApi: ApiFromModules<{
   "core/delivery": typeof core_delivery;
   "core/directives": typeof core_directives;
   "core/embeddings": typeof core_embeddings;
+  "core/envelope": typeof core_envelope;
   "core/fakeModel": typeof core_fakeModel;
   "core/identity": typeof core_identity;
   "core/jobs": typeof core_jobs;

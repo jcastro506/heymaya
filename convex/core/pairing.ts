@@ -30,6 +30,9 @@ import type { Doc, Id } from "../_generated/dataModel";
  */
 export const PAIRING_TTL_MS = 15 * 60_000;
 
+/** What she says the moment they pair, before the read is done. */
+export const HELLO = "hey, i'm maya. i'm going through your posts and the accounts you picked right now. first thoughts in about ten minutes.";
+
 function mintToken(): string {
   const bytes = new Uint8Array(24);
   crypto.getRandomValues(bytes);
@@ -147,6 +150,19 @@ export const claimPairing = internalMutation({
       pairingExpiresAt: undefined,
       updatedAt: now,
     });
+    // First contact. If her first read has not been written yet, she says hello now and
+    // what she is doing, so pairing is never followed by silence. Once, ever.
+    const firstRead = await ctx.db.query("messages").withIndex("by_creator_and_dedupe", (q) => q.eq("creatorId", creator._id).eq("dedupeKey", `first_read:${creator._id}`)).first();
+    if (!firstRead) {
+      await ctx.runMutation(internal.core.messages.send, {
+        creatorId: creator._id,
+        surface: "telegram",
+        body: HELLO,
+        dedupeKey: `hello:${creator._id}`,
+        proactive: true,
+        kind: "status",
+      });
+    }
     // Everything written while unpaired (the first read, at least) goes out now.
     await ctx.runMutation(internal.core.jobs.wakeDeliveries, { creatorId: creator._id });
     return { paired: true, creatorId: creator._id };
