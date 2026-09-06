@@ -113,7 +113,15 @@ export const draft = internalAction({
     const inp = await ctx.runQuery(internal.calendar.weekPlan.inputsFor, { creatorId: a.creatorId, now });
     if (!inp) return { sent: false, reason: "creator not found" };
     if (inp.alreadyPlanned && !a.force) return { sent: false, reason: "this week is already planned" };
-    const picked = pickIdeas(inp.ideas, Math.max(1, Math.min(5, Math.round(inp.postsPerWeek) || 1)), inp.experiment);
+    let picked = pickIdeas(inp.ideas, Math.max(1, Math.min(5, Math.round(inp.postsPerWeek) || 1)), inp.experiment);
+    if (picked.length === 0 && a.horizon === "first") {
+      // Day one: nothing found yet, so the first plan is seeded from their own posts.
+      const seeded = await ctx.runAction(internal.calendar.firstIdeas.seed, { creatorId: a.creatorId, n: Math.max(1, Math.min(5, Math.round(inp.postsPerWeek) || 1)) });
+      if (seeded.seeded > 0) {
+        const again = await ctx.runQuery(internal.calendar.weekPlan.inputsFor, { creatorId: a.creatorId, now });
+        if (again) picked = pickIdeas(again.ideas, Math.max(1, Math.min(5, Math.round(again.postsPerWeek) || 1)), again.experiment);
+      }
+    }
     if (picked.length === 0) return { sent: false, reason: "nothing to plan with: no ideas and no experiment" };
     // Day one is a working day: the first plan covers the rest of THIS week when at least
     // two days are left, otherwise next week, right now rather than on Sunday.

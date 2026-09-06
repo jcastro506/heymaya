@@ -23,6 +23,12 @@ export function fakeAnswer(purpose: string, messages: OpenRouterMessage[]): Open
   const user = lastUser(messages);
   const ok = (content: string): OpenRouterResult => ({ ok: true, content, usage: { promptTokens: 100, completionTokens: 50, costUsd: 0 } });
   switch (purpose) {
+    case "first_plan_ideas":
+      return ok(JSON.stringify({ ideas: [
+        { hook: "the shoe rack list, said to camera", why: "rhymes with your best post", evidencePostIds: [firstPostId(user) ?? "p1"] },
+        { hook: "km vs miles, one continuous take", why: "your ambient clips held people", evidencePostIds: [] },
+        { hook: "the mile-one face, five seconds", why: "thin history; close to what worked", evidencePostIds: [] },
+      ] }));
     case "scout":
     case "scout_final": {
       const postId = firstPostId(user);
