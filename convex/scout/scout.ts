@@ -108,7 +108,7 @@ export const run = internalAction({
        * overwritten with the model's reason when a verdict is recorded, so a re-judged
        * signal lost its link entirely and she wrote about a post nobody could open.
        */
-      const url = s.url ?? s.why.split("; ").pop() ?? "";
+      const url = s.url ?? (s.detected ?? s.why).split("; ").pop() ?? "";
       let transcript: string | null = null;
       let handle: string | null = null;
       if (s.trackedAccountId) {
@@ -123,7 +123,7 @@ export const run = internalAction({
           transcript = null;
         }
       }
-      evidence.push({ postId: s.sourcePostIds[0], kind: s.kind, url, ratio: s.kind === "shape" ? null : s.score, why: s.why, transcript, handle, taste: g.tasteHints[s._id] ?? "" });
+      evidence.push({ postId: s.sourcePostIds[0], kind: s.kind, url, ratio: s.kind === "shape" ? null : s.score, why: s.detected ?? s.why, transcript, handle, taste: g.tasteHints[s._id] ?? "" });
     }
 
     const gathered = await ctx.runQuery(internal.agent.context.gather, { creatorId: args.creatorId });

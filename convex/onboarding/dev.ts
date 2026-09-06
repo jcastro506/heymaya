@@ -139,7 +139,7 @@ export const reopenSignals = internalMutation({
     const rows = (await ctx.db.query("signals").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"signals">[];
     let n = 0;
     for (const r of rows) {
-      await ctx.db.patch(r._id, { verdict: "pending", createdAt: Date.now(), investigation: undefined });
+      await ctx.db.patch(r._id, { verdict: "pending", createdAt: Date.now(), investigation: undefined, ...(r.detected ? { why: r.detected } : {}) });
       n++;
     }
     return { reopened: n };

@@ -194,7 +194,7 @@ export const writeSignals = internalMutation({
         corroboration: { accounts: 0, soundRising: false },
         verdict: "pending",
         url: e.htmlLink ?? undefined,
-        detected: undefined as string | undefined,
+        detected: `their calendar: "${e.title}" ${e.allDay ? "on" : "at"} ${formatLocal(e.start, a.timezone, { withTime: !e.allDay })} (${daysOut} days out); ${e.htmlLink ?? ""}`.trim(),
         why: `their calendar: "${e.title}" ${e.allDay ? "on" : "at"} ${formatLocal(e.start, a.timezone, { withTime: !e.allDay })} (${daysOut} days out); ${e.htmlLink ?? ""}`.trim(),
         thresholdsVersion: THRESHOLDS.version,
         createdAt: a.now,
