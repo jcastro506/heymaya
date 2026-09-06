@@ -108,10 +108,34 @@ export const embedTexts = internalAction({
     const vectors: Array<{ text: string; values: number[] }> = [];
     let failed = 0;
 
+    // Live 2026-09-06: sequential single embeds hit the per-minute quota (429) on a batch of
+    // nine. One batchEmbedContents request per fifty texts is one quota unit, not fifty.
+    // Anything the batch does not return falls through to the per-text loop below.
+    const pending = new Set(args.texts);
+    for (let i = 0; i < args.texts.length; i += 50) {
+      const chunk = args.texts.slice(i, i + 50);
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:batchEmbedContents?key=${key}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ requests: chunk.map((text) => ({ model: `models/${MODEL}`, content: { parts: [{ text }] }, outputDimensionality: EMBEDDING_DIMENSIONS })) }),
+        });
+        if (!response.ok) { console.error(`[maya.embeddings] batch ${response.status}: ${(await response.text().catch(() => "")).slice(0, 160)}`); continue; }
+        const body = (await response.json()) as { embeddings?: Array<{ values?: number[] }> };
+        (body.embeddings ?? []).forEach((e, j) => {
+          const text = chunk[j];
+          if (text !== undefined && Array.isArray(e?.values) && e.values.length > 0) { vectors.push({ text, values: e.values }); pending.delete(text); }
+        });
+      } catch (err) {
+        console.error(`[maya.embeddings] batch failed: ${String(err).slice(0, 160)}`);
+      }
+    }
+    if (pending.size === 0) return { vectors, failed: 0 };
+
     // Sequential: this runs on a sweep, not a user turn, and a burst of
     // parallel embed calls is how you discover a rate limit you didn't know
     // about — during the one job that was supposed to be cheap and quiet.
-    for (const text of args.texts) {
+    for (const text of pending) {
       try {
         // Live 2026-09-06: one text in a batch of nine failed on every run and embedded fine
         // alone, so the failure was the batch (a 429 or a blip), not the text, and the
