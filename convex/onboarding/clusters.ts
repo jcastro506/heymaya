@@ -28,7 +28,7 @@ export const CLUSTERS = {
 
 export interface ClusterIn { postId: string; text: string; vector: number[] | null; multiple: number | null; hashtags: string[] }
 export interface Cluster { label: string; keywords: string[]; postIds: string[]; share: number; medianMultiple: number | null }
-export interface Lanes { readAt: number; posts: number; scatter: number; state: "known" | "unnamed" | "scattered" | "none"; clusters: Cluster[] }
+export interface Lanes { readAt: number; posts: number; scatter: number; state: "known" | "unnamed" | "scattered" | "none"; clusters: Cluster[]; /** The words of the accounts they admire, read at onboarding so the split question can fire on day one. */ admiredKeywords?: string[] }
 
 const med = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b); return s.length ? Math.round((s[Math.floor(s.length / 2)] ?? 0) * 100) / 100 : null; };
 
@@ -83,6 +83,14 @@ export const postsFor = internalQuery({
   },
 });
 
+export const rosterFor = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<Array<{ platform: "tiktok" | "instagram"; handle: string }>> => {
+    const rows = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(12)) as Doc<"trackedAccounts">[];
+    return rows.filter((r) => r.status !== "removed").map((r) => ({ platform: r.platform, handle: r.handle }));
+  },
+});
+
 export const write = internalMutation({
   args: { creatorId: v.id("creators"), lanes: v.any() },
   handler: async (ctx, a): Promise<null> => {
@@ -118,6 +126,21 @@ export const read = internalAction({
       }
     }
     const lanes = lanesFrom(real.map((g, i) => ({ members: g.members, label: names[i]?.label || undefined, keywords: names[i]?.keywords })), posts.length, now, STOP);
+    // Who they wish they were, in words, on day one: the roster's recent posts (cached reads,
+    // one credit each at most), before the sweep has sampled anyone. A failed read is skipped.
+    const roster = await ctx.runQuery(internal.onboarding.clusters.rosterFor, { creatorId: a.creatorId });
+    const score = new Map<string, number>();
+    for (const acct of roster.slice(0, 8)) {
+      try {
+        const r = await ctx.runAction(internal.reads.read.read, { kind: "account.posts", params: { platform: acct.platform, handle: acct.handle, sort: "popular", slot: "onboarding" }, creatorId: a.creatorId });
+        const theirs = (Array.isArray(r.value) ? r.value : []) as Array<{ caption?: string | null }>;
+        const members: ClusterIn[] = theirs.slice(0, 20).map((p, i) => ({ postId: `${acct.handle}:${i}`, text: (p.caption ?? "").replace(/#[\p{L}\p{N}_]+/gu, "").slice(0, CLUSTERS.textChars), vector: null, multiple: null, hashtags: (p.caption ?? "").match(/#[\p{L}\p{N}_]+/gu)?.map((h) => h.slice(1)) ?? [] }));
+        for (const w of groupWords(members, STOP)) score.set(w, (score.get(w) ?? 0) + 1);
+      } catch (err) {
+        console.error(`[clusters] roster read failed for @${acct.handle}: ${String(err).slice(0, 120)}`);
+      }
+    }
+    lanes.admiredKeywords = [...score.entries()].sort((x, y) => y[1] - x[1]).slice(0, 12).map(([k]) => k);
     await ctx.runMutation(internal.onboarding.clusters.write, { creatorId: a.creatorId, lanes });
     return lanes;
   },

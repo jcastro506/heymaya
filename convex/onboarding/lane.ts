@@ -177,6 +177,8 @@ export const inputsFor = internalQuery({
       const obs = (await ctx.db.query("observations").withIndex("by_author", (q) => q.eq("platform", t.platform).eq("authorHandle", t.handle)).order("desc").take(12)) as Doc<"observations">[];
       for (const o of obs) for (const k of o.keywords ?? []) kw.set(k.toLowerCase(), (kw.get(k.toLowerCase()) ?? 0) + 1);
     }
+    // Day one: the roster's own words from the cluster read, before the sweep has sampled anyone.
+    for (const k of ((c.lanes as Lanes | undefined)?.admiredKeywords ?? [])) kw.set(k.toLowerCase(), (kw.get(k.toLowerCase()) ?? 0) + 1);
     const admiredKeywords = [...kw.entries()].sort((x, y) => y[1] - x[1]).slice(0, 12).map(([k]) => k);
     // Bounded: at most two lane questions in the first week, ever.
     const weekAgo = Date.now() - 7 * 86_400_000;

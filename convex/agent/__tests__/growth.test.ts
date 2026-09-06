@@ -98,3 +98,13 @@ describe("the plan row", () => {
     expect(li?.laneQuestionsThisWeek).toBe(2);
   });
 });
+
+describe("who they admire reaches the proposal on day one", () => {
+  it("the roster's words from the cluster read are merged into admiredKeywords", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { channel: { paired: true } }));
+    await t.run(async (ctx) => { await ctx.db.patch(creatorId, { lanes: { readAt: 1, posts: 0, scatter: 0, state: "none", clusters: [], admiredKeywords: ["travel", "backpacking"] } }); });
+    const li = await t.query(internal.onboarding.lane.inputsFor, { creatorId });
+    expect(li?.admiredKeywords).toEqual(expect.arrayContaining(["travel", "backpacking"]));
+  });
+});
