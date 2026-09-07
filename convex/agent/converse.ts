@@ -367,8 +367,12 @@ export const run = internalAction({
       const r = await ctx.runAction(internal.agent.moment.run, { creatorId: creator._id, messageId: target._id, hasMedia: false });
       return { ok: r.ok, reason: r.reason };
     }
-    if (intent.intent === "edit_idea" || intent.intent === "drop_idea") {
-      const latest = await ctx.runQuery(internal.agent.moment.latestIdea, { creatorId: creator._id });
+    // Live 2026-09-07: "scrap that, what's my next open slot?" was routed here with no idea to
+    // edit and answered with a canned line. With nothing to change, the message is a message:
+    // it falls through to the conversation instead of a refusal.
+    const latestForEdit = intent.intent === "edit_idea" || intent.intent === "drop_idea" ? await ctx.runQuery(internal.agent.moment.latestIdea, { creatorId: creator._id }) : null;
+    if ((intent.intent === "edit_idea" || intent.intent === "drop_idea") && latestForEdit) {
+      const latest = latestForEdit;
       let body: string;
       if (!latest) body = "nothing of mine to change yet. send me a moment or wait for the next idea.";
       else if (intent.intent === "drop_idea") {
