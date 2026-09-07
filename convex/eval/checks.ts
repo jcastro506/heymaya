@@ -17,7 +17,7 @@ import { checkPlainLanguage } from "../core/plainLanguage";
  *
  * `rubric.test.ts` fails if the checks change without this being bumped.
  */
-export const RUBRIC_VERSION = "3";
+export const RUBRIC_VERSION = "4";
 
 
 export interface Check { name: string; pass: boolean; detail: string }
@@ -124,7 +124,11 @@ export function runChecks(input: { text: string; evidence: unknown; kind: string
   const retentionClaim = /watched \d+%|left in the first 3 seconds|skip rate|retention/i.test(text);
   const tiktokClaim = /tiktok/i.test(text);
   const transferred = /same video|the reel of|on the reel|cross-?post/i.test(text);
-  if (retentionClaim && tiktokClaim && !transferred) checks.push({ name: "mixed_basis", pass: false, detail: "a TikTok number and a retention figure in one claim with no cross-post link named" });
+  // An honest refusal is not a claim: "i can't see watch time on tiktok" names the metric to say
+  // it is unavailable (gauntlet 2026-09-06, a correct answer failed this check).
+  const refusal = /(can'?t|cannot|don'?t|doesn'?t|not able to|no way to)\s+(see|share|show|get|expose|track|give)/i.test(text);
+  if (retentionClaim && tiktokClaim && !transferred && !refusal) checks.push({ name: "mixed_basis", pass: false, detail: "a TikTok number and a retention figure in one claim with no cross-post link named" });
+  else if (retentionClaim && refusal && !transferred) checks.push({ name: "mixed_basis", pass: true, detail: "retention named only to say it cannot be seen" });
   else if (retentionClaim) checks.push({ name: "mixed_basis", pass: true, detail: transferred ? "retention transferred with the link named" : "retention cited on its own platform" });
 
   if (input.kind === "scout") {

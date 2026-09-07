@@ -23,7 +23,7 @@ function rubricHash(): string {
   return createHash("sha256").update(checks).update(prompt).digest("hex").slice(0, 16);
 }
 
-const RECORDED = "ea222782e6fd2a48";
+const RECORDED = "ce0f8b380541129b"; // rubric 4: mixed_basis exempts an honest refusal
 
 describe("the rubric", () => {
   it("has not changed without its version being bumped", () => {
