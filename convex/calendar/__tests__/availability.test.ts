@@ -10,7 +10,7 @@ describe("her calendar sense (2026-09-07: next open slot on a monday was thursda
   it("today counts: at 10am the first window is today at their usual hour, then tomorrow", () => {
     const w = freeWindows({ now: MON_10AM, timeZone: TZ, busy: [], filmHour: 17 });
     expect(w[0].label).toBe("today 5 pm");
-    expect(w[0].why).toBe("their usual filming hour");
+    expect(w[0].why).toBe("their usual filming hour"); // filmHour given
     expect(w[1].label).toBe("tomorrow 5 pm");
     expect(w.length).toBe(4);
   });

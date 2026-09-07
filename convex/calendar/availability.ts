@@ -38,7 +38,9 @@ export function freeWindows(input: { now: number; timeZone: string; busy: Busy[]
     if (slotHour >= quietStart || slotHour < PLAN.dayStartHour) continue;
     const dayName = d === 0 ? "today" : d === 1 ? "tomorrow" : new Intl.DateTimeFormat("en-US", { timeZone: input.timeZone, weekday: "long" }).format(slot.start).toLowerCase();
     const t = new Intl.DateTimeFormat("en-US", { timeZone: input.timeZone, hour: "numeric", minute: "2-digit" }).format(slot.start).toLowerCase().replace(":00", "");
-    const why = slotHour === preferHour ? `their usual filming hour` : d === 0 ? `the next free hour today` : `the nearest free slot to their usual ${preferHour > 12 ? preferHour - 12 + "pm" : preferHour + "am"}`;
+    // Honest about the source: a stated hour is theirs; the planner's default is a default.
+    const usual = input.filmHour !== null ? "their usual filming hour" : "the default filming hour until they name theirs";
+    const why = slotHour === preferHour ? usual : d === 0 ? `the next free hour today` : `the nearest free slot to ${input.filmHour !== null ? "their usual" : "the default"} ${preferHour > 12 ? preferHour - 12 + "pm" : preferHour + "am"}`;
     out.push({ start: slot.start, end: slot.end, label: `${dayName} ${t}`, why });
   }
   return out;
@@ -55,7 +57,7 @@ export function bestHoursLine(model: PostTimeModel, timeZone: string): string {
 /** The prefix block: what is free, and why those hours; read on every turn. */
 export function availabilitySection(windows: Window[], bestHours: string): string {
   const lines = windows.length ? windows.map((w) => `- ${w.label} (${w.why})`) : ["- nothing free in the next few days before quiet hours; ask them"];
-  return `# Their free filming windows, from now (their clock; "next open slot" means the FIRST of these)\n${lines.join("\n")}\nBest posting hours: ${bestHours}\nRules: today counts if it is on this list. Say why you picked a time in one clause, from this list, never a guess about "the evening scroll window".`;
+  return `# Their free filming windows, from now (their clock; "next open slot" means the FIRST of these)\n${lines.join("\n")}\nBest posting hours: ${bestHours}\nRules: a question about when gets the FIRST window as an answer, never a question back; "a default until they name theirs" is still an answer: offer it and let them move it. Today counts if it is on this list. Say why you picked a time in one clause, from this list, never a guess about "the evening scroll window".`;
 }
 
 export async function availabilityFor(ctx: QueryCtx, creator: Doc<"creators">, now: number, days?: number): Promise<{ windows: Window[]; bestHours: string }> {
