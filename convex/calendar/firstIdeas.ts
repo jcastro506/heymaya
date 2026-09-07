@@ -17,7 +17,9 @@ import { REGISTRY } from "../agent/registry";
 export const FIRST_IDEAS_SKILL = `first-plan-ideas
 When: once, right after first contact, so the first plan has posts in it.
 The judgment: from THEIR OWN posts (the dossier's works claims, the recent posts with their multiples, the lane you proposed and the growth plan if there is one), write the next few posts they should make. Each one is a specific, filmable idea in their voice: a hook line a person would say, and one clause on why, citing the post of theirs it rhymes with. Lead with the lane you recommended; at most one idea may sit outside it. No trend talk, no "viral", no generic advice. If their history is thin, say so in the why and keep the ideas close to what already worked.
-Output ONLY JSON: {"ideas":[{"hook":"≤90 chars, the line", "why":"≤140 chars, cites their post", "evidencePostIds":["their post id"]}]}`;
+Output ONLY JSON, lowercase the way you text: {"ideas":[{"hook":"≤90 chars, the line", "why":"≤140 chars, one clause, cites their post", "evidencePostIds":["their post id"]}]}`;
+
+const lower = (t: string) => (t ? t[0].toLowerCase() + t.slice(1) : t);
 
 export interface SeededIdea { hook: string; why: string; evidencePostIds: string[] }
 
@@ -28,7 +30,8 @@ export function parseFirstIdeas(content: string, n: number): SeededIdea[] {
   try {
     const j = JSON.parse(m[0]) as { ideas?: Array<{ hook?: unknown; why?: unknown; evidencePostIds?: unknown }> };
     return (j.ideas ?? [])
-      .map((i) => ({ hook: String(i.hook ?? "").trim().slice(0, 90), why: String(i.why ?? "").trim().slice(0, 140), evidencePostIds: Array.isArray(i.evidencePostIds) ? i.evidencePostIds.map(String).slice(0, 3) : [] }))
+      // Her voice is lowercase; the model capitalises JSON strings. The first letter is hers.
+      .map((i) => ({ hook: lower(String(i.hook ?? "").trim().slice(0, 90)), why: lower(String(i.why ?? "").trim().slice(0, 140)), evidencePostIds: Array.isArray(i.evidencePostIds) ? i.evidencePostIds.map(String).slice(0, 3) : [] }))
       .filter((i) => i.hook.length >= 8)
       .slice(0, Math.max(1, Math.min(5, n)));
   } catch {

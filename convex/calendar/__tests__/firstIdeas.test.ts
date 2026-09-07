@@ -14,6 +14,7 @@ describe("the first plan has posts in it (live 2026-09-06)", () => {
   it("the parser keeps only usable ideas, capped, and invents none", () => {
     const out = parseFirstIdeas('here you go {"ideas":[{"hook":"the shoe rack list, said to camera","why":"rhymes with p1","evidencePostIds":["p1"]},{"hook":"x","why":"too short"},{"hook":"km vs miles, one take","why":"held people"}]}', 5);
     expect(out.map((i) => i.hook)).toEqual(["the shoe rack list, said to camera", "km vs miles, one take"]);
+    expect(parseFirstIdeas('{"ideas":[{"hook":"Best part of walking the city","why":"Your ambient clip did 9x"}]}', 1)[0]).toEqual({ hook: "best part of walking the city", why: "your ambient clip did 9x", evidencePostIds: [] });
     expect(parseFirstIdeas("no json here", 3)).toEqual([]);
     expect(parseFirstIdeas('{"ideas":[{"hook":"a long enough hook 1"},{"hook":"a long enough hook 2"},{"hook":"a long enough hook 3"}]}', 2).length).toBe(2);
   });
