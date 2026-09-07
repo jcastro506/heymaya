@@ -158,7 +158,7 @@ export const read = internalAction({
     if (toName.length) {
       const spec = REGISTRY.classifier;
       const messages = [
-        { role: "system" as const, content: "You name groups of a creator's own posts. For each group, a two-to-four word label a person would use (\"solo dev builds\", \"london runs\", \"food reviews\") and up to four lowercase keywords. Output ONLY JSON: {\"groups\":[{\"label\":\"\",\"keywords\":[\"\"]}]} in the same order." },
+        { role: "system" as const, content: "You name groups of a creator's own posts. For each group, a label of one to three plain words that fits in the sentence \"the ___ stuff\" the way a person would say it to a friend (\"travel\", \"running clips\", \"dev builds\", \"food reviews\"; never \"awe reactions\" or anything that sounds like a category on a dashboard) and up to four lowercase keywords. Output ONLY JSON: {\"groups\":[{\"label\":\"\",\"keywords\":[\"\"]}]} in the same order." },
         { role: "user" as const, content: toName.map(({ g }, k) => `group ${k + 1} (${g.members.length} posts):\n${g.members.slice(0, 6).map((m) => `- ${m.text.slice(0, 140)}`).join("\n")}`).join("\n\n") },
       ];
       let r = await callModel(ctx, { creatorId: a.creatorId, purpose: "name_clusters", model: spec.primary, temperature: 0.2, maxTokens: 600, timeoutMs: 20_000, messages, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
