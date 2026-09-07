@@ -23,3 +23,15 @@ describe("the same-day sample after onboarding touches only that creator's roste
     expect(sampled.find((x) => x.handle === "stoolpresidente")?.lastSampledAt).toBeUndefined();
   });
 });
+
+import { cleanLink, hasLink } from "../scout";
+
+describe("the link goes out once, without tracking (live 2026-09-06)", () => {
+  it("recognises the post by id whatever form the model wrote, and strips the query when appending", () => {
+    const share = "https://www.tiktok.com/@starterstory/photo/7682453808072445197?_r=1&u_code=abc&share_item_id=7682453808072445197";
+    expect(hasLink("see https://www.tiktok.com/@starterstory/photo/7682453808072445197 for it", share)).toBe(true);
+    expect(hasLink("nothing here", share)).toBe(false);
+    expect(cleanLink(share)).toBe("https://www.tiktok.com/@starterstory/photo/7682453808072445197");
+    expect(hasLink("https://www.instagram.com/reel/DbrZ8lIlxma/", "https://www.instagram.com/reel/DbrZ8lIlxma/?igsh=x")).toBe(true);
+  });
+});

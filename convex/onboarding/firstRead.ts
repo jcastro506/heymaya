@@ -22,14 +22,27 @@ export const FIRST_PLAN_DELAY_MS = 20 * 60_000;
 /** The first scout, after the read and the plan have had their say. The gate still decides whether today gets an idea. */
 export const FIRST_SCOUT_DELAY_MS = 30 * 60_000;
 
-export const FIRST_READ_SKILL = `first-read
-When: once. This is first contact: the first real thing they read from you, so it has to do two jobs in one text, introduce you and prove you watched.
+/**
+ * First contact, in two shapes. When the hello already went out at pairing, the read has no
+ * introduction section at all: telling the model to "skip" a section it was handed does not
+ * work (live 2026-09-06, she introduced herself twice again); not handing it the section does.
+ */
+export function firstReadSkill(saidHello: boolean): string {
+  const intro = saidHello
+    ? `1. No hello and no introduction: you already said hello when they paired. Open straight with the read. At most one short clause, inside the read, on what you'll do next (the rest of their week in a few minutes, then every Sunday). Never say "on Sundays" as if the work starts later.`
+    : `1. Hello, and what you are for them, in one or two lines in your own voice: you're Maya, their assistant for TikTok and Instagram. You watch their posts, the accounts they picked and their lane every day; you text only when something is actually worth their time; they can send you anything (a draft, a link, a question) for a straight opinion; you'll lay out the rest of their week in a few minutes, and every Sunday after that. No feature list, no bullets, no "I'm an AI". Never say "on Sundays" as if the work starts later: it starts today.`;
+  return `first-read
+When: once. ${saidHello ? "You said hello already; this is the read they were promised." : "This is first contact: the first real thing they read from you, so it has to do two jobs in one text, introduce you and prove you watched."}
 Shape, in this order:
-1. Hello, and what you are for them, in one or two lines in your own voice: you're Maya, their assistant for TikTok and Instagram. You watch their posts, the accounts they picked and their lane every day; you text only when something is actually worth their time; they can send you anything (a draft, a link, a question) for a straight opinion; you'll lay out the rest of their week in a few minutes, and every Sunday after that. Never say "on Sundays" as if the work starts later: it starts today. No feature list, no bullets, no "I'm an AI".
+${intro}
 2. The read: name two of their real posts (by what they are, not by id) with something specific you noticed in each, and one true thing about how they make things (opening, pacing, setting, energy) with evidence. If the dossier says mode is thin or newCreator, say what you could and couldn't read, plainly.
 3. The one question you were given, if any; otherwise none.
 Send it the way a person texts: two or three short messages, not one block. Put a line containing only --- between them; the question is the last one on its own.
 Hard rules: no compliments without a specific. No claim without evidence in the dossier or the lane line you were given; no share or percentage that is not in that line. Under 150 words, and under 900 characters, which is the hard cap. Exactly one question at most.`;
+}
+
+/** The first-contact shape, for callers that only need the text. */
+export const FIRST_READ_SKILL = firstReadSkill(false);
 
 /** Pure: does the text name every button it will carry? Case-insensitive, whole label. */
 export function candidatesNamed(text: string, labels: string[]): boolean {
@@ -70,7 +83,10 @@ export const run = internalAction({
       return { ok: true };
     }
 
-    const prefix = buildPrefix({ creator, directives, skill: FIRST_READ_SKILL, personal: gathered.personal, voice: gathered.voice, history: gathered.history });
+    // Live 2026-09-06: she introduced herself twice, once at pairing and again in the read.
+    const saidHello = await ctx.runQuery(internal.core.messages.exists, { creatorId: creator._id, dedupeKey: `hello:${creator._id}` });
+
+    const prefix = buildPrefix({ creator, directives, skill: firstReadSkill(saidHello), personal: gathered.personal, voice: gathered.voice, history: gathered.history });
     const spec = REGISTRY.writer;
     /**
      * Sprint 4d: she states the lane she read from their posts, for one tap, rather than
@@ -96,9 +112,6 @@ export const run = internalAction({
         laneLine = laneQuestion(read.keywords, li?.hooks ?? []);
       }
     }
-
-    // Live 2026-09-06: she introduced herself twice, once at pairing and again in the read.
-    const saidHello = await ctx.runQuery(internal.core.messages.exists, { creatorId: creator._id, dedupeKey: `hello:${creator._id}` });
 
     const result = await callModel(ctx, {
       creatorId: creator._id,

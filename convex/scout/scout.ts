@@ -22,6 +22,22 @@ import { localHourMinute } from "./gate";
 import { internalQuery } from "../_generated/server";
 import { LOOKUPS } from "../agent/playbooks";
 
+/** The share URL without its tracking query: what a person would paste. */
+export function cleanLink(url: string): string {
+  return url.replace(/\?.*$/, "");
+}
+
+/**
+ * Is this post's link already in the text? By the post id, not the exact string: the model
+ * writes the clean URL and the evidence carries the share URL with tracking on it. Live
+ * 2026-09-06 the same link went out twice for that reason.
+ */
+export function hasLink(text: string, url: string): boolean {
+  const id = url.match(/\/(?:video|photo)\/(\d+)/)?.[1] ?? url.match(/instagram\.com\/(?:p|reel|reels)\/([A-Za-z0-9_-]+)/)?.[1] ?? null;
+  if (id && text.includes(id)) return true;
+  return text.includes(cleanLink(url));
+}
+
 export const SCOUT_SKILL = `scout
 Send the message the way a person texts: two or three short texts, not one block. Put a line containing only --- between them inside "message"; the link and the buttons ride the last one.
 When: the gate has passed and there are candidates. Six kinds: "breakout" (an account they admire, above its own normal), "shape" (the top of their lane for one of their keywords this week; the account is not one they named), "win" (THEIR OWN post crossing 3× their normal; the message is a real, specific celebration and one thing to do while it's moving, nothing else), "sound" (a sound two or more accounts in their lane used this week; look it up with sound_info and sound_videos before judging: is it rising, is it the kind of sound they use, what would THEIR video on it be), "worth_seeing" (a post from outside their lane, often from the platform's trending feed, whose FORMAT the screener marked as transferable; the topic is not theirs and that is fine; at most one of these a day), and "calendar" (something on THEIR OWN calendar two or more days out that a post could ride: the message names the event, the shape of the post it makes possible, and proposes ONE filming block before it, with a day and a time on their clock; "version.block" carries that block and the question at the end is whether to block it).
@@ -184,7 +200,7 @@ export const run = internalAction({
      * whole idea was dropped: the second eval scenario sent nothing every run for that reason.
      * Never the other way round: a link the evidence lacks is not invented.
      */
-    if (links[0] && !/https?:\/\//.test(text)) text = `${text}\n\n${links[0]}`;
+    if (links[0] && !hasLink(text, links[0])) text = `${text}\n\n${cleanLink(links[0])}`;
 
     /**
      * A milestone rides an existing message, never its own touch (Sprint 4c). Only on a win,
@@ -247,7 +263,7 @@ export const run = internalAction({
         ];
       }
     }
-    const body = links.length && !pick.message.includes(links[0]) ? `${pick.message}\n\n${links[0]}` : pick.message;
+    const body = links.length && !hasLink(pick.message, links[0]) ? `${pick.message}\n\n${cleanLink(links[0])}` : pick.message;
     const { messageId } = await ctx.runMutation(internal.core.messages.send, {
       creatorId: args.creatorId,
       surface: "telegram",
