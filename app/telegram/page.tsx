@@ -8,7 +8,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import QRCode from "qrcode";
 import { api } from "@/convex/_generated/api";
+
+/** On a phone the button opens the app; on a computer the QR is the button (2026-09-07). */
+function isPhone(): boolean {
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+  return /iPhone|iPad|iPod|Android/i.test(ua);
+}
 
 function storeUrl(): string {
   const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
@@ -21,6 +28,8 @@ export default function TelegramPage() {
   const createLink = useMutation(api.core.pairing.createPairingLink);
   const progress = useQuery(api.onboarding.start.progress);
   const [link, setLink] = useState<{ deepLink: string; appLink: string } | null>(null);
+  const [qr, setQr] = useState<string | null>(null);
+  const [phone, setPhone] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tapped, setTapped] = useState(false);
   const [showStore, setShowStore] = useState(false);
@@ -33,11 +42,15 @@ export default function TelegramPage() {
     const m = r.deepLink.match(/t\.me\/([^?]+)\?start=(.+)$/);
     const appLink = m ? `tg://resolve?domain=${m[1]}&start=${m[2]}` : r.deepLink;
     setLink({ deepLink: r.deepLink, appLink });
+    // The QR carries the same one-shot link; scanning it on a phone opens Telegram at Maya with Start ready.
+    try { setQr(await QRCode.toDataURL(r.deepLink, { margin: 1, width: 220, color: { dark: "#ffffffff", light: "#00000000" } })); } catch { setQr(null); }
   }
 
   useEffect(() => {
     // Minted on the next tick so the state write is not synchronous inside the effect.
-    const t = setTimeout(() => void mint(), 0);
+    // Both on the next tick: no synchronous state write inside the effect, and no hydration
+    // mismatch (the server has no navigator, so "phone" starts true and corrects itself).
+    const t = setTimeout(() => { setPhone(isPhone()); void mint(); }, 0);
     const onVis = () => {
       if (document.hidden) hiddenAt.current = Date.now();
     };
@@ -84,8 +97,18 @@ export default function TelegramPage() {
       ) : (
         <section className="flex flex-col gap-4">
           <h2 className="text-lg">Meet Maya on Telegram</h2>
-          <p className="text-sm opacity-70">She texts you there. Tap the button, then tap <b>Start</b> in Telegram. That&apos;s the whole pairing.</p>
-          <button className="btn" disabled={!link} onClick={open}>Open Maya in Telegram</button>
+          {phone ? (
+            <>
+              <p className="text-sm opacity-70">She texts you there. Tap the button, then tap <b>Start</b> in Telegram. That&apos;s the whole pairing.</p>
+              <button className="btn" disabled={!link} onClick={open}>Open Maya in Telegram</button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm opacity-70">She texts you on your phone. Scan this with your phone&apos;s camera, then tap <b>Start</b> in Telegram. That&apos;s the whole pairing.</p>
+              {qr ? <img src={qr} alt="Scan to open Maya in Telegram" className="w-[220px] h-[220px] self-start rounded" /> : <p className="text-xs opacity-60">Making your code…</p>}
+              <button className="btn-secondary" disabled={!link} onClick={open}>Or open Telegram on this computer</button>
+            </>
+          )}
           {showStore && (
             <div className="flex flex-col gap-2">
               <p className="text-sm opacity-80">Looks like Telegram isn&apos;t installed yet. It&apos;s free. Install it, come back here, and tap the button again.</p>
@@ -96,10 +119,10 @@ export default function TelegramPage() {
           {stuck && !paired && (
             <p className="text-sm opacity-80">Didn&apos;t work? Tap the button again. If Telegram opened but nothing happened, tap <b>Start</b> at the bottom of the chat, she can&apos;t message first.</p>
           )}
-          {link && (
+          {link && phone && (
             <details className="text-xs opacity-60">
-              <summary>On a computer?</summary>
-              <p className="mt-2">Open this on your phone: <a className="underline" href={link.deepLink}>{link.deepLink}</a></p>
+              <summary>On a computer too?</summary>
+              <p className="mt-2">This link works anywhere you have Telegram: <a className="underline" href={link.deepLink}>{link.deepLink}</a></p>
             </details>
           )}
           {progress && progress.posts > 0 && <p className="text-xs opacity-60">Meanwhile she has read {progress.posts} of your posts.</p>}
