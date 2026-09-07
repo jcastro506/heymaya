@@ -1275,6 +1275,26 @@ Each judgment the model makes has a human-labeled set, built in the sprint that 
 Built in Sprints 0 and 1, used by everything after: a vendor recorder and replayer keyed by `read()` params · a fake Telegram (inbound, buttons, reactions, delivery failures) · a fake calendar with push · a fake clock for timezones, quiet hours and DST · a cost-ledger assertion helper · a "simulate a day / week" runner that takes a creator fixture and produces the rows · the convex-test module glob helper from the old repo.
 
 
+### 17.9 The gauntlets: acting as the user, and the edge cases (added 2026-09-06)
+
+**Why.** Five hundred green tests found none of the fourteen defects two live days found. The tests assert on rows; the defects were in what she said, when, and whether she noticed the world changing. So two suites run against **scenario creators** (their own rows, paused, never paired, seeded through the real onboarding path; never a customer who shares a handle — that contaminated the first pilot):
+
+**The conversation gauntlet** (`eval/converse.ts`). A bank of things a creator actually texts, by category — greeting, a commitment, calendar CRUD, an opinion, numbers she cannot see, "how do I grow", a taste rule, a management change, hostility, off-topic, an empty "?", "are you a bot", price, delete — sent through the same path a phone takes (`recordInbound` → `converse.run`), every reply attributed by its dedupe key and judged by the checks and the judge under suite `converse`. Runs on demand and before any prompt or model change; the report is on /ops next to the scout suite. First run (2026-09-06, one scenario): 13 of 14 categories replied; failures were a greeting the judge would not send ("hey. what's on your mind?") and a growth answer that drifted.
+
+**The edge-case scripts** (to build, `eval/scripts.ts`). Each is a sequence of *world changes* with assertions on rows and on her next words, run on the fake model where the judgment is not the point and live where it is:
+1. **Calendar moves under her.** Book a block; move the Google event an hour; run the sync; assert the block moved, the reminders were re-scheduled, and the check-in fires at the new time. Move it into quiet hours; assert she says so instead of reminding at 23:00. Delete the event; assert the block is dropped and the plan says so.
+2. **A post she planned goes up early, or never.** Post before the block; assert the readback matches it and the block is marked. Skip the block silently; assert the touches cap and no nagging.
+3. **The lane changes in conversation.** "actually i'm going all in on cooking": assert keywords repointed, the roster filter changed, the next scout's fit reasoning cites cooking.
+4. **A double tap, a stale tap, a tap on a deleted idea.** Assert one reply, a refusal in words, never a crash.
+5. **Quiet hours crossing midnight and a timezone change** ("i moved to london"): assert every scheduled touch recomputed.
+6. **A vendor outage mid-day.** Fixtures fail for ScrapeCreators; assert the honest status line once, not silence, not four.
+7. **The daily cap under a burst**: three signals and a reminder; assert the reminder goes and the fourth idea holds.
+8. **Deletion mid-conversation**, and a message arriving after: assert the final text, the unpair, and that nothing answers the stray.
+9. **Reconnect after Zernio loss**: assert the ninety-day backfill runs once and numbers switch basis in the next readback.
+10. **The judge disagrees with the operator**: labels on /ops flip a baseline; assert the gate refuses the next regression.
+
+Each script is a test the moment it is written on the fake model, and a live check the day it matters.
+
 ## 18. Product metrics and telemetry
 
 **Metrics, all computed from rows, shown in the operator console (S5):**
