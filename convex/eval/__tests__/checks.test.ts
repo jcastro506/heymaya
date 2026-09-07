@@ -51,6 +51,6 @@ describe("runChecks", () => {
   it("a clean scout message passes every check", () => {
     const text = "@x just posted a list that's at 6× their normal after 9h. your wnba post did 559,925 views on the same directness, so this is yours to take. your version: open on the shoe rack, keep it under 30s. want the shot list? https://www.tiktok.com/@x/video/1";
     const c = runChecks({ text, evidence, kind: "scout" });
-    expect(c.filter((x) => !x.pass)).toEqual([]);
+    expect(c.filter((x) => !x.pass && !x.advisory), "advisory checks are measured, never a fail").toEqual([]);
   });
 });

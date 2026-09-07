@@ -17,10 +17,10 @@ import { checkPlainLanguage } from "../core/plainLanguage";
  *
  * `rubric.test.ts` fails if the checks change without this being bumped.
  */
-export const RUBRIC_VERSION = "4";
+export const RUBRIC_VERSION = "5";
 
 
-export interface Check { name: string; pass: boolean; detail: string }
+export interface Check { name: string; pass: boolean; detail: string; /** Measured and reported, never a fail: a habit we are moving, not a promise we enforce. */ advisory?: boolean }
 
 /** The exact tells (§21.4): deliberately short, because over-blocking is the worse failure. */
 export const TELLS: RegExp[] = [/\bgreat question\b/i, /\bi'?d be happy to\b/i, /\bas an ai\b/i, /\bi hope this helps\b/i, /\bcontent strategy\b/i, /\bleverage\b/i, /\boptimi[sz]e\b/i, /\bengagement\b/i, /\bsynerg/i, /\bunlock\b/i, /\bgame[- ]changer\b/i, /🚀/];
@@ -131,6 +131,15 @@ export function runChecks(input: { text: string; evidence: unknown; kind: string
   else if (retentionClaim && refusal && !transferred) checks.push({ name: "mixed_basis", pass: true, detail: "retention named only to say it cannot be seen" });
   else if (retentionClaim) checks.push({ name: "mixed_basis", pass: true, detail: transferred ? "retention transferred with the link named" : "retention cited on its own platform" });
 
+  // A post is reacted to as a viewer before it is read as a strategist (2026-09-06): the first
+  // sentence of a message about one of their posts carries no number and no metric word.
+  // Measured, not enforced; the critic carries the tell and the rewrite fixes it.
+  if (input.kind === "scout" || input.kind === "opinion" || input.kind === "first_read") {
+    const first = text.split(/(?<=[.!?])\s+|\n/)[0] ?? "";
+    const analytical = /\d/.test(first) || /\b(normal|reach|views|baseline|multiple|engagement|retention|impressions)\b/i.test(first);
+    checks.push({ name: "reaction_first", advisory: true, pass: !analytical, detail: analytical ? `opens on a number or a metric: "${first.slice(0, 80)}"` : "opens as a viewer" });
+  }
+
   if (input.kind === "scout") {
     const inText = /https?:\/\//.test(text);
     const inEvidence = /https?:\/\//.test(evidence);
@@ -153,5 +162,5 @@ export function runChecks(input: { text: string; evidence: unknown; kind: string
 }
 
 export function passed(checks: Check[]): boolean {
-  return checks.every((c) => c.pass);
+  return checks.filter((c) => !c.advisory).every((c) => c.pass);
 }
