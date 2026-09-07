@@ -70,6 +70,13 @@ export const markRun = internalMutation({
   },
 });
 
+/** Is this Telegram chat a creator's? Ops never writes to a customer. */
+export const isCustomerChat = internalQuery({
+  args: { chatId: v.string() },
+  handler: async (ctx, a): Promise<boolean> =>
+    Boolean(await ctx.db.query("creators").withIndex("by_telegram_chat", (q) => q.eq("telegramChatId", a.chatId)).first()),
+});
+
 export const run = internalAction({
   args: {},
   handler: async (ctx): Promise<{ sent: boolean; text: string | null }> => {
@@ -80,11 +87,16 @@ export const run = internalAction({
     let sent = false;
     const chat = process.env.TELEGRAM_OPERATOR_CHAT_ID;
     const identity = resolveTelegramBotIdentity();
-    if (text && chat && identity) {
+    // 2026-09-06: on dev the operator's chat was also the pilot's, and "🩺 smoke failed" reached
+    // a person as if Maya had said it. A customer never receives an ops line, in any environment:
+    // if the operator chat belongs to a creator, the alert goes to the log and nowhere else.
+    const customer = chat ? await ctx.runQuery(internal.core.alerts.isCustomerChat, { chatId: chat }) : false;
+    if (text && customer) console.error(`[alerts] REFUSED: TELEGRAM_OPERATOR_CHAT_ID is a creator's chat; not sending: ${text.slice(0, 200)}`);
+    if (text && chat && identity && !customer) {
       const r = await sendTelegramMessage(identity, { chatId: chat, text }).catch(() => null);
       sent = Boolean(r && r.ok);
     }
-    await ctx.runMutation(internal.core.alerts.markRun, { sent, detail: text?.slice(0, 200) });
+    await ctx.runMutation(internal.core.alerts.markRun, { sent, detail: customer && text ? `refused: operator chat belongs to a creator · ${text.slice(0, 150)}` : text?.slice(0, 200) });
     return { sent, text };
   },
 });
