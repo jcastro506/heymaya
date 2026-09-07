@@ -55,7 +55,8 @@ export const inputsFor = internalQuery({
       ideas: [...hearted, ...ideas].map((i) => ({
         ideaId: String(i._id),
         hook: ((i.version as { hook?: string } | undefined)?.hook ?? i.messageText.slice(0, 80)).slice(0, 90),
-        why: ((i.version as { why?: string } | undefined)?.why ?? null),
+        // The why: a seeded idea carries it in its version; a scout idea carries it as fitWhy (live 2026-09-07: the plan line had none).
+        why: ((i.version as { why?: string } | undefined)?.why || i.fitWhy || null),
         // "saved" is a tap on an idea; it lives as `savedAt`, not as a status.
         status: i.savedAt ? "saved" : i.status,
         savedAt: i.savedAt ?? null,

@@ -261,3 +261,19 @@ describe("day one is a working day (2026-09-06)", () => {
     expect(cron.sent, "the sunday cron sees the week as planned").toBe(false);
   });
 });
+
+describe("every plan line carries its why (2026-09-07)", () => {
+  it("a scout idea's fitWhy reaches the line when its version has no why", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await creatorWithIdeas(t);
+    await t.run(async (ctx) => {
+      for (const i of await ctx.db.query("ideas").collect()) await ctx.db.patch(i._id, { fitWhy: "rhymes with your piccadilly pan" });
+    });
+    const inp = await t.query(internal.calendar.weekPlan.inputsFor, { creatorId, now: SUNDAY_6PM });
+    expect(inp?.ideas.every((i) => i.why === "rhymes with your piccadilly pan")).toBe(true);
+    const r = await t.action(internal.calendar.weekPlan.draft, { creatorId, now: SUNDAY_6PM });
+    expect(r.sent).toBe(true);
+    const plan = (await t.run((ctx) => ctx.db.query("messages").collect())).find((m) => m.kind === "plan");
+    expect(plan?.body).toMatch(/\(rhymes with your piccadilly pan\)/);
+  });
+});
