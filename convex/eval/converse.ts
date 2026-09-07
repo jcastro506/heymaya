@@ -50,11 +50,17 @@ export const failedChecks = internalQuery({
   },
 });
 
-export const repliesSince = internalQuery({
-  args: { creatorId: v.id("creators"), since: v.number() },
+/**
+ * The replies to ONE inbound message, by the dedupe keys the reply paths write
+ * (`reply:<inbound>`, `manage:<inbound>`, `btn:<inbound>`), never by time: a scheduled
+ * follow-up from an earlier probe landing late was being read as this probe's answer
+ * (live 2026-09-06: "how do i get more followers" showed the answer to "how much do you cost").
+ */
+export const repliesTo = internalQuery({
+  args: { creatorId: v.id("creators"), inboundId: v.id("messages"), since: v.number() },
   handler: async (ctx, a): Promise<Array<{ messageId: Id<"messages">; text: string; kind: string | undefined }>> => {
-    const rows = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId).gte("ts", a.since)).take(20)) as Doc<"messages">[];
-    return rows.filter((m) => m.direction === "out").map((m) => ({ messageId: m._id, text: m.body, kind: m.kind }));
+    const rows = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId).gte("ts", a.since - 1000)).take(30)) as Doc<"messages">[];
+    return rows.filter((m) => m.direction === "out" && (m.dedupeKey ?? "").includes(String(a.inboundId))).map((m) => ({ messageId: m._id, text: m.body, kind: m.kind }));
   },
 });
 
@@ -73,7 +79,7 @@ export const run = internalAction({
         const { messageId } = await ctx.runMutation(internal.core.messages.recordInbound, { creatorId, surface: "telegram", body: probe.text });
         turns++;
         const r = await ctx.runAction(internal.agent.converse.run, { creatorId, messageId });
-        const replies = await ctx.runQuery(internal.eval.converse.repliesSince, { creatorId, since });
+        const replies = await ctx.runQuery(internal.eval.converse.repliesTo, { creatorId, inboundId: messageId, since });
         if (!r.ok || replies.length === 0) { silent.push(`${probe.category}: ${probe.text} (${r.reason ?? "no reply row"})`); continue; }
         replied++;
         for (const reply of replies) {
