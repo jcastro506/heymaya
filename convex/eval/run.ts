@@ -95,7 +95,7 @@ export const recent = internalAction({
  *
  * Handles, not ids, so the set survives a reseed and reads as a list of real accounts.
  */
-export const SCENARIO_HANDLES = ["vanessaalopezz", "leahruns"] as const;
+export const SCENARIO_HANDLES = ["vanessaalopezz", "brettconti"] as const;
 
 export const scenarioCreators = internalQuery({
   args: {},
@@ -104,7 +104,8 @@ export const scenarioCreators = internalQuery({
     const ids: Id<"creators">[] = [];
     const missing: string[] = [];
     for (const handle of SCENARIO_HANDLES) {
-      const match = rows.find((c) => c.handles.tiktok === handle || c.handles.instagram === handle);
+      // The scenario row, by its own subject: never a customer who happens to share the handle (2026-09-06).
+      const match = rows.find((c) => c.clerkUserId === `eval:${handle}`);
       // Loud, not silent: a scenario that quietly vanishes turns a regression into a smaller suite.
       if (!match) { missing.push(handle); continue; }
       if (!match.dossier) { missing.push(`${handle} (no dossier yet)`); continue; }
