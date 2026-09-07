@@ -251,6 +251,14 @@ export const run = internalAction({
       creatorId: creator._id,
       payloadJson: JSON.stringify({ after: "ingest" }),
     });
+    // Day one is a working day: their roster is sampled now, not at the next six-hour sweep,
+    // and the scout judges right away; the gate decides whether today gets an idea.
+    try {
+      await ctx.runAction(internal.scout.sampler.run, { creatorId: creator._id });
+      await ctx.runAction(internal.scout.scout.run, { creatorId: creator._id });
+    } catch (err) {
+      console.error(`[ingest] day-one sample/scout failed: ${String(err).slice(0, 160)}`);
+    }
     return { ok: true };
   },
 });

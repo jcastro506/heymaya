@@ -163,11 +163,13 @@ export const writeBreakouts = internalMutation({
 
 /** The fleet job: sample every distinct tracked account once, fan out to its admirers. */
 export const run = internalAction({
-  args: { slot: v.optional(v.string()) },
-  handler: async (ctx): Promise<{ accounts: number; signals: number; failed: number; gone: number }> => {
+  // `creatorId`: only that creator's roster, for the same-day sample after onboarding (day one is a working day).
+  args: { slot: v.optional(v.string()), creatorId: v.optional(v.id("creators")) },
+  handler: async (ctx, args): Promise<{ accounts: number; signals: number; failed: number; gone: number }> => {
     const now = Date.now();
     const slot = `sample-${Math.floor(now / (6 * 3_600_000))}`; // one read per account per 6 h bucket
-    const accounts = await ctx.runQuery(internal.scout.sampler.distinctTracked, {});
+    const all = await ctx.runQuery(internal.scout.sampler.distinctTracked, {});
+    const accounts = args.creatorId ? all.filter((a) => a.rows.some((r) => r.creatorId === args.creatorId)) : all;
     let signals = 0, failed = 0, gone = 0;
     for (const acct of accounts) {
       try {

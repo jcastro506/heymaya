@@ -59,19 +59,19 @@ export function freeSlotOn(dayEpoch: number, minutes: number, busy: Busy[], pref
   return null;
 }
 
-export interface IdeaLite { ideaId: string; hook: string; status: string; savedAt?: number | null; sentAt?: number | null; experiment?: boolean }
+export interface IdeaLite { ideaId: string; hook: string; status: string; savedAt?: number | null; sentAt?: number | null; experiment?: boolean; why?: string | null }
 
 /** Which ideas fill the week: saved first, then hearted, then recent unexpired sends. The experiment goes last so it always gets a slot. Pure. */
-export function pickIdeas(ideas: IdeaLite[], slots: number, experiment: string | null): Array<{ ideaId: string | null; hook: string; experiment: boolean }> {
+export function pickIdeas(ideas: IdeaLite[], slots: number, experiment: string | null): Array<{ ideaId: string | null; hook: string; why?: string; experiment: boolean }> {
   const rank = (i: IdeaLite) => (i.status === "saved" ? 0 : i.status === "hearted" ? 1 : i.status === "sent" ? 2 : 9);
   const pool = ideas.filter((i) => rank(i) < 9).sort((a, b) => rank(a) - rank(b) || (b.savedAt ?? b.sentAt ?? 0) - (a.savedAt ?? a.sentAt ?? 0));
   const n = experiment ? Math.max(0, slots - 1) : slots;
-  const out: Array<{ ideaId: string | null; hook: string; experiment: boolean }> = pool.slice(0, n).map((i) => ({ ideaId: i.ideaId, hook: i.hook, experiment: false }));
+  const out: Array<{ ideaId: string | null; hook: string; why?: string; experiment: boolean }> = pool.slice(0, n).map((i) => ({ ideaId: i.ideaId, hook: i.hook, ...(i.why ? { why: i.why } : {}), experiment: false }));
   if (experiment) out.push({ ideaId: null, hook: experiment, experiment: true });
   return out;
 }
 
-export interface Slot { day: number; film: { start: number; end: number }; edit: { start: number; end: number } | null; post: { at: number; hour: number; fromHistory: boolean }; ideaId: string | null; hook: string; experiment: boolean }
+export interface Slot { day: number; film: { start: number; end: number }; edit: { start: number; end: number } | null; post: { at: number; hour: number; fromHistory: boolean }; ideaId: string | null; hook: string; /** One clause on why this post, citing their own work; the value of a day-one plan. */ why?: string; experiment: boolean }
 
 /**
  * Lay the week out. `filmDays` are local weekday numbers they tend to film on (0 = Sunday)
@@ -87,7 +87,7 @@ export function draftWeek(input: {
   editMinutes: number;
   busy: Busy[];
   model: PostTimeModel;
-  ideas: Array<{ ideaId: string | null; hook: string; experiment: boolean }>;
+  ideas: Array<{ ideaId: string | null; hook: string; why?: string; experiment: boolean }>;
   /** How many days the plan covers, from tomorrow. Seven for a week; fewer for the rest of a signup week. */
   days?: number;
 }): Slot[] {
@@ -119,7 +119,7 @@ export function draftWeek(input: {
     }
     const after = edit ? edit.end : film.end;
     const post = nextPost(input.model, after, input.timeZone);
-    out.push({ day, film, edit, post, ideaId: idea.ideaId, hook: idea.hook, experiment: idea.experiment });
+    out.push({ day, film, edit, post, ideaId: idea.ideaId, hook: idea.hook, ...(idea.why ? { why: idea.why } : {}), experiment: idea.experiment });
   });
   return out;
 }

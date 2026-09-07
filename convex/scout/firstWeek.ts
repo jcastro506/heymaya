@@ -41,7 +41,8 @@ export const dueForInvite = internalQuery({
       if (!c.channel.paired || !c.dossier || c.plan.status === "paused" || c.plan.status === "canceled" || c.plan.status === "deleting") continue;
       const started = c.firstWeek?.startedAt ?? c.channel.pairedAt ?? c.createdAt;
       const day = Math.floor((a.now - started) / 86_400_000) + 1;
-      if (day < 4 || day > 10) continue;
+      // Day two, not four (2026-09-06): the pilot asked for opinions unprompted by day two anyway.
+      if (day < 2 || day > 10) continue;
       if (c.firstWeek?.stepsDone.includes("invite_draft")) continue;
       const { hour } = localHourMinute(a.now, c.timezone);
       if (hour < 10 || hour >= 19) continue;

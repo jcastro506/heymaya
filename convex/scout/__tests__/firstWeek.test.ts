@@ -9,12 +9,13 @@ import { seedCreator } from "../../../tests/lib/creatorRow";
 const DAY = 86_400_000;
 
 describe("first week", () => {
-  it("the invitation is due on day 4–10, at a civil hour, once", async () => {
+  it("the invitation is due on day 2–10, at a civil hour, once", async () => {
     const t = convexTest(schema, modules);
     const start = Date.UTC(2026, 8, 1, 12, 0);
     const a = await t.run((ctx) => seedCreator(ctx, "a", { timezone: "UTC", channel: { paired: true, pairedAt: start }, dossier: { persona: {} }, firstWeek: { startedAt: start, stepsDone: ["first_read"] } }));
     await t.run((ctx) => seedCreator(ctx, "b", { clerkUserId: "u_b", handles: { tiktok: "tt_b" }, timezone: "UTC", channel: { paired: true, pairedAt: start }, dossier: { persona: {} }, firstWeek: { startedAt: start, stepsDone: ["first_read", "invite_draft"] } }));
-    expect(await t.query(internal.scout.firstWeek.dueForInvite, { now: start + 2 * DAY })).toEqual([]); // day 3
+    expect(await t.query(internal.scout.firstWeek.dueForInvite, { now: start + 2 * 3600_000 })).toEqual([]); // day 1: the read and the plan own the day
+    expect(await t.query(internal.scout.firstWeek.dueForInvite, { now: start + 1 * DAY + 2 * 3600_000 })).toEqual([a]); // day 2, 14:00
     expect(await t.query(internal.scout.firstWeek.dueForInvite, { now: start + 3 * DAY + 2 * 3600_000 })).toEqual([a]); // day 4, 14:00
     expect(await t.query(internal.scout.firstWeek.dueForInvite, { now: start + 3 * DAY + 10 * 3600_000 })).toEqual([]); // day 4, 22:00: too late
     await t.mutation(internal.scout.firstWeek.markStep, { creatorId: a, step: "invite_draft" });

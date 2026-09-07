@@ -52,6 +52,7 @@ export const inputsFor = internalQuery({
       ideas: [...hearted, ...ideas].map((i) => ({
         ideaId: String(i._id),
         hook: ((i.version as { hook?: string } | undefined)?.hook ?? i.messageText.slice(0, 80)).slice(0, 90),
+        why: ((i.version as { why?: string } | undefined)?.why ?? null),
         // "saved" is a tap on an idea; it lives as `savedAt`, not as a status.
         status: i.savedAt ? "saved" : i.status,
         savedAt: i.savedAt ?? null,
@@ -89,7 +90,7 @@ export function composeWeek(slots: Slot[], tz: string, fromHistory: boolean, lab
     const day = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(s.film.start).toLowerCase();
     const t = (e: number) => new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(e).toLowerCase().replace(":00", "");
     const edit = s.edit ? `, edit ${t(s.edit.start)}` : "";
-    return `${day} ${t(s.film.start)} film${edit}, post ${t(s.post.at)} — ${s.hook}${s.experiment ? " (this week's experiment)" : ""}`;
+    return `${day} ${t(s.film.start)} film${edit}, post ${t(s.post.at)} — ${s.hook}${s.why ? ` (${s.why})` : ""}${s.experiment ? " (this week's experiment)" : ""}`;
   });
   const basis = fromHistory ? "post times are your best hours from your own numbers." : "post times are a default until i've seen more of your posts.";
   return `${label}, ${slots.length} post${slots.length === 1 ? "" : "s"}:\n\n${lines.join("\n")}\n\n${basis} book it and i'll put the blocks on your calendar and check in before each one. move any of them by telling me.`;
