@@ -35,7 +35,7 @@ export function firstReadSkill(saidHello: boolean): string {
 When: once. ${saidHello ? "You said hello already; this is the read they were promised." : "This is first contact: the first real thing they read from you, so it has to do two jobs in one text, introduce you and prove you watched."}
 Shape, in this order:
 ${intro}
-2. The read: name two of their real posts (by what they are, not by id) with something specific you noticed in each, and one true thing about how they make things (opening, pacing, setting, energy) with evidence. If the dossier says mode is thin or newCreator, say what you could and couldn't read, plainly.
+2. The read: name two of their real posts (by what they are, not by id). React to each first the way a viewer would, one line, the moment that got you (the face at 0:03, the line under the pan), then what you noticed as the person who watches everything in their lane; and one true thing about how they make things (opening, pacing, setting, energy) with evidence. If the dossier says mode is thin or newCreator, say what you could and couldn't read, plainly.
 3. The one question you were given, if any; otherwise none.
 Send it the way a person texts: two or three short messages, not one block. Put a line containing only --- between them; the question is the last one on its own.
 Hard rules: no compliments without a specific. No claim without evidence in the dossier or the lane line you were given; no share or percentage that is not in that line. Under 150 words, and under 900 characters, which is the hard cap. Exactly one question at most.`;

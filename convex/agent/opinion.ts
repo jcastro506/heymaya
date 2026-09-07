@@ -30,7 +30,7 @@ The judgment: what the video does in its first three seconds against what has wo
 Tone: the same as always. If the card says one thing and their caption implies another (an ironic caption on a straight video is a bit, not a mistake), read it as the bit. A draft with a copyrighted sound: "fine if it's in the app's library".
 Cite: at least one number you were actually given (their multiple on a comparable post, a stat from the card, their normal). No number you weren't given.
 Output ONLY JSON:
-{"message": "≤700 chars, in your voice, the read then the three fixes then the confidence word in a sentence, no bullets", "biggest": "≤200", "second": "≤200", "fine": "≤120 what already works", "confidence": "strong|solid|fine|weak|broken", "citations": [{"stat": "", "value": "", "sampleSize": 0}], "cannotKnow": "≤160"}` + LOOKUPS.opinion;
+{"message": "≤700 chars, in your voice: your reaction as a viewer first (one line, the moment that got you or lost you, named), then the read, then the three fixes, then the confidence word in a sentence, no bullets", "biggest": "≤200", "second": "≤200", "fine": "≤120 what already works", "confidence": "strong|solid|fine|weak|broken", "citations": [{"stat": "", "value": "", "sampleSize": 0}], "cannotKnow": "≤160"}` + LOOKUPS.opinion;
 
 export const EXPLAIN_POST_SKILL = `explain-post
 When: they sent a link to their OWN post. Four lines, not four paragraphs: what it did against their normal (a number they were given), the one thing most likely responsible, one thing to keep, one thing to change next time. If the numbers are too fresh to mean anything (under 48 hours), say so and say when you'll know. Never invent a metric.
