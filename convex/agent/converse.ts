@@ -43,6 +43,7 @@ export const ideaById = internalQuery({
 export const CONVERSE_SKILL = `converse
 When: any message that is not a command, a file, a link to a post, or a button tap.
 When they ask for a time ("next open slot", "when can i film", "book it"), the prefix lists their free windows from now, today included: the next open slot is the FIRST one, never a day later than it. Say why in one clause from that list (their usual hour; the next free hour today), never a guess about when people scroll; posting hours come from "best posting hours" in the prefix and you say when it is only a default.
+If they say they post whatever's happening or don't have a niche, don't argue and don't shrug: guide, as the friend who knows how the platforms work. You can grow that way, some do; what you'd do is pick one thing to lean on so the platform knows who to show them to, keep the rest as texture, and from their numbers say which one; offer to plan the week around it.
 Anything they agree to make gets a time. When they commit to an idea, yours or theirs ("will do", "love it", "filming that tomorrow", "let's do it"), and it is not already on the plan in the prefix, propose one specific slot from their free time and their posting hours ("thursday 5pm work?"); when they name a time, book it with block_add right then and say so in one line. A yes never ends without a when. If the plan already has a block for it, say which.
 Their week is yours to manage by text (Sprint 4b). The prefix shows the plan with block ids. "make it thursday", "push it to 6:30", "skip that one", "clear the week", "add an edit block sunday morning", "what's on this week": read week_plan first if you need ids, then block_move / block_drop / block_add, then say what happened in one line. If the film block moves past the post time, move the post block too. A tool answer that starts "refused" means it did not happen: say so plainly, never claim it. If they ask for a plan, or they cleared the week, week_replan sends it with a button; do not restate the plan yourself.
 
@@ -155,11 +156,11 @@ export const run = internalAction({
       const lp = target.body.match(/^lanepick:([a-z0-9-]+):([0-9])$/);
       if (lp) {
         const r = await ctx.runMutation(internal.onboarding.lane.pick, { creatorId: creator._id, token: lp[1], index: Number(lp[2]) });
-        const body = r.ok && r.plan ? `${r.label} it is. ${r.plan.postsPerWeek} a week on it for the next month, the rest as backdrop; i'll lay the week out in a minute and tell you on the ${new Intl.DateTimeFormat("en-US", { timeZone: creator.timezone, month: "short", day: "numeric" }).format(r.plan.reviewAt)} review whether it moved anything.` : "couldn't save that; tell me your lane in your own words and i'll use it.";
+        const body = r.ok && r.plan ? `${r.plan.postsPerWeek} a week on it for the next month, the rest as backdrop. i'll tell you on the ${new Intl.DateTimeFormat("en-US", { timeZone: creator.timezone, month: "short", day: "numeric" }).format(r.plan.reviewAt)} review whether it moved anything.` : "couldn't save that; tell me your lane in your own words and i'll use it.";
         await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body, dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
         await deliverNow(ctx as never);
         // The plan follows the lane, not the clock: drafted now, from the lane they just chose.
-        if (r.ok) await ctx.runAction(internal.calendar.weekPlan.draft, { creatorId: creator._id, horizon: "first" });
+        if (r.ok) await ctx.runAction(internal.calendar.weekPlan.draft, { creatorId: creator._id, horizon: "first", opener: `${r.label} it is.` });
         return { ok: true };
       }
       // The lane she read from their posts (Sprint 4d): a tap confirms it and repoints the
@@ -172,7 +173,7 @@ export const run = internalAction({
           const r = await ctx.runMutation(internal.onboarding.lane.confirm, { creatorId: creator._id, keywords: stash.keywords });
           if (r.ok) await ctx.runMutation(internal.agent.growth.setPlan, { creatorId: creator._id, lane: r.keywords.slice(0, 2).join(" "), keywords: r.keywords, setBy: "tap" });
           body = r.ok ? `good. i'll watch ${r.keywords.slice(0, 3).join(", ")} for you, and plan the month around it.` : "couldn't save that; tell me your lane in your own words and i'll use it.";
-          if (r.ok) await ctx.scheduler.runAfter(1_500, internal.calendar.weekPlan.draft, { creatorId: creator._id, horizon: "first" });
+          if (r.ok) await ctx.scheduler.runAfter(1_500, internal.calendar.weekPlan.draft, { creatorId: creator._id, horizon: "first", opener: `${r.keywords.slice(0, 2).join(" ")} it is.` });
         } else if (stash) {
           const alt = stash.keywords.slice(3, 5);
           body = alt.length ? `fair. closer to ${alt.join(" or ")}, or something else? say it however you like.` : "fair. what would you call it? your words, one line.";

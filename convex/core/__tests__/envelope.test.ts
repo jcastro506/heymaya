@@ -40,6 +40,9 @@ describe("first contact", () => {
     expect(rows.filter((m) => m.creatorId === a && m.body === HELLO).length).toBe(1);
     expect(rows.filter((m) => m.creatorId === b && m.body === HELLO).length).toBe(0);
     expect(HELLO).toMatch(/maya/);
+    expect(HELLO).toMatch(/scroll for you/);
+    expect(HELLO).toMatch(/what should i call you/);
+    expect(HELLO.split("\n---\n").length, "two texts: the pitch, then the promise and the question").toBe(2);
   });
 });
 

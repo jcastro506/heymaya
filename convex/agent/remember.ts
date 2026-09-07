@@ -17,6 +17,7 @@ import { REGISTRY } from "../agent/registry";
 export const REMEMBER_PROMPT = `You read one message a content creator sent to their assistant. Decide, strictly:
 - "note": a concrete fact about their life, plans, schedule, people, or situation that would matter to someone planning content with them later (e.g. "training for Chicago in October", "filming with my sister from now on", "off for two weeks in July"). Quote it in their words, ≤ 200 chars. Give expiresDays if it is time-bound (an event, a trip), else null. kind: "life" (plans, events), "fact" (stable facts), "bit" (a running joke or recurring bit they reference).
 - "rule": a standing instruction to the assistant about what to do or never do ("never suggest dance trends", "don't text before 9", "always give me two options"). Verbatim, ≤ 200 chars.
+- A name they give, especially in answer to "what should i call you" (a bare "Josh", "call me kev", "it's Vanessa"), is a "fact" note, written as "call them Josh". No expiry.
 - Otherwise nothing. Questions, opinions on a post, small talk, thanks, one-off logistics: nothing.
 Output ONLY JSON: {"note": {"text": "", "kind": "life|fact|bit", "expiresDays": 30} | null, "rule": "" | null}`;
 

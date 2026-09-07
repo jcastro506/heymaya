@@ -208,13 +208,14 @@ describe("first contact is warm and explains what this is (2026-09-07)", () => {
   it("both shapes show they watched first, explain the arrangement, and ask one question; the hello-less one does not re-introduce", () => {
     for (const said of [true, false]) {
       const sk = firstReadSkill(said);
-      expect(sk).toMatch(/Show you watched, warmly/);
-      expect(sk).toMatch(/What this is, in your own voice/);
-      expect(sk).toMatch(/keep their week on the calendar/);
+      expect(sk).toMatch(/went through everything/);
+      expect(sk).toMatch(/whatever's happening that week/);
       expect(sk).toMatch(/Exactly one question/);
-      expect(sk).toMatch(/never a put-down/);
+      expect(sk).toMatch(/plain words/);
     }
     expect(firstReadSkill(true)).toMatch(/No name, no re-introduction/);
-    expect(firstReadSkill(false)).toMatch(/say your name once/);
+    expect(firstReadSkill(true)).not.toMatch(/keep their content calendar/);
+    expect(firstReadSkill(false)).toMatch(/keep their content calendar/);
+    expect(firstReadSkill(false)).toMatch(/Say your name once/);
   });
 });

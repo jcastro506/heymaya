@@ -25,6 +25,9 @@ describe("what she may say about money and leaving (live 2026-09-06)", () => {
     expect(SOUL).toMatch(/typing DELETE/);
     expect(SOUL).toMatch(/never "baseline"/);
     expect(SOUL).toMatch(/Sounds like you:/);
+    expect(SOUL).toMatch(/personality and it is allowed out/);
+    expect(SOUL).toMatch(/capitalise however reads naturally/);
+    expect(SOUL).not.toMatch(/lowercase is fine, fragments are fine/);
     expect(SOUL).toMatch(/If a sentence could sit in an email from a company/);
   });
 });

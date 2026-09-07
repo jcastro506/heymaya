@@ -277,3 +277,14 @@ describe("every plan line carries its why (2026-09-07)", () => {
     expect(plan?.body).toMatch(/\(rhymes with your piccadilly pan\)/);
   });
 });
+
+describe("the plan answers their choice (2026-09-07)", () => {
+  it("opens with the acknowledgement when one is given", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await creatorWithIdeas(t);
+    const r = await t.action(internal.calendar.weekPlan.draft, { creatorId, now: SUNDAY_6PM, opener: "travel it is." });
+    expect(r.sent).toBe(true);
+    const plan = (await t.run((ctx) => ctx.db.query("messages").collect())).find((m) => m.kind === "plan");
+    expect(plan?.body.startsWith("travel it is. next week")).toBe(true);
+  });
+});
