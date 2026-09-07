@@ -7,7 +7,7 @@
 import { internalQuery, type QueryCtx } from "../_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
-import { SOUL, SOUL_VERSION, REGISTER_ADDENDA } from "./soul";
+import { SOUL, SOUL_VERSION, REGISTER_ADDENDA, PLAN_LINE } from "./soul";
 import { summarize, type Affinity } from "../taste/affinities";
 import { voiceFor, voiceSection } from "./voice";
 import { historyFor, historySection } from "./history";
@@ -93,6 +93,7 @@ export function buildPrefix(input: { creator: Doc<"creators">; directives: Doc<"
     REGISTER_ADDENDA[c.tone ?? "friend"],
     `# Skill\n${input.skill}`,
     `# The creator (their dossier, evidence-backed; say "unknown" for anything not in it)\nHandles: ${JSON.stringify(c.handles)}\nTheir words about what they make: ${JSON.stringify(c.niche)}\nTimezone: ${c.timezone}\n${dossier}`,
+    planSection(c),
     tasteSection(c),
     ...(input.voice ? [input.voice] : []),
     ...(input.history ? [input.history] : []),
@@ -122,3 +123,10 @@ export function producedStamp(model: string): { skillVersion: string; model: str
 }
 
 export type CreatorId = Id<"creators">;
+
+/** The only money facts she may state: their status, the price line, the trial date. Live 2026-09-06 she invented "early access, completely free". */
+export function planSection(c: Doc<"creators">): string {
+  const p = c.plan as { status: string; founding?: boolean; trialEndsAt?: number };
+  const trial = p.trialEndsAt ? ` Trial ends ${new Intl.DateTimeFormat("en-US", { timeZone: c.timezone, month: "short", day: "numeric" }).format(p.trialEndsAt)}.` : "";
+  return `# Their plan (the only money facts you may state)\nStatus: ${p.status}${p.founding ? " (founding seat)" : ""}.${trial} Price: ${PLAN_LINE}`;
+}
