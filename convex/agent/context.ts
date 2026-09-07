@@ -12,6 +12,7 @@ import { summarize, type Affinity } from "../taste/affinities";
 import { voiceFor, voiceSection } from "./voice";
 import { historyFor, historySection } from "./history";
 import { growthSection, type GrowthPlan } from "./growth";
+import { availabilityFor, availabilitySection } from "../calendar/availability";
 
 export const RECENT_MESSAGES = 20;
 export const CONTEXT_VERSION = "ctx-2026-09-02.1";
@@ -80,7 +81,9 @@ export async function personalFor(ctx: QueryCtx, creator: Doc<"creators">): Prom
     return `- ${day(b.start)} ${time(b.start)}–${time(b.end)} · ${b.title} (${state}; id ${b._id})${live}`;
   });
   const nowLocal = new Intl.DateTimeFormat("en-US", { timeZone: creator.timezone, weekday: "short", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(now);
-  return `# Their recent posts (newest first; the numbers you may cite about them)\n${week.join("\n") || "- none read yet"}\n\n# Their week's plan (film / edit / post blocks; the ids are for the block tools)\nNow on their clock: ${nowLocal} (${creator.timezone}).\n${plan.join("\n") || "- no plan yet this week; you can lay one out with week_replan, or they can ask for one"}\n\n# Their next few days (titles only; never private events)\n${life.join("\n") || "- nothing on the calendar, or no calendar connected"}`;
+  // Her calendar sense (2026-09-07): what is free from now, and why those hours, on every turn.
+  const avail = await availabilityFor(ctx, creator, now);
+  return `# Their recent posts (newest first; the numbers you may cite about them)\n${week.join("\n") || "- none read yet"}\n\n# Their week's plan (film / edit / post blocks; the ids are for the block tools)\nNow on their clock: ${nowLocal} (${creator.timezone}).\n${plan.join("\n") || "- no plan yet this week; you can lay one out with week_replan, or they can ask for one"}\n\n# Their next few days (titles only; never private events)\n${life.join("\n") || "- nothing on the calendar, or no calendar connected"}\n\n${availabilitySection(avail.windows, avail.bestHours)}`;
 }
 
 /** Build the stable prefix: soul → register → skill → dossier → directives → live notes. */
