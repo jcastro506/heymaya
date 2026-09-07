@@ -201,3 +201,20 @@ describe("buttons and the question agree (live 2026-09-06)", () => {
     expect(ensureCandidatesNamed(`fine. ${line}`, ["travel moments", "runner track"], line)).toBe(`fine. ${line}`);
   });
 });
+
+import { firstReadSkill } from "../firstRead";
+
+describe("first contact is warm and explains what this is (2026-09-07)", () => {
+  it("both shapes show they watched first, explain the arrangement, and ask one question; the hello-less one does not re-introduce", () => {
+    for (const said of [true, false]) {
+      const sk = firstReadSkill(said);
+      expect(sk).toMatch(/Show you watched, warmly/);
+      expect(sk).toMatch(/What this is, in your own voice/);
+      expect(sk).toMatch(/keep their week on the calendar/);
+      expect(sk).toMatch(/Exactly one question/);
+      expect(sk).toMatch(/never a put-down/);
+    }
+    expect(firstReadSkill(true)).toMatch(/No name, no re-introduction/);
+    expect(firstReadSkill(false)).toMatch(/say your name once/);
+  });
+});

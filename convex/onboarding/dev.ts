@@ -499,3 +499,16 @@ export const readsFor = internalQuery({
     return out;
   },
 });
+
+/** Forget the first read so it can run again on the same creator (a voice change to see on the phone). Dev only. */
+export const redoFirstRead = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ removed: number }> => {
+    let removed = 0;
+    const rows = (await ctx.db.query("messages").withIndex("by_creator_and_dedupe", (q) => q.eq("creatorId", a.creatorId).eq("dedupeKey", `first_read:${a.creatorId}`)).collect()) as Doc<"messages">[];
+    for (const r of rows) { await ctx.db.delete(r._id); removed++; }
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (c?.firstWeek) await ctx.db.patch(a.creatorId, { firstWeek: { ...c.firstWeek, stepsDone: c.firstWeek.stepsDone.filter((s) => s !== "first_read") } });
+    return { removed };
+  },
+});

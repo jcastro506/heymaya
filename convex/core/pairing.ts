@@ -31,7 +31,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 export const PAIRING_TTL_MS = 15 * 60_000;
 
 /** What she says the moment they pair, before the read is done. */
-export const HELLO = "hey, i'm maya. i'm going through your posts and the accounts you picked right now. first thoughts in about ten minutes.";
+export const HELLO = "hey, i'm maya. going through your posts and the accounts you picked right now. give me about ten minutes and i'll tell you what i see.";
 
 function mintToken(): string {
   const bytes = new Uint8Array(24);
