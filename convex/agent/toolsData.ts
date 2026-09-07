@@ -30,3 +30,16 @@ export const ownRhymes = internalQuery({
     return scored.map(({ p }) => ({ url: p.url, multiple: p.multiple ?? null, caption: p.caption, createTime: p.createTime }));
   },
 });
+
+/** Posts by row id, for the semantic half of own_rhymes (2026-09-07). Scoped to the creator. */
+export const postsByIds = internalQuery({
+  args: { creatorId: v.id("creators"), ids: v.array(v.id("ownPosts")) },
+  handler: async (ctx, a): Promise<Array<{ url: string; multiple: number | null; caption: string; createTime: number }>> => {
+    const out: Array<{ url: string; multiple: number | null; caption: string; createTime: number }> = [];
+    for (const id of a.ids) {
+      const p = (await ctx.db.get(id)) as Doc<"ownPosts"> | null;
+      if (p && p.creatorId === a.creatorId) out.push({ url: p.url, multiple: p.reachMultiple ?? p.multiple ?? null, caption: p.caption, createTime: p.createTime });
+    }
+    return out;
+  },
+});

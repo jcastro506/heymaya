@@ -252,6 +252,8 @@ export const run = internalAction({
       creatorId: creator._id,
       payloadJson: JSON.stringify({ after: "ingest" }),
     });
+    // Their posts into her memory, with what she saw in them (2026-09-07).
+    try { await ctx.runAction(internal.agent.postMemory.indexAll, { creatorId: creator._id }); } catch (err) { console.error(`[ingest] post memory failed: ${String(err).slice(0, 120)}`); }
     // Day one is a working day: their roster is sampled now, not at the next six-hour sweep.
     // The scout judges after the first read has gone out (scheduled there), never before it:
     // live 2026-09-06 an idea reached the phone while the read was still being written.

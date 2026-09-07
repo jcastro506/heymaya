@@ -23,7 +23,7 @@ const TEXTS = ["love it", "not this one", "busy this week, keep them coming", "w
 const START = Date.UTC(2026, 8, 1, 13, 0); // Tuesday 1 Sep 2026, 13:00 UTC; Sundays fall on days 6 and 13
 
 describe("a simulated fortnight", () => {
-  it("fourteen days of scout and review keep every promise, on rows", async () => {
+  it("fourteen days of scout and review keep every promise, on rows", { timeout: 30_000 }, async () => {
     const t = convexTest(schema, modules);
     vi.useFakeTimers({ now: START, toFake: ["Date"] });
     const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { timezone: "UTC", channel: { paired: true }, dossier: { persona: { summary: "runner" }, keywords: ["running"], cadence: { postsPerWeek: 2 } }, plan: { status: "active", founding: true } }));

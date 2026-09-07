@@ -13,6 +13,7 @@ import { voiceFor, voiceSection } from "./voice";
 import { historyFor, historySection } from "./history";
 import { growthSection, type GrowthPlan } from "./growth";
 import { availabilityFor, availabilitySection } from "../calendar/availability";
+import { callbacksFor, callbacksSection } from "./callbacks";
 
 export const RECENT_MESSAGES = 20;
 export const CONTEXT_VERSION = "ctx-2026-09-02.1";
@@ -47,7 +48,9 @@ export const gather = internalQuery({
     const h = await historyFor(ctx, creator);
     // Sprint 4f: growth expertise rides with the standing, only while it earns its place.
     const growth = growthSection({ standing: h.standing.confidence, laneConfirmed: Boolean(creator.laneConfirmedAt), plan: (creator.growthPlan as GrowthPlan | undefined) ?? null, now: Date.now(), timeZone: creator.timezone });
-    const history = growth ? `${historySection(h)}\n\n${growth}` : historySection(h);
+    // Callbacks (2026-09-07): three things from their past and their world worth bringing up, chosen from rows.
+    const callbacks = callbacksSection(await callbacksFor(ctx, creator));
+    const history = [historySection(h), growth, callbacks].filter(Boolean).join("\n\n");
     return { creator, directives, recent: recent.reverse(), target, personal, voice, history };
   },
 });

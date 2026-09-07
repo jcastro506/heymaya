@@ -437,8 +437,9 @@ export default defineSchema({
   // §15.7 (4): retrieval on demand. Saved ideas, notes and the swipe file, embedded once.
   memories: defineTable({
     creatorId: v.id("creators"),
-    kind: v.union(v.literal("idea"), v.literal("note"), v.literal("swipe")),
-    refId: v.string(), // the idea id or note id
+    // "post" (2026-09-07): their own posts with what she saw in them, so "the dog barking at the tv" finds a video captioned "I have no words".
+    kind: v.union(v.literal("idea"), v.literal("note"), v.literal("swipe"), v.literal("post")),
+    refId: v.string(), // the idea id, note id, or ownPosts id
     text: v.string(),
     embedding: v.array(v.float64()),
     at: v.number(),

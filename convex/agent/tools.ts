@@ -168,7 +168,15 @@ export async function runTool(ctx: ActionCtx, creatorId: Id<"creators">, call: {
   try {
     let value: unknown;
     if (call.name === "own_rhymes") {
-      value = await ctx.runQuery(internal.agent.toolsData.ownRhymes, { creatorId, query: String(call.args.query ?? "") });
+      // By meaning first (their posts in memory with what she saw in them), then by words; merged, meaning first.
+      const query = String(call.args.query ?? "");
+      // The semantic half degrades to nothing (word overlap still answers) when embeddings or the vector index are unavailable.
+      let byMeaning: Array<{ kind: string; refId: string }> = [];
+      try { const r = await ctx.runAction(internal.agent.memory.recall, { creatorId, query, k: 6 }); byMeaning = Array.isArray(r) ? r.filter((h) => h.kind === "post") : []; } catch { byMeaning = []; }
+      const semantic = byMeaning.length ? await ctx.runQuery(internal.agent.toolsData.postsByIds, { creatorId, ids: byMeaning.map((h) => h.refId as Id<"ownPosts">) }) : [];
+      const byWords = await ctx.runQuery(internal.agent.toolsData.ownRhymes, { creatorId, query });
+      const seen = new Set<string>();
+      value = [...semantic, ...byWords].filter((p) => (seen.has(p.url) ? false : (seen.add(p.url), true))).slice(0, 6);
       record(true, 0);
       const rows = value as Array<{ url: string; multiple: number | null; caption: string; createTime: number }>;
       return rows.length ? cap(rows.map((r) => `${r.url} · ${new Date(r.createTime).toISOString().slice(0, 10)} · ${r.multiple ?? "?"}× · "${r.caption.slice(0, 100)}"`).join("\n")) : "nothing of theirs rhymes with that";

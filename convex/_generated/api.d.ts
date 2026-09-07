@@ -9,6 +9,7 @@
  */
 
 import type * as account_deletion from "../account/deletion.js";
+import type * as agent_callbacks from "../agent/callbacks.js";
 import type * as agent_classify from "../agent/classify.js";
 import type * as agent_commands from "../agent/commands.js";
 import type * as agent_consolidate from "../agent/consolidate.js";
@@ -24,6 +25,7 @@ import type * as agent_memory from "../agent/memory.js";
 import type * as agent_moment from "../agent/moment.js";
 import type * as agent_opinion from "../agent/opinion.js";
 import type * as agent_playbooks from "../agent/playbooks.js";
+import type * as agent_postMemory from "../agent/postMemory.js";
 import type * as agent_profile from "../agent/profile.js";
 import type * as agent_registry from "../agent/registry.js";
 import type * as agent_remember from "../agent/remember.js";
@@ -146,6 +148,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "account/deletion": typeof account_deletion;
+  "agent/callbacks": typeof agent_callbacks;
   "agent/classify": typeof agent_classify;
   "agent/commands": typeof agent_commands;
   "agent/consolidate": typeof agent_consolidate;
@@ -161,6 +164,7 @@ declare const fullApi: ApiFromModules<{
   "agent/moment": typeof agent_moment;
   "agent/opinion": typeof agent_opinion;
   "agent/playbooks": typeof agent_playbooks;
+  "agent/postMemory": typeof agent_postMemory;
   "agent/profile": typeof agent_profile;
   "agent/registry": typeof agent_registry;
   "agent/remember": typeof agent_remember;
