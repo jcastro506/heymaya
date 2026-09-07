@@ -37,14 +37,20 @@ export function inQuietHours(now: number, timezone: string, quiet: { start: stri
   return s <= e ? cur >= s && cur < e : cur >= s || cur < e; // overnight window wraps
 }
 
+/** After the first read, no idea for this long, by any path. */
+export const READ_SETTLE_MS = 30 * 60_000;
+
 /** The rails, read from rows. Pure given its inputs. */
-export function checkRails(input: { creator: Doc<"creators">; sentToday: number; openQuestion: boolean; now: number; budget?: Pick<Doc<"budgets">, "spentUsd" | "watches" | "marginalCredits"> | null }): Rails {
+export function checkRails(input: { creator: Doc<"creators">; sentToday: number; openQuestion: boolean; now: number; budget?: Pick<Doc<"budgets">, "spentUsd" | "watches" | "marginalCredits"> | null; firstReadAt?: number | null }): Rails {
   const { creator, now } = input;
   const { hour } = localHourMinute(now, creator.timezone);
   if (creator.plan.status === "paused" || creator.plan.status === "canceled" || creator.plan.status === "deleting") return { ok: false, reason: `plan is ${creator.plan.status}`, localHour: hour, sentToday: input.sentToday };
   // §19.3: past due keeps proactive for three days of grace, then it pauses; nothing is deleted.
   if (creator.plan.status === "past_due" && creator.plan.pastDueSince && now - creator.plan.pastDueSince > 3 * 86_400_000) return { ok: false, reason: "plan is past due for more than three days", localHour: hour, sentToday: input.sentToday };
   if (!creator.channel.paired) return { ok: false, reason: "not paired", localHour: hour, sentToday: input.sentToday };
+  // Live 2026-09-07: the hourly scout landed on top of the first read. The read gets half an
+  // hour to be read before any idea, whichever path the scout arrives by.
+  if (input.firstReadAt && now - input.firstReadAt < READ_SETTLE_MS) return { ok: false, reason: "the first read just landed; let it settle", localHour: hour, sentToday: input.sentToday };
   if (inQuietHours(now, creator.timezone, creator.quietHours ?? THRESHOLDS.quietHoursDefault)) return { ok: false, reason: "quiet hours", localHour: hour, sentToday: input.sentToday };
   if (input.sentToday >= THRESHOLDS.dailyMessageCap) return { ok: false, reason: `daily cap (${THRESHOLDS.dailyMessageCap}) reached`, localHour: hour, sentToday: input.sentToday };
   if (input.openQuestion) return { ok: false, reason: "a question is still open", localHour: hour, sentToday: input.sentToday };
@@ -66,7 +72,8 @@ export const railsFor = internalQuery({
     // was a second, contradictory rule for the same thing.
     const openQuestion = recent.some((m) => m.direction === "out" && m.awaitingAnswer);
     const budget = (await ctx.db.query("budgets").withIndex("by_creator_day", (q) => q.eq("creatorId", a.creatorId).eq("day", day)).first()) as Doc<"budgets"> | null;
-    const rails = checkRails({ creator, sentToday, openQuestion, now: a.now, budget });
+    const firstReadAt = recent.find((m) => m.direction === "out" && m.kind === "first_read")?.ts ?? null;
+    const rails = checkRails({ creator, sentToday, openQuestion, now: a.now, budget, firstReadAt });
     const pending = (await ctx.db.query("signals").withIndex("by_creator_verdict", (q) => q.eq("creatorId", a.creatorId).eq("verdict", "pending")).collect()) as Doc<"signals">[];
     const fresh: Doc<"signals">[] = [];
     for (const s of pending) {

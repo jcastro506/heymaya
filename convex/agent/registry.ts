@@ -38,9 +38,12 @@ export const REGISTRY: Record<ModelRole, ModelSpec> = {
     json: true,
   },
   critic: {
-    primary: env("MODEL_CRITIC", "z-ai/glm-5.3-flash"),
-    fallback: env("MODEL_CRITIC_FALLBACK", "deepseek/deepseek-v4-flash"),
-    family: "zai",
+    // 2026-09-07: GLM timed out on a third of critic calls for a week (34 of 100 today), so the
+    // "critic" was often the fallback or nobody. DeepSeek answered every time it was asked.
+    // Still a different family from the writer (Gemini), which is the point of the critic.
+    primary: env("MODEL_CRITIC", "deepseek/deepseek-v4-flash"),
+    fallback: env("MODEL_CRITIC_FALLBACK", "z-ai/glm-5.3-flash"),
+    family: "deepseek",
     maxTokens: 400,
     temperature: 0,
     json: true,

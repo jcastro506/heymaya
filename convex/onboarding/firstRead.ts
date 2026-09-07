@@ -16,11 +16,12 @@ import { buildPrefix, producedStamp } from "../agent/context";
 import { deliverNow } from "../core/scheduler";
 import { critique, tooLong } from "../agent/critic";
 import { laneQuestion, proposeLane, readLane } from "./lane";
+import { READ_SETTLE_MS } from "../scout/gate";
 
 /** The rest-of-week plan follows first contact by this much: long enough to tap the lane, short enough to feel like the same conversation. */
 export const FIRST_PLAN_DELAY_MS = 20 * 60_000;
 /** The first scout, after the read and the plan have had their say. The gate still decides whether today gets an idea. */
-export const FIRST_SCOUT_DELAY_MS = 30 * 60_000;
+export const FIRST_SCOUT_DELAY_MS = READ_SETTLE_MS;
 
 /**
  * First contact, in two shapes. When the hello already went out at pairing, the read has no

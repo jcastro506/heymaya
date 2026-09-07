@@ -35,3 +35,21 @@ describe("the link goes out once, without tracking (live 2026-09-06)", () => {
     expect(hasLink("https://www.instagram.com/reel/DbrZ8lIlxma/", "https://www.instagram.com/reel/DbrZ8lIlxma/?igsh=x")).toBe(true);
   });
 });
+
+import { checkRails, READ_SETTLE_MS } from "../gate";
+import { seedCreator as seedCreatorRow } from "../../../tests/lib/creatorRow";
+
+describe("the first read settles before any idea (live 2026-09-07: the hourly scout landed on top of it)", () => {
+  it("within the settle window the rails refuse by any path; after it they allow", async () => {
+    const t = convexTest(schema, modules);
+    const id = await t.run((ctx) => seedCreatorRow(ctx, "a", { channel: { paired: true }, plan: { status: "active", founding: true } }));
+    const creator = (await t.run((ctx) => ctx.db.get(id)))!;
+    const now = Date.UTC(2026, 8, 7, 18, 7); // 14:07 New York
+    const early = checkRails({ creator, sentToday: 0, openQuestion: false, now, firstReadAt: now - 10 * 60_000 });
+    expect(early.ok).toBe(false);
+    expect(early.reason).toMatch(/first read just landed/);
+    const later = checkRails({ creator, sentToday: 0, openQuestion: false, now, firstReadAt: now - READ_SETTLE_MS - 1 });
+    expect(later.ok).toBe(true);
+    expect(checkRails({ creator, sentToday: 0, openQuestion: false, now, firstReadAt: null }).ok).toBe(true);
+  });
+});
