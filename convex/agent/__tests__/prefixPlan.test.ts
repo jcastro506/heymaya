@@ -24,5 +24,7 @@ describe("what she may say about money and leaving (live 2026-09-06)", () => {
     expect(SOUL).toMatch(/Never invent a price/);
     expect(SOUL).toMatch(/typing DELETE/);
     expect(SOUL).toMatch(/never "baseline"/);
+    expect(SOUL).toMatch(/Sounds like you:/);
+    expect(SOUL).toMatch(/If a sentence could sit in an email from a company/);
   });
 });
