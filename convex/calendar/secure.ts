@@ -35,7 +35,7 @@ export const proposeSlot = internalMutation({
     if (mine) return { blockId: mine._id, start: mine.start, existing: true, consented: Boolean(mine.consentAt), hook };
     const events = (await ctx.db.query("calendarEvents").withIndex("by_creator_start", (q) => q.eq("creatorId", a.creatorId).gte("start", now).lte("start", now + 8 * 86_400_000)).take(200)) as Doc<"calendarEvents">[];
     const busy = [...events.filter((e) => e.status === "active" && !e.allDay).map((e) => ({ start: e.start, end: e.end })), ...blocks.map((b) => ({ start: b.start, end: b.end }))];
-    const preferHour = creator.preferredSendHour ?? PLAN.defaultFilmHour;
+    const preferHour = PLAN.defaultFilmHour; // preferredSendHour is when they reply, not when they film (2026-09-07)
     for (let d = 1; d <= 7; d++) {
       const slot = freeSlotOn(now + d * 86_400_000, PLAN.filmMinutes, busy, preferHour, creator.timezone);
       if (!slot || slot.start <= now) continue;

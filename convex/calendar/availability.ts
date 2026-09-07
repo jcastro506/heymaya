@@ -64,7 +64,7 @@ export async function availabilityFor(ctx: QueryCtx, creator: Doc<"creators">, n
   const busy: Busy[] = [...events.filter((e) => e.status === "active" && !e.allDay).map((e) => ({ start: e.start, end: e.end })), ...blocks.filter((b) => b.status !== "deleted").map((b) => ({ start: b.start, end: b.end }))];
   const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).order("desc").take(60)) as Doc<"ownPosts">[];
   const model = buildPostTimeModel(posts.map((p) => ({ createTime: p.createTime, multiple: p.reachMultiple ?? p.multiple ?? null })), creator.timezone);
-  const windows = freeWindows({ now, timeZone: creator.timezone, busy, filmHour: creator.preferredSendHour ?? null, days, quiet: creator.quietHours });
+  const windows = freeWindows({ now, timeZone: creator.timezone, busy, filmHour: null /* preferredSendHour is when they REPLY, not when they film (2026-09-07: "your usual filming hour" was 9pm) */, days, quiet: creator.quietHours });
   return { windows, bestHours: bestHoursLine(model, creator.timezone) };
 }
 

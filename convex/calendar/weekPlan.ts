@@ -42,7 +42,7 @@ export const inputsFor = internalQuery({
       // Sprint 4f: a running growth plan sets the cadence before the dossier does.
       postsPerWeek: ((creator.growthPlan as { status?: string; postsPerWeek?: number } | undefined)?.status === "running" ? (creator.growthPlan as { postsPerWeek?: number }).postsPerWeek : undefined) ?? dossier?.cadence?.postsPerWeek ?? 2,
       filmDays: (dossier?.cadence?.filmingDays ?? []).map((d) => WEEKDAY[d.slice(0, 3).toLowerCase()]).filter((n): n is number => typeof n === "number"),
-      filmHour: creator.preferredSendHour ?? null,
+      filmHour: null, // preferredSendHour is the hour they reply in, not a filming hour (2026-09-07)
       editMinutes: editMinutesFor({ medianCutSeconds: typeof medianCut === "number" ? medianCut : null }, creator.noEditBlock),
       busy: [
         ...events.filter((e) => e.status === "active" && !e.allDay).map((e) => ({ start: e.start, end: e.end })),
