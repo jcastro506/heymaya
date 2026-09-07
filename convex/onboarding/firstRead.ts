@@ -19,6 +19,8 @@ import { laneQuestion, proposeLane, readLane } from "./lane";
 
 /** The rest-of-week plan follows first contact by this much: long enough to tap the lane, short enough to feel like the same conversation. */
 export const FIRST_PLAN_DELAY_MS = 20 * 60_000;
+/** The first scout, after the read and the plan have had their say. The gate still decides whether today gets an idea. */
+export const FIRST_SCOUT_DELAY_MS = 30 * 60_000;
 
 export const FIRST_READ_SKILL = `first-read
 When: once. This is first contact: the first real thing they read from you, so it has to do two jobs in one text, introduce you and prove you watched.
@@ -175,8 +177,10 @@ export const run = internalAction({
     });
     await deliverNow(ctx as never);
       await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: args.creatorId, step: "first_read" });
-      // Day one is a working day (plan 4f addendum): the rest of this week follows the read.
+      // Day one is a working day (plan 4f addendum): the rest of this week follows the read,
+      // and the scout judges the roster it sampled during onboarding, after the read, not before.
       await ctx.scheduler.runAt(Date.now() + FIRST_PLAN_DELAY_MS, internal.calendar.weekPlan.draft, { creatorId: creator._id, horizon: "first" });
+      await ctx.scheduler.runAt(Date.now() + FIRST_SCOUT_DELAY_MS, internal.scout.scout.run, { creatorId: creator._id });
     return { ok: true };
   },
 });

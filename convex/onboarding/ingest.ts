@@ -251,13 +251,13 @@ export const run = internalAction({
       creatorId: creator._id,
       payloadJson: JSON.stringify({ after: "ingest" }),
     });
-    // Day one is a working day: their roster is sampled now, not at the next six-hour sweep,
-    // and the scout judges right away; the gate decides whether today gets an idea.
+    // Day one is a working day: their roster is sampled now, not at the next six-hour sweep.
+    // The scout judges after the first read has gone out (scheduled there), never before it:
+    // live 2026-09-06 an idea reached the phone while the read was still being written.
     try {
       await ctx.runAction(internal.scout.sampler.run, { creatorId: creator._id });
-      await ctx.runAction(internal.scout.scout.run, { creatorId: creator._id });
     } catch (err) {
-      console.error(`[ingest] day-one sample/scout failed: ${String(err).slice(0, 160)}`);
+      console.error(`[ingest] day-one sample failed: ${String(err).slice(0, 160)}`);
     }
     return { ok: true };
   },
