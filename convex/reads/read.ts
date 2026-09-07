@@ -135,7 +135,7 @@ export const read = internalAction({
     }
 
     for (let attempt = 0; attempt <= MAX_WAITS; attempt++) {
-      const claim = await ctx.runMutation(internal.reads.cache.claim, { kind: k, key, params: normalized, now: Date.now() });
+      const claim = await ctx.runMutation(internal.reads.cache.claim, { kind: k, key, params: normalized, now: Date.now(), force: attempt === 0 ? Boolean(force) : undefined });
       if (claim.claimed) {
         const { client, fixture } = clientForEnv();
         try {

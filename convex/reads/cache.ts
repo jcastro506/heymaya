@@ -28,14 +28,16 @@ export const getFresh = internalQuery({
 });
 
 export const claim = internalMutation({
-  args: { kind: v.string(), key: v.string(), params: v.any(), now: v.number() },
-  handler: async (ctx, { kind, key, params, now }) => {
+  // `force`: a caller that knows the cached value is stale (an expired signed media URL,
+  // 2026-09-07) claims the row even while it looks fresh. Without it, force was ignored here.
+  args: { kind: v.string(), key: v.string(), params: v.any(), now: v.number(), force: v.optional(v.boolean()) },
+  handler: async (ctx, { kind, key, params, now, force }) => {
     const row = await ctx.db
       .query("readCache")
       .withIndex("by_key", (q) => q.eq("kind", kind).eq("key", key))
       .unique();
     if (row) {
-      const fresh = row.value !== undefined && row.expiresAt > now;
+      const fresh = row.value !== undefined && row.expiresAt > now && !force;
       if (fresh) return { claimed: false as const, value: row.value };
       const inFlight = row.inFlightSince !== undefined && now - row.inFlightSince < STALE_CLAIM_MS;
       if (inFlight) return { claimed: false as const, inFlight: true as const };
