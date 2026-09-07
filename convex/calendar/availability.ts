@@ -11,6 +11,7 @@ import type { Doc } from "../_generated/dataModel";
 import { freeSlotOn, PLAN, type Busy } from "./planning";
 import { atLocalHour, buildPostTimeModel, type PostTimeModel } from "./postTime";
 import { localHourMinute } from "../scout/gate";
+import { habitsFor } from "./habits";
 
 export interface Window { start: number; end: number; label: string; why: string }
 
@@ -66,7 +67,9 @@ export async function availabilityFor(ctx: QueryCtx, creator: Doc<"creators">, n
   const busy: Busy[] = [...events.filter((e) => e.status === "active" && !e.allDay).map((e) => ({ start: e.start, end: e.end })), ...blocks.filter((b) => b.status !== "deleted").map((b) => ({ start: b.start, end: b.end }))];
   const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).order("desc").take(60)) as Doc<"ownPosts">[];
   const model = buildPostTimeModel(posts.map((p) => ({ createTime: p.createTime, multiple: p.reachMultiple ?? p.multiple ?? null })), creator.timezone);
-  const windows = freeWindows({ now, timeZone: creator.timezone, busy, filmHour: null /* preferredSendHour is when they REPLY, not when they film (2026-09-07: "your usual filming hour" was 9pm) */, days, quiet: creator.quietHours });
+  // Their habits (two real blocks) set the hour; before that it is the planner's default and says so.
+  const habits = await habitsFor(ctx, creator, now);
+  const windows = freeWindows({ now, timeZone: creator.timezone, busy, filmHour: habits.hour, days, quiet: creator.quietHours });
   return { windows, bestHours: bestHoursLine(model, creator.timezone) };
 }
 

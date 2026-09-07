@@ -314,6 +314,8 @@ export default defineSchema({
     // §13.10 (2): named by the writer in the same call that wrote the idea
     features: v.optional(v.object({ format: v.string(), topics: v.array(v.string()), tone: v.string(), lengthBucket: v.string(), sound: v.string(), source: v.string(), account: v.optional(v.string()) })),
     newForYou: v.optional(v.boolean()),
+    // 2026-09-07: a breakout goes stale in days, an evergreen format does not; the calendar picks the window by this.
+    urgency: v.optional(v.union(v.literal("now"), v.literal("any"))),
     savedAt: v.optional(v.number()),
     /** Sprint 4c: the outcome has been folded into taste, once, ever. */
     outcomeLearnedAt: v.optional(v.number()),
@@ -356,7 +358,8 @@ export default defineSchema({
     externalEventId: v.optional(v.string()),
     calendarId: v.optional(v.string()),
     createdAt: v.number(),
-  }).index("by_creator", ["creatorId", "start"]),
+  }).index("by_creator", ["creatorId", "start"])
+    .index("by_creator_event", ["creatorId", "externalEventId"]),
 
   // ----------------------------------------------------------- calendarEvents
   // What we keep from a calendar (§12.5): title, bounds, all-day flag, calendar id and

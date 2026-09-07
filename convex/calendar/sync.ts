@@ -89,7 +89,8 @@ export const syncOne = internalAction({
       }
     }
 
-    const { unknown } = await ctx.runMutation(internal.calendar.sync.upsertEvents, { creatorId: a.creatorId, rows });
+    const { unknown, moved, dropped } = await ctx.runMutation(internal.calendar.sync.upsertEvents, { creatorId: a.creatorId, rows });
+    if (moved.length || dropped.length) await ctx.runAction(internal.calendar.sync.followMoves, { creatorId: a.creatorId, moved, dropped });
 
     // The model half: only titles code could not place, in one cheap call.
     if (unknown.length > 0) {
@@ -140,11 +141,27 @@ export const upsertEvents = internalMutation({
     creatorId: v.id("creators"),
     rows: v.array(v.object({ calendarId: v.string(), externalId: v.string(), title: v.string(), htmlLink: v.optional(v.string()), start: v.number(), end: v.number(), allDay: v.boolean(), recurring: v.boolean(), cancelled: v.boolean() })),
   },
-  handler: async (ctx, a): Promise<{ unknown: Array<{ id: Id<"calendarEvents">; title: string }> }> => {
+  handler: async (ctx, a): Promise<{ unknown: Array<{ id: Id<"calendarEvents">; title: string }>; moved: Array<{ blockId: Id<"calendarBlocks">; from: number; to: number; title: string }>; dropped: Array<{ blockId: Id<"calendarBlocks">; title: string; start: number }> }> => {
     const now = Date.now();
     const unknown: Array<{ id: Id<"calendarEvents">; title: string }> = [];
+    // Edge case 1 (plan §17.9, 2026-09-07): an event moved or removed under her. A block she
+    // wrote to their calendar follows the event: moved with it, or dropped with it, and she
+    // says so once. Reminders re-validate at fire time, so the old ones die on their own.
+    const moved: Array<{ blockId: Id<"calendarBlocks">; from: number; to: number; title: string }> = [];
+    const dropped: Array<{ blockId: Id<"calendarBlocks">; title: string; start: number }> = [];
     for (const r of a.rows) {
       const existing = (await ctx.db.query("calendarEvents").withIndex("by_creator_external", (q) => q.eq("creatorId", a.creatorId).eq("externalId", r.externalId)).first()) as Doc<"calendarEvents"> | null;
+      const linked = (await ctx.db.query("calendarBlocks").withIndex("by_creator_event", (q) => q.eq("creatorId", a.creatorId).eq("externalEventId", r.externalId)).first()) as Doc<"calendarBlocks"> | null;
+      if (linked && linked.status !== "deleted") {
+        if (r.cancelled) {
+          await ctx.db.patch(linked._id, { status: "deleted" });
+          dropped.push({ blockId: linked._id, title: linked.title, start: linked.start });
+        } else if (r.start !== linked.start) {
+          const delta = r.start - linked.start;
+          await ctx.db.patch(linked._id, { start: r.start, end: linked.end + delta, status: "moved" });
+          moved.push({ blockId: linked._id, from: linked.start, to: r.start, title: linked.title });
+        }
+      }
       const cls = existing && existing.classifiedBy === "model" && existing.title === r.title ? existing.class : classifyByCode({ title: r.title, recurring: r.recurring });
       const title = cls === "private" ? "" : r.title;
       const status = r.cancelled ? ("cancelled" as const) : ("active" as const);
@@ -156,7 +173,27 @@ export const upsertEvents = internalMutation({
         if (cls === "unknown" && status === "active") unknown.push({ id, title: r.title });
       }
     }
-    return { unknown };
+    return { unknown, moved, dropped };
+  },
+});
+
+/** After a sync: reminders follow a moved block, and she says what she saw, once per change. */
+export const followMoves = internalAction({
+  args: { creatorId: v.id("creators"), moved: v.array(v.object({ blockId: v.id("calendarBlocks"), from: v.number(), to: v.number(), title: v.string() })), dropped: v.array(v.object({ blockId: v.id("calendarBlocks"), title: v.string(), start: v.number() })) },
+  handler: async (ctx, a): Promise<{ said: number }> => {
+    const tz = (await ctx.runQuery(internal.calendar.sync.creatorTz, { creatorId: a.creatorId }))?.timezone ?? "UTC";
+    const when = (t: number) => new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "long", hour: "numeric", minute: "2-digit" }).format(t).toLowerCase().replace(":00", "");
+    let said = 0;
+    for (const m of a.moved) {
+      await ctx.runAction(internal.calendar.reminders.scheduleFor, { blockId: m.blockId });
+      const { sent } = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: `saw you moved ${m.title.replace(/^film: /, "filming ")} to ${when(m.to)} on your calendar. i'll follow; the check-in moves with it.`, dedupeKey: `evmove:${m.blockId}:${m.to}`, proactive: true, kind: "status" });
+      if (sent) said++;
+    }
+    for (const d of a.dropped) {
+      const { sent } = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: `you took ${d.title.replace(/^film: /, "filming ")} off your calendar, so it's off the plan here too. say the word if you want a new slot for it.`, dedupeKey: `evdrop:${d.blockId}`, proactive: true, kind: "status" });
+      if (sent) said++;
+    }
+    return { said };
   },
 });
 

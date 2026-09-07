@@ -14,6 +14,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { buildPostTimeModel } from "./postTime";
 import { draftWeek, editMinutesFor, pickIdeas, type Slot } from "./planning";
 import { localDateKey } from "./time";
+import { habitsFor } from "./habits";
 import { buildIcs } from "./ics";
 import { localHourMinute } from "../scout/gate";
 
@@ -35,14 +36,16 @@ export const inputsFor = internalQuery({
     const blocks = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("start", a.now - 86_400_000)).take(200)) as Doc<"calendarBlocks">[];
     const ideas = (await ctx.db.query("ideas").withIndex("by_creator_status", (q) => q.eq("creatorId", a.creatorId).eq("status", "sent")).order("desc").take(40)) as Doc<"ideas">[];
     const hearted = (await ctx.db.query("ideas").withIndex("by_creator_status", (q) => q.eq("creatorId", a.creatorId).eq("status", "hearted")).order("desc").take(40)) as Doc<"ideas">[];
+    const habits = await habitsFor(ctx, creator, a.now);
     const experiment = creator.experiments.filter((e) => !(e as { result?: string }).result).slice(-1)[0]?.text ?? null;
     const medianCut = dossier?.fingerprint?.medianCutSeconds;
     return {
       timezone: tz,
       // Sprint 4f: a running growth plan sets the cadence before the dossier does.
       postsPerWeek: ((creator.growthPlan as { status?: string; postsPerWeek?: number } | undefined)?.status === "running" ? (creator.growthPlan as { postsPerWeek?: number }).postsPerWeek : undefined) ?? dossier?.cadence?.postsPerWeek ?? 2,
-      filmDays: (dossier?.cadence?.filmingDays ?? []).map((d) => WEEKDAY[d.slice(0, 3).toLowerCase()]).filter((n): n is number => typeof n === "number"),
-      filmHour: null, // preferredSendHour is the hour they reply in, not a filming hour (2026-09-07)
+      // Their habits from real blocks come first; the dossier's read of their catalogue second.
+      filmDays: habits.days.length ? habits.days : (dossier?.cadence?.filmingDays ?? []).map((d) => WEEKDAY[d.slice(0, 3).toLowerCase()]).filter((n): n is number => typeof n === "number"),
+      filmHour: habits.hour,
       editMinutes: editMinutesFor({ medianCutSeconds: typeof medianCut === "number" ? medianCut : null }, creator.noEditBlock),
       busy: [
         ...events.filter((e) => e.status === "active" && !e.allDay).map((e) => ({ start: e.start, end: e.end })),
