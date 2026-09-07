@@ -84,10 +84,17 @@ async function watchOne(ctx: ActionCtx, args: { creatorId: Id<"creators">; post:
       try {
         // The playable URL comes from the post read; it is signed and expiring, so fetch at once.
         const info = await ctx.runAction(internal.reads.read.read, { kind: "post.info", params: { platform: post.platform, url: post.url }, creatorId: args.creatorId });
-        const videoUrl = (info.value as { videoUrl?: string | null } | null)?.videoUrl ?? null;
+        let videoUrl = (info.value as { videoUrl?: string | null } | null)?.videoUrl ?? null;
         if (!videoUrl) reason = "no playable url";
         else {
-          const media = await fetchMedia(videoUrl);
+          let media = await fetchMedia(videoUrl);
+          // 2026-09-07: the playable URL is signed and expires; a cached post read hours old gave a
+          // 403 on re-watch. One fresh read, one more try, then it degrades honestly.
+          if (!media.ok && /40[13]/.test(media.reason)) {
+            const fresh = await ctx.runAction(internal.reads.read.read, { kind: "post.info", params: { platform: post.platform, url: post.url }, creatorId: args.creatorId, force: true });
+            videoUrl = (fresh.value as { videoUrl?: string | null } | null)?.videoUrl ?? videoUrl;
+            media = await fetchMedia(videoUrl);
+          }
           if (!media.ok) reason = media.reason;
           else {
             const r = await watchMedia({ model, apiKey, prompt: WATCH_PROMPT, media: { bytes: media.bytes, mimeType: media.mimeType }, resolution: isTop ? "default" : "low" });
