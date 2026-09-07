@@ -485,3 +485,17 @@ export const scheduledFor = internalQuery({
       .map((r) => ({ name: r.name, at: new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(r.scheduledTime), state: r.state.kind, args: JSON.stringify(r.args).slice(0, 120) }));
   },
 });
+
+/** The watched cards for one creator, to read what she actually saw. Dev only. */
+export const readsFor = internalQuery({
+  args: { creatorId: v.id("creators"), limit: v.optional(v.number()) },
+  handler: async (ctx, a): Promise<Array<{ depth: string; caption: string; card: unknown }>> => {
+    const reads = (await ctx.db.query("ownPostReads").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(a.limit ?? 5)) as Doc<"ownPostReads">[];
+    const out: Array<{ depth: string; caption: string; card: unknown }> = [];
+    for (const r of reads) {
+      const p = (await ctx.db.get(r.ownPostId)) as Doc<"ownPosts"> | null;
+      out.push({ depth: (r as unknown as { depth?: string }).depth ?? "?", caption: p?.caption.slice(0, 80) ?? "", card: r.card });
+    }
+    return out;
+  },
+});

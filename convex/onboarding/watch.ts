@@ -5,7 +5,7 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalMutation, internalQuery, type ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { watchMedia, fetchMedia } from "../integrations/gemini/client";
@@ -28,9 +28,18 @@ export const WATCH_PROMPT = `You are watching one short video to describe HOW it
  "signature": "what would identify this creator with the name hidden (≤160)",
  "generic": "what is standard for the genre here (≤120)",
  "toneObservations": {"delivery": "flat|animated|mixed|unknown", "absurdity": "none|some|high|unknown", "laughCues": false, "captionRegister": "straight|playful|unknown"},
+ "them": {
+   "look": "≤160: how they present on camera: style, what they wear, hair as style, their space and its state. Never age, ethnicity, body, health.",
+   "voice": "≤160: how they talk: pace, register, fillers, catchphrases, an accent only in words they use, or 'no speech'",
+   "humor": "≤120: the kind of funny and at whose expense (self, the platform, the subject), or 'none'",
+   "presence": "≤120: eye contact, confidence, mood, how they treat the viewer (direct, ignoring, conspiratorial)",
+   "world": "≤160: recurring people, pets, places, objects, bits a regular viewer would recognise",
+   "cares": "≤120: what they seem to care about, from what they chose to show"
+ },
+ "aFriendWouldNotice": "≤200: the one thing a friend who watched this would say about THEM, not the video",
  "confidence": {"hook": 0.0, "person": 0.0, "craft": 0.0}
 }
-Describe only what you can actually see and hear. Empty string or 'unknown' beats a guess.`;
+Describe only what you can actually see and hear. Empty string or 'unknown' beats a guess. In "them", never guess or mention age, ethnicity, body shape or health; describe style and manner, the way a friend would.`;
 
 export const sampledPosts = internalQuery({
   args: { creatorId: v.id("creators") },
@@ -63,18 +72,15 @@ export const readsFor = internalQuery({
 });
 
 /** Watch the sample. Returns counts; failures degrade to a `read`-depth card with the reason. */
-export const run = internalAction({
-  args: { creatorId: v.id("creators") },
-  handler: async (ctx, args): Promise<{ watched: number; degraded: number; costUsd: number }> => {
-    const apiKey = process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY ?? "";
-    if (!apiKey) return { watched: 0, degraded: 0, costUsd: 0 };
-    const posts = await ctx.runQuery(internal.onboarding.watch.sampledPosts, { creatorId: args.creatorId });
-    let watched = 0, degraded = 0, costUsd = 0;
+type WatchablePost = { _id: Id<"ownPosts">; platform: "tiktok" | "instagram"; url: string; postId: string; sample?: string[] };
 
-    for (const post of posts) {
-      const isTop = post.sample?.includes("top") || post.sample?.includes("recent");
-      const model = isTop ? WATCH_MODEL_TOP : WATCH_MODEL;
-      let reason = "";
+/** One post, watched or degraded, the same way for onboarding and for every new post after (2026-09-07). */
+async function watchOne(ctx: ActionCtx, args: { creatorId: Id<"creators">; post: WatchablePost; isTop: boolean; apiKey: string }): Promise<{ watched: boolean; costUsd: number }> {
+  const { post, isTop, apiKey } = args;
+  const model = isTop ? WATCH_MODEL_TOP : WATCH_MODEL;
+  let costUsd = 0;
+  let reason = "";
+  {
       try {
         // The playable URL comes from the post read; it is signed and expiring, so fetch at once.
         const info = await ctx.runAction(internal.reads.read.read, { kind: "post.info", params: { platform: post.platform, url: post.url }, creatorId: args.creatorId });
@@ -97,8 +103,7 @@ export const run = internalAction({
               if (!card) reason = "watch returned no JSON";
               else {
                 await ctx.runMutation(internal.onboarding.watch.storeRead, { creatorId: args.creatorId, ownPostId: post._id, card: { ...(card as object), depth: "watch", postId: post.postId, platform: post.platform }, depth: "watch", model });
-                watched += 1;
-                continue;
+                return { watched: true, costUsd };
               }
             }
           }
@@ -114,8 +119,43 @@ export const run = internalAction({
         depth: "read",
         model,
       });
-      degraded += 1;
+    return { watched: false, costUsd };
+  }
+}
+
+export const run = internalAction({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, args): Promise<{ watched: number; degraded: number; costUsd: number }> => {
+    const apiKey = process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY ?? "";
+    if (!apiKey) return { watched: 0, degraded: 0, costUsd: 0 };
+    const posts = await ctx.runQuery(internal.onboarding.watch.sampledPosts, { creatorId: args.creatorId });
+    let watched = 0, degraded = 0, costUsd = 0;
+    for (const post of posts) {
+      const isTop = Boolean(post.sample?.includes("top") || post.sample?.includes("recent"));
+      const r = await watchOne(ctx, { creatorId: args.creatorId, post: post as WatchablePost, isTop, apiKey });
+      costUsd += r.costUsd;
+      if (r.watched) watched += 1; else degraded += 1;
     }
     return { watched, degraded, costUsd };
+  },
+});
+
+/** A new post after onboarding, watched at full resolution: it is their latest, and the one she will be asked about. */
+export const watchPost = internalAction({
+  args: { creatorId: v.id("creators"), ownPostId: v.id("ownPosts") },
+  handler: async (ctx, args): Promise<{ watched: boolean; costUsd: number }> => {
+    const apiKey = process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY ?? "";
+    const post = await ctx.runQuery(internal.onboarding.watch.postById, { creatorId: args.creatorId, ownPostId: args.ownPostId });
+    if (!apiKey || !post || !post.url) return { watched: false, costUsd: 0 };
+    return await watchOne(ctx, { creatorId: args.creatorId, post: post as WatchablePost, isTop: true, apiKey });
+  },
+});
+
+export const postById = internalQuery({
+  args: { creatorId: v.id("creators"), ownPostId: v.id("ownPosts") },
+  handler: async (ctx, a): Promise<{ _id: Id<"ownPosts">; platform: "tiktok" | "instagram"; url: string; postId: string } | null> => {
+    const p = (await ctx.db.get(a.ownPostId)) as Doc<"ownPosts"> | null;
+    if (!p || p.creatorId !== a.creatorId || p.contentType !== "video") return null;
+    return { _id: p._id, platform: p.platform as "tiktok" | "instagram", url: p.url, postId: p.postId };
   },
 });

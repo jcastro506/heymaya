@@ -21,6 +21,15 @@ export const DossierSchema = z.object({
     register: z.enum(["casual", "expert", "comic", "calm", "hype", "mixed", "unknown"]),
     onCamera: z.enum(["face", "voice", "hands", "text", "mixed", "unknown"]),
     whyTheyPost: z.string().max(200),
+    // 2026-09-07: the person, the way a friend who watched everything would put it. From the
+    // watched cards' "them" blocks only; absent when the cards are silent. Never age, ethnicity,
+    // body or health.
+    look: z.string().max(200).optional(),
+    voice: z.string().max(200).optional(),
+    humor: z.string().max(160).optional(),
+    presence: z.string().max(160).optional(),
+    world: z.string().max(200).optional(),
+    cares: z.string().max(160).optional(),
   }),
   themes: z.array(z.object({ label: z.string(), share: z.number().min(0).max(1), evidencePostIds: z.array(z.string()) })),
   interests: z.array(z.object({ label: z.string(), source: z.enum(["follows", "sounds", "linkInBio", "admired", "collections", "highlights", "stated", "posts", "captions", "transcripts"]), evidence: z.string().max(120) })),
@@ -52,7 +61,7 @@ export type Dossier = z.infer<typeof DossierSchema>;
 
 /** The JSON schema handed to the model (a loose mirror; Zod is the gate). */
 export const DOSSIER_JSON_SHAPE = `{
-  "persona": {"summary": "≤400 chars", "register": "casual|expert|comic|calm|hype|mixed|unknown", "onCamera": "face|voice|hands|text|mixed|unknown (unknown when you only have captions and transcripts)", "whyTheyPost": "≤200 chars or 'unknown'"},
+  "persona": {"summary": "≤400 chars", "register": "casual|expert|comic|calm|hype|mixed|unknown", "onCamera": "face|voice|hands|text|mixed|unknown (unknown when you only have captions and transcripts)", "whyTheyPost": "≤200 chars or 'unknown'", "look": "≤200 optional, from the cards' them blocks only", "voice": "≤200 optional", "humor": "≤160 optional", "presence": "≤160 optional", "world": "≤200 optional", "cares": "≤160 optional"},
   "themes": [{"label": "", "share": 0.0, "evidencePostIds": [""]}],
   "interests": [{"label": "", "source": "follows|sounds|linkInBio|admired|collections|highlights|stated", "evidence": "≤120 chars"}],
   "audience": {"whoComments": "≤200", "asks": ["≤5"], "arguesAbout": ["≤3"], "evidencePostIds": [""]},

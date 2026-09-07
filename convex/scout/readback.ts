@@ -71,7 +71,13 @@ export const run = internalAction({
           if (!handle) continue;
           const r = await ctx.runAction(internal.reads.read.read, { kind: "account.posts", params: { platform, handle, sort: "latest", slot: `readback-${day}` }, creatorId: c.id });
           const posts = Array.isArray(r.value) ? r.value : [];
-          await ctx.runMutation(internal.onboarding.ingest.upsertOwnPosts, { creatorId: c.id, posts, now, handle });
+          const up = await ctx.runMutation(internal.onboarding.ingest.upsertOwnPosts, { creatorId: c.id, posts, now, handle });
+          // 2026-09-07: her picture of them froze at onboarding; every new post is watched too,
+          // so the person she knows keeps up with the person posting. A failed watch is a card
+          // marked degraded, never a missing post.
+          for (const ownPostId of up.insertedIds.slice(0, 3)) {
+            try { await ctx.runAction(internal.onboarding.watch.watchPost, { creatorId: c.id, ownPostId }); } catch (err) { console.error(`[readback] watch failed: ${String(err).slice(0, 120)}`); }
+          }
         }
         await ctx.runMutation(internal.onboarding.ingest.computeMultiples, { creatorId: c.id });
         await ctx.runMutation(internal.review.predictions.scoreDue, { creatorId: c.id, now }); // §13.6: the 48 h outcome beside the call

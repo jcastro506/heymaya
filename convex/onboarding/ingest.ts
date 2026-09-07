@@ -45,9 +45,10 @@ async function sameUrlRow(ctx: MutationCtx, creatorId: Id<"creators">, platform:
 
 export const upsertOwnPosts = internalMutation({
   args: { creatorId: v.id("creators"), posts: v.any(), now: v.number(), handle: v.optional(v.string()) },
-  handler: async (ctx, a): Promise<{ inserted: number; total: number }> => {
+  handler: async (ctx, a): Promise<{ inserted: number; total: number; insertedIds: Id<"ownPosts">[] }> => {
     const posts = a.posts as PostIn[];
     let inserted = 0;
+    const insertedIds: Id<"ownPosts">[] = [];
     for (const p of posts) {
       if (!p.postId) continue;
       const existing = await ctx.db
@@ -92,7 +93,7 @@ export const upsertOwnPosts = internalMutation({
         });
         continue;
       }
-      await ctx.db.insert("ownPosts", {
+      insertedIds.push(await ctx.db.insert("ownPosts", {
         creatorId: a.creatorId,
         platform: p.platform,
         postId: p.postId,
@@ -105,11 +106,11 @@ export const upsertOwnPosts = internalMutation({
         metrics,
         metricsAsOf: a.now,
         source: "scrape",
-      });
+      }));
       inserted += 1;
     }
     const total = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()).length;
-    return { inserted, total };
+    return { inserted, total, insertedIds };
   },
 });
 
@@ -297,7 +298,7 @@ export const synthesize = internalAction({
       transcript: r.transcript ? r.transcript.slice(0, 600) : null,
       sample: r.sample ?? null,
     }));
-    const system = `${SOUL}\n\n# Skill: learn-creator\nYou are writing the creator's dossier from their own posts. Every claim must cite post ids from the data. Say "unknown" where the data is silent. Do not invent visuals: you may describe how a post looks ONLY from the watched cards; everything else is captions, transcripts and numbers.${args.reason === "onboarding" ? "" : " This is a rewrite: the previous dossier, their house rules, their notes and their taste are below. A house rule or a note from them beats anything you inferred. Keep what still holds, change what the new posts contradict, and never keep a claim they corrected."}\nOutput ONLY JSON matching this shape:\n${DOSSIER_JSON_SHAPE}`;
+    const system = `${SOUL}\n\n# Skill: learn-creator\nYou are writing the creator's dossier from their own posts. Every claim must cite post ids from the data. Say "unknown" where the data is silent. Do not invent visuals: you may describe how a post looks ONLY from the watched cards; everything else is captions, transcripts and numbers. The person (persona.look, voice, humor, presence, world, cares) comes ONLY from the cards' "them" and "aFriendWouldNotice" blocks, summarised across posts the way a friend who watched everything would say it, never from a single post and never a guess about age, ethnicity, body or health; leave a field out when the cards are silent.${args.reason === "onboarding" ? "" : " This is a rewrite: the previous dossier, their house rules, their notes and their taste are below. A house rule or a note from them beats anything you inferred. Keep what still holds, change what the new posts contradict, and never keep a claim they corrected."}\nOutput ONLY JSON matching this shape:\n${DOSSIER_JSON_SHAPE}`;
     const watchedCards = cards.filter((c) => c.depth === "watch").slice(0, 40);
     const context = args.reason === "onboarding" ? "" : `\n\nPrevious dossier (version ${learn.dossierVersion}):\n${JSON.stringify(learn.dossier)}\n\nHouse rules, verbatim:\n${JSON.stringify(learn.rules)}\n\nThings they told you:\n${JSON.stringify(learn.notes)}\n\nTheir taste (what they took / passed on):\n${JSON.stringify(learn.taste)}\n\nIdeas of yours they posted this month:\n${JSON.stringify(learn.postedIdeas)}`;
     const user = `Creator handles: ${JSON.stringify(creator.handles)}\nTheir sentence about what they make: ${JSON.stringify(creator.niche)}\nMode: ${mode} (posts read: ${posts}, baseline median views of last 20: ${baseline ?? "unknown"})\n\nPosts (newest first):\n${JSON.stringify(digest)}\n\nWatched cards (${watchedCards.length}; these are the only posts you may describe visually):\n${JSON.stringify(watchedCards)}${context}`;
