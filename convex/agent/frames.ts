@@ -37,7 +37,7 @@ export type RequestedBy = "tap" | "ask" | "scout";
 export const FRAMES_SKILL = `frames (show, don't tell)
 When: they tapped "show me" on an idea, asked to see it in words, or the idea lives in how it looks and you chose to draw it.
 The judgment: turn the idea into two to four still frames a person glances at and gets the whole post: what is on screen, where the camera is, the on-screen text exactly as it would appear. A storyboard, not a finished post; one clear moment per frame, in the order they happen. Their setting from the dossier (their room, their street, their kitchen, their dog), never their face: the person is a figure from behind, hands, or out of frame. No app interface, no numbers, no logos, no watermarks. The intro is one line to them in your voice, and it says this is a rough sketch of what you mean, not a post.
-"them" is how THIS creator shows up in a frame without their face: what they wear as a style (the hoodie, the running vest, the rings), their hair as a style, their usual place with its real details (the narrow flat, the track by the park, the kitchen with the plants), and their recurring props and characters (the dog, the notebook, the espresso cup), every item from the dossier and the cards you were given, none invented; "unknown" for anything the dossier does not say. Never their build, skin, age or face: the person is always from behind, over the shoulder, or hands only.
+"them" is how THIS creator shows up in a frame without their face: what they wear as a style (the hoodie, the running vest, the rings), their hair as a style, their usual place with its real details (the narrow flat, the track by the park, the kitchen with the plants), and their recurring props and characters (the dog, the notebook, the espresso cup), every item from the dossier and the cards you were given, none invented; "unknown" for anything the dossier does not say. How they present is allowed and matters (a woman, a man, their hair as a style), because a frame of the wrong person is a frame of a stranger; their build, skin, age and face are not: the person is always from behind, over the shoulder, or hands only.
 Output ONLY JSON, no markdown: {"style": "≤160: one line of look shared by all frames (light, palette, setting, mood)", "them": "≤220: how they appear from behind and where, from the dossier only", "intro": "≤140: one line to them before the frames", "frames": [{"scene": "≤220: what is in the frame and where the camera is", "onScreen": "≤60: the text on screen exactly, or ''", "caption": "≤90: what this beat is, for them, in your voice"}]}`;
 
 export interface FramePlan { style: string; them: string; intro: string; frames: Array<{ scene: string; onScreen: string; caption: string }> }
@@ -263,10 +263,21 @@ export const devSeedIdea = internalMutation({
   },
 });
 
+/** Dev only: forget an idea's frames so it can be drawn again after a prompt change. */
+export const devClearFrames = internalMutation({
+  args: { creatorId: v.id("creators"), ideaId: v.id("ideas") },
+  handler: async (ctx, a): Promise<null> => {
+    const idea = (await ctx.db.get(a.ideaId)) as Doc<"ideas"> | null;
+    if (idea && idea.creatorId === a.creatorId) await ctx.db.patch(a.ideaId, { frames: undefined, framesAt: undefined, framesBy: undefined });
+    return null;
+  },
+});
+
 /** Dev only: draw an idea now and return the frame URLs, so the operator can look before a person does. */
 export const devRender = internalAction({
-  args: { creatorId: v.id("creators"), ideaId: v.id("ideas"), requestedBy: v.optional(v.union(v.literal("tap"), v.literal("ask"), v.literal("scout"))) },
+  args: { creatorId: v.id("creators"), ideaId: v.id("ideas"), requestedBy: v.optional(v.union(v.literal("tap"), v.literal("ask"), v.literal("scout"))), redraw: v.optional(v.boolean()) },
   handler: async (ctx, a): Promise<{ ok: boolean; reason: string; frames: number; costUsd: number; urls: string[] }> => {
+    if (a.redraw) await ctx.runMutation(internal.agent.frames.devClearFrames, { creatorId: a.creatorId, ideaId: a.ideaId });
     const r = await ctx.runAction(internal.agent.frames.render, { creatorId: a.creatorId, ideaId: a.ideaId, requestedBy: a.requestedBy ?? "tap", requestId: `dev:${Date.now()}` });
     const found = await ctx.runQuery(internal.agent.frames.ideaForFrames, { creatorId: a.creatorId, ideaId: a.ideaId, now: Date.now() });
     const urls: string[] = [];
