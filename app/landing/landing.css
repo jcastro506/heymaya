@@ -2927,3 +2927,12 @@ html:has(.maya-site) { scroll-snap-type: y proximity; scroll-padding-top: 0; }
 .maya-site main > section { scroll-snap-align: start; scroll-snap-stop: always; min-height: 100dvh; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; }
 .maya-site main > section.maya-hero { justify-content: center; }
 @media (prefers-reduced-motion: reduce) { html:has(.maya-site) { scroll-snap-type: none; } }
+
+/* Tall sections carry snap points inside them, so a strict snap never hides a lower half:
+   each feature card, the day layout, and the numbers report are their own stop. */
+.maya-site main > section { scroll-snap-stop: normal; }
+.maya-site .feature-grid > .feature-card,
+.maya-site #your-day .day-layout,
+.maya-site #your-numbers .performance-intro,
+.maya-site #your-numbers .performance-report,
+.maya-site #your-numbers .performance-layout > * { scroll-snap-align: start; scroll-margin-top: 24px; }
