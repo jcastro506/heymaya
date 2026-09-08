@@ -2907,3 +2907,9 @@
     font-size: 33px;
   }
 }
+
+/* How it starts (2026-09-08) */
+.maya-start .start-steps { list-style: none; padding: 0; margin: 28px 0 0; display: grid; gap: 12px; counter-reset: step; max-width: 640px; }
+.maya-start .start-steps li { counter-increment: step; display: grid; grid-template-columns: 40px 1fr; gap: 14px; align-items: baseline; font-size: 1.05rem; line-height: 1.45; }
+.maya-start .start-steps li::before { content: counter(step); font-weight: 800; font-size: 1.25rem; opacity: 0.35; }
+.maya-start .start-steps b { font-weight: 600; }

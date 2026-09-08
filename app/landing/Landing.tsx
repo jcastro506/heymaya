@@ -126,8 +126,8 @@ export default function Landing() {
           <div className="hero-orbit orbit-two" aria-hidden="true" />
           <div className="maya-hero-copy">
             <div className="maya-eyebrow">
-              <span className="status-dot" /> YOUR CONTENT PERSON. ALWAYS IN
-              YOUR CORNER.
+              <span className="status-dot" /> YOUR CONTENT PERSON, IN YOUR
+              TEXTS
             </div>
             <h1 id="hero-title">
               You do{" "}
@@ -142,8 +142,9 @@ export default function Landing() {
               the <span className="hero-rest">rest.</span>
             </h1>
             <p>
-              Your ideas, with a little backup. Maya researches your niche, gets
-              your voice, and helps you turn your next good idea into a plan.
+              Maya is your content person, in your texts. Every day she scrolls
+              your niche, brings you ideas with proof, keeps your week on your
+              calendar, and tells you honestly what worked.
             </p>
             <div className="hero-actions">
               <Trial where="hero" />
@@ -164,7 +165,6 @@ export default function Landing() {
           >
             <div className="studio-grid" aria-hidden="true" />
             <div className="idea-sheet">
-              <span className="tiny-label">YOUR NEXT GOOD IDEA</span>
               <div className="idea-art">
                 <span className="art-sun" />
                 <span className="art-hill hill-back" />
@@ -200,9 +200,7 @@ export default function Landing() {
                 <span className="chat-dots">···</span>
               </div>
               <div className="chat-body">
-                <span className="chat-time">
-                  A LITTLE INSPIRATION, RIGHT ON TIME
-                </span>
+                <span className="chat-time">TODAY 2:06 PM</span>
                 <p className="message maya-message">
                   that idea you saved? i found your angle. your london footage +
                   a “do i regret it?” hook. very you 👀
@@ -271,9 +269,7 @@ export default function Landing() {
           aria-labelledby="messages-title"
         >
           <div className="messages-copy">
-            <span className="maya-eyebrow">
-              YOUR CONTENT PERSON, ONE TEXT AWAY
-            </span>
+            <span className="maya-eyebrow">IN TELEGRAM</span>
             <h2 id="messages-title">
               Big ideas.
               <br />
@@ -300,9 +296,7 @@ export default function Landing() {
         <section id="how-it-works" className="maya-features container">
           <span className="chapter-divider" aria-hidden="true" />
           <div className="section-intro">
-            <span className="maya-eyebrow">
-              A LITTLE DIRECTION GOES A LONG WAY
-            </span>
+            <span className="maya-eyebrow">WHAT SHE DOES</span>
             <h2>
               Less second-guessing.
               <br />
@@ -321,16 +315,16 @@ export default function Landing() {
                 <div className="radar-row">
                   <i>↗</i>
                   <div>
-                    The unexpected opener
-                    <small>A fresh take in your niche</small>
+                    @brettconti · 4.6× his normal
+                    <small>the “do i regret it?” cut, 9 hours in</small>
                   </div>
                   <span>watching</span>
                 </div>
                 <div className="radar-row">
                   <i>✳</i>
                   <div>
-                    The honest little update
-                    <small>A format with room for you</small>
+                    the tier list format
+                    <small>moving in your lane this week</small>
                   </div>
                   <span>saved</span>
                 </div>
@@ -418,7 +412,7 @@ export default function Landing() {
           <span className="chapter-divider" aria-hidden="true" />
           <div className="container day-layout">
             <div className="day-copy">
-              <span className="maya-eyebrow">IN YOUR TEXTS. ON YOUR SIDE.</span>
+              <span className="maya-eyebrow">A DAY WITH MAYA</span>
               <h2>
                 A good day to <br />
                 have <span>Maya.</span>
@@ -478,9 +472,6 @@ export default function Landing() {
               aria-labelledby={`moment-tab-${active}`}
               className="day-panel"
             >
-              <span className="day-panel-label">
-                A DAY WITH YOUR CONTENT PERSON <Flower />
-              </span>
               <div className="day-message" key={active}>
                 <span className="maya-avatar">
                   <Flower />
@@ -505,9 +496,6 @@ export default function Landing() {
 
         <section className="maya-manifesto container">
           <span className="chapter-divider" aria-hidden="true" />
-          <span className="maya-eyebrow">
-            A CONTENT PERSON. NOT ANOTHER THING TO MANAGE.
-          </span>
           <h2>
             You didn’t start creating
             <br />
@@ -521,10 +509,23 @@ export default function Landing() {
           <Flower />
         </section>
 
+        <section id="start" className="maya-start container" aria-labelledby="start-title">
+          <span className="chapter-divider" aria-hidden="true" />
+          <div className="section-intro">
+            <span className="maya-eyebrow">HOW IT STARTS</span>
+            <h2 id="start-title">Thirty seconds of typing. Then she’s yours.</h2>
+          </div>
+          <ol className="start-steps">
+            <li><b>Your handles.</b> TikTok, Instagram, or both.</li>
+            <li><b>Three accounts you admire.</b> She watches them for you.</li>
+            <li><b>One tap into Telegram.</b> That’s the whole pairing.</li>
+            <li><b>Ten minutes later, her first read.</b> Two of your posts she liked, and one question.</li>
+          </ol>
+        </section>
         <section id="pricing" className="maya-pricing container">
           <span className="chapter-divider" aria-hidden="true" />
           <div className="pricing-copy">
-            <span className="maya-eyebrow">YOUR NEXT CHAPTER, WITH BACKUP</span>
+            <span className="maya-eyebrow">THE PRICE</span>
             <h2>
               Small price.
               <br />
@@ -560,9 +561,7 @@ export default function Landing() {
             <small>
               Card required. $19/month after your trial.
               <br />
-              Social account connections open after the trial.
-              <br />
-              Cancel anytime. Delete your data by texting DELETE.
+              Cancel anytime. Delete everything in Settings by typing DELETE.
             </small>
           </div>
         </section>
