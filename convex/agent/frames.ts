@@ -28,7 +28,9 @@ export const FRAMES_VERSION = "frames-2026-09-08.1";
 export const MIN_FRAMES = 2;
 export const MAX_FRAMES = 4;
 /** A reference photo bigger than this is not worth the upload; the model only needs the light. */
-const REFERENCE_MAX_BYTES = 3 * 1024 * 1024;
+const REFERENCE_MAX_BYTES = 1024 * 1024;
+/** All references together. Three cover stills at 3 MB each made a 12 MB base64 body and an instant 400 from the provider (2026-09-08). */
+const REFERENCE_TOTAL_MAX_BYTES = 2 * 1024 * 1024;
 /** Stills from their own posts handed to the image model. Three shows a room and a wardrobe; one shows a mood. Post reads are cached seven days. */
 export const MAX_REFERENCES = 3;
 
@@ -198,7 +200,10 @@ export const render = internalAction({
           const thumb = (info.value as { thumbnailUrl?: string | null } | null)?.thumbnailUrl ?? null;
           if (!thumb) continue;
           const media = await fetchMedia(thumb, REFERENCE_MAX_BYTES);
-          if (media.ok && media.mimeType.startsWith("image/")) references.push({ bytes: media.bytes, mimeType: media.mimeType });
+          if (!media.ok || !media.mimeType.startsWith("image/")) continue;
+          const total = references.reduce((s, r) => s + r.bytes.byteLength, 0) + media.bytes.byteLength;
+          if (total > REFERENCE_TOTAL_MAX_BYTES) break;
+          references.push({ bytes: media.bytes, mimeType: media.mimeType });
         } catch (error) {
           console.error(`[frames] reference skipped: ${String(error)}`);
         }

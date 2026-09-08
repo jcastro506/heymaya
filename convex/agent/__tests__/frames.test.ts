@@ -93,6 +93,9 @@ describe("frames: the pure parts", () => {
       expect(r).toEqual({ ok: false, reason: "no OpenRouter API key" });
       const http = await generateImage({ model: "google/x", prompt: "p", apiKey: "k", fetchImpl: (async () => new Response(JSON.stringify({ error: { message: "rate limited" } }), { status: 429, statusText: "Too Many" })) as typeof fetch });
       expect(http).toMatchObject({ ok: false, reason: expect.stringMatching(/HTTP 429.*rate limited/) });
+      // The provider's own words ride along; "Provider returned error" on its own diagnosed nothing live.
+      const wrapped = await generateImage({ model: "google/x", prompt: "p", apiKey: "k", fetchImpl: (async () => new Response(JSON.stringify({ error: { message: "Provider returned error", metadata: { raw: "Request payload size exceeds the limit", provider_name: "Google" } } }), { status: 400 })) as typeof fetch });
+      expect(wrapped).toMatchObject({ ok: false, reason: expect.stringMatching(/Provider returned error · Request payload size exceeds the limit/) });
     } finally {
       if (was !== undefined) process.env.MODEL_FAKE = was;
     }

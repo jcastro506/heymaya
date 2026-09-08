@@ -108,7 +108,10 @@ export async function generateImage(input: GenerateImageInput): Promise<Generate
     let json: unknown = null;
     try { json = JSON.parse(raw); } catch { json = null; }
     if (!res.ok) {
-      const detail = (json as { error?: { message?: string } } | null)?.error?.message ?? raw.slice(0, 200);
+      // OpenRouter wraps the provider's own text in error.metadata.raw; "Provider returned error" alone diagnoses nothing.
+      const err = (json as { error?: { message?: string; metadata?: { raw?: unknown; provider_name?: string } } } | null)?.error;
+      const rawDetail = typeof err?.metadata?.raw === "string" ? err.metadata.raw : err?.metadata?.raw ? JSON.stringify(err.metadata.raw) : "";
+      const detail = [err?.message ?? raw.slice(0, 200), rawDetail.slice(0, 300)].filter(Boolean).join(" · ");
       return { ok: false, reason: `image model HTTP ${res.status}: ${detail}` };
     }
     const parsed = parseImageResponse(json);
