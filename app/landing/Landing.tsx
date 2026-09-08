@@ -513,13 +513,13 @@ export default function Landing() {
           <span className="chapter-divider" aria-hidden="true" />
           <div className="section-intro">
             <span className="maya-eyebrow">HOW IT STARTS</span>
-            <h2 id="start-title">Thirty seconds of typing. Then she’s yours.</h2>
+            <h2 id="start-title">Thirty seconds to set up. Then she gets to work.</h2>
           </div>
           <ol className="start-steps">
-            <li><span><b>Your handles.</b> TikTok, Instagram, or both.</span></li>
-            <li><span><b>Three accounts you admire.</b> She watches them for you.</span></li>
-            <li><span><b>One tap into Telegram.</b> That’s the whole pairing.</span></li>
-            <li><span><b>Ten minutes later, her first read.</b> Two of your posts she liked, and one question.</span></li>
+            <li><span><b>Tell her where you post.</b> Your TikTok, your Instagram, or both.</span></li>
+            <li><span><b>Name three creators you admire.</b> She watches them for you from day one.</span></li>
+            <li><span><b>Open Telegram and tap Start.</b> That’s it. You’re connected.</span></li>
+            <li><span><b>Ten minutes later, her first message.</b> Two of your posts she liked, and one question for you.</span></li>
           </ol>
         </section>
         <section id="pricing" className="maya-pricing container">
