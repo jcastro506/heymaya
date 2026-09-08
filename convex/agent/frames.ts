@@ -82,6 +82,15 @@ export function framePrompt(plan: FramePlan, index: number, hasReference: boolea
   ].filter(Boolean).join(" ");
 }
 
+/** What the bytes actually are, by magic number; a CDN's content-type lies ("Unable to process input image", 2026-09-08). Pure. */
+export function sniffImage(bytes: ArrayBuffer): "image/jpeg" | "image/png" | "image/webp" | null {
+  const b = new Uint8Array(bytes.slice(0, 12));
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "image/png";
+  if (b.length >= 12 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return "image/webp";
+  return null;
+}
+
 /** The scout's proactive call, pure: a visual pick, room in the week, and the idea actually landed. */
 export function shouldDrawProactively(input: { visual: boolean; weekCount: number; sent: boolean }): boolean {
   return input.sent && input.visual && input.weekCount < THRESHOLDS.framesPerWeek;
@@ -200,10 +209,12 @@ export const render = internalAction({
           const thumb = (info.value as { thumbnailUrl?: string | null } | null)?.thumbnailUrl ?? null;
           if (!thumb) continue;
           const media = await fetchMedia(thumb, REFERENCE_MAX_BYTES);
-          if (!media.ok || !media.mimeType.startsWith("image/")) continue;
+          if (!media.ok) continue;
+          const sniffed = sniffImage(media.bytes);
+          if (!sniffed) { console.error(`[frames] reference skipped: not a jpeg/png/webp (${media.mimeType}, ${media.bytes.byteLength} bytes)`); continue; }
           const total = references.reduce((s, r) => s + r.bytes.byteLength, 0) + media.bytes.byteLength;
           if (total > REFERENCE_TOTAL_MAX_BYTES) break;
-          references.push({ bytes: media.bytes, mimeType: media.mimeType });
+          references.push({ bytes: media.bytes, mimeType: sniffed });
         } catch (error) {
           console.error(`[frames] reference skipped: ${String(error)}`);
         }
@@ -213,10 +224,15 @@ export const render = internalAction({
     // One request per frame, in parallel, the fallback model on a refused primary.
     const results = await Promise.all(plan.plan.frames.map(async (_, i) => {
       const prompt = framePrompt(plan.plan, i, references.length > 0);
+      // The ladder: primary with their stills; primary without (a still the provider cannot read must not cost the frame); then the fallback model.
       let r = await generateImage({ model: IMAGE_MODEL, prompt, references, apiKey });
+      if (!r.ok && references.length) {
+        console.error(`[frames] frame ${i + 1} on ${IMAGE_MODEL} with ${references.length} stills: ${r.reason}; retrying without them`);
+        r = await generateImage({ model: IMAGE_MODEL, prompt: framePrompt(plan.plan, i, false), apiKey });
+      }
       if (!r.ok) {
         console.error(`[frames] frame ${i + 1} on ${IMAGE_MODEL}: ${r.reason}; trying ${IMAGE_MODEL_FALLBACK}`);
-        r = await generateImage({ model: IMAGE_MODEL_FALLBACK, prompt, references, apiKey });
+        r = await generateImage({ model: IMAGE_MODEL_FALLBACK, prompt: framePrompt(plan.plan, i, false), apiKey });
       }
       return r;
     }));
