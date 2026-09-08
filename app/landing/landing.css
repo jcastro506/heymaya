@@ -2914,3 +2914,16 @@
 .maya-start .start-steps li::before { content: counter(step); font-weight: 800; font-size: 1.25rem; opacity: 0.35; }
 .maya-start .start-steps b { font-weight: 600; display: inline; } /* the page styles b as block; here it is a run-in label */
 .maya-start .start-steps li > span { display: block; }
+
+/* Room between how-it-starts and the price card (2026-09-08) */
+.maya-start { padding-block: 96px 48px; }
+
+/* One section at a time (2026-09-08). The document scrolls, so the snap lives on html, scoped
+   to the landing with :has so the app pages keep their normal scroll. Mandatory on wide
+   screens where every section fits a viewport; proximity on phones, where a section can be
+   taller than the screen and a mandatory snap would hide its bottom. */
+html:has(.maya-site) { scroll-snap-type: y proximity; scroll-padding-top: 0; }
+@media (min-width: 900px) { html:has(.maya-site) { scroll-snap-type: y mandatory; } }
+.maya-site main > section { scroll-snap-align: start; scroll-snap-stop: always; min-height: 100dvh; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; }
+.maya-site main > section.maya-hero { justify-content: center; }
+@media (prefers-reduced-motion: reduce) { html:has(.maya-site) { scroll-snap-type: none; } }
