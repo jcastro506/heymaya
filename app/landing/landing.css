@@ -2935,3 +2935,9 @@ html:has(.maya-site) { scroll-snap-type: y proximity; scroll-padding-top: 0; }
 .maya-site #your-numbers .performance-intro,
 .maya-site #your-numbers .performance-report,
 .maya-site #your-numbers .performance-layout > * { scroll-snap-align: start; scroll-margin-top: 24px; }
+
+/* Three short sections, each its own screen (2026-09-08): the manifesto, how it starts, the price.
+   Each fills the viewport with its content centred, so one wheel flick lands on one of them. */
+.maya-site .maya-manifesto,
+.maya-site .maya-start { min-height: 100dvh; display: grid; align-content: center; }
+.maya-site .maya-pricing { min-height: 100dvh; align-content: center; }
