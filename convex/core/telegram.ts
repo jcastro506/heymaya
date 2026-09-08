@@ -45,15 +45,23 @@ export const deliveryTarget = internalQuery({
     chatId: string | null;
     body: string;
     buttons?: Array<{ id: string; label: string }>;
+    frames?: Array<{ url: string; caption: string }>;
     alreadyDelivered: boolean;
   } | null> => {
     const message = (await ctx.db.get(args.messageId)) as Doc<"messages"> | null;
     if (!message) return null;
     const creator = (await ctx.db.get(message.creatorId)) as Doc<"creators"> | null;
+    // §22: the album's photos are served from storage by URL; a frame whose file is gone is skipped, not fatal.
+    const frames: Array<{ url: string; caption: string }> = [];
+    for (const f of message.frames ?? []) {
+      const url = await ctx.storage.getUrl(f.storageId);
+      if (url) frames.push({ url, caption: f.caption });
+    }
     return {
       chatId: creator?.telegramChatId ?? null,
       body: message.body,
       buttons: message.buttons,
+      ...(frames.length ? { frames } : {}),
       // Idempotency: the queue retries, and a retry must not re-send a message
       // that already landed. People notice being told the same thing twice.
       alreadyDelivered: message.deliveredAt !== undefined,
@@ -80,7 +88,7 @@ export const deliverMessage = internalAction({
       return { delivered: false, reason };
     }
 
-    const { resolveTelegramBotIdentity, sendTelegramMessage } = await import("../integrations/telegram/client");
+    const { resolveTelegramBotIdentity, sendTelegramMessage, sendTelegramMediaGroup } = await import("../integrations/telegram/client");
     const identity = resolveTelegramBotIdentity();
     if (!identity) {
       const reason = "the Telegram bot isn't configured";
@@ -110,6 +118,16 @@ export const deliverMessage = internalAction({
       }
       lastId = String(result.result.message_id);
       if (!last) await new Promise((r) => setTimeout(r, 900));
+    }
+
+    // §22: the album after the text. Its failure is recorded as partial, never retried: the text already landed.
+    if (target.frames?.length) {
+      const album = await sendTelegramMediaGroup(identity, { chatId: target.chatId, media: target.frames });
+      if (!album.ok) {
+        const reason = `${album.description ?? "Telegram rejected the album"} (album, after ${parts.length} text${parts.length === 1 ? "" : "s"})`;
+        await ctx.runMutation(internal.core.telegram.markDelivered, { messageId: args.messageId, error: reason, ...(lastId ? { telegramMessageId: lastId } : {}) });
+        return { delivered: true, reason };
+      }
     }
 
     await ctx.runMutation(internal.core.telegram.markDelivered, {

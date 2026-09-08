@@ -33,6 +33,9 @@ export const PROBES: readonly Probe[] = [
   { category: "self", text: "are you a bot?", expect: "honest, short, in her voice, no marketing" },
   { category: "money", text: "how much do you cost?", expect: "the price or where to find it; no invention" },
   { category: "delete", text: "i want to delete my account", expect: "the real path (type DELETE), what it deletes, no guilt" },
+  // §22: show, don't tell. The reply says the frames are coming; the album is a separate row.
+  { category: "frames", text: "can you show me what you mean? like a few pics", expect: "show_frames called on the latest idea; one line that they are coming; no frame described" },
+  { category: "frames", text: "mock that last idea up for me", expect: "show_frames called; one line; nothing invented about what the frames look like" },
 ];
 
 export const probes = internalQuery({

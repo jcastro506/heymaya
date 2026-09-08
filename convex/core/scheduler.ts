@@ -13,12 +13,14 @@ import { v } from "convex/values";
 import { internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
+import { THRESHOLDS } from "../config/thresholds";
 
 export const HANDLED_KINDS = new Set<string>([
   "deliver_message",
   "converse",
   "first_read",
   "ingest_catalogue",
+  "render_frames",
 ]);
 
 type Handler = (
@@ -58,6 +60,18 @@ const handlers: Record<string, Handler> = {
       .runAction(internal.onboarding.firstRead.run, { creatorId: job.creatorId }));
     return r.ok ? { ok: true } : { ok: false, error: r.reason ?? "first read failed" };
   },
+  async render_frames(ctx, job) {
+    const p = payloadOf<{ ideaId?: Id<"ideas">; requestedBy?: "tap" | "ask" | "scout"; requestId?: string }>(job);
+    if (!p?.ideaId || !job.creatorId) return { ok: false, error: "render job has no idea or creator" };
+    // §22 fleet cap: a burst of taps queues behind the cap instead of becoming a 429 storm at the vendor.
+    const running = await (ctx as unknown as { runQuery: (ref: typeof internal.core.jobs.runningOfKind, a: { kind: string }) => Promise<number> }).runQuery(internal.core.jobs.runningOfKind, { kind: "render_frames" });
+    if (running > THRESHOLDS.framesMaxInFlight) return { ok: false, error: `${running} renders in flight (cap ${THRESHOLDS.framesMaxInFlight})`, defer: 15_000 };
+    const r = (await (ctx as unknown as { runAction: (ref: typeof internal.agent.frames.render, a: { creatorId: Id<"creators">; ideaId: Id<"ideas">; requestedBy: "tap" | "ask" | "scout"; requestId?: string }) => Promise<{ ok: boolean; reason: string }> })
+      .runAction(internal.agent.frames.render, { creatorId: job.creatorId, ideaId: p.ideaId, requestedBy: p.requestedBy ?? "tap", requestId: p.requestId }));
+    // A refusal she already explained (the week's sketches, a cached album) is the job concluding, not failing; a model or image failure is worth one retry.
+    if (r.ok || /spent|cached|not their idea/.test(r.reason)) return { ok: true };
+    return { ok: false, error: r.reason };
+  },
   async ingest_catalogue(ctx, job) {
     if (!job.creatorId) return { ok: false, error: "ingest job has no creator" };
     const r = (await (ctx as unknown as { runAction: (ref: typeof internal.onboarding.ingest.run, a: { creatorId: Id<"creators"> }) => Promise<{ ok: boolean; reason?: string }> })
@@ -86,7 +100,7 @@ export async function deliverNow(ctx: { runAction: (ref: never, args: never) => 
  * at the point work actually happens, once `budgets` lands with the sweeps.
  */
 /** Jobs that take minutes. They never run inline in the drain. */
-export const LONG_KINDS: ReadonlySet<string> = new Set(["ingest_catalogue"]);
+export const LONG_KINDS: ReadonlySet<string> = new Set(["ingest_catalogue", "render_frames"]);
 
 /** One claimed job, in its own action, so the drain is never blocked by it. */
 export const runJob = internalAction({

@@ -235,6 +235,34 @@ export async function sendTelegramDocument(
   }
 }
 
+/** The album body, pure (§22 frames). Telegram fetches each photo by URL; ten per group, captions to 1024. */
+export function mediaGroupBody(args: { chatId: string | number; media: Array<{ url: string; caption: string }> }): Record<string, unknown> {
+  return { chat_id: args.chatId, media: args.media.slice(0, 10).map((m) => ({ type: "photo", media: m.url, caption: m.caption.slice(0, 1024) })) };
+}
+
+/** Send an album of photos as one media group. No inline keyboard is possible on a group; buttons ride the text before it. */
+export async function sendTelegramMediaGroup(
+  identity: TelegramBotIdentity,
+  args: { chatId: string | number; media: Array<{ url: string; caption: string }> },
+  fetchImpl: typeof fetch = fetch
+): Promise<TelegramApiResult<Array<{ message_id: number }>>> {
+  try {
+    const res = await fetchImpl(apiUrl(identity.token, "sendMediaGroup"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(mediaGroupBody(args)),
+    });
+    if (!res.ok) {
+      let description = `HTTP ${res.status} ${res.statusText}`;
+      try { const j = (await res.json()) as { description?: string }; if (j.description) description = j.description; } catch { /* the status is the description */ }
+      return { ok: false, description, errorCode: res.status };
+    }
+    return (await res.json()) as TelegramApiResult<Array<{ message_id: number }>>;
+  } catch (error) {
+    return { ok: false, description: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 /**
  * Send a text message. Returns the parsed Telegram envelope.
  */

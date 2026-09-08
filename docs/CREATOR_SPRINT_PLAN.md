@@ -1438,3 +1438,31 @@ Competence gets a creator to day 30. Liking her is what makes cancelling feel li
 | **Knows when to shut up** | No question when none is needed; no message when there is no signal. Absence is part of charm. | the gate; `ask_creator` refuses a question with no decision behind it |
 
 **Measured by** "would you miss her" on Sundays (§17.3) and weekly-active, which is people choosing to talk to her (§18).
+
+## 22. Sprint 4g — show, don't tell: her ideas as frames (2026-09-08)
+
+**The question.** Words carry a hook. They do not carry framing, the on-screen text, or the beat order, and that is where a creator either sees the post or does not. Google's image models are one HTTP call through OpenRouter, which we already use. So: when an idea lives in how it looks, she draws it.
+
+**What it is, exactly.** Two to four still frames, vertical, a storyboard of the idea, sent as one Telegram album with one line from her before it: a rough sketch of what she means, never a post. Not a video (cost, latency, and a bad video of *them* is a cringe where a bad still is a sketch). Not their face (a consent line we are not crossing in phase one: the person is a figure from behind, hands, or out of frame). Their setting, from the dossier and from a frame of their own best post handed to the model as the light and palette to match.
+
+**Three triggers, one path.**
+
+| Trigger | Where the decision is made | What she says |
+|---|---|---|
+| **On command** — "show me", "mock it up", "can you picture that" in any words | the writer, in the conversation loop, via a belt tool `show_frames` | one line that they are coming; never a description of frames she has not seen |
+| **A tap** — "show me" on any idea message | code: the button | "drawing it. give me a minute." |
+| **Proactive** — the scout marks an idea `visual: true` when it lives in a look rather than a line | the writer, in the scout's JSON; code checks the week's budget | the album follows the idea within a minute |
+
+**How the skill is shaped.** She never loops over an image API in her prompt. The writer answers one call (`frames_plan`) with a shot list: a shared style line, an intro in her voice, two to four frames each with a scene, the on-screen text exactly as it appears, and a caption for them. Code clamps the count, sanitises the strings, fans out one image request per frame in parallel with the same style and the same reference, stores the results, writes them on the idea row, and sends the album. A retap or a later "show me again" sends the cached frames for free.
+
+**Budgets, never booleans.** `THRESHOLDS.framesPerWeek` (5) per creator, counted from `ideas.framesAt`; the sixth ask gets a plain line saying she is out of sketches until next week. Every frame is a cost row (`frames`, vendor openrouter) on the creator's day. Fleet-wide, `framesMaxInFlight` (8) render jobs run at once; a burst queues (the job kind is `render_frames`, a long kind, its own action) and retries with backoff instead of a 429 storm. At 200 creators × 5 a week × 3 frames that is 3,000 images a week, about $180, under a dollar a creator a month.
+
+**Honesty carries over.** The prompt forbids app interfaces, numbers, logos and watermarks, so a frame can never pass for a real screenshot. The on-screen text is the writer's, from the idea, never a metric. The intro says it is a sketch. The FAQ's "she doesn't make your videos" stays true: a storyboard is her thinking.
+
+**Nothing fails silently.** No key, a refused model, fewer than two frames back: she says she could not get the sketch to come out and the job fails with a named reason. A partial album (two of three) still goes.
+
+**Tests (the five categories).** Cross-tenant: a render on another creator's idea refuses and writes nothing. Budget × action: the sixth of the week refuses with a message and no image call; no API key is a named failure. Adversarial: markdown and a 400-character on-screen line from the writer are stripped and capped; one frame or six become a refusal or four. Sibling coherence: `render_frames` is in `HANDLED_KINDS` and `LONG_KINDS`; every producer has a consumer (the existing job-kinds test). Plus the three triggers end to end on the fake model: the tool enqueues, the tap enqueues and records taste, the scout's `visual` pick enqueues after the idea is sent.
+
+**Exit criterion, live.** Five real ideas from the scenario creators drawn on dev, looked at by the operator. Three of five make him say "i see it" or the sprint stops here.
+
+**Phase two (not built).** Their face, by their upload, with a consent row, wiped by DELETE; a six-second motion preview for the weekly pick via the video model, overnight, off the batch price.

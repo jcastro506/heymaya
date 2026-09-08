@@ -6,6 +6,7 @@
  */
 
 import { v } from "convex/values";
+import { enqueueRender, shouldDrawProactively } from "../agent/frames";
 import { internalAction, internalMutation } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -48,9 +49,10 @@ The judgment: which of these, if any, is notable (a real breakout above that acc
 Sound: name a real one or say original audio. If you name a sound it must be one a lookup actually returned (sound_info, sound_videos, or the candidate's own sound), and you say in three words why it fits. "a trending sound", "whatever is on your fyp" or "an upbeat track" is a refusal to do the work: say "your own audio" instead, which is honest and often right.
 
 The on-screen text and the hook are the part they will actually read on the screen, so they are held to the voice rules above: their length, their case, their kind of joke, one concrete noun from their life, and a line no other creator in the niche could post word for word.
+Show, don't tell: set "visual": true only when the idea lives in how it looks (a framing, an object open, text on screen, a place) rather than in a line someone says; she draws those as a few frames after the message, within a weekly budget. A talking-head take on a topic is not visual.
 Taste: each candidate carries "taste", their history with things like it; the prefix carries the note you keep on what they take. Weigh it, don't obey it: a "passed on" is a reason to pick something else unless this one is clearly different, and say what's different. Name the idea's features honestly in "features"; they are how you learn from what they do next. If the prompt says the explore slot is open, you may pick something outside their usual, set "newForYou": true, and say in the message that it's not their usual.
 Output ONLY JSON:
-{"pick": {"postId": "", "notable": true, "fit": "yes|maybe|no", "fitWhy": "≤160", "transfer": false, "newForYou": false, "features": {"format": "talking-head|skit|vlog|tutorial|list|reaction|duet|pov|grwm|text-on-screen|other", "topics": ["≤3 short tags"], "tone": "serious|deadpan|ironic|hype|warm", "lengthBucket": "<15|15-30|30-60|60+", "sound": "trending|original|none"}, "message": "≤900 chars, in your voice, lowercase fine, no bullets", "version": {"hook": "≤120", "onScreenText": "≤80", "lengthSec": 0, "sound": "≤80 or ''", "block": {"startLocal": "YYYY-MM-DDTHH:MM on their clock", "lengthMin": 60, "title": "≤60, starts with 'film:'"} | null}} | null,
+{"pick": {"postId": "", "notable": true, "fit": "yes|maybe|no", "fitWhy": "≤160", "transfer": false, "newForYou": false, "visual": false, "features": {"format": "talking-head|skit|vlog|tutorial|list|reaction|duet|pov|grwm|text-on-screen|other", "topics": ["≤3 short tags"], "tone": "serious|deadpan|ironic|hype|warm", "lengthBucket": "<15|15-30|30-60|60+", "sound": "trending|original|none"}, "message": "≤900 chars, in your voice, lowercase fine, no bullets", "version": {"hook": "≤120", "onScreenText": "≤80", "lengthSec": 0, "sound": "≤80 or ''", "block": {"startLocal": "YYYY-MM-DDTHH:MM on their clock", "lengthMin": 60, "title": "≤60, starts with 'film:'"} | null}} | null,
  "rejected": [{"postId": "", "why": "≤80, must say whether the topic or the format was the problem"}]}` + LOOKUPS.scout;
 
 export const writeIdea = internalMutation({
@@ -156,7 +158,7 @@ export const run = internalAction({
     const result = { ok: true as const, content: inv.content };
     if (inv.trace.length && !args.dryRun) await ctx.runMutation(internal.scout.gate.setInvestigation, { signalIds: g.candidates.map((s) => s._id), trace: inv.trace });
 
-    let parsed: { pick: null | { postId: string; notable: boolean; fit: "yes" | "maybe" | "no"; fitWhy: string; message: string; version: unknown; newForYou?: boolean; features?: { format?: string; topics?: string[]; tone?: string; lengthBucket?: string; sound?: string } }; rejected?: Array<{ postId: string; why: string }> };
+    let parsed: { pick: null | { postId: string; notable: boolean; fit: "yes" | "maybe" | "no"; fitWhy: string; message: string; version: unknown; newForYou?: boolean; visual?: boolean; features?: { format?: string; topics?: string[]; tone?: string; lengthBucket?: string; sound?: string } }; rejected?: Array<{ postId: string; why: string }> };
     try {
       const m = result.content.match(/\{[\s\S]*\}/);
       parsed = JSON.parse(m ? m[0] : "{}") as typeof parsed;
@@ -251,6 +253,7 @@ export const run = internalAction({
     // A calendar pick proposes a block; the row is `proposed` and nothing reaches Google until they tap yes (§12.5).
     let buttons: Array<{ id: string; label: string }> = [
       { id: `idea:${ideaId}:shotlist`, label: "shot list" },
+      { id: `idea:${ideaId}:frames`, label: "show me" },
       { id: `idea:${ideaId}:notme`, label: "not me" },
       { id: `idea:${ideaId}:save`, label: "save" },
     ];
@@ -282,6 +285,8 @@ export const run = internalAction({
       criticSkipped,
     });
     if (messageId) await ctx.runMutation(internal.scout.scout.linkIdeaMessage, { ideaId, messageId, sentAt: now });
+    // §22: a pick that lives in how it looks gets drawn, within the week's sketches; the album follows the idea by a minute.
+    if (shouldDrawProactively({ visual: Boolean(pick.visual), weekCount: await ctx.runQuery(internal.agent.frames.weekCount, { creatorId: args.creatorId, now }), sent: Boolean(messageId) })) await enqueueRender(ctx as never, { creatorId: args.creatorId, ideaId, requestedBy: "scout", requestId: "scout" });
     await ctx.scheduler.runAfter(0, internal.agent.memory.index, { creatorId: args.creatorId, kind: "idea", refId: String(ideaId), text: `${(pick.version as { hook?: string } | undefined)?.hook ?? ""}\n${pick.message}` });
     verdicts.push({ signalId: signal._id, verdict: "sent", why: `sent: ${pick.fitWhy}` });
     await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: args.creatorId, step: "first_scout" });

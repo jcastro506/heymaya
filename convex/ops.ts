@@ -29,7 +29,7 @@ export const overview = query({
       const events = (await ctx.db.query("tasteEvents").withIndex("by_creator", (q) => q.eq("creatorId", c._id).gte("at", month)).collect()) as Doc<"tasteEvents">[];
       const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", c._id).gte("createTime", month)).collect()) as Doc<"ownPosts">[];
       const costs = (await ctx.db.query("costEvents").withIndex("by_creator_at", (q) => q.eq("creatorId", c._id).gte("at", week)).collect()) as Doc<"costEvents">[];
-      const TAKEN = new Set(["posted", "blocked", "shotlist", "heart", "save", "reply_pos"]);
+      const TAKEN = new Set(["posted", "blocked", "shotlist", "frames", "heart", "save", "reply_pos"]);
       const sentIn = (s: number) => messages.filter((m) => m.direction === "out" && m.proactive && m.ts >= s).length;
       const repliesIn = (s: number) => messages.filter((m) => m.direction === "in" && (m.kind ?? "inbound") === "inbound" && m.ts >= s).length;
       const lastReply = messages.filter((m) => m.direction === "in").sort((x, y) => y.ts - x.ts)[0];

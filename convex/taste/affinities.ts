@@ -23,6 +23,7 @@ export const WEIGHTS: Record<string, number> = {
   posted: 3,
   blocked: 2,
   shotlist: 1.5,
+  frames: 1.5, // §22: asking to see it is the same signal as asking how to shoot it
   heart: 1,
   save: 1,
   reply_pos: 1,

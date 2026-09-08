@@ -43,12 +43,19 @@ describe("a simulated day", () => {
     const signal = await t.run((ctx) => ctx.db.get(signalId));
     expect(signal?.verdict).toBe("sent");
 
-    const outbound = (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out");
+    const allOut = (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out");
+    // §22: the fake scout marks its pick visual, so the album follows the idea as its own row, never counted as proactive.
+    const outbound = allOut.filter((m) => m.kind !== "frames");
     expect(outbound).toHaveLength(1);
     expect(outbound[0].kind).toBe("scout");
-    expect(outbound[0].buttons?.map((b) => b.id.split(":").pop())).toEqual(["shotlist", "notme", "save"]);
+    expect(outbound[0].buttons?.map((b) => b.id.split(":").pop())).toEqual(["shotlist", "frames", "notme", "save"]);
     expect(outbound[0].links?.[0]).toContain("tiktok.com");
     expect(outbound[0].proactive).toBe(true);
+    // The album itself is asserted in agent/__tests__/frames.test.ts by calling the render directly:
+    // convex-test cannot `storage.store` from an action a scheduled job started ("Write outside of
+    // transaction"), so here the proof is the queued render with the scout as its requester.
+    const render = (await t.run((ctx) => ctx.db.query("jobs").collect())).find((j) => j.kind === "render_frames");
+    expect(JSON.parse(render?.payloadJson ?? "{}"), "a visual pick queues its render after it is sent").toMatchObject({ ideaId: ideas[0]._id, requestedBy: "scout" });
 
     // Nothing new to judge: the same run again sends nothing.
     const again = await t.action(internal.scout.scout.run, { creatorId });

@@ -47,7 +47,7 @@ export const pulseFor = internalQuery({
     const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("createTime", month)).collect()) as Doc<"ownPosts">[];
     const sentIn = (since: number) => messages.filter((m) => m.direction === "out" && m.proactive && m.ts >= since).length;
     const repliesIn = (since: number) => messages.filter((m) => m.direction === "in" && (m.kind ?? "inbound") === "inbound" && m.ts >= since).length;
-    const TAKEN = new Set(["posted", "blocked", "shotlist", "heart", "save", "reply_pos"]);
+    const TAKEN = new Set(["posted", "blocked", "shotlist", "frames", "heart", "save", "reply_pos"]);
     const takenIn = (since: number) => events.filter((e) => TAKEN.has(e.kind) && e.at >= since).length;
     const lastReply = messages.filter((m) => m.direction === "in").sort((x, y) => y.ts - x.ts)[0];
     const pulse = {

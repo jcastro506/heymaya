@@ -134,6 +134,7 @@ async function writeOutbound(
     produced?: { skillVersion: string; model: string; thresholdsVersion: string };
     buttons?: Array<{ id: string; label: string }>;
     links?: string[];
+    frames?: Array<{ storageId: Id<"_storage">; caption: string }>;
     criticSkipped?: boolean;
   },
 ): Promise<Id<"messages">> {
@@ -177,6 +178,7 @@ async function writeOutbound(
     produced: row.produced,
     buttons: row.buttons,
     links: row.links,
+    frames: row.frames,
     criticSkipped: row.criticSkipped,
     dedupeKey: row.dedupeKey,
     proactive: row.proactive,
@@ -225,6 +227,7 @@ export const send = internalMutation({
     produced: v.optional(v.object({ skillVersion: v.string(), model: v.string(), thresholdsVersion: v.string() })),
     buttons: v.optional(v.array(v.object({ id: v.string(), label: v.string() }))),
     links: v.optional(v.array(v.string())),
+    frames: v.optional(v.array(v.object({ storageId: v.id("_storage"), caption: v.string() }))),
     criticSkipped: v.optional(v.boolean()),
   },
   handler: async (
@@ -265,6 +268,7 @@ export const send = internalMutation({
       produced: args.produced,
       buttons: args.buttons,
       links: args.links,
+      frames: args.frames,
       criticSkipped: args.criticSkipped,
     });
 

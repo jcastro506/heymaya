@@ -102,6 +102,34 @@ export const pairChat = internalMutation({
   },
 });
 
+/** Dev only: a bare creator row, paired to a chat, with NO catalogue read queued: for exercising one delivery path (an album, say) on a phone without spend. */
+export const seedBare = internalMutation({
+  args: { tiktok: v.string(), chatId: v.string(), timezone: v.optional(v.string()) },
+  handler: async (ctx, a): Promise<{ creatorId: string }> => {
+    const now = Date.now();
+    for (const other of await ctx.db.query("creators").withIndex("by_telegram_chat", (q) => q.eq("telegramChatId", a.chatId)).collect()) {
+      await ctx.db.patch(other._id, { telegramChatId: undefined, channel: { paired: false }, updatedAt: now });
+    }
+    const creatorId = await ctx.db.insert("creators", {
+      clerkUserId: `devbare_${now}`, email: "dev-bare@example.com", handles: { tiktok: a.tiktok }, ownership: "unverified", niche: "", timezone: a.timezone ?? "UTC",
+      quietHours: { start: "22:00", end: "07:00" }, tone: "friend", mode: "full", dossierVersion: 0, notes: [], affinities: [], experiments: [],
+      channel: { paired: true, pairedAt: now }, telegramChatId: a.chatId, plan: { status: "paused", founding: true }, createdAt: now,
+    });
+    return { creatorId };
+  },
+});
+
+/** Dev only: take a chat off a creator, so a test row stops being able to reach a phone. */
+export const unpairChat = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ ok: boolean }> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!c) return { ok: false };
+    await ctx.db.patch(a.creatorId, { telegramChatId: undefined, channel: { paired: false }, updatedAt: Date.now() });
+    return { ok: true };
+  },
+});
+
 /** Dev only: the most recent failed or dead jobs with their errors, fleet-wide. */
 export const failedJobs = internalQuery({
   args: {},

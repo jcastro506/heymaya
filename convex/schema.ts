@@ -320,6 +320,10 @@ export default defineSchema({
     /** Sprint 4c: the outcome has been folded into taste, once, ever. */
     outcomeLearnedAt: v.optional(v.number()),
     outcomeMultiple: v.optional(v.number()), // the swipe file (§11.3 save): kept, filterable, never expires
+    // §22 Sprint 4g: the idea drawn as two to four frames, once; re-sent from here for free.
+    frames: v.optional(v.array(v.object({ storageId: v.id("_storage"), caption: v.string() }))),
+    framesAt: v.optional(v.number()),
+    framesBy: v.optional(v.union(v.literal("tap"), v.literal("ask"), v.literal("scout"))),
     produced,
     createdAt: v.number(),
   })
@@ -389,7 +393,7 @@ export default defineSchema({
     creatorId: v.id("creators"),
     ideaId: v.optional(v.id("ideas")),
     messageId: v.optional(v.id("messages")),
-    kind: v.string(), // posted | blocked | shotlist | heart | save | reply_pos | reply_neg | idea_only | ignored | thumbs_down | notme | unlinked | outcome_win | outcome_flop
+    kind: v.string(), // posted | blocked | shotlist | frames | heart | save | reply_pos | reply_neg | idea_only | ignored | thumbs_down | notme | unlinked | outcome_win | outcome_flop
     weight: v.number(),
     features: v.array(v.string()), // "format:skit", "account:@x", "source:breakout", …
     at: v.number(),
@@ -569,6 +573,8 @@ export default defineSchema({
     fileUniqueId: v.optional(v.string()),
     buttons: v.optional(v.array(v.object({ id: v.string(), label: v.string() }))),
     links: v.optional(v.array(v.string())),
+    // §22: an album of frames that rides after the text, one Telegram media group.
+    frames: v.optional(v.array(v.object({ storageId: v.id("_storage"), caption: v.string() }))),
     ideaId: v.optional(v.id("ideas")),
     reaction: v.optional(v.string()),
     criticSkipped: v.optional(v.boolean()),

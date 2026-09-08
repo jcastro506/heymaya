@@ -89,6 +89,9 @@ export const snapshot = internalQuery({
     if (!creator) return null;
     const messages = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"messages">[];
     const fileIds = messages.map((m) => m.fileId).filter((x): x is Id<"_storage"> => Boolean(x));
+    // §22: the frames she drew for them are files too; DELETE wipes them with everything else.
+    const ideas = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"ideas">[];
+    for (const idea of ideas) for (const f of idea.frames ?? []) fileIds.push(f.storageId);
     const zernio = (await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).eq("provider", "zernio")).first()) as Doc<"connections"> | null;
     return { creator, fileIds, zernio };
   },

@@ -20,6 +20,10 @@ export const THRESHOLDS = {
   quietHoursDefault: { start: "22:00", end: "07:00" },
   formatCooldownDays: 14,
 
+  // §22 frames: sketches per creator per week, and renders in flight across the fleet
+  framesPerWeek: 5,
+  framesMaxInFlight: 8,
+
   // §13.5 idea matching
   matchWindowDays: 14,
 

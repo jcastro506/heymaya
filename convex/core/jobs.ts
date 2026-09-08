@@ -109,6 +109,15 @@ export const enqueue = internalMutation({
  * exclusive — a second caller in the same instant sees the row already
  * `running`. Returns null when there's nothing to do.
  */
+/** How many jobs of one kind are running right now, fleet-wide (§22 render cap). */
+export const runningOfKind = internalQuery({
+  args: { kind: v.string() },
+  handler: async (ctx, a): Promise<number> => {
+    const rows = await ctx.db.query("jobs").withIndex("by_status_and_deadline", (q) => q.eq("status", "running")).take(500);
+    return rows.filter((r) => r.kind === a.kind).length;
+  },
+});
+
 export const claimNext = internalMutation({
   args: {
     kinds: v.optional(v.array(v.string())),
