@@ -20,8 +20,8 @@ export const THRESHOLDS = {
   quietHoursDefault: { start: "22:00", end: "07:00" },
   formatCooldownDays: 14,
 
-  // §22 frames: sketches per creator per week, and renders in flight across the fleet
-  framesPerWeek: 5,
+  // §22 frames: sketches per creator per week (3 × $0.12 keeps frames under $1.60 a month at the cap), and renders in flight across the fleet
+  framesPerWeek: 3,
   framesMaxInFlight: 8,
 
   // §13.5 idea matching

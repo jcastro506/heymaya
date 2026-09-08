@@ -13,9 +13,15 @@
 
 const OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
 
-/** Nano Banana 2 (Gemini 3.1 Flash Image); the older Flash Image as the fallback. Overridable per environment. */
-export const IMAGE_MODEL = process.env.MODEL_IMAGE ?? "google/gemini-3.1-flash-image";
-export const IMAGE_MODEL_FALLBACK = process.env.MODEL_IMAGE_FALLBACK ?? "google/gemini-2.5-flash-image";
+/**
+ * ONE image model: the original Nano Banana (Gemini 2.5 Flash Image), $0.039 a frame as OpenRouter
+ * bills it against $0.067 for the 3.1 model (measured 2026-09-08 on the same idea). The operator's
+ * call: the on-screen text is the creator's to write anyway, so the 3.1 model's cleaner lettering is
+ * not worth 70% more, and routing frames between models by content is counterproductive. The 3.1
+ * model remains ONLY as the error fallback, never chosen by content. Overridable per environment.
+ */
+export const IMAGE_MODEL = process.env.MODEL_IMAGE ?? "google/gemini-2.5-flash-image";
+export const IMAGE_MODEL_FALLBACK = process.env.MODEL_IMAGE_FALLBACK ?? "google/gemini-3.1-flash-image";
 /** An image takes five to twenty seconds; a hung request must not hold a render job open forever. */
 export const IMAGE_TIMEOUT_MS = 60_000;
 
