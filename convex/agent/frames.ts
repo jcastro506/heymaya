@@ -29,15 +29,18 @@ export const MIN_FRAMES = 2;
 export const MAX_FRAMES = 4;
 /** A reference photo bigger than this is not worth the upload; the model only needs the light. */
 const REFERENCE_MAX_BYTES = 3 * 1024 * 1024;
+/** Stills from their own posts handed to the image model. Three shows a room and a wardrobe; one shows a mood. Post reads are cached seven days. */
+export const MAX_REFERENCES = 3;
 
 export type RequestedBy = "tap" | "ask" | "scout";
 
 export const FRAMES_SKILL = `frames (show, don't tell)
 When: they tapped "show me" on an idea, asked to see it in words, or the idea lives in how it looks and you chose to draw it.
 The judgment: turn the idea into two to four still frames a person glances at and gets the whole post: what is on screen, where the camera is, the on-screen text exactly as it would appear. A storyboard, not a finished post; one clear moment per frame, in the order they happen. Their setting from the dossier (their room, their street, their kitchen, their dog), never their face: the person is a figure from behind, hands, or out of frame. No app interface, no numbers, no logos, no watermarks. The intro is one line to them in your voice, and it says this is a rough sketch of what you mean, not a post.
-Output ONLY JSON, no markdown: {"style": "≤160: one line of look shared by all frames (light, palette, setting, mood)", "intro": "≤140: one line to them before the frames", "frames": [{"scene": "≤220: what is in the frame and where the camera is", "onScreen": "≤60: the text on screen exactly, or ''", "caption": "≤90: what this beat is, for them, in your voice"}]}`;
+"them" is how THIS creator shows up in a frame without their face: what they wear as a style (the hoodie, the running vest, the rings), their hair as a style, their usual place with its real details (the narrow flat, the track by the park, the kitchen with the plants), and their recurring props and characters (the dog, the notebook, the espresso cup), every item from the dossier and the cards you were given, none invented; "unknown" for anything the dossier does not say. Never their build, skin, age or face: the person is always from behind, over the shoulder, or hands only.
+Output ONLY JSON, no markdown: {"style": "≤160: one line of look shared by all frames (light, palette, setting, mood)", "them": "≤220: how they appear from behind and where, from the dossier only", "intro": "≤140: one line to them before the frames", "frames": [{"scene": "≤220: what is in the frame and where the camera is", "onScreen": "≤60: the text on screen exactly, or ''", "caption": "≤90: what this beat is, for them, in your voice"}]}`;
 
-export interface FramePlan { style: string; intro: string; frames: Array<{ scene: string; onScreen: string; caption: string }> }
+export interface FramePlan { style: string; them: string; intro: string; frames: Array<{ scene: string; onScreen: string; caption: string }> }
 
 /** Plain text only: the writer's strings become prompts and captions, never markdown, never a wall. */
 function clean(s: unknown, max: number): string {
@@ -48,7 +51,7 @@ function clean(s: unknown, max: number): string {
 export function planFromModel(content: string): { ok: true; plan: FramePlan } | { ok: false; reason: string } {
   const m = content.match(/\{[\s\S]*\}/);
   if (!m) return { ok: false, reason: "the frames plan was not JSON" };
-  let parsed: { style?: unknown; intro?: unknown; frames?: unknown };
+  let parsed: { style?: unknown; them?: unknown; intro?: unknown; frames?: unknown };
   try { parsed = JSON.parse(m[0]) as typeof parsed; } catch { return { ok: false, reason: "the frames plan did not parse" }; }
   const raw = Array.isArray(parsed.frames) ? (parsed.frames as Array<Record<string, unknown>>) : [];
   const frames = raw
@@ -56,7 +59,8 @@ export function planFromModel(content: string): { ok: true; plan: FramePlan } | 
     .filter((f) => f.scene.length > 0)
     .slice(0, MAX_FRAMES);
   if (frames.length < MIN_FRAMES) return { ok: false, reason: `the plan had ${frames.length} usable frame${frames.length === 1 ? "" : "s"}; ${MIN_FRAMES} is the floor` };
-  return { ok: true, plan: { style: clean(parsed.style, 160), intro: clean(parsed.intro, 140) || "rough sketch of what i mean, not a post:", frames } };
+  const them = clean(parsed.them, 220);
+  return { ok: true, plan: { style: clean(parsed.style, 160), them: /^unknown\.?$/i.test(them) ? "" : them, intro: clean(parsed.intro, 140) || "rough sketch of what i mean, not a post:", frames } };
 }
 
 /** One frame's prompt. The rails that keep a sketch from passing for a screenshot live here, in code. */
@@ -66,12 +70,13 @@ export function framePrompt(plan: FramePlan, index: number, hasReference: boolea
   return [
     `Storyboard frame ${index + 1} of ${plan.frames.length} for a short vertical phone video.`,
     plan.style ? `Look shared by every frame: ${plan.style}.` : "",
+    plan.them ? `The person and their place, the same in every frame: ${plan.them}.` : "",
     `This frame: ${f.scene}.`,
     text,
     "Photographic, natural, handheld, like a still from a real phone video; not an illustration, not a render.",
-    "No recognisable face, not even in profile: the camera is behind the person, over their shoulder, or on their hands; the face is never visible.",
+    "No recognisable face, not even in profile: the camera is behind the person, over their shoulder, or on their hands; the face is never visible. Never invent their build, skin or age.",
     "No app interface, no view counts or numbers, no logos, no watermarks, no captions other than the text given.",
-    hasReference ? "Match the light, the palette and the kind of place in the reference photo, which is the creator's own video; do not copy its subject or its composition." : "",
+    hasReference ? "Match the light, the palette, the clothes and the kind of place in the reference photos, which are stills from the creator's own videos; do not copy their subject or their composition." : "",
   ].filter(Boolean).join(" ");
 }
 
@@ -102,15 +107,15 @@ export const weekCount = internalQuery({
 
 export const ideaForFrames = internalQuery({
   args: { creatorId: v.id("creators"), ideaId: v.id("ideas"), now: v.number() },
-  handler: async (ctx, a): Promise<{ idea: Doc<"ideas">; weekCount: number; reference: { platform: "tiktok" | "instagram"; url: string } | null } | null> => {
+  handler: async (ctx, a): Promise<{ idea: Doc<"ideas">; weekCount: number; references: Array<{ platform: "tiktok" | "instagram"; url: string }> } | null> => {
     const idea = (await ctx.db.get(a.ideaId)) as Doc<"ideas"> | null;
     // Cross-tenant: an idea id from another creator's chat is not theirs to draw.
     if (!idea || idea.creatorId !== a.creatorId) return null;
     const weekCount = await weekCountFor(ctx, a.creatorId, a.now);
-    // Their own best recent post is the light and the room the model should match.
+    // Their own best recent posts are the light, the clothes and the room the model should match (three stills, not one).
     const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("createTime", a.now - 180 * 86_400_000)).collect()) as Doc<"ownPosts">[];
-    const top = posts.filter((p) => p.contentType === "video" || p.contentType === "photo").sort((x, y) => y.metrics.views - x.metrics.views)[0];
-    return { idea, weekCount, reference: top ? { platform: top.platform, url: top.url } : null };
+    const top = posts.filter((p) => p.contentType === "video" || p.contentType === "photo").sort((x, y) => y.metrics.views - x.metrics.views).slice(0, MAX_REFERENCES);
+    return { idea, weekCount, references: top.map((p) => ({ platform: p.platform, url: p.url })) };
   },
 });
 
@@ -153,7 +158,7 @@ export const render = internalAction({
     const now = Date.now();
     const found = await ctx.runQuery(internal.agent.frames.ideaForFrames, { creatorId: a.creatorId, ideaId: a.ideaId, now });
     if (!found) return { ok: false, reason: "not their idea", frames: 0, costUsd: 0 };
-    const { idea, weekCount, reference } = found;
+    const { idea, weekCount, references: referencePosts } = found;
     const gathered = await ctx.runQuery(internal.agent.context.gather, { creatorId: a.creatorId });
     if (!gathered) return { ok: false, reason: "creator not found", frames: 0, costUsd: 0 };
     const { creator, directives } = gathered;
@@ -184,18 +189,19 @@ export const render = internalAction({
       return { ok: false, reason: plan.reason, frames: 0, costUsd: 0 };
     }
 
-    // Their own best post, as the light and the room to match. Optional: a missing reference degrades to none.
-    let references: Array<{ bytes: ArrayBuffer; mimeType: string }> = [];
-    if (reference && process.env.MODEL_FAKE !== "1") {
-      try {
-        const info = await ctx.runAction(internal.reads.read.read, { kind: "post.info", params: { platform: reference.platform, url: reference.url }, creatorId: creator._id });
-        const thumb = (info.value as { thumbnailUrl?: string | null } | null)?.thumbnailUrl ?? null;
-        if (thumb) {
+    // Their own best posts, as the light, the clothes and the room to match. Optional: a missing still degrades to fewer.
+    const references: Array<{ bytes: ArrayBuffer; mimeType: string }> = [];
+    if (process.env.MODEL_FAKE !== "1") {
+      for (const post of referencePosts) {
+        try {
+          const info = await ctx.runAction(internal.reads.read.read, { kind: "post.info", params: { platform: post.platform, url: post.url }, creatorId: creator._id });
+          const thumb = (info.value as { thumbnailUrl?: string | null } | null)?.thumbnailUrl ?? null;
+          if (!thumb) continue;
           const media = await fetchMedia(thumb, REFERENCE_MAX_BYTES);
-          if (media.ok && media.mimeType.startsWith("image/")) references = [{ bytes: media.bytes, mimeType: media.mimeType }];
+          if (media.ok && media.mimeType.startsWith("image/")) references.push({ bytes: media.bytes, mimeType: media.mimeType });
+        } catch (error) {
+          console.error(`[frames] reference skipped: ${String(error)}`);
         }
-      } catch (error) {
-        console.error(`[frames] reference skipped: ${String(error)}`);
       }
     }
 

@@ -37,7 +37,7 @@ export function fakeAnswer(purpose: string, messages: OpenRouterMessage[]): Open
       return ok(JSON.stringify({ pick: { postId, notable: true, fit: "yes", fitWhy: "same format they already do", transfer: false, newForYou: false, visual: true, features: { format: "talking-head", topics: ["running"], tone: "deadpan", lengthBucket: "15-30", sound: "none" }, message: `@runwithcarly is at ${ratio}× their normal with a list that cuts to an object on every point. you did the list twice this year and both beat your normal. your version: open on the shoe rack, under 30s. want the shot list?`, version: { hook: "the shoe rack list", onScreenText: "5 things", lengthSec: 25, sound: "", block: null } }, rejected: [] }));
     }
     case "frames_plan":
-      return ok(JSON.stringify({ style: "morning light, a hallway, phone held at chest height", intro: "rough sketch of what i mean, not a post:", frames: [
+      return ok(JSON.stringify({ style: "morning light, a hallway, phone held at chest height", them: "grey hoodie and running shoes, seen from behind; the narrow hallway of their flat; the fluffy dog underfoot", intro: "rough sketch of what i mean, not a post:", frames: [
         { scene: "a shoe rack by the door, five pairs, camera low and close", onScreen: "5 things", caption: "open on the rack, not your face" },
         { scene: "a hand pulling one pair off the rack", onScreen: "1. the ones that lie", caption: "cut to the object on every point" },
         { scene: "the door open, the street beyond, feet mid-step", onScreen: "", caption: "out the door, end on the run" },

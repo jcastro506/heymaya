@@ -1465,4 +1465,6 @@ Competence gets a creator to day 30. Liking her is what makes cancelling feel li
 
 **Exit criterion, live.** Five real ideas from the scenario creators drawn on dev, looked at by the operator. Three of five make him say "i see it" or the sprint stops here.
 
-**Phase two (not built).** Their face, by their upload, with a consent row, wiped by DELETE; a six-second motion preview for the weekly pick via the video model, overnight, off the batch price.
+**Them, without their face (2026-09-08, evening).** The operator: use what she knows of them, but never the face, "that gets too weird". So the plan carries a `them` line the writer fills from the dossier and the watched cards only: what they wear as a style, their hair as a style, their usual place with its real details, their recurring props and characters; "unknown" where the dossier is silent (dropped from the prompt, never the word itself). Code pins that line into every frame prompt, and the image model gets three stills from their top posts rather than one, as the light, the clothes and the room to match. The rails stay in code: never their build, skin, age or face; the person is from behind, over the shoulder, or hands only.
+
+**Phase two (not built).** A six-second motion preview for the weekly pick via the video model, overnight, off the batch price. Their face is off the table: the operator decided it is too weird.

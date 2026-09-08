@@ -28,12 +28,13 @@ async function seedIdea(t: ReturnType<typeof convexTest>, creatorId: string, ext
 
 describe("frames: the pure parts", () => {
   it("the writer's plan is clamped to two-to-four frames and stripped of markdown (adversarial)", () => {
-    const six = planFromModel(JSON.stringify({ style: "**bright**", intro: "# rough sketch", frames: Array.from({ length: 6 }, (_, i) => ({ scene: `scene ${i}`, onScreen: "x".repeat(400), caption: "`c`" })) }));
+    const six = planFromModel(JSON.stringify({ style: "**bright**", them: "unknown", intro: "# rough sketch", frames: Array.from({ length: 6 }, (_, i) => ({ scene: `scene ${i}`, onScreen: "x".repeat(400), caption: "`c`" })) }));
     expect(six.ok).toBe(true);
     if (six.ok) {
       expect(six.plan.frames.length).toBe(MAX_FRAMES);
       expect(six.plan.style).toBe("bright");
       expect(six.plan.intro).toBe("rough sketch");
+      expect(six.plan.them, "an unknown them is an empty line, never the word in the prompt").toBe("");
       expect(six.plan.frames[0].onScreen.length).toBe(60);
       expect(six.plan.frames[0].caption).toBe("c");
     }
@@ -45,15 +46,17 @@ describe("frames: the pure parts", () => {
   });
 
   it("every frame prompt carries the rails in code: no face, no interface, no numbers, the exact on-screen text", () => {
-    const plan = { style: "morning light", intro: "i", frames: [{ scene: "a rack", onScreen: "5 things", caption: "c" }, { scene: "a door", onScreen: "", caption: "c" }] };
+    const plan = { style: "morning light", them: "grey hoodie from behind, the narrow flat, the fluffy dog", intro: "i", frames: [{ scene: "a rack", onScreen: "5 things", caption: "c" }, { scene: "a door", onScreen: "", caption: "c" }] };
     const p0 = framePrompt(plan, 0, true);
+    expect(p0, "what she knows of them is pinned into every frame").toMatch(/The person and their place, the same in every frame: grey hoodie from behind, the narrow flat, the fluffy dog/);
+    expect(framePrompt({ ...plan, them: "" }, 0, false)).not.toMatch(/The person and their place/);
     expect(p0).toMatch(/No recognisable face/);
     expect(p0).toMatch(/No app interface, no view counts or numbers, no logos, no watermarks/);
     expect(p0).toMatch(/"5 things"/);
-    expect(p0).toMatch(/reference photo/);
+    expect(p0).toMatch(/reference photos/);
     const p1 = framePrompt(plan, 1, false);
     expect(p1).toMatch(/No text anywhere/);
-    expect(p1).not.toMatch(/reference photo/);
+    expect(p1).not.toMatch(/reference photos/);
   });
 
   it("the scout draws only a visual pick that landed, inside the week's budget", () => {
