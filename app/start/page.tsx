@@ -26,6 +26,10 @@ export default function StartPage() {
   const progress = useQuery(api.onboarding.start.progress);
   const suggest = useAction(api.onboarding.admired.suggest);
   const updateSettings = useMutation(api.ui.updateSettings);
+  const setPhone = useMutation(api.onboarding.start.setPhone);
+  const chooseTelegram = useMutation(api.onboarding.start.chooseTelegram);
+  const [phoneInput, setPhoneInput] = useState("");
+  const [phoneSaved, setPhoneSaved] = useState(false);
   const cal = useQuery(api.calendar.oauth.status);
 
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(() => {
@@ -185,8 +189,30 @@ export default function StartPage() {
           </label>
           <p className="text-sm opacity-70">She stays quiet between {progress?.quietHours.start ?? "22:00"} and {progress?.quietHours.end ?? "07:00"}. Change it in Settings, or just tell her.</p>
           <p className="text-sm">{progress?.dossier ? "She has read your posts." : progress?.ingest === "running" || (progress?.posts ?? 0) > 0 ? `Reading your posts now: ${progress?.posts ?? 0} so far${progress?.transcripts ? `, ${progress.transcripts} transcribed` : ""}.` : progress?.ingest === "failed" || progress?.ingest === "dead" ? "The read hit a snag; she'll retry, and you can go on." : "Starting the read of your posts."}</p>
-          <p className="text-sm opacity-70">Your first message lands in about 8 minutes, on Telegram.</p>
-          <Link className="btn" href="/telegram">Open Maya in Telegram</Link>
+          {progress?.channelKind === "telegram" ? (
+            <>
+              <p className="text-sm opacity-70">Your first message lands in about 8 minutes, on Telegram.</p>
+              <Link className="btn" href="/telegram">Open Maya in Telegram</Link>
+              <button className="text-xs opacity-60 underline self-start" onClick={async () => { const r = await setPhone({ phone: phoneInput }); if (!r.ok) setError(r.error ?? "try again"); }}>Prefer texts? Use your number instead</button>
+            </>
+          ) : (
+            <>
+              <label className="flex flex-col gap-1 text-sm">
+                Your number
+                <input className="input" type="tel" inputMode="tel" autoComplete="tel" placeholder="+1 555 123 4567" value={phoneInput || progress?.phone || ""} onChange={(e) => { setPhoneInput(e.target.value); setPhoneSaved(false); }} />
+              </label>
+              <p className="text-xs opacity-60">Maya texts you here, iMessage or SMS. Reply STOP any time.</p>
+              {phoneSaved || (progress?.phone && !phoneInput) ? (
+                <>
+                  <p className="text-sm opacity-70">Your first message lands in about 8 minutes, as a text.</p>
+                  <Link className="btn" href="/telegram">Text Maya</Link>
+                </>
+              ) : (
+                <button className="btn" disabled={!phoneInput.trim()} onClick={async () => { setError(null); const r = await setPhone({ phone: phoneInput }); if (!r.ok) return setError(r.error ?? "try again"); setPhoneSaved(true); }}>Save my number</button>
+              )}
+              <button className="text-xs opacity-60 underline self-start" onClick={async () => { const r = await chooseTelegram({}); if (!r.ok) setError(r.error ?? "try again"); }}>Prefer Telegram?</button>
+            </>
+          )}
         </section>
       )}
 

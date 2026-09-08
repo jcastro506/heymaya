@@ -17,6 +17,7 @@ const vendorArg = v.union(
   v.literal("zernio"),
   v.literal("groq"),
   v.literal("telegram"),
+  v.literal("claw"),
 );
 
 export const record = internalMutation({

@@ -27,7 +27,7 @@ function storeUrl(): string {
 export default function TelegramPage() {
   const createLink = useMutation(api.core.pairing.createPairingLink);
   const progress = useQuery(api.onboarding.start.progress);
-  const [link, setLink] = useState<{ deepLink: string; appLink: string } | null>(null);
+  const [link, setLink] = useState<{ deepLink: string; appLink: string; kind: "telegram" | "imessage"; lineNumber?: string; token?: string } | null>(null);
   const [qr, setQr] = useState<string | null>(null);
   const [phone, setPhone] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,9 +39,15 @@ export default function TelegramPage() {
   async function mint() {
     const r = await createLink({});
     if (!r.ok || !r.deepLink) return setError(r.error ?? "couldn't make your link");
+    if (r.kind === "imessage") {
+      // §23: the link opens Messages with START prefilled; the QR carries the same link for a phone scanning a laptop.
+      setLink({ deepLink: r.deepLink, appLink: r.deepLink, kind: "imessage", lineNumber: r.lineNumber, token: r.token });
+      try { setQr(await QRCode.toDataURL(r.deepLink, { margin: 1, width: 220, color: { dark: "#ffffffff", light: "#00000000" } })); } catch { setQr(null); }
+      return;
+    }
     const m = r.deepLink.match(/t\.me\/([^?]+)\?start=(.+)$/);
     const appLink = m ? `tg://resolve?domain=${m[1]}&start=${m[2]}` : r.deepLink;
-    setLink({ deepLink: r.deepLink, appLink });
+    setLink({ deepLink: r.deepLink, appLink, kind: "telegram" });
     // The QR carries the same one-shot link; scanning it on a phone opens Telegram at Maya with Start ready.
     try { setQr(await QRCode.toDataURL(r.deepLink, { margin: 1, width: 220, color: { dark: "#ffffffff", light: "#00000000" } })); } catch { setQr(null); }
   }
@@ -91,8 +97,25 @@ export default function TelegramPage() {
         <section className="flex flex-col gap-3">
           <h2 className="text-lg">Connected.</h2>
           <p className="text-sm opacity-80">
-            {progress?.dossier ? "She's read your posts. Her first message is on its way to Telegram." : `She's reading your posts now (${progress?.posts ?? 0} so far). Her first message lands in Telegram in a few minutes.`}
+            {progress?.dossier ? `She's read your posts. Her first message is on its way${progress?.channelKind === "imessage" ? " to your phone" : " to Telegram"}.` : `She's reading your posts now (${progress?.posts ?? 0} so far). Her first message lands ${progress?.channelKind === "imessage" ? "as a text" : "in Telegram"} in a few minutes.`}
           </p>
+        </section>
+      ) : link?.kind === "imessage" ? (
+        <section className="flex flex-col gap-4">
+          <h2 className="text-lg">Text Maya</h2>
+          {phone ? (
+            <>
+              <p className="text-sm opacity-70">One text pairs you. Tap the button, send the message it opens, and she&apos;s yours.</p>
+              <a className="btn" href={link.deepLink} onClick={() => setTapped(true)}>Text Maya</a>
+            </>
+          ) : (
+            <>
+              <p className="text-sm opacity-70">She texts your phone. Scan this with your phone&apos;s camera and send the message it opens.</p>
+              {qr ? <img src={qr} alt="Scan to text Maya" className="w-[220px] h-[220px] self-start rounded" /> : <p className="text-xs opacity-60">Making your code…</p>}
+            </>
+          )}
+          <p className="text-xs opacity-60">Or text <b>START {link.token}</b> to <b>{link.lineNumber}</b> from {progress?.phone ?? "your number"}.</p>
+          {tapped && !paired && <p className="text-xs opacity-60">Waiting for your text…</p>}
         </section>
       ) : (
         <section className="flex flex-col gap-4">

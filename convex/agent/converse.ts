@@ -69,10 +69,16 @@ export const setWatch = internalMutation({
 });
 
 export const messageByTelegramId = internalQuery({
+  // §23: on the phone channel the inbound reaction row carries the VENDOR id of the reacted message in this field.
   args: { creatorId: v.id("creators"), telegramMessageId: v.string() },
   handler: async (ctx, a): Promise<{ ideaId: Id<"ideas"> | null } | null> => {
-    const m = (await ctx.db.query("messages").withIndex("by_creator_tg_message", (q) => q.eq("creatorId", a.creatorId).eq("telegramMessageId", a.telegramMessageId)).first()) as Doc<"messages"> | null;
-    return m ? { ideaId: m.ideaId ?? null } : null;
+    // The reacted message is HERS (outbound): the inbound reaction row carries the same id and must not answer for it.
+    const same = (await ctx.db.query("messages").withIndex("by_creator_tg_message", (q) => q.eq("creatorId", a.creatorId).eq("telegramMessageId", a.telegramMessageId)).collect()) as Doc<"messages">[];
+    const m = same.find((row) => row.direction === "out");
+    if (m) return { ideaId: m.ideaId ?? null };
+    const byVendor = (await ctx.db.query("messages").withIndex("by_channel_message", (q) => q.eq("channelMessageId", a.telegramMessageId)).collect()) as Doc<"messages">[];
+    const out = byVendor.find((row) => row.direction === "out" && row.creatorId === a.creatorId);
+    return out ? { ideaId: out.ideaId ?? null } : null;
   },
 });
 

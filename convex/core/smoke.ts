@@ -38,6 +38,31 @@ export const run = internalAction({
   handler: async (ctx): Promise<Record<string, boolean>> => {
     const out: Record<string, boolean> = {};
 
+    // §23 the phone channel: the vendor's relay answers, and our own relay is connected (when configured).
+    const claw = process.env.CLAW_API_KEY ? (process.env.CLAW_BASE_URL ?? "https://claw-messenger.onrender.com") : null;
+    if (claw) {
+      try {
+        const res = await fetch(`${claw.replace(/\/+$/, "")}/health`);
+        await ctx.runMutation(internal.core.smoke.record, { vendor: "claw", check: "health", ok: res.ok, detail: { status: res.status } });
+        out.claw = res.ok;
+      } catch (e) {
+        await ctx.runMutation(internal.core.smoke.record, { vendor: "claw", check: "health", ok: false, detail: String(e).slice(0, 200) });
+        out.claw = false;
+      }
+      const relay = process.env.CLAW_RELAY_URL;
+      if (relay) {
+        try {
+          const res = await fetch(`${relay.replace(/\/+$/, "")}/health`);
+          const body = (await res.json().catch(() => ({}))) as { ok?: boolean; forwarded?: number; failed?: number; lastEventAt?: number | null };
+          await ctx.runMutation(internal.core.smoke.record, { vendor: "claw", check: "relay", ok: res.ok && body.ok === true, detail: { status: res.status, forwarded: body.forwarded ?? null, failed: body.failed ?? null, lastEventAt: body.lastEventAt ?? null } });
+          out.clawRelay = res.ok && body.ok === true;
+        } catch (e) {
+          await ctx.runMutation(internal.core.smoke.record, { vendor: "claw", check: "relay", ok: false, detail: String(e).slice(0, 200) });
+          out.clawRelay = false;
+        }
+      }
+    }
+
     // ScrapeCreators: the credit balance, always live (the fixture flag does not apply to the vendor's own account).
     try {
       const key = process.env.SCRAPE_CREATORS_API_KEY ?? "";

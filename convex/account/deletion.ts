@@ -134,7 +134,11 @@ export const run = internalAction({
 
     // 5. Telegram: the final message BEFORE the pairing goes.
     const identity = resolveTelegramBotIdentity();
-    if (creator.telegramChatId && identity) {
+    if (creator.channel.kind === "imessage" && creator.phone) {
+      // §23: the final text goes to their number, outside the log that is about to be purged.
+      const r = await ctx.runAction(internal.core.imessage.sendRaw, { to: creator.phone, text: FINAL_MESSAGE }).catch(() => ({ ok: false }));
+      steps.telegram = r.ok ? "final text sent to their phone, pairing removed" : "final text failed, pairing removed";
+    } else if (creator.telegramChatId && identity) {
       const r = await sendTelegramMessage(identity, { chatId: creator.telegramChatId, text: FINAL_MESSAGE }).catch(() => null);
       steps.telegram = r && r.ok ? "final message sent, pairing removed" : "final message failed, pairing removed";
     } else steps.telegram = "not paired";

@@ -47,6 +47,8 @@ export const deliveryTarget = internalQuery({
     buttons?: Array<{ id: string; label: string }>;
     frames?: Array<{ url: string; caption: string }>;
     alreadyDelivered: boolean;
+    surface: "telegram" | "imessage" | "web" | "system";
+    phone: string | null;
   } | null> => {
     const message = (await ctx.db.get(args.messageId)) as Doc<"messages"> | null;
     if (!message) return null;
@@ -62,6 +64,8 @@ export const deliveryTarget = internalQuery({
       body: message.body,
       buttons: message.buttons,
       ...(frames.length ? { frames } : {}),
+      surface: message.surface,
+      phone: creator?.phone ?? null,
       // Idempotency: the queue retries, and a retry must not re-send a message
       // that already landed. People notice being told the same thing twice.
       alreadyDelivered: message.deliveredAt !== undefined,
@@ -81,6 +85,16 @@ export const deliverMessage = internalAction({
     const target = await ctx.runQuery(internal.core.telegram.deliveryTarget, { messageId: args.messageId });
     if (!target) return { delivered: false, reason: "message not found" };
     if (target.alreadyDelivered) return { delivered: true };
+
+    // §23: one function decides where a row goes; the phone channel is a delegate of it, never a second path.
+    if (target.surface === "imessage") {
+      if (!target.phone) {
+        const reason = "no phone number paired for this account";
+        await ctx.runMutation(internal.core.telegram.markDelivered, { messageId: args.messageId, error: reason });
+        return { delivered: false, reason };
+      }
+      return await ctx.runAction(internal.core.imessage.deliver, { messageId: args.messageId, phone: target.phone, body: target.body, buttons: target.buttons, frames: target.frames });
+    }
 
     if (!target.chatId) {
       const reason = "no Telegram chat paired for this account";

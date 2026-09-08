@@ -80,6 +80,8 @@ export default defineSchema({
       paired: v.boolean(),
       pairedAt: v.optional(v.number()),
       broken: v.optional(v.boolean()),
+      // §23: which app she lives in for this creator. Absent means Telegram, so nothing existing changes.
+      kind: v.optional(v.union(v.literal("telegram"), v.literal("imessage"))),
     }),
     plan: v.object({
       status: v.union(
@@ -108,6 +110,7 @@ export default defineSchema({
     .index("by_stripe_customer", ["plan.stripeCustomerId"])
     .index("by_clerkUserId", ["clerkUserId"])
     .index("by_telegram_chat", ["telegramChatId"])
+    .index("by_phone", ["phone"])
     .index("by_pairing_token", ["pairingToken"])
     .index("by_tiktok", ["handles.tiktok"])
     .index("by_instagram", ["handles.instagram"]),
@@ -557,7 +560,7 @@ export default defineSchema({
   messages: defineTable({
     creatorId: v.id("creators"),
     direction: v.union(v.literal("in"), v.literal("out")),
-    surface: v.union(v.literal("telegram"), v.literal("web"), v.literal("system")),
+    surface: v.union(v.literal("telegram"), v.literal("imessage"), v.literal("web"), v.literal("system")),
     kind: v.optional(v.string()), // first_read | scout | worth_seeing | calendar_idea | checklist | feedback | review | status | reply | inbound
     body: v.string(),
     dedupeKey: v.optional(v.string()), // required on every proactive outbound; enforced in messages.ts
@@ -568,6 +571,8 @@ export default defineSchema({
     deliveryError: v.optional(v.string()),
     telegramMessageId: v.optional(v.string()),
     telegramUpdateId: v.optional(v.number()),
+    // §23: the phone channel's vendor id for this row (outbound once sent; inbound as received). The replay guard.
+    channelMessageId: v.optional(v.string()),
     fileId: v.optional(v.id("_storage")), // an inbound file, stored for the classifier (§15.3)
     fileMime: v.optional(v.string()),
     fileUniqueId: v.optional(v.string()),
@@ -586,6 +591,7 @@ export default defineSchema({
     .index("by_creator_and_ts", ["creatorId", "ts"])
     .index("by_creator_and_dedupe", ["creatorId", "dedupeKey"])
     .index("by_creator_and_awaiting", ["creatorId", "awaitingAnswer"])
+    .index("by_channel_message", ["channelMessageId"])
     .index("by_delivery", ["direction", "deliveredAt"])
     .index("by_telegramUpdateId", ["telegramUpdateId"]),
 
@@ -636,7 +642,7 @@ export default defineSchema({
   // ---------------------------------------------------------------- costEvents
   costEvents: defineTable({
     creatorId: v.optional(v.id("creators")),
-    vendor: v.union(v.literal("scrapecreators"), v.literal("gemini"), v.literal("openrouter"), v.literal("zernio"), v.literal("groq"), v.literal("telegram")),
+    vendor: v.union(v.literal("scrapecreators"), v.literal("gemini"), v.literal("openrouter"), v.literal("zernio"), v.literal("groq"), v.literal("telegram"), v.literal("claw")),
     kind: v.string(),
     units: v.number(), // credits or tokens
     costUsd: v.number(),

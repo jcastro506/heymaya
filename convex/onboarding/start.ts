@@ -5,6 +5,7 @@
  */
 
 import { v } from "convex/values";
+import { normalizePhone } from "../integrations/claw/client";
 import { internalMutation, mutation, query, type MutationCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -145,9 +146,47 @@ export const onboardAsUser = internalMutation({
 });
 
 /** Screen 7 and the Today tab: what has she read so far. Reactive. */
+/**
+ * §23: their number. E.164 only, one creator per number, the channel becomes the phone from
+ * this moment (unpaired until they text), and the number is registered on the line at once so
+ * their first text is not refused. Consent is the one line on the screen; STOP always works.
+ */
+export const setPhone = mutation({
+  args: { phone: v.string() },
+  handler: async (ctx, args): Promise<{ ok: boolean; error?: string; phone?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { ok: false, error: "sign in first" };
+    const creator = (await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject)).first()) as Doc<"creators"> | null;
+    if (!creator) return { ok: false, error: "tell me about your posts first" };
+    const phone = normalizePhone(args.phone);
+    if (!phone) return { ok: false, error: "that doesn't look like a phone number (try +1 555 123 4567)" };
+    const taken = (await ctx.db.query("creators").withIndex("by_phone", (q) => q.eq("phone", phone)).first()) as Doc<"creators"> | null;
+    if (taken && taken._id !== creator._id) return { ok: false, error: "that number is already on another account" };
+    const now = Date.now();
+    const rePaired = creator.phone === phone && creator.channel.paired && creator.channel.kind === "imessage";
+    await ctx.db.patch(creator._id, { phone, channel: rePaired ? creator.channel : { paired: false, kind: "imessage" }, updatedAt: now });
+    await ctx.scheduler.runAfter(0, internal.core.imessage.registerPhone, { phone });
+    return { ok: true, phone };
+  },
+});
+
+/** §23: the developer door stays open. Telegram instead of a number, chosen on the same screen. */
+export const chooseTelegram = mutation({
+  args: {},
+  handler: async (ctx): Promise<{ ok: boolean; error?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { ok: false, error: "sign in first" };
+    const creator = (await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject)).first()) as Doc<"creators"> | null;
+    if (!creator) return { ok: false, error: "tell me about your posts first" };
+    if (creator.channel.paired && creator.channel.kind === "imessage") return { ok: false, error: "you're already paired by text; say 'talk to a person' in the chat to switch" };
+    await ctx.db.patch(creator._id, { channel: { paired: false, kind: "telegram" }, updatedAt: Date.now() });
+    return { ok: true };
+  },
+});
+
 export const progress = query({
   args: {},
-  handler: async (ctx): Promise<{ state: "none" | "reading" | "read" | "paired"; posts: number; transcripts: number; dossier: boolean; paired: boolean; ingest: string | null; firstRead: string | null; timezone: string; quietHours: { start: string; end: string } } | null> => {
+  handler: async (ctx): Promise<{ state: "none" | "reading" | "read" | "paired"; posts: number; transcripts: number; dossier: boolean; paired: boolean; ingest: string | null; firstRead: string | null; timezone: string; quietHours: { start: string; end: string }; channelKind: "telegram" | "imessage"; phone: string | null } | null> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
     const creator = (await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject)).first()) as Doc<"creators"> | null;
@@ -159,6 +198,6 @@ export const progress = query({
     const jobs = (await ctx.db.query("jobs").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).collect()) as Doc<"jobs">[];
     const ingest = jobs.filter((j) => j.kind === "ingest_catalogue").sort((x, y) => y.createdAt - x.createdAt)[0];
     const firstRead = jobs.filter((j) => j.kind === "first_read").sort((x, y) => y.createdAt - x.createdAt)[0];
-    return { state: paired ? "paired" : dossier ? "read" : posts.length ? "reading" : "none", posts: posts.length, transcripts, dossier, paired, ingest: ingest?.status ?? null, firstRead: firstRead?.status ?? null, timezone: creator.timezone, quietHours: creator.quietHours };
+    return { state: paired ? "paired" : dossier ? "read" : posts.length ? "reading" : "none", posts: posts.length, transcripts, dossier, paired, ingest: ingest?.status ?? null, firstRead: firstRead?.status ?? null, timezone: creator.timezone, quietHours: creator.quietHours, channelKind: creator.channel.kind ?? "telegram", phone: creator.phone ?? null };
   },
 });

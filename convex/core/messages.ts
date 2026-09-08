@@ -34,6 +34,7 @@ import { applyBump, emptyDay } from "./budgets";
 
 const SURFACE = v.union(
   v.literal("telegram"),
+  v.literal("imessage"),
   v.literal("web"),
   v.literal("system"),
 );
@@ -123,7 +124,7 @@ async function writeOutbound(
   ctx: MutationCtx,
   row: {
     creatorId: Id<"creators">;
-    surface: "telegram" | "web" | "system";
+    surface: "telegram" | "imessage" | "web" | "system";
     body: string;
     dedupeKey: string;
     proactive?: boolean;
@@ -196,7 +197,7 @@ async function writeOutbound(
     else await ctx.db.insert("budgets", next);
   }
 
-  if (row.surface === "telegram") {
+  if (row.surface === "telegram" || row.surface === "imessage") {
     await ctx.runMutation(internal.core.jobs.enqueue, {
       kind: "deliver_message",
       idempotencyKey: `deliver:${messageId}`,
@@ -253,9 +254,16 @@ export const send = internalMutation({
     // ⭐ One writer — the plain-language guard and the delivery job both live
     // in `writeOutbound`. `askFounder` skipped this block entirely when it was
     // inline here, and its questions were never delivered.
+    /**
+     * §23: the row's surface is the creator's channel, whatever the caller said. Thirty call
+     * sites write "telegram" meaning "their messenger"; this is the one place that resolves
+     * it, so a creator on a phone number never gets a row that claims Telegram.
+     */
+    const owner = (await ctx.db.get(args.creatorId)) as Doc<"creators"> | null;
+    const surface = args.surface === "system" || args.surface === "web" ? args.surface : owner?.channel.kind === "imessage" ? "imessage" : "telegram";
     const messageId = await writeOutbound(ctx, {
       creatorId: args.creatorId,
-      surface: args.surface,
+      surface,
       body,
       dedupeKey: args.dedupeKey,
       proactive: args.proactive,
