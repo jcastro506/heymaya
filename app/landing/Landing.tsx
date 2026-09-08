@@ -516,10 +516,10 @@ export default function Landing() {
             <h2 id="start-title">Thirty seconds of typing. Then she’s yours.</h2>
           </div>
           <ol className="start-steps">
-            <li><b>Your handles.</b> TikTok, Instagram, or both.</li>
-            <li><b>Three accounts you admire.</b> She watches them for you.</li>
-            <li><b>One tap into Telegram.</b> That’s the whole pairing.</li>
-            <li><b>Ten minutes later, her first read.</b> Two of your posts she liked, and one question.</li>
+            <li><span><b>Your handles.</b> TikTok, Instagram, or both.</span></li>
+            <li><span><b>Three accounts you admire.</b> She watches them for you.</span></li>
+            <li><span><b>One tap into Telegram.</b> That’s the whole pairing.</span></li>
+            <li><span><b>Ten minutes later, her first read.</b> Two of your posts she liked, and one question.</span></li>
           </ol>
         </section>
         <section id="pricing" className="maya-pricing container">
