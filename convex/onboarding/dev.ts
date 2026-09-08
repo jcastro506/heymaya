@@ -119,6 +119,16 @@ export const seedBare = internalMutation({
   },
 });
 
+/** Dev only: forget a creator's watched cards so `watch.run` watches the sample again (after a change to what a card carries). */
+export const forgetCards = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ forgotten: number }> => {
+    const rows = (await ctx.db.query("ownPostReads").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"ownPostReads">[];
+    for (const r of rows) await ctx.db.delete(r._id);
+    return { forgotten: rows.length };
+  },
+});
+
 /** Dev only: take a chat off a creator, so a test row stops being able to reach a phone. */
 export const unpairChat = internalMutation({
   args: { creatorId: v.id("creators") },
