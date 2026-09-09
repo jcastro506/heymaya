@@ -13,7 +13,7 @@ import { resolveTelegramBotIdentity, sendTelegramMessage } from "../integrations
 import { forgetEvidence, recordVisible } from "./personalHistory";
 
 export const apply = internalMutation({
-  args: { creatorId: v.id("creators"), command: v.union(v.literal("stop"), v.literal("resume"), v.literal("forget"), v.literal("delete")) },
+  args: { creatorId: v.id("creators"), command: v.union(v.literal("stop"), v.literal("resume"), v.literal("forget"), v.literal("delete")), topic: v.optional(v.string()) },
   handler: async (ctx, a): Promise<{ body: string }> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c) return { body: "" };
@@ -28,6 +28,14 @@ export const apply = internalMutation({
     }
     if (a.command === "forget") {
       const live = (c.notes ?? []).filter((n) => !n.tombstonedAt).sort((x, y) => y.at - x.at);
+      // A named thing ("about my sister") forgets the newest note that carries those words; an empty match is said plainly, nothing else is touched.
+      if (a.topic) {
+        const words = a.topic.toLowerCase().split(/[^a-z0-9']+/).filter((w) => w.length >= 3 && !["the", "that", "this", "about", "what", "told", "said", "you", "and", "for", "with", "thing"].includes(w));
+        const hit = live.find((n) => words.some((w) => n.text.toLowerCase().includes(w)));
+        if (!hit) return { body: `i don't have anything kept about ${a.topic}. tell me the line and i'll drop it.` };
+        await forgetEvidence(ctx, c, hit);
+        return { body: `forgotten: "${hit.text.slice(0, 80)}".` };
+      }
       let last = live[0];
       const records = await ctx.db.query("personalRecords").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").take(30);
       for (const record of records) {

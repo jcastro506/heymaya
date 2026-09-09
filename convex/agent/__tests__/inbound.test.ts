@@ -78,3 +78,14 @@ describe("commands are rows", () => {
     expect((await t.run((ctx) => ctx.db.get(creatorId)))?.plan.status).not.toBe("deleting");
   });
 });
+
+describe("forget, by topic (live 2026-09-09)", () => {
+  it("names the thing to forget; a bare forget-that stays the latest-thing command", () => {
+    const h = { handles: { tiktok: "a" } };
+    expect(classifyInbound({ text: "forget what i told you about my sister", kind: "inbound", ...h })).toMatchObject({ route: "command", command: "forget", topic: "my sister" });
+    expect(classifyInbound({ text: "Forget the thing about the marathon.", kind: "inbound", ...h })).toMatchObject({ route: "command", command: "forget", topic: "the marathon" });
+    expect(classifyInbound({ text: "forget about mochi", kind: "inbound", ...h })).toMatchObject({ route: "command", command: "forget", topic: "mochi" });
+    expect(classifyInbound({ text: "forget that", kind: "inbound", ...h })).toEqual({ route: "command", command: "forget" });
+    expect(classifyInbound({ text: "i keep forgetting to post about the race", kind: "inbound", ...h })).toMatchObject({ route: "text" });
+  });
+});

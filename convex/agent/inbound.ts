@@ -9,7 +9,7 @@
 export type CommandName = "stop" | "resume" | "forget" | "person" | "delete";
 
 export type Route =
-  | { route: "command"; command: CommandName }
+  | { route: "command"; command: CommandName; topic?: string }
   | { route: "link"; own: boolean; link: ParsedLink }
   | { route: "file"; media: "video" | "image" | "audio" | "other" }
   | { route: "text" };
@@ -43,6 +43,9 @@ export function classifyInbound(input: { text: string; kind: string; mime?: stri
     if (m.startsWith("audio/") || m.includes("ogg") || m.includes("opus")) return { route: "file", media: "audio" };
     return { route: "file", media: "other" };
   }
+  // Live 2026-09-09: "forget what i told you about my sister" went to the writer, who answered "wiped" and deleted nothing.
+  const topical = input.text.match(/^\s*forget\s+(?:(?:what|everything|the (?:thing|bit|part|note|stuff))\s+(?:i\s+(?:told|said|mentioned)(?:\s+to)?\s+you\s+)?)?about\s+(.{2,80}?)\s*[.!]*\s*$/i);
+  if (topical) return { route: "command", command: "forget", topic: topical[1].trim() };
   for (const c of COMMANDS) if (c.re.test(input.text)) return { route: "command", command: c.command };
   const link = parseLink(input.text);
   if (link) {
