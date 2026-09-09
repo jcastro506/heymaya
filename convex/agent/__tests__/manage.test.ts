@@ -1,4 +1,5 @@
 /** §1 chat is complete: the sentence writes the same row as the control; the rule is shared; destructive asks confirm first. */
+import { readsAsInstruction } from "../manage";
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import schema from "../../schema";
@@ -49,5 +50,15 @@ describe("manage", () => {
     const miss = await t.mutation(internal.agent.manage.stopWatchingButtons, { creatorId, handle: "nobody" });
     expect(miss.ok).toBe(false);
     expect(miss.body).toContain("@fastguy");
+  });
+});
+
+describe("a rule is never what they make (live 2026-09-09)", () => {
+  it("refuses to set the niche from an instruction, so the turn falls through and the rule is kept as a rule", () => {
+    expect(readsAsInstruction("i hate talking-head videos, never suggest those")).toBe(true);
+    expect(readsAsInstruction("never suggest dance trends")).toBe(true);
+    expect(readsAsInstruction("don't text me before 10")).toBe(true);
+    expect(readsAsInstruction("going all in on solo travel, hostels, the whv life")).toBe(false);
+    expect(readsAsInstruction("i do gear reviews now")).toBe(false);
   });
 });

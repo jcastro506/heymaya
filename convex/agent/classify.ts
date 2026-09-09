@@ -36,7 +36,7 @@ export const CLASSIFY_PROMPT = `You label one message a content creator sent to 
   - "tone": "coach" | "friend" | "blunt" (be blunter → blunt; be nicer/softer → friend; push me → coach).
   - "add_admired": watch an account: "handle" without @, "platform".
   - "stop_watching": stop watching an account: "handle".
-  - "niche": they are redefining what they make ("i do gear reviews now"): "text" in their words.
+  - "niche": they are redefining WHAT THEY MAKE ("i do gear reviews now", "going all in on travel"): "text" in their words. NOT a rule about how she should behave ("never suggest talking heads", "don't text me mornings", "i hate skits") and NOT a taste statement: those are "text"; she keeps them as rules herself.
 - "moment": they are somewhere or something is happening NOW and they want to make content about it ("i'm at this ramen place, want to do something", "we're at the start line, ideas?", "just got the medal").
 - "edit_idea": they want to change the most recent idea she sent: give "field" (hook | lengthSec | onScreenText | sound | shotList | caption) and "text" (the new value, or the instruction in their words if it is a rewrite like "make the hook meaner").
 - "drop_idea": scrap the most recent idea ("scrap that", "nah not that one", "kill it").

@@ -21,7 +21,8 @@ export const REMEMBER_PROMPT = `You read one message a content creator sent to t
 - Otherwise nothing. Questions, opinions on a post, small talk, thanks, one-off logistics: nothing.
 If they explicitly correct a stored fact, include supersedesNoteId with the exact existing note id. Only supersede a direct contradiction about the same fact, not a new topic or a guess. A temporary experiment does not replace their identity. Use recent conversation only to resolve a short answer (such as a name); never extract the assistant's claims as user facts.
 Also capture one "experience" when they explicitly express creative preference, effort/repeatability, a decision/rejection, or a commitment. kind: preference|effort|decision|commitment. quote must be an exact passage from THEIR message, <=400 chars. reason is an exact quote of their reason if stated, never invented. blockId may only be an existing block id in their plan that clearly corresponds to this commitment; otherwise null. Do not mistake a question, suggestion, or Maya's words for consent or completion.
-Output ONLY JSON: {"note": {"text": "", "kind": "life|fact|bit", "expiresDays": 30, "supersedesNoteId": null} | null, "rule": "" | null, "experience": {"kind":"decision", "quote":"", "reason":null, "blockId":null} | null}`;
+If the new rule directly replaces one of the rules already kept (a changed time, a reversed instruction), give supersedesRule as the EXACT text of that old rule; otherwise null. Never supersede a rule about a different thing.
+Output ONLY JSON: {"note": {"text": "", "kind": "life|fact|bit", "expiresDays": 30, "supersedesNoteId": null} | null, "rule": "" | null, "supersedesRule": "" | null, "experience": {"kind":"decision", "quote":"", "reason":null, "blockId":null} | null}`;
 
 export const afterTurn = internalAction({
   args: { creatorId: v.id("creators"), messageId: v.id("messages") },
@@ -44,7 +45,7 @@ export const afterTurn = internalAction({
       apiKey: process.env.OPENROUTER_API_KEY ?? "",
     });
     if (!r.ok) return { note: false, rule: false };
-    let out: { note?: { text?: string; kind?: string; expiresDays?: number | null; supersedesNoteId?: string | null } | null; rule?: string | null; experience?: { kind?: string; quote?: string; reason?: string; blockId?: string } } = {};
+    let out: { note?: { text?: string; kind?: string; expiresDays?: number | null; supersedesNoteId?: string | null } | null; rule?: string | null; supersedesRule?: string | null; experience?: { kind?: string; quote?: string; reason?: string; blockId?: string } } = {};
     try {
       const m = r.content.match(/\{[\s\S]*\}/);
       out = JSON.parse(m ? m[0] : "{}") as typeof out;
@@ -63,7 +64,7 @@ export const afterTurn = internalAction({
       epoch = res.epoch ?? epoch;
     }
     if (typeof out.rule === "string" && out.rule.trim()) {
-      const res = await ctx.runMutation(internal.agent.remember.addRule, { creatorId: a.creatorId, verbatim: out.rule.trim().slice(0, 200), sourceMessageId: a.messageId, epoch });
+      const res = await ctx.runMutation(internal.agent.remember.addRule, { creatorId: a.creatorId, verbatim: out.rule.trim().slice(0, 200), sourceMessageId: a.messageId, epoch, supersedesRule: typeof out.supersedesRule === "string" && out.supersedesRule.trim() ? out.supersedesRule.trim().slice(0, 200) : undefined });
       rule = res.added;
     }
     await ctx.runMutation(internal.agent.remember.markProcessed, { creatorId: a.creatorId, messageId: a.messageId, epoch });
@@ -120,16 +121,23 @@ export const addNote = internalMutation({
 
 /** A rule in their words, once; the same words twice is not two rules. */
 export const addRule = internalMutation({
-  args: { creatorId: v.id("creators"), verbatim: v.string(), sourceMessageId: v.optional(v.id("messages")), epoch: v.optional(v.number()) },
-  handler: async (ctx, a): Promise<{ added: boolean }> => {
+  args: { creatorId: v.id("creators"), verbatim: v.string(), sourceMessageId: v.optional(v.id("messages")), epoch: v.optional(v.number()), supersedesRule: v.optional(v.string()) },
+  handler: async (ctx, a): Promise<{ added: boolean; superseded?: boolean }> => {
     const creator = await ctx.db.get(a.creatorId);
     if (!creator || creator.plan.status === "deleting" || (a.epoch ?? 0) !== (creator.memoryEpoch ?? 0)) return { added: false };
     if (a.sourceMessageId) { const source = await ctx.db.get(a.sourceMessageId); if (!source || source.creatorId !== a.creatorId || source.direction !== "in" || source.memoryExcludedAt) return { added: false }; }
     const active = (await ctx.db.query("directives").withIndex("by_creator_and_active", (q) => q.eq("creatorId", a.creatorId).eq("active", true)).collect()) as Doc<"directives">[];
-    const norm = a.verbatim.toLowerCase().replace(/\s+/g, " ").trim();
-    if (active.some((d) => d.verbatim.toLowerCase().replace(/\s+/g, " ").trim() === norm)) return { added: false };
+    const fold = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+    const norm = fold(a.verbatim);
+    if (active.some((d) => fold(d.verbatim) === norm)) return { added: false };
+    // The newest explicit instruction retires the one it replaces; two contradictory rules never sit active together (live 2026-09-09).
+    let superseded = false;
+    if (a.supersedesRule) {
+      const target = fold(a.supersedesRule);
+      for (const d of active) if (fold(d.verbatim) === target || fold(d.verbatim).includes(target) || target.includes(fold(d.verbatim))) { await ctx.db.patch(d._id, { active: false, supersededAt: Date.now() }); superseded = true; }
+    }
     await ctx.db.insert("directives", { creatorId: a.creatorId, kind: "rule", verbatim: a.verbatim, active: true, source: "chat", sourceMessageId: a.sourceMessageId, createdAt: Date.now() });
-    return { added: true };
+    return { added: true, ...(superseded ? { superseded } : {}) };
   },
 });
 

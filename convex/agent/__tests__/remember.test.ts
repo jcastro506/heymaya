@@ -23,7 +23,11 @@ describe("remember", () => {
     const creatorId = await t.run((ctx) => seedCreator(ctx, "a"));
     expect(await t.mutation(internal.agent.remember.addRule, { creatorId, verbatim: "never suggest dance trends" })).toEqual({ added: true });
     expect(await t.mutation(internal.agent.remember.addRule, { creatorId, verbatim: "Never suggest dance trends" })).toEqual({ added: false });
+    // Live 2026-09-09: "keep running as texture" and "running stays the main thing" both sat active. The newer one retires the older.
+    expect(await t.mutation(internal.agent.remember.addRule, { creatorId, verbatim: "running stays the main thing", supersedesRule: "never suggest dance trends" })).toEqual({ added: true, superseded: true });
+    const active = (await t.run((ctx) => ctx.db.query("directives").collect())).filter((d) => d.active).map((d) => d.verbatim);
+    expect(active).toEqual(["running stays the main thing"]);
     const rules = await t.run((ctx) => ctx.db.query("directives").collect());
-    expect(rules.map((r) => [r.verbatim, r.active])).toEqual([["never suggest dance trends", true]]);
+    expect(rules.map((r) => [r.verbatim, r.active])).toEqual([["never suggest dance trends", false], ["running stays the main thing", true]]);
   });
 });

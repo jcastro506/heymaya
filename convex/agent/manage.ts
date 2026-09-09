@@ -36,11 +36,19 @@ export const setTone = internalMutation({
   },
 });
 
+/** An instruction to her is a rule, never what they make. The classifier is told; this is the rail (live 2026-09-09: the niche became "i hate talking-head videos, never suggest those"). Pure. */
+export function readsAsInstruction(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  return /^(never|don'?t|do not|stop|always|no |please |i hate|i don'?t (like|want))/.test(t) || /\b(never|don'?t|do not) (suggest|send|text|message|recommend|pitch)\b/.test(t);
+}
+
 export const setNiche = internalMutation({
   args: { creatorId: v.id("creators"), text: v.string() },
   handler: async (ctx, a): Promise<{ ok: boolean; body: string }> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c || !a.text.trim()) return { ok: false, body: "" };
+    // Refused with no body: the turn falls through to a normal reply, and the remember pass keeps the rule.
+    if (readsAsInstruction(a.text)) return { ok: false, body: "" };
     await ctx.db.patch(c._id, { niche: a.text.trim().slice(0, 300), updatedAt: Date.now() });
     // Their words, whole or not at all: a quote cut mid-word reads as a glitch, and "pass" is plumbing (live 2026-09-08).
     const words = a.text.trim().replace(/[.!?]+$/, ""); // their sentence, without a period inside the quote and another after it (live 2026-09-09)
