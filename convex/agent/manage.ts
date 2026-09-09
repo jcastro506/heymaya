@@ -43,7 +43,7 @@ export const setNiche = internalMutation({
     if (!c || !a.text.trim()) return { ok: false, body: "" };
     await ctx.db.patch(c._id, { niche: a.text.trim().slice(0, 300), updatedAt: Date.now() });
     // Their words, whole or not at all: a quote cut mid-word reads as a glitch, and "pass" is plumbing (live 2026-09-08).
-    const words = a.text.trim();
+    const words = a.text.trim().replace(/[.!?]+$/, ""); // their sentence, without a period inside the quote and another after it (live 2026-09-09)
     return { ok: true, body: words.length <= 140 ? `noted, "${words}". that's how i'll read your lane now.` : "noted. that's how i'll read your lane now." };
   },
 });

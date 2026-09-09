@@ -26,6 +26,7 @@ import type * as agent_manage from "../agent/manage.js";
 import type * as agent_memory from "../agent/memory.js";
 import type * as agent_moment from "../agent/moment.js";
 import type * as agent_opinion from "../agent/opinion.js";
+import type * as agent_personalHistory from "../agent/personalHistory.js";
 import type * as agent_playbooks from "../agent/playbooks.js";
 import type * as agent_postMemory from "../agent/postMemory.js";
 import type * as agent_profile from "../agent/profile.js";
@@ -144,6 +145,7 @@ import type * as taste_affinities from "../taste/affinities.js";
 import type * as taste_events from "../taste/events.js";
 import type * as taste_outcomes from "../taste/outcomes.js";
 import type * as taste_profile from "../taste/profile.js";
+import type * as taste_separation from "../taste/separation.js";
 import type * as telegram_webhook from "../telegram/webhook.js";
 import type * as ui from "../ui.js";
 
@@ -172,6 +174,7 @@ declare const fullApi: ApiFromModules<{
   "agent/memory": typeof agent_memory;
   "agent/moment": typeof agent_moment;
   "agent/opinion": typeof agent_opinion;
+  "agent/personalHistory": typeof agent_personalHistory;
   "agent/playbooks": typeof agent_playbooks;
   "agent/postMemory": typeof agent_postMemory;
   "agent/profile": typeof agent_profile;
@@ -290,6 +293,7 @@ declare const fullApi: ApiFromModules<{
   "taste/events": typeof taste_events;
   "taste/outcomes": typeof taste_outcomes;
   "taste/profile": typeof taste_profile;
+  "taste/separation": typeof taste_separation;
   "telegram/webhook": typeof telegram_webhook;
   ui: typeof ui;
 }>;
