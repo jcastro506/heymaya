@@ -10,7 +10,7 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { CADENCE, followerMilestone, morningReasons, streakWeeks } from "../cadence";
+import { CADENCE, followerMilestone, morningHourFor, morningReasons, streakWeeks } from "../cadence";
 import { TOOLS, TOOL_CREDITS } from "../tools";
 import { THRESHOLDS } from "../../config/thresholds";
 import { PROBES } from "../../eval/converse";
@@ -55,6 +55,13 @@ describe("the human cadence: pure", () => {
     expect(streakWeeks({ now: NOW, timezone: "UTC", postsPerWeek: 3, postTimes: twoAWeek })).toBe(0);
     expect(streakWeeks({ now: NOW, timezone: "UTC", postsPerWeek: null, postTimes: twoAWeek })).toBe(0);
     expect(streakWeeks({ now: NOW, timezone: "UTC", postsPerWeek: 1, postTimes: [NOW - 2 * D, NOW - w - 2 * D, NOW - 3 * w - 2 * D] })).toBe(2);
+  });
+
+  it("the morning is at 8, or when their quiet hours end if that is later", () => {
+    expect(morningHourFor(undefined)).toBe(8);
+    expect(morningHourFor({ start: "22:00", end: "07:00" })).toBe(8);
+    expect(morningHourFor({ start: "23:00", end: "10:00" }), "'no messages before 10am' moves the morning to 10").toBe(10);
+    expect(morningHourFor({ start: "22:00", end: "junk" })).toBe(8);
   });
 
   it("followers cross a round number once", () => {
@@ -232,6 +239,9 @@ describe("the human cadence: rows and rails, on the fake model", () => {
     expect(due).toEqual([{ creatorId: utc, touch: "morning" }]);
     const dueLa = await t.query(internal.agent.cadence.dueNow, { now: Date.UTC(2026, 8, 8, 15, 30) });
     expect(dueLa).toEqual([{ creatorId: la, touch: "morning" }]);
+    const late = await t.run((ctx) => seedCreator(ctx, "q", { timezone: "UTC", channel: { paired: true }, plan: { status: "active", founding: true }, quietHours: { start: "23:00", end: "10:00" } }));
+    expect((await t.query(internal.agent.cadence.dueNow, { now: Date.UTC(2026, 8, 8, 8, 30) })).some((d) => d.creatorId === late), "not at 8 for them").toBe(false);
+    expect((await t.query(internal.agent.cadence.dueNow, { now: Date.UTC(2026, 8, 8, 10, 30) })).some((d) => d.creatorId === late && d.touch === "morning")).toBe(true);
     expect(CADENCE.morningHour).toBe(8);
   });
 });

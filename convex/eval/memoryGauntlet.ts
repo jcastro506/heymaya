@@ -16,6 +16,7 @@ import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
+import { morningHourFor } from "../agent/cadence";
 
 const D = 86_400_000, H = 3_600_000;
 
@@ -102,6 +103,11 @@ export const deleteMessagesOfKind = internalMutation({
     for (const m of rows) if (m.kind === a.kind) { await ctx.db.delete(m._id); n += 1; }
     return n;
   },
+});
+
+export const quietOf = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ start: string; end: string } | null> => ((await ctx.db.get(a.creatorId)) as Doc<"creators"> | null)?.quietHours ?? null,
 });
 
 export const buttonRow = internalMutation({
@@ -208,6 +214,8 @@ export const run = internalAction({
       }
       // 6. The scout with a calendar signal on the table.
       if (want("scout")) {
+        // The gauntlet itself spends the day's budget (a dossier rewrite, the reads); the scout must not fail on our tab.
+        await ctx.runMutation(internal.onboarding.dev.resetBudget, { creatorId });
         const since = Date.now();
         const r = await ctx.runAction(internal.scout.scout.run, { creatorId });
         const out = await ctx.runQuery(internal.eval.memoryGauntlet.outboundSince, { creatorId, since });
@@ -243,7 +251,8 @@ export const run = internalAction({
         const tz = (await ctx.runQuery(internal.calendar.secure.creatorTz, { creatorId }))?.timezone ?? "UTC";
         const eightThatDay = new Date(b.start); // 8:00 on their clock, the day of the block
         const localHour = Number(new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", hour12: false }).format(eightThatDay));
-        const morningTs = b.start - (localHour - 8) * H;
+        const quiet = await ctx.runQuery(internal.eval.memoryGauntlet.quietOf, { creatorId });
+        const morningTs = b.start - (localHour - morningHourFor(quiet ?? undefined)) * H;
         const since = Date.now();
         const r = await ctx.runAction(internal.agent.cadence.morning, { creatorId, now: morningTs });
         const out = await ctx.runQuery(internal.eval.memoryGauntlet.outboundSince, { creatorId, since });
@@ -301,6 +310,7 @@ export const run = internalAction({
       // 14. Quiet: nine days of their silence.
       if (want("quiet")) {
         await ctx.runMutation(internal.eval.memoryGauntlet.backdateInbound, { creatorId, byMs: 9 * D });
+        await ctx.runMutation(internal.core.messages.closeOpen, { creatorId }); // silence answers nothing; the nightly sweep closes it the same way
         const since = Date.now();
         const r = await ctx.runAction(internal.agent.cadence.quiet, { creatorId });
         const out = await ctx.runQuery(internal.eval.memoryGauntlet.outboundSince, { creatorId, since });

@@ -17,7 +17,7 @@ import { checkPlainLanguage } from "../core/plainLanguage";
  *
  * `rubric.test.ts` fails if the checks change without this being bumped.
  */
-export const RUBRIC_VERSION = "5";
+export const RUBRIC_VERSION = "6";
 
 
 export interface Check { name: string; pass: boolean; detail: string; /** Measured and reported, never a fail: a habit we are moving, not a promise we enforce. */ advisory?: boolean }
@@ -86,7 +86,9 @@ export function runChecks(input: { text: string; evidence: unknown; kind: string
   const questions = (text.match(/\?/g) ?? []).length;
   checks.push({ name: "one_question", pass: questions <= 1, detail: `${questions} question mark${questions === 1 ? "" : "s"}` });
 
-  const bullets = /^\s*([-*•]|\d+\.)\s/m.test(text) || /^#{1,6}\s/m.test(text);
+  // Live 2026-09-08: "Thursday at 5 pm: … / Saturday (Sep 12): … / Monday (Sep 14): …" is a list with the bullets removed.
+  const labelledLines = (text.match(/^[A-Z][\w ()]{1,30}:\s+\S/gm) ?? []).length;
+  const bullets = /^\s*([-*•]|\d+\.)\s/m.test(text) || /^#{1,6}\s/m.test(text) || labelledLines >= 3;
   checks.push({ name: "no_bullets", pass: !bullets, detail: bullets ? "bullets or headers in chat" : "prose" });
 
   const names = (text.match(/\bmaya\b/gi) ?? []).length;

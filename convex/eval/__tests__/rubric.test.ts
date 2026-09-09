@@ -23,7 +23,7 @@ function rubricHash(): string {
   return createHash("sha256").update(checks).update(prompt).digest("hex").slice(0, 16);
 }
 
-const RECORDED = "2ac13065688e1977"; // rubric 5: reaction_first, advisory
+const RECORDED = "ce20d7e55fb669dc"; // rubric 5: reaction_first, advisory
 
 describe("the rubric", () => {
   it("has not changed without its version being bumped", () => {

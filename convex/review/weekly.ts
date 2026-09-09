@@ -175,6 +175,12 @@ export const run = internalAction({
         verdict = tooLong(text) ? { pass: false, problems: ["too_long" as const], note: "still over" } : await critique(ctx, { creatorId: a.creatorId, kind: "review", text, evidence, voice: { voice: dossierVoice?.voice, persona: dossierVoice?.persona }, directives: inp.directives.map((d) => d.verbatim) });
         criticSkipped = criticSkipped || Boolean(verdict.skipped);
       }
+      // Live 2026-09-08: the review was dropped for "too_long" and Sunday went by with nothing. A review that never
+      // arrives is the silent failure this product forbids; one more pass with a hard cap, then it goes, marked.
+      if (!verdict.pass && verdict.problems.includes("too_long" as never)) {
+        const rw2 = await callModel(ctx, { creatorId: a.creatorId, purpose: "weekly_review_rewrite", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `${user}\n\nToo long twice. Write the review again in UNDER 120 WORDS: the one thing that worked, the one thing that did not, the one thing to try. Text only.` }], temperature: 0.3, maxTokens: 400, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+        if (rw2.ok && rw2.content.trim()) { text = rw2.content.trim(); verdict = { pass: true, problems: [], note: "sent after a third pass", skipped: true } as typeof verdict; criticSkipped = true; }
+      }
       if (!verdict.pass) return { sent: false, reason: `critic: ${verdict.problems.join(", ")}` };
     }
 

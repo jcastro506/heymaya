@@ -101,6 +101,12 @@ export function streakWeeks(input: { now: number; timezone: string; postsPerWeek
   return n;
 }
 
+/** 8 on their clock, or the hour their quiet hours end when that is later ("no messages before 10am" means the morning line is at 10). Pure. */
+export function morningHourFor(quiet: { start: string; end: string } | undefined): number {
+  const end = Number((quiet?.end ?? "07:00").split(":")[0]);
+  return Number.isFinite(end) && end > CADENCE.morningHour ? end : CADENCE.morningHour;
+}
+
 /** Followers crossing a round number, once each. Pure. */
 export function followerMilestone(followers: number | null, said: string[]): { key: string; line: string } | null {
   if (followers === null) return null;
@@ -123,7 +129,7 @@ export const dueNow = internalQuery({
     for (const c of creators) {
       if (!c.channel.paired || c.plan.status === "paused" || c.plan.status === "canceled" || c.plan.status === "deleting" || c.plan.status === "onboarding") continue;
       const { hour } = localHourMinute(a.now, c.timezone);
-      if (hour === CADENCE.morningHour) out.push({ creatorId: c._id, touch: "morning" });
+      if (hour === morningHourFor(c.quietHours)) out.push({ creatorId: c._id, touch: "morning" });
       if (hour === CADENCE.quietHourLocal) out.push({ creatorId: c._id, touch: "quiet" });
     }
     return out;

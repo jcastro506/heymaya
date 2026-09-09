@@ -44,8 +44,7 @@ export const setNiche = internalMutation({
     await ctx.db.patch(c._id, { niche: a.text.trim().slice(0, 300), updatedAt: Date.now() });
     // Their words, whole or not at all: a quote cut mid-word reads as a glitch, and "pass" is plumbing (live 2026-09-08).
     const words = a.text.trim();
-    const quote = words.length <= 140 ? `"${words}"` : "that";
-    return { ok: true, body: `noted, ${quote}. that's how i'll read your lane now.` };
+    return { ok: true, body: words.length <= 140 ? `noted, "${words}". that's how i'll read your lane now.` : "noted. that's how i'll read your lane now." };
   },
 });
 
