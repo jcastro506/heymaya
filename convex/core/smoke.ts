@@ -6,6 +6,7 @@
  */
 
 import { v } from "convex/values";
+import { THRESHOLDS } from "../config/thresholds";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
@@ -68,8 +69,9 @@ export const run = internalAction({
       const key = process.env.SCRAPE_CREATORS_API_KEY ?? "";
       const res = await fetch("https://api.scrapecreators.com/v1/credit-balance", { headers: { "x-api-key": key } });
       const body = (await res.json().catch(() => ({}))) as { creditCount?: number; success?: boolean };
-      const ok = res.ok && Boolean(body.success);
-      await ctx.runMutation(internal.core.smoke.record, { vendor: "scrapecreators", check: "credit-balance", ok, detail: { status: res.status, credits: body.creditCount ?? null, fixtures: process.env.SCRAPE_FIXTURES ?? "off" } });
+      const credits = typeof body.creditCount === "number" ? body.creditCount : null;
+      const ok = res.ok && Boolean(body.success) && credits !== null && credits >= THRESHOLDS.creditFloor;
+      await ctx.runMutation(internal.core.smoke.record, { vendor: "scrapecreators", check: "credit-balance", ok, detail: { status: res.status, credits, floor: THRESHOLDS.creditFloor, fixtures: process.env.SCRAPE_FIXTURES ?? "off", ...(credits !== null && credits < THRESHOLDS.creditFloor ? { why: `balance ${credits} is under the floor ${THRESHOLDS.creditFloor}; every read fails at zero` } : {}) } });
       out.scrapecreators = ok;
     } catch (e) {
       await ctx.runMutation(internal.core.smoke.record, { vendor: "scrapecreators", check: "credit-balance", ok: false, detail: String(e).slice(0, 200) });

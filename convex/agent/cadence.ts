@@ -230,7 +230,7 @@ export const morning = internalAction({
     const missed = reasons.find((x) => x.kind === "missed");
     const buttons = missed?.blockId ? [{ id: `missed:${missed.blockId}:rebook`, label: "put it back" }, { id: `missed:${missed.blockId}:drop`, label: "let it go" }] : undefined;
     if (buttons) await ctx.runMutation(internal.core.messages.closeOpen, { creatorId: a.creatorId });
-    const sent = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: text, dedupeKey: `morning:${day}`, proactive: true, kind: "morning", awaitingAnswer: Boolean(buttons), buttons, produced: producedStamp(spec.primary), criticSkipped: verdict.skipped === true });
+    const sent = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: text, dedupeKey: `morning:${day}`, ts: now, proactive: true, kind: "morning", awaitingAnswer: Boolean(buttons), buttons, produced: producedStamp(spec.primary), criticSkipped: verdict.skipped === true });
     if (!sent.sent) return { sent: false, reason: "already said this morning" };
     for (const x of reasons) if (x.milestoneKey) await ctx.runMutation(internal.agent.history.markSaid, { creatorId: a.creatorId, key: x.milestoneKey });
     await deliverNow(ctx as never);
@@ -263,7 +263,7 @@ export const howDidItGo = internalAction({
     if (!rails.ok) return { sent: false, reason: rails.reason ?? "rails" };
     const hook = hookOf(block.title).replace(/^the\s+/i, "");
     await ctx.runMutation(internal.core.messages.closeOpen, { creatorId: a.creatorId });
-    const sent = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: `how'd the ${hook} shoot go?`, dedupeKey: `howdidit:${block._id}`, proactive: true, kind: "checkin", awaitingAnswer: true, buttons: [{ id: `shot:${block._id}:yes`, label: "filmed it" }, { id: `shot:${block._id}:no`, label: "didn't happen" }] });
+    const sent = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: `how'd the ${hook} shoot go?`, dedupeKey: `howdidit:${block._id}`, ts: now, proactive: true, kind: "checkin", awaitingAnswer: true, buttons: [{ id: `shot:${block._id}:yes`, label: "filmed it" }, { id: `shot:${block._id}:no`, label: "didn't happen" }] });
     await ctx.runMutation(internal.calendar.reminders.touched, { blockId: block._id, touch: "howdidit" });
     if (!sent.sent) return { sent: false, reason: "already asked" };
     await deliverNow(ctx as never);
@@ -294,7 +294,7 @@ export const sawIt = internalAction({
       text = rw.ok && rw.content.trim() && !/\d/.test(rw.content) ? rw.content.trim() : "";
       if (!text) return { sent: false, reason: "could not say it without a number" };
     }
-    const sent = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: text, dedupeKey: `sawit:${a.ownPostId}`, proactive: true, kind: "saw_it", links: [post.url], produced: producedStamp(spec.primary) });
+    const sent = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: text, dedupeKey: `sawit:${a.ownPostId}`, ts: now, proactive: true, kind: "saw_it", links: [post.url], produced: producedStamp(spec.primary) });
     if (!sent.sent) return { sent: false, reason: "already said" };
     await deliverNow(ctx as never);
     return { sent: true, reason: "said" };
@@ -331,7 +331,7 @@ export const quiet = internalAction({
     const r = await callModel(ctx, { creatorId: a.creatorId, purpose: "quiet", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `They have not written in ${pulse.daysSinceLastReply} days. Write the line.` }], temperature: 0.7, maxTokens: 120, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
     const text = r.ok ? r.content.trim() : "";
     if (!text) return { sent: false, reason: "no line" };
-    const sent = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: text, dedupeKey: `quiet:${monthKey}`, proactive: true, kind: "quiet", produced: producedStamp(spec.primary) });
+    const sent = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: text, dedupeKey: `quiet:${monthKey}`, ts: now, proactive: true, kind: "quiet", produced: producedStamp(spec.primary) });
     if (!sent.sent) return { sent: false, reason: "already said" };
     await ctx.runMutation(internal.agent.history.markSaid, { creatorId: a.creatorId, key: `quiet:${monthKey}` });
     await deliverNow(ctx as never);
@@ -351,7 +351,7 @@ export const forYou = internalAction({
     const rails = await railsOk(ctx as never, a.creatorId, now);
     if (!rails.ok) return { sent: false, reason: rails.reason ?? "rails" };
     const body = line.includes(a.url) ? line : `${line}\n\n${a.url}`;
-    const sent = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body, dedupeKey: `foryou:${a.postId}`, proactive: true, kind: "for_you", links: [a.url] });
+    const sent = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body, dedupeKey: `foryou:${a.postId}`, ts: now, proactive: true, kind: "for_you", links: [a.url] });
     if (!sent.sent) return { sent: false, reason: "already shared" };
     await deliverNow(ctx as never);
     return { sent: true, reason: "shared" };

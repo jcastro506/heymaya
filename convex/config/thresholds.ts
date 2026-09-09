@@ -17,6 +17,8 @@ export const THRESHOLDS = {
   dailyUsdCap: 0.75,
   dailyWatchCap: 8,
   dailyCreditCap: 60,
+  // 2026-09-09: the vendor sat at ZERO credits while the smoke check said ok, because the HTTP call succeeded. A balance under this is a failure that pages.
+  creditFloor: 200,
   quietHoursDefault: { start: "22:00", end: "07:00" },
   formatCooldownDays: 14,
 
