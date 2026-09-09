@@ -1504,3 +1504,27 @@ Cross-tenant: a phone paired to A routes only to A; pairing it to B moves it and
 ### 23.4 After this sprint: the human cadence (v2, designed, not built)
 
 She sends at most three proactive messages a day and usually one: the morning idea when the scout has something, a nudge before a filming block, the week plan on Monday, the review on Sunday, a win within the hour. Four things a person would do and she does not yet: a line on the mornings she has nothing to bring but something to say; "you had thursday at 6 down and it didn't happen" the morning after an unfilmed block; naming a streak when it is real (three weeks on plan) and once; and warmth in the messages she already sends, which is prompt work, not a new message. Not random encouragement: praise with nothing behind it is the failure the soul forbids. The cap stays at three.
+
+## 24. Sprint 7 — the human cadence (2026-09-08)
+
+**Why.** Everything she sends today carries an ask: an idea to take, a block to confirm, a plan to book, a review to read. A person who works with you also says things that ask nothing. The operator: "if this was a human assistant, what would they message?" The table below is that answer, built in v1, not deferred. The cap stays at three proactive messages a day, and most days she sends one or none: silence is part of being easy to have around.
+
+| When | She sends | Where the decision is made |
+|---|---|---|
+| Morning, at 8 on their clock | One line, only when there is something: a shoot today, a thing on their calendar, a milestone, an unfilmed block yesterday | code finds the reasons from rows; the writer says them in one line; no reasons, no message |
+| The morning after a missed shoot | "thursday didn't happen. want it back on saturday?" with rebook and drop buttons | code: a confirmed film block that ended unfilmed, not already handled the evening before |
+| The evening after a shoot | "how'd it go?" with filmed / didn't-happen buttons; a no offers the next slot | code: a confirmed film block that ended 90 minutes to six hours ago, unfilmed, not asked |
+| When they post | A viewer's line within the hour of noticing, from the watched card, no numbers | the readback that notices the post; the writer reacts as a viewer |
+| Once or twice a week, unprompted | "saw this, thought of you." A post from the niche with no ask attached | the scout names it in its JSON on a day it has no idea; code holds the weekly count |
+| When they go quiet | "you alright? no pressure." Once a month at most | code: the pulse says silent for a week; the writer says it warmly |
+| Milestones | followers crossing 1k, 10k, 100k; three weeks on plan; the existing views, months and ideas | code, said once, ever |
+| Monday, Sunday | The plan, the review | unchanged |
+| Most days | Nothing | the reasons are empty |
+
+**Rails.** Every one of these is proactive and goes through the same rails as the scout: the daily cap, quiet hours, the one open question, the budget, the plan status. One dedupe key each, scoped to the thing (`morning:<day>`, `howdidit:<block>`, `sawit:<post>`, `foryou:<post>`, `quiet:<month>`), so a retry never repeats and a person never hears the same thing twice. One hourly cron finds who is due on their own clock; each creator's run sends at most one thing.
+
+**What she never sends.** Random encouragement, "you've got this", a morning line with nothing in it, a check-in that is a survey. Praise is specific or it is silence.
+
+**Named tests.** Cross-tenant: B's block never produces A's line. Fail-closed: cap reached, quiet hours, an open question, a paused plan each mean nothing goes; no reasons means nothing goes. Adversarial: a block that ended in the future, a filmed block, a deleted block, a post older than 36 hours, a third "for you" in a week, a second quiet line in a month each produce nothing. Sibling coherence: the cron is registered; the buttons have handlers; every send has a dedupe key and a kind. TODO grep. The simulated day runs a block that ended unfilmed and asserts the evening question and the morning line.
+
+**Frames (§22), suppressed.** The image skill is off her belt entirely: no tool, no "show me" button, no proactive drawing, `framesPerWeek: 0`. The code and its tests stay for the day it comes back; nothing she can reach mentions it.

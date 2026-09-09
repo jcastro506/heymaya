@@ -9,6 +9,7 @@
  */
 
 import type * as account_deletion from "../account/deletion.js";
+import type * as agent_cadence from "../agent/cadence.js";
 import type * as agent_callbacks from "../agent/callbacks.js";
 import type * as agent_classify from "../agent/classify.js";
 import type * as agent_commands from "../agent/commands.js";
@@ -153,6 +154,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "account/deletion": typeof account_deletion;
+  "agent/cadence": typeof agent_cadence;
   "agent/callbacks": typeof agent_callbacks;
   "agent/classify": typeof agent_classify;
   "agent/commands": typeof agent_commands;

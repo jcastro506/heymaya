@@ -32,9 +32,9 @@ export function fakeAnswer(purpose: string, messages: OpenRouterMessage[]): Open
     case "scout":
     case "scout_final": {
       const postId = firstPostId(user);
-      if (!postId) return ok(JSON.stringify({ pick: null, rejected: [] }));
+      if (!postId) return ok(JSON.stringify({ pick: null, rejected: [], forYou: null }));
       const ratio = user.match(/"ratio":([\d.]+)/)?.[1] ?? "2";
-      return ok(JSON.stringify({ pick: { postId, notable: true, fit: "yes", fitWhy: "same format they already do", transfer: false, newForYou: false, visual: true, features: { format: "talking-head", topics: ["running"], tone: "deadpan", lengthBucket: "15-30", sound: "none" }, message: `@runwithcarly is at ${ratio}× their normal with a list that cuts to an object on every point. you did the list twice this year and both beat your normal. your version: open on the shoe rack, under 30s. want the shot list?`, version: { hook: "the shoe rack list", onScreenText: "5 things", lengthSec: 25, sound: "", block: null } }, rejected: [] }));
+      return ok(JSON.stringify({ pick: { postId, notable: true, fit: "yes", fitWhy: "same format they already do", transfer: false, newForYou: false, features: { format: "talking-head", topics: ["running"], tone: "deadpan", lengthBucket: "15-30", sound: "none" }, message: `@runwithcarly is at ${ratio}× their normal with a list that cuts to an object on every point. you did the list twice this year and both beat your normal. your version: open on the shoe rack, under 30s. want the shot list?`, version: { hook: "the shoe rack list", onScreenText: "5 things", lengthSec: 25, sound: "", block: null } }, rejected: [] }));
     }
     case "frames_plan":
       return ok(JSON.stringify({ style: "morning light, a hallway, phone held at chest height", them: "grey hoodie and running shoes, seen from behind; the narrow hallway of their flat; the fluffy dog underfoot", intro: "rough sketch of what i mean, not a post:", frames: [
@@ -42,6 +42,14 @@ export function fakeAnswer(purpose: string, messages: OpenRouterMessage[]): Open
         { scene: "a hand pulling one pair off the rack", onScreen: "1. the ones that lie", caption: "cut to the object on every point" },
         { scene: "the door open, the street beyond, feet mid-step", onScreen: "", caption: "out the door, end on the run" },
       ] }));
+    case "morning":
+    case "morning_rewrite":
+      return ok("filming today at 5pm, the shoe rack list. and yesterday's block didn't happen, want it back?");
+    case "saw_it":
+    case "saw_it_rewrite":
+      return ok("the cut to the shoe rack on the second point got me. that one's yours.");
+    case "quiet":
+      return ok("still here, no pressure. hope the training's going ok.");
     case "scout_rewrite":
       return ok("shorter version of the same idea, with the link. want the shot list?");
     case "critic":

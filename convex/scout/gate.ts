@@ -59,6 +59,23 @@ export function checkRails(input: { creator: Doc<"creators">; sentToday: number;
   return { ok: true, localHour: hour, sentToday: input.sentToday };
 }
 
+/** §24: the rails alone, for the cadence touches. Same rules as the scout, none of its candidates. */
+export const railsOnly = internalQuery({
+  args: { creatorId: v.id("creators"), now: v.number() },
+  handler: async (ctx, a): Promise<{ ok: boolean; reason?: string } | null> => {
+    const creator = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!creator) return null;
+    const day = dayKeyInZone(a.now, creator.timezone);
+    const recent = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(50)) as Doc<"messages">[];
+    const sentToday = recent.filter((m) => m.direction === "out" && m.proactive && dayKeyInZone(m.ts, creator.timezone) === day && m.kind !== "status").length;
+    const openQuestion = recent.some((m) => m.direction === "out" && m.awaitingAnswer);
+    const budget = (await ctx.db.query("budgets").withIndex("by_creator_day", (q) => q.eq("creatorId", a.creatorId).eq("day", day)).first()) as Doc<"budgets"> | null;
+    const firstReadAt = recent.find((m) => m.direction === "out" && m.kind === "first_read")?.ts ?? null;
+    const rails = checkRails({ creator, sentToday, openQuestion, now: a.now, budget, firstReadAt });
+    return { ok: rails.ok, reason: rails.ok ? undefined : rails.reason };
+  },
+});
+
 export const railsFor = internalQuery({
   args: { creatorId: v.id("creators"), now: v.number() },
   handler: async (ctx, a): Promise<{ rails: Rails; creator: Doc<"creators">; candidates: Doc<"signals">[]; tasteHints: Record<string, string>; tasteDropped: Array<{ signalId: Id<"signals">; why: string }>; exploreOpen: boolean; askStop: Array<{ trackedAccountId: Id<"trackedAccounts">; handle: string }> } | null> => {

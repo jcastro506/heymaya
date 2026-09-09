@@ -21,8 +21,12 @@ export const THRESHOLDS = {
   formatCooldownDays: 14,
 
   // §22 frames: sketches per creator per week (3 × $0.12 keeps frames under $1.60 a month at the cap), and renders in flight across the fleet
-  framesPerWeek: 3,
+  // 2026-09-08: the image skill is off her belt; 0 sketches a week keeps the code and refuses the work.
+  framesPerWeek: 0,
   framesMaxInFlight: 8,
+
+  // §24 the human cadence: "saw this, thought of you" per creator per week
+  forYouPerWeek: 2,
 
   // §13.5 idea matching
   matchWindowDays: 14,

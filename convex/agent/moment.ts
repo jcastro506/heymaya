@@ -147,7 +147,6 @@ export const run = internalAction({
       awaitingAnswer: /\?\s*$/.test(text),
       buttons: [
         { id: `idea:${ideaId}:shotlist`, label: "shot list" },
-        { id: `idea:${ideaId}:frames`, label: "show me" },
         { id: `idea:${ideaId}:blocknow`, label: "block time now" },
         { id: `idea:${ideaId}:save`, label: "save" },
       ],

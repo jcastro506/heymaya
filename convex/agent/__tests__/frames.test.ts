@@ -68,7 +68,7 @@ describe("frames: the pure parts", () => {
   });
 
   it("the scout draws only a visual pick that landed, inside the week's budget", () => {
-    expect(shouldDrawProactively({ visual: true, weekCount: 0, sent: true })).toBe(true);
+    expect(shouldDrawProactively({ visual: true, weekCount: 0, sent: true }), "true only while the cap is above zero").toBe(THRESHOLDS.framesPerWeek > 0);
     expect(shouldDrawProactively({ visual: false, weekCount: 0, sent: true })).toBe(false);
     expect(shouldDrawProactively({ visual: true, weekCount: THRESHOLDS.framesPerWeek, sent: true })).toBe(false);
     expect(shouldDrawProactively({ visual: true, weekCount: 0, sent: false })).toBe(false);
@@ -116,28 +116,41 @@ describe("frames: the pure parts", () => {
     expect(body.media[0].caption.length).toBe(1024);
   });
 
-  it("sibling coherence: the job kind, the tool, the weight, the probes, the buttons", () => {
+  it("sibling coherence: the job kind stays; the skill is OFF her belt (2026-09-08)", () => {
     expect(HANDLED_KINDS.has("render_frames")).toBe(true);
     expect(LONG_KINDS.has("render_frames"), "an image fan-out takes tens of seconds; it must not run inline in the drain").toBe(true);
-    expect(TOOLS.some((t) => t.function.name === "show_frames")).toBe(true);
-    expect(TOOL_CREDITS.show_frames).toBe(0);
+    expect(TOOLS.some((t) => t.function.name === "show_frames"), "no tool").toBe(false);
+    expect(TOOL_CREDITS.show_frames).toBeUndefined();
     expect(WEIGHTS.frames).toBeGreaterThan(0);
-    expect(PROBES.filter((p) => p.category === "frames").length).toBeGreaterThanOrEqual(2);
+    expect(THRESHOLDS.framesPerWeek, "zero sketches a week: the budget knob, not a boolean").toBe(0);
+    expect(PROBES.filter((p) => p.category === "frames").length).toBeGreaterThanOrEqual(1);
     const scout = readFileSync(new URL("../../scout/scout.ts", import.meta.url), "utf8");
     const moment = readFileSync(new URL("../moment.ts", import.meta.url), "utf8");
     const converse = readFileSync(new URL("../converse.ts", import.meta.url), "utf8");
-    for (const src of [scout, moment]) expect(src).toMatch(/idea:\$\{ideaId\}:frames/);
-    expect(converse).toMatch(/shotlist\|notme\|save\|frames/);
-    expect(scout).toMatch(/"visual": false/);
+    for (const src of [scout, moment]) expect(src, "no button").not.toMatch(/idea:\$\{ideaId\}:frames/);
+    expect(converse, "a stray tap still has a handler and is refused by the cap").toMatch(/shotlist\|notme\|save\|frames/);
+    expect(scout).not.toMatch(/"visual": false/);
     const soul = readFileSync(new URL("../soul.ts", import.meta.url), "utf8");
-    expect(soul).toMatch(/show_frames/);
+    expect(soul, "nothing in the soul").not.toMatch(/show_frames/);
     for (const f of ["../frames.ts", "../../integrations/openrouter/images.ts"]) expect(readFileSync(new URL(f, import.meta.url), "utf8")).not.toMatch(/TODO|FIXME/);
   });
 });
 
-describe("frames: the three doors, on the fake model", () => {
-  beforeEach(() => { process.env.MODEL_FAKE = "1"; delete process.env.FRAMES_FAKE_FAIL; });
-  afterEach(() => { delete process.env.FRAMES_FAKE_FAIL; });
+describe("frames: the three doors, on the fake model (with the cap raised for the test; it is 0 in the product)", () => {
+  const knob = THRESHOLDS as unknown as { framesPerWeek: number };
+  beforeEach(() => { process.env.MODEL_FAKE = "1"; delete process.env.FRAMES_FAKE_FAIL; knob.framesPerWeek = 5; });
+  afterEach(() => { delete process.env.FRAMES_FAKE_FAIL; knob.framesPerWeek = 0; });
+
+  it("with the cap at zero, a tap draws nothing and no image is asked for (the product's state)", async () => {
+    knob.framesPerWeek = 0;
+    const t = convexTest(schema, modules);
+    const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { channel: { paired: true } }));
+    const ideaId = await seedIdea(t, creatorId);
+    const r = await t.action(internal.agent.frames.render, { creatorId, ideaId, requestedBy: "tap", requestId: "tap:0" });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toMatch(/spent/);
+    expect((await t.run((ctx) => ctx.db.query("costEvents").collect())).length).toBe(0);
+  });
 
   it("a render draws the frames onto the idea, sends one album row, and records a cost row per frame", async () => {
     const t = convexTest(schema, modules);
@@ -227,7 +240,7 @@ describe("frames: the three doors, on the fake model", () => {
     expect(replies[0].body).toMatch(/drawing it/);
   });
 
-  it("door two, in words: the tool queues a render for the latest idea, or refuses when there is none", async () => {
+  it.skip("door two, in words: the tool is off her belt (kept for the day it returns)", async () => {
     const t = convexTest(schema, modules);
     const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { channel: { paired: true } }));
     // No idea yet: refused, and the refusal tells her what to say.
@@ -245,7 +258,7 @@ describe("frames: the three doors, on the fake model", () => {
     expect(jobs.every((j) => JSON.parse(j.payloadJson ?? "{}").requestedBy === "ask")).toBe(true);
   });
 
-  it("door three, the scout: a visual pick queues its own render after the idea is sent", async () => {
+  it.skip("door three, the scout: proactive drawing is off (kept for the day it returns)", async () => {
     process.env.SCRAPE_FIXTURES = "spec";
     vi.useFakeTimers();
     vi.setSystemTime(Date.UTC(2026, 8, 8, 13)); // 13:00 UTC, outside quiet hours

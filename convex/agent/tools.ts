@@ -13,7 +13,6 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { parseLink } from "./inbound";
 import { DIAGNOSIS_WORDS } from "../connections/numbers";
-import { enqueueRender } from "./frames";
 
 export const SUMMARY_CAP = 1800; // characters of tool result the model sees, per call
 
@@ -21,7 +20,7 @@ export interface ToolBudget { calls: number; credits: number; deadlineAt: number
 export const DEFAULT_BUDGET = (): ToolBudget => ({ calls: 6, credits: 40, deadlineAt: Date.now() + 60_000 });
 
 /** Approximate credit prices per call (the ledger records the vendor's real number). */
-export const TOOL_CREDITS: Record<string, number> = { post_info: 10, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, sound_reels: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, search_reels: 1, search_ig_hashtag: 1, ig_popular: 1, trending_tiktok: 1, trending_reels: 1, suggestions: 1, discover_creators: 1, discover_profiles: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0, recall: 0, lane_benchmark: 0, week_plan: 0, block_move: 0, block_drop: 0, block_add: 0, week_replan: 0, own_post_numbers: 0, post_diagnosis: 0, growth_plan: 0, calendar_free: 0, show_frames: 0 };
+export const TOOL_CREDITS: Record<string, number> = { post_info: 10, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, sound_reels: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, search_reels: 1, search_ig_hashtag: 1, ig_popular: 1, trending_tiktok: 1, trending_reels: 1, suggestions: 1, discover_creators: 1, discover_profiles: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0, recall: 0, lane_benchmark: 0, week_plan: 0, block_move: 0, block_drop: 0, block_add: 0, week_replan: 0, own_post_numbers: 0, post_diagnosis: 0, growth_plan: 0, calendar_free: 0 };
 
 const str = { type: "string" } as const;
 
@@ -58,8 +57,6 @@ export const TOOLS: OpenRouterTool[] = [
   { type: "function", function: { name: "growth_plan", description: "Their growth plan: read it, set it (lane, keywords, formats, posts a week, one-line hypothesis), or drop it. Free. Set it when they confirm a lane or ask you to plan their growth; the week plan follows its cadence and the Sunday review scores it.", parameters: { type: "object", properties: { action: { type: "string", enum: ["read", "set", "drop"] }, lane: str, keywords: { type: "array", items: str }, formats: { type: "array", items: str }, postsPerWeek: { type: "number" }, hypothesis: str, why: str }, required: ["action", "why"] } } },
   { type: "function", function: { name: "own_post_numbers", description: "One of THE CREATOR'S OWN posts by url: reach, impressions, views per person, retention and skip rate where the platform gives them, each labelled connected or public with how old the read is, plus what this platform cannot tell you. Free. Use this, not post_info, for their own posts.", parameters: { type: "object", properties: { url: str, why: str }, required: ["url", "why"] } } },
   { type: "function", function: { name: "post_diagnosis", description: "Why one of their own posts did what it did, in one of four reads: not distributed, distributed but scrolled, the hook lost them, held them — or 'not enough connected data'. Free. Cite the basis it names.", parameters: { type: "object", properties: { url: str, why: str }, required: ["url", "why"] } } },
-  // §22 — show, don't tell. This WRITES a job; the frames arrive as photos a minute later, in a separate message.
-  { type: "function", function: { name: "show_frames", description: "Draw an idea you sent them as two to four still frames (a storyboard, vertical, their setting, never their face) and send them as photos. Free to you; budgeted per week. Use when they ask to see it, picture it, mock it up, or when an idea lives in how it looks. The latest idea unless `idea` names another by a few words of its hook. Say in one line that they are coming; never describe frames you have not seen.", parameters: { type: "object", properties: { idea: str, why: str }, required: ["why"] } } },
   { type: "function", function: { name: "week_replan", description: "Lay the coming week out again from their ideas, their cadence and their free time, and send it to them with a book-it button. Free. Use when they ask for a plan, or after they cleared the week.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
 ];
 
@@ -193,14 +190,6 @@ export async function runTool(ctx: ActionCtx, creatorId: Id<"creators">, call: {
       const hits = await ctx.runAction(internal.agent.memory.recall, { creatorId, query: String(call.args.query ?? ""), k: 4 });
       record(true, 0);
       return hits.length ? cap(hits.map((h) => `[${h.kind}, ${new Date(h.at).toISOString().slice(0, 10)}] ${h.text.slice(0, 300)}`).join("\n")) : "nothing close enough in their memory";
-    }
-    if (call.name === "show_frames") {
-      const latest = await ctx.runQuery(internal.agent.frames.latestIdeaFor, { creatorId, hint: typeof call.args.idea === "string" ? call.args.idea : undefined });
-      if (!latest) { record(false, 0, "no idea to draw"); return "refused: there is no idea of yours to draw yet. Say so plainly; offer to draw the next one you send."; }
-      // One job per idea per minute: asking twice in a turn does not draw twice.
-      await enqueueRender(ctx as never, { creatorId, ideaId: latest.ideaId, requestedBy: "ask", requestId: `ask:${Math.floor(Date.now() / 60_000)}` });
-      record(true, 0);
-      return `ok: the frames for "${latest.hook || "that idea"}" are being drawn and will arrive as photos in about a minute. Tell them in one line that they're coming. Do not describe the frames; you have not seen them.`;
     }
     if (call.name === "calendar_free") {
       const a = await ctx.runQuery(internal.calendar.availability.forCreator, { creatorId, days: typeof call.args.days === "number" ? call.args.days : undefined });

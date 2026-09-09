@@ -75,6 +75,9 @@ crons.hourly("creator status", { minuteUTC: 25 }, internal.core.status.run, {});
 // Sprint 4e: connected numbers. The delta feed hourly (only what changed, fleet-wide), followers daily.
 crons.hourly("zernio delta", { minuteUTC: 25 }, internal.connections.sync.delta, {});
 crons.daily("zernio followers", { hourUTC: 4, minuteUTC: 40 }, internal.connections.sync.followers, {});
+// §24 the human cadence: the morning line and the quiet line on their clock, the evening question in its window. Every hour.
+crons.hourly("human cadence", { minuteUTC: 55 }, internal.agent.cadence.runAll, {});
+
 crons.daily("cost reconcile", { hourUTC: 23, minuteUTC: 30 }, internal.core.reconcile.run, {});
 
 export default crons;

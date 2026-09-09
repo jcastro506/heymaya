@@ -360,6 +360,8 @@ export default defineSchema({
     touches: v.optional(v.array(v.string())),
     /** Set when they said yes to the check-in or sent a clip during the block: the post-time nudge needs it. */
     filmedAt: v.optional(v.number()),
+    /** §24: they said it did not happen (or the morning after found it unfilmed and offered it back). */
+    missedAt: v.optional(v.number()),
     status: v.union(v.literal("proposed"), v.literal("confirmed"), v.literal("moved"), v.literal("deleted")),
     consentAt: v.optional(v.number()), // required before any external write
     externalEventId: v.optional(v.string()),

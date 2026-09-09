@@ -78,6 +78,8 @@ export const run = internalAction({
           for (const ownPostId of up.insertedIds.slice(0, 3)) {
             try { await ctx.runAction(internal.onboarding.watch.watchPost, { creatorId: c.id, ownPostId }); } catch (err) { console.error(`[readback] watch failed: ${String(err).slice(0, 120)}`); }
             try { await ctx.runAction(internal.agent.postMemory.indexPost, { creatorId: c.id, ownPostId }); } catch (err) { console.error(`[readback] post memory failed: ${String(err).slice(0, 120)}`); }
+            // §24: a viewer's line within the hour of noticing, from the card she just made.
+            try { await ctx.runAction(internal.agent.cadence.sawIt, { creatorId: c.id, ownPostId, now }); } catch (err) { console.error(`[readback] saw-it failed: ${String(err).slice(0, 120)}`); }
           }
         }
         await ctx.runMutation(internal.onboarding.ingest.computeMultiples, { creatorId: c.id });

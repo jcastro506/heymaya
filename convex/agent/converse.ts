@@ -49,7 +49,6 @@ Anything they agree to make gets a time. When they commit to an idea, yours or t
 Their week is yours to manage by text (Sprint 4b). The prefix shows the plan with block ids. "make it thursday", "push it to 6:30", "skip that one", "clear the week", "add an edit block sunday morning", "what's on this week": read week_plan first if you need ids, then block_move / block_drop / block_add, then say what happened in one line. If the film block moves past the post time, move the post block too. A tool answer that starts "refused" means it did not happen: say so plainly, never claim it. If they ask for a plan, or they cleared the week, week_replan sends it with a button; do not restate the plan yourself.
 
 The judgment: answer the thing they actually asked, in their register, with what you know from the dossier, the conversation, and what you can look up (you have the tools: a post's numbers and words, a sound, an account's normal, what a keyword or hashtag is doing this week, what people are typing next to a keyword, their own posts that rhyme, their calendar). Look something up when it changes the answer; don't when it doesn't. If they ask about numbers nobody outside the app can see (watch time), say so. If they ask for an idea, give one, shaped to them, with why. If nothing needs a question, don't ask one.
-Show, don't tell (§22): when they ask to see it, picture it, mock it up, "what would that look like", or an idea you're describing lives in how it looks and words aren't landing, call show_frames (the latest idea unless they name one); then say in one line that the frames are coming. Never describe frames you have not seen; never claim they were sent if the tool answered "refused".
 What you can do from here, when they ask: give an opinion on a plan or a hook in words; explain what an account is doing; recall an idea or a note; and the management moves (quiet hours, tone, watch or drop an account, what they make) and edits to the latest idea happen when their message is routed to those tools, not inside this reply.
 Hard rules: never invent a metric, a post, or a trend. Never promise a post will do well. Under 120 words unless they asked for detail. You cannot change settings, watch or drop an account, or edit their list from inside a reply: those happen only when the message is routed to the tool that does them. If you are answering a request like that here, it means it was NOT done; never say "added", "done" or "tracking" — say what to text so it lands ("say: add @handle" / "say: stop watching @handle" / "say: no messages before 9am") or that it's in Settings.`;
 
@@ -208,7 +207,7 @@ export const run = internalAction({
         return { ok: true };
       }
       // The check-in before a block (Sprint 4b): yes marks it filmed for the post nudge; push proposes a gap; skip drops it.
-      const ci = target.body.match(/^cal:([a-z0-9]+):(yes|push|skip)$/);
+      const ci = target.body.match(/^cal:([a-zA-Z0-9]+):(yes|push|skip)$/);
       if (ci) {
         const blockId = ci[1] as Id<"calendarBlocks">;
         let body: string;
@@ -237,7 +236,7 @@ export const run = internalAction({
         return { ok: true };
       }
       // Their pick of a new time: a move they asked for is written now and confirmed in one line.
-      const pu = target.body.match(/^push:([a-z0-9]+):(\d+|pick)$/);
+      const pu = target.body.match(/^push:([a-zA-Z0-9]+):(\d+|pick)$/);
       if (pu) {
         const blockId = pu[1] as Id<"calendarBlocks">;
         let body: string;
@@ -256,8 +255,40 @@ export const run = internalAction({
         await deliverNow(ctx as never);
         return { ok: true };
       }
+      // §24: "how'd it go?" — filmed marks the block so the post nudge can fire; didn't-happen offers it back.
+      const sh = target.body.match(/^shot:([a-zA-Z0-9]+):(yes|no)$/);
+      if (sh) {
+        const blockId = sh[1] as Id<"calendarBlocks">;
+        if (sh[2] === "yes") {
+          await ctx.runMutation(internal.calendar.reminders.touched, { blockId, touch: "shot_yes", filmedAt: Date.now() });
+          await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: "nice. i'll nudge you when it's post time.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
+        } else {
+          await ctx.runMutation(internal.agent.cadence.markMissed, { creatorId: creator._id, blockId });
+          const m = await ctx.runQuery(internal.calendar.reminders.proposeMove, { blockId, now: Date.now() });
+          const buttons = m ? [{ id: `push:${blockId}:${m.tomorrow.start}`, label: "tomorrow" }, { id: `push:${blockId}:pick`, label: "i'll pick" }, { id: `cal:${blockId}:skip`, label: "let it go" }] : undefined;
+          await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: "no stress. want it back tomorrow, same time?", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply", buttons, awaitingAnswer: Boolean(buttons) });
+        }
+        await deliverNow(ctx as never);
+        return { ok: true };
+      }
+      // §24: the morning after a missed block — put it back, or let it go.
+      const ms = target.body.match(/^missed:([a-zA-Z0-9]+):(rebook|drop)$/);
+      if (ms) {
+        const blockId = ms[1] as Id<"calendarBlocks">;
+        await ctx.runMutation(internal.agent.cadence.markMissed, { creatorId: creator._id, blockId });
+        if (ms[2] === "drop") {
+          await ctx.runAction(internal.calendar.blocks.remove, { blockId });
+          await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: "let go. the idea's still in your list if it comes back around.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
+        } else {
+          const m = await ctx.runQuery(internal.calendar.reminders.proposeMove, { blockId, now: Date.now() });
+          const buttons = m ? [...(m.today ? [{ id: `push:${blockId}:${m.today.start}`, label: "today" }] : []), { id: `push:${blockId}:${m.tomorrow.start}`, label: "tomorrow" }, { id: `push:${blockId}:pick`, label: "i'll pick" }] : undefined;
+          await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: buttons ? "when?" : "couldn't find a gap this week. tell me a day and i'll put it in.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply", buttons, awaitingAnswer: true });
+        }
+        await deliverNow(ctx as never);
+        return { ok: true };
+      }
       // A proposed filming block: yes is the consent row and the calendar write; no keeps the idea (§12.5).
-      const b = target.body.match(/^block:([a-z0-9]+):(yes|no)$/);
+      const b = target.body.match(/^block:([a-zA-Z0-9]+):(yes|no)$/);
       if (b) {
         const blockId = b[1] as Id<"calendarBlocks">;
         let body: string;
