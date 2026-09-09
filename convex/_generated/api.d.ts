@@ -89,6 +89,7 @@ import type * as eval_checks from "../eval/checks.js";
 import type * as eval_converse from "../eval/converse.js";
 import type * as eval_gate from "../eval/gate.js";
 import type * as eval_judge from "../eval/judge.js";
+import type * as eval_memoryGauntlet from "../eval/memoryGauntlet.js";
 import type * as eval_run from "../eval/run.js";
 import type * as eval_scenarios from "../eval/scenarios.js";
 import type * as http from "../http.js";
@@ -234,6 +235,7 @@ declare const fullApi: ApiFromModules<{
   "eval/converse": typeof eval_converse;
   "eval/gate": typeof eval_gate;
   "eval/judge": typeof eval_judge;
+  "eval/memoryGauntlet": typeof eval_memoryGauntlet;
   "eval/run": typeof eval_run;
   "eval/scenarios": typeof eval_scenarios;
   http: typeof http;
