@@ -239,6 +239,35 @@ export const seedArc = internalMutation({
   },
 });
 
+/**
+ * Era posts: the source catalogue is ten posts, and a style snapshot needs five in a month, so
+ * the year gets synthetic posts whose captions change era by era (long, hashtagged and earnest
+ * in the first months; short, lowercase and deadpan by the end), so "how has my style changed"
+ * has something dated to point at. Synthetic and marked as such in the post id.
+ */
+export const seedEraPosts = internalMutation({
+  args: { creatorId: v.id("creators"), now: v.number() },
+  handler: async (ctx, a): Promise<{ posts: number }> => {
+    const r = rng(21);
+    const A = arc(a.now);
+    const early = ["Sunrise miles before the city wakes up. Grateful for every step of this journey! #running #sunrise #motivation #runningmotivation #australia", "Long run Sunday complete. 21km of thinking, sweating and believing in the process. Every mile counts! #marathontraining #runcommunity", "Chasing the light on the Brisbane river this morning. Keep showing up for yourself. #running #brisbane #goldcoastmarathon"];
+    const mid = ["ran 12k so i could eat the whole hostel breakfast. no regrets #running #hostellife", "rest day guilt is real. mochi does not care. #running", "km vs miles argument with an american at 6am, round three"];
+    const late = ["lap 4 of 8. questioning every life choice.", "ran so i can rot all afternoon", "the 5am alarm face, again", "hostel kitchen at 6am. someone is making eggs. it's not me."];
+    let posts = 0;
+    for (let m = 0; m < 12; m++) {
+      const pool = m < 4 ? early : m < 8 ? mid : late;
+      for (let k = 0; k < 5; k++) {
+        const createTime = A.joinedAt + m * 30 * D + Math.floor(r() * 28) * D + 7 * H;
+        const caption = pick(r, pool);
+        const views = Math.round((m < 4 ? 900 : m < 8 ? 2400 : 6000) * (0.5 + r() * 1.5));
+        await ctx.db.insert("ownPosts", { creatorId: a.creatorId, platform: "tiktok", postId: `era-${m}-${k}`, url: `https://www.tiktok.com/@${TWIN_HANDLE}/video/era${m}${k}`, createTime, contentType: "video", durationSec: m < 4 ? 28 : m < 8 ? 18 : 9, caption, hashtags: (caption.match(/#\w+/g) ?? []).map((h) => h.slice(1)), metrics: { views, likes: Math.round(views * 0.08), comments: Math.round(views * 0.01), shares: Math.round(views * 0.005) }, metricsAsOf: createTime + 2 * D, source: "scrape" } as never);
+        posts++;
+      }
+    }
+    return { posts };
+  },
+});
+
 /** Monthly style snapshots across the year, from the re-dated posts. */
 export const seedStyle = internalMutation({
   args: { creatorId: v.id("creators"), now: v.number() },
