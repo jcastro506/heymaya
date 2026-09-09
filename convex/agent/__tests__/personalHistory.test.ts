@@ -58,6 +58,9 @@ describe("personal continuity", () => {
     let context = await t.run((ctx) => personalHistoryFor(ctx, creatorId));
     expect(context).toContain("booked for");
     expect(context).toContain("less editing");
+    await t.run((ctx) => ctx.db.patch(blockId, { missedAt: Date.now() }));
+    context = await t.run((ctx) => personalHistoryFor(ctx, creatorId));
+    expect(context, "a missed shoot says so; 'booked for' a past date read as done").toContain("did not happen");
     await t.run((ctx) => ctx.db.patch(blockId, { status: "deleted" }));
     context = await t.run((ctx) => personalHistoryFor(ctx, creatorId));
     expect(context).toContain("cancelled");

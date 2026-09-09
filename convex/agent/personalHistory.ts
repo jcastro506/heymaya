@@ -53,7 +53,8 @@ export async function personalHistoryFor(ctx: QueryCtx, creatorId: Id<"creators"
     let state = r.kind === "commitment" ? "discussed; no linked scheduled action" : "creator's words";
     if (r.blockId) {
       const block = await ctx.db.get(r.blockId);
-      if (block?.creatorId === creatorId) state = block.status === "deleted" ? "cancelled" : block.filmedAt ? "filmed (recorded)" : block.consentAt ? `booked for ${new Date(block.start).toISOString()}` : "proposed, not booked";
+      // A missed block is a fact of its own: "booked for" a past date read as done (live 2026-09-09: "yep, you made it").
+      if (block?.creatorId === creatorId) state = block.status === "deleted" ? "cancelled" : block.filmedAt ? "filmed (recorded)" : block.missedAt ? `did not happen (marked missed; was booked for ${new Date(block.start).toISOString().slice(0, 10)})` : block.consentAt ? (block.end < Date.now() ? `booked for ${new Date(block.start).toISOString().slice(0, 10)}; no record it was filmed` : `booked for ${new Date(block.start).toISOString()}`) : "proposed, not booked";
     }
     lines.push(`- ${new Date(r.at).toISOString().slice(0, 10)} [${r.kind}; ${state}; source ${r.sourceMessageIds.join(",")}] ${r.text}${r.reason ? ` — reason: ${r.reason}` : ""}`);
   }
