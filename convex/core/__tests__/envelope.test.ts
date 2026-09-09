@@ -10,6 +10,8 @@ import { HELLO } from "../pairing";
 describe("a person never receives a JSON envelope (live 2026-09-06)", () => {
   it("unwraps a message field, leaves prose alone, refuses an envelope with nothing to say", () => {
     expect(unwrapModelEnvelope('{"message": "zero posts this week.", "experimentVerdict": "none"}')).toEqual({ text: "zero posts this week.", unwrapped: true });
+    // Live 2026-09-08: a fenced envelope reached the leak guard as a code block and a review became "something went wrong".
+    expect(unwrapModelEnvelope('```json\n{ "message": "7 posts this week.", "experimentVerdict": "unknown" }\n```')).toEqual({ text: "7 posts this week.", unwrapped: true });
     expect(unwrapModelEnvelope("plain text, with {braces} inside")).toEqual({ text: "plain text, with {braces} inside", unwrapped: false });
     expect(() => unwrapModelEnvelope('{"experimentVerdict": "none"}')).toThrow(/no message field/);
   });

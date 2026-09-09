@@ -7,7 +7,10 @@
 
 /** Pure. A JSON envelope with a string `message` becomes that message; plain text is returned as is. */
 export function unwrapModelEnvelope(body: string): { text: string; unwrapped: boolean } {
-  const t = body.trim();
+  // Live 2026-09-08: a rewrite came back as ```json { "message": … } ```; the fence tripped the leak guard and a
+  // person got "something went wrong" instead of their review. A fence around an envelope is still an envelope.
+  const fenced = body.trim().match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
+  const t = (fenced ? fenced[1] : body).trim();
   if (!t.startsWith("{") || !t.endsWith("}")) return { text: body, unwrapped: false };
   try {
     const j = JSON.parse(t) as { message?: unknown; text?: unknown };

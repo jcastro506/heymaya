@@ -15,7 +15,7 @@ import { judge, judgePass } from "./judge";
 const EVAL_KINDS = new Set(["scout", "opinion", "explain", "review", "reply", "status"]);
 
 export const record = internalMutation({
-  args: { suite: v.string(), skill: v.string(), creatorId: v.optional(v.id("creators")), messageId: v.optional(v.id("messages")), text: v.string(), checks: v.array(v.object({ name: v.string(), pass: v.boolean(), detail: v.string() })), judge: v.optional(v.object({ corny: v.number(), generic: v.number(), flattering: v.number(), toolSpeak: v.number(), specific: v.number(), wouldSend: v.number(), soundsLikeThem: v.optional(v.number()), note: v.string(), model: v.string() })), pass: v.boolean(), trace: v.optional(v.any()) },
+  args: { suite: v.string(), skill: v.string(), creatorId: v.optional(v.id("creators")), messageId: v.optional(v.id("messages")), text: v.string(), checks: v.array(v.object({ name: v.string(), pass: v.boolean(), detail: v.string(), advisory: v.optional(v.boolean()) })), judge: v.optional(v.object({ corny: v.number(), generic: v.number(), flattering: v.number(), toolSpeak: v.number(), specific: v.number(), wouldSend: v.number(), soundsLikeThem: v.optional(v.number()), note: v.string(), model: v.string() })), pass: v.boolean(), trace: v.optional(v.any()) },
   handler: async (ctx, a): Promise<Id<"evalRuns">> => await ctx.db.insert("evalRuns", { ...a, at: Date.now() }),
 });
 

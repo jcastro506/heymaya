@@ -17,6 +17,7 @@ import { buildPrefix, personalFor, producedStamp } from "../agent/context";
 import { voiceFor, voiceSection } from "../agent/voice";
 import { historyFor, historySection } from "../agent/history";
 import { critique, tooLong } from "../agent/critic";
+import { unwrapModelEnvelope } from "../core/envelope";
 import { computeRung, engagement, type RungFacts } from "./rung";
 import { growthFacts, type GrowthPlan } from "../agent/growth";
 import { localHourMinute } from "../scout/gate";
@@ -171,7 +172,7 @@ export const run = internalAction({
     if (!verdict.pass) {
       const rw = await callModel(ctx, { creatorId: a.creatorId, purpose: "weekly_review_rewrite", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `${user}\n\nYour previous review was rejected by the critic for: ${verdict.problems.join(", ")} (${verdict.note}). Rewrite ONLY the message text, fixing exactly that. Output the text only.` }], temperature: 0.4, maxTokens: 1200, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
       if (rw.ok && rw.content.trim()) {
-        text = rw.content.trim();
+        text = unwrapModelEnvelope(rw.content.trim()).text;
         verdict = tooLong(text) ? { pass: false, problems: ["too_long" as const], note: "still over" } : await critique(ctx, { creatorId: a.creatorId, kind: "review", text, evidence, voice: { voice: dossierVoice?.voice, persona: dossierVoice?.persona }, directives: inp.directives.map((d) => d.verbatim) });
         criticSkipped = criticSkipped || Boolean(verdict.skipped);
       }
@@ -179,7 +180,7 @@ export const run = internalAction({
       // arrives is the silent failure this product forbids; one more pass with a hard cap, then it goes, marked.
       if (!verdict.pass && verdict.problems.includes("too_long" as never)) {
         const rw2 = await callModel(ctx, { creatorId: a.creatorId, purpose: "weekly_review_rewrite", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `${user}\n\nToo long twice. Write the review again in UNDER 120 WORDS: the one thing that worked, the one thing that did not, the one thing to try. Text only.` }], temperature: 0.3, maxTokens: 400, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
-        if (rw2.ok && rw2.content.trim()) { text = rw2.content.trim(); verdict = { pass: true, problems: [], note: "sent after a third pass", skipped: true } as typeof verdict; criticSkipped = true; }
+        if (rw2.ok && rw2.content.trim()) { text = unwrapModelEnvelope(rw2.content.trim()).text; verdict = { pass: true, problems: [], note: "sent after a third pass", skipped: true } as typeof verdict; criticSkipped = true; }
       }
       if (!verdict.pass) return { sent: false, reason: `critic: ${verdict.problems.join(", ")}` };
     }
