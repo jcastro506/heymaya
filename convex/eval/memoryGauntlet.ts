@@ -21,13 +21,18 @@ const D = 86_400_000, H = 3_600_000;
 
 interface Step { step: string; said: string[]; facts: Record<string, unknown>; ok: boolean; why: string }
 
+/**
+ * For the run: an active plan and a paired channel, because every proactive rail refuses an
+ * unpaired or paused creator (the first run failed four touches on exactly that). No chat is
+ * attached, so nothing can reach a phone: deliveries defer on "no chat paired". Restored after.
+ */
 export const setPlanStatus = internalMutation({
-  args: { creatorId: v.id("creators"), status: v.string() },
-  handler: async (ctx, a): Promise<string> => {
+  args: { creatorId: v.id("creators"), status: v.string(), paired: v.optional(v.boolean()) },
+  handler: async (ctx, a): Promise<{ status: string; paired: boolean }> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
-    if (!c) return "none";
-    const before = c.plan.status;
-    await ctx.db.patch(a.creatorId, { plan: { ...c.plan, status: a.status as Doc<"creators">["plan"]["status"] }, updatedAt: Date.now() });
+    if (!c) return { status: "none", paired: false };
+    const before = { status: c.plan.status, paired: c.channel.paired };
+    await ctx.db.patch(a.creatorId, { plan: { ...c.plan, status: a.status as Doc<"creators">["plan"]["status"] }, channel: { ...c.channel, paired: a.paired ?? c.channel.paired }, updatedAt: Date.now() });
     return before;
   },
 });
@@ -88,6 +93,17 @@ export const backdateInbound = internalMutation({
   },
 });
 
+/** Forget rows of one kind (a review, say), so a step whose dedupe key already fired can run again. */
+export const deleteMessagesOfKind = internalMutation({
+  args: { creatorId: v.id("creators"), kind: v.string() },
+  handler: async (ctx, a): Promise<number> => {
+    const rows = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"messages">[];
+    let n = 0;
+    for (const m of rows) if (m.kind === a.kind) { await ctx.db.delete(m._id); n += 1; }
+    return n;
+  },
+});
+
 export const buttonRow = internalMutation({
   args: { creatorId: v.id("creators"), body: v.string() },
   handler: async (ctx, a): Promise<Id<"messages">> => await ctx.db.insert("messages", { creatorId: a.creatorId, direction: "in", surface: "telegram", kind: "button", body: a.body, ts: Date.now() }),
@@ -95,9 +111,25 @@ export const buttonRow = internalMutation({
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** The report lives in a row (the fleet key/value table), because a long transcript is not a function result. */
+export const saveReport = internalMutation({
+  args: { key: v.string(), value: v.string() },
+  handler: async (ctx, a): Promise<null> => {
+    const existing = await ctx.db.query("syncState").withIndex("by_key", (q) => q.eq("key", a.key)).first();
+    if (existing) await ctx.db.patch(existing._id, { value: a.value, updatedAt: Date.now() });
+    else await ctx.db.insert("syncState", { key: a.key, value: a.value, updatedAt: Date.now() });
+    return null;
+  },
+});
+
+export const report = internalQuery({
+  args: { key: v.string() },
+  handler: async (ctx, a): Promise<string | null> => (await ctx.db.query("syncState").withIndex("by_key", (q) => q.eq("key", a.key)).first())?.value ?? null,
+});
+
 export const run = internalAction({
-  args: { handle: v.optional(v.string()), steps: v.optional(v.array(v.string())) },
-  handler: async (ctx, a): Promise<{ creatorId: Id<"creators">; steps: Step[]; passed: number; failed: number }> => {
+  args: { handle: v.optional(v.string()), steps: v.optional(v.array(v.string())), reportKey: v.optional(v.string()) },
+  handler: async (ctx, a): Promise<{ creatorId: Id<"creators">; passed: number; failed: number; reportKey: string }> => {
     const scenarios = await ctx.runQuery(internal.eval.scenarios.list, {});
     const sc = scenarios.find((s) => s.handle === (a.handle ?? "vanessaalopezz"));
     if (!sc) throw new Error("no such scenario creator");
@@ -105,13 +137,13 @@ export const run = internalAction({
     const only = a.steps ? new Set(a.steps) : null;
     const steps: Step[] = [];
     const t0 = Date.now();
-    const before = await ctx.runMutation(internal.eval.memoryGauntlet.setPlanStatus, { creatorId, status: "active" });
+    const before = await ctx.runMutation(internal.eval.memoryGauntlet.setPlanStatus, { creatorId, status: "active", paired: true });
 
     const say = async (text: string): Promise<string[]> => {
       const since = Date.now();
       const { messageId } = await ctx.runMutation(internal.core.messages.recordInbound, { creatorId, surface: "telegram", body: text });
       await ctx.runAction(internal.agent.converse.run, { creatorId, messageId });
-      await sleep(9_000); // the remember pass is scheduled after the reply
+      await sleep(6_000); // the remember pass is scheduled after the reply
       const out = await ctx.runQuery(internal.eval.memoryGauntlet.outboundSince, { creatorId, since });
       for (const m of out) await ctx.runAction(internal.eval.run.evaluate, { suite: "memory", skill: m.kind === "reply" ? "reply" : m.kind, text: m.body, evidence: { theirMessage: text }, creatorId, messageId: m.id, actionTaken: m.kind !== "reply" });
       return out.map((m) => `[${m.kind}] ${m.body}${m.buttons.length ? `  {${m.buttons.join(" | ")}}` : ""}`);
@@ -124,7 +156,8 @@ export const run = internalAction({
       if (want("direction")) {
         const said = await say("hey so real talk. i'm moving away from the running content. going all in on solo travel, hostels, the whv life in australia. keep the running as texture at most, not the main thing.");
         const mem = await ctx.runQuery(internal.eval.memoryGauntlet.memoryOf, { creatorId });
-        const kept = Boolean(mem && (mem.notes.some((n) => /travel|hostel|whv/i.test(n)) || mem.rules.some((r) => /travel|hostel|whv|running/i.test(r))));
+        // Kept anywhere she reads from: a note, a rule, or their own words about what they make (the niche field).
+        const kept = Boolean(mem && (mem.notes.some((n) => /travel|hostel|whv/i.test(n)) || mem.rules.some((r) => /travel|hostel|whv|running/i.test(r)) || /travel|hostel|whv/i.test(mem.niche)));
         const inPrefix = Boolean(mem && /travel|hostel|whv/i.test(mem.prefix));
         record("direction", said, { notes: mem?.notes, rules: mem?.rules, niche: mem?.niche, keywords: mem?.keywords, inPrefix }, kept, kept ? `a note or a rule now carries the direction${inPrefix ? ", and the prefix carries it" : ", but the prefix does not show it"}` : "nothing kept: the direction lives only in the chat log");
       }
@@ -154,7 +187,7 @@ export const run = internalAction({
         record("drift", said, { rewrite: r, keywords: mem?.keywords, laneDriftAsked: Boolean(drift) }, ok, !r.ok ? `rewrite failed: ${r.reason}` : drift ? "the drift question fired as if they had said nothing" : "no contradictory drift question");
       }
       // 5. Calendar events, through the same door the Google sync uses.
-      let tripId = "";
+      let tripId = "ev-trip";
       if (want("calendar")) {
         const now = Date.now();
         const rows = [
@@ -189,8 +222,12 @@ export const run = internalAction({
         const ok = said.some((s) => /byron|marathon/i.test(s)) && !said.some((s) => /dentist/i.test(s));
         record("calendar_chat", said, {}, ok, ok ? "names the trip and the race, never the dentist" : "wrong or missing events in the reply");
       }
-      // 8. A commitment in chat becomes a block.
+      // 8. A commitment in chat becomes a block. (Batched runs: later steps find the latest booked block from rows.)
       let blockId: Id<"calendarBlocks"> | null = null;
+      if (!want("commit")) {
+        const latest = (await ctx.runQuery(internal.eval.memoryGauntlet.blocksOf, { creatorId })).filter((x) => x.status !== "deleted" && x.consented).sort((x, y) => y.start - x.start)[0];
+        blockId = latest?.id ?? null;
+      }
       if (want("commit")) {
         const said = await say("ok let's film the hostel tour thursday at 5pm. put it in.");
         const blocks = await ctx.runQuery(internal.eval.memoryGauntlet.blocksOf, { creatorId });
@@ -271,10 +308,12 @@ export const run = internalAction({
         record("quiet", out.map((m) => `[${m.kind}] ${m.body}`), { result: r }, r.sent, r.sent ? "one warm line, no ask" : `no quiet line: ${r.reason}`);
       }
     } finally {
-      await ctx.runMutation(internal.eval.memoryGauntlet.setPlanStatus, { creatorId, status: before });
+      await ctx.runMutation(internal.eval.memoryGauntlet.setPlanStatus, { creatorId, status: before.status, paired: before.paired });
     }
     const passed = steps.filter((s) => s.ok).length;
     console.log(`[memory-gauntlet] ${passed}/${steps.length} in ${Math.round((Date.now() - t0) / 1000)}s`);
-    return { creatorId, steps, passed, failed: steps.length - passed };
+    const reportKey = a.reportKey ?? `gauntlet:memory:${new Date(t0).toISOString().slice(0, 16)}`;
+    await ctx.runMutation(internal.eval.memoryGauntlet.saveReport, { key: reportKey, value: JSON.stringify({ creatorId, at: t0, steps }) });
+    return { creatorId, passed, failed: steps.length - passed, reportKey };
   },
 });

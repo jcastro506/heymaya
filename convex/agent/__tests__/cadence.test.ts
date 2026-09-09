@@ -74,6 +74,9 @@ describe("the human cadence: pure", () => {
     const cadence = readFileSync(new URL("../cadence.ts", import.meta.url), "utf8");
     for (const key of ["morning:${day}", "howdidit:${block._id}", "sawit:${a.ownPostId}", "quiet:${monthKey}", "foryou:${a.postId}"]) expect(cadence, `dedupe key ${key}`).toContain(key);
     expect(cadence).not.toMatch(/TODO|FIXME/);
+    // Live 2026-09-08: "i'll read your lane that way from the next pass" reached a creator. Plumbing words stay out of code strings.
+    const manage = readFileSync(new URL("../manage.ts", import.meta.url), "utf8");
+    expect(manage).not.toMatch(/next pass/);
     // Frames: no tool, no button, no proactive, no line in the soul, nothing she can reach.
     expect(TOOLS.some((t) => t.function.name === "show_frames")).toBe(false);
     expect(TOOL_CREDITS.show_frames).toBeUndefined();

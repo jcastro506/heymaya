@@ -42,7 +42,10 @@ export const setNiche = internalMutation({
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c || !a.text.trim()) return { ok: false, body: "" };
     await ctx.db.patch(c._id, { niche: a.text.trim().slice(0, 300), updatedAt: Date.now() });
-    return { ok: true, body: `noted, in your words: "${a.text.trim().slice(0, 120)}". i'll read your lane that way from the next pass.` };
+    // Their words, whole or not at all: a quote cut mid-word reads as a glitch, and "pass" is plumbing (live 2026-09-08).
+    const words = a.text.trim();
+    const quote = words.length <= 140 ? `"${words}"` : "that";
+    return { ok: true, body: `noted, ${quote}. that's how i'll read your lane now.` };
   },
 });
 
@@ -66,7 +69,7 @@ export const addAdmired = internalMutation({
     const existing = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"trackedAccounts">[];
     const r = await addTracked(ctx as never, a.creatorId, a.platform, a.handle, existing);
     if (!r.ok) return { ok: false, body: r.error === "ten is the most she can watch closely" ? "you're at ten, which is the most i can watch closely. tell me who to drop and i'll swap." : `couldn't add that one: ${r.error}.` };
-    return { ok: true, body: `watching @${a.handle.replace(/^@/, "").toLowerCase()} on ${a.platform} from the next pass. i'll know their normal in a day or two.` };
+    return { ok: true, body: `watching @${a.handle.replace(/^@/, "").toLowerCase()} on ${a.platform} now. i'll know their normal in a day or two.` };
   },
 });
 
