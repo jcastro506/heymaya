@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import QRCode from "qrcode";
 import { api } from "@/convex/_generated/api";
+import { OnboardShell } from "../onboarding/Shell";
 
 /** On a phone the button opens the app; on a computer the QR is the button (2026-09-07). */
 function isPhone(): boolean {
@@ -87,71 +88,67 @@ export default function TelegramPage() {
   const paired = progress?.paired ?? false;
 
   return (
-    <main className="min-h-dvh max-w-md mx-auto p-6 flex flex-col gap-6">
-      <header className="flex items-baseline justify-between">
-        <h1 className="text-xl font-semibold">Maya</h1>
-        <span className="text-xs opacity-60">last step</span>
-      </header>
+    <OnboardShell where="last step">
 
       {paired ? (
-        <section className="flex flex-col gap-3">
-          <h2 className="text-lg">Connected.</h2>
-          <p className="text-sm opacity-80">
+        <section>
+          <h2>Connected.</h2>
+          <p className="small">
             {progress?.dossier ? `She's read your posts. Her first message is on its way${progress?.channelKind === "imessage" ? " to your phone" : " to Telegram"}.` : `She's reading your posts now (${progress?.posts ?? 0} so far). Her first message lands ${progress?.channelKind === "imessage" ? "as a text" : "in Telegram"} in a few minutes.`}
           </p>
         </section>
       ) : link?.kind === "imessage" ? (
-        <section className="flex flex-col gap-4">
-          <h2 className="text-lg">Text Maya</h2>
+        <section>
+          <h2>Text Maya</h2>
           {phone ? (
             <>
-              <p className="text-sm opacity-70">One text pairs you. Tap the button, send the message it opens, and she&apos;s yours.</p>
+              <p className="muted small">One text pairs you. Tap the button, send the message it opens, and she&apos;s yours.</p>
               <a className="btn" href={link.deepLink} onClick={() => setTapped(true)}>Text Maya</a>
             </>
           ) : (
             <>
-              <p className="text-sm opacity-70">She texts your phone. Scan this with your phone&apos;s camera and send the message it opens.</p>
-              {qr ? <img src={qr} alt="Scan to text Maya" className="w-[220px] h-[220px] self-start rounded" /> : <p className="text-xs opacity-60">Making your code…</p>}
+              <p className="muted small">She texts your phone. Scan this with your phone&apos;s camera and send the message it opens.</p>
+              {qr ? <img src={qr} alt="Scan to text Maya" className="qr self-start" /> : <p className="tiny muted">Making your code…</p>}
             </>
           )}
-          <p className="text-xs opacity-60">Or text <b>START {link.token}</b> to <b>{link.lineNumber}</b> from {progress?.phone ?? "your number"}.</p>
-          {tapped && !paired && <p className="text-xs opacity-60">Waiting for your text…</p>}
+          <p className="tiny muted">Or text <b>START {link.token}</b> to <b>{link.lineNumber}</b> from {progress?.phone ?? "your number"}.</p>
+          {tapped && !paired && <p className="tiny muted">Waiting for your text…</p>}
         </section>
       ) : (
-        <section className="flex flex-col gap-4">
-          <h2 className="text-lg">Meet Maya on Telegram</h2>
+        <section>
+          <h2>Meet Maya on Telegram</h2>
           {phone ? (
             <>
-              <p className="text-sm opacity-70">She texts you there. Tap the button, then tap <b>Start</b> in Telegram. That&apos;s the whole pairing.</p>
+              <p className="muted small">She texts you there. Tap the button, then tap <b>Start</b> in Telegram. That&apos;s the whole pairing.</p>
               <button className="btn" disabled={!link} onClick={open}>Open Maya in Telegram</button>
             </>
           ) : (
             <>
-              <p className="text-sm opacity-70">She texts you on your phone. Scan this with your phone&apos;s camera, then tap <b>Start</b> in Telegram. That&apos;s the whole pairing.</p>
-              {qr ? <img src={qr} alt="Scan to open Maya in Telegram" className="w-[220px] h-[220px] self-start rounded" /> : <p className="text-xs opacity-60">Making your code…</p>}
+              <p className="muted small">She texts you on your phone. Scan this with your phone&apos;s camera, then tap <b>Start</b> in Telegram. That&apos;s the whole pairing.</p>
+              {qr ? <img src={qr} alt="Scan to open Maya in Telegram" className="qr self-start" /> : <p className="tiny muted">Making your code…</p>}
               <button className="btn-secondary" disabled={!link} onClick={open}>Or open Telegram on this computer</button>
             </>
           )}
           {showStore && (
-            <div className="flex flex-col gap-2">
-              <p className="text-sm opacity-80">Looks like Telegram isn&apos;t installed yet. It&apos;s free. Install it, come back here, and tap the button again.</p>
+            <div className="panel">
+              <p className="small">Looks like Telegram isn&apos;t installed yet. It&apos;s free. Install it, come back here, and tap the button again.</p>
               <a className="btn-secondary" href={storeUrl()} target="_blank" rel="noreferrer">Get Telegram, it&apos;s free</a>
             </div>
           )}
-          {tapped && !showStore && !paired && <p className="text-xs opacity-60">Waiting for you to tap Start in Telegram…</p>}
+          {tapped && !showStore && !paired && <p className="tiny muted">Waiting for you to tap Start in Telegram…</p>}
           {stuck && !paired && (
-            <p className="text-sm opacity-80">Didn&apos;t work? Tap the button again. If Telegram opened but nothing happened, tap <b>Start</b> at the bottom of the chat, she can&apos;t message first.</p>
+            <p className="small">Didn&apos;t work? Tap the button again. If Telegram opened but nothing happened, tap <b>Start</b> at the bottom of the chat, she can&apos;t message first.</p>
           )}
           {link && phone && (
-            <details className="text-xs opacity-60">
+            <details className="tiny muted">
               <summary>On a computer too?</summary>
-              <p className="mt-2">This link works anywhere you have Telegram: <a className="underline" href={link.deepLink}>{link.deepLink}</a></p>
+              <p className="mt-2">This link works anywhere you have Telegram: <a className="link" href={link.deepLink}>{link.deepLink}</a></p>
             </details>
           )}
-          {progress && progress.posts > 0 && <p className="text-xs opacity-60">Meanwhile she has read {progress.posts} of your posts.</p>}
+          {progress && progress.posts > 0 && <p className="tiny muted">Meanwhile she has read {progress.posts} of your posts.</p>}
         </section>
       )}
-      {error && <p className="text-sm text-red-400">{error}</p>}
-    </main>
+      {error && <p className="err">{error}</p>}
+    </OnboardShell>
   );
 }

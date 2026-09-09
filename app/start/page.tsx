@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { OnboardShell } from "../onboarding/Shell";
 
 type Platform = "tiktok" | "instagram";
 
@@ -98,27 +99,23 @@ export default function StartPage() {
   }
 
   return (
-    <main className="min-h-dvh max-w-md mx-auto p-6 flex flex-col gap-6">
-      <header className="flex items-baseline justify-between">
-        <h1 className="text-xl font-semibold">Maya</h1>
-        <span className="text-xs opacity-60">step {step} of 5</span>
-      </header>
+    <OnboardShell where={`step ${step} of 5`}>
 
       {step === 1 && (
-        <section className="flex flex-col gap-4">
-          <h2 className="text-lg">Your handles</h2>
-          <p className="text-sm opacity-70">Public is enough to start. She reads your posts the moment you save.</p>
-          <label className="flex flex-col gap-1 text-sm">
+        <section>
+          <h2>Your handles</h2>
+          <p className="muted small">Public is enough to start. She reads your posts the moment you save.</p>
+          <label className="">
             TikTok
             <input className="input" placeholder="@handle" value={tiktok} onChange={(e) => setTiktok(e.target.value)} autoCapitalize="none" />
           </label>
-          <label className="flex flex-col gap-1 text-sm">
+          <label className="">
             Instagram
             <input className="input" placeholder="@handle" value={instagram} onChange={(e) => setInstagram(e.target.value)} autoCapitalize="none" />
           </label>
           {Object.entries(preview).map(([k, p]) => (
-            <div key={k} className="text-xs opacity-80 flex items-center gap-2">
-              {p.avatarUrl && <img src={p.avatarUrl} alt="" className="w-6 h-6 rounded-full" />}
+            <div key={k} className="tiny muted flex items-center gap-2">
+              {p.avatarUrl && <img src={p.avatarUrl} alt="" className="avatar" />}
               <span>{k} · {p.displayName ?? ""} {p.followers !== undefined ? `· ${p.followers.toLocaleString()} followers` : ""}</span>
             </div>
           ))}
@@ -127,9 +124,9 @@ export default function StartPage() {
       )}
 
       {step === 2 && (
-        <section className="flex flex-col gap-4">
-          <h2 className="text-lg">Who do you wish you were?</h2>
-          <p className="text-sm opacity-70">Three to ten accounts in your lane. She watches them every day and tells you when something of theirs is worth your time.</p>
+        <section>
+          <h2>Who do you wish you were?</h2>
+          <p className="muted small">Three to ten accounts in your lane. She watches them every day and tells you when something of theirs is worth your time.</p>
           <div className="flex gap-2">
             <select className="input w-28" value={candidatePlatform} onChange={(e) => setCandidatePlatform(e.target.value as Platform)}>
               <option value="tiktok">TikTok</option>
@@ -140,19 +137,19 @@ export default function StartPage() {
           </div>
           {suggestions && suggestions.length > 0 && (
             <div className="flex flex-col gap-1">
-              <div className="text-xs opacity-50">tap to add</div>
+              <div className="tiny muted">tap to add</div>
               <div className="flex flex-wrap gap-2">
                 {suggestions.filter((sg) => !admired.some((a) => a.handle === sg.handle)).map((sg) => (
-                  <button key={`${sg.platform}:${sg.handle}`} className="rounded-full border border-white/20 px-3 py-1 text-xs" title={sg.why} onClick={() => addAdmired({ platform: sg.platform, handle: sg.handle })}>@{sg.handle}{sg.followers ? ` · ${Math.round(sg.followers / 1000)}k` : ""}</button>
+                  <button key={`${sg.platform}:${sg.handle}`} className="chip" title={sg.why} onClick={() => addAdmired({ platform: sg.platform, handle: sg.handle })}>@{sg.handle}{sg.followers ? ` · ${Math.round(sg.followers / 1000)}k` : ""}</button>
                 ))}
               </div>
             </div>
           )}
           <ul className="flex flex-col gap-2">
             {admired.map((a) => (
-              <li key={a.id} className="flex items-center justify-between text-sm border border-white/10 rounded px-3 py-2">
-                <span>@{a.handle} <span className="opacity-50">· {a.platform}</span></span>
-                <button className="text-xs opacity-60" onClick={() => removeAdmired({ id: a.id })}>remove</button>
+              <li key={a.id} className="row">
+                <span>@{a.handle} <span className="muted">· {a.platform}</span></span>
+                <button className="tiny muted" onClick={() => removeAdmired({ id: a.id })}>remove</button>
               </li>
             ))}
           </ul>
@@ -161,65 +158,65 @@ export default function StartPage() {
       )}
 
       {step === 3 && (
-        <section className="flex flex-col gap-4">
-          <h2 className="text-lg">What do you make?</h2>
-          <p className="text-sm opacity-70">One sentence, in your words.</p>
+        <section>
+          <h2>What do you make?</h2>
+          <p className="muted small">One sentence, in your words.</p>
           <textarea className="input min-h-24" value={niche} onChange={(e) => setNiche(e.target.value)} placeholder="running and gear for people who started late" />
           <button className="btn" onClick={saveNiche}>next</button>
         </section>
       )}
 
       {step === 4 && (
-        <section className="flex flex-col gap-4">
-          <h2 className="text-lg">Your calendar</h2>
-          <p className="text-sm opacity-70">With it she finds ideas in your life and plans filming around it. She keeps only titles and times, never details, and skips anything private. You can skip this.</p>
-          {cal?.status === "connected" ? <p className="text-sm text-emerald-300">Connected.</p> : <a className="btn" href="/api/google-calendar/start?return=%2Fstart%3Fstep%3D5">Connect Google Calendar</a>}
+        <section>
+          <h2>Your calendar</h2>
+          <p className="muted small">With it she finds ideas in your life and plans filming around it. She keeps only titles and times, never details, and skips anything private. You can skip this.</p>
+          {cal?.status === "connected" ? <p className="small ok">Connected.</p> : <a className="btn" href="/api/google-calendar/start?return=%2Fstart%3Fstep%3D5">Connect Google Calendar</a>}
           <button className="btn-secondary" onClick={() => setStep(5)}>{cal?.status === "connected" ? "next" : "skip for now"}</button>
           <p className="text-xs opacity-40">Apple Calendar is coming after the pilot.</p>
         </section>
       )}
 
       {step === 5 && (
-        <section className="flex flex-col gap-4">
-          <h2 className="text-lg">Almost there</h2>
-          <label className="text-sm flex flex-col gap-1">your timezone
+        <section>
+          <h2>Almost there</h2>
+          <label className="">your timezone
             <select className="input" value={tz || progress?.timezone || ""} onChange={(e) => { setTz(e.target.value); updateSettings({ timezone: e.target.value }); }}>
               {Array.from(new Set([progress?.timezone ?? "", Intl.DateTimeFormat().resolvedOptions().timeZone, ...(typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [])])).filter(Boolean).map((z) => <option key={z} value={z}>{z}</option>)}
             </select>
           </label>
-          <p className="text-sm opacity-70">She stays quiet between {progress?.quietHours.start ?? "22:00"} and {progress?.quietHours.end ?? "07:00"}. Change it in Settings, or just tell her.</p>
-          <p className="text-sm">{progress?.dossier ? "She has read your posts." : progress?.ingest === "running" || (progress?.posts ?? 0) > 0 ? `Reading your posts now: ${progress?.posts ?? 0} so far${progress?.transcripts ? `, ${progress.transcripts} transcribed` : ""}.` : progress?.ingest === "failed" || progress?.ingest === "dead" ? "The read hit a snag; she'll retry, and you can go on." : "Starting the read of your posts."}</p>
+          <p className="muted small">She stays quiet between {progress?.quietHours.start ?? "22:00"} and {progress?.quietHours.end ?? "07:00"}. Change it in Settings, or just tell her.</p>
+          <p className="small">{progress?.dossier ? "She has read your posts." : progress?.ingest === "running" || (progress?.posts ?? 0) > 0 ? `Reading your posts now: ${progress?.posts ?? 0} so far${progress?.transcripts ? `, ${progress.transcripts} transcribed` : ""}.` : progress?.ingest === "failed" || progress?.ingest === "dead" ? "The read hit a snag; she'll retry, and you can go on." : "Starting the read of your posts."}</p>
           {progress?.channelKind === "telegram" ? (
             <>
-              <p className="text-sm opacity-70">Your first message lands in about 8 minutes, on Telegram.</p>
+              <p className="muted small">Your first message lands in about 8 minutes, on Telegram.</p>
               <Link className="btn" href="/telegram">Open Maya in Telegram</Link>
-              <button className="text-xs opacity-60 underline self-start" onClick={async () => { const r = await setPhone({ phone: phoneInput }); if (!r.ok) setError(r.error ?? "try again"); }}>Prefer texts? Use your number instead</button>
+              <button className="link" onClick={async () => { const r = await setPhone({ phone: phoneInput }); if (!r.ok) setError(r.error ?? "try again"); }}>Prefer texts? Use your number instead</button>
             </>
           ) : (
             <>
-              <label className="flex flex-col gap-1 text-sm">
+              <label className="">
                 Your number
                 <input className="input" type="tel" inputMode="tel" autoComplete="tel" placeholder="+1 555 123 4567" value={phoneInput || progress?.phone || ""} onChange={(e) => { setPhoneInput(e.target.value); setPhoneSaved(false); }} />
               </label>
-              <p className="text-xs opacity-60">Maya texts you here, iMessage or SMS. Reply STOP any time.</p>
+              <p className="tiny muted">Maya texts you here, iMessage or SMS. Reply STOP any time.</p>
               {phoneSaved || (progress?.phone && !phoneInput) ? (
                 <>
-                  <p className="text-sm opacity-70">Your first message lands in about 8 minutes, as a text.</p>
+                  <p className="muted small">Your first message lands in about 8 minutes, as a text.</p>
                   <Link className="btn" href="/telegram">Text Maya</Link>
                 </>
               ) : (
                 <button className="btn" disabled={!phoneInput.trim()} onClick={async () => { setError(null); const r = await setPhone({ phone: phoneInput }); if (!r.ok) return setError(r.error ?? "try again"); setPhoneSaved(true); }}>Save my number</button>
               )}
-              <button className="text-xs opacity-60 underline self-start" onClick={async () => { const r = await chooseTelegram({}); if (!r.ok) setError(r.error ?? "try again"); }}>Prefer Telegram?</button>
+              <button className="link" onClick={async () => { const r = await chooseTelegram({}); if (!r.ok) setError(r.error ?? "try again"); }}>Prefer Telegram?</button>
             </>
           )}
         </section>
       )}
 
       {progress && progress.posts > 0 && (
-        <p className="text-xs opacity-60">She has read {progress.posts} of your posts so far{progress.transcripts ? `, ${progress.transcripts} transcribed` : ""}.</p>
+        <p className="tiny muted">She has read {progress.posts} of your posts so far{progress.transcripts ? `, ${progress.transcripts} transcribed` : ""}.</p>
       )}
-      {error && <p className="text-sm text-red-400">{error}</p>}
-    </main>
+      {error && <p className="err">{error}</p>}
+    </OnboardShell>
   );
 }
