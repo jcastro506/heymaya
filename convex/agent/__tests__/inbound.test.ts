@@ -9,7 +9,7 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { classifyInbound, parseLink } from "../inbound";
+import { classifyInbound, looksMultiPart, parseLink } from "../inbound";
 
 const handles = { tiktok: "runwithmaya", instagram: "run.with.maya" };
 
@@ -87,5 +87,14 @@ describe("forget, by topic (live 2026-09-09)", () => {
     expect(classifyInbound({ text: "forget about mochi", kind: "inbound", ...h })).toMatchObject({ route: "command", command: "forget", topic: "mochi" });
     expect(classifyInbound({ text: "forget that", kind: "inbound", ...h })).toEqual({ route: "command", command: "forget" });
     expect(classifyInbound({ text: "i keep forgetting to post about the race", kind: "inbound", ...h })).toMatchObject({ route: "text" });
+  });
+});
+
+describe("more than one ask in a message (live 2026-09-09)", () => {
+  it("three things is three things; a single sentence is not", () => {
+    expect(looksMultiPart("three things. set my quiet hours to 11pm to 9am. remind me what i told you about voiceovers. and what's my best posting hour lately?")).toBe(true);
+    expect(looksMultiPart("no messages before 10am")).toBe(false);
+    expect(looksMultiPart("move the film block to thursday 6pm and add an edit block sunday morning, then tell me what the week looks like")).toBe(true);
+    expect(looksMultiPart("love that idea, i'll film it tomorrow")).toBe(false);
   });
 });

@@ -20,7 +20,7 @@ describe("the reply path is judged", () => {
     // The send must not sit behind the verdict: a person is waiting on it.
     const afterCritique = converse.slice(converse.indexOf('kind: "reply", text'));
     expect(afterCritique).toMatch(/converse_rewrite/);
-    expect(afterCritique, "a reply must send even when the critic fails it").toMatch(/dedupeKey: `reply:\$\{args\.messageId\}`/);
+    expect(afterCritique, "a reply must send even when the critic fails it").toMatch(/const replyKey = [^\n]*`reply:\$\{args\.messageId\}`[\s\S]*dedupeKey: replyKey/);
     expect(afterCritique).not.toMatch(/if \(!verdict\.pass\) return/);
   });
 

@@ -35,6 +35,17 @@ export function parseLink(text: string): ParsedLink | null {
   return null;
 }
 
+/**
+ * More than one ask in a message ("set my quiet hours… and remind me what i said about…"). A routed action
+ * answers one of them; the rest must not be dropped (live 2026-09-09: "three things" got one). Pure.
+ */
+export function looksMultiPart(text: string): boolean {
+  const t = text.trim();
+  if (t.length < 60) return false;
+  const clauses = t.split(/(?:[.?!]\s+|\s+(?:and|then|also|plus)\s+|\n+)/i).map((c) => c.trim()).filter((c) => c.length >= 12);
+  return clauses.length >= 3 || /^(two|three|four|3|4) things/i.test(t);
+}
+
 export function classifyInbound(input: { text: string; kind: string; mime?: string | null; handles: { tiktok?: string; instagram?: string } }): Route {
   if (input.kind === "file") {
     const m = (input.mime ?? "").toLowerCase();

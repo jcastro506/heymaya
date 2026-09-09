@@ -307,7 +307,8 @@ export const run = internalAction({
         const said = await say("make me a four week plan to get to 20k followers using only what's actually worked for me this year, and set it.");
         const mem = await ctx.runQuery(internal.eval.memoryGauntlet.memoryOf, { creatorId });
         const plan = mem?.growthPlan as { hypothesis?: string; postsPerWeek?: number; formats?: string[] } | null;
-        const grounded = said.some((t) => /deadpan|talking|runn/i.test(t)) && !said.some((t) => /guarantee|will hit 20k|promise/i.test(t));
+        // "i am not going to promise you 20k" is the right answer; only an actual promise fails.
+        const grounded = said.some((t) => /deadpan|talking|runn/i.test(t)) && !said.some((t) => /\b(i )?guarantee\b|\byou'?ll (hit|reach|be at) 20k|\bi promise\b|\bwill hit 20k\b/i.test(t.replace(/not (going to |gonna )?promise[^.]*/gi, "")));
         record("hard_growth", said, { growthPlan: plan }, Boolean(plan) && grounded, plan ? (grounded ? "a plan set, from what worked, no promises" : "a plan set but with a promise or ungrounded") : "no plan row was set");
       }
       // 3. The lane, now.

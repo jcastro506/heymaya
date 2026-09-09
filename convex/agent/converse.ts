@@ -12,7 +12,7 @@ import { callModel } from "../core/llm";
 import { REGISTRY } from "./registry";
 import { buildPrefix, buildSuffix, producedStamp } from "./context";
 import { deliverNow } from "../core/scheduler";
-import { classifyInbound, type Route } from "./inbound";
+import { classifyInbound, looksMultiPart, type Route } from "./inbound";
 import { classifyText } from "./classify";
 import { investigate } from "./investigate";
 import { internalMutation, internalQuery } from "../_generated/server";
@@ -83,7 +83,7 @@ export const messageByTelegramId = internalQuery({
 });
 
 export const run = internalAction({
-  args: { creatorId: v.id("creators"), messageId: v.id("messages"), rerouted: v.optional(v.boolean()) },
+  args: { creatorId: v.id("creators"), messageId: v.id("messages"), rerouted: v.optional(v.boolean()), handledNote: v.optional(v.string()) },
   handler: async (ctx, args): Promise<{ ok: boolean; reason?: string }> => {
     const gathered = await ctx.runQuery(internal.agent.context.gather, { creatorId: args.creatorId, messageId: args.messageId });
     if (!gathered) return { ok: false, reason: "creator not found" };
@@ -410,6 +410,8 @@ export const run = internalAction({
       if (out.body) {
         await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: out.body, dedupeKey: `manage:${target._id}`, proactive: false, kind: "reply", buttons: out.buttons });
         await deliverNow(ctx as never);
+        // "three things": the action took one; the rest of the message gets a real turn, told what is already done.
+        if (looksMultiPart(target.body)) return await ctx.runAction(internal.agent.converse.run, { creatorId: creator._id, messageId: target._id, rerouted: true, handledNote: out.body });
         return { ok: true };
       }
     }
@@ -452,7 +454,7 @@ export const run = internalAction({
     }
 
     const prefix = buildPrefix({ creator, directives, skill: CONVERSE_SKILL, personal: gathered.personal, voice: gathered.voice, history: gathered.history });
-    const suffix = buildSuffix({ recent: recent.filter((m) => m._id !== target._id), target }) + recalled;
+    const suffix = buildSuffix({ recent: recent.filter((m) => m._id !== target._id), target }) + recalled + (args.handledNote ? `\n\n(Already done by code this turn, and already said to them: "${args.handledNote.slice(0, 200)}". Answer the REST of their message now; do not repeat the done part.)` : "");
     const apiKey = process.env.OPENROUTER_API_KEY ?? "";
     const spec = REGISTRY.writer;
 
@@ -517,11 +519,13 @@ export const run = internalAction({
       else criticSkipped = true;
     }
 
+    // The rest of a multi-ask message is a second reply to the same inbound row; it must not collide with the first.
+    const replyKey = args.handledNote ? `reply:${args.messageId}:rest` : `reply:${args.messageId}`;
     await ctx.runMutation(internal.core.messages.send, {
       creatorId: creator._id,
       surface: "telegram",
       body: text,
-      dedupeKey: `reply:${args.messageId}`,
+      dedupeKey: replyKey,
       proactive: false,
       kind: "reply",
       produced: producedStamp(spec.primary),
