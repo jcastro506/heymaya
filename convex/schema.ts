@@ -44,6 +44,9 @@ export default defineSchema({
     mode: v.union(v.literal("full"), v.literal("thin"), v.literal("newCreator")),
     dossier: v.optional(v.any()), // Dossier (§14.1), zod-validated at write time
     dossierVersion: v.number(),
+    memoryEpoch: v.optional(v.number()),
+    signalsSeparatedAt: v.optional(v.number()),
+    performanceAffinities: v.optional(v.array(v.object({ key: v.string(), kind: v.string(), score: v.number(), n: v.number(), updatedAt: v.optional(v.number()) }))),
     dossierPrevious: v.optional(v.any()), // §15.7: the version before the last rewrite
     dossierDiff: v.optional(v.object({ version: v.number(), at: v.number(), changed: v.array(v.string()) })),
     notes: v.array(
@@ -442,6 +445,28 @@ export default defineSchema({
     receivedAt: v.number(),
   }).index("by_event_id", ["eventId"]),
 
+  // Evidence-linked decisions, experiences and style history. No inferred action completion.
+  personalRecords: defineTable({
+    creatorId: v.id("creators"),
+    key: v.string(),
+    kind: v.union(v.literal("preference"), v.literal("effort"), v.literal("decision"), v.literal("commitment"), v.literal("style")),
+    text: v.string(),
+    reason: v.optional(v.string()),
+    sourceMessageIds: v.array(v.id("messages")),
+    sourcePostIds: v.array(v.id("ownPosts")),
+    sourceNoteIds: v.array(v.string()),
+    blockId: v.optional(v.id("calendarBlocks")),
+    facts: v.optional(v.object({ n: v.number(), medianWords: v.union(v.number(), v.null()), lowercaseStartPct: v.union(v.number(), v.null()), emojiPct: v.union(v.number(), v.null()), questionPct: v.union(v.number(), v.null()), medianHashtags: v.union(v.number(), v.null()) })),
+    periodStart: v.optional(v.number()),
+    periodEnd: v.optional(v.number()),
+    active: v.boolean(),
+    at: v.number(),
+    invalidatedAt: v.optional(v.number()),
+  }).index("by_creator", ["creatorId"])
+    .index("by_creator_key", ["creatorId", "key"])
+    .index("by_creator_kind", ["creatorId", "kind", "at"])
+    .searchIndex("by_text", { searchField: "text", filterFields: ["creatorId", "active"] }),
+
   // ------------------------------------------------------------------ memories
   // §15.7 (4): retrieval on demand. Saved ideas, notes and the swipe file, embedded once.
   memories: defineTable({
@@ -450,11 +475,13 @@ export default defineSchema({
     kind: v.union(v.literal("idea"), v.literal("note"), v.literal("swipe"), v.literal("post")),
     refId: v.string(), // the idea id, note id, or ownPosts id
     text: v.string(),
-    embedding: v.array(v.float64()),
+    embedding: v.optional(v.array(v.float64())),
+    embeddingState: v.optional(v.union(v.literal("pending"), v.literal("ready"), v.literal("failed"))),
     at: v.number(),
   })
     .index("by_creator_ref", ["creatorId", "refId"])
-    .vectorIndex("by_embedding", { vectorField: "embedding", dimensions: 768, filterFields: ["creatorId"] }),
+    .searchIndex("by_text", { searchField: "text", filterFields: ["creatorId", "kind"] })
+    .vectorIndex("by_embedding", { vectorField: "embedding", dimensions: 768, filterFields: ["creatorId", "kind"] }),
 
   // ------------------------------------------------------------------ evalRuns
   // Sprint 3c: one row per evaluated message; the checks are code, the judge is a second family.
@@ -565,6 +592,8 @@ export default defineSchema({
     surface: v.union(v.literal("telegram"), v.literal("imessage"), v.literal("web"), v.literal("system")),
     kind: v.optional(v.string()), // first_read | scout | worth_seeing | calendar_idea | checklist | feedback | review | status | reply | inbound
     body: v.string(),
+    memoryExcludedAt: v.optional(v.number()), // forgotten source; excluded from context and conversation retrieval
+    memoryProcessedAt: v.optional(v.number()),
     dedupeKey: v.optional(v.string()), // required on every proactive outbound; enforced in messages.ts
     proactive: v.optional(v.boolean()),
     turnId: v.optional(v.string()),
@@ -590,6 +619,7 @@ export default defineSchema({
   })
     .index("by_creator", ["creatorId"])
     .index("by_creator_tg_message", ["creatorId", "telegramMessageId"])
+    .searchIndex("by_body", { searchField: "body", filterFields: ["creatorId", "memoryExcludedAt"] })
     .index("by_creator_and_ts", ["creatorId", "ts"])
     .index("by_creator_and_dedupe", ["creatorId", "dedupeKey"])
     .index("by_creator_and_awaiting", ["creatorId", "awaitingAnswer"])

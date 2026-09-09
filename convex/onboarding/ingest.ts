@@ -15,6 +15,7 @@ import { DossierSchema, DOSSIER_JSON_SHAPE } from "../contracts/dossier";
 import { driftShare, LANE } from "./lane";
 import { SOUL } from "../agent/soul";
 import { summarize, type Affinity } from "../taste/affinities";
+import { separatedCreator } from "../taste/separation";
 
 const TRANSCRIPT_CAP = 40; // tonight: transcripts for the sample only; the full-catalogue pass follows with batch
 
@@ -144,16 +145,17 @@ export const storeTranscript = internalMutation({
 });
 
 export const writeDossier = internalMutation({
-  args: { creatorId: v.id("creators"), dossier: v.any(), mode: v.union(v.literal("full"), v.literal("thin"), v.literal("newCreator")) },
-  handler: async (ctx, a): Promise<{ version: number }> => {
+  args: { creatorId: v.id("creators"), dossier: v.any(), mode: v.union(v.literal("full"), v.literal("thin"), v.literal("newCreator")), epoch: v.optional(v.number()) },
+  handler: async (ctx, a): Promise<{ version: number; stored: boolean }> => {
     const creator = (await ctx.db.get(a.creatorId)) as Doc<"creators">;
+    if (!creator || creator.plan.status === "deleting" || (a.epoch ?? 0) !== (creator.memoryEpoch ?? 0)) return { version: creator?.dossierVersion ?? 0, stored: false };
     const version = (creator.dossierVersion ?? 0) + 1;
     const next = { ...(a.dossier as object), version } as Record<string, unknown>;
     const prev = (creator.dossier ?? null) as Record<string, unknown> | null;
     // §15.7: a rewrite is a diff row, never a silent overwrite. Section-level, by code.
     const changed = prev ? Object.keys({ ...prev, ...next }).filter((k) => k !== "version" && k !== "readFrom" && JSON.stringify(prev[k]) !== JSON.stringify(next[k])) : Object.keys(next);
     await ctx.db.patch(a.creatorId, { dossier: next, dossierVersion: version, dossierPrevious: prev ?? undefined, dossierDiff: { version, at: Date.now(), changed }, mode: a.mode, updatedAt: Date.now() });
-    return { version };
+    return { version, stored: true };
   },
 });
 
@@ -322,7 +324,8 @@ export const synthesize = internalAction({
       if (retry.ok) parsed = parseDossier(retry.content, { readFrom: readFrom as never, mode });
     }
     if (!parsed.ok) return { ok: false, reason: `dossier did not validate: ${parsed.error}` };
-    await ctx.runMutation(internal.onboarding.ingest.writeDossier, { creatorId: creator._id, dossier: parsed.dossier, mode });
+    const stored = await ctx.runMutation(internal.onboarding.ingest.writeDossier, { creatorId: creator._id, dossier: parsed.dossier, mode, epoch: creator.memoryEpoch ?? 0 });
+    if (!stored.stored) return { ok: false, reason: "memory changed during synthesis" };
 
     /**
      * Sprint 4d — lane drift. A lane that was right in March is wrong in September, and
@@ -345,8 +348,9 @@ export const synthesize = internalAction({
 export const learnInputs = internalQuery({
   args: { creatorId: v.id("creators") },
   handler: async (ctx, a): Promise<{ dossier: unknown; dossierVersion: number; rules: string[]; notes: string[]; taste: { likes: string[]; dislikes: string[] }; postedIdeas: string[] } | null> => {
-    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    let c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c) return null;
+    c = await separatedCreator(ctx, c);
     const directives = (await ctx.db.query("directives").withIndex("by_creator_and_active", (q) => q.eq("creatorId", a.creatorId).eq("active", true)).collect()) as Doc<"directives">[];
     const ideas = (await ctx.db.query("ideas").withIndex("by_creator_status", (q) => q.eq("creatorId", a.creatorId).eq("status", "posted")).take(20)) as Doc<"ideas">[];
     return {

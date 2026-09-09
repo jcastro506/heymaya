@@ -8,9 +8,8 @@
  * teaches her nothing. Outcomes need no tap. A post either beat their normal or it did not,
  * and that fact is already in a row two days later.
  *
- * So: when a posted idea's numbers land, fold the RESULT back into taste, and let the
- * hook that beat their normal rise in the lines she quotes. Nothing here asks the creator
- * anything, and nothing here is a model's opinion.
+ * Results now update performanceAffinities, separate from the creator's preferences.
+ * A flop never rewrites enjoyment. Both signals remain available to the writer.
  */
 
 import { v } from "convex/values";
@@ -18,6 +17,7 @@ import { internalAction, internalMutation, internalQuery } from "../_generated/s
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { applyEvent, featureKeys, WEIGHTS, type Affinity } from "./affinities";
+import { ensureSeparated } from "./separation";
 
 export const OUTCOME = {
   /** Two days of numbers before a post is evidence of anything (§13.7). */
@@ -67,8 +67,7 @@ export const pending = internalQuery({
 });
 
 /**
- * Fold one verdict in. A result outranks the tap that preceded it: a format they hearted
- * and then flopped with moves DOWN, which a tap-only system could never learn.
+ * Fold one verdict into performance evidence. Preserve the creator's preference score.
  */
 export const learn = internalMutation({
   args: { creatorId: v.id("creators"), ideaId: v.id("ideas"), verdict: v.union(v.literal("win"), v.literal("flop")), multiple: v.number(), now: v.optional(v.number()) },
@@ -77,6 +76,7 @@ export const learn = internalMutation({
     const idea = (await ctx.db.get(a.ideaId)) as Doc<"ideas"> | null;
     const creator = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!idea || !creator || idea.creatorId !== a.creatorId) return { learned: false, keys: [] };
+    const clean = await ensureSeparated(ctx, creator);
     if (idea.outcomeLearnedAt) return { learned: false, keys: [] }; // once per idea, ever
     const keys = featureKeys(idea.features);
     // Scaled by how far it went: a 4× win teaches more than a 1.6× one, capped so one
@@ -84,7 +84,7 @@ export const learn = internalMutation({
     const scale = a.verdict === "win" ? Math.min(2, a.multiple / OUTCOME.winMultiple) : Math.min(2, OUTCOME.flopMultiple / Math.max(0.05, a.multiple));
     const weight = (a.verdict === "win" ? OUTCOME.winWeight : OUTCOME.flopWeight) * scale;
     await ctx.db.insert("tasteEvents", { creatorId: a.creatorId, ideaId: a.ideaId, kind: a.verdict === "win" ? "outcome_win" : "outcome_flop", weight, features: keys, at: now });
-    if (keys.length) await ctx.db.patch(a.creatorId, { affinities: applyEvent((creator.affinities ?? []) as Affinity[], keys, weight, now), updatedAt: now });
+    if (keys.length) await ctx.db.patch(a.creatorId, { performanceAffinities: applyEvent((clean.performanceAffinities ?? []) as Affinity[], keys, weight, now), updatedAt: now });
     await ctx.db.patch(a.ideaId, { outcomeLearnedAt: now, outcomeMultiple: a.multiple });
     return { learned: true, keys };
   },

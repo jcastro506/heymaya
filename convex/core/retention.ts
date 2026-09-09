@@ -25,6 +25,9 @@ export const nightly = internalMutation({
       await ctx.db.delete(m._id);
       messages++;
     }
+    // Conversation-derived records must not become a second, permanent copy of expired chat.
+    const oldPersonal = await ctx.db.query("personalRecords").filter((q) => q.and(q.lt(q.field("at"), now - MESSAGE_DAYS * 86_400_000), q.neq(q.field("kind"), "style"))).take(BATCH);
+    for (const record of oldPersonal) await ctx.db.delete(record._id);
     // Calendar rows are kept ninety days past their start; a rolling window, never the whole calendar.
     const oldEvents = (await ctx.db.query("calendarEvents").filter((q) => q.lt(q.field("start"), now - CALENDAR_DAYS * 86_400_000)).take(BATCH)) as Doc<"calendarEvents">[];
     for (const e of oldEvents) {

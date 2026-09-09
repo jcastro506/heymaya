@@ -53,7 +53,8 @@ describe("folding the result back", () => {
     const r = await t.mutation(internal.taste.outcomes.learn, { creatorId, ideaId, verdict: "win", multiple: 3, now: NOW });
     expect(r.learned).toBe(true);
     const c = await t.run((ctx) => ctx.db.get(creatorId));
-    const fmt = c!.affinities.find((a) => a.key === "format:talking-head")!;
+    const fmt = c!.performanceAffinities!.find((a) => a.key === "format:talking-head")!;
+    expect(c!.affinities).toEqual([]);
     expect(fmt.score).toBeGreaterThan(0);
     const ev = await t.run((ctx) => ctx.db.query("tasteEvents").collect());
     expect(ev[0].kind).toBe("outcome_win");
@@ -65,10 +66,11 @@ describe("folding the result back", () => {
     const { creatorId, ideaId } = await posted(t, FEATURES);
     await t.mutation(internal.taste.outcomes.learn, { creatorId, ideaId, verdict: "flop", multiple: 0.3, now: NOW });
     const c = await t.run((ctx) => ctx.db.get(creatorId));
-    expect(c!.affinities.find((a) => a.key === "format:talking-head")!.score).toBeLessThan(0);
+    expect(c!.performanceAffinities!.find((a) => a.key === "format:talking-head")!.score).toBeLessThan(0);
+    expect(c!.affinities).toEqual([]);
   });
 
-  it("a result outranks the tap before it: hearted then flopped ends up negative", async () => {
+  it("a disappointing result does not erase the creator's enthusiasm", async () => {
     const t = convexTest(schema, modules);
     const { creatorId, ideaId } = await posted(t, FEATURES);
     await t.mutation(internal.taste.events.record, { creatorId, ideaId, kind: "heart", reaction: "🔥" });
@@ -76,18 +78,18 @@ describe("folding the result back", () => {
     expect(afterTap).toBeGreaterThan(0);
     await t.mutation(internal.taste.outcomes.learn, { creatorId, ideaId, verdict: "flop", multiple: 0.2, now: NOW });
     const after = (await t.run((ctx) => ctx.db.get(creatorId)))!.affinities.find((a) => a.key === "format:talking-head")!.score;
-    expect(after, "what happened beats what they tapped").toBeLessThan(afterTap);
-    expect(after).toBeLessThan(0);
+    expect(after).toBe(afterTap);
+    expect((await t.run((ctx) => ctx.db.get(creatorId)))!.performanceAffinities![0].score).toBeLessThan(0);
   });
 
   it("a bigger win teaches more, but one freak post cannot rewrite their taste", async () => {
     const t = convexTest(schema, modules);
     const a = await posted(t, FEATURES);
     await t.mutation(internal.taste.outcomes.learn, { creatorId: a.creatorId, ideaId: a.ideaId, verdict: "win", multiple: 2, now: NOW });
-    const small = (await t.run((ctx) => ctx.db.get(a.creatorId)))!.affinities.find((x) => x.key === "format:talking-head")!.score;
+    const small = (await t.run((ctx) => ctx.db.get(a.creatorId)))!.performanceAffinities!.find((x) => x.key === "format:talking-head")!.score;
     const b = await posted(t, FEATURES);
     await t.mutation(internal.taste.outcomes.learn, { creatorId: b.creatorId, ideaId: b.ideaId, verdict: "win", multiple: 40, now: NOW });
-    const huge = (await t.run((ctx) => ctx.db.get(b.creatorId)))!.affinities.find((x) => x.key === "format:talking-head")!.score;
+    const huge = (await t.run((ctx) => ctx.db.get(b.creatorId)))!.performanceAffinities!.find((x) => x.key === "format:talking-head")!.score;
     expect(huge).toBeGreaterThan(small);
     expect(huge, "capped").toBeLessThanOrEqual(small * 2 + 0.01);
   });
@@ -127,8 +129,8 @@ describe("the nightly sweep", () => {
 
     const first = await t.action(internal.taste.outcomes.runAll, { now: NOW });
     expect(first.learned).toBe(2);
-    expect((await t.run((ctx) => ctx.db.get(winner)))!.affinities.find((x) => x.key === "format:talking-head")!.score).toBeGreaterThan(0);
-    expect((await t.run((ctx) => ctx.db.get(flopper)))!.affinities.find((x) => x.key === "format:talking-head")!.score).toBeLessThan(0);
+    expect((await t.run((ctx) => ctx.db.get(winner)))!.performanceAffinities!.find((x) => x.key === "format:talking-head")!.score).toBeGreaterThan(0);
+    expect((await t.run((ctx) => ctx.db.get(flopper)))!.performanceAffinities!.find((x) => x.key === "format:talking-head")!.score).toBeLessThan(0);
 
     // Idempotent: a second night learns nothing new and writes no second event.
     expect((await t.action(internal.taste.outcomes.runAll, { now: NOW + 86_400_000 })).learned).toBe(0);

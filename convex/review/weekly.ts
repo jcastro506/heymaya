@@ -22,6 +22,7 @@ import { computeRung, engagement, type RungFacts } from "./rung";
 import { growthFacts, type GrowthPlan } from "../agent/growth";
 import { localHourMinute } from "../scout/gate";
 import { summarize, type Affinity } from "../taste/affinities";
+import { separatedCreator } from "../taste/separation";
 import { laneBenchmarkFor } from "../scout/benchmarks";
 import { investigate } from "../agent/investigate";
 import { LOOKUPS } from "../agent/playbooks";
@@ -73,8 +74,9 @@ export const runAll = internalAction({
 export const inputs = internalQuery({
   args: { creatorId: v.id("creators"), now: v.number() },
   handler: async (ctx, a) => {
-    const creator = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    let creator = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!creator) return null;
+    creator = await separatedCreator(ctx, creator);
     const since = a.now - WEEK_MS;
     const all = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(80)) as Doc<"ownPosts">[];
     const week = all.filter((p) => p.createTime >= since);

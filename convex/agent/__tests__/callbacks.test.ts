@@ -27,7 +27,7 @@ describe("callbacks: what a friend would bring up (2026-09-07)", () => {
       notes: [{ text: "training for chicago in october", kind: "life", expiresHint: NOW + 40 * day }, { text: "never suggest dance trends", kind: "rule" }],
     });
     expect(cb.map((c) => c.kind)).toEqual(["unfilmed", "win", "note"]);
-    expect(cb[0].line).toMatch(/tier list.*10 days ago and have not filmed it/);
+    expect(cb[0].line).toMatch(/tier list.*10 days ago; not marked posted/);
     expect(cb[1].line).toMatch(/pet reacting to a television screen.*8.99×/);
     expect(cb[1].line).not.toMatch(/old hit/);
     expect(cb[2].line).toMatch(/chicago/);

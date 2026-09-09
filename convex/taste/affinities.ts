@@ -33,8 +33,7 @@ export const WEIGHTS: Record<string, number> = {
   reply_neg: -1.5,
   thumbs_down: -1.5,
   notme: -2,
-  // Sprint 4c — what actually happened, scaled at write time by how far it went. A result
-  // outranks a tap: a format they hearted and then flopped with moves down.
+  // Outcome weights use the separate performance ledger, never preference scores.
   outcome_win: 3,
   outcome_flop: -1.5,
 };

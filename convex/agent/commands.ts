@@ -10,6 +10,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { deliverNow } from "../core/scheduler";
 import { resolveTelegramBotIdentity, sendTelegramMessage } from "../integrations/telegram/client";
+import { forgetEvidence, recordVisible } from "./personalHistory";
 
 export const apply = internalMutation({
   args: { creatorId: v.id("creators"), command: v.union(v.literal("stop"), v.literal("resume"), v.literal("forget"), v.literal("delete")) },
@@ -27,9 +28,15 @@ export const apply = internalMutation({
     }
     if (a.command === "forget") {
       const live = (c.notes ?? []).filter((n) => !n.tombstonedAt).sort((x, y) => y.at - x.at);
-      const last = live[0];
+      let last = live[0];
+      const records = await ctx.db.query("personalRecords").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").take(30);
+      for (const record of records) {
+        if (record.kind !== "style" && (!last || record.at > last.at) && await recordVisible(ctx, record, c._id)) {
+          last = { id: String(record._id), text: record.text, kind: "fact", at: record.at, sourceMessageId: record.sourceMessageIds[0] };
+        }
+      }
       if (!last) return { body: "nothing recent to forget. tell me what you mean and i'll drop it." };
-      await ctx.db.patch(c._id, { notes: (c.notes ?? []).map((n) => (n.id === last.id ? { ...n, tombstonedAt: now } : n)), updatedAt: now });
+      await forgetEvidence(ctx, c, last);
       return { body: `forgotten: "${last.text.slice(0, 80)}".` };
     }
     // delete: the nine-step procedure (§16.5) runs from Settings after a confirm; never from a text alone.

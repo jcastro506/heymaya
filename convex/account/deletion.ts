@@ -36,6 +36,7 @@ export const TABLES_BY_CREATOR = [
   "budgets",
   "costEvents",
   "memories",
+  "personalRecords",
   "laneReads",
   "followerSnapshots",
   "evalRuns",
@@ -77,6 +78,8 @@ export const exportMine = query({
       directives: await pick("directives"),
       calendarBlocks: await pick("calendarBlocks"),
       tasteEvents: await pick("tasteEvents"),
+      personalRecords: await pick("personalRecords"),
+      memories: await pick("memories"),
       trackedAccounts: await pick("trackedAccounts"),
     };
   },

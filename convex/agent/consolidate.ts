@@ -9,6 +9,22 @@ import { v } from "convex/values";
 import { internalMutation } from "../_generated/server";
 import type { Doc } from "../_generated/dataModel";
 import { localHourMinute } from "../scout/gate";
+import { internal } from "../_generated/api";
+import { captureStyle } from "./personalHistory";
+import { ensureSeparated } from "../taste/separation";
+
+export const maintainPersonal = internalMutation({
+  args: { creatorId: v.id("creators"), now: v.optional(v.number()) },
+  handler: async (ctx, a) => {
+    const creator = await ctx.db.get(a.creatorId);
+    if (!creator || creator.plan.status === "deleting") return;
+    await ensureSeparated(ctx, creator);
+    const now = a.now ?? Date.now();
+    const previous = await ctx.db.query("personalRecords").withIndex("by_creator_kind", (q) => q.eq("creatorId", creator._id).eq("kind", "style")).first();
+    if (!previous) for (const days of [90, 60, 30]) await captureStyle(ctx, creator._id, now - days * 86_400_000);
+    await captureStyle(ctx, creator._id, now);
+  },
+});
 
 export const MIN_REPLIES_FOR_HOUR = 6;
 
@@ -26,6 +42,7 @@ export const nightly = internalMutation({
     const creators = (await ctx.db.query("creators").collect()) as Doc<"creators">[];
     let expiredNotes = 0, hoursLearned = 0;
     for (const c of creators) {
+      await ctx.scheduler.runAfter(0, internal.agent.consolidate.maintainPersonal, { creatorId: c._id, now });
       const patch: Partial<Doc<"creators">> = {};
       const notes = (c.notes ?? []).map((n) => {
         // §21.5 callbacks: a running bit never expires on its own; only "forget that" ends one.

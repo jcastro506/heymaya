@@ -10,6 +10,7 @@ import { internalMutation, internalQuery, mutation } from "../_generated/server"
 import type { Doc, Id } from "../_generated/dataModel";
 import { applyEvent, featureKeys, TASTE, WEIGHTS, type Affinity } from "./affinities";
 import { creatorForIdentity } from "../core/identity";
+import { ensureSeparated, isOutcome } from "./separation";
 
 const STATUS_FOR: Record<string, Doc<"ideas">["status"] | undefined> = { posted: "posted", heart: "hearted", notme: "passed", thumbs_down: "passed", ignored: "expired" };
 
@@ -24,8 +25,9 @@ export const record = internalMutation({
     reaction: v.optional(v.string()),
   },
   handler: async (ctx, a): Promise<{ ok: boolean; reason?: string; eventId?: Id<"tasteEvents"> }> => {
-    const creator = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    let creator = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!creator) return { ok: false, reason: "creator not found" };
+    creator = await ensureSeparated(ctx, creator);
     let idea: Doc<"ideas"> | null = null;
     if (a.ideaId) {
       idea = (await ctx.db.get(a.ideaId)) as Doc<"ideas"> | null;
@@ -39,8 +41,8 @@ export const record = internalMutation({
     const now = Date.now();
     const eventId = await ctx.db.insert("tasteEvents", { creatorId: a.creatorId, ideaId: a.ideaId, messageId: a.messageId, kind: a.kind, weight, features: keys, at: now });
     if (keys.length && weight !== 0) {
-      const affinities = applyEvent((creator.affinities ?? []) as Affinity[], keys, weight, now);
-      await ctx.db.patch(a.creatorId, { affinities, updatedAt: now });
+      const field = isOutcome(a.kind) ? "performanceAffinities" : "affinities";
+      await ctx.db.patch(a.creatorId, { [field]: applyEvent((creator[field] ?? []) as Affinity[], keys, weight, now), updatedAt: now });
     }
     if (idea) {
       const status = STATUS_FOR[a.kind];
@@ -78,8 +80,9 @@ export const expireIgnored = internalMutation({
         await ctx.db.patch(idea._id, { status: "expired" });
         continue;
       }
-      const creator = (await ctx.db.get(idea.creatorId)) as Doc<"creators"> | null;
+      let creator = (await ctx.db.get(idea.creatorId)) as Doc<"creators"> | null;
       if (!creator) continue;
+      creator = await ensureSeparated(ctx, creator);
       const keys = featureKeys(idea.features);
       const weight = idea.newForYou ? 0 : WEIGHTS.ignored;
       await ctx.db.insert("tasteEvents", { creatorId: idea.creatorId, ideaId: idea._id, kind: "ignored", weight, features: keys, at: now });
@@ -95,9 +98,10 @@ export const expireIgnored = internalMutation({
 export const markPosted = mutation({
   args: { ideaId: v.id("ideas") },
   handler: async (ctx, a): Promise<{ ok: boolean }> => {
-    const c = await creatorForIdentity(ctx);
+    let c = await creatorForIdentity(ctx);
     const idea = (await ctx.db.get(a.ideaId)) as Doc<"ideas"> | null;
     if (!c || !idea || idea.creatorId !== c._id) return { ok: false };
+    c = await ensureSeparated(ctx, c);
     if (idea.status === "posted") return { ok: true };
     const now = Date.now();
     const keys = featureKeys(idea.features);

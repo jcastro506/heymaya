@@ -45,7 +45,7 @@ export const TOOLS: OpenRouterTool[] = [
   { type: "function", function: { name: "discover_profiles", description: "Instagram profiles for a keyword. 1 credit.", parameters: { type: "object", properties: { keyword: str, why: str }, required: ["keyword", "why"] } } },
   { type: "function", function: { name: "own_rhymes", description: "The creator's OWN posts that rhyme with a topic or format, with their multiples. Free. Use before saying 'this is yours to take'.", parameters: { type: "object", properties: { query: str, why: str }, required: ["query", "why"] } } },
   { type: "function", function: { name: "lane_benchmark", description: "This week's median and top-quarter views across the creator's lane (their keywords and the accounts they watch), or why it is unusable. Free. Use to say whether a number is good, not just big.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
-  { type: "function", function: { name: "recall", description: "Search the creator's own memory: ideas she sent, ideas they saved, things they told her. Free. Use when they refer to something from before.", parameters: { type: "object", properties: { query: str, why: str }, required: ["query", "why"] } } },
+  { type: "function", function: { name: "recall", description: "Search their posts, saved ideas, personal facts AND retained conversations with surrounding context. Use specific names, topics or distinctive words, not a whole conversational question. Use for past decisions, rejected ideas, promises, and how their style has changed. Historical Maya messages are suggestions, not proof of execution. Current user corrections override old passages.", parameters: { type: "object", properties: { query: str, why: str }, required: ["query", "why"] } } },
   { type: "function", function: { name: "calendar_upcoming", description: "What is on the creator's calendar in the next two weeks (titles and times only). Free.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
   // Sprint 4b — the plan is theirs to manage by text. These WRITE. Say what you did only after the tool says ok.
   { type: "function", function: { name: "week_plan", description: "Their week's plan as rows: every film, edit and post block with its time, hook, whether it is booked or only proposed, whether it was filmed, and its id. Free. Read this before moving or dropping anything.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
@@ -187,9 +187,19 @@ export async function runTool(ctx: ActionCtx, creatorId: Id<"creators">, call: {
       return b.usable ? `lane this week: median ${b.medianViews?.toLocaleString()} views, top quarter from ${b.p75Views?.toLocaleString()}, median engagement per view ${((b.medianEngagementPerView ?? 0) * 100).toFixed(1)}% (${b.why})` : `no usable lane median: ${b.why}`;
     }
     if (call.name === "recall") {
-      const hits = await ctx.runAction(internal.agent.memory.recall, { creatorId, query: String(call.args.query ?? ""), k: 4 });
+      const query = String(call.args.query ?? "");
+      const [hits, conversations, personal] = await Promise.all([
+        ctx.runAction(internal.agent.memory.recall, { creatorId, query, k: 4 }),
+        ctx.runQuery(internal.agent.memory.conversations, { creatorId, query }),
+        ctx.runQuery(internal.agent.memory.personal, { creatorId, query }),
+      ]);
       record(true, 0);
-      return hits.length ? cap(hits.map((h) => `[${h.kind}, ${new Date(h.at).toISOString().slice(0, 10)}] ${h.text.slice(0, 300)}`).join("\n")) : "nothing close enough in their memory";
+      const evidence = [
+        ...personal.slice(0, 2).map((h) => `[${h.kind}; ${new Date(h.at).toISOString().slice(0, 10)}; sources ${h.sourceIds.join(",")}] ${h.text.slice(0, 650)}`),
+        ...conversations.slice(0, 2).map((h) => `[conversation ${new Date(h.at).toISOString().slice(0, 10)}; source ${h.sourceId}]\n${h.text.slice(0, 1100)}`),
+        ...hits.map((h) => `[${h.kind}; source ${h.refId}; indexed ${new Date(h.at).toISOString().slice(0, 10)}] ${h.text.slice(0, 400)}`),
+      ];
+      return evidence.length ? evidence.join("\n\n").slice(0, 4500) : "No matching evidence found. This is a search miss, not proof they never told you. Ask for one useful clue; never invent the past.";
     }
     if (call.name === "calendar_free") {
       const a = await ctx.runQuery(internal.calendar.availability.forCreator, { creatorId, days: typeof call.args.days === "number" ? call.args.days : undefined });

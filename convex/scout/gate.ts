@@ -9,6 +9,7 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { rankMultiplier, tasteHint, TASTE, type Affinity } from "../taste/affinities";
+import { separatedCreator } from "../taste/separation";
 import { budgetExhausted } from "../core/budgets";
 import { THRESHOLDS } from "../config/thresholds";
 import { dayKeyInZone } from "../core/cadence";
@@ -79,8 +80,9 @@ export const railsOnly = internalQuery({
 export const railsFor = internalQuery({
   args: { creatorId: v.id("creators"), now: v.number() },
   handler: async (ctx, a): Promise<{ rails: Rails; creator: Doc<"creators">; candidates: Doc<"signals">[]; tasteHints: Record<string, string>; tasteDropped: Array<{ signalId: Id<"signals">; why: string }>; exploreOpen: boolean; askStop: Array<{ trackedAccountId: Id<"trackedAccounts">; handle: string }> } | null> => {
-    const creator = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    let creator = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!creator) return null;
+    creator = await separatedCreator(ctx, creator);
     const day = dayKeyInZone(a.now, creator.timezone);
     const recent = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(50)) as Doc<"messages">[];
     const sentToday = recent.filter((m) => m.direction === "out" && m.proactive && dayKeyInZone(m.ts, creator.timezone) === day && m.kind !== "status").length;

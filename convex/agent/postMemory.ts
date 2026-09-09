@@ -42,9 +42,11 @@ export const postWithCard = internalQuery({
 });
 
 export const postIds = internalQuery({
-  args: { creatorId: v.id("creators") },
-  handler: async (ctx, a): Promise<Id<"ownPosts">[]> =>
-    ((await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(200)) as Doc<"ownPosts">[]).map((p) => p._id),
+  args: { creatorId: v.id("creators"), cursor: v.optional(v.string()) },
+  handler: async (ctx, a): Promise<{ ids: Id<"ownPosts">[]; cursor: string | null }> => {
+    const page = await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").paginate({ cursor: a.cursor ?? null, numItems: 40 });
+    return { ids: page.page.map((p) => p._id), cursor: page.isDone ? null : page.continueCursor };
+  },
 });
 
 /** One post into memory, re-indexed when it is watched again (same refId, upsert). */
@@ -53,21 +55,22 @@ export const indexPost = internalAction({
   handler: async (ctx, a): Promise<{ indexed: boolean }> => {
     const r = await ctx.runQuery(internal.agent.postMemory.postWithCard, { creatorId: a.creatorId, ownPostId: a.ownPostId });
     if (!r) return { indexed: false };
-    await ctx.runAction(internal.agent.memory.index, { creatorId: a.creatorId, kind: "post", refId: String(a.ownPostId), text: r.text });
-    return { indexed: true };
+    const result = await ctx.runAction(internal.agent.memory.index, { creatorId: a.creatorId, kind: "post", refId: String(a.ownPostId), text: r.text });
+    return { indexed: result.ok };
   },
 });
 
 /** Every post they have, after onboarding and on demand. */
 export const indexAll = internalAction({
-  args: { creatorId: v.id("creators") },
+  args: { creatorId: v.id("creators"), cursor: v.optional(v.string()) },
   handler: async (ctx, a): Promise<{ indexed: number }> => {
-    const ids = await ctx.runQuery(internal.agent.postMemory.postIds, { creatorId: a.creatorId });
+    const page = await ctx.runQuery(internal.agent.postMemory.postIds, a);
     let indexed = 0;
-    for (const ownPostId of ids) {
+    for (const ownPostId of page.ids) {
       const r = await ctx.runAction(internal.agent.postMemory.indexPost, { creatorId: a.creatorId, ownPostId });
       if (r.indexed) indexed++;
     }
+    if (page.cursor) await ctx.scheduler.runAfter(0, internal.agent.postMemory.indexAll, { creatorId: a.creatorId, cursor: page.cursor });
     return { indexed };
   },
 });
