@@ -51,6 +51,11 @@ export const memoryOf = internalQuery({
   },
 });
 
+export const creatorByHandle = internalQuery({
+  args: { handle: v.string() },
+  handler: async (ctx, a): Promise<Id<"creators"> | null> => ((await ctx.db.query("creators").withIndex("by_tiktok", (q) => q.eq("handles.tiktok", a.handle)).first()) as Doc<"creators"> | null)?._id ?? null,
+});
+
 export const outboundSince = internalQuery({
   args: { creatorId: v.id("creators"), since: v.number() },
   handler: async (ctx, a): Promise<Array<{ id: Id<"messages">; kind: string; body: string; buttons: string[]; awaitingAnswer: boolean; ts: number }>> => {
@@ -136,10 +141,9 @@ export const report = internalQuery({
 export const run = internalAction({
   args: { handle: v.optional(v.string()), steps: v.optional(v.array(v.string())), reportKey: v.optional(v.string()) },
   handler: async (ctx, a): Promise<{ creatorId: Id<"creators">; passed: number; failed: number; reportKey: string }> => {
-    const scenarios = await ctx.runQuery(internal.eval.scenarios.list, {});
-    const sc = scenarios.find((s) => s.handle === (a.handle ?? "vanessaalopezz"));
-    if (!sc) throw new Error("no such scenario creator");
-    const creatorId = sc.creatorId;
+    // By handle, so the long-tenure twin (not in the fixed scenario list) can be run too.
+    const creatorId = await ctx.runQuery(internal.eval.memoryGauntlet.creatorByHandle, { handle: a.handle ?? "vanessaalopezz" });
+    if (!creatorId) throw new Error("no such scenario creator");
     const only = a.steps ? new Set(a.steps) : null;
     const steps: Step[] = [];
     const t0 = Date.now();
