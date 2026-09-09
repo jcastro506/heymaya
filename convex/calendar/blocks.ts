@@ -188,3 +188,15 @@ export const remove = internalAction({
     return { ok: true };
   },
 });
+
+/** Dev: what the event for an idea would say, exactly as Google shows it. */
+export const devPreviewEvent = internalQuery({
+  args: { ideaId: v.id("ideas"), kind: v.optional(v.union(v.literal("film"), v.literal("edit"), v.literal("post"))) },
+  handler: async (ctx, a): Promise<{ summary: string; description: string } | null> => {
+    const idea = (await ctx.db.get(a.ideaId)) as Doc<"ideas"> | null;
+    if (!idea) return null;
+    const kind = a.kind ?? "film";
+    const title = `${kind}: ${((idea.version ?? {}) as { hook?: string }).hook ?? idea.messageText?.slice(0, 40) ?? ""}`;
+    return { summary: eventSummary(kind, title), description: eventDescription({ kind, idea: ideaForEvent(idea) }) };
+  },
+});
