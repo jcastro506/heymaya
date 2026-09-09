@@ -99,7 +99,9 @@ export const addNote = internalMutation({
       superseded.tombstonedAt = now;
       const records = await ctx.db.query("personalRecords").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).collect();
       for (const record of records) if (record.sourceNoteIds.includes(superseded.id) || (superseded.sourceMessageId && record.sourceMessageIds.includes(superseded.sourceMessageId))) await ctx.db.patch(record._id, { active: false, invalidatedAt: now });
-      await ctx.db.patch(c._id, { memoryEpoch: (c.memoryEpoch ?? 0) + 1, dossier: undefined, dossierPrevious: undefined, dossierDiff: undefined, taste: undefined, growthPlan: undefined });
+      // A corrected fact bumps the epoch (stale rewrites are refused) and rebuilds the prose now; it never blanks who they are.
+      await ctx.db.patch(c._id, { memoryEpoch: (c.memoryEpoch ?? 0) + 1 });
+      await ctx.scheduler.runAfter(0, internal.onboarding.ingest.synthesize, { creatorId: c._id, reason: "correction" });
     }
     const dup = notes.find((n) => !n.tombstonedAt && n.text.toLowerCase().replace(/\s+/g, " ").trim() === norm);
     if (dup) {

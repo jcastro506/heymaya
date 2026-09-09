@@ -173,6 +173,17 @@ export const run = internalAction({
         const ok = said.some((s) => /travel|hostel|whv/i.test(s)) && !said.some((s) => /don't (know|recall)|nothing/i.test(s));
         record("recall", said, {}, ok, ok ? "she recalls the direction" : "she did not recall it");
       }
+      // 2b. A correction in words: the old direction is superseded, not piled on, and who they are is not blanked.
+      if (want("correction")) {
+        const before = await ctx.runQuery(internal.eval.memoryGauntlet.memoryOf, { creatorId });
+        const said = await say("actually scrap that. running stays the main thing. the travel stuff is just for the summer, not a pivot.");
+        const mem = await ctx.runQuery(internal.eval.memoryGauntlet.memoryOf, { creatorId });
+        const keptDossier = Boolean(mem && mem.keywords.length > 0);
+        const nowSaysRunning = Boolean(mem && (/running/i.test(mem.niche) || mem.notes.some((n) => /running.*(main|stay)|summer/i.test(n))));
+        const oldStillCurrent = Boolean(mem && /all in on solo travel/i.test(mem.niche));
+        const ok = keptDossier && nowSaysRunning && !oldStillCurrent;
+        record("correction", said, { nicheBefore: before?.niche, nicheAfter: mem?.niche, notes: mem?.notes, keywords: mem?.keywords }, ok, !keptDossier ? "the dossier was blanked by the correction" : !nowSaysRunning ? "the correction was not kept" : oldStillCurrent ? "the old direction still reads as current" : "the correction superseded the old direction and the dossier survived");
+      }
       // 3. The lane, now.
       if (want("lane")) {
         const said = await say("so what's my lane right now, one line.");

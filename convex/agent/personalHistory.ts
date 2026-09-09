@@ -4,6 +4,7 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { MESSAGE_DAYS } from "../core/retention";
 import { styleFacts } from "./voice";
 import { splitEvents } from "../taste/separation";
+import { internal } from "../_generated/api";
 
 export const normalizeMemory = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
@@ -96,5 +97,14 @@ export async function forgetEvidence(ctx: MutationCtx, creator: Doc<"creators">,
     else remaining.push(event);
   }
   const signals = splitEvents(remaining);
-  await ctx.db.patch(creator._id, { notes, affinities: signals.preferences, performanceAffinities: signals.performance, signalsSeparatedAt: now, memoryEpoch: (creator.memoryEpoch ?? 0) + 1, dossier: undefined, dossierPrevious: undefined, dossierDiff: undefined, taste: undefined, growthPlan: undefined, updatedAt: now });
+  /**
+   * Review 2026-09-09: blanking the dossier, the taste note and the growth plan here put the creator into
+   * "no dossier yet" mode for up to a week over one forgotten note, and the lane, the plan and the scout gate
+   * all read those fields. The epoch still fences any rewrite that started before this; the prose is rebuilt
+   * NOW from what remains (the note is tombstoned, its sources excluded), and the growth plan, which is theirs
+   * and confirmed, is not memory to forget.
+   */
+  await ctx.db.patch(creator._id, { notes, affinities: signals.preferences, performanceAffinities: signals.performance, signalsSeparatedAt: now, memoryEpoch: (creator.memoryEpoch ?? 0) + 1, updatedAt: now });
+  await ctx.scheduler.runAfter(0, internal.onboarding.ingest.synthesize, { creatorId: creator._id, reason: "correction" });
+  await ctx.scheduler.runAfter(0, internal.taste.profile.rewrite, { creatorId: creator._id });
 }

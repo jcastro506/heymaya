@@ -96,9 +96,11 @@ describe("personal continuity", () => {
     await t.mutation(internal.onboarding.ingest.writeDossier, { creatorId, dossier: { resurrected: true }, mode: "thin", epoch: 0 });
     await t.mutation(internal.taste.profile.store, { creatorId, text: "resurrected", eventsSeen: 1, epoch: 0 });
     const creator = await t.run((ctx) => ctx.db.get(creatorId));
-    expect(creator?.dossier).toBeUndefined();
-    expect(creator?.dossierPrevious).toBeUndefined();
-    expect(creator?.taste).toBeUndefined();
+    // Review 2026-09-09: forgetting a note never blanks who they are. The stale epoch-0 writes above were refused
+    // (the dossier is still the seeded one, not "resurrected"), and a fresh rewrite is scheduled from what remains.
+    expect((creator?.dossier as { resurrected?: boolean } | undefined)?.resurrected).toBeUndefined();
+    expect((creator?.dossier as { persona?: { world?: string } } | undefined)?.persona?.world).toBe("sister films everything");
+    expect(creator?.taste?.text).toBe("sister films everything");
     expect(creator?.memoryEpoch).toBe(1);
     expect(creator?.affinities).toEqual([]);
     expect((await t.run((ctx) => ctx.db.query("directives").collect()))[0].active).toBe(false);
