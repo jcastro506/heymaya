@@ -7,6 +7,7 @@
  */
 
 import { v } from "convex/values";
+import { eventDescription, eventSummary, ideaForEvent } from "./eventBody";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -27,6 +28,54 @@ export const propose = internalMutation({
 export const byId = internalQuery({
   args: { blockId: v.id("calendarBlocks") },
   handler: async (ctx, a): Promise<Doc<"calendarBlocks"> | null> => (await ctx.db.get(a.blockId)) as Doc<"calendarBlocks"> | null,
+});
+
+/** What the event should say: the block's idea and the creator's clock. */
+export const eventContext = internalQuery({
+  args: { blockId: v.id("calendarBlocks") },
+  handler: async (ctx, a): Promise<{ idea: Doc<"ideas"> | null; timezone: string } | null> => {
+    const b = (await ctx.db.get(a.blockId)) as Doc<"calendarBlocks"> | null;
+    if (!b) return null;
+    const idea = b.ideaId ? ((await ctx.db.get(b.ideaId)) as Doc<"ideas"> | null) : null;
+    const c = (await ctx.db.get(b.creatorId)) as Doc<"creators"> | null;
+    return { idea: idea && idea.creatorId === b.creatorId ? idea : null, timezone: c?.timezone ?? "UTC" };
+  },
+});
+
+/** The live events for an idea: booked, written to Google, not deleted. */
+export const liveForIdea = internalQuery({
+  args: { creatorId: v.id("creators"), ideaId: v.id("ideas") },
+  handler: async (ctx, a): Promise<Doc<"calendarBlocks">[]> => {
+    const rows = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("start", Date.now() - 30 * 86_400_000)).collect()) as Doc<"calendarBlocks">[];
+    return rows.filter((b) => b.ideaId === a.ideaId && b.consentAt && b.externalEventId && b.status !== "deleted");
+  },
+});
+
+/**
+ * The idea changed (a hook edited by text, a shot list written): every event booked for it gets
+ * the new words. Times untouched. Best effort per event; a failure is a named reason, never a throw.
+ */
+export const refreshForIdea = internalAction({
+  args: { creatorId: v.id("creators"), ideaId: v.id("ideas") },
+  handler: async (ctx, a): Promise<{ refreshed: number; reason?: string }> => {
+    const blocks = await ctx.runQuery(internal.calendar.blocks.liveForIdea, { creatorId: a.creatorId, ideaId: a.ideaId });
+    if (!blocks.length) return { refreshed: 0, reason: "no booked event for this idea" };
+    const conn = await ctx.runQuery(internal.calendar.oauth.connection, { creatorId: a.creatorId });
+    if (!conn || conn.status !== "connected") return { refreshed: 0, reason: "calendar not connected" };
+    let refreshed = 0;
+    for (const b of blocks) {
+      const c = await ctx.runQuery(internal.calendar.blocks.eventContext, { blockId: b._id });
+      if (!c) continue;
+      try {
+        const token = await ensureAccessToken(ctx, conn);
+        await patchEvent(token, { calendarId: b.calendarId ?? conn.calendarIds?.[0] ?? "primary", eventId: b.externalEventId!, timeZone: c.timezone, summary: eventSummary(b.kind, b.title), description: eventDescription({ kind: b.kind, idea: ideaForEvent(c.idea) }) });
+        refreshed += 1;
+      } catch (e) {
+        console.error(`[calendar] refresh of ${b._id} failed: ${e instanceof Error ? e.message.slice(0, 120) : String(e)}`);
+      }
+    }
+    return { refreshed };
+  },
 });
 
 /** Their yes, as a row. Idempotent. */
@@ -77,7 +126,9 @@ export const confirm = internalAction({
     const calendarId = conn.calendarIds?.[0] ?? "primary";
     try {
       const token = await ensureAccessToken(ctx, conn);
-      const ev = await createEvent(token, { calendarId, summary: b.title, description: "Planned with Maya. Move or delete it freely; she follows.", start: new Date(b.start).toISOString(), end: new Date(b.end).toISOString(), timeZone: tz });
+      // What they see when they click into it: the idea, the shot list, the post that started it (2026-09-09).
+      const c = await ctx.runQuery(internal.calendar.blocks.eventContext, { blockId: a.blockId });
+      const ev = await createEvent(token, { calendarId, summary: eventSummary(b.kind, b.title), description: eventDescription({ kind: b.kind, idea: ideaForEvent(c?.idea) }), start: new Date(b.start).toISOString(), end: new Date(b.end).toISOString(), timeZone: tz });
       await ctx.runMutation(internal.calendar.blocks.recordExternal, { blockId: a.blockId, externalEventId: ev.id, calendarId });
       return { ok: true, htmlLink: ev.htmlLink, when };
     } catch (e) {

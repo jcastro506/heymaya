@@ -42,6 +42,7 @@ import type * as billing_stripe from "../billing/stripe.js";
 import type * as billing_webhook from "../billing/webhook.js";
 import type * as calendar_availability from "../calendar/availability.js";
 import type * as calendar_blocks from "../calendar/blocks.js";
+import type * as calendar_eventBody from "../calendar/eventBody.js";
 import type * as calendar_firstIdeas from "../calendar/firstIdeas.js";
 import type * as calendar_habits from "../calendar/habits.js";
 import type * as calendar_ics from "../calendar/ics.js";
@@ -191,6 +192,7 @@ declare const fullApi: ApiFromModules<{
   "billing/webhook": typeof billing_webhook;
   "calendar/availability": typeof calendar_availability;
   "calendar/blocks": typeof calendar_blocks;
+  "calendar/eventBody": typeof calendar_eventBody;
   "calendar/firstIdeas": typeof calendar_firstIdeas;
   "calendar/habits": typeof calendar_habits;
   "calendar/ics": typeof calendar_ics;

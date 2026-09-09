@@ -326,6 +326,8 @@ export default defineSchema({
     /** Sprint 4c: the outcome has been folded into taste, once, ever. */
     outcomeLearnedAt: v.optional(v.number()),
     outcomeMultiple: v.optional(v.number()), // the swipe file (§11.3 save): kept, filterable, never expires
+    /** 2026-09-09: the shot list she wrote for it, once produced, so the calendar event can carry it. */
+    shotList: v.optional(v.string()),
     // §22 Sprint 4g: the idea drawn as two to four frames, once; re-sent from here for free.
     frames: v.optional(v.array(v.object({ storageId: v.id("_storage"), caption: v.string() }))),
     framesAt: v.optional(v.number()),

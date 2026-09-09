@@ -79,11 +79,17 @@ export async function createEvent(accessToken: string, args: { calendarId: strin
   return { id: ev.id, htmlLink: ev.htmlLink };
 }
 
-export async function patchEvent(accessToken: string, args: { calendarId: string; eventId: string; start: string; end: string; timeZone: string }): Promise<void> {
+export async function patchEvent(accessToken: string, args: { calendarId: string; eventId: string; start?: string; end?: string; timeZone: string; summary?: string; description?: string }): Promise<void> {
+  // Times, words, or both: a moved block sends times; an edited idea sends the words (2026-09-09).
+  const body: Record<string, unknown> = {};
+  if (args.start) body.start = { dateTime: args.start, timeZone: args.timeZone };
+  if (args.end) body.end = { dateTime: args.end, timeZone: args.timeZone };
+  if (args.summary !== undefined) body.summary = args.summary;
+  if (args.description !== undefined) body.description = args.description;
   const res = await calendarFetch(accessToken, `/calendars/${encodeURIComponent(args.calendarId)}/events/${encodeURIComponent(args.eventId)}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ start: { dateTime: args.start, timeZone: args.timeZone }, end: { dateTime: args.end, timeZone: args.timeZone } }),
+    body: JSON.stringify(body),
   });
   await readJsonOrThrow(res, "events.patch");
 }

@@ -7,7 +7,7 @@
  * so a re-send updates rather than duplicates.
  */
 
-export interface IcsBlock { id: string; kind: "film" | "edit" | "post"; title: string; start: number; end: number }
+export interface IcsBlock { id: string; kind: "film" | "edit" | "post"; title: string; start: number; end: number; description?: string }
 
 const pad = (n: number) => String(n).padStart(2, "0");
 /** UTC timestamp in the iCalendar form, e.g. 20260908T200000Z. */
@@ -41,7 +41,7 @@ export function buildIcs(blocks: IcsBlock[], now: number): string {
       `DTSTART:${icsStamp(b.start)}`,
       `DTEND:${icsStamp(b.end)}`,
       fold(`SUMMARY:${escapeText(`${label}: ${summary}`)}`),
-      fold(`DESCRIPTION:${escapeText("Planned with Maya. Move it and tell her; she follows.")}`),
+      fold(`DESCRIPTION:${escapeText(b.description ?? "Planned with Maya. Move it and tell her; she follows.")}`),
       "END:VEVENT",
     );
   }

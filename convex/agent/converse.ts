@@ -25,6 +25,15 @@ When: they tapped "shot list" on an idea you sent.
 The judgment: turn the idea into something they can shoot this afternoon. Five to six shots at most, each one line: what's on screen, what they say or the text that appears, roughly how long. Their setting and their opening pattern from the dossier. No production jargon.
 Hard rules: under 120 words. No question at the end unless a real decision needs it.`;
 
+export const saveShotList = internalMutation({
+  args: { creatorId: v.id("creators"), ideaId: v.id("ideas"), text: v.string() },
+  handler: async (ctx, a): Promise<null> => {
+    const idea = (await ctx.db.get(a.ideaId)) as Doc<"ideas"> | null;
+    if (idea && idea.creatorId === a.creatorId) await ctx.db.patch(a.ideaId, { shotList: a.text.slice(0, 1500) });
+    return null;
+  },
+});
+
 export const markIdea = internalMutation({
   args: { ideaId: v.id("ideas"), status: v.optional(v.union(v.literal("sent"), v.literal("hearted"), v.literal("posted"), v.literal("passed"), v.literal("expired"))), savedAt: v.optional(v.number()) },
   handler: async (ctx, a): Promise<null> => {
@@ -382,6 +391,11 @@ export const run = internalAction({
         const text = r.ok ? r.content.trim() : "";
         await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: text || "couldn't put the shot list together just now. ask me again in a minute.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply", produced: producedStamp(spec.primary) });
         await deliverNow(ctx as never);
+        if (text) {
+          // The shot list lives on the idea from now on, and any event booked for it gets it (2026-09-09).
+          await ctx.runMutation(internal.agent.converse.saveShotList, { creatorId: creator._id, ideaId, text });
+          await ctx.runAction(internal.calendar.blocks.refreshForIdea, { creatorId: creator._id, ideaId });
+        }
         return { ok: true };
       }
     }
@@ -432,6 +446,7 @@ export const run = internalAction({
         body = "scrapped. fewer like that.";
       } else {
         const r = await ctx.runMutation(internal.agent.moment.editIdea, { creatorId: creator._id, ideaId: latest.id, field: intent.field, value: intent.value });
+        if (r.ok) await ctx.runAction(internal.calendar.blocks.refreshForIdea, { creatorId: creator._id, ideaId: latest.id }); // the event says the new words
         body = r.ok ? `changed. ${intent.field === "lengthSec" ? `${intent.value.replace(/[^\d]/g, "")}s it is.` : `${intent.field === "hook" ? "hook" : intent.field === "onScreenText" ? "on-screen text" : intent.field === "shotList" ? "shots" : intent.field} updated.`} it's in ideas.` : "couldn't change that one.";
       }
       await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body, dedupeKey: `edit:${target._id}`, proactive: false, kind: "reply" });

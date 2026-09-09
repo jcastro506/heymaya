@@ -8,6 +8,7 @@
  */
 
 import { v } from "convex/values";
+import { eventDescription, ideaForEvent } from "./eventBody";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -178,7 +179,12 @@ export const book = internalAction({
         const { resolveTelegramBotIdentity, sendTelegramDocument } = await import("../integrations/telegram/client");
         const identity = resolveTelegramBotIdentity();
         if (identity) {
-          const ics = buildIcs(blocks.map((b) => ({ id: String(b._id), kind: b.kind, title: b.title, start: b.start, end: b.end })), Date.now());
+          const withNotes: Array<{ id: string; kind: "film" | "edit" | "post"; title: string; start: number; end: number; description: string }> = [];
+          for (const b of blocks) {
+            const c = await ctx.runQuery(internal.calendar.blocks.eventContext, { blockId: b._id });
+            withNotes.push({ id: String(b._id), kind: b.kind, title: b.title, start: b.start, end: b.end, description: eventDescription({ kind: b.kind, idea: ideaForEvent(c?.idea) }) });
+          }
+          const ics = buildIcs(withNotes, Date.now());
           const ok = await sendTelegramDocument(identity, { chatId: chat.telegramChatId, filename: `maya-${a.planKey.replace("week:", "")}.ics`, content: ics, caption: "tap to add the week to your calendar. move anything and tell me; i'll follow." });
           if (ok) await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: "sent you the week as a calendar file.", dedupeKey: `plan:${a.planKey}:ics`, proactive: false, kind: "status" });
         }
