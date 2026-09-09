@@ -145,10 +145,12 @@ export const run = internalAction({
     const t0 = Date.now();
     const before = await ctx.runMutation(internal.eval.memoryGauntlet.setPlanStatus, { creatorId, status: "active", paired: true });
 
+    const latencies: number[] = [];
     const say = async (text: string): Promise<string[]> => {
       const since = Date.now();
       const { messageId } = await ctx.runMutation(internal.core.messages.recordInbound, { creatorId, surface: "telegram", body: text });
       await ctx.runAction(internal.agent.converse.run, { creatorId, messageId });
+      latencies.push(Date.now() - since);
       await sleep(6_000); // the remember pass is scheduled after the reply
       const out = await ctx.runQuery(internal.eval.memoryGauntlet.outboundSince, { creatorId, since });
       for (const m of out) await ctx.runAction(internal.eval.run.evaluate, { suite: "memory", skill: m.kind === "reply" ? "reply" : m.kind, text: m.body, evidence: { theirMessage: text }, creatorId, messageId: m.id, actionTaken: m.kind !== "reply" });
@@ -183,6 +185,55 @@ export const run = internalAction({
         const oldStillCurrent = Boolean(mem && /all in on solo travel/i.test(mem.niche));
         const ok = keptDossier && nowSaysRunning && !oldStillCurrent;
         record("correction", said, { nicheBefore: before?.niche, nicheAfter: mem?.niche, notes: mem?.notes, keywords: mem?.keywords }, ok, !keptDossier ? "the dossier was blanked by the correction" : !nowSaysRunning ? "the correction was not kept" : oldStillCurrent ? "the old direction still reads as current" : "the correction superseded the old direction and the dossier survived");
+      }
+      // Long tenure (2026-09-09): questions only a year of memory can answer. Seeded by eval/longTenure.
+      if (want("why_broll")) {
+        const said = await say("remind me why i stopped doing the sunrise b-roll with quotes?");
+        const ok = said.some((s) => /everyone else'?s feed|not (you|me)|look(s|ed) like everyone/i.test(s));
+        record("why_broll", said, {}, ok, ok ? "the March reason, in their words" : "the reason was not recalled");
+      }
+      if (want("mornings_rule")) {
+        const said = await say("what did we agree about mornings? when can you text me");
+        const ok = said.some((s) => /before 8|after 8|8 ?am|8:00/i.test(s)) && !said.some((s) => /10 ?am|before 10/i.test(s));
+        record("mornings_rule", said, {}, ok, ok ? "the newest rule, not the superseded one" : "the superseded 10am rule leaked, or no rule");
+      }
+      if (want("hostel_filmed")) {
+        const said = await say("did i ever actually film the hostel tour or did i flake?");
+        const ok = said.some((s) => /filmed|you did|did it|shot it/i.test(s)) && !said.some((s) => /didn'?t happen|flaked|never filmed/i.test(s));
+        record("hostel_filmed", said, {}, ok, ok ? "read from the block: filmed" : "wrong or hedged about a fact she holds");
+      }
+      if (want("alarm_missed")) {
+        const said = await say("and the 5am alarm one, did that get made?");
+        const ok = said.some((s) => /didn'?t happen|never (got )?(made|filmed)|missed|no/i.test(s));
+        record("alarm_missed", said, {}, ok, ok ? "read from the block: missed" : "claimed or hedged");
+      }
+      if (want("style_change")) {
+        const said = await say("how has my style changed since spring? be specific");
+        const ok = said.some((s) => /\b(20\d\d|january|february|march|april|may|june|july|august|spring|summer)\b/i.test(s)) && !said.some((s) => /i can'?t (see|tell)|no way to know/i.test(s));
+        record("style_change", said, {}, ok, ok ? "dated, from the snapshots" : "no dated comparison");
+      }
+      if (want("taste_vs_perf")) {
+        const said = await say("what does best for me numbers-wise, and is that the same as what i actually like making?");
+        const ok = said.some((s) => /skit/i.test(s)) && said.some((s) => /deadpan|talking/i.test(s));
+        record("taste_vs_perf", said, {}, ok, ok ? "performance and preference named separately" : "the two were merged or missed");
+      }
+      if (want("naples")) {
+        const said = await say("what happened with the naples pizza one in the end?");
+        const ok = said.some((s) => /naples|pizza|slice/i.test(s));
+        record("naples", said, {}, ok, ok ? "the bit is remembered" : "not recalled");
+      }
+      if (want("forget_sister")) {
+        const before = await ctx.runQuery(internal.eval.memoryGauntlet.memoryOf, { creatorId });
+        const said = await say("forget what i told you about my sister");
+        const after = await ctx.runQuery(internal.eval.memoryGauntlet.memoryOf, { creatorId });
+        const sisterGone = !after?.notes.some((n) => /sister/i.test(n));
+        const collateral = (before?.notes.length ?? 0) - (after?.notes.length ?? 0) - (sisterGone ? 1 : 0);
+        record("forget_sister", said, { sisterGone, collateral, notesBefore: before?.notes.length, notesAfter: after?.notes.length }, sisterGone && collateral <= 0, sisterGone ? (collateral > 0 ? `the sister note went, but ${collateral} other note(s) went with it` : "the older note about the sister was the one forgotten") : "the sister note is still there (forget targets only the latest thing)");
+      }
+      if (want("metrics")) {
+        const size = await ctx.runQuery(internal.eval.longTenure.prefixSize, { creatorId });
+        const ms = latencies.length ? Math.round(latencies.reduce((s, x) => s + x, 0) / latencies.length) : null;
+        record("metrics", [], { prefixChars: size?.chars, sections: size?.sections, avgTurnMs: ms, turns: latencies.length }, Boolean(size && size.chars < 60_000), size ? `prefix ${size.chars} chars, avg turn ${ms ?? "?"} ms` : "no prefix");
       }
       // 3. The lane, now.
       if (want("lane")) {
