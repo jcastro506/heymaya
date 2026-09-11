@@ -34,7 +34,7 @@ Instagram's account insights, audience demographics, and Story-specific reports 
 
 Sources: [Instagram capabilities](https://docs.zernio.com/platforms/instagram), [post analytics fields](https://docs.zernio.com/analytics/get-analytics), [Instagram demographics](https://docs.zernio.com/analytics/get-instagram-demographics).
 
-**TikTok:** the documented post metrics are views, likes, comments, and shares. Public APIs do not provide TikTok Studio watch time, retention, full-watch rate, or traffic-source breakdown. Zernio does not provide a TikTok comments/DM inbox. Maya can read analytics screenshots sent in Telegram; label that as creator-provided evidence, never connected retention. Compare views with views, not Instagram reach.
+**TikTok:** the documented post metrics are views, likes, comments, and shares. Public APIs do not provide TikTok Studio watch time, retention, full-watch rate, or traffic-source breakdown. **Corrected 2026-09-11:** since 2026-09-10 Zernio's TikTok integration runs on the TikTok for Business app and `GET /v1/inbox/comments/{postId}` returns a connected account's own-post comments (personal creator accounts included; DMs are reply-only, Business accounts, outside the EEA/UK/CH). Accounts connected before 2026-09-10 must be reconnected. Reading those comments is Sprint 8 (`CREATOR_SPRINT_PLAN.md` §25); replying, hiding and DMs stay out of the product. Maya can read analytics screenshots sent in Telegram; label that as creator-provided evidence, never connected retention. Compare views with views, not Instagram reach.
 
 Source: [TikTok capabilities and limitations](https://docs.zernio.com/platforms/tiktok).
 
