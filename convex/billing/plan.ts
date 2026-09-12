@@ -173,11 +173,13 @@ export const seatsLeft = internalQuery({
 
 /** Ops: put a creator on a tier by hand (a comp, a pilot, a live test). The Stripe price still wins at the next webhook. */
 export const setTier = internalMutation({
-  args: { creatorId: v.id("creators"), tier: v.union(v.literal("solo"), v.literal("duo"), v.literal("partner")) },
-  handler: async (ctx, a): Promise<{ before: string | undefined; after: Tier }> => {
+  args: { creatorId: v.id("creators"), tier: v.union(v.literal("solo"), v.literal("duo"), v.literal("partner")), status: v.optional(v.union(v.literal("comped"), v.literal("paused"), v.literal("active"))) },
+  handler: async (ctx, a): Promise<{ before: { tier: string | undefined; status: string }; after: { tier: Tier; status: string } }> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c) throw new Error("no such creator");
-    await ctx.db.patch(a.creatorId, { plan: { ...c.plan, tier: a.tier }, updatedAt: Date.now() });
-    return { before: c.plan.tier, after: a.tier };
+    if (c.plan.status === "deleting") throw new Error("deletion wins");
+    const status = a.status ?? c.plan.status;
+    await ctx.db.patch(a.creatorId, { plan: { ...c.plan, tier: a.tier, status }, updatedAt: Date.now() });
+    return { before: { tier: c.plan.tier, status: c.plan.status }, after: { tier: a.tier, status } };
   },
 });
