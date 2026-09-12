@@ -4,7 +4,8 @@ import schema from "../../schema";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
 import { buildPrefix, planSection } from "../context";
-import { PLAN_LINE, SOUL } from "../soul";
+import { SOUL } from "../soul";
+import { planLineFor } from "../../billing/tiers";
 
 describe("what she may say about money and leaving (live 2026-09-06)", () => {
   it("the prefix carries the plan status, the trial date and the one price line", async () => {
@@ -14,7 +15,7 @@ describe("what she may say about money and leaving (live 2026-09-06)", () => {
     const section = planSection(c);
     expect(section).toContain("Status: trialing (founding seat)");
     expect(section).toContain("Trial ends Sep 13");
-    expect(section).toContain(PLAN_LINE);
+    expect(section).toContain(planLineFor("solo")); // no tier on the row: solo, fail-closed (§26)
     const prefix = buildPrefix({ creator: c, directives: [], skill: "x" });
     expect(prefix).toContain("# Their plan");
     expect(prefix.indexOf("# Their plan")).toBeGreaterThan(prefix.indexOf("# The creator"));

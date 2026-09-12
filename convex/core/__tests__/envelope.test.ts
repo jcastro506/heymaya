@@ -5,7 +5,7 @@ import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
 import { splitParts, unwrapModelEnvelope, MAX_PARTS } from "../envelope";
-import { HELLO } from "../pairing";
+import { HELLO, helloFor } from "../pairing";
 
 describe("a person never receives a JSON envelope (live 2026-09-06)", () => {
   it("unwraps a message field, leaves prose alone, refuses an envelope with nothing to say", () => {
@@ -39,8 +39,8 @@ describe("first contact", () => {
     expect((await t.mutation(internal.core.pairing.claimPairing, { token: "tok-a", chatId: "111" })).paired).toBe(true);
     expect((await t.mutation(internal.core.pairing.claimPairing, { token: "tok-b", chatId: "222" })).paired).toBe(true);
     const rows = await t.run(async (ctx) => await ctx.db.query("messages").collect());
-    expect(rows.filter((m) => m.creatorId === a && m.body === HELLO).length).toBe(1);
-    expect(rows.filter((m) => m.creatorId === b && m.body === HELLO).length).toBe(0);
+    expect(rows.filter((m) => m.creatorId === a && m.body === helloFor(false)).length).toBe(1);
+    expect(rows.filter((m) => m.creatorId === b && m.body === helloFor(false)).length).toBe(0);
     expect(HELLO).toMatch(/maya/);
     expect(HELLO).toMatch(/what would you most like help with/);
     expect(HELLO).toMatch(/or something else/);

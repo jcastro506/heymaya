@@ -5,7 +5,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { creatorForIdentity } from "../core/identity";
 import { encrypt, decrypt } from "../lib/encryption";
 import { exchangeCode, refreshAccessToken, revokeToken } from "../integrations/google/calendar";
-import { active } from "./store";
+import { active, partnershipsOpen } from "./store";
 import { email, Draft, Opportunity } from "./contracts";
 
 type Tokens = { access: string; refresh: string; expiresAt: number };
@@ -65,7 +65,7 @@ export const status = query({ args: {}, handler: async (ctx) => {
   const c = await creatorForIdentity(ctx);
   if (!c) return null;
   const row = await ctx.db.query("partnershipMailboxes").withIndex("by_creator", q => q.eq("creatorId", c._id)).unique();
-  return { connected: !!row, email: row?.email ?? null, attention: row?.attention ?? null, available: (process.env.PARTNERSHIP_PILOT_CREATOR_IDS ?? "").split(",").map(s => s.trim()).includes(c._id), sendingEnabled: process.env.PARTNERSHIP_EMAIL_SEND_ENABLED === "true" };
+  return { connected: !!row, email: row?.email ?? null, attention: row?.attention ?? null, available: partnershipsOpen(c), sendingEnabled: process.env.PARTNERSHIP_EMAIL_SEND_ENABLED === "true" };
 } });
 export const attention = internalMutation({ args: { creatorId: v.id("creators"), generation: v.string(), failed: v.boolean() }, handler: async (ctx, a) => {
   const row = await ctx.db.query("partnershipMailboxes").withIndex("by_creator", q => q.eq("creatorId", a.creatorId)).unique();

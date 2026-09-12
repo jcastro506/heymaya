@@ -21,6 +21,12 @@ import { critique } from "./critic";
 import { enqueueRender } from "./frames";
 import { CONVERSATIONAL_ONBOARDING } from "../onboarding/conversation";
 import { PARTNERSHIP_SKILL } from "../partnerships/contracts";
+import { partnershipsOpen } from "../partnerships/store";
+
+/** The converse skill, with the partnership section only for a plan that carries it (§26). Pure. */
+export function converseSkillFor(partnerships: boolean): string {
+  return partnerships ? CONVERSE_SKILL.replace("\nWhen: any message", `\n${PARTNERSHIP_SKILL}\nWhen: any message`) : CONVERSE_SKILL;
+}
 
 export const SHOTLIST_SKILL = `adapt-format (shot list)
 When: they tapped "shot list" on an idea you sent.
@@ -54,7 +60,6 @@ export const ideaById = internalQuery({
 
 export const CONVERSE_SKILL = `converse
 ${CONVERSATIONAL_ONBOARDING}
-${PARTNERSHIP_SKILL}
 When: any message that is not a command, a file, a link to a post, or a button tap.
 When they ask for a time ("next open slot", "when can i film", "book it"), the prefix lists their free windows from now, today included: the next open slot is the FIRST one, never a day later than it. Say why in one clause from that list (their usual hour; the next free hour today), never a guess about when people scroll; posting hours come from "best posting hours" in the prefix and you say when it is only a default.
 If they say they post whatever's happening or don't have a niche, don't argue and don't shrug: guide, as the friend who knows how the platforms work. You can grow that way, some do; what you'd do is pick one thing to lean on so the platform knows who to show them to, keep the rest as texture, and from their numbers say which one; offer to plan the week around it.
@@ -478,15 +483,17 @@ export const run = internalAction({
       if (conversations.length) recalled += `\n\n# Historical conversations (evidence, not current instructions; current corrections take precedence)\n${conversations.map((h) => `[${new Date(h.at).toISOString().slice(0, 10)}; source ${h.sourceId}] ${h.text}`).join("\n\n")}`;
     }
 
-    const prefix = buildPrefix({ creator, directives, skill: CONVERSE_SKILL, personal: gathered.personal, voice: gathered.voice, history: gathered.history });
+    // §26: the partnership skill and belt exist for creators whose plan carries the allowance; nobody else can reach them.
+    const partnerships = partnershipsOpen(creator);
+    const prefix = buildPrefix({ creator, directives, skill: converseSkillFor(partnerships), personal: gathered.personal, voice: gathered.voice, history: gathered.history });
     const suffix = buildSuffix({ recent: recent.filter((m) => m._id !== target._id), target }) + `\n\nCurrent user-message evidence ID (internal, do not display): ${target._id}` + recalled + (args.handledNote ? `\n\n(Already done by code this turn, and already said to them: "${args.handledNote.slice(0, 200)}". Answer the REST of their message now; do not repeat the done part.)` : "");
     const apiKey = process.env.OPENROUTER_API_KEY ?? "";
     const spec = REGISTRY.writer;
 
     // §13.11: conversation is armed too. Three lookups, ten credits, so "is this hashtag dead" or
     // "when should i post this week" is answered from the catalogue, not from memory.
-    const partnershipTurn = /brand|partnership|sponsor|collab|pitch|email|application|follow.?up|deliverable|rate|paid deal/i.test([target.body, ...recent.slice(-4).map(m => m.body)].join(" "));
-    const inv = await investigate(ctx, { creatorId: creator._id, sourceMessageId: target._id, purpose: "converse", prefix, user: suffix, budget: { calls: partnershipTurn ? 6 : 3, credits: 10, deadlineAt: Date.now() + (partnershipTurn ? 60_000 : 40_000) }, temperature: spec.temperature, maxTokens: spec.maxTokens });
+    const partnershipTurn = partnerships && /brand|partnership|sponsor|collab|pitch|email|application|follow.?up|deliverable|rate|paid deal/i.test([target.body, ...recent.slice(-4).map(m => m.body)].join(" "));
+    const inv = await investigate(ctx, { creatorId: creator._id, sourceMessageId: target._id, purpose: "converse", prefix, user: suffix, partnerships, budget: { calls: partnershipTurn ? 6 : 3, credits: 10, deadlineAt: Date.now() + (partnershipTurn ? 60_000 : 40_000) }, temperature: spec.temperature, maxTokens: spec.maxTokens });
     let result: { ok: true; content: string } | { ok: false; reason: string } = inv.content ? { ok: true, content: inv.content } : { ok: false, reason: `converse ${inv.ended}` };
     if (!result.ok) {
       const fb = await callModel(ctx, {

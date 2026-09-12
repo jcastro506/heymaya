@@ -5,7 +5,7 @@ import Landing from "./landing/Landing";
 export const metadata = {
   title: "Maya — Your content person, in your corner",
   description:
-    "Your content person, right in Telegram. Text Maya for ideas, planning, and honest feedback. Your dashboard is optional for everyday work. Try 7 days free, then $19/month.",
+    "Your content person, right in Telegram. Text Maya for ideas, planning, and honest feedback. Your dashboard is optional for everyday work. Try 7 days free, then from $19/month.",
 };
 
 const bricolage = Bricolage_Grotesque({

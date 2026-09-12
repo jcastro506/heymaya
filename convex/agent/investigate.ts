@@ -17,7 +17,7 @@ export interface InvestigateResult { content: string; trace: ToolCallRecord[]; e
 
 export const INVESTIGATE_RULES = `You may look things up before you answer. Each tool costs what it says; you have a budget and it is shown to you. Look up only what changes the answer: whether this is the account or the sound, whether it is above the author's own normal, what people react to in the comments, whether the shape is a wave this week, and whether the creator already has a post that rhymes with it. When you have enough, answer in the exact JSON the skill asks for. Never invent a number you did not get from a tool or the prompt. If a tool is refused or fails, say what you could not check and answer anyway.`;
 
-export async function investigate(ctx: ActionCtx, input: { creatorId: Id<"creators">; sourceMessageId?: Id<"messages">; purpose: string; prefix: string; user: string; budget?: ToolBudget; temperature?: number; maxTokens?: number }): Promise<InvestigateResult> {
+export async function investigate(ctx: ActionCtx, input: { creatorId: Id<"creators">; sourceMessageId?: Id<"messages">; purpose: string; prefix: string; user: string; budget?: ToolBudget; temperature?: number; maxTokens?: number; /** §26: partnership tools ride only when the caller says the plan allows them. */ partnerships?: boolean }): Promise<InvestigateResult> {
   const budget = input.budget ?? DEFAULT_BUDGET();
   const trace: ToolCallRecord[] = [];
   const spec = REGISTRY.writer;
@@ -27,7 +27,7 @@ export async function investigate(ctx: ActionCtx, input: { creatorId: Id<"creato
     { role: "user", content: `${input.user}\n\nBudget: ${budget.calls} tool calls, ${budget.credits} credits.` },
   ];
   const maxTurns = budget.calls + 2;
-  const availableTools = input.sourceMessageId ? TOOLS : TOOLS.filter(t => !t.function.name.startsWith("partnership_"));
+  const availableTools = input.partnerships && input.sourceMessageId ? TOOLS : TOOLS.filter(t => !t.function.name.startsWith("partnership_"));
   for (let turn = 1; turn <= maxTurns; turn++) {
     const spent = trace.reduce((s, t) => s + (t.credits ?? 0), 0);
     const exhausted = trace.length >= budget.calls || Date.now() > budget.deadlineAt;

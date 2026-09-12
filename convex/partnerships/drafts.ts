@@ -3,7 +3,7 @@ import { z } from "zod";
 import { internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
-import { active, event, ownedOpportunity, profile, assertPersonalEvidence } from "./store";
+import { active, event, ownedOpportunity, profile, assertPersonalEvidence, partnershipAllowance } from "./store";
 import { CLOSED, Draft, email, line } from "./contracts";
 import { checkPlainLanguage } from "../core/plainLanguage";
 
@@ -31,7 +31,7 @@ export const prepare = internalMutation({
     if (o.threadId && o.mailboxGeneration !== mailbox?.generation) throw new Error("This relationship belongs to a different mailbox connection");
     const recent = await ctx.db.query("partnershipDrafts").withIndex("by_creator", q => q.eq("creatorId", a.creatorId)).order("desc").take(100);
     const monthStart = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), 1);
-    if (recent.filter(d => d._creationTime >= monthStart).length >= 30) throw new Error("Monthly draft allowance reached");
+    if (recent.filter(d => d._creationTime >= monthStart).length >= partnershipAllowance(c).draftsPerMonth) throw new Error("Monthly draft allowance reached");
     for (const d of drafts) {
       const old = Draft.parse(d.data);
       if (["draft", "approved"].includes(old.status)) await ctx.db.patch(d._id, { data: { ...old, status: "canceled" }, updatedAt: now });

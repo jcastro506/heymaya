@@ -251,10 +251,13 @@ describe("approval and delivery races", () => {
     await expect(f.draft()).rejects.toThrow("No actionable");
     await expect(f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "report", input: { opportunityId: f.opportunityId, status: "shortlisted", note: "Try again" } })).rejects.toThrow("suppressed");
   });
-  it("fails closed when the account is not in the partnership pilot", async () => {
+  it("fails closed when the plan has no partnerships and the account is not in the pilot (§26)", async () => {
     const f = await fixture(); vi.stubEnv("PARTNERSHIP_PILOT_CREATOR_IDS", "");
-    await expect(f.draft()).rejects.toThrow("not been enabled");
-    await expect(f.t.mutation(internal.partnerships.store.reserveResearch, { creatorId: f.a })).rejects.toThrow("not been enabled");
+    await expect(f.draft()).rejects.toThrow("not on this plan");
+    await expect(f.t.mutation(internal.partnerships.store.reserveResearch, { creatorId: f.a })).rejects.toThrow("not on this plan");
+    // The partner tier opens it with no env at all.
+    await f.t.run(async (ctx) => { const c = (await ctx.db.get(f.a))!; await ctx.db.patch(f.a, { plan: { ...c.plan, tier: "partner" } }); });
+    await expect(f.t.mutation(internal.partnerships.store.reserveResearch, { creatorId: f.a })).resolves.toBeTruthy();
   });
   it("requires a delivered review before accepting a phone approval", async () => {
     const f = await fixture();

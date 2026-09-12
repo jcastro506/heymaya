@@ -4,7 +4,7 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { OPENING_QUESTION } from "../conversation";
+import { OPENING_QUESTION, openingQuestionFor } from "../conversation";
 import { personalHistoryFor } from "../../agent/personalHistory";
 import { callModel } from "../../core/llm";
 
@@ -18,7 +18,7 @@ describe("conversational onboarding", () => {
     if (surface === "imessage") await t.mutation(internal.core.pairing.claimPairingByPhone, { token: "early", phone: "+15555550101" });
     else await t.mutation(internal.core.pairing.claimPairing, { token: "early", chatId: "456" });
     const rows = await t.run((ctx) => ctx.db.query("messages").collect());
-    expect(rows.filter((r) => r.body === OPENING_QUESTION)).toHaveLength(1);
+    expect(rows.filter((r) => r.body === openingQuestionFor(false))).toHaveLength(1); // §26: no plan tier means no brand deals in the opening
     expect(rows.filter((r) => r.kind === "first_read")).toHaveLength(1);
   });
   it.each(["imessage", "telegram"] as const)("pairs %s with one clear opening question on the correct channel", async (surface) => {
@@ -28,7 +28,7 @@ describe("conversational onboarding", () => {
     else await t.mutation(internal.core.pairing.claimPairing, { token: "hello", chatId: "123" });
     const rows = await t.run((ctx) => ctx.db.query("messages").collect());
     expect(rows.every((m) => m.surface === surface)).toBe(true);
-    expect(rows.map((m) => m.body).join("\n")).toContain(OPENING_QUESTION);
+    expect(rows.map((m) => m.body).join("\n")).toContain(openingQuestionFor(false));
     expect(rows.map((m) => m.body).join("\n").match(/\?/g)).toHaveLength(1);
     expect(rows.some((m) => m.awaitingAnswer)).toBe(true);
     expect((await t.run((ctx) => ctx.db.get(creatorId)))?.conversationalOnboardingAt).toBeTypeOf("number");

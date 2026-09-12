@@ -21,7 +21,7 @@ export const meForBilling = internalQuery({
 });
 
 export const createCheckout = action({
-  args: { interval: v.union(v.literal("monthly"), v.literal("annual")) },
+  args: { interval: v.union(v.literal("monthly"), v.literal("annual")), tier: v.union(v.literal("solo"), v.literal("duo"), v.literal("partner")) },
   handler: async (ctx, a): Promise<{ ok: true; url: string } | { ok: false; reason: string }> => {
     const me = await ctx.runQuery(internal.billing.checkout.meForBilling, {});
     if (!me) return { ok: false, reason: "no account" };
@@ -39,8 +39,8 @@ export const createCheckout = action({
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
-      line_items: [{ price: priceIdFor(a.interval, founding), quantity: 1 }],
-      subscription_data: { ...(firstTime ? { trial_period_days: TRIAL_DAYS } : {}), metadata: { creatorId: me._id, founding: founding ? "1" : "0", interval: a.interval } },
+      line_items: [{ price: priceIdFor(a.tier, a.interval), quantity: 1 }],
+      subscription_data: { ...(firstTime ? { trial_period_days: TRIAL_DAYS } : {}), metadata: { creatorId: me._id, founding: founding ? "1" : "0", interval: a.interval, tier: a.tier } },
       payment_method_collection: "always",
       automatic_tax: { enabled: true },
       allow_promotion_codes: true,

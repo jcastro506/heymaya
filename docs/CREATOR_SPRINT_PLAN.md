@@ -1559,3 +1559,32 @@ She sends at most three proactive messages a day and usually one: the morning id
 **Operator-required.** 1. Reconnect the pilot TikTok through Zernio so it lands on the Business app (a connection from before 2026-09-10 stays on the old app until reconnected; authorising a different account into the slot deletes the previous account's analytics, so the connect page must warn). 2. Confirm the inbox entitlement on our Zernio account. 3. Add `comment.received` to the deployment webhook subscription. Nothing here can be verified without a real connected account.
 
 **Estimate.** A day and a half: half for the table, webhook and pulls; half for the four consumers; half for the tests and the live proof.
+
+## 26. Sprint 9 — three tiers, enforced by the server (2026-09-12)
+
+**Why.** §19 shipped one price. The operator's tiers are now fixed: **$19 a month for one connected account, $24.99 for both, $29.99 for both plus partnerships** (brand research, pitches for approval, tracked replies; §25 of the design docs and `convex/partnerships/`). The partnership pilot gates on an env allowlist; the connection screen lets anyone connect anything; the landing, the terms and her own plan line all say $19. Nothing knows which tier a creator is on, so nothing can enforce one. This sprint makes the tier a row, derives every allowance from it, and enforces at the three doors. **Budgets, never booleans** (§0.3): a tier without partnerships is a partnership allowance of zero, and every consumer of that allowance already degrades to "not on this plan" instead of breaking.
+
+| Tier | Price | Connected accounts | Partnership allowances a month |
+|---|---|---|---|
+| `solo` | $19 | 1 | 0 research · 0 opportunities · 0 drafts |
+| `duo` | $24.99 | 2 | 0 · 0 · 0 |
+| `partner` | $29.99 | 2 | 40 · 10 · 30 |
+
+Annual: ten months for twelve, one Stripe price per tier and interval. Founding pricing is retired: the flag stays on the rows and in the ops view as a badge for the first hundred, with no effect on price. A comped creator is on the tier the operator sets, `duo` by default. During the trial the tier is the one chosen at checkout; connections stay closed until the trial ends (§19.2), so the account cap never bites a trial. `canceled`, `paused` and `deleting` keep the account cap for reading and zero the partnership allowances.
+
+**Where the tier comes from.** `creators.plan.tier`. Set from the Stripe subscription's price id (`tierFromPriceId`, the reverse of `priceIdFor`), with the checkout metadata as the fallback and the existing row as the last. A plan switch in the Customer Portal arrives as `subscription.updated` with the new price and lands the same way. The tier is never set from the client and never from a prompt.
+
+**The three doors.**
+1. **Connecting an account** (`connections/zernio.startConnect`): refused with a plain reason once the connected TikTok + Instagram accounts reach the cap. The sync (`connections/sync.ts`) reads only the accounts within the cap, oldest first, so an account attached around the door produces no rows; the connection's detail says which account is beyond the plan.
+2. **Partnerships** (`partnerships/store.active`): access is `partner`, or the pilot allowlist as an operator comp on top. The three monthly allowances are read from the tier, not literals.
+3. **The conversation**: the partnership skill text and the five `partnership_*` tools are on her belt only for creators with a partnership allowance; the wider turn budget for partnership-shaped messages applies only to them. Everyone else never sees the tools, so she cannot try them and be refused. The opening line names brand deals only on `partner`.
+
+**What she says.** The plan line in her prefix states their tier and its price and the two others in one sentence, so "how much do you cost" and "can you do brand deals" get true answers. Settings shows the tier; checkout shows three choices; the landing's price card becomes three; the terms name all three prices.
+
+**Named tests.** Cross-tenant: A's tier never reads from B's subscription (the existing metadata-vs-customer check). Fail-closed: an unknown or missing tier is `solo`; an unknown price id leaves the tier unchanged and is recorded; a `duo` creator calling a partnership tool gets nothing, not an error string; a third account never syncs. Adversarial: metadata claiming `partner` with a `solo` price id resolves to `solo`; a client-supplied tier at checkout can only choose a price, never set the row. Sibling coherence: `TIERS` is the one source for prices in the landing, the terms, Settings and the plan line (a test reads all four); the partnership allowances in `store.ts` equal `TIERS.partner`. TODO grep.
+
+**Exit criterion, live.** On dev with Stripe test mode: three test prices; a checkout on `duo` lands `tier: "duo"` from the webhook; a portal switch to `partner` lands `partner`; a second TikTok connection is refused on `solo` with the reason shown in Settings; a `duo` creator asking for brand deals gets an honest answer with no tool call in the trace.
+
+**Also in this sprint, from the partnership review of 2026-09-11.** A Convex row id can no longer reach a person: the leak guard replaces a message carrying one, and `eval/checks.ts` gains `no_internal_ids` (rubric 7). Three partnership probes join the conversation bank: a request for brand deals, "yes send it" to nothing, and a request while research is unconfigured; the report shows who has the tools and who does not.
+
+**Operator-required.** Six Stripe prices (three tiers × monthly/annual) as `STRIPE_PRICE_<TIER>_<INTERVAL>` in each deployment; the old founding/list keys go. Gmail restricted-scope review remains the long pole for `partner` beyond the pilot.

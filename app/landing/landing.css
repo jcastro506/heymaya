@@ -1395,7 +1395,7 @@
 }
 .maya-pricing {
   display: grid;
-  grid-template-columns: 1fr 420px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
   gap: 65px;
   align-items: center;
   background: #efe8f4;
@@ -1422,6 +1422,16 @@
   color: #a58bb6;
   margin-top: 40px;
   transform: rotate(-4deg);
+}
+.price-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+.price-card-featured {
+  box-shadow: 0 10px 30px rgba(118, 97, 180, 0.12);
+  border-color: #e0d3ea;
 }
 .price-card {
   background: #fffcfa;
@@ -1806,9 +1816,12 @@
     padding-block: 70px;
   }
   .maya-pricing {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     padding: 30px !important;
     gap: 30px;
+  }
+  .price-cards {
+    grid-template-columns: 1fr;
   }
   .pricing-copy h2 {
     font-size: 36px;

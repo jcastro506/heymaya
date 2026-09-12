@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { TIERS, TIER_NAMES, price } from "@/convex/billing/tiers";
 import { useRef, useState } from "react";
 import { CtaLink } from "../cta";
 import PerformancePreview from "./PerformancePreview";
@@ -156,7 +157,7 @@ export default function Landing() {
               </a>
             </div>
             <p className="trial-note">
-              7 days free. Then $19/month. Cancel anytime.
+              7 days free. From {price(TIERS.solo.priceUsd)}/month. Cancel anytime.
             </p>
           </div>
           <div
@@ -542,27 +543,31 @@ export default function Landing() {
               less in your head. more out in the world. ↗
             </div>
           </div>
-          <div className="price-card">
-            <span className="price-badge">THE FOUNDING CREATOR PLAN</span>
-            <div className="price-amount">
-              $19<span>/ month</span>
-              <Flower />
-            </div>
-            <p>Founding pricing while seats last.</p>
-            <ul>
-              <li>Your niche, researched daily</li>
-              <li>Ideas built around your voice</li>
-              <li>Google Calendar planning & reminders</li>
-              <li>Post insights and a weekly review</li>
-              <li>Connected account insights on your paid plan</li>
-              <li>Your content person, right in Telegram</li>
-            </ul>
-            <Trial where="pricing" text="Start my 7 days free" />
-            <small>
-              Card required. $19/month after your trial.
-              <br />
-              Cancel anytime. Delete everything in Settings by typing DELETE.
-            </small>
+          <div className="price-cards">
+            {TIER_NAMES.map((tier, i) => (
+              <div className={`price-card${tier === "duo" ? " price-card-featured" : ""}`} key={tier}>
+                <span className="price-badge">{TIERS[tier].label.toUpperCase()}</span>
+                <div className="price-amount">
+                  {price(TIERS[tier].priceUsd)}<span>/ month</span>
+                  {i === 1 ? <Flower /> : null}
+                </div>
+                <p>{TIERS[tier].blurb}</p>
+                <ul>
+                  <li>{tier === "solo" ? "One TikTok or Instagram account" : "Your TikTok and your Instagram"}</li>
+                  <li>Your niche, researched daily</li>
+                  <li>Ideas built around your voice</li>
+                  <li>Google Calendar planning & reminders</li>
+                  <li>Post insights and a weekly review</li>
+                  {tier === "partner" ? <li>Brand opportunities, pitches you approve, replies tracked</li> : <li>Your content person, right in Telegram</li>}
+                </ul>
+                <Trial where="pricing" text="Start my 7 days free" />
+                <small>
+                  Card required. {price(TIERS[tier].priceUsd)}/month after your trial, or {price(TIERS[tier].annualUsd)}/year.
+                  <br />
+                  Cancel anytime. Delete everything in Settings by typing DELETE.
+                </small>
+              </div>
+            ))}
           </div>
         </section>
         <section className="maya-faq container">
@@ -601,7 +606,7 @@ export default function Landing() {
               ],
               [
                 "How does the free trial work?",
-                "Try Maya for seven days with a card on file. The trial includes research, ideas, planning, and feedback using public post information and what you share with her. Social account connections open on your paid plan, after the trial. Then it’s $19 per month at the founding rate while founding seats last. You can cancel anytime.",
+                "Try Maya for seven days with a card on file. The trial includes research, ideas, planning, and feedback using public post information and what you share with her. Social account connections open on your paid plan, after the trial. Then it’s the plan you pick, at the price on this page. You can cancel anytime.",
               ],
             ].map(([question, answer]) => (
               <details key={question}>

@@ -10,6 +10,15 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { FOUNDING_SEATS } from "./stripe";
+import { isTier, tierFromPriceId, type Tier } from "./tiers";
+
+/** The tier for a subscription: the price id decides; checkout metadata is the fallback; the row is kept when neither says. Pure. */
+export function tierFor(sub: { priceId?: string; metadataTier?: string }, current: string | undefined, env: Record<string, string | undefined> = process.env): Tier | undefined {
+  const fromPrice = tierFromPriceId(sub.priceId, env);
+  if (fromPrice) return fromPrice;
+  if (isTier(sub.metadataTier)) return sub.metadataTier;
+  return isTier(current) ? current : undefined;
+}
 
 export type PlanStatus = Doc<"creators">["plan"]["status"];
 
@@ -84,7 +93,7 @@ export const applyEvent = internalMutation({
     createdAt: v.number(), // Stripe's event.created, seconds
     customerId: v.optional(v.string()),
     creatorIdFromMetadata: v.optional(v.string()),
-    subscription: v.optional(v.object({ id: v.string(), status: v.string(), cancel_at_period_end: v.optional(v.boolean()), trial_end: v.union(v.number(), v.null()), current_period_end: v.union(v.number(), v.null()), founding: v.optional(v.boolean()) })),
+    subscription: v.optional(v.object({ id: v.string(), status: v.string(), cancel_at_period_end: v.optional(v.boolean()), trial_end: v.union(v.number(), v.null()), current_period_end: v.union(v.number(), v.null()), founding: v.optional(v.boolean()), priceId: v.optional(v.string()), metadataTier: v.optional(v.string()) })),
   },
   handler: async (ctx, a): Promise<{ handled: boolean; detail: string; change: null | { creatorId: Id<"creators">; prev: PlanStatus; next: PlanStatus } }> => {
     const seen = await ctx.db.query("stripeWebhookEvents").withIndex("by_event_id", (q) => q.eq("eventId", a.eventId)).first();
@@ -134,6 +143,7 @@ export const applyEvent = internalMutation({
         stripeSubscriptionId: a.subscription.id,
         status: prev === "deleting" ? "deleting" : next, // deletion wins over anything Stripe says
         founding: creator.plan.founding || Boolean(a.subscription.founding),
+        tier: tierFor(a.subscription, creator.plan.tier), // §26: the price decides; an unknown price keeps the row
         trialEndsAt: a.subscription.trial_end ? a.subscription.trial_end * 1000 : creator.plan.trialEndsAt,
         currentPeriodEnd: a.subscription.current_period_end ? a.subscription.current_period_end * 1000 : creator.plan.currentPeriodEnd,
         /**
@@ -148,7 +158,7 @@ export const applyEvent = internalMutation({
       },
       updatedAt: now,
     });
-    await record("processed", `${prev} → ${next}`);
+    await record("processed", `${prev} → ${next}${a.subscription.priceId && !tierFromPriceId(a.subscription.priceId) ? `; price ${a.subscription.priceId} matches no tier, tier unchanged` : ""}`);
     return { handled: true, detail: `${prev} → ${next}`, change: prev !== next && prev !== "deleting" ? { creatorId: creator._id, prev, next } : null };
   },
 });

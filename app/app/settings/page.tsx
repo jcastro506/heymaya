@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { TIERS, TIER_NAMES, price } from "@/convex/billing/tiers";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import Link from "next/link";
@@ -81,7 +82,7 @@ export default function SettingsPage() {
       <section className="flex flex-col gap-2 text-sm">
         <h2 className="text-sm uppercase tracking-wide opacity-50">Accounts</h2>
         <div>TikTok: {s.handles.tiktok ? `@${s.handles.tiktok}` : "—"} · Instagram: {s.handles.instagram ? `@${s.handles.instagram}` : "—"}</div>
-        <div>Telegram: {s.paired ? "connected" : <Link className="underline" href="/telegram">connect</Link>} · plan: {s.plan}</div>
+        <div>Telegram: {s.paired ? "connected" : <Link className="underline" href="/telegram">connect</Link>} · plan: {s.plan} · {TIERS[s.tier].label.toLowerCase()} ({s.accountCap} connected account{s.accountCap === 1 ? "" : "s"})</div>
       </section>
 
       <section className="flex flex-col gap-2 text-sm">
@@ -94,10 +95,15 @@ export default function SettingsPage() {
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            <p className="opacity-70">{s.plan === "canceled" ? "Canceled. Come back any time; you're billed right away the second time." : "Seven days free, card required, charged on day seven. $19 a month or $180 a year while founding seats last."}</p>
-            <div className="flex gap-2">
-              <button className="btn" onClick={async () => { const r = await createCheckout({ interval: "monthly" }); if (r.ok) window.location.href = r.url; else setBillingNote(r.reason); }}>monthly</button>
-              <button className="btn-secondary" onClick={async () => { const r = await createCheckout({ interval: "annual" }); if (r.ok) window.location.href = r.url; else setBillingNote(r.reason); }}>annual</button>
+            <p className="opacity-70">{s.plan === "canceled" ? "Canceled. Come back any time; you're billed right away the second time." : "Seven days free, card required, charged on day seven. Pick a plan; switch any time in one tap."}</p>
+            <div className="flex flex-col gap-2">
+              {TIER_NAMES.map((tier) => (
+                <div key={tier} className="flex flex-wrap items-center gap-2">
+                  <span className="min-w-[14rem]">{TIERS[tier].label} · {price(TIERS[tier].priceUsd)}/month or {price(TIERS[tier].annualUsd)}/year</span>
+                  <button className="btn" onClick={async () => { const r = await createCheckout({ interval: "monthly", tier }); if (r.ok) window.location.href = r.url; else setBillingNote(r.reason); }}>monthly</button>
+                  <button className="btn-secondary" onClick={async () => { const r = await createCheckout({ interval: "annual", tier }); if (r.ok) window.location.href = r.url; else setBillingNote(r.reason); }}>annual</button>
+                </div>
+              ))}
             </div>
           </div>
         )}

@@ -4,11 +4,29 @@ import { internalMutation, internalQuery, query, type MutationCtx, type QueryCtx
 import type { Doc, Id } from "../_generated/dataModel";
 import { creatorForIdentity } from "../core/identity";
 import { CLOSED, Draft, Evidence, Opportunity, Profile, publicUrl, followUpEligible, type OpportunityData } from "./contracts";
+import { TIERS, entitlementsFor, type Entitlements } from "../billing/tiers";
+
+/** The operator's pilot list: a comp on top of the tier, never the gate (§26). */
+export function isPilot(creatorId: string, env: Record<string, string | undefined> = process.env): boolean {
+  return (env.PARTNERSHIP_PILOT_CREATOR_IDS ?? "").split(",").map(s => s.trim()).includes(creatorId);
+}
+
+/** What this creator may do in partnerships this month: the tier's allowances, or the partner tier's for a pilot comp. Pure. */
+export function partnershipAllowance(c: { _id: string; plan: { status: string; tier?: string } }, env: Record<string, string | undefined> = process.env): Entitlements["partnerships"] {
+  const live = ["active", "trialing", "comped"].includes(c.plan.status);
+  if (!live) return { researchPerMonth: 0, opportunitiesPerMonth: 0, draftsPerMonth: 0 };
+  const own = entitlementsFor(c.plan).partnerships;
+  return own.opportunitiesPerMonth > 0 ? own : isPilot(c._id, env) ? TIERS.partner.partnerships : own;
+}
+
+export function partnershipsOpen(c: { _id: string; plan: { status: string; tier?: string } }, env: Record<string, string | undefined> = process.env): boolean {
+  return partnershipAllowance(c, env).opportunitiesPerMonth > 0;
+}
 
 export async function active(ctx: QueryCtx | MutationCtx, creatorId: Id<"creators">) {
   const c = await ctx.db.get(creatorId) as Doc<"creators"> | null;
   if (!c || !["active", "trialing", "comped"].includes(c.plan.status)) throw new Error("Partnerships are unavailable for this account");
-  if (!(process.env.PARTNERSHIP_PILOT_CREATOR_IDS ?? "").split(",").map(s => s.trim()).includes(creatorId)) throw new Error("Partnership access has not been enabled for this account");
+  if (!partnershipsOpen(c)) throw new Error("Partnerships are not on this plan");
   return c;
 }
 export async function profile(ctx: QueryCtx | MutationCtx, creatorId: Id<"creators">) {
@@ -60,7 +78,7 @@ export const mine = query({ args: {}, handler: async (ctx) => {
 export const change = internalMutation({
   args: { creatorId: v.id("creators"), sourceMessageId: v.id("messages"), operation: v.string(), input: v.any() },
   handler: async (ctx, a): Promise<unknown> => {
-    await active(ctx, a.creatorId);
+    const c = await active(ctx, a.creatorId);
     const source = await ctx.db.get(a.sourceMessageId) as Doc<"messages"> | null;
     if (!source || source.creatorId !== a.creatorId || source.direction !== "in" || source.memoryExcludedAt) throw new Error("A current user message is required");
     const p = await profile(ctx, a.creatorId);
@@ -127,8 +145,9 @@ export const change = internalMutation({
         return { id: existing._id, ...merged };
       }
       if (input.opportunityId) throw new Error("No matching relationship to refresh");
-      const monthly = await ctx.db.query("partnershipOpportunities").withIndex("by_creator", q => q.eq("creatorId", a.creatorId)).order("desc").take(11);
-      if (monthly.filter(r => new Date(r._creationTime).toISOString().slice(0, 7) === new Date(now).toISOString().slice(0, 7)).length >= 10) throw new Error("Monthly opportunity allowance reached");
+      const cap = partnershipAllowance(c).opportunitiesPerMonth;
+      const monthly = await ctx.db.query("partnershipOpportunities").withIndex("by_creator", q => q.eq("creatorId", a.creatorId)).order("desc").take(cap + 1);
+      if (monthly.filter(r => new Date(r._creationTime).toISOString().slice(0, 7) === new Date(now).toISOString().slice(0, 7)).length >= cap) throw new Error("Monthly opportunity allowance reached");
       const id = await ctx.db.insert("partnershipOpportunities", { creatorId: a.creatorId, brandDomain: domain, data, updatedAt: now });
       await event(ctx, a.creatorId, id, `discovered:${id}`, "discovered", data.fit);
       return { id, ...data };
@@ -150,11 +169,11 @@ export const change = internalMutation({
 });
 
 export const reserveResearch = internalMutation({ args: { creatorId: v.id("creators") }, handler: async (ctx, a) => {
-  await active(ctx, a.creatorId);
+  const c = await active(ctx, a.creatorId);
   if ((await profile(ctx, a.creatorId)).data.paused) throw new Error("Partnerships are paused");
   const month = new Date().toISOString().slice(0, 7);
   const row = await ctx.db.query("partnershipResearch").withIndex("by_month", q => q.eq("creatorId", a.creatorId).eq("month", month)).unique();
-  if ((row?.calls ?? 0) >= 40) throw new Error("Monthly research allowance reached");
+  if ((row?.calls ?? 0) >= partnershipAllowance(c).researchPerMonth) throw new Error("Monthly research allowance reached");
   if (row) { await ctx.db.patch(row._id, { calls: row.calls + 1, updatedAt: Date.now() }); return row._id; }
   return await ctx.db.insert("partnershipResearch", { creatorId: a.creatorId, month, calls: 1, data: [], updatedAt: Date.now() });
 } });

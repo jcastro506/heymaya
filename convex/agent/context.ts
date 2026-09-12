@@ -7,7 +7,8 @@
 import { internalQuery, type QueryCtx } from "../_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
-import { SOUL, SOUL_VERSION, REGISTER_ADDENDA, PLAN_LINE } from "./soul";
+import { SOUL, SOUL_VERSION, REGISTER_ADDENDA } from "./soul";
+import { entitlementsFor, planLineFor } from "../billing/tiers";
 import { summarize, type Affinity } from "../taste/affinities";
 import { voiceFor, voiceSection } from "./voice";
 import { historyFor, historySection } from "./history";
@@ -143,5 +144,5 @@ export type CreatorId = Id<"creators">;
 export function planSection(c: Doc<"creators">): string {
   const p = c.plan as { status: string; founding?: boolean; trialEndsAt?: number };
   const trial = p.trialEndsAt ? ` Trial ends ${new Intl.DateTimeFormat("en-US", { timeZone: c.timezone, month: "short", day: "numeric" }).format(p.trialEndsAt)}.` : "";
-  return `# Their plan (the only money facts you may state)\nStatus: ${p.status}${p.founding ? " (founding seat)" : ""}.${trial} Price: ${PLAN_LINE}`;
+  return `# Their plan (the only money facts you may state)\nStatus: ${p.status}${p.founding ? " (founding seat)" : ""}.${trial} Price: ${planLineFor(entitlementsFor(p).tier)}`;
 }

@@ -17,10 +17,10 @@ function customerIdOf(obj: { customer?: string | { id: string } | null } | null 
   return typeof c === "string" ? c : c?.id;
 }
 
-function subscriptionPayload(sub: Stripe.Subscription): { id: string; status: string; cancel_at_period_end?: boolean; trial_end: number | null; current_period_end: number | null; founding?: boolean } {
-  const item = sub.items?.data?.[0] as unknown as { current_period_end?: number } | undefined;
+function subscriptionPayload(sub: Stripe.Subscription): { id: string; status: string; cancel_at_period_end?: boolean; trial_end: number | null; current_period_end: number | null; founding?: boolean; priceId?: string; metadataTier?: string } {
+  const item = sub.items?.data?.[0] as unknown as { current_period_end?: number; price?: { id?: string } } | undefined;
   const legacyEnd = (sub as unknown as { current_period_end?: number }).current_period_end;
-  return { id: sub.id, status: sub.status, cancel_at_period_end: sub.cancel_at_period_end ?? undefined, trial_end: sub.trial_end ?? null, current_period_end: legacyEnd ?? item?.current_period_end ?? null, founding: sub.metadata?.founding === "1" };
+  return { id: sub.id, status: sub.status, cancel_at_period_end: sub.cancel_at_period_end ?? undefined, trial_end: sub.trial_end ?? null, current_period_end: legacyEnd ?? item?.current_period_end ?? null, founding: sub.metadata?.founding === "1", priceId: item?.price?.id, metadataTier: sub.metadata?.tier };
 }
 
 export const stripeWebhook = httpAction(async (ctx, request) => {

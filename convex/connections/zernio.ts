@@ -9,6 +9,7 @@
  */
 
 import { v } from "convex/values";
+import { entitlementsFor, accountsWithinPlan } from "../billing/tiers";
 import { action, httpAction, internalAction, internalMutation, internalQuery, query, type ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -35,9 +36,11 @@ export const byProfile = internalQuery({
 
 export const meForConnect = internalQuery({
   args: {},
-  handler: async (ctx): Promise<{ creatorId: Id<"creators">; plan: string; label: string } | null> => {
+  handler: async (ctx): Promise<{ creatorId: Id<"creators">; plan: string; label: string; accountCap: number; connectedAccounts: number } | null> => {
     const c = await creatorForIdentity(ctx);
-    return c ? { creatorId: c._id, plan: c.plan.status, label: c.handles.tiktok ?? c.handles.instagram ?? c.email } : null;
+    if (!c) return null;
+    const conn = (await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", c._id).eq("provider", "zernio")).first()) as Doc<"connections"> | null;
+    return { creatorId: c._id, plan: c.plan.status, label: c.handles.tiktok ?? c.handles.instagram ?? c.email, accountCap: entitlementsFor(c.plan).accounts, connectedAccounts: (conn?.zernioAccounts ?? []).length };
   },
 });
 
@@ -81,6 +84,8 @@ export const startConnect = action({
     const me = await ctx.runQuery(internal.connections.zernio.meForConnect, {});
     if (!me) return { ok: false, reason: "no account" };
     if (me.plan !== "active" && me.plan !== "comped") return { ok: false, reason: "connections open when the trial ends" };
+    // §26: the plan's account cap is the door. Budgets, never booleans: solo is a cap of one.
+    if (me.connectedAccounts >= me.accountCap) return { ok: false, reason: me.accountCap === 1 ? "your plan includes one connected account. switch to both accounts in Settings to add the other" : `your plan includes ${me.accountCap} connected accounts` };
     if (!process.env.ZERNIO_API_KEY) return { ok: false, reason: "not configured" };
     const c = client();
     let conn = await ctx.runQuery(internal.connections.zernio.connection, { creatorId: me.creatorId });

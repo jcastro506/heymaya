@@ -105,6 +105,7 @@ export default defineSchema({
       pastDueSince: v.optional(v.number()), // §19.3: three days of grace for proactive, then it pauses
       lastEventAt: v.optional(v.number()), // the Stripe event time last applied; older events change nothing
       founding: v.boolean(),
+      tier: v.optional(v.union(v.literal("solo"), v.literal("duo"), v.literal("partner"))), // §26: set from the Stripe price, never the client
     }),
     firstWeek: v.optional(v.object({ startedAt: v.number(), stepsDone: v.array(v.string()) })),
     openQuestionId: v.optional(v.id("messages")), // at most one open question

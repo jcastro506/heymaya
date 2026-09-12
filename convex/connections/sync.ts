@@ -15,6 +15,7 @@
  */
 
 import { v } from "convex/values";
+import { entitlementsFor, accountsWithinPlan } from "../billing/tiers";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -118,7 +119,9 @@ export const bootstrap = internalAction({
   args: { creatorId: v.id("creators") },
   handler: async (ctx, a): Promise<{ accounts: number; rows: number; written: number; created: number; detail?: string }> => {
     const conn = await ctx.runQuery(internal.connections.zernio.connection, { creatorId: a.creatorId });
-    const accounts = (conn?.zernioAccounts ?? []).filter((x) => x.canFetchAnalytics && !x.needsReconnect);
+    const cap = await ctx.runQuery(internal.connections.sync.accountCap, { creatorId: a.creatorId });
+    // §26: only the accounts within the plan are read; an account past the cap produces no rows.
+    const accounts = accountsWithinPlan(conn?.zernioAccounts ?? [], cap).filter((x) => x.canFetchAnalytics && !x.needsReconnect);
     if (!conn?.zernioProfileId || accounts.length === 0) return { accounts: 0, rows: 0, written: 0, created: 0, detail: "no connected account with analytics access" };
     let rows = 0, written = 0, created = 0;
     try {
@@ -161,11 +164,25 @@ export const setCursor = internalMutation({
 });
 
 /** Which creator owns a Zernio account id. */
+/** The plan's connected-account cap (§26). */
+export const accountCap = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<number> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    return c ? entitlementsFor(c.plan).accounts : 0;
+  },
+});
+
 export const creatorForAccount = internalQuery({
   args: { accountId: v.string() },
   handler: async (ctx, a): Promise<Id<"creators"> | null> => {
     const conns = (await ctx.db.query("connections").take(1000)) as Doc<"connections">[];
-    return conns.find((c) => c.provider === "zernio" && (c.zernioAccounts ?? []).some((x) => x.accountId === a.accountId))?.creatorId ?? null;
+    const conn = conns.find((c) => c.provider === "zernio" && (c.zernioAccounts ?? []).some((x) => x.accountId === a.accountId));
+    if (!conn) return null;
+    // §26: an account past the plan's cap is nobody's; its rows are never written.
+    const creator = (await ctx.db.get(conn.creatorId)) as Doc<"creators"> | null;
+    if (!creator) return null;
+    return accountsWithinPlan(conn.zernioAccounts ?? [], entitlementsFor(creator.plan).accounts).some((x) => x.accountId === a.accountId) ? conn.creatorId : null;
   },
 });
 

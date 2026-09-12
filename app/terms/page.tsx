@@ -14,7 +14,7 @@ export default function Terms() {
       <p>You must be 18 or older. You are responsible for the handles you give us being yours and for what you do with the ideas. One person, one account, one Telegram chat.</p>
 
       <h2 className="font-semibold text-base">Payment</h2>
-      <p>Seven days free with a card on file, then $19 a month or $180 a year at the founding price while seats last, $29 or $290 after. You are charged on day seven unless you cancel first. Cancel any time from Settings; the current period runs out and there are no pro-rata refunds. Exceptions are at the founder&apos;s discretion.</p>
+      <p>Seven days free with a card on file, then $19 a month or $190 a year for one connected account, $24.99 a month or $249.90 a year for both, or $29.99 a month or $299.90 a year for both plus partnerships. You are charged on day seven unless you cancel first. Cancel any time from Settings; the current period runs out and there are no pro-rata refunds. Exceptions are at the founder&apos;s discretion.</p>
 
       <h2 className="font-semibold text-base">Fair use</h2>
       <p>The trial and the paid plan have the same budgets for how much she watches and reads each day. Using Maya to harass, impersonate or scrape people, or to feed her content you have no right to share, ends the account.</p>

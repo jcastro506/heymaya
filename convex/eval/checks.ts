@@ -5,7 +5,7 @@
  * §21.2 that can be code: no tells, no leak, one question, no bullets, her name once.
  */
 
-import { checkPlainLanguage } from "../core/plainLanguage";
+import { INTERNAL_ID, checkPlainLanguage } from "../core/plainLanguage";
 
 /**
  * The RULER's version. Bump it whenever a check is added, removed, or its meaning changes.
@@ -17,7 +17,7 @@ import { checkPlainLanguage } from "../core/plainLanguage";
  *
  * `rubric.test.ts` fails if the checks change without this being bumped.
  */
-export const RUBRIC_VERSION = "6";
+export const RUBRIC_VERSION = "7";
 
 
 export interface Check { name: string; pass: boolean; detail: string; /** Measured and reported, never a fail: a habit we are moving, not a promise we enforce. */ advisory?: boolean }
@@ -79,6 +79,9 @@ export function runChecks(input: { text: string; evidence: unknown; kind: string
 
   const leak = checkPlainLanguage(text);
   checks.push({ name: "no_leak", pass: leak.ok, detail: leak.ok ? "clean" : (leak as { reason?: string }).reason ?? "leak" });
+  // 2026-09-12: the prompt now carries row ids for the partnership evidence; none may reach a person.
+  const ids = text.match(INTERNAL_ID) ?? [];
+  checks.push({ name: "no_internal_ids", pass: ids.length === 0, detail: ids.length ? `row id in the message: ${ids[0]}` : "clean" });
 
   const max = input.maxChars ?? 900;
   checks.push({ name: "length", pass: text.length <= max, detail: `${text.length} / ${max}` });

@@ -39,6 +39,7 @@ import type * as agent_voice from "../agent/voice.js";
 import type * as billing_checkout from "../billing/checkout.js";
 import type * as billing_plan from "../billing/plan.js";
 import type * as billing_stripe from "../billing/stripe.js";
+import type * as billing_tiers from "../billing/tiers.js";
 import type * as billing_webhook from "../billing/webhook.js";
 import type * as calendar_availability from "../calendar/availability.js";
 import type * as calendar_blocks from "../calendar/blocks.js";
@@ -198,6 +199,7 @@ declare const fullApi: ApiFromModules<{
   "billing/checkout": typeof billing_checkout;
   "billing/plan": typeof billing_plan;
   "billing/stripe": typeof billing_stripe;
+  "billing/tiers": typeof billing_tiers;
   "billing/webhook": typeof billing_webhook;
   "calendar/availability": typeof calendar_availability;
   "calendar/blocks": typeof calendar_blocks;

@@ -6,6 +6,7 @@
  */
 
 import Stripe from "stripe";
+import { priceEnvKey, type Tier } from "./tiers";
 
 export const STRIPE_API_VERSION = "2026-04-22.dahlia" as const;
 
@@ -31,9 +32,9 @@ export async function constructEvent(rawBody: string, signature: string, secret:
   return await getStripe().webhooks.constructEventAsync(rawBody, signature, secret, undefined, Stripe.createSubtleCryptoProvider());
 }
 
-/** Price ids live in the deployment env, one per interval and tier; founding is the first hundred (§19.1). */
-export function priceIdFor(interval: "monthly" | "annual", founding: boolean): string {
-  const key = founding ? (interval === "monthly" ? "STRIPE_PRICE_FOUNDING_MONTHLY" : "STRIPE_PRICE_FOUNDING_ANNUAL") : interval === "monthly" ? "STRIPE_PRICE_LIST_MONTHLY" : "STRIPE_PRICE_LIST_ANNUAL";
+/** Price ids live in the deployment env, one per tier and interval (§26). Founding is a badge now, not a price. */
+export function priceIdFor(tier: Tier, interval: "monthly" | "annual"): string {
+  const key = priceEnvKey(tier, interval);
   const id = process.env[key];
   if (!id) throw new Error(`${key} is not set`);
   return id;

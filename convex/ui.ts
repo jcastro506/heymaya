@@ -5,6 +5,7 @@
  */
 
 import { v } from "convex/values";
+import { entitlementsFor } from "./billing/tiers";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
@@ -110,6 +111,8 @@ export const settings = query({
       paired: c.channel.paired,
       plan: c.plan.status,
       founding: c.plan.founding,
+      tier: entitlementsFor(c.plan).tier,
+      accountCap: entitlementsFor(c.plan).accounts,
       trialEndsAt: c.plan.trialEndsAt ?? null,
       currentPeriodEnd: c.plan.currentPeriodEnd ?? null,
       knows: d ? { summary: d.persona?.summary ?? null, register: d.persona?.register ?? null, works: (d.works ?? []).map((w) => w.claim), doesNot: (d.doesNot ?? []).map((w) => w.claim), keywords: d.keywords ?? [], mode: d.mode ?? c.mode } : null,

@@ -71,7 +71,15 @@ export const INTERNAL_NAMES = [
  * Machine-shaped fragments. These are patterns rather than names because the
  * damaging part is the SHAPE — an exception, a status code, an id.
  */
+/**
+ * A Convex row id: 32 lowercase base-32 characters starting with j or k, standing on its
+ * own (a URL path segment never matches). 2026-09-12: the prompt carries message ids for
+ * the partnership evidence; a model that "cites" one leaks it. Exported for eval/checks.ts.
+ */
+export const INTERNAL_ID = /(?<![/\w])[jk][a-z0-9]{31}(?![\w/])/g;
+
 const MACHINE_PATTERNS: Array<{ name: string; re: RegExp }> = [
+  { name: "row id", re: INTERNAL_ID },
   // "Error: ...", "TypeError: ...", "AbortError". The single most likely leak,
   // because `catch (e) { return e.message }` is the default thing to write.
   { name: "exception", re: /\b[A-Z][a-zA-Z]*Error\b:?/g },

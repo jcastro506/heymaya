@@ -24,7 +24,8 @@ import { internal } from "../_generated/api";
 import { internalMutation, mutation, type MutationCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { pairingSmsLink } from "./imessage";
-import { OPENING_QUESTION } from "../onboarding/conversation";
+import { OPENING_QUESTION, openingQuestionFor } from "../onboarding/conversation";
+import { partnershipsOpen } from "../partnerships/store";
 
 /**
  * Fifteen minutes. Long enough to walk to your phone, short enough that a link
@@ -34,6 +35,10 @@ export const PAIRING_TTL_MS = 15 * 60_000;
 
 /** What she says the moment they pair, before the read is done. */
 export const HELLO = `hey! i'm maya. i'll help you figure out what to post, work through drafts, and keep your content plans moving—all here in our chat. i'm taking a look at your posts now.\n---\n${OPENING_QUESTION}`;
+/** The first hello, with the opening for their plan (§26). Pure. */
+export function helloFor(partnerships: boolean): string {
+  return HELLO.replace(OPENING_QUESTION, openingQuestionFor(partnerships));
+}
 
 function mintToken(): string {
   const bytes = new Uint8Array(24);
@@ -139,7 +144,7 @@ export const claimPairingByPhone = internalMutation({
     const firstRead = await ctx.db.query("messages").withIndex("by_creator_and_dedupe", (q) => q.eq("creatorId", creator._id).eq("dedupeKey", `first_read:${creator._id}`)).first();
     if (!firstRead || creator.conversationalOnboardingAt) {
       await ctx.db.patch(creator._id, { conversationalOnboardingAt: creator.conversationalOnboardingAt ?? now });
-      await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "imessage", body: firstRead ? OPENING_QUESTION : HELLO, dedupeKey: `hello:${creator._id}`, proactive: true, kind: "status", awaitingAnswer: true });
+      await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "imessage", body: firstRead ? openingQuestionFor(partnershipsOpen(creator)) : helloFor(partnershipsOpen(creator)), dedupeKey: `hello:${creator._id}`, proactive: true, kind: "status", awaitingAnswer: true });
     }
     await ctx.runMutation(internal.core.jobs.enqueue, { kind: "first_read", idempotencyKey: `first_read:${creator._id}`, creatorId: creator._id, payloadJson: JSON.stringify({ phone: args.phone, service: args.service ?? null }) });
     await ctx.runMutation(internal.core.jobs.wakeDeliveries, { creatorId: creator._id });
@@ -216,7 +221,7 @@ export const claimPairing = internalMutation({
       await ctx.runMutation(internal.core.messages.send, {
         creatorId: creator._id,
         surface: "telegram",
-        body: firstRead ? OPENING_QUESTION : HELLO,
+        body: firstRead ? openingQuestionFor(partnershipsOpen(creator)) : helloFor(partnershipsOpen(creator)),
         dedupeKey: `hello:${creator._id}`,
         proactive: true,
         kind: "status",
