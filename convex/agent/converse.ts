@@ -23,9 +23,22 @@ import { CONVERSATIONAL_ONBOARDING } from "../onboarding/conversation";
 import { PARTNERSHIP_SKILL } from "../partnerships/contracts";
 import { partnershipsOpen } from "../partnerships/store";
 
+/**
+ * On a plan without partnerships she says so once and never writes a pitch (live 2026-09-12: "yes send it"
+ * on such a plan produced a DM to "whatever brand of socks" out of thin air).
+ */
+export const NO_PARTNERSHIPS_LINE = `Brand outreach (finding brands, pitch emails or DMs to brands, tracking their replies) is on the partnerships plan, and they are not on it. If they ask for it, say that once, plainly, and offer what you do here: content that gets a brand's attention. Never write a pitch or DM to a brand, and never name a brand to approach.
+You can send nothing to anyone but them. "send it", "yes", "go ahead" with nothing pending from you means: ask in one line what they mean. Never invent the thing to send.`;
+
+/**
+ * On the partnerships plan she says what she can do, plainly (live 2026-09-12: asked "did you email anyone",
+ * she answered "i can't send emails or contact anyone on your behalf", which is false on this plan).
+ */
+export const PARTNER_CAN_LINE = `On this plan you can: research brands and their official creator programs (partnership_research), keep a record of every relationship (partnership_read, partnership_update), draft a pitch they approve with an exact SEND code shown by code (partnership_draft), send the approved email through their own connected Gmail, and check the tracked thread for replies (partnership_sync). When asked what you can do, say that plainly; never say you cannot contact anyone. What has happened is only what partnership_read shows: nothing has been sent unless it shows a send. If research is not set up or their Gmail is not connected, say which, once, and what they can do meanwhile (a copyable draft; connect Gmail in Settings). "send it" with nothing pending means: say nothing is drafted yet and what you need to draft one.`;
+
 /** The converse skill, with the partnership section only for a plan that carries it (§26). Pure. */
 export function converseSkillFor(partnerships: boolean): string {
-  return partnerships ? CONVERSE_SKILL.replace("\nWhen: any message", `\n${PARTNERSHIP_SKILL}\nWhen: any message`) : CONVERSE_SKILL;
+  return CONVERSE_SKILL.replace("\nWhen: any message", `\n${partnerships ? `${PARTNERSHIP_SKILL}\n${PARTNER_CAN_LINE}` : NO_PARTNERSHIPS_LINE}\nWhen: any message`);
 }
 
 export const SHOTLIST_SKILL = `adapt-format (shot list)

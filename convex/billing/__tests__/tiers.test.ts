@@ -13,7 +13,7 @@ import { seedCreator } from "../../../tests/lib/creatorRow";
 import { TIERS, TIER_NAMES, accountsWithinPlan, entitlementsFor, planLineFor, price, priceEnvKey, tierFromPriceId } from "../tiers";
 import { tierFor } from "../plan";
 import { partnershipAllowance, partnershipsOpen } from "../../partnerships/store";
-import { converseSkillFor } from "../../agent/converse";
+import { NO_PARTNERSHIPS_LINE, PARTNER_CAN_LINE, converseSkillFor } from "../../agent/converse";
 import { helloFor } from "../../core/pairing";
 import { openingQuestionFor } from "../../onboarding/conversation";
 import { PARTNERSHIP_SKILL } from "../../partnerships/contracts";
@@ -82,6 +82,10 @@ describe("the tiers", () => {
   it("the skill, the opening and the hello name partnerships only for a plan that has them", () => {
     expect(converseSkillFor(true)).toContain(PARTNERSHIP_SKILL);
     expect(converseSkillFor(false)).not.toContain(PARTNERSHIP_SKILL);
+    expect(converseSkillFor(false)).toContain(NO_PARTNERSHIPS_LINE);
+    expect(converseSkillFor(true)).not.toContain(NO_PARTNERSHIPS_LINE);
+    expect(converseSkillFor(true)).toContain(PARTNER_CAN_LINE);
+    expect(converseSkillFor(false)).not.toContain(PARTNER_CAN_LINE);
     expect(converseSkillFor(false)).toContain("When: any message");
     expect(openingQuestionFor(true)).toMatch(/brand deals/);
     expect(openingQuestionFor(false)).not.toMatch(/brand/);

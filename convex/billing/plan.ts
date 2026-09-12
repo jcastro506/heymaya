@@ -170,3 +170,14 @@ export const seatsLeft = internalQuery({
     return Math.max(0, FOUNDING_SEATS - rows.filter((c) => c.plan.stripeSubscriptionId).length);
   },
 });
+
+/** Ops: put a creator on a tier by hand (a comp, a pilot, a live test). The Stripe price still wins at the next webhook. */
+export const setTier = internalMutation({
+  args: { creatorId: v.id("creators"), tier: v.union(v.literal("solo"), v.literal("duo"), v.literal("partner")) },
+  handler: async (ctx, a): Promise<{ before: string | undefined; after: Tier }> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!c) throw new Error("no such creator");
+    await ctx.db.patch(a.creatorId, { plan: { ...c.plan, tier: a.tier }, updatedAt: Date.now() });
+    return { before: c.plan.tier, after: a.tier };
+  },
+});
