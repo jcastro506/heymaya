@@ -17,7 +17,7 @@ export interface InvestigateResult { content: string; trace: ToolCallRecord[]; e
 
 export const INVESTIGATE_RULES = `You may look things up before you answer. Each tool costs what it says; you have a budget and it is shown to you. Look up only what changes the answer: whether this is the account or the sound, whether it is above the author's own normal, what people react to in the comments, whether the shape is a wave this week, and whether the creator already has a post that rhymes with it. When you have enough, answer in the exact JSON the skill asks for. Never invent a number you did not get from a tool or the prompt. If a tool is refused or fails, say what you could not check and answer anyway.`;
 
-export async function investigate(ctx: ActionCtx, input: { creatorId: Id<"creators">; purpose: string; prefix: string; user: string; budget?: ToolBudget; temperature?: number; maxTokens?: number }): Promise<InvestigateResult> {
+export async function investigate(ctx: ActionCtx, input: { creatorId: Id<"creators">; sourceMessageId?: Id<"messages">; purpose: string; prefix: string; user: string; budget?: ToolBudget; temperature?: number; maxTokens?: number }): Promise<InvestigateResult> {
   const budget = input.budget ?? DEFAULT_BUDGET();
   const trace: ToolCallRecord[] = [];
   const spec = REGISTRY.writer;
@@ -27,10 +27,11 @@ export async function investigate(ctx: ActionCtx, input: { creatorId: Id<"creato
     { role: "user", content: `${input.user}\n\nBudget: ${budget.calls} tool calls, ${budget.credits} credits.` },
   ];
   const maxTurns = budget.calls + 2;
+  const availableTools = input.sourceMessageId ? TOOLS : TOOLS.filter(t => !t.function.name.startsWith("partnership_"));
   for (let turn = 1; turn <= maxTurns; turn++) {
     const spent = trace.reduce((s, t) => s + (t.credits ?? 0), 0);
     const exhausted = trace.length >= budget.calls || Date.now() > budget.deadlineAt;
-    const r = await callModel(ctx, { creatorId: input.creatorId, purpose: input.purpose, model: spec.primary, messages, tools: exhausted ? undefined : TOOLS, toolChoice: exhausted ? "none" : "auto", temperature: input.temperature ?? 0.4, maxTokens: input.maxTokens ?? 1600, apiKey });
+    const r = await callModel(ctx, { creatorId: input.creatorId, purpose: input.purpose, model: spec.primary, messages, tools: exhausted ? undefined : availableTools, toolChoice: exhausted ? "none" : "auto", temperature: input.temperature ?? 0.4, maxTokens: input.maxTokens ?? 1600, apiKey });
     if (!r.ok) return { content: "", trace, ended: "model_error", turns: turn };
     if (r.toolCalls && r.toolCalls.length > 0) {
       messages.push({ role: "assistant", content: r.content ?? "", tool_calls: r.toolCalls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.arguments } })) });
@@ -41,7 +42,7 @@ export async function investigate(ctx: ActionCtx, input: { creatorId: Id<"creato
         } catch {
           args = {};
         }
-        const out = await runTool(ctx, input.creatorId, { name: c.name, args }, budget, trace);
+        const out = await runTool(ctx, input.creatorId, { name: c.name, args }, budget, trace, input.sourceMessageId);
         const left = Math.max(0, budget.calls - trace.length);
         const creditsLeft = Math.max(0, budget.credits - trace.reduce((s, t) => s + (t.credits ?? 0), 0));
         messages.push({ role: "tool", tool_call_id: c.id, name: c.name, content: `${out}\n\n(budget left: ${left} calls, ${creditsLeft} credits)` });

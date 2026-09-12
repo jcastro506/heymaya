@@ -19,6 +19,8 @@ import { internalMutation, internalQuery } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { critique } from "./critic";
 import { enqueueRender } from "./frames";
+import { CONVERSATIONAL_ONBOARDING } from "../onboarding/conversation";
+import { PARTNERSHIP_SKILL } from "../partnerships/contracts";
 
 export const SHOTLIST_SKILL = `adapt-format (shot list)
 When: they tapped "shot list" on an idea you sent.
@@ -51,10 +53,12 @@ export const ideaById = internalQuery({
 });
 
 export const CONVERSE_SKILL = `converse
+${CONVERSATIONAL_ONBOARDING}
+${PARTNERSHIP_SKILL}
 When: any message that is not a command, a file, a link to a post, or a button tap.
 When they ask for a time ("next open slot", "when can i film", "book it"), the prefix lists their free windows from now, today included: the next open slot is the FIRST one, never a day later than it. Say why in one clause from that list (their usual hour; the next free hour today), never a guess about when people scroll; posting hours come from "best posting hours" in the prefix and you say when it is only a default.
 If they say they post whatever's happening or don't have a niche, don't argue and don't shrug: guide, as the friend who knows how the platforms work. You can grow that way, some do; what you'd do is pick one thing to lean on so the platform knows who to show them to, keep the rest as texture, and from their numbers say which one; offer to plan the week around it.
-Anything they agree to make gets a time. When they commit to an idea, yours or theirs ("will do", "love it", "filming that tomorrow", "let's do it"), and it is not already on the plan in the prefix, propose one specific slot from their free time and their posting hours ("thursday 5pm work?"); when they name a time, book it with block_add right then and say so in one line. A yes never ends without a when. If the plan already has a block for it, say which.
+When they explicitly commit to making a specific piece of content, and it is not already on the plan in the prefix, propose one specific slot from their free time and their posting hours ("thursday 5pm work?"); when they name a time for that commitment, book it with block_add right then and say so in one line. If the plan already has a block for it, say which. A goal, a general "love it", or agreement with advice is not a filming commitment; do not book or demand a time for those.
 Their week is yours to manage by text (Sprint 4b). The prefix shows the plan with block ids. "make it thursday", "push it to 6:30", "skip that one", "clear the week", "add an edit block sunday morning", "what's on this week": read week_plan first if you need ids, then block_move / block_drop / block_add, then say what happened in one line. If the film block moves past the post time, move the post block too. A tool answer that starts "refused" means it did not happen: say so plainly, never claim it. If they ask for a plan, or they cleared the week, week_replan sends it with a button; do not restate the plan yourself.
 
 The judgment: answer the thing they actually asked, in their register, with what you know from the dossier, the conversation, and what you can look up (you have the tools: a post's numbers and words, a sound, an account's normal, what a keyword or hashtag is doing this week, what people are typing next to a keyword, their own posts that rhyme, their calendar). Look something up when it changes the answer; don't when it doesn't. If they ask about numbers nobody outside the app can see (watch time), say so. If they ask for an idea, give one, shaped to them, with why. If nothing needs a question, don't ask one.
@@ -98,6 +102,12 @@ export const run = internalAction({
     if (!gathered) return { ok: false, reason: "creator not found" };
     const { creator, directives, recent, target } = gathered;
     if (!target) return { ok: false, reason: "message not found" };
+    const approval = await ctx.runMutation(internal.partnerships.drafts.approve, { creatorId: creator._id, sourceMessageId: target._id });
+    if (approval.handled) {
+      await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: approval.text ?? "nothing was sent.", dedupeKey: `partner-approval:${target._id}`, proactive: false, kind: "reply" });
+      await deliverNow(ctx as never);
+      return { ok: true };
+    }
 
     // §15.3: code decides the route. Commands never reach a model; links and files go
     // to the opinion path; a voice note or screenshot is read first and then answered here.
@@ -469,13 +479,14 @@ export const run = internalAction({
     }
 
     const prefix = buildPrefix({ creator, directives, skill: CONVERSE_SKILL, personal: gathered.personal, voice: gathered.voice, history: gathered.history });
-    const suffix = buildSuffix({ recent: recent.filter((m) => m._id !== target._id), target }) + recalled + (args.handledNote ? `\n\n(Already done by code this turn, and already said to them: "${args.handledNote.slice(0, 200)}". Answer the REST of their message now; do not repeat the done part.)` : "");
+    const suffix = buildSuffix({ recent: recent.filter((m) => m._id !== target._id), target }) + `\n\nCurrent user-message evidence ID (internal, do not display): ${target._id}` + recalled + (args.handledNote ? `\n\n(Already done by code this turn, and already said to them: "${args.handledNote.slice(0, 200)}". Answer the REST of their message now; do not repeat the done part.)` : "");
     const apiKey = process.env.OPENROUTER_API_KEY ?? "";
     const spec = REGISTRY.writer;
 
     // §13.11: conversation is armed too. Three lookups, ten credits, so "is this hashtag dead" or
     // "when should i post this week" is answered from the catalogue, not from memory.
-    const inv = await investigate(ctx, { creatorId: creator._id, purpose: "converse", prefix, user: suffix, budget: { calls: 3, credits: 10, deadlineAt: Date.now() + 40_000 }, temperature: spec.temperature, maxTokens: spec.maxTokens });
+    const partnershipTurn = /brand|partnership|sponsor|collab|pitch|email|application|follow.?up|deliverable|rate|paid deal/i.test([target.body, ...recent.slice(-4).map(m => m.body)].join(" "));
+    const inv = await investigate(ctx, { creatorId: creator._id, sourceMessageId: target._id, purpose: "converse", prefix, user: suffix, budget: { calls: partnershipTurn ? 6 : 3, credits: 10, deadlineAt: Date.now() + (partnershipTurn ? 60_000 : 40_000) }, temperature: spec.temperature, maxTokens: spec.maxTokens });
     let result: { ok: true; content: string } | { ok: false; reason: string } = inv.content ? { ok: true, content: inv.content } : { ok: false, reason: `converse ${inv.ended}` };
     if (!result.ok) {
       const fb = await callModel(ctx, {

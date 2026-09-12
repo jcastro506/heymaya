@@ -80,4 +80,5 @@ crons.hourly("human cadence", { minuteUTC: 55 }, internal.agent.cadence.runAll, 
 
 crons.daily("cost reconcile", { hourUTC: 23, minuteUTC: 30 }, internal.core.reconcile.run, {});
 
+crons.interval("partnership reply sync", { minutes: 30 }, internal.partnerships.delivery.poll, {});
 export default crons;

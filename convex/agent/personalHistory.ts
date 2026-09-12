@@ -5,6 +5,7 @@ import { MESSAGE_DAYS } from "../core/retention";
 import { styleFacts } from "./voice";
 import { splitEvents } from "../taste/separation";
 import { internal } from "../_generated/api";
+import { forgetPartnershipEvidence } from "../partnerships/privacy";
 
 export const normalizeMemory = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
@@ -47,10 +48,14 @@ export async function personalHistoryFor(ctx: QueryCtx, creatorId: Id<"creators"
   const records = await ctx.db.query("personalRecords").withIndex("by_creator", (q) => q.eq("creatorId", creatorId)).order("desc").take(80);
   const live: Doc<"personalRecords">[] = [];
   for (const record of records) if (await recordVisible(ctx, record, creatorId)) live.push(record);
-  const current = live.filter((r) => r.kind !== "style").slice(0, 8);
+  // Goals have their own bounded read so ordinary feedback cannot push them out of context.
+  const goalRows = await ctx.db.query("personalRecords").withIndex("by_creator_kind", (q) => q.eq("creatorId", creatorId).eq("kind", "goal")).order("desc").take(20);
+  const goals: Doc<"personalRecords">[] = [];
+  for (const row of goalRows) if (await recordVisible(ctx, row, creatorId)) goals.push(row);
+  const current = [...goals.slice(0, 4), ...live.filter((r) => r.kind !== "style" && r.kind !== "goal").slice(0, 8)];
   const lines: string[] = [];
   for (const r of current) {
-    let state = r.kind === "commitment" ? "discussed; no linked scheduled action" : "creator's words";
+    let state = r.kind === "goal" ? "stated aspiration, not consent or a booked action; newest explicit correction wins" : r.kind === "commitment" ? "discussed; no linked scheduled action" : "creator's words";
     if (r.blockId) {
       const block = await ctx.db.get(r.blockId);
       // A missed block is a fact of its own: "booked for" a past date read as done (live 2026-09-09: "yep, you made it").
@@ -85,6 +90,7 @@ export async function forgetEvidence(ctx: MutationCtx, creator: Doc<"creators">,
     if (matches || m.dedupeKey === `reply:${note.sourceMessageId}`) { await ctx.db.patch(m._id, { memoryExcludedAt: now }); excluded.add(m._id); }
   }
   const records = await ctx.db.query("personalRecords").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).collect();
+  await forgetPartnershipEvidence(ctx, creator._id, excluded, needles);
   for (const r of records) if (r.sourceNoteIds.includes(note.id) || r.sourceMessageIds.some((id) => excluded.has(id)) || needles.some((n) => normalizeMemory(`${r.text} ${r.reason ?? ""}`).includes(n))) await ctx.db.patch(r._id, { active: false, invalidatedAt: now });
   const notes = creator.notes.map((n) => n.id === note.id || (n.sourceMessageId && excluded.has(n.sourceMessageId)) || needles.some((needle) => normalizeMemory(n.text).includes(needle)) ? { ...n, tombstonedAt: now } : n);
   const memories = await ctx.db.query("memories").withIndex("by_creator_ref", (q) => q.eq("creatorId", creator._id)).collect();

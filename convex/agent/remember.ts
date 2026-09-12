@@ -20,7 +20,7 @@ export const REMEMBER_PROMPT = `You read one message a content creator sent to t
 - A name they give, especially in answer to "what should i call you" (a bare "Josh", "call me kev", "it's Vanessa"), is a "fact" note, written as "call them Josh". No expiry.
 - Otherwise nothing. Questions, opinions on a post, small talk, thanks, one-off logistics: nothing.
 If they explicitly correct a stored fact, include supersedesNoteId with the exact existing note id. Only supersede a direct contradiction about the same fact, not a new topic or a guess. A temporary experiment does not replace their identity. Use recent conversation only to resolve a short answer (such as a name); never extract the assistant's claims as user facts.
-Also capture one "experience" when they explicitly express creative preference, effort/repeatability, a decision/rejection, or a commitment. kind: preference|effort|decision|commitment. quote must be an exact passage from THEIR message, <=400 chars. reason is an exact quote of their reason if stated, never invented. blockId may only be an existing block id in their plan that clearly corresponds to this commitment; otherwise null. Do not mistake a question, suggestion, or Maya's words for consent or completion.
+Also capture one "experience" when they explicitly express a goal, creative preference, effort/repeatability, a decision/rejection, or a commitment. kind: goal|preference|effort|decision|commitment. Goals include "post twice a week", "better paid partnerships", or a short answer like "brand deals" to a question about what they want help with. Prioritize a stated goal over a generic preference. Save motivations, boundaries and capacity as notes too when stated; do not let "opinions: nothing" discard these. quote must be an exact passage from THEIR message, <=400 chars. reason is an exact quote of their reason if stated, never invented. A goal is not a scheduled commitment: blockId must be null for goals. For commitments, blockId may only be an existing block id in their plan that clearly corresponds to this commitment; otherwise null. Do not mistake a question, suggestion, or Maya's words for consent or completion.
 If the new rule directly replaces one of the rules already kept (a changed time, a reversed instruction), give supersedesRule as the EXACT text of that old rule; otherwise null. Never supersede a rule about a different thing.
 Output ONLY JSON: {"note": {"text": "", "kind": "life|fact|bit", "expiresDays": 30, "supersedesNoteId": null} | null, "rule": "" | null, "supersedesRule": "" | null, "experience": {"kind":"decision", "quote":"", "reason":null, "blockId":null} | null}`;
 
@@ -54,8 +54,8 @@ export const afterTurn = internalAction({
     }
     let note = false, rule = false;
     let epoch = g.creator.memoryEpoch ?? 0;
-    if (out.experience && typeof out.experience.quote === "string" && ["preference", "effort", "decision", "commitment"].includes(out.experience.kind ?? "")) {
-      await ctx.runMutation(internal.agent.remember.recordExperience, { creatorId: a.creatorId, sourceMessageId: a.messageId, kind: out.experience.kind as "preference" | "effort" | "decision" | "commitment", quote: out.experience.quote.slice(0, 400), reason: typeof out.experience.reason === "string" ? out.experience.reason.slice(0, 300) : undefined, blockId: typeof out.experience.blockId === "string" ? out.experience.blockId : undefined, epoch });
+    if (out.experience && typeof out.experience.quote === "string" && ["goal", "preference", "effort", "decision", "commitment"].includes(out.experience.kind ?? "")) {
+      await ctx.runMutation(internal.agent.remember.recordExperience, { creatorId: a.creatorId, sourceMessageId: a.messageId, kind: out.experience.kind as "goal" | "preference" | "effort" | "decision" | "commitment", quote: out.experience.quote.slice(0, 400), reason: typeof out.experience.reason === "string" ? out.experience.reason.slice(0, 300) : undefined, blockId: out.experience.kind === "commitment" && typeof out.experience.blockId === "string" ? out.experience.blockId : undefined, epoch });
     }
     if (typeof out.note?.text === "string" && out.note.text.trim()) {
       const kind = out.note.kind === "fact" || out.note.kind === "bit" ? out.note.kind : "life";
@@ -142,12 +142,13 @@ export const addRule = internalMutation({
 });
 
 export const recordExperience = internalMutation({
-  args: { creatorId: v.id("creators"), sourceMessageId: v.id("messages"), kind: v.union(v.literal("preference"), v.literal("effort"), v.literal("decision"), v.literal("commitment")), quote: v.string(), reason: v.optional(v.string()), blockId: v.optional(v.string()), epoch: v.number() },
+  args: { creatorId: v.id("creators"), sourceMessageId: v.id("messages"), kind: v.union(v.literal("goal"), v.literal("preference"), v.literal("effort"), v.literal("decision"), v.literal("commitment")), quote: v.string(), reason: v.optional(v.string()), blockId: v.optional(v.string()), epoch: v.number() },
   handler: async (ctx, a): Promise<boolean> => {
     const c = await ctx.db.get(a.creatorId);
     const source = await ctx.db.get(a.sourceMessageId);
     if (!c || c.plan.status === "deleting" || (c.memoryEpoch ?? 0) !== a.epoch || !source || source.creatorId !== c._id || source.direction !== "in" || source.memoryExcludedAt) return false;
     const quote = a.quote.trim();
+    if (a.kind !== "commitment" && a.blockId) return false;
     if (!quote || !source.body.toLowerCase().includes(quote.toLowerCase()) || (a.reason && !source.body.toLowerCase().includes(a.reason.toLowerCase()))) return false;
     const key = `experience:${source._id}:${a.kind}`;
     if (await ctx.db.query("personalRecords").withIndex("by_creator_key", (q) => q.eq("creatorId", c._id).eq("key", key)).first()) return false;

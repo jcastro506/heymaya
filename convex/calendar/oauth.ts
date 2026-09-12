@@ -55,7 +55,7 @@ export const claimState = internalMutation({
   handler: async (ctx, a): Promise<{ creatorId: Id<"creators">; returnTo: string | null } | null> => {
     const row = (await ctx.db.query("oauthStates").withIndex("by_token", (q) => q.eq("token", a.token)).first()) as Doc<"oauthStates"> | null;
     const now = Date.now();
-    if (!row || row.expiresAt <= now || row.claimedAt) return null;
+    if (!row || row.provider !== "google" || row.expiresAt <= now || row.claimedAt) return null;
     await ctx.db.patch(row._id, { claimedAt: now });
     return { creatorId: row.creatorId, returnTo: row.returnTo ?? null };
   },

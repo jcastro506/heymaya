@@ -18,6 +18,12 @@ const produced = { skillVersion: "t", model: "t", thresholdsVersion: "t" };
 async function oneRowEverywhere(t: ReturnType<typeof convexTest>, creatorId: Id<"creators">) {
   await t.run(async (ctx) => {
     const now = Date.now();
+    await ctx.db.insert("partnershipProfiles", { creatorId, data: {}, updatedAt: now });
+    const opportunityId = await ctx.db.insert("partnershipOpportunities", { creatorId, brandDomain: "brand.com", data: {}, updatedAt: now });
+    await ctx.db.insert("partnershipDrafts", { creatorId, opportunityId, data: {}, updatedAt: now });
+    await ctx.db.insert("partnershipEvents", { creatorId, opportunityId, key: "event", kind: "test", text: "test", at: now });
+    await ctx.db.insert("partnershipResearch", { creatorId, month: "2026-09", calls: 1, data: [], updatedAt: now });
+    await ctx.db.insert("partnershipMailboxes", { creatorId, email: "me@example.com", tokenRef: "encrypted", generation: "test", updatedAt: now });
     const tracked = await ctx.db.insert("trackedAccounts", { creatorId, platform: "tiktok", handle: "x", status: "active", addedBy: "creator", baselineN: 0, createdAt: now } as never);
     const post = await ctx.db.insert("ownPosts", { creatorId, platform: "tiktok", postId: "p1", url: "https://t", createTime: now, contentType: "video", hashtags: [], caption: "", metrics: { views: 1, likes: 0, comments: 0, shares: 0 }, metricsAsOf: now, source: "scrape" });
     await ctx.db.insert("ownPostReads", { creatorId, ownPostId: post, card: {}, depth: "read", produced, createdAt: now });

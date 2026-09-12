@@ -38,6 +38,14 @@ export default function SettingsPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteNote, setDeleteNote] = useState<string | null>(null);
   const cal = useQuery(api.calendar.oauth.status);
+  const mailbox = useQuery(api.partnerships.mailbox.status);
+  const disconnectMailbox = useAction(api.partnerships.mailbox.disconnect);
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailNote, setEmailNote] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const q = new URLSearchParams(window.location.search);
+    return q.has("email_error") ? "Couldn’t connect your email. Please try again." : q.get("email") === "connected" ? "Email connected." : null;
+  });
   const selectCalendars = useMutation(api.calendar.oauth.selectCalendars);
   const disconnect = useAction(api.calendar.oauth.disconnect);
   // The connect round trip lands here with a query string; read it once, at mount, without an effect.
@@ -55,6 +63,20 @@ export default function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-lg font-semibold">Settings</h1>
+      {(mailbox?.available || mailbox?.connected) && <section className="flex flex-col gap-2 text-sm">
+        <h2 className="text-sm uppercase tracking-wide opacity-50">Partnership email</h2>
+        <p>Maya prepares brand pitches for your approval and checks replies in your partnership conversations.</p>
+        {emailNote && <p role="status">{emailNote}</p>}
+        {mailbox?.attention && <p role="status">{mailbox.attention} <a className="underline" href="/api/gmail/start">Reconnect email</a></p>}
+        {mailbox?.connected ? <>
+          <p>{mailbox.email}</p>
+          <button className="underline self-start" disabled={emailBusy} onClick={async () => {
+            setEmailBusy(true);
+            try { await disconnectMailbox({}); setEmailNote("Email disconnected."); } catch { setEmailNote("Couldn’t disconnect. Please try again."); } finally { setEmailBusy(false); }
+          }}>{emailBusy ? "Disconnecting…" : "Disconnect email"}</button>
+        </> : <a className="underline" href="/api/gmail/start">Connect Gmail</a>}
+        {mailbox && !mailbox.sendingEnabled && <p className="opacity-60">Pitches can be drafted now. Email sending is not enabled yet.</p>}
+      </section>}
 
       <section className="flex flex-col gap-2 text-sm">
         <h2 className="text-sm uppercase tracking-wide opacity-50">Accounts</h2>

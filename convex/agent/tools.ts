@@ -13,6 +13,7 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { parseLink } from "./inbound";
 import { DIAGNOSIS_WORDS } from "../connections/numbers";
+import { PARTNERSHIP_TOOLS, runPartnershipTool } from "../partnerships/tools";
 
 export const SUMMARY_CAP = 1800; // characters of tool result the model sees, per call
 
@@ -23,8 +24,10 @@ export const DEFAULT_BUDGET = (): ToolBudget => ({ calls: 6, credits: 40, deadli
 export const TOOL_CREDITS: Record<string, number> = { post_info: 10, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, sound_reels: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, search_reels: 1, search_ig_hashtag: 1, ig_popular: 1, trending_tiktok: 1, trending_reels: 1, suggestions: 1, discover_creators: 1, discover_profiles: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0, recall: 0, lane_benchmark: 0, week_plan: 0, block_move: 0, block_drop: 0, block_add: 0, week_replan: 0, own_post_numbers: 0, post_diagnosis: 0, growth_plan: 0, calendar_free: 0 };
 
 const str = { type: "string" } as const;
+for (const tool of PARTNERSHIP_TOOLS) TOOL_CREDITS[tool.function.name] = 0;
 
 export const TOOLS: OpenRouterTool[] = [
+  ...PARTNERSHIP_TOOLS,
   { type: "function", function: { name: "post_info", description: "Full detail for one post: sound id, media, caption, author, length, stats. 10 credits when the vendor finds the media, so use account_posts (1 credit, the whole feed with stats) when numbers are all you need; post_info is for the sound id or a link they sent.", parameters: { type: "object", properties: { url: str, why: str }, required: ["url", "why"] } } },
   { type: "function", function: { name: "post_transcript", description: "What is said in the post, as text. 1 credit. You have NOT watched it; this is the words.", parameters: { type: "object", properties: { url: str, why: str }, required: ["url", "why"] } } },
   { type: "function", function: { name: "post_comments", description: "The top comments: what people are reacting to. 1 credit on TikTok, 15 on Instagram (replies are fetched too), so on Instagram only when it decides something.", parameters: { type: "object", properties: { url: str, why: str }, required: ["url", "why"] } } },
@@ -62,6 +65,7 @@ export const TOOLS: OpenRouterTool[] = [
 
 /** The vendor's price, platform-aware where it matters (docs/scrapecreators-credits.json). */
 export function priceFor(name: string, args: Record<string, unknown>): number | undefined {
+  if (PARTNERSHIP_TOOLS.some(t => t.function.name === name)) return 0; // research has its own transactional allowance
   const base = TOOL_CREDITS[name];
   if (base === undefined) return undefined;
   const url = typeof args.url === "string" ? args.url : "";
@@ -143,7 +147,7 @@ function summarize(tool: string, value: unknown): string {
  * Run one tool. Refuses over budget, refuses unknown tools, and never reads outside `read()`.
  * The creator's own posts and calendar come from rows scoped by creatorId.
  */
-export async function runTool(ctx: ActionCtx, creatorId: Id<"creators">, call: { name: string; args: Record<string, unknown> }, budget: ToolBudget, trace: ToolCallRecord[]): Promise<string> {
+export async function runTool(ctx: ActionCtx, creatorId: Id<"creators">, call: { name: string; args: Record<string, unknown> }, budget: ToolBudget, trace: ToolCallRecord[], sourceMessageId?: Id<"messages">): Promise<string> {
   const why = String(call.args.why ?? "").slice(0, 160);
   const started = Date.now();
   const record = (ok: boolean, credits?: number, detail?: string) => trace.push({ tool: call.name, params: Object.fromEntries(Object.entries(call.args).filter(([k]) => k !== "why")), why, credits, ms: Date.now() - started, ok, ...(detail ? { detail } : {}) });
@@ -166,6 +170,11 @@ export async function runTool(ctx: ActionCtx, creatorId: Id<"creators">, call: {
     return `refused: the credit budget (${budget.credits}) would be exceeded. Answer with what you have.`;
   }
   try {
+    if (call.name.startsWith("partnership_")) {
+      const result = await runPartnershipTool(ctx, creatorId, call.name, call.args, sourceMessageId);
+      record(!result.startsWith("refused"), 0);
+      return result;
+    }
     let value: unknown;
     if (call.name === "own_rhymes") {
       // By meaning first (their posts in memory with what she saw in them), then by words; merged, meaning first.

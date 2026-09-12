@@ -13,12 +13,14 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { creatorForIdentity } from "../core/identity";
 import { disconnectFor } from "../calendar/oauth";
+import { disconnectFor as disconnectMailbox } from "../partnerships/mailbox";
 import { resolveTelegramBotIdentity, sendTelegramMessage } from "../integrations/telegram/client";
 import { getStripe } from "../billing/stripe";
 import { disconnectFor as zernioDisconnectFor } from "../connections/zernio";
 
 /** Every table with a creatorId, and the index that reaches it. Adding a table without listing it here fails the deletion test. */
 export const TABLES_BY_CREATOR = [
+  "partnershipProfiles", "partnershipOpportunities", "partnershipDrafts", "partnershipEvents", "partnershipResearch", "partnershipMailboxes",
   "trackedAccounts",
   "ownPosts",
   "ownPostReads",
@@ -81,6 +83,12 @@ export const exportMine = query({
       personalRecords: await pick("personalRecords"),
       memories: await pick("memories"),
       trackedAccounts: await pick("trackedAccounts"),
+      partnershipProfiles: await pick("partnershipProfiles"),
+      partnershipOpportunities: await pick("partnershipOpportunities"),
+      partnershipDrafts: await pick("partnershipDrafts"),
+      partnershipEvents: await pick("partnershipEvents"),
+      partnershipResearch: await pick("partnershipResearch"),
+      partnershipMailboxes: (await pick("partnershipMailboxes")).map(r => ({ email: "email" in r ? r.email : null, updatedAt: "updatedAt" in r ? r.updatedAt : null })),
     };
   },
 });
@@ -127,6 +135,7 @@ export const run = internalAction({
       steps.zernio = `disconnect failed: ${e instanceof Error ? e.message.slice(0, 80) : "error"}; rows purged below`;
     }
 
+    await disconnectMailbox(ctx, a.creatorId);
     // 4. Calendar: revoke at Google, drop the bundle and every stored event.
     try {
       await disconnectFor(ctx, a.creatorId);

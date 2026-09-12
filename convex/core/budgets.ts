@@ -72,6 +72,7 @@ export const today = internalQuery({
 /** Which budget a cost event belongs to, from its vendor and purpose. Pure. */
 export function kindForCost(vendor: string, purpose: string, resource: string): BudgetKind | null {
   if (vendor === "scrapecreators") return "credits";
+  if (vendor === "tavily") return "credits";
   // `watch_own` is the one-time catalogue read of THEIR posts; lane watching is the daily cost.
   if (vendor === "gemini" && purpose === "watch_own") return "onboarding_watch";
   if (vendor === "gemini") return /watch|scene|media_kind|read_screenshot|voice/.test(purpose) ? "watch" : "writer";

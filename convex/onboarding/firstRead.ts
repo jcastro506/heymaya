@@ -12,7 +12,7 @@ import { internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
-import { buildPrefix, producedStamp } from "../agent/context";
+import { buildPrefix, buildSuffix, producedStamp } from "../agent/context";
 import { deliverNow } from "../core/scheduler";
 import { critique, tooLong } from "../agent/critic";
 import { laneQuestion, proposeLane, readLane } from "./lane";
@@ -28,7 +28,9 @@ export const FIRST_SCOUT_DELAY_MS = READ_SETTLE_MS;
  * introduction section at all: telling the model to "skip" a section it was handed does not
  * work (live 2026-09-06, she introduced herself twice again); not handing it the section does.
  */
-export function firstReadSkill(saidHello: boolean): string {
+export function firstReadSkill(saidHello: boolean, conversational = false): string {
+  if (conversational) return `first-read
+The opening conversation is already underway. Add a short useful observation from the posts you actually read, with one or two concrete examples. Use any goals or preferences already shared to explain why this matters to them; never assume they want growth or brand deals. If evidence is thin, say so briefly. No re-introduction, no survey, no lane buttons, and NO question: the live conversation owns the next question. Do not say you went through everything when you only sampled posts. Under 100 words, two short texts at most, separated by a line containing only ---. No invented details or metrics. This read is a contribution, not a new conversation.`;
   const arrangement = saidHello
     ? `2. Nothing about what you do: the hello at pairing already said it. No name, no re-introduction.`
     : `2. Then what this is, in your own voice, the way you'd text a friend who just agreed to let you help, two or three lines, no list, never a manual's opener ("here is how this works"): you scroll for them every day (their lane, what's blowing up in general, who's worth stealing from), you keep their content calendar, you bring ideas, and they can throw anything at you for a straight opinion. Say your name once, lightly.`;
@@ -87,7 +89,8 @@ export const run = internalAction({
     // Live 2026-09-06: she introduced herself twice, once at pairing and again in the read.
     const saidHello = await ctx.runQuery(internal.core.messages.exists, { creatorId: creator._id, dedupeKey: `hello:${creator._id}` });
 
-    const prefix = buildPrefix({ creator, directives, skill: firstReadSkill(saidHello), personal: gathered.personal, voice: gathered.voice, history: gathered.history });
+    const conversational = Boolean(creator.conversationalOnboardingAt);
+    const prefix = buildPrefix({ creator, directives, skill: firstReadSkill(saidHello, conversational), personal: gathered.personal, voice: gathered.voice, history: gathered.history });
     const spec = REGISTRY.writer;
     /**
      * Sprint 4d: she states the lane she read from their posts, for one tap, rather than
@@ -97,7 +100,7 @@ export const run = internalAction({
      */
     let laneAsk: { token: string; keywords: string[]; candidates: Array<{ label: string; keywords: string[] }> } | null = null;
     let laneLine = "";
-    if (!creator.laneConfirmedAt) {
+    if (!conversational && !creator.laneConfirmedAt) {
       const li = await ctx.runQuery(internal.onboarding.lane.inputsFor, { creatorId: creator._id });
       const read = li ? readLane(li.posts) : null;
       // Sprint 4f: the scattered account. She leads with the truth and a recommendation, and asks one thing.
@@ -120,6 +123,7 @@ export const run = internalAction({
       model: spec.primary,
       messages: [
         { role: "system", content: prefix },
+        ...(conversational ? [{ role: "user" as const, content: buildSuffix({ recent: gathered.recent, target: null }) }] : []),
         { role: "user", content: `${saidHello ? "You already said hello when they paired (\"hey, i'm maya. i'm going through your posts…\"), so do NOT introduce yourself again: open straight with the read, and fold what you do for them into one short line at most." : "Write the first message. Address them directly. This is the first thing they will ever read from you."}${laneLine ? ` This is the lane read from their rows; say it in your own words, keep every number and name in it, and let its question be the ONLY question in the message: "${laneLine}"` : ""}` },
       ],
       temperature: 0.6,

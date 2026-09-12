@@ -45,6 +45,7 @@ export default defineSchema({
     dossier: v.optional(v.any()), // Dossier (§14.1), zod-validated at write time
     dossierVersion: v.number(),
     memoryEpoch: v.optional(v.number()),
+    conversationalOnboardingAt: v.optional(v.number()),
     signalsSeparatedAt: v.optional(v.number()),
     performanceAffinities: v.optional(v.array(v.object({ key: v.string(), kind: v.string(), score: v.number(), n: v.number(), updatedAt: v.optional(v.number()) }))),
     dossierPrevious: v.optional(v.any()), // §15.7: the version before the last rewrite
@@ -451,7 +452,7 @@ export default defineSchema({
   personalRecords: defineTable({
     creatorId: v.id("creators"),
     key: v.string(),
-    kind: v.union(v.literal("preference"), v.literal("effort"), v.literal("decision"), v.literal("commitment"), v.literal("style")),
+    kind: v.union(v.literal("goal"), v.literal("preference"), v.literal("effort"), v.literal("decision"), v.literal("commitment"), v.literal("style")),
     text: v.string(),
     reason: v.optional(v.string()),
     sourceMessageIds: v.array(v.id("messages")),
@@ -540,7 +541,7 @@ export default defineSchema({
   // Single-use, 15-minute state tokens for OAuth round trips; the token is the auth.
   oauthStates: defineTable({
     creatorId: v.id("creators"),
-    provider: v.literal("google"),
+    provider: v.union(v.literal("google"), v.literal("gmail")),
     token: v.string(),
     returnTo: v.optional(v.string()), // where to land after the round trip (onboarding step 5, or Settings)
     expiresAt: v.number(),
@@ -676,7 +677,7 @@ export default defineSchema({
   // ---------------------------------------------------------------- costEvents
   costEvents: defineTable({
     creatorId: v.optional(v.id("creators")),
-    vendor: v.union(v.literal("scrapecreators"), v.literal("gemini"), v.literal("openrouter"), v.literal("zernio"), v.literal("groq"), v.literal("telegram"), v.literal("claw")),
+    vendor: v.union(v.literal("scrapecreators"), v.literal("gemini"), v.literal("openrouter"), v.literal("zernio"), v.literal("groq"), v.literal("telegram"), v.literal("claw"), v.literal("tavily")),
     kind: v.string(),
     units: v.number(), // credits or tokens
     costUsd: v.number(),
@@ -686,6 +687,14 @@ export default defineSchema({
   })
     .index("by_at", ["at"])
     .index("by_creator_at", ["creatorId", "at"]),
+
+  // Partnership state is validated by partnerships/contracts at every write boundary.
+  partnershipProfiles: defineTable({ creatorId: v.id("creators"), data: v.any(), updatedAt: v.number() }).index("by_creator", ["creatorId"]),
+  partnershipOpportunities: defineTable({ creatorId: v.id("creators"), brandDomain: v.string(), data: v.any(), updatedAt: v.number() }).index("by_creator", ["creatorId"]).index("by_brand", ["creatorId", "brandDomain"]),
+  partnershipDrafts: defineTable({ creatorId: v.id("creators"), opportunityId: v.id("partnershipOpportunities"), data: v.any(), updatedAt: v.number() }).index("by_creator", ["creatorId"]).index("by_opportunity", ["opportunityId"]),
+  partnershipEvents: defineTable({ creatorId: v.id("creators"), opportunityId: v.id("partnershipOpportunities"), key: v.string(), kind: v.string(), text: v.string(), at: v.number() }).index("by_creator", ["creatorId"]).index("by_opportunity", ["opportunityId"]).index("by_key", ["creatorId", "key"]),
+  partnershipResearch: defineTable({ creatorId: v.id("creators"), month: v.string(), calls: v.number(), data: v.any(), updatedAt: v.number() }).index("by_creator", ["creatorId"]).index("by_month", ["creatorId", "month"]),
+  partnershipMailboxes: defineTable({ creatorId: v.id("creators"), email: v.string(), tokenRef: v.string(), generation: v.string(), attention: v.optional(v.string()), updatedAt: v.number() }).index("by_creator", ["creatorId"]),
 
   // -------------------------------------------------------------- vendorHealth
   vendorHealth: defineTable({

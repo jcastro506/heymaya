@@ -84,6 +84,7 @@ export async function startCreator(ctx: MutationCtx, args: { subject: string; em
       channel: { paired: false },
       plan: { status: "onboarding", founding: true },
       createdAt: now,
+      conversationalOnboardingAt: now,
     });
     // The read starts now; the first message waits on pairing, not on this.
     await ctx.runMutation(internal.core.jobs.enqueue, {
