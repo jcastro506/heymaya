@@ -2931,23 +2931,25 @@
 /* Room between how-it-starts and the price card (2026-09-08) */
 .maya-start { padding-block: 96px 48px; }
 
-/* One section at a time (2026-09-08). The document scrolls, so the snap lives on html, scoped
-   to the landing with :has so the app pages keep their normal scroll. Mandatory on wide
-   screens where every section fits a viewport; proximity on phones, where a section can be
-   taller than the screen and a mandatory snap would hide its bottom. */
-html:has(.maya-site) { scroll-snap-type: y proximity; scroll-padding-top: 0; }
-@media (min-width: 900px) { html:has(.maya-site) { scroll-snap-type: y mandatory; } }
-.maya-site main > section { scroll-snap-align: start; scroll-snap-stop: always; }
-@media (prefers-reduced-motion: reduce) { html:has(.maya-site) { scroll-snap-type: none; } }
-
-/* Tall sections carry snap points inside them, so a strict snap never hides a lower half:
-   each feature card, the day layout, and the numbers report are their own stop. */
-.maya-site main > section { scroll-snap-stop: normal; }
-.maya-site .feature-grid > .feature-card,
-.maya-site #your-day .day-layout,
-.maya-site #your-numbers .performance-intro,
-.maya-site #your-numbers .performance-report,
-.maya-site #your-numbers .performance-layout > * { scroll-snap-align: start; scroll-margin-top: 24px; }
+/* Let each chapter settle into place without taking control away from the person scrolling.
+   A single set of proximity targets avoids the tug-of-war caused by mandatory section snaps
+   plus nested card snaps. The short platform strip stays part of the hero's natural flow. */
+html:has(.maya-site) {
+  scroll-behavior: smooth;
+  scroll-padding-top: 20px;
+  scroll-snap-type: y proximity;
+}
+.maya-site main > section:not(.platform-strip) {
+  scroll-margin-top: 20px;
+  scroll-snap-align: start;
+  scroll-snap-stop: normal;
+}
+@media (prefers-reduced-motion: reduce) {
+  html:has(.maya-site) {
+    scroll-behavior: auto;
+    scroll-snap-type: none;
+  }
+}
 
 /* Three short sections, each its own screen (2026-09-08): the manifesto, how it starts, the price.
    Each fills the viewport with its content centred, so one wheel flick lands on one of them. */
