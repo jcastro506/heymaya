@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { OfflineBanner } from "../offline";
+import { Flower } from "../onboarding/Shell";
+import "./mission-control.css";
 
 const TABS = [
   { href: "/app/today", label: "Today" },
@@ -18,14 +20,18 @@ const TABS = [
 export default function AppLayout({ children }: { children: ReactNode }) {
   const path = usePathname();
   return (
-    <div className="min-h-dvh max-w-md mx-auto flex flex-col">
+    <div className="maya-control">
       <OfflineBanner />
-      <main className="flex-1 p-5 pb-24">{children}</main>
-      <nav className="fixed bottom-0 left-0 right-0 border-t border-white/10 bg-black/90 backdrop-blur" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
-        <ul className="max-w-md mx-auto grid grid-cols-6">
+      <header className="control-header">
+        <Link href="/app/today" className="control-brand" aria-label="Maya Mission Control"><Flower />maya</Link>
+        <div className="control-title"><span className="control-dot" aria-hidden="true" />Mission Control</div>
+      </header>
+      <main className="control-main">{children}</main>
+      <nav className="control-nav" aria-label="Mission Control">
+        <ul>
           {TABS.map((t) => (
             <li key={t.href}>
-              <Link href={t.href} className={`block text-center py-3 text-xs ${path?.startsWith(t.href) ? "text-emerald-400" : "opacity-60"}`}>{t.label}</Link>
+              <Link href={t.href} aria-current={path?.startsWith(t.href) ? "page" : undefined}>{t.label}</Link>
             </li>
           ))}
         </ul>
