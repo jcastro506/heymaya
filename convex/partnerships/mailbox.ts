@@ -6,6 +6,7 @@ import { creatorForIdentity } from "../core/identity";
 import { encrypt, decrypt } from "../lib/encryption";
 import { exchangeCode, refreshAccessToken, revokeToken } from "../integrations/google/calendar";
 import { active, partnershipsOpen } from "./store";
+import { providerBase } from "./providerConfig";
 import { email, Draft, Opportunity } from "./contracts";
 
 type Tokens = { access: string; refresh: string; expiresAt: number };
@@ -85,7 +86,8 @@ export async function access(ctx: ActionCtx, row: Doc<"partnershipMailboxes">): 
   return bundle.access;
 }
 export async function gmail(token: string, path: string, body?: unknown): Promise<Record<string, unknown>> {
-  const response = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/${path}`, { method: body ? "POST" : "GET", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(15000) });
+  // GMAIL_BASE_URL: the eval fake, never set in production.
+  const response = await fetch(`${providerBase("gmail", token === "fake-access")}/${path}`, { method: body ? "POST" : "GET", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(15000) });
   if (!response.ok) throw new Error(`Gmail request failed (${response.status})`);
   const raw = await response.text();
   if (raw.length > 2000000) throw new Error("Gmail response too large");

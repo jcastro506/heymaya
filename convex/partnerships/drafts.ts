@@ -37,7 +37,7 @@ export const prepare = internalMutation({
       if (["draft", "approved"].includes(old.status)) await ctx.db.patch(d._id, { data: { ...old, status: "canceled" }, updatedAt: now });
     }
     const code = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, "0")).join("");
-    const data = Draft.parse({ revision: drafts.length + 1, channel: o.route, subject: input.subject, body: input.body, recipient, sender: mailbox?.email, mailboxGeneration: mailbox?.generation, threadId: o.threadId, inReplyTo: o.lastMessageId, status: "draft", approvalCode: code, approvalExpiresAt: now + 86400000, createdAt: now });
+    const data = Draft.parse({ sourceMessageId: a.sourceMessageId, revision: drafts.length + 1, channel: o.route, subject: input.subject, body: input.body, recipient, sender: mailbox?.email, mailboxGeneration: mailbox?.generation, threadId: o.threadId, inReplyTo: o.lastMessageId, status: "draft", approvalCode: code, approvalExpiresAt: now + 86400000, createdAt: now });
     const id = await ctx.db.insert("partnershipDrafts", { creatorId: a.creatorId, opportunityId: row._id, data, updatedAt: now });
     await event(ctx, a.creatorId, row._id, `draft:${id}`, "draft_created", `Revision ${data.revision}; ${data.channel}; ${recipient}`);
     const command = `SEND ${code}`;

@@ -11,6 +11,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { deliverNow } from "../core/scheduler";
 import { resolveTelegramBotIdentity, sendTelegramMessage } from "../integrations/telegram/client";
 import { forgetEvidence, recordVisible } from "./personalHistory";
+import { Draft, Opportunity } from "../partnerships/contracts";
 
 export const apply = internalMutation({
   args: { creatorId: v.id("creators"), command: v.union(v.literal("stop"), v.literal("resume"), v.literal("forget"), v.literal("delete")), topic: v.optional(v.string()) },
@@ -30,6 +31,31 @@ export const apply = internalMutation({
       const live = (c.notes ?? []).filter((n) => !n.tombstonedAt).sort((x, y) => y.at - x.at);
       // A named thing ("about my sister") forgets the newest note that carries those words; an empty match is said plainly, nothing else is touched.
       if (a.topic) {
+        // This is an explicit whole-domain request, not a fuzzy match for one ordinary note.
+        // Partnership records can exist before the background note extractor has run.
+        if (/^(?:(?:all )?my )?(?:partnerships?|brands?|brand deals?|sponsorships?)(?: and (?:partnerships?|brands?|brand deals?|sponsorships?))?$/i.test(a.topic.trim())) {
+          const relationships = await ctx.db.query("partnershipOpportunities").withIndex("by_creator", q => q.eq("creatorId", c._id)).collect();
+          const sourceMessageIds = new Set<Id<"messages">>();
+          const drafts = await ctx.db.query("partnershipDrafts").withIndex("by_creator", q => q.eq("creatorId", c._id)).collect();
+          for (const row of drafts) {
+            const draft = Draft.parse(row.data);
+            if (draft.sourceMessageId) sourceMessageIds.add(draft.sourceMessageId as Id<"messages">);
+          }
+          const needles = ["partnership", "sponsorship", "brand deal"];
+          for (const r of relationships) {
+            const o = Opportunity.parse(r.data);
+            needles.push(o.brand, r.brandDomain);
+            for (const e of o.assessment.creatorEvidence) {
+              if (e.kind === "message") sourceMessageIds.add(e.id as Id<"messages">);
+              else if (e.kind === "personalRecord") {
+                const record = await ctx.db.get(e.id as Id<"personalRecords">);
+                if (record?.creatorId === c._id) for (const id of record.sourceMessageIds) sourceMessageIds.add(id);
+              }
+            }
+          }
+          await forgetEvidence(ctx, c, { id: "partnership-scope", text: "partnership", kind: "fact", at: now }, { sourceMessageIds, needles, allPartnerships: true });
+          return { body: "i've cleared your partnership preferences and personal pitch details, paused partnerships, and canceled pending approvals. i'll keep the basic contact history so we don't accidentally pitch someone twice." };
+        }
         const words = a.topic.toLowerCase().split(/[^a-z0-9']+/).filter((w) => w.length >= 3 && !["the", "that", "this", "about", "what", "told", "said", "you", "and", "for", "with", "thing"].includes(w));
         const hit = live.find((n) => words.some((w) => n.text.toLowerCase().includes(w)));
         if (!hit) return { body: `i don't have anything kept about ${a.topic}. tell me the line and i'll drop it.` };

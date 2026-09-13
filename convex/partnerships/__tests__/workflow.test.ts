@@ -306,6 +306,29 @@ describe("approval and delivery races", () => {
     expect(r.opportunity?.data.lastOutboundAt).toBeUndefined();
     expect(r.events?.[0].kind).toBe("user_report");
   });
+  it("a topical partnership forget works before any ordinary note exists and cancels the pending approval", async () => {
+    const f = await fixture();
+    const terms = await f.t.mutation(internal.core.messages.recordInbound, { creatorId: f.a, surface: "web", body: "Ask for $800, no exclusivity." });
+    await f.t.mutation(internal.core.messages.send, { creatorId: f.a, surface: "web", body: "That's $800 for the bundle.", dedupeKey: `reply:${terms.messageId}`, proactive: false, kind: "reply" });
+    const prepared = await f.t.mutation(internal.partnerships.drafts.prepare, { creatorId: f.a, sourceMessageId: terms.messageId, input: { opportunityId: f.opportunityId, subject: "Running content idea", body: "The bundle is $800 without exclusivity." } }) as { draftId: Id<"partnershipDrafts"> };
+    const d = { id: prepared.draftId, data: Draft.parse((await f.t.query(internal.partnerships.drafts.get, { creatorId: f.a, draftId: prepared.draftId })).row.data) };
+    const unrelated = await f.t.mutation(internal.core.messages.recordInbound, { creatorId: f.a, surface: "web", body: "My sister's name is Alice." });
+    await f.t.run(ctx => ctx.db.patch(f.a, { notes: [] }));
+    await f.t.mutation(internal.agent.commands.apply, { creatorId: f.a, command: "forget", topic: "partnerships and brands" });
+    const r = await f.t.query(internal.partnerships.store.read, { creatorId: f.a, opportunityId: f.opportunityId });
+    expect((await f.t.query(internal.partnerships.store.read, { creatorId: f.a })).profile?.paused).toBe(true);
+    expect(r.opportunity?.brandDomain).toBe("brand.com");
+    expect(JSON.stringify(r.opportunity?.data.assessment)).not.toContain("I want paid running partnerships.");
+    expect((await f.t.query(internal.partnerships.drafts.get, { creatorId: f.a, draftId: d.id })).row.data).toMatchObject({ status: "canceled", body: "[forgotten]" });
+    expect(await f.approve(d.data.approvalCode)).toMatchObject({ handled: true, text: "partnerships are paused. nothing was sent." });
+    expect((await f.t.run(ctx => ctx.db.get(f.source)))?.memoryExcludedAt).toBeDefined();
+    expect((await f.t.run(ctx => ctx.db.get(terms.messageId)))?.memoryExcludedAt).toBeDefined();
+    const replies = await f.t.run(ctx => ctx.db.query("messages").withIndex("by_creator_and_dedupe", q => q.eq("creatorId", f.a).eq("dedupeKey", `reply:${terms.messageId}`)).collect());
+    expect(replies[0].memoryExcludedAt).toBeDefined();
+    expect((await f.t.run(ctx => ctx.db.get(unrelated.messageId)))?.memoryExcludedAt).toBeUndefined();
+    expect((await f.t.run(ctx => ctx.db.get(f.b)))?.memoryEpoch).toBeUndefined();
+    vi.clearAllTimers();
+  });
   it("folds long Unicode subjects into valid MIME encoded words", async () => {
     const f = await fixture(), d = await f.draft();
     const raw = mime({ ...d.data, subject: "新しいアイデア".repeat(20) }, d.id);

@@ -37,7 +37,7 @@ export function price(usd: number): string {
  */
 export function entitlementsFor(plan: { status: string; tier?: string }): Entitlements {
   const tier: Tier = isTier(plan.tier) ? plan.tier : plan.status === "comped" ? "duo" : "solo";
-  const live = plan.status === "active" || plan.status === "trialing" || plan.status === "comped" || plan.status === "past_due";
+  const live = plan.status === "active" || plan.status === "trialing" || plan.status === "comped";
   return { tier, accounts: TIERS[tier].accounts, partnerships: live ? TIERS[tier].partnerships : NO_PARTNERSHIPS };
 }
 

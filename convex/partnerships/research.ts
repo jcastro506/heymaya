@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { publicUrl } from "./contracts";
+import { providerBase } from "./providerConfig";
 
 // Only Tavily is fetched server-side. Arbitrary URLs are never fetched by our server.
 // Public excerpts are data, not executable skill text; no mailbox/user records leave here.
@@ -16,8 +17,10 @@ export const run = internalAction({
     // Reserve a conservative one-credit cost even on timeout. The basic endpoints below
     // cannot auto-upgrade; billing reconciliation may later lower this estimate.
     await ctx.runMutation(internal.core.costs.record, { creatorId: a.creatorId, vendor: "tavily", resource: target ? "extract_basic" : "search_basic", purpose: "partnership_research_reserved", costUsd: 0.008, promptTokens: 1, costSource: "endpoint_table" });
-    const response = await fetch(`https://api.tavily.com/${target ? "extract" : "search"}`, {
-      method: "POST", headers: { Authorization: `Bearer ${process.env.TAVILY_API_KEY}`, "Content-Type": "application/json" },
+    // TAVILY_BASE_URL: the eval fake, never set in production.
+    const fixture = process.env.EVAL_FAKES === "1" && await ctx.runQuery(internal.eval.fakes.isFixture, { creatorId: a.creatorId });
+    const response = await fetch(`${providerBase("tavily", fixture)}/${target ? "extract" : "search"}`, {
+      method: "POST", headers: { Authorization: `Bearer ${fixture ? "fake-research" : process.env.TAVILY_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify(target ? { urls: [target], extract_depth: "basic", include_usage: true } : { query: a.query, search_depth: "basic", max_results: 5, include_answer: false, include_raw_content: false, auto_parameters: false, include_usage: true }),
       signal: AbortSignal.timeout(15000),
     });

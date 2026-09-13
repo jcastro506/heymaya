@@ -79,18 +79,19 @@ export async function personalHistoryFor(ctx: QueryCtx, creatorId: Id<"creators"
 /** Invalidate descendants, repeated verbatim sources, and untraceable legacy summaries.
  * Operational calendar records remain authoritative; forgetting is not cancellation.
  */
-export async function forgetEvidence(ctx: MutationCtx, creator: Doc<"creators">, note: Doc<"creators">["notes"][number]) {
+export async function forgetEvidence(ctx: MutationCtx, creator: Doc<"creators">, note: Doc<"creators">["notes"][number], scope?: { sourceMessageIds: Set<Id<"messages">>; needles: string[]; allPartnerships: boolean }) {
   const now = Date.now();
   const source = note.sourceMessageId ? await ctx.db.get(note.sourceMessageId) : null;
-  const needles = [note.text, source?.creatorId === creator._id ? source.body : ""].map(normalizeMemory).filter((s) => s.length >= 8);
+  const needles = [...[note.text, source?.creatorId === creator._id ? source.body : ""].map(normalizeMemory).filter((s) => s.length >= 8), ...(scope?.needles ?? []).map(normalizeMemory).filter(s => s.length >= 3)];
   const messages = await ctx.db.query("messages").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).collect();
   const excluded = new Set<Id<"messages">>();
+  const replyKeys = new Set([note.sourceMessageId, ...(scope?.sourceMessageIds ?? [])].filter(Boolean).flatMap(id => [`reply:${id}`, `reply:${id}:rest`]));
   for (const m of messages) {
-    const matches = m._id === note.sourceMessageId || needles.some((n) => normalizeMemory(m.body).includes(n));
-    if (matches || m.dedupeKey === `reply:${note.sourceMessageId}`) { await ctx.db.patch(m._id, { memoryExcludedAt: now }); excluded.add(m._id); }
+    const matches = m._id === note.sourceMessageId || scope?.sourceMessageIds.has(m._id) || needles.some((n) => normalizeMemory(m.body).includes(n));
+    if (matches || (m.dedupeKey && replyKeys.has(m.dedupeKey))) { await ctx.db.patch(m._id, { memoryExcludedAt: now }); excluded.add(m._id); }
   }
   const records = await ctx.db.query("personalRecords").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).collect();
-  await forgetPartnershipEvidence(ctx, creator._id, excluded, needles);
+  await forgetPartnershipEvidence(ctx, creator._id, excluded, needles, scope?.allPartnerships);
   for (const r of records) if (r.sourceNoteIds.includes(note.id) || r.sourceMessageIds.some((id) => excluded.has(id)) || needles.some((n) => normalizeMemory(`${r.text} ${r.reason ?? ""}`).includes(n))) await ctx.db.patch(r._id, { active: false, invalidatedAt: now });
   const notes = creator.notes.map((n) => n.id === note.id || (n.sourceMessageId && excluded.has(n.sourceMessageId)) || needles.some((needle) => normalizeMemory(n.text).includes(needle)) ? { ...n, tombstonedAt: now } : n);
   const memories = await ctx.db.query("memories").withIndex("by_creator_ref", (q) => q.eq("creatorId", creator._id)).collect();

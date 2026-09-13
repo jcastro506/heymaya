@@ -1,4 +1,5 @@
 import { httpRouter } from "convex/server";
+import { tavily as tavilyFake, gmail as gmailFake } from "./eval/fakes";
 import { stripeWebhook } from "./billing/webhook";
 import { zernioWebhook } from "./connections/zernio";
 import { telegramWebhookHttp } from "./telegram/webhook";
@@ -23,5 +24,10 @@ http.route({ path: "/stripe/webhook", method: "POST", handler: stripeWebhook });
 
 // Connections: Zernio's account events are the authoritative path for attach/detach (§6 Sprint 4).
 http.route({ path: "/zernio/webhook", method: "POST", handler: zernioWebhook });
+
+// Eval fakes (2026-09-12): served only when EVAL_FAKES=1, reached only through TAVILY_BASE_URL / GMAIL_BASE_URL.
+http.route({ pathPrefix: "/fake/tavily/", method: "POST", handler: tavilyFake });
+http.route({ pathPrefix: "/fake/gmail/", method: "GET", handler: gmailFake });
+http.route({ pathPrefix: "/fake/gmail/", method: "POST", handler: gmailFake });
 
 export default http;

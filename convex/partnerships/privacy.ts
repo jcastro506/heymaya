@@ -5,10 +5,11 @@ import { Draft, Opportunity } from "./contracts";
 /** Erase derived prose while retaining minimal operational suppression/send receipts.
  * Forgetting must not let a later retry cold-pitch a brand again.
  */
-export async function forgetPartnershipEvidence(ctx: MutationCtx, creatorId: Id<"creators">, excluded: Set<Id<"messages">>, needles: string[]) {
+export async function forgetPartnershipEvidence(ctx: MutationCtx, creatorId: Id<"creators">, excluded: Set<Id<"messages">>, needles: string[], all = false) {
   const normalize = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-  const matches = (s: string) => needles.some(n => normalize(s).includes(n));
+  const matches = (s: string) => all || needles.some(n => normalize(s).includes(n));
   const profiles = await ctx.db.query("partnershipProfiles").withIndex("by_creator", q => q.eq("creatorId", creatorId)).collect();
+  if (all && profiles.length === 0) await ctx.db.insert("partnershipProfiles", { creatorId, data: { paused: true }, updatedAt: Date.now() });
   for (const p of profiles) if (matches(JSON.stringify(p.data))) await ctx.db.patch(p._id, { data: { paused: true }, updatedAt: Date.now() });
   for (const row of await ctx.db.query("partnershipOpportunities").withIndex("by_creator", q => q.eq("creatorId", creatorId)).collect()) {
     const o = Opportunity.parse(row.data);

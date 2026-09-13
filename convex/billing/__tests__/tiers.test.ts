@@ -46,6 +46,8 @@ describe("the tiers", () => {
     const dead = entitlementsFor({ status: "canceled", tier: "partner" });
     expect(dead.accounts).toBe(2);
     expect(dead.partnerships.opportunitiesPerMonth).toBe(0);
+    expect(entitlementsFor({ status: "past_due", tier: "partner" }).partnerships.opportunitiesPerMonth).toBe(0);
+    expect(partnershipsOpen({ _id: "c", plan: { status: "past_due", tier: "partner" } }, {})).toBe(false);
     expect(accountsWithinPlan(["a", "b", "c"], 1)).toEqual(["a"]);
     expect(accountsWithinPlan(["a"], 2)).toEqual(["a"]);
     expect(accountsWithinPlan(["a"], -1)).toEqual([]);
