@@ -19,6 +19,45 @@ function cleanHandle(h: string | undefined): string | undefined {
   return c && /^[a-z0-9._]{1,40}$/.test(c) ? c : undefined;
 }
 
+/**
+ * Create the minimal creator row as soon as Clerk has authenticated. Checkout and
+ * Zernio both need a tenant-bound row before either external redirect begins.
+ * Handles arrive only from the authenticated Zernio connection later.
+ */
+export const ensureCreator = mutation({
+  args: { timezone: v.optional(v.string()) },
+  handler: async (ctx, args): Promise<{ ok: boolean; creatorId?: string; error?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { ok: false, error: "sign in first" };
+    const existing = (await ctx.db
+      .query("creators")
+      .withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject))
+      .first()) as Doc<"creators"> | null;
+    if (existing) return { ok: true, creatorId: existing._id };
+    const now = Date.now();
+    const creatorId = await ctx.db.insert("creators", {
+      clerkUserId: identity.subject,
+      email: identity.email ?? "",
+      handles: {},
+      ownership: "unverified",
+      niche: "",
+      timezone: args.timezone ?? "UTC",
+      quietHours: { start: "22:00", end: "07:00" },
+      tone: "friend",
+      mode: "full",
+      dossierVersion: 0,
+      notes: [],
+      affinities: [],
+      experiments: [],
+      channel: { paired: false, kind: "imessage" },
+      plan: { status: "onboarding", founding: true },
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { ok: true, creatorId };
+  },
+});
+
 /** Screen 2: create (or update) the creator row from their handles. Idempotent per Clerk user. */
 export const start = mutation({
   args: { handles: handleShape, timezone: v.optional(v.string()) },
@@ -153,7 +192,7 @@ export const onboardAsUser = internalMutation({
  * their first text is not refused. Consent is the one line on the screen; STOP always works.
  */
 export const setPhone = mutation({
-  args: { phone: v.string() },
+  args: { phone: v.string(), consent: v.literal(true) },
   handler: async (ctx, args): Promise<{ ok: boolean; error?: string; phone?: string }> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return { ok: false, error: "sign in first" };
@@ -165,7 +204,7 @@ export const setPhone = mutation({
     if (taken && taken._id !== creator._id) return { ok: false, error: "that number is already on another account" };
     const now = Date.now();
     const rePaired = creator.phone === phone && creator.channel.paired && creator.channel.kind === "imessage";
-    await ctx.db.patch(creator._id, { phone, channel: rePaired ? creator.channel : { paired: false, kind: "imessage" }, updatedAt: now });
+    await ctx.db.patch(creator._id, { phone, messageConsentAt: now, channel: rePaired ? creator.channel : { paired: false, kind: "imessage" }, updatedAt: now });
     await ctx.scheduler.runAfter(0, internal.core.imessage.registerPhone, { phone });
     return { ok: true, phone };
   },
@@ -187,7 +226,7 @@ export const chooseTelegram = mutation({
 
 export const progress = query({
   args: {},
-  handler: async (ctx): Promise<{ state: "none" | "reading" | "read" | "paired"; posts: number; transcripts: number; dossier: boolean; paired: boolean; ingest: string | null; firstRead: string | null; timezone: string; quietHours: { start: string; end: string }; channelKind: "telegram" | "imessage"; phone: string | null } | null> => {
+  handler: async (ctx): Promise<{ state: "none" | "reading" | "read" | "paired"; posts: number; transcripts: number; dossier: boolean; paired: boolean; ingest: string | null; firstRead: string | null; timezone: string; quietHours: { start: string; end: string }; channelKind: "telegram" | "imessage"; phone: string | null; planStatus: string; tier: "solo" | "duo" | "partner" | null } | null> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
     const creator = (await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject)).first()) as Doc<"creators"> | null;
@@ -199,6 +238,6 @@ export const progress = query({
     const jobs = (await ctx.db.query("jobs").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).collect()) as Doc<"jobs">[];
     const ingest = jobs.filter((j) => j.kind === "ingest_catalogue").sort((x, y) => y.createdAt - x.createdAt)[0];
     const firstRead = jobs.filter((j) => j.kind === "first_read").sort((x, y) => y.createdAt - x.createdAt)[0];
-    return { state: paired ? "paired" : dossier ? "read" : posts.length ? "reading" : "none", posts: posts.length, transcripts, dossier, paired, ingest: ingest?.status ?? null, firstRead: firstRead?.status ?? null, timezone: creator.timezone, quietHours: creator.quietHours, channelKind: creator.channel.kind ?? "telegram", phone: creator.phone ?? null };
+    return { state: paired ? "paired" : dossier ? "read" : posts.length ? "reading" : "none", posts: posts.length, transcripts, dossier, paired, ingest: ingest?.status ?? null, firstRead: firstRead?.status ?? null, timezone: creator.timezone, quietHours: creator.quietHours, channelKind: creator.channel.kind ?? "imessage", phone: creator.phone ?? null, planStatus: creator.plan.status, tier: creator.plan.tier ?? null };
   },
 });

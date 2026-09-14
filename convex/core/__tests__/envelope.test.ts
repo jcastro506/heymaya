@@ -27,7 +27,7 @@ describe("a person never receives a JSON envelope (live 2026-09-06)", () => {
 });
 
 describe("first contact", () => {
-  it("pairing before the first read says hello once; pairing after it says nothing extra", async () => {
+  it("pairing before the first read orients once; pairing after it asks the goal once", async () => {
     const t = convexTest(schema, modules);
     const a = await t.run((ctx) => seedCreator(ctx, "a", {}));
     const b = await t.run((ctx) => seedCreator(ctx, "b", {}));
@@ -41,10 +41,11 @@ describe("first contact", () => {
     const rows = await t.run(async (ctx) => await ctx.db.query("messages").collect());
     expect(rows.filter((m) => m.creatorId === a && m.body === helloFor(false)).length).toBe(1);
     expect(rows.filter((m) => m.creatorId === b && m.body === helloFor(false)).length).toBe(0);
+    expect(rows.filter((m) => m.creatorId === b && m.awaitingAnswer).length).toBe(1);
     expect(HELLO).toMatch(/maya/);
-    expect(HELLO).toMatch(/what would you most like help with/);
-    expect(HELLO).toMatch(/or something else/);
-    expect(HELLO.split("\n---\n").length, "two texts: a short hello, then one open question").toBe(2);
+    expect(HELLO).not.toContain("?");
+    expect(HELLO).toMatch(/someone on your team/);
+    expect(HELLO.split("\n---\n").length, "three short orientation texts before the read").toBe(3);
   });
 });
 

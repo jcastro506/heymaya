@@ -9,7 +9,7 @@
  */
 
 import { v } from "convex/values";
-import { entitlementsFor, accountsWithinPlan } from "../billing/tiers";
+import { entitlementsFor } from "../billing/tiers";
 import { action, httpAction, internalAction, internalMutation, internalQuery, query, type ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -67,6 +67,36 @@ export const applyAccounts = internalMutation({
     const accounts = a.accounts.filter((x) => x.platform === "tiktok" || x.platform === "instagram").map((x) => ({ accountId: x.accountId, platform: x.platform as "tiktok" | "instagram", canFetchAnalytics: x.canFetchAnalytics, needsReconnect: x.needsReconnect, username: x.username ?? undefined }));
     const status: Doc<"connections">["status"] = accounts.length === 0 ? "attention" : accounts.some((x) => x.needsReconnect) ? "needs_reconnect" : "connected";
     await ctx.db.patch(conn._id, { zernioAccounts: accounts, status, detail: a.detail ?? (accounts.length === 0 ? "no account attached yet" : accounts.some((x) => x.needsReconnect) ? "an account needs reconnecting" : undefined), lastSyncedAt: Date.now(), updatedAt: Date.now() });
+    // Authenticated account identities become the creator handles. The catalogue read
+    // starts here, after Zernio has confirmed ownership, instead of trusting pasted text.
+    const creator = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (creator && accounts.length > 0) {
+      const handles = { ...creator.handles };
+      let changed = false;
+      for (const account of accounts) {
+        const username = account.username?.trim().replace(/^@/, "").toLowerCase();
+        if (!username || !/^[a-z0-9._]{1,40}$/.test(username)) continue;
+        const key = account.platform as "tiktok" | "instagram";
+        if (handles[key] === username) continue;
+        const taken = (await ctx.db
+          .query("creators")
+          .withIndex(key === "tiktok" ? "by_tiktok" : "by_instagram", (q) => q.eq(key === "tiktok" ? "handles.tiktok" : "handles.instagram", username))
+          .first()) as Doc<"creators"> | null;
+        if (!taken || taken._id === creator._id) {
+          handles[key] = username;
+          changed = true;
+        }
+      }
+      if (changed) {
+        await ctx.db.patch(creator._id, { handles, ownership: "verified", updatedAt: Date.now() });
+        await ctx.runMutation(internal.core.jobs.enqueue, {
+          kind: "ingest_catalogue",
+          idempotencyKey: `ingest:${creator._id}:v${creator.dossierVersion}`,
+          creatorId: creator._id,
+          payloadJson: JSON.stringify({ reason: "zernio_connected" }),
+        });
+      }
+    }
     // 2026-09-06: the history backfill had no caller. An account that is newly able to report
     // gets its ninety days pulled once, here, where "connected" is decided; the hourly delta
     // only carries what changes after that.
@@ -79,11 +109,11 @@ export const applyAccounts = internalMutation({
 
 /** Settings: the connect button. Paid plans only (§19.2: connections are not a trial feature). */
 export const startConnect = action({
-  args: { platform: PLATFORM },
+  args: { platform: PLATFORM, returnTo: v.optional(v.union(v.literal("onboarding"), v.literal("settings"))) },
   handler: async (ctx, a): Promise<{ ok: true; url: string } | { ok: false; reason: string }> => {
     const me = await ctx.runQuery(internal.connections.zernio.meForConnect, {});
     if (!me) return { ok: false, reason: "no account" };
-    if (me.plan !== "active" && me.plan !== "comped") return { ok: false, reason: "connections open when the trial ends" };
+    if (me.plan !== "active" && me.plan !== "trialing" && me.plan !== "comped") return { ok: false, reason: "choose a plan before connecting an account" };
     // §26: the plan's account cap is the door. Budgets, never booleans: solo is a cap of one.
     if (me.connectedAccounts >= me.accountCap) return { ok: false, reason: me.accountCap === 1 ? "your plan includes one connected account. switch to both accounts in Settings to add the other" : `your plan includes ${me.accountCap} connected accounts` };
     if (!process.env.ZERNIO_API_KEY) return { ok: false, reason: "not configured" };
@@ -101,7 +131,8 @@ export const startConnect = action({
     }
     const appUrl = process.env.APP_URL ?? "http://localhost:3000";
     try {
-      const { authUrl } = await connectUrl(c, a.platform, profileId, `${appUrl}/app/settings?connect=back`);
+      const returnUrl = a.returnTo === "onboarding" ? `${appUrl}/start?step=2&connect=back` : `${appUrl}/app/settings?connect=back`;
+      const { authUrl } = await connectUrl(c, a.platform, profileId, returnUrl);
       return { ok: true, url: authUrl };
     } catch (e) {
       return { ok: false, reason: e instanceof ZernioError ? `zernio ${e.status}` : "connect failed" };

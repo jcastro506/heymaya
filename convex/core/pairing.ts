@@ -24,7 +24,7 @@ import { internal } from "../_generated/api";
 import { internalMutation, mutation, type MutationCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { pairingSmsLink } from "./imessage";
-import { OPENING_QUESTION, openingQuestionFor } from "../onboarding/conversation";
+import { openingQuestionFor } from "../onboarding/conversation";
 import { partnershipsOpen } from "../partnerships/store";
 
 /**
@@ -34,10 +34,11 @@ import { partnershipsOpen } from "../partnerships/store";
 export const PAIRING_TTL_MS = 15 * 60_000;
 
 /** What she says the moment they pair, before the read is done. */
-export const HELLO = `hey! i'm maya. i'll help you figure out what to post, work through drafts, and keep your content plans moving—all here in our chat. i'm taking a look at your posts now.\n---\n${OPENING_QUESTION}`;
+export const HELLO = `hey — i'm maya. i'm going through your posts now so i can get a feel for what you make, what sounds like you, and what's actually been working.\n---\ntext me like you'd text someone on your team. send me a half-formed idea, ask what to post, tell me to remember something, or ask me to make room to film it. i'll also message you when i find something in your world worth trying.\n---\nyou don't need to figure everything out today. i'll share what i notice first, then we can work out what you'd like me to help with most.`;
 /** The first hello, with the opening for their plan (§26). Pure. */
 export function helloFor(partnerships: boolean): string {
-  return HELLO.replace(OPENING_QUESTION, openingQuestionFor(partnerships));
+  void partnerships;
+  return HELLO;
 }
 
 function mintToken(): string {
@@ -142,10 +143,10 @@ export const claimPairingByPhone = internalMutation({
     }
     await ctx.db.patch(creator._id, { phone: args.phone, phoneVerifiedAt: now, channel: { paired: true, pairedAt: now, kind: "imessage" }, pairingToken: undefined, pairingExpiresAt: undefined, updatedAt: now });
     const firstRead = await ctx.db.query("messages").withIndex("by_creator_and_dedupe", (q) => q.eq("creatorId", creator._id).eq("dedupeKey", `first_read:${creator._id}`)).first();
-    if (!firstRead || creator.conversationalOnboardingAt) {
-      await ctx.db.patch(creator._id, { conversationalOnboardingAt: creator.conversationalOnboardingAt ?? now });
-      await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "imessage", body: firstRead ? openingQuestionFor(partnershipsOpen(creator)) : helloFor(partnershipsOpen(creator)), dedupeKey: `hello:${creator._id}`, proactive: true, kind: "status", awaitingAnswer: true });
-    }
+    await ctx.db.patch(creator._id, { conversationalOnboardingAt: creator.conversationalOnboardingAt ?? now });
+    await ctx.runMutation(internal.core.messages.send, firstRead
+      ? { creatorId: creator._id, surface: "imessage", body: openingQuestionFor(partnershipsOpen(creator)), dedupeKey: `onboarding_goal:${creator._id}`, proactive: true, kind: "status", awaitingAnswer: true }
+      : { creatorId: creator._id, surface: "imessage", body: helloFor(partnershipsOpen(creator)), dedupeKey: `hello:${creator._id}`, proactive: true, kind: "status", awaitingAnswer: false });
     await ctx.runMutation(internal.core.jobs.enqueue, { kind: "first_read", idempotencyKey: `first_read:${creator._id}`, creatorId: creator._id, payloadJson: JSON.stringify({ phone: args.phone, service: args.service ?? null }) });
     await ctx.runMutation(internal.core.jobs.wakeDeliveries, { creatorId: creator._id });
     await ctx.scheduler.runAfter(0, internal.core.scheduler.drainJobs, { kinds: ["deliver_message"] });
@@ -216,18 +217,10 @@ export const claimPairing = internalMutation({
     // First contact. If her first read has not been written yet, she says hello now and
     // what she is doing, so pairing is never followed by silence. Once, ever.
     const firstRead = await ctx.db.query("messages").withIndex("by_creator_and_dedupe", (q) => q.eq("creatorId", creator._id).eq("dedupeKey", `first_read:${creator._id}`)).first();
-    if (!firstRead || creator.conversationalOnboardingAt) {
-      await ctx.db.patch(creator._id, { conversationalOnboardingAt: creator.conversationalOnboardingAt ?? now });
-      await ctx.runMutation(internal.core.messages.send, {
-        creatorId: creator._id,
-        surface: "telegram",
-        body: firstRead ? openingQuestionFor(partnershipsOpen(creator)) : helloFor(partnershipsOpen(creator)),
-        dedupeKey: `hello:${creator._id}`,
-        proactive: true,
-        kind: "status",
-        awaitingAnswer: true,
-      });
-    }
+    await ctx.db.patch(creator._id, { conversationalOnboardingAt: creator.conversationalOnboardingAt ?? now });
+    await ctx.runMutation(internal.core.messages.send, firstRead
+      ? { creatorId: creator._id, surface: "telegram", body: openingQuestionFor(partnershipsOpen(creator)), dedupeKey: `onboarding_goal:${creator._id}`, proactive: true, kind: "status", awaitingAnswer: true }
+      : { creatorId: creator._id, surface: "telegram", body: helloFor(partnershipsOpen(creator)), dedupeKey: `hello:${creator._id}`, proactive: true, kind: "status", awaitingAnswer: false });
     // Everything written while unpaired (the first read, at least) goes out now, not at the
     // next minute tick, and not behind whatever long job the drain is on.
     await ctx.runMutation(internal.core.jobs.wakeDeliveries, { creatorId: creator._id });

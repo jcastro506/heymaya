@@ -14,7 +14,15 @@ export async function GET(req: NextRequest) {
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const denied = url.searchParams.get("error");
-  if (denied) return fail(req, denied === "access_denied" ? "denied" : `google_${denied}`);
+  if (denied) {
+    const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+    let returnTo: string | null = null;
+    if (convexUrl && state) {
+      const client = new ConvexHttpClient(convexUrl);
+      returnTo = (await client.action(api.calendar.oauth.decline, { state }).catch(() => ({ returnTo: null }))).returnTo;
+    }
+    return fail(req, denied === "access_denied" ? "denied" : `google_${denied}`, returnTo);
+  }
   if (!code || !state) return fail(req, "missing_code");
 
   const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -30,8 +38,8 @@ export async function GET(req: NextRequest) {
   return NextResponse.redirect(dest);
 }
 
-function fail(req: NextRequest, reason: string): NextResponse {
-  const dest = new URL("/app/settings", req.url);
+function fail(req: NextRequest, reason: string, returnTo?: string | null): NextResponse {
+  const dest = new URL(returnTo ?? "/app/settings", req.url);
   dest.searchParams.set("calendar_error", reason);
   return NextResponse.redirect(dest);
 }

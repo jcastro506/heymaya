@@ -20,6 +20,7 @@ export default defineSchema({
     email: v.string(),
     phone: v.optional(v.string()),
     phoneVerifiedAt: v.optional(v.number()),
+    messageConsentAt: v.optional(v.number()),
     handles: v.object({
       tiktok: v.optional(v.string()),
       instagram: v.optional(v.string()),

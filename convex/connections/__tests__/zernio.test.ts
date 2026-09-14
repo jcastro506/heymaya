@@ -40,6 +40,8 @@ describe("connections rows", () => {
     expect(row?.status).toBe("attention");
     expect((await t.mutation(internal.connections.zernio.applyAccounts, { creatorId, accounts: [] })).status).toBe("attention");
     expect((await t.mutation(internal.connections.zernio.applyAccounts, { creatorId, accounts: [{ accountId: "a1", platform: "tiktok", username: "leah", needsReconnect: false, canFetchAnalytics: true }] })).status).toBe("connected");
+    expect((await t.run((ctx) => ctx.db.get(creatorId)))?.handles.tiktok).toBe("leah");
+    expect((await t.run((ctx) => ctx.db.get(creatorId)))?.ownership).toBe("verified");
     expect((await t.mutation(internal.connections.zernio.applyAccounts, { creatorId, accounts: [{ accountId: "a1", platform: "tiktok", username: "leah", needsReconnect: true, canFetchAnalytics: true }] })).status).toBe("needs_reconnect");
     expect((await t.mutation(internal.connections.zernio.applyAccounts, { creatorId, accounts: [{ accountId: "x", platform: "youtube", username: null, needsReconnect: false, canFetchAnalytics: true }] })).status).toBe("attention"); // not a platform we do
     const byProfile = await t.query(internal.connections.zernio.byProfile, { zernioProfileId: "prof_1" });

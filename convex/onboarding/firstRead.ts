@@ -17,6 +17,8 @@ import { deliverNow } from "../core/scheduler";
 import { critique, tooLong } from "../agent/critic";
 import { laneQuestion, proposeLane, readLane } from "./lane";
 import { READ_SETTLE_MS } from "../scout/gate";
+import { openingQuestionFor } from "./conversation";
+import { partnershipsOpen } from "../partnerships/store";
 
 /** The rest-of-week plan follows first contact by this much: long enough to tap the lane, short enough to feel like the same conversation. */
 export const FIRST_PLAN_DELAY_MS = 20 * 60_000;
@@ -75,7 +77,7 @@ export const run = internalAction({
       // Said once: `send` dedupes on the key, so a retry of this job is silent.
       await ctx.runMutation(internal.core.messages.send, {
         creatorId: creator._id,
-        surface: "telegram",
+        surface: creator.channel.kind ?? "imessage",
         body: "reading your posts now. give me a few minutes and I'll tell you what I see.",
         dedupeKey: `first_read_pending:${creator._id}`,
         proactive: true,
@@ -172,7 +174,7 @@ export const run = internalAction({
 
     await ctx.runMutation(internal.core.messages.send, {
       creatorId: creator._id,
-      surface: "telegram",
+      surface: creator.channel.kind ?? "imessage",
       body: text,
       criticSkipped,
       /**
@@ -192,6 +194,17 @@ export const run = internalAction({
           : { buttons: [{ id: `lane:${laneAsk.token}:yes`, label: "that's it" }, { id: `lane:${laneAsk.token}:no`, label: "not quite" }] }
         : {}),
       produced: producedStamp(spec.primary),
+    });
+    // Orientation comes first, then proof, then one clear goal question. Keeping the
+    // question in its own deduped message prevents it from being buried in a long read.
+    await ctx.runMutation(internal.core.messages.send, {
+      creatorId: creator._id,
+      surface: creator.channel.kind ?? "imessage",
+      body: openingQuestionFor(partnershipsOpen(creator)),
+      dedupeKey: `onboarding_goal:${creator._id}`,
+      proactive: true,
+      kind: "status",
+      awaitingAnswer: true,
     });
     await deliverNow(ctx as never);
       await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: args.creatorId, step: "first_read" });

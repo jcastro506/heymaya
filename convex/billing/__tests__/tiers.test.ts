@@ -89,11 +89,11 @@ describe("the tiers", () => {
     expect(converseSkillFor(true)).toContain(PARTNER_CAN_LINE);
     expect(converseSkillFor(false)).not.toContain(PARTNER_CAN_LINE);
     expect(converseSkillFor(false)).toContain("When: any message");
-    expect(openingQuestionFor(true)).toMatch(/brand deals/);
+    expect(openingQuestionFor(true)).toMatch(/partnerships/);
     expect(openingQuestionFor(false)).not.toMatch(/brand/);
     expect(helloFor(false)).not.toMatch(/brand/);
-    expect(helloFor(true)).toMatch(/brand deals/);
-    expect(helloFor(false)).toMatch(/what would you most like help with/);
+    expect(helloFor(true)).not.toMatch(/brand|partnership/);
+    expect(helloFor(false)).toMatch(/i'm maya/);
   });
 
   it("the belt: a duo creator never sees partnership tools; the investigate loop filters them unless told the plan allows", () => {

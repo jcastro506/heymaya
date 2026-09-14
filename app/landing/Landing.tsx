@@ -90,7 +90,7 @@ function Trial({
   text?: string;
 }) {
   return (
-    <CtaLink href="/sign-up" where={where} className="maya-button">
+    <CtaLink href="/join" where={where} className="maya-button">
       {text}
       <Arrow />
     </CtaLink>

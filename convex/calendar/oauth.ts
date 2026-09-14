@@ -61,6 +61,15 @@ export const claimState = internalMutation({
   },
 });
 
+/** A denied Google consent still consumes the state and returns the intended screen. */
+export const decline = action({
+  args: { state: v.string() },
+  handler: async (ctx, a): Promise<{ returnTo: string | null }> => {
+    const claim = await ctx.runMutation(internal.calendar.oauth.claimState, { token: a.state });
+    return { returnTo: claim?.returnTo ?? null };
+  },
+});
+
 /** Public by design: the single-use state token is the authentication. */
 export const exchange = action({
   args: { code: v.string(), state: v.string(), redirectUri: v.string() },

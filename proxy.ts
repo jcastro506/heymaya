@@ -7,7 +7,7 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
  * the Stripe webhook 404'd behind Clerk for months in the old product).
  */
 const isPublic = createRouteMatcher([
-  "/ops","/", "/privacy", "/terms", "/sign-in(.*)", "/sign-up(.*)", "/api/health", "/onboarding-preview", "/mission-control-preview"]);
+  "/ops","/", "/join", "/privacy", "/terms", "/sign-in(.*)", "/sign-up(.*)", "/api/health", "/onboarding-preview", "/mission-control-preview"]);
 
 export const proxy = clerkMiddleware(async (auth, req) => {
   if (!isPublic(req)) await auth.protect();

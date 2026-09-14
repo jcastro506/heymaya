@@ -21,7 +21,7 @@ export const meForBilling = internalQuery({
 });
 
 export const createCheckout = action({
-  args: { interval: v.union(v.literal("monthly"), v.literal("annual")), tier: v.union(v.literal("solo"), v.literal("duo"), v.literal("partner")) },
+  args: { interval: v.union(v.literal("monthly"), v.literal("annual")), tier: v.union(v.literal("solo"), v.literal("duo"), v.literal("partner")), returnTo: v.optional(v.union(v.literal("onboarding"), v.literal("settings"))) },
   handler: async (ctx, a): Promise<{ ok: true; url: string } | { ok: false; reason: string }> => {
     const me = await ctx.runQuery(internal.billing.checkout.meForBilling, {});
     if (!me) return { ok: false, reason: "no account" };
@@ -36,6 +36,8 @@ export const createCheckout = action({
     const founding = (await ctx.runQuery(internal.billing.plan.seatsLeft, {})) > 0;
     const appUrl = process.env.APP_URL ?? "http://localhost:3000";
     const firstTime = !me.plan.stripeSubscriptionId; // a re-subscriber after cancel is billed now (§19.3)
+    const successPath = a.returnTo === "onboarding" ? "/start?step=2&billing=started" : "/app/settings?billing=started";
+    const cancelPath = a.returnTo === "onboarding" ? "/start?step=1&billing=canceled" : "/app/settings?billing=canceled";
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
@@ -45,8 +47,8 @@ export const createCheckout = action({
       automatic_tax: { enabled: true },
       allow_promotion_codes: true,
       metadata: { creatorId: me._id, founding: founding ? "1" : "0" },
-      success_url: `${appUrl}/app/settings?billing=started`,
-      cancel_url: `${appUrl}/app/settings?billing=canceled`,
+      success_url: `${appUrl}${successPath}`,
+      cancel_url: `${appUrl}${cancelPath}`,
     });
     if (!session.url) return { ok: false, reason: "no checkout url" };
     return { ok: true, url: session.url };

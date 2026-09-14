@@ -42,7 +42,8 @@ export function callbackUri(req: NextRequest): string {
 }
 
 function fail(req: NextRequest, reason: string): NextResponse {
-  const dest = new URL("/app/settings", req.url);
+  const requested = new URL(req.url).searchParams.get("return");
+  const dest = new URL(requested && /^\/[a-z0-9/?=&_-]*$/i.test(requested) ? requested : "/app/settings", req.url);
   dest.searchParams.set("calendar_error", reason);
   return NextResponse.redirect(dest);
 }
