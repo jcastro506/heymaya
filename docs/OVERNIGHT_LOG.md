@@ -440,3 +440,17 @@ Partner path, comped for the probe: "nothing has been emailed. nothing ever goes
 2. Terms became "fitness coach", "online coaching", but the one pick quoted "1374.7x their normal", true arithmetic on a thin normal. Fixed: a multiple needs five posts with views and a median of 500; a runaway post is named, not quoted.
 3. Four picks, each tied to his own posts ("direct DM coaching CTAs, mirroring your DM ME PAID and DM ME SCALE formats"), multiples 1.9 to 7.7. TikTok-only rerun: three picks tied to her Brisbane runs and training diary. Instagram-only never read TikTok. About ten vendor reads and one model call per run, two to three cents.
 Not verified live: a creator with both platforms connected (no public creator whose two handles I could verify); covered by tests.
+
+## 2026-09-14, evening · suggestion quality, measured (plan §27.1 to §27.3)
+
+**Asked:** had the quality of her suggestions been tested: real accounts, real content, real followers? It had not; two creators had been read by eye.
+**Built:** `eval/suggestQuality.ts`. Real public subjects found through the vendor (never guessed handles; the both-platform subject verified by the same email and site in both bios), a first read of their posts only, production `suggestFor`, then every card re-read: exists, 1,000+ followers, a post in 30 days, five posts, connected platform, the reason's numbers exist; a critic-family judge scores real creator, relevance, learnable, reason accuracy and the set.
+
+| Round | Engine | Cards passed |
+|---|---|---|
+| 1 | as shipped | 11 of 24 |
+| 2 | gates for activity, size and readability; sized ranking; their sentence first; no reposts, hubs or catalogues | 22 of 23 |
+| 3 | Instagram Reels authors as a second source (the four subjects with Instagram) | 13 of 13; Instagram cards per subject rose from 1 to 4 (fitness 40+), 1 to 2 (travel), 2 to 4 (both platforms) |
+
+Round one's failures: seven not real creators (repost pages, a photography hub, recipe catalogues, a brand), seven off-lane, two dormant (54 and 126 days), unsized accounts ranked first, one judge answer lost silently. Fixed in the engine and the eval. Found on the way: `search.reels` had returned a payload the cache strips, so the lane sweep had stored zero Instagram posts; normalized. Twelve more read kinds have the same bug; split into its own task, with the Instagram roster's views-based floor.
+**Still true:** the verdict is one model's, not a human's; each subject ran once; small creators get large accounts (the judge accepted them); the over-40 fitness subject got no over-40 specialist; about one reason in ten is "partly" accurate. The web page itself was not driven (Clerk CAPTCHA). Credits: 942 at the start of this work, 751 after it.

@@ -146,6 +146,7 @@ import type * as reads_key from "../reads/key.js";
 import type * as reads_kinds from "../reads/kinds.js";
 import type * as reads_profiles from "../reads/profiles.js";
 import type * as reads_read from "../reads/read.js";
+import type * as reads_reels from "../reads/reels.js";
 import type * as review_predictions from "../review/predictions.js";
 import type * as review_pulse from "../review/pulse.js";
 import type * as review_rung from "../review/rung.js";
@@ -314,6 +315,7 @@ declare const fullApi: ApiFromModules<{
   "reads/kinds": typeof reads_kinds;
   "reads/profiles": typeof reads_profiles;
   "reads/read": typeof reads_read;
+  "reads/reels": typeof reads_reels;
   "review/predictions": typeof review_predictions;
   "review/pulse": typeof review_pulse;
   "review/rung": typeof review_rung;
