@@ -38,6 +38,14 @@ Return STRICT JSON only: {"picks":[{"id":"c0","why":"..."}]}. If none fit, retur
 const GENERIC = new Set(["fyp", "foryou", "foryoupage", "viral", "explore", "explorepage", "reels", "reel", "trending", "tiktok", "instagram", "instagood", "fy", "xyzbca", "capcut", "fypage", "viralvideo"]);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const toMs = (t: number) => (t < 1e12 ? t * 1000 : t);
+/**
+ * Cut text by characters, never inside one (live 2026-09-14: a caption cut at 200 split an emoji's
+ * surrogate pair and Convex refused the whole return value). Pure.
+ */
+export function clip(text: string, max: number): string {
+  const chars = Array.from(text);
+  return chars.length <= max ? text : chars.slice(0, max).join("");
+}
 
 /** Search terms: the dossier's, else hashtags weighted by how the post did, else their sentence. Pure. */
 export function keywordsFrom(posts: OwnPost[], niche: string | undefined, dossierKeywords: string[], max: number = SUGGEST.keywords): string[] {
@@ -93,7 +101,7 @@ export function statsFor(posts: CandidatePost[], now: number): CandidateStats {
   const medianViews = views.length ? views[Math.floor(views.length / 2)] : null;
   const bestMultiple = medianViews && views.length >= 3 ? Math.round((views[views.length - 1] / medianViews) * 10) / 10 : null;
   const postsLast30 = posts.filter((p) => p.postedAt && toMs(p.postedAt) >= now - 30 * 86_400_000).length;
-  const topCaptions = [...posts].sort((a, b) => (b.views ?? 0) - (a.views ?? 0)).map((p) => p.caption.replace(/\s+/g, " ").trim().slice(0, 120)).filter(Boolean).slice(0, 3);
+  const topCaptions = [...posts].sort((a, b) => (b.views ?? 0) - (a.views ?? 0)).map((p) => clip(p.caption.replace(/\s+/g, " ").trim(), 120)).filter(Boolean).slice(0, 3);
   return { medianViews, bestMultiple, postsLast30, topCaptions };
 }
 
@@ -158,7 +166,7 @@ export const gather = internalQuery({
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c) return null;
     const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(60)) as Doc<"ownPosts">[];
-    const own = [...posts].sort((x, y) => (y.multiple ?? 0) - (x.multiple ?? 0)).slice(0, 12).map((p) => ({ platform: p.platform, caption: p.caption.slice(0, 200), hashtags: p.hashtags, multiple: p.multiple ?? null, views: p.metrics.views }));
+    const own = [...posts].sort((x, y) => (y.multiple ?? 0) - (x.multiple ?? 0)).slice(0, 12).map((p) => ({ platform: p.platform, caption: clip(p.caption, 200), hashtags: p.hashtags, multiple: p.multiple ?? null, views: p.metrics.views }));
     const tracked = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"trackedAccounts">[];
     const mine = [c.handles.tiktok, c.handles.instagram].filter((h): h is string => Boolean(h)).map((h) => h.toLowerCase());
     const exclude = [...tracked.filter((t) => t.status !== "removed").map((t) => `${t.platform}:${t.handle.toLowerCase()}`), ...mine.flatMap((h) => [`tiktok:${h}`, `instagram:${h}`])];
@@ -226,8 +234,8 @@ export const suggestFor = internalAction({
     let dropped = 0;
     if (usable.length) {
       const evidence = JSON.stringify({
-        theirBestPosts: gg.own.slice(0, 6).map((p) => ({ platform: p.platform, caption: p.caption.slice(0, 140), timesTheirNormal: p.multiple })),
-        shortlist: usable.map((d) => ({ id: d.id, platform: d.c.platform, handle: d.c.handle, followers: d.c.followerCount, bio: (d.c.bio ?? "").slice(0, 120), postsLast30Days: d.stats.postsLast30, medianViews: d.stats.medianViews, bestRecentTimesTheirNormal: d.stats.bestMultiple, topRecentCaptions: d.stats.topCaptions })),
+        theirBestPosts: gg.own.slice(0, 6).map((p) => ({ platform: p.platform, caption: clip(p.caption, 140), timesTheirNormal: p.multiple })),
+        shortlist: usable.map((d) => ({ id: d.id, platform: d.c.platform, handle: d.c.handle, followers: d.c.followerCount, bio: clip(d.c.bio ?? "", 120), postsLast30Days: d.stats.postsLast30, medianViews: d.stats.medianViews, bestRecentTimesTheirNormal: d.stats.bestMultiple, topRecentCaptions: d.stats.topCaptions })),
       });
       for (const model of [REGISTRY.writer.primary, REGISTRY.writer.fallback]) {
         const r = await callModel(ctx, { creatorId: a.creatorId, purpose: "onboarding_suggest", model, messages: [{ role: "system", content: SUGGEST_SKILL }, { role: "user", content: evidence }], temperature: 0.3, maxTokens: 900, timeoutMs: 25_000, apiKey: process.env.OPENROUTER_API_KEY ?? "" });

@@ -8,7 +8,7 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { SUGGEST, balance, bandFor, fallbackWhy, keywordsFrom, numbersGrounded, parsePicks, shortlist, statsFor } from "../suggest";
+import { SUGGEST, balance, bandFor, clip, fallbackWhy, keywordsFrom, numbersGrounded, parsePicks, shortlist, statsFor } from "../suggest";
 import type { DiscoveredProfile } from "../../reads/profiles";
 
 const prof = (platform: "tiktok" | "instagram", handle: string, followerCount: number | null, extra: Partial<DiscoveredProfile> = {}): DiscoveredProfile => ({ platform, handle, displayName: null, followerCount, avatarUrl: null, bio: null, isPrivate: false, ...extra });
@@ -77,6 +77,19 @@ describe("what reaches a card", () => {
     expect(out.filter((x) => x.platform === "instagram")).toHaveLength(1);
     expect(balance(pick("tiktok", 3), [], ["tiktok", "instagram"])).toHaveLength(3);
     expect(balance(pick("tiktok", 3), pick("instagram", 1), ["tiktok"])).toHaveLength(3);
+  });
+});
+
+describe("text that survives the trip", () => {
+  it("adversarial: an emoji at the cut point stays whole (live 2026-09-14: a split pair broke the return value)", () => {
+    const caption = "a".repeat(199) + "🏃‍♀️ race day";
+    const cut = clip(caption, 200);
+    expect(() => JSON.parse(JSON.stringify(cut))).not.toThrow();
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(cut), "no lone high surrogate").toBe(false);
+    expect(Array.from(cut)).toHaveLength(200);
+    expect(clip("short", 200)).toBe("short");
+    const own = [{ platform: "tiktok" as const, caption: "x".repeat(118) + "🔥🔥🔥", views: 10, postedAt: null }];
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(statsFor(own, 0).topCaptions[0])).toBe(false);
   });
 });
 
