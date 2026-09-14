@@ -4,7 +4,7 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { summarizeState } from "../durableConverse";
-import { judgeProblems } from "../converse";
+import { isActionReplyKey, judgeProblems } from "../converse";
 
 describe("durable conversation eval", () => {
   it("explains every model-judge failure", () => {
@@ -14,6 +14,11 @@ describe("durable conversation eval", () => {
       "judge: toolSpeak 2",
       "judge: wouldSend 1",
     ]);
+  });
+
+  it("recognizes state-changing replies from their dedupe key", () => {
+    expect(isActionReplyKey("manage:message-id")).toBe(true);
+    expect(isActionReplyKey("reply:message-id")).toBe(false);
   });
 
   it("reports checkpoint progress and real latency percentiles", () => {

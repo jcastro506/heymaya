@@ -155,7 +155,7 @@ export const step = internalAction({
       if (!turn.ok || replies.length === 0) throw new Error(turn.reason ?? "no reply row");
       const reply = replies[0];
       const evaluateAt = Date.now();
-      const scored = await ctx.runAction(internal.eval.run.evaluate, { suite: `converse:${a.runId}`, skill: "reply", text: reply.text, evidence: { theirMessage: probe.text, category: probe.category, expect: probe.expect }, creatorId, messageId: reply.messageId, actionTaken: reply.kind !== "reply", trace: { runId: a.runId, ordinal, converseMs } });
+      const scored = await ctx.runAction(internal.eval.run.evaluate, { suite: `converse:${a.runId}`, skill: "reply", text: reply.text, evidence: { theirMessage: probe.text, category: probe.category, expect: probe.expect }, creatorId, messageId: reply.messageId, actionTaken: reply.actionTaken, trace: { runId: a.runId, ordinal, converseMs } });
       const evaluateMs = Date.now() - evaluateAt;
       const problems = scored.pass ? [] : await ctx.runQuery(internal.eval.converse.failedChecks, { id: scored.id });
       result = { ordinal, creatorId, category: probe.category, prompt: probe.text, reply: reply.text, pass: scored.pass, problems, latencyMs: { total: Date.now() - t0, converse: converseMs, evaluate: evaluateMs } };

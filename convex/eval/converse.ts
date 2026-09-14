@@ -60,6 +60,8 @@ export function judgeProblems(judge?: JudgeScores): string[] {
   return problems;
 }
 
+export const isActionReplyKey = (dedupeKey?: string): boolean => /^(manage|btn|cmd|person):/.test(dedupeKey ?? "");
+
 export const failedChecks = internalQuery({
   args: { id: v.id("evalRuns") },
   handler: async (ctx, a): Promise<string[]> => {
@@ -78,9 +80,9 @@ export const failedChecks = internalQuery({
  */
 export const repliesTo = internalQuery({
   args: { creatorId: v.id("creators"), inboundId: v.id("messages"), since: v.number() },
-  handler: async (ctx, a): Promise<Array<{ messageId: Id<"messages">; text: string; kind: string | undefined }>> => {
+  handler: async (ctx, a): Promise<Array<{ messageId: Id<"messages">; text: string; kind: string | undefined; actionTaken: boolean }>> => {
     const rows = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId).gte("ts", a.since - 1000)).take(30)) as Doc<"messages">[];
-    return rows.filter((m) => m.direction === "out" && (m.dedupeKey ?? "").includes(String(a.inboundId))).map((m) => ({ messageId: m._id, text: m.body, kind: m.kind }));
+    return rows.filter((m) => m.direction === "out" && (m.dedupeKey ?? "").includes(String(a.inboundId))).map((m) => ({ messageId: m._id, text: m.body, kind: m.kind, actionTaken: isActionReplyKey(m.dedupeKey) }));
   },
 });
 
@@ -103,7 +105,7 @@ export const run = internalAction({
         if (!r.ok || replies.length === 0) { silent.push(`${probe.category}: ${probe.text} (${r.reason ?? "no reply row"})`); continue; }
         replied++;
         for (const reply of replies) {
-          const res = await ctx.runAction(internal.eval.run.evaluate, { suite: "converse", skill: "reply", text: reply.text, evidence: { theirMessage: probe.text, category: probe.category, expect: probe.expect }, creatorId, messageId: reply.messageId, actionTaken: reply.kind !== "reply" });
+          const res = await ctx.runAction(internal.eval.run.evaluate, { suite: "converse", skill: "reply", text: reply.text, evidence: { theirMessage: probe.text, category: probe.category, expect: probe.expect }, creatorId, messageId: reply.messageId, actionTaken: reply.actionTaken });
           if (res.pass) passed++;
           else failed.push({ category: probe.category, text: reply.text.slice(0, 160), problems: await ctx.runQuery(internal.eval.converse.failedChecks, { id: res.id }) });
         }
