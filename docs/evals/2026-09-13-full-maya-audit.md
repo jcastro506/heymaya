@@ -47,7 +47,7 @@ After the fixes, the full suite passes 676 tests with 2 intentional image-genera
 - No real message was sent to a person's phone. The Claw Messenger adapter is verified against its documented contract and the fake vendor; its own source notes that it has not yet been proven against a live line.
 - No real Google account was connected during this audit. Calendar logic, OAuth boundaries, provider contracts, privacy behavior, and simulated end-to-end flows passed, but live token refresh and event creation require a dedicated test Google account.
 - Zernio logic and recorded API shapes passed. A real connected-account round trip was not run against a customer account because the audit does not have a designated disposable social account.
-- The development deployment lacks `GEMINI_API_KEY`, so embeddings fall back to lexical/word-overlap recall. Live replies still used the configured OpenRouter key. Production should either configure Gemini embeddings or explicitly standardize and evaluate the fallback as the intended retrieval mode.
+- Local unit-test processes intentionally have no Google model key, so those tests exercise lexical/word-overlap fallback. The Convex development deployment does have `GOOGLE_API_KEY`, which the embedding path accepts, and the live memory runs therefore exercised the configured semantic path plus lexical fallback. Production configuration still needs the same smoke check and retrieval-quality baseline.
 
 ## Remaining launch checks
 
