@@ -177,7 +177,8 @@ export function balance<T extends { platform: Platform }>(chosen: T[], extras: T
   return out;
 }
 
-const postsOf = (value: unknown): CandidatePost[] => {
+/** Normalized posts from an account.posts read value. Pure. */
+export const postsOf = (value: unknown): CandidatePost[] => {
   const arr = Array.isArray(value) ? value : ((value as { posts?: unknown[] } | null)?.posts ?? []);
   return (arr as Array<{ caption?: string | null; metrics?: { viewCount?: number | null }; postedAt?: number | null }>).map((p) => ({ caption: p.caption ?? "", views: p.metrics?.viewCount ?? null, postedAt: p.postedAt ?? null }));
 };

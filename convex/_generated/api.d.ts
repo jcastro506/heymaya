@@ -100,6 +100,7 @@ import type * as eval_memoryGauntlet from "../eval/memoryGauntlet.js";
 import type * as eval_partnershipGauntlet from "../eval/partnershipGauntlet.js";
 import type * as eval_run from "../eval/run.js";
 import type * as eval_scenarios from "../eval/scenarios.js";
+import type * as eval_suggestQuality from "../eval/suggestQuality.js";
 import type * as http from "../http.js";
 import type * as imessage_webhook from "../imessage/webhook.js";
 import type * as integrations_claw_client from "../integrations/claw/client.js";
@@ -267,6 +268,7 @@ declare const fullApi: ApiFromModules<{
   "eval/partnershipGauntlet": typeof eval_partnershipGauntlet;
   "eval/run": typeof eval_run;
   "eval/scenarios": typeof eval_scenarios;
+  "eval/suggestQuality": typeof eval_suggestQuality;
   http: typeof http;
   "imessage/webhook": typeof imessage_webhook;
   "integrations/claw/client": typeof integrations_claw_client;

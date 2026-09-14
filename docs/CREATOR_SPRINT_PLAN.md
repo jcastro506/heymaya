@@ -1614,3 +1614,26 @@ Annual: ten months for twelve, one Stripe price per tier and interval. Founding 
 **Named tests.** Cross-tenant: suggestions resolve the creator from the session only; an accepted roster candidate lands on that creator's row. Fail-closed: no connected platform means no reads; Instagram-only never yields TikTok; private and already-watched accounts never appear; an empty or broken discovery read degrades to fewer cards, never an error. Adversarial: model ids outside the shortlist, numbers not in the evidence, and plumbing words are dropped. Sibling coherence: the discovery normalizers read the recorded fixtures; the belt formatter and the suggestion engine read the same `profiles` field. TODO grep.
 
 **Exit criterion, live.** On dev with real credits: suggestions for a creator with real handles come back from their connected platforms with specific reasons grounded in the numbers read; an Instagram-connected creator gets Instagram accounts; the credit ledger shows the bound held.
+
+### 27.1 The suggestion quality eval (2026-09-14)
+
+**Why.** The operator asked whether the suggestions were tested for quality: real accounts, making real content, with real audiences, worth this creator's attention. They were not. Two creators were run and the reasons read by eye; no card was checked against the account itself, and one TikTok pick came back with no follower count (keyword-search authors arrive unsized).
+
+**How it runs.** `eval/suggestQuality.ts`. Subjects are real public creators found through the vendor, never guessed: several lanes, both platforms, small to large. Each gets a creator row with the catalogue job marked dead and only the first read of their posts, which is the state a real signup is in on the suggestion screen. Suggestions run through the production `suggestFor`. Then every card is audited:
+
+| Check | Kind | Bar |
+|---|---|---|
+| The account exists | code, fresh profile read | read succeeds |
+| A real audience | code | at least 1,000 followers |
+| Active | code | a post in the last 30 days |
+| Enough to judge | code | five or more recent posts read |
+| On a platform they connected | code | yes |
+| The reason's numbers | code | every number is in that account's stats or captions |
+| A real creator, not a brand catalogue, repost or fan page | judge | yes |
+| Relevant to this creator | judge, 0 to 3 | 2 or more |
+| Something concrete to borrow | judge, 0 to 3 | reported |
+| The reason matches the posts | judge | not "no" |
+
+The judge is the critic's model family, not the writer's, and scores the whole set as well. A card passes on all code checks plus the three judge bars. The report per subject lands in `syncState` under `eval:suggest_quality:<label>`; the aggregate goes in the log.
+
+**Then.** Whatever the audit finds is fixed in the engine, and the same subjects are re-audited. The web page itself is not driven: sign-up sits behind Clerk's CAPTCHA, which is never bypassed.
