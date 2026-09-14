@@ -1637,3 +1637,18 @@ Annual: ten months for twelve, one Stripe price per tier and interval. Founding 
 The judge is the critic's model family, not the writer's, and scores the whole set as well. A card passes on all code checks plus the three judge bars. The report per subject lands in `syncState` under `eval:suggest_quality:<label>`; the aggregate goes in the log.
 
 **Then.** Whatever the audit finds is fixed in the engine, and the same subjects are re-audited. The web page itself is not driven: sign-up sits behind Clerk's CAPTCHA, which is never bypassed.
+
+### 27.2 Round one of the quality eval, and what it changed (2026-09-14)
+
+Eight real subjects: TikTok running, small meal prep, large family dinners, finance; Instagram coaching, travel photography, fitness for women over 40; one creator verified on both platforms. **11 of 24 cards passed.**
+
+| Failure | Cards | Cause |
+|---|---|---|
+| Not a real creator: repost page, community hub, recipe catalogue, brand account | 7 | the pick prompt never named them; nothing in code or prompt looked |
+| Relevance under 2 | 7 | broad recurring hashtags outranked their own sentence, which the model never saw |
+| Dormant, 54 and 126 days | 2 | no activity gate |
+| Reason judged wrong | 4 | partly the eval (the judge saw the newest six posts, the engine wrote from the most viewed); partly reasons that led with a multiple |
+| Unsized accounts shortlisted first | many | an unknown follower count scored as a perfect size match |
+| A judge call returned nothing, silently | 1 subject | unparseable answer, no named failure, no fallback |
+
+**Changes.** Code gates before the model sees an account: five posts read, a post in the last 30 days, 1,000 followers, with the profile read to fill a missing count (up to eight more credits). Unknown sizes rank after known ones. Their sentence is the first search term after the dossier; more generic tags excluded. The pick prompt sees their sentence, names repost pages, hubs, catalogues, magazines and apps as never, leads with the borrowable format and allows one number at most. The judge sees the same stats and most-viewed captions the engine used; an unreadable judge answer is a named failure and falls back to the second model. Then the same eight subjects are re-audited.

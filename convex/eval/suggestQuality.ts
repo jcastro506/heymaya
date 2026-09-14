@@ -64,7 +64,7 @@ For each card judge from the account's own bio and recent posts, not from its ha
 - kind: creator | creator_brand | brand_catalogue | repost_or_meme | fan_page | spam | unclear
 - relevance 0-3 to THIS creator: 3 same lane and audience; 2 adjacent lane with a format they could borrow; 1 loose; 0 unrelated.
 - learnable 0-3: a concrete hook, format or series this creator could borrow from these posts.
-- reasonAccurate: does the sentence shown on the card match this account's posts and numbers? yes | partly | no
+- reasonAccurate: does the sentence shown on the card match this account's posts and numbers? Judge it against topPostsByViews and stats as well as recentPosts; a multiple is "their best recent post against their own median". yes | partly | no
 - note: one short sentence on the biggest problem, or what makes it good.
 Then score the whole set 0-3 as a first impression for this creator, and name what is missing.
 Return STRICT JSON only: {"cards":[{"i":0,"realCreator":"yes","kind":"creator","relevance":2,"learnable":2,"reasonAccurate":"yes","note":"..."}],"set":{"score":2,"note":"..."}}`;
@@ -214,12 +214,15 @@ export const audit = internalAction({
     if (cards.length) {
       const input = JSON.stringify({
         creator: { platforms: connected, sentence: g.niche ?? null, theirBestPosts: g.own.slice(0, 6).map((p) => ({ platform: p.platform, caption: clip(p.caption, 140), timesTheirNormal: p.multiple })) },
-        cards: cards.map((c, i) => ({ i, platform: c.platform, handle: c.handle, reasonShown: c.why, followers: c.facts.followers, verified: c.facts.verified, bio: c.facts.bio, lastPostDaysAgo: c.facts.lastPostDaysAgo, recentPosts: c.facts.recentPosts })),
+        // §27.2: the judge sees the evidence the engine wrote from, not only the newest posts.
+        cards: cards.map((c, i) => ({ i, platform: c.platform, handle: c.handle, reasonShown: c.why, followers: c.facts.followers, verified: c.facts.verified, bio: c.facts.bio, lastPostDaysAgo: c.facts.lastPostDaysAgo, stats: { medianViews: c.facts.stats.medianViews, bestRecentTimesTheirNormal: c.facts.stats.bestMultiple, oneRunawayPost: c.facts.stats.runawayPost, postsLast30Days: c.facts.stats.postsLast30 }, topPostsByViews: c.facts.stats.topCaptions, recentPosts: c.facts.recentPosts })),
       });
       for (const model of [REGISTRY.critic.primary, REGISTRY.critic.fallback]) {
-        const res = await callModel(ctx, { creatorId: a.creatorId, purpose: "eval_judge", model, messages: [{ role: "system", content: QUALITY_JUDGE }, { role: "user", content: input }], temperature: 0, maxTokens: 1600, timeoutMs: 45_000, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+        const res = await callModel(ctx, { creatorId: a.creatorId, purpose: "eval_judge", model, messages: [{ role: "system", content: QUALITY_JUDGE }, { role: "user", content: input }], temperature: 0, maxTokens: 2400, timeoutMs: 60_000, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
         if (!res.ok) { failures.push(`judge ${model}: ${res.reason.slice(0, 120)}`); continue; }
         const parsed = parseJudge(res.content, cards.length);
+        // §27.2: a judge answer that yields no verdict is a named failure, and the fallback gets its turn.
+        if (parsed.cards.every((x) => x === null)) { failures.push(`judge ${model}: no readable verdicts (${res.content.length} chars)`); continue; }
         verdicts = parsed.cards; setScore = parsed.setScore; setNote = parsed.setNote;
         break;
       }

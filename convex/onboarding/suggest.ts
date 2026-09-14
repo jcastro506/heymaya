@@ -17,7 +17,7 @@ type Platform = "tiktok" | "instagram";
 export interface Suggestion { platform: Platform; handle: string; followers: number | null; why: string; displayName?: string; avatarUrl?: string }
 export interface OwnPost { platform: Platform; caption: string; hashtags: string[]; multiple: number | null; views: number }
 export interface CandidatePost { caption: string; views: number | null; postedAt: number | null }
-export interface CandidateStats { medianViews: number | null; bestMultiple: number | null; postsLast30: number; topCaptions: string[]; /** One post far above a thin normal: real, but no multiple is quoted for it. */ runawayPost: boolean }
+export interface CandidateStats { medianViews: number | null; bestMultiple: number | null; postsLast30: number; topCaptions: string[]; /** One post far above a thin normal: real, but no multiple is quoted for it. */ runawayPost: boolean; lastPostDaysAgo: number | null; postsRead: number }
 type Pooled = DiscoveredProfile & { following?: boolean };
 
 export const SUGGEST = {
@@ -27,15 +27,29 @@ export const SUGGEST = {
   show: 6,
   keywords: 2,
   waitForPostsMs: 15_000,
+  /** Where an unsized account sorts: after sized accounts within about 1.5 orders of magnitude. */
+  unknownSizeDistance: 1.5,
 } as const;
 
+/** What code requires before the model sees an account (§27.2): readable, active, a real audience. */
+export const GATE = { minPosts: 5, activeWithinDays: 30, minFollowers: 1_000 } as const;
+
+/** Whether an account clears the gate, and why not. Pure. */
+export function qualifies(s: CandidateStats, followers: number | null): { ok: boolean; reason?: string } {
+  if (s.postsRead < GATE.minPosts) return { ok: false, reason: `only ${s.postsRead} posts read` };
+  if (s.lastPostDaysAgo === null || s.lastPostDaysAgo > GATE.activeWithinDays) return { ok: false, reason: s.lastPostDaysAgo === null ? "no post dates" : `last post ${s.lastPostDaysAgo} days ago` };
+  if (!followers || followers < GATE.minFollowers) return { ok: false, reason: followers ? `${followers} followers` : "follower count unknown" };
+  return { ok: true };
+}
+
 export const SUGGEST_SKILL = `who to watch
-You pick creators worth watching for one creator who just signed up. You get their own best posts and a shortlist of accounts, each with its recent posts and numbers.
-Pick up to six they can actually learn from: close to their subject or audience, a format they could borrow, and posts doing well against that account's own normal. Skip anyone who matches only by size. When the shortlist covers two platforms, pick from both.
-For each pick write one sentence to the creator, second person, under 160 characters, naming the specific thing worth borrowing; tie it to one of their own posts or topics when the evidence shows it. Use only numbers that appear in the data. No hype, no "inspiring", no emoji, no follower counts as the reason.
+You pick accounts worth watching for one creator who just signed up. You get their own sentence about what they make, their best posts, and a shortlist of accounts that code has already checked are active, sized and readable, each with its bio, numbers and most-viewed recent captions.
+Pick up to six this creator can actually learn from. Every pick must be a person or a creator-led brand posting its own original content. Never pick repost or aggregator pages, meme pages, community hubs that feature other people's work, magazines, apps, or product and recipe catalogues; the bio and captions usually give them away ("DM for credit", "tag us to be featured", "community", "download the app", a feed of other people's clips).
+Relevance comes from their sentence first: the same subject and audience, or an adjacent lane with a format they could borrow. Skip anyone who matches only by size or a broad tag. When the shortlist covers two platforms, pick from both. Fewer good picks beat six weak ones.
+For each pick write one sentence to the creator, second person, under 160 characters: name the specific format, hook or series worth borrowing as it appears in that account's captions, and tie it to their own sentence or posts when you can. A number is optional and at most one; never make a number the reason. No hype, no "inspiring", no emoji, no follower counts.
 Return STRICT JSON only: {"picks":[{"id":"c0","why":"..."}]}. If none fit, return {"picks":[]}.`;
 
-const GENERIC = new Set(["fyp", "foryou", "foryoupage", "viral", "explore", "explorepage", "reels", "reel", "trending", "tiktok", "instagram", "instagood", "fy", "xyzbca", "capcut", "fypage", "viralvideo"]);
+const GENERIC = new Set(["fyp", "foryou", "foryoupage", "viral", "explore", "explorepage", "reels", "reel", "trending", "tiktok", "instagram", "instagood", "fy", "xyzbca", "capcut", "fypage", "viralvideo", "motivation", "fitnessmotivation", "inspiration", "healthy", "healthydiet", "love", "instadaily", "photooftheday", "trend", "trend2026", "reelsinstagram", "explorar", "fitness", "lifestyle", "tips"]);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const toMs = (t: number) => (t < 1e12 ? t * 1000 : t);
 /**
@@ -47,13 +61,13 @@ export function clip(text: string, max: number): string {
   return chars.length <= max ? text : chars.slice(0, max).join("");
 }
 
-const STOP = new Set(["about", "make", "makes", "making", "videos", "video", "content", "people", "their", "getting", "with", "that", "this", "from", "into", "your", "what", "they", "them", "just", "like", "who", "for", "and", "the", "help", "helping", "things", "stuff", "creator", "posts"]);
+const STOP = new Set(["about", "make", "makes", "making", "videos", "video", "content", "people", "their", "getting", "with", "that", "this", "from", "into", "your", "what", "they", "them", "just", "like", "who", "for", "and", "the", "help", "helping", "things", "stuff", "creator", "posts", "real", "over", "little", "busy", "best", "daily", "sense", "ideas", "week"]);
 
 /**
  * Search terms (§27; tightened live 2026-09-14, when an Instagram coach's own-name hashtag
- * "charliejohnson" and a one-off tag returned namesakes and strangers): the dossier's; else
- * hashtags that recur on at least two of their posts, weighted by how those posts did, never one
- * containing their own handle; else a two-word phrase from their own sentence. Pure.
+ * "charliejohnson" and a one-off tag returned namesakes and strangers): the dossier's; then a two-word
+ * phrase from their own sentence; then hashtags that recur on at least two of their posts, weighted by
+ * how those posts did, never one containing their own handle. Pure.
  */
 export function keywordsFrom(posts: OwnPost[], niche: string | undefined, dossierKeywords: string[], max: number = SUGGEST.keywords, ownHandles: string[] = []): string[] {
   const stems = ownHandles.map((h) => h.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/(fitness|official|tv|show|\d+)$/g, "")).filter((h) => h.length >= 4);
@@ -66,12 +80,14 @@ export function keywordsFrom(posts: OwnPost[], niche: string | undefined, dossie
     seenOn.set(h, (seenOn.get(h) ?? 0) + 1);
   }
   const tags = [...score.entries()].filter(([k]) => (seenOn.get(k) ?? 0) >= 2).sort((a, b) => b[1] - a[1]).map(([k]) => k);
-  const out = [...dossierKeywords.map((k) => k.toLowerCase().trim()).filter((k) => k && !isOwn(k.replace(/\s+/g, ""))), ...tags];
-  if (out.length < max && niche) {
+  // §27.2: their own sentence outranks their hashtags; broad recurring tags pulled a generic pool.
+  const phrase: string[] = [];
+  if (niche) {
     const words = niche.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 3 && !STOP.has(w));
-    if (words.length >= 2) out.push(`${words[0]} ${words[1]}`);
-    else if (words.length === 1) out.push(words[0]);
+    if (words.length >= 2) phrase.push(`${words[0]} ${words[1]}`);
+    else if (words.length === 1) phrase.push(words[0]);
   }
+  const out = [...dossierKeywords.map((k) => k.toLowerCase().trim()).filter((k) => k && !isOwn(k.replace(/\s+/g, ""))), ...phrase, ...tags];
   return [...new Set(out)].slice(0, max);
 }
 
@@ -99,8 +115,9 @@ export function shortlist(input: { candidates: Pooled[]; platforms: Platform[]; 
   }
   const distance = (p: Platform) => (c: Pooled) => {
     const target = Math.max((input.ownFollowers[p] ?? 0) * 3, 5_000);
-    const f = c.followerCount ?? target;
-    return Math.abs(Math.log10(Math.max(f, 1)) - Math.log10(target)) - (c.following ? 0.5 : 0);
+    // §27.2: an unknown size is not a perfect match; it ranks after known sizes near theirs.
+    if (!c.followerCount) return SUGGEST.unknownSizeDistance - (c.following ? 0.5 : 0);
+    return Math.abs(Math.log10(c.followerCount) - Math.log10(target)) - (c.following ? 0.5 : 0);
   };
   for (const p of input.platforms) by[p].sort((a, b) => distance(p)(a) - distance(p)(b));
   const per = input.platforms.length > 1 ? SUGGEST.perPlatformBoth : SUGGEST.single;
@@ -123,7 +140,9 @@ export function statsFor(posts: CandidatePost[], now: number): CandidateStats {
   const bestMultiple = ratio !== null && !runawayPost ? Math.round(ratio * 10) / 10 : null;
   const postsLast30 = posts.filter((p) => p.postedAt && toMs(p.postedAt) >= now - 30 * 86_400_000).length;
   const topCaptions = [...posts].sort((a, b) => (b.views ?? 0) - (a.views ?? 0)).map((p) => clip(p.caption.replace(/\s+/g, " ").trim(), 120)).filter(Boolean).slice(0, 3);
-  return { medianViews, bestMultiple, postsLast30, topCaptions, runawayPost };
+  const dates = posts.map((p) => p.postedAt).filter((x): x is number => typeof x === "number" && x > 0).map(toMs);
+  const lastPostDaysAgo = dates.length ? Math.max(0, Math.round((now - Math.max(...dates)) / 86_400_000)) : null;
+  return { medianViews, bestMultiple, postsLast30, topCaptions, runawayPost, lastPostDaysAgo, postsRead: posts.length };
 }
 
 /** The reason when the model is unavailable: only what the numbers show. Pure. */
@@ -248,15 +267,30 @@ export const suggestFor = internalAction({
 
     const short = shortlist({ candidates: pool, platforms: [...platforms], exclude: new Set(gg.exclude), ownFollowers });
     const now = Date.now();
-    const detailed = await Promise.all(short.map(async (c, i) => ({ id: `c${i}`, c, stats: statsFor(postsOf(await read("account.posts", { platform: c.platform, handle: c.handle, sort: "latest", slot: "onboarding" })), now) })));
-    const usable = detailed.filter((d) => d.stats.topCaptions.length > 0);
-    const trace: Record<string, unknown> = { platforms, keywords, ownPosts: gg.ownCount, ownFollowers, pool: pool.length, shortlist: short.map((s) => `${s.platform}:${s.handle}`), usable: usable.length };
+    const detailed = await Promise.all(short.map(async (c, i) => {
+      const stats = statsFor(postsOf(await read("account.posts", { platform: c.platform, handle: c.handle, sort: "latest", slot: "onboarding" })), now);
+      let filled: Pooled = c;
+      // §27.2: an unsized account is sized before it can be judged; keyword-search authors arrive without a count.
+      if (!c.followerCount && stats.postsRead >= GATE.minPosts) {
+        const p = (await read("profile", { platform: c.platform, handle: c.handle })) as { followerCount?: number; displayName?: string | null; avatarUrl?: string | null; bio?: string | null } | null;
+        if (p) filled = { ...c, followerCount: p.followerCount || null, displayName: c.displayName ?? p.displayName ?? null, avatarUrl: c.avatarUrl ?? p.avatarUrl ?? null, bio: c.bio ?? p.bio ?? null };
+      }
+      return { id: `c${i}`, c: filled, stats };
+    }));
+    const gated: string[] = [];
+    const usable = detailed.filter((d) => {
+      const q = qualifies(d.stats, d.c.followerCount);
+      if (!q.ok) gated.push(`${d.c.platform}:${d.c.handle}: ${q.reason}`);
+      return q.ok && d.stats.topCaptions.length > 0;
+    });
+    const trace: Record<string, unknown> = { platforms, keywords, ownPosts: gg.ownCount, ownFollowers, pool: pool.length, shortlist: short.map((s) => `${s.platform}:${s.handle}`), gated, usable: usable.length };
 
     let modelAnswered = false;
     let picks: Array<{ id: string; why: string }> = [];
     let dropped = 0;
     if (usable.length) {
       const evidence = JSON.stringify({
+        theirSentence: gg.niche ?? null,
         theirBestPosts: gg.own.slice(0, 6).map((p) => ({ platform: p.platform, caption: clip(p.caption, 140), timesTheirNormal: p.multiple })),
         shortlist: usable.map((d) => ({ id: d.id, platform: d.c.platform, handle: d.c.handle, followers: d.c.followerCount, bio: clip(d.c.bio ?? "", 120), postsLast30Days: d.stats.postsLast30, medianViews: d.stats.medianViews, bestRecentTimesTheirNormal: d.stats.bestMultiple, oneRunawayPost: d.stats.runawayPost, topRecentCaptions: d.stats.topCaptions })),
       });

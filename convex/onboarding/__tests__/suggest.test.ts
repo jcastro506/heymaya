@@ -8,7 +8,7 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { SUGGEST, balance, bandFor, clip, fallbackWhy, keywordsFrom, numbersGrounded, parsePicks, shortlist, statsFor } from "../suggest";
+import { GATE, SUGGEST, balance, bandFor, clip, fallbackWhy, keywordsFrom, numbersGrounded, parsePicks, qualifies, shortlist, statsFor } from "../suggest";
 import type { DiscoveredProfile } from "../../reads/profiles";
 
 const prof = (platform: "tiktok" | "instagram", handle: string, followerCount: number | null, extra: Partial<DiscoveredProfile> = {}): DiscoveredProfile => ({ platform, handle, displayName: null, followerCount, avatarUrl: null, bio: null, isPrivate: false, ...extra });
@@ -28,7 +28,7 @@ describe("keywords", () => {
     const k = keywordsFrom(own, "coaching fitness coaches on getting high ticket clients", [], 2, ["charliejohnsonfitness"]);
     expect(k).not.toContain("charliejohnson");
     expect(k).not.toContain("clientwin");
-    expect(k).toEqual(["coachingbusiness", "coaching fitness"]);
+    expect(k, "§27.2: their own sentence outranks their hashtags").toEqual(["coaching fitness", "coachingbusiness"]);
   });
 
   it("fall back to a two-word phrase from their sentence, skipping filler; nothing when there is nothing", () => {
@@ -57,15 +57,32 @@ describe("the shortlist", () => {
   });
 });
 
+describe("§27.2: the gate before the model", () => {
+  const stats = (over: Partial<ReturnType<typeof statsFor>> = {}) => ({ medianViews: 3000, bestMultiple: 2, postsLast30: 8, topCaptions: ["x"], runawayPost: false, lastPostDaysAgo: 2, postsRead: 10, ...over });
+  it("fail-closed, live round one: dormant, thin, tiny and unsized accounts never reach the model", () => {
+    expect(qualifies(stats(), 24_000)).toEqual({ ok: true });
+    expect(qualifies(stats({ lastPostDaysAgo: 126 }), 602_137)).toMatchObject({ ok: false, reason: "last post 126 days ago" });
+    expect(qualifies(stats({ lastPostDaysAgo: null }), 50_000).ok).toBe(false);
+    expect(qualifies(stats({ postsRead: GATE.minPosts - 1 }), 50_000).ok).toBe(false);
+    expect(qualifies(stats(), GATE.minFollowers - 1).ok).toBe(false);
+    expect(qualifies(stats(), null)).toMatchObject({ ok: false, reason: "follower count unknown" });
+  });
+
+  it("an unknown size ranks after known sizes near theirs, not first", () => {
+    const s = shortlist({ platforms: ["tiktok"], exclude: new Set(), ownFollowers: { tiktok: 900 }, candidates: [prof("tiktok", "unsized.mega", null), prof("tiktok", "near", 4_000), prof("tiktok", "far", 3_000_000)] });
+    expect(s.map((x) => x.handle)).toEqual(["near", "unsized.mega", "far"]);
+  });
+});
+
 describe("what reaches a card", () => {
   it("stats read only what the posts say; TikTok seconds become milliseconds", () => {
     const now = Date.UTC(2026, 8, 14);
     const posts = [1000, 2000, 3000, 4000, 20000].map((views, i) => ({ caption: ` post ${i} `, views, postedAt: Math.floor((now - i * 86_400_000) / 1000) }));
     const s = statsFor([...posts, { caption: "old", views: null, postedAt: now - 60 * 86_400_000 }], now);
-    expect(s).toMatchObject({ medianViews: 3000, bestMultiple: 6.7, postsLast30: 5, runawayPost: false });
+    expect(s).toMatchObject({ medianViews: 3000, bestMultiple: 6.7, postsLast30: 5, runawayPost: false, lastPostDaysAgo: 0, postsRead: 6 });
     expect(s.topCaptions[0]).toBe("post 4");
     expect(fallbackWhy(s)).toBe("Posts steadily, 5 times in the last month, and their best recent post did 6.7× their usual views.");
-    expect(fallbackWhy({ medianViews: null, bestMultiple: null, postsLast30: 0, topCaptions: [], runawayPost: false })).not.toMatch(/\d/);
+    expect(fallbackWhy({ medianViews: null, bestMultiple: null, postsLast30: 0, topCaptions: [], runawayPost: false, lastPostDaysAgo: null, postsRead: 0 })).not.toMatch(/\d/);
   });
 
   it("adversarial, live 2026-09-14: no multiple on a thin normal, and a runaway post is named, never quoted as 1374.7x", () => {

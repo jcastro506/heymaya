@@ -12,7 +12,7 @@ import { QUALITY, cardPasses, hardChecks, parseJudge, type CardFacts, type Verdi
 
 const facts = (over: Partial<CardFacts> = {}): CardFacts => ({
   exists: true, followers: 24_000, verified: false, bio: "runner", postCount: 300, lastPostDaysAgo: 3, postsRead: 12,
-  stats: { medianViews: 3000, bestMultiple: 4.7, postsLast30: 9, topCaptions: ["my 16-mile long run"], runawayPost: false },
+  stats: { medianViews: 3000, bestMultiple: 4.7, postsLast30: 9, topCaptions: ["my 16-mile long run"], runawayPost: false, lastPostDaysAgo: 3, postsRead: 12 },
   recentPosts: [{ caption: "my 16-mile long run", views: 14000, daysAgo: 3 }],
   ...over,
 });
