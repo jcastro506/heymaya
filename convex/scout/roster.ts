@@ -42,7 +42,7 @@ export const ROSTER = {
   minScaleOfOwn: 0.5,
 } as const;
 
-export interface Candidate { handle: string; posts: number; days: number; medianViews: number }
+export interface Candidate { platform: "tiktok" | "instagram"; handle: string; posts: number; days: number; medianViews: number }
 
 function median(xs: number[]): number {
   if (!xs.length) return 0;
@@ -60,20 +60,21 @@ export const candidatesFor = internalQuery({
     const tracked = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"trackedAccounts">[];
     const active = tracked.filter((t) => t.status === "active");
     // Anything they already removed, or that she already retired, must never be offered again.
-    const known = new Set(tracked.map((t) => t.handle.toLowerCase()));
-    for (const h of Object.values(creator.handles)) if (h) known.add(String(h).toLowerCase());
+    // §27: keyed by platform and handle; the same handle on the other platform is a different account.
+    const known = new Set(tracked.map((t) => `${t.platform}:${t.handle.toLowerCase()}`));
+    for (const h of Object.values(creator.handles)) if (h) { known.add(`tiktok:${String(h).toLowerCase()}`); known.add(`instagram:${String(h).toLowerCase()}`); }
 
     const keywords = ((creator.dossier as { keywords?: string[] } | undefined)?.keywords ?? []).map((k) => k.toLowerCase());
     const since = a.now - ROSTER.windowDays * 86_400_000;
     const rows = (await ctx.db.query("observations").withIndex("by_sampledAt", (q) => q.gte("sampledAt", since)).take(1000)) as Doc<"observations">[];
 
-    const byAuthor = new Map<string, { views: number[]; days: Set<string>; posts: Set<string> }>();
+    const byAuthor = new Map<string, { platform: "tiktok" | "instagram"; handle: string; views: number[]; days: Set<string>; posts: Set<string> }>();
     for (const r of rows) {
       const handle = (r.authorHandle ?? "").toLowerCase().replace(/^@/, "");
-      if (!handle || known.has(handle)) continue;
+      if (!handle || known.has(`${r.platform}:${handle}`)) continue;
       // Their lane, not the whole platform: the post must carry one of their keywords.
       if (keywords.length && !r.keywords.some((k) => keywords.includes(k.toLowerCase()))) continue;
-      const e = byAuthor.get(handle) ?? { views: [], days: new Set<string>(), posts: new Set<string>() };
+      const e = byAuthor.get(`${r.platform}:${handle}`) ?? { platform: r.platform, handle, views: [], days: new Set<string>(), posts: new Set<string>() };
       e.views.push(r.views);
       /**
        * ⚠️ The day they POSTED, not the day we sampled. Counting sample days meant one
@@ -83,19 +84,23 @@ export const candidatesFor = internalQuery({
        */
       e.days.add(new Date(r.createTime).toISOString().slice(0, 10));
       e.posts.add(r.postId);
-      byAuthor.set(handle, e);
+      byAuthor.set(`${r.platform}:${handle}`, e);
     }
 
     // Their own normal, to judge whether a candidate is even in their weight class.
-    const ownPosts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(20)) as Doc<"ownPosts">[];
-    const ownNormal = median(ownPosts.map((p) => p.metrics.views).filter((v) => v > 0));
-    const floor = ownNormal > 0 ? ownNormal * ROSTER.minScaleOfOwn : 0;
+    const ownPosts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(40)) as Doc<"ownPosts">[];
+    // Their normal on the candidate's platform when they post there; across both otherwise.
+    const normalOn = (platform: string) => {
+      const same = ownPosts.filter((p) => p.platform === platform).slice(0, 20).map((p) => p.metrics.views).filter((v) => v > 0);
+      return median(same.length ? same : ownPosts.slice(0, 20).map((p) => p.metrics.views).filter((v) => v > 0));
+    };
+    const floorOn = (platform: string) => { const n = normalOn(platform); return n > 0 ? n * ROSTER.minScaleOfOwn : 0; };
 
-    const candidates = [...byAuthor.entries()]
-      .map(([handle, e]) => ({ handle, posts: e.posts.size, days: e.days.size, medianViews: median(e.views) }))
+    const candidates = [...byAuthor.values()]
+      .map((e) => ({ platform: e.platform, handle: e.handle, posts: e.posts.size, days: e.days.size, medianViews: median(e.views) }))
       // Both: two posts on two different days. One post cannot satisfy this however it is sampled.
       .filter((c) => c.days >= ROSTER.minDays && c.posts >= ROSTER.minDays)
-      .filter((c) => c.medianViews >= floor)
+      .filter((c) => c.medianViews >= floorOn(c.platform))
       // Consistency AND reach: days as the primary weight, but scaled by how big they are,
       // so four small posts do not beat two that actually landed.
       .sort((x, y) => y.days * Math.log10(1 + y.medianViews) - x.days * Math.log10(1 + x.medianViews));
@@ -105,11 +110,11 @@ export const candidatesFor = internalQuery({
 });
 
 export const accept = internalMutation({
-  args: { creatorId: v.id("creators"), handle: v.string() },
+  args: { creatorId: v.id("creators"), handle: v.string(), platform: v.optional(v.union(v.literal("tiktok"), v.literal("instagram"))) },
   handler: async (ctx, a): Promise<{ ok: boolean; error?: string }> => {
     const existing = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"trackedAccounts">[];
-    // The same rule as the web control and the chat: one way to join the roster.
-    return await addTracked(ctx as never, a.creatorId, "tiktok", a.handle, existing);
+    // The same rule as the web control and the chat: one way to join the roster. §27: on the platform she saw them on.
+    return await addTracked(ctx as never, a.creatorId, a.platform ?? "tiktok", a.handle, existing, { addedBy: "maya", why: "kept coming up in your lane" });
   },
 });
 
@@ -133,9 +138,9 @@ export const offer = internalAction({
     const sent = await ctx.runMutation(internal.core.messages.send, {
       creatorId: a.creatorId,
       surface: "telegram",
-      body: `@${pick.handle} keeps coming up in your lane — ${pick.posts} posts on ${pick.days} different days, median ${pick.medianViews.toLocaleString()} views. want me to watch them?`,
-      // One ask per account, ever.
-      dedupeKey: `roster:${pick.handle}`,
+      body: `@${pick.handle} keeps coming up in your lane on ${pick.platform === "instagram" ? "Instagram" : "TikTok"} — ${pick.posts} posts on ${pick.days} different days, median ${pick.medianViews.toLocaleString()} views. want me to watch them?`,
+      // One ask per account, ever. §27: per platform, since the same handle elsewhere is someone else.
+      dedupeKey: `roster:${pick.platform}:${pick.handle}`,
       proactive: true,
       kind: "status",
       /**
@@ -146,7 +151,7 @@ export const offer = internalAction({
        * idea and inverted the priority — the idea matters, this does not.
        */
       awaitingAnswer: false,
-      buttons: [{ id: `roster:${pick.handle}:yes`, label: "watch them" }, { id: `roster:${pick.handle}:no`, label: "no" }],
+      buttons: [{ id: `roster:${pick.platform}:${pick.handle}:yes`, label: "watch them" }, { id: `roster:${pick.platform}:${pick.handle}:no`, label: "no" }],
     });
     /**
      * The dedupe key means asking twice writes nothing, so trust `sent` rather than the

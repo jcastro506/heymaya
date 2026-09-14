@@ -53,6 +53,12 @@ export async function event(ctx: MutationCtx, creatorId: Id<"creators">, opportu
   if (!old) await ctx.db.insert("partnershipEvents", { creatorId, opportunityId, key, kind, text: text.slice(0, 16000), at });
   return !old;
 }
+/** Whether their mailbox is connected, so she reads it instead of guessing (§27). */
+async function mailboxState(ctx: QueryCtx | MutationCtx, creatorId: Id<"creators">) {
+  const row = await ctx.db.query("partnershipMailboxes").withIndex("by_creator", q => q.eq("creatorId", creatorId)).unique();
+  return { connected: Boolean(row), email: row?.email ?? null, sendingEnabled: process.env.PARTNERSHIP_EMAIL_SEND_ENABLED === "true", needsAttention: row?.attention ?? null };
+}
+
 export const read = internalQuery({
   args: { creatorId: v.id("creators"), opportunityId: v.optional(v.id("partnershipOpportunities")), brandDomain: v.optional(v.string()), cursor: v.optional(v.string()) },
   handler: async (ctx, a) => {
@@ -62,10 +68,10 @@ export const read = internalQuery({
       const page = await ctx.db.query("partnershipEvents").withIndex("by_opportunity", q => q.eq("opportunityId", a.opportunityId!)).order("desc").paginate({ cursor: a.cursor ?? null, numItems: 10 });
       const events = page.page;
       const drafts = await ctx.db.query("partnershipDrafts").withIndex("by_opportunity", q => q.eq("opportunityId", a.opportunityId!)).order("desc").take(10);
-      return { opportunity: o.row, events, drafts, nextCursor: page.isDone ? null : page.continueCursor, followUpDue: followUpEligible(o.data, Date.now()) };
+      return { opportunity: o.row, events, drafts, nextCursor: page.isDone ? null : page.continueCursor, followUpDue: followUpEligible(o.data, Date.now()), mailbox: await mailboxState(ctx, a.creatorId) };
     }
     const opportunities = a.brandDomain ? await ctx.db.query("partnershipOpportunities").withIndex("by_brand", q => q.eq("creatorId", a.creatorId).eq("brandDomain", a.brandDomain!.toLowerCase().replace(/^www\./, ""))).paginate({ cursor: a.cursor ?? null, numItems: 20 }) : await ctx.db.query("partnershipOpportunities").withIndex("by_creator", q => q.eq("creatorId", a.creatorId)).order("desc").paginate({ cursor: a.cursor ?? null, numItems: 20 });
-    return { profile: (await profile(ctx, a.creatorId)).data, opportunities: opportunities.page, nextCursor: opportunities.isDone ? null : opportunities.continueCursor };
+    return { profile: (await profile(ctx, a.creatorId)).data, opportunities: opportunities.page, nextCursor: opportunities.isDone ? null : opportunities.continueCursor, mailbox: await mailboxState(ctx, a.creatorId) };
   },
 });
 export const mine = query({ args: {}, handler: async (ctx) => {

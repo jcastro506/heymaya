@@ -57,7 +57,7 @@ export const setNiche = internalMutation({
 });
 
 /** The same rules as the web control: lowercase handle, revive a removed one, ten at most. */
-export async function addTracked(ctx: { db: { query: (t: "trackedAccounts") => unknown; patch: (id: Id<"trackedAccounts">, v: Partial<Doc<"trackedAccounts">>) => Promise<void>; insert: (t: "trackedAccounts", v: Omit<Doc<"trackedAccounts">, "_id" | "_creationTime">) => Promise<Id<"trackedAccounts">> } }, creatorId: Id<"creators">, platform: "tiktok" | "instagram", rawHandle: string, existing: Doc<"trackedAccounts">[]): Promise<{ ok: boolean; error?: string; id?: Id<"trackedAccounts"> }> {
+export async function addTracked(ctx: { db: { query: (t: "trackedAccounts") => unknown; patch: (id: Id<"trackedAccounts">, v: Partial<Doc<"trackedAccounts">>) => Promise<void>; insert: (t: "trackedAccounts", v: Omit<Doc<"trackedAccounts">, "_id" | "_creationTime">) => Promise<Id<"trackedAccounts">> } }, creatorId: Id<"creators">, platform: "tiktok" | "instagram", rawHandle: string, existing: Doc<"trackedAccounts">[], opts: { addedBy?: "creator" | "suggested" | "maya"; why?: string } = {}): Promise<{ ok: boolean; error?: string; id?: Id<"trackedAccounts"> }> {
   const handle = rawHandle.trim().replace(/^@/, "").toLowerCase();
   if (!/^[a-z0-9_.]{2,30}$/.test(handle)) return { ok: false, error: "that doesn't look like a handle" };
   const dup = existing.find((r) => r.platform === platform && r.handle === handle);
@@ -66,7 +66,8 @@ export async function addTracked(ctx: { db: { query: (t: "trackedAccounts") => u
     return { ok: true, id: dup._id };
   }
   if (existing.filter((r) => r.status !== "removed").length >= 10) return { ok: false, error: "ten is the most she can watch closely" };
-  const id = await ctx.db.insert("trackedAccounts", { creatorId, platform, handle, status: "active", addedBy: "creator", baselineN: 0, createdAt: Date.now() } as never);
+  // §27: who added it, and why, so a suggestion's pick rate and its reason can be read back.
+  const id = await ctx.db.insert("trackedAccounts", { creatorId, platform, handle, status: "active", addedBy: opts.addedBy ?? "creator", ...(opts.why ? { why: opts.why.slice(0, 300) } : {}), baselineN: 0, createdAt: Date.now() } as never);
   return { ok: true, id };
 }
 

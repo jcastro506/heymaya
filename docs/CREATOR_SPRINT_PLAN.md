@@ -1588,3 +1588,29 @@ Annual: ten months for twelve, one Stripe price per tier and interval. Founding 
 **Also in this sprint, from the partnership review of 2026-09-11.** A Convex row id can no longer reach a person: the leak guard replaces a message carrying one, and `eval/checks.ts` gains `no_internal_ids` (rubric 7). Three partnership probes join the conversation bank: a request for brand deals, "yes send it" to nothing, and a request while research is unconfigured; the report shows who has the tools and who does not.
 
 **Operator-required.** Six Stripe prices (three tiers × monthly/annual) as `STRIPE_PRICE_<TIER>_<INTERVAL>` in each deployment; the old founding/list keys go. Gmail restricted-scope review remains the long pole for `partner` beyond the pilot.
+
+## 27. Sprint 10 — who to watch, chosen from their own posts (2026-09-14)
+
+**Why.** The operator asked ChatGPT how onboarding picks creators to watch, then asked for a verdict; it was checked line by line against the code. Confirmed: the suggestion screen ignores everything the catalogue learns, asks for popular TikTok creators by follower band and country only, gives Instagram-only signups TikTok strangers, and shows one canned sentence as every card's reason. Worse than reported: **the discovery, following and Instagram profile-search reads have never returned a profile.** Those three kinds return the vendor's raw payload; a fresh read hands the wrapper to callers that look for fields the vendor does not send (`handle` where TikTok sends `tt_link` and `unique_id`), and a cached read has the raw payload stripped by `slimForCache`. The belt tools `discover_creators` and `discover_profiles` read the same kinds and always said "no profiles returned". Also: roster growth sweeps Instagram but saves every accepted candidate as TikTok, and an account picked from suggestions is recorded as creator-added.
+
+**What changes.**
+
+| Piece | Now | After |
+|---|---|---|
+| Discovery reads | raw payload, nothing survives | `{ profiles: [{platform, handle, displayName, followerCount, avatarUrl, bio, isPrivate}] }`, normalized in `reads/profiles.ts` from the recorded vendor shapes; a stale cached row without `profiles` is re-read once |
+| Platforms | TikTok always | only the platforms they connected; both get candidates from both |
+| Sources | TikTok band + TikTok following | TikTok: band, their following, and the authors of top posts for their keywords · Instagram: profile search on their keywords |
+| Keywords | none | the dossier's when it exists; otherwise the hashtags on their strongest first-pass posts, weighted by how each did against their normal; otherwise their sentence |
+| Before a card | profile metadata | each shortlisted account's recent posts read: median views, best recent post against its own normal, posts in the last 30 days, top captions |
+| Choice and reason | canned sentence | one writer call over their best posts and the shortlist picks up to six and writes one specific sentence each; ids outside the shortlist, unplain words and ungrounded numbers are dropped; a failed call falls back to a sentence built from the numbers |
+| Timing | fires on arrival | the page waits for the first own posts or 25 seconds; the action waits up to 15 |
+| Roster | platform lost | candidates carry their platform; the button, the dedupe key and the saved row keep it; old buttons still mean TikTok |
+| Labels | always "creator" | "suggested" with its reason, "maya" for roster growth |
+
+**Budget.** One profile read per connected platform, at most four discovery reads, at most eight post reads, one model call: about thirteen credits and one writer call per signup, all through the cache. No watching before a card; watching starts when they pick someone.
+
+**Also, from the partnership gauntlet's soft passes.** `partnership_read` now says whether their mailbox is connected, so she stops guessing "gmail isn't linked". When a brand replies, she says in plain words what they asked. The gauntlet's reply step now needs both asks relayed, and the wrong-approval step fails a false claim about the mailbox.
+
+**Named tests.** Cross-tenant: suggestions resolve the creator from the session only; an accepted roster candidate lands on that creator's row. Fail-closed: no connected platform means no reads; Instagram-only never yields TikTok; private and already-watched accounts never appear; an empty or broken discovery read degrades to fewer cards, never an error. Adversarial: model ids outside the shortlist, numbers not in the evidence, and plumbing words are dropped. Sibling coherence: the discovery normalizers read the recorded fixtures; the belt formatter and the suggestion engine read the same `profiles` field. TODO grep.
+
+**Exit criterion, live.** On dev with real credits: suggestions for a creator with real handles come back from their connected platforms with specific reasons grounded in the numbers read; an Instagram-connected creator gets Instagram accounts; the credit ledger shows the bound held.

@@ -47,12 +47,12 @@ export const validate = action({
 });
 
 export const add = mutation({
-  args: { platform, handle: v.string(), addedBy: v.optional(v.union(v.literal("creator"), v.literal("suggested"))) },
+  args: { platform, handle: v.string(), addedBy: v.optional(v.union(v.literal("creator"), v.literal("suggested"))), why: v.optional(v.string()) },
   handler: async (ctx, a): Promise<{ ok: boolean; error?: string; id?: Id<"trackedAccounts"> }> => {
     const creator = await creatorFor(ctx);
     if (!creator) return { ok: false, error: "sign in first" };
     const existing = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).collect()) as Doc<"trackedAccounts">[];
-    return await addTracked(ctx as never, creator._id, a.platform, a.handle, existing); // one rule for the web and the chat
+    return await addTracked(ctx as never, creator._id, a.platform, a.handle, existing, { addedBy: a.addedBy ?? "creator", why: a.why }); // one rule for the web and the chat; §27 keeps the label
   },
 });
 
@@ -68,52 +68,16 @@ export const remove = mutation({
 });
 
 /**
- * Tap-to-pick suggestions for screen 3 (plan §7 S2): popular creators in their follower
- * band and country, plus the accounts they follow on TikTok, both through the cache.
- * Never their own handle, never one already on the list. Best effort: an empty list is
- * a normal answer, the free-entry field is always there.
+ * Tap-to-pick suggestions for screen 3 (plan §27): chosen from their own posts, on the platforms
+ * they connected, by `onboarding/suggest.ts`. The creator comes from the session, never an argument.
  */
 export const suggest = action({
   args: {},
   handler: async (ctx): Promise<Array<{ platform: "tiktok" | "instagram"; handle: string; followers: number | null; why: string; displayName?: string; avatarUrl?: string }>> => {
     const me = await ctx.runQuery(internal.onboarding.admired.meForSuggest, {});
     if (!me) return [];
-    const out: Array<{ platform: "tiktok" | "instagram"; handle: string; followers: number | null; why: string; displayName?: string; avatarUrl?: string }> = [];
-    const seen = new Set<string>([...me.mine, ...me.already]);
-    const push = (platform: "tiktok" | "instagram", handle: string, followers: number | null, why: string, displayName?: string, avatarUrl?: string) => {
-      const h = handle.toLowerCase().replace(/^@/, "");
-      if (!h || seen.has(h)) return;
-      seen.add(h);
-      out.push({ platform, handle: h, followers, why, displayName, avatarUrl });
-    };
-    const country = me.timezone.startsWith("America/") ? "US" : me.timezone.startsWith("Europe/London") ? "GB" : me.timezone.startsWith("Australia/") ? "AU" : "US";
-    let followers = 0;
-    try {
-      if (me.handles.tiktok) {
-        const p = await ctx.runAction(internal.reads.read.read, { kind: "profile", params: { platform: "tiktok", handle: me.handles.tiktok }, creatorId: me.creatorId });
-        followers = Number((p.value as { followerCount?: number } | null)?.followerCount ?? 0);
-      }
-    } catch {
-      /* size unknown: middle band */
-    }
-    const band = followers >= 10_000_000 ? "10M+" : followers >= 1_000_000 ? "1M-10M" : followers >= 100_000 ? "100K-1M" : "10K-100K";
-    try {
-      const r = await ctx.runAction(internal.reads.read.read, { kind: "discover.creators", params: { band, country }, creatorId: me.creatorId });
-      const rows = (Array.isArray(r.value) ? r.value : ((r.value as { creators?: unknown[]; users?: unknown[] } | null)?.creators ?? (r.value as { users?: unknown[] } | null)?.users ?? [])) as Array<{ handle?: string; uniqueId?: string; username?: string; followerCount?: number; followers?: number; displayName?: string; nickname?: string; avatarUrl?: string; avatar?: string }>;
-      for (const c of rows.slice(0, 12)) push("tiktok", String(c.handle ?? c.uniqueId ?? c.username ?? ""), Number(c.followerCount ?? c.followers ?? 0) || null, "A strong creator near your current audience size, with patterns you can realistically test.", c.displayName ?? c.nickname, c.avatarUrl ?? c.avatar);
-    } catch {
-      /* discover is optional */
-    }
-    try {
-      if (me.handles.tiktok) {
-        const f = await ctx.runAction(internal.reads.read.read, { kind: "account.following", params: { handle: me.handles.tiktok }, creatorId: me.creatorId });
-        const rows = (Array.isArray(f.value) ? f.value : ((f.value as { users?: unknown[]; following?: unknown[] } | null)?.users ?? (f.value as { following?: unknown[] } | null)?.following ?? [])) as Array<{ handle?: string; uniqueId?: string; username?: string; followerCount?: number; displayName?: string; nickname?: string; avatarUrl?: string; avatar?: string }>;
-        for (const c of rows.slice(0, 12)) push("tiktok", String(c.handle ?? c.uniqueId ?? c.username ?? ""), Number(c.followerCount ?? 0) || null, "Already in your orbit—a useful signal for the taste and formats you naturally pay attention to.", c.displayName ?? c.nickname, c.avatarUrl ?? c.avatar);
-      }
-    } catch {
-      /* following can be private */
-    }
-    return out.slice(0, 10);
+    const r = await ctx.runAction(internal.onboarding.suggest.suggestFor, { creatorId: me.creatorId });
+    return r.suggestions;
   },
 });
 

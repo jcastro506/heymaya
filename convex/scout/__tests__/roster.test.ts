@@ -107,7 +107,7 @@ describe("the offer", () => {
 
     const out = (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out");
     expect(out).toHaveLength(1);
-    expect(out[0].buttons?.map((b) => b.id)).toEqual(["roster:leahruns:yes", "roster:leahruns:no"]);
+    expect(out[0].buttons?.map((b) => b.id)).toEqual(["roster:tiktok:leahruns:yes", "roster:tiktok:leahruns:no"]);
     // An optional offer must not hold the day's one open-question slot; an idea outranks it.
     expect(out[0].awaitingAnswer).toBe(false);
 
@@ -170,5 +170,39 @@ describe("weight class", () => {
     const r = await t.query(internal.scout.roster.candidatesFor, { creatorId, now: NOW });
     expect(r.candidates[0].handle, "reach has to count for something").toBe("bigandrelevant");
     expect(r.candidates.map((c) => c.handle), "and the tiny one is out of her weight class entirely").not.toContain("tinybutbusy");
+  });
+});
+
+describe("§27: the roster keeps the platform", () => {
+  it("an Instagram author is offered and saved as Instagram, labelled as hers; the same handle on TikTok is someone else", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await t.run((ctx) => seedCreator(ctx, "ig", { timezone: "UTC", channel: { paired: true }, dossier: { persona: { summary: "runner" }, keywords: ["running"], cadence: { postsPerWeek: 2 } }, handles: { instagram: "vanessa.runs" } }));
+    await t.run(async (ctx) => {
+      let i = 0;
+      for (const [platform, handle, day] of [["instagram", "leah.runs", 1], ["instagram", "leah.runs", 3], ["tiktok", "leah.runs", 2]] as const) {
+        await ctx.db.insert("observations", { postId: `q${i++}`, platform, authorHandle: handle, url: `https://example.com/${i}`, createTime: NOW - day * DAY, sampledAt: NOW - day * DAY, ageHours: 10, views: 50_000, likes: 10, comments: 1, shares: 1, keywords: ["running"], source: "sweep" } as never);
+      }
+      await ctx.db.insert("trackedAccounts", { creatorId, platform: "tiktok", handle: "leah.runs", status: "active", addedBy: "creator", baselineN: 0, createdAt: 1 });
+    });
+    const r = await t.query(internal.scout.roster.candidatesFor, { creatorId, now: NOW });
+    expect(r.candidates.map((c) => `${c.platform}:${c.handle}`)).toEqual(["instagram:leah.runs"]);
+    const ok = await t.mutation(internal.scout.roster.accept, { creatorId, handle: "leah.runs", platform: "instagram" });
+    expect(ok.ok).toBe(true);
+    const rows = await t.run((ctx) => ctx.db.query("trackedAccounts").collect());
+    expect(rows.find((x) => x.platform === "instagram" && x.handle === "leah.runs")).toMatchObject({ addedBy: "maya" });
+  });
+
+  it("a suggested pick keeps its label and reason; an old button with no platform still means TikTok", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await t.run((ctx) => seedCreator(ctx, "s", { handles: { tiktok: "me" } }));
+    const { addTracked } = await import("../../agent/manage");
+    await t.run(async (ctx) => { await addTracked(ctx as never, creatorId, "instagram", "@Pick.Me", [], { addedBy: "suggested", why: "opens on the result" }); });
+    const row = await t.run((ctx) => ctx.db.query("trackedAccounts").first());
+    expect(row).toMatchObject({ platform: "instagram", handle: "pick.me", addedBy: "suggested", why: "opens on the result" });
+    const legacy = await t.mutation(internal.scout.roster.accept, { creatorId, handle: "old.button" });
+    expect(legacy.ok).toBe(true);
+    expect((await t.run((ctx) => ctx.db.query("trackedAccounts").collect())).find((x) => x.handle === "old.button")?.platform).toBe("tiktok");
+    const converse = (await import("node:fs")).readFileSync(new URL("../../agent/converse.ts", import.meta.url), "utf8");
+    expect(converse).toMatch(/\^roster:\(\?:\(tiktok\|instagram\):\)\?/);
   });
 });

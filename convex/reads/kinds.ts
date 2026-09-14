@@ -5,6 +5,7 @@
  */
 
 import { tiktok, extractClipId } from "../integrations/scrapeCreators/platforms/tiktok";
+import { instagramSearchProfiles, profilesResult, tiktokFollowingProfiles, tiktokPopularProfiles } from "./profiles";
 import { instagram } from "../integrations/scrapeCreators/platforms/instagram";
 import { cross } from "../integrations/scrapeCreators/platforms/cross";
 import type { EndpointDeps } from "../integrations/scrapeCreators/deps";
@@ -146,7 +147,13 @@ export const KINDS = {
     shared: false,
     path: "/v1/tiktok/user/following",
     normalize: (p) => ({ handle: normalizeHandle(p.handle) }),
-    call: (p, deps) => tiktok.following(p.handle, deps),
+    // §27: profiles from the vendor payload (follower counts, avatars), keeping the client's `users` for any older reader.
+    call: async (p, deps) => {
+      const r = await tiktok.following(p.handle, deps);
+      const fromUsers = () => r.users.filter((u) => u.handle).map((u) => ({ platform: "tiktok" as const, handle: u.handle!.toLowerCase(), displayName: u.nickname, followerCount: null, avatarUrl: null, bio: null, isPrivate: false }));
+      const out = profilesResult({ source: "tiktok_user_following", raw: r.raw }, (raw) => { const full = tiktokFollowingProfiles(raw); return full.length ? full : fromUsers(); });
+      return { ...out, users: r.users, count: r.count, total: r.total };
+    },
   }),
   "account.highlights": spec<{ handle: string }>({
     ttlMs: 30 * D,
@@ -167,14 +174,14 @@ export const KINDS = {
     shared: true,
     path: "/v1/tiktok/creators/popular",
     normalize: (p) => ({ band: p.band, country: p.country.toUpperCase(), page: p.page ?? 1 }),
-    call: (p, deps) => tiktok.popularCreators({ ...deps, followerCount: p.band, creatorCountry: p.country, audienceCountry: p.country, sortBy: "engagement", page: p.page }),
+    call: async (p, deps) => profilesResult(await tiktok.popularCreators({ ...deps, followerCount: p.band, creatorCountry: p.country, audienceCountry: p.country, sortBy: "engagement", page: p.page }), tiktokPopularProfiles),
   }),
   "discover.profiles": spec<{ keyword: string }>({
     ttlMs: 7 * D,
     shared: true,
     path: "/v1/instagram/search/profiles",
     normalize: (p) => ({ keyword: p.keyword.trim().toLowerCase() }),
-    call: (p, deps) => instagram.searchProfiles(p.keyword, deps),
+    call: async (p, deps) => profilesResult(await instagram.searchProfiles(p.keyword, deps), instagramSearchProfiles),
   }),
   "social.profiles": spec<{ platform: Platform; handle: string }>({
     ttlMs: 30 * D,

@@ -96,10 +96,18 @@ export default function StartPage() {
       .finally(() => setBusy(null));
   }, [reconcileSocialConnections, step]);
 
+  // §27: suggestions are chosen from their own posts, so wait for the first ones (or 25 seconds, or a finished read).
+  const [waitedForPosts, setWaitedForPosts] = useState(false);
   useEffect(() => {
-    if (step !== 3 || suggestions !== null) return;
+    if (step !== 3) return;
+    const timer = window.setTimeout(() => setWaitedForPosts(true), 25_000);
+    return () => window.clearTimeout(timer);
+  }, [step]);
+  const postsReady = (progress?.posts ?? 0) > 0 || progress?.ingest === "succeeded" || progress?.ingest === "failed" || progress?.ingest === "dead";
+  useEffect(() => {
+    if (step !== 3 || suggestions !== null || (!postsReady && !waitedForPosts)) return;
     suggestionsQuery({}).then((rows) => setSuggestions(rows)).catch(() => setSuggestions([]));
-  }, [step, suggestions, suggestionsQuery]);
+  }, [step, suggestions, suggestionsQuery, postsReady, waitedForPosts]);
 
   function go(next: 1 | 2 | 3 | 4 | 5) {
     setError(null);
@@ -126,7 +134,7 @@ export default function StartPage() {
   }
 
   async function addSuggestion(suggestion: Suggestion) {
-    const result = await addAdmired({ platform: suggestion.platform, handle: suggestion.handle, addedBy: "suggested" });
+    const result = await addAdmired({ platform: suggestion.platform, handle: suggestion.handle, addedBy: "suggested", why: suggestion.why });
     if (!result.ok) setError(result.error ?? "I couldn’t add that creator.");
   }
 
@@ -231,7 +239,7 @@ export default function StartPage() {
           <div className="screen-heading"><span className="kicker">Your taste</span><h1>A few creators worth keeping an eye on.</h1><p className="muted">I found people who may be useful for different reasons. Pick any that feel right, add your own, or leave this to me.</p></div>
           <div className="read-card"><span className="read-orbit" aria-hidden="true" /><div><strong>{knownSummary ? "Here’s my first read" : "I’m reading your posts now"}</strong><p className="small muted">{knownSummary ?? (progress?.posts ? `${progress.posts} posts are in. I’ll keep learning in the background.` : "I’ll share what I notice in Messages as soon as I have enough evidence.")}</p></div></div>
           <label>Anything you want me to understand from the start? <span className="muted">optional</span><textarea className="input" value={niche} onChange={(event) => setNiche(event.target.value)} placeholder="I make practical style videos for people who hate overthinking clothes." /></label>
-          {suggestions === null ? <div className="suggestion-grid" aria-label="Loading creator suggestions">{[0, 1, 2].map((item) => <div className="suggestion-card skeleton" key={item} />)}</div> : suggestions.length > 0 ? (
+          {suggestions === null ? <div className="suggestion-grid" aria-label={postsReady ? "Choosing creators from your posts" : "Reading your posts first"}>{[0, 1, 2].map((item) => <div className="suggestion-card skeleton" key={item} />)}</div> : suggestions.length > 0 ? (
             <div className="suggestion-grid">{suggestions.slice(0, 6).map((suggestion) => {
               const selectedRow = admired.find((item) => item.platform === suggestion.platform && item.handle === suggestion.handle);
               return <article className={`suggestion-card ${selectedRow ? "selected" : ""}`} key={`${suggestion.platform}:${suggestion.handle}`}>
