@@ -262,7 +262,16 @@ export const suggestFor = internalAction({
         for (const p of arr as Array<{ authorHandle?: string | null }>) if (p.authorHandle) pool.push({ platform: "tiktok", handle: p.authorHandle.toLowerCase(), displayName: null, followerCount: null, avatarUrl: null, bio: null, isPrivate: false });
       }));
     }
-    if (platforms.includes("instagram")) for (const k of keywords) jobs.push(discover("discover.profiles", { keyword: k }).then((r) => { pool.push(...r); }));
+    if (platforms.includes("instagram")) for (const k of keywords) {
+      jobs.push(discover("discover.profiles", { keyword: k }).then((r) => { pool.push(...r); }));
+      // §27.3: the authors of this month's top Reels for their terms. Profile search alone mostly returned dormant accounts.
+      jobs.push(read("search.reels", { keyword: k, window: "last-month" }).then((v) => {
+        const arr = (v as { posts?: unknown[] } | null)?.posts ?? [];
+        for (const p of arr as Array<{ authorHandle?: string | null; author?: { followerCount?: number | null; displayName?: string | null; avatarUrl?: string | null; isPrivate?: boolean } }>) {
+          if (p.authorHandle) pool.push({ platform: "instagram", handle: p.authorHandle, displayName: p.author?.displayName ?? null, followerCount: p.author?.followerCount ?? null, avatarUrl: p.author?.avatarUrl ?? null, bio: null, isPrivate: p.author?.isPrivate === true });
+        }
+      }));
+    }
     await Promise.all(jobs);
 
     const short = shortlist({ candidates: pool, platforms: [...platforms], exclude: new Set(gg.exclude), ownFollowers });

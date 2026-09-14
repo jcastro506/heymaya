@@ -5,6 +5,7 @@
  */
 
 import { tiktok, extractClipId } from "../integrations/scrapeCreators/platforms/tiktok";
+import { instagramReelsPosts } from "./reels";
 import { instagramSearchProfiles, profilesResult, tiktokFollowingProfiles, tiktokPopularProfiles } from "./profiles";
 import { instagram } from "../integrations/scrapeCreators/platforms/instagram";
 import { cross } from "../integrations/scrapeCreators/platforms/cross";
@@ -75,7 +76,12 @@ export const KINDS = {
     shared: true,
     path: "/v2/instagram/reels/search",
     normalize: (p) => ({ keyword: p.keyword.trim().toLowerCase(), window: p.window, page: p.page ?? 1 }),
-    call: (p, deps) => instagram.reelsSearch(p.keyword, { ...deps, datePosted: p.window, page: p.page }),
+    // §27.3: normalized posts with authors; the raw payload never survived the cache.
+    call: async (p, deps) => {
+      const r = await instagram.reelsSearch(p.keyword, { ...deps, datePosted: p.window, page: p.page });
+      const charged = (r.raw as { credits_charged?: unknown } | null)?.credits_charged;
+      return { source: r.source, posts: instagramReelsPosts(r.raw), ...(typeof charged === "number" ? { credits_charged: charged } : {}) };
+    },
   }),
   "search.hashtagPosts": spec<{ hashtag: string; window: "last-week" | "last-month" }>({
     ttlMs: 24 * H,
