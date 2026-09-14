@@ -11,7 +11,7 @@ import type { Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "./registry";
 
-export type Problem = "no_reaction" | "slop" | "invented_number" | "unsupported_claim" | "wrong_request" | "leak" | "off_voice" | "unsafe" | "no_link" | "no_action" | "directive_violation" | "too_long" | "generic_line" | "vague_sound" | "invented_sound" | "mixed_basis";
+export type Problem = "no_reaction" | "slop" | "invented_number" | "unsupported_claim" | "wrong_request" | "false_action" | "leak" | "off_voice" | "unsafe" | "no_link" | "no_action" | "directive_violation" | "too_long" | "generic_line" | "vague_sound" | "invented_sound" | "mixed_basis";
 
 export interface CritiqueResult {
   pass: boolean;
@@ -35,8 +35,14 @@ export const CRITIC_TIMEOUT_MS = 25_000;
 
 /** Catch the distinctive self-description example even when the model swaps its noun. */
 export const reusesVoiceExample = (text: string): boolean => /\byep[,.] software\b[\s\S]{0,120}\bstill watched\b/i.test(text);
+export const assertsUnprovenCause = (text: string): boolean => /\b(worked|performed|took off) because\b|\bwhich is why\b.{0,100}\b(views|reach|followers)\b|\bthat'?s (really )?how people (find|follow)\b|\bwhat actually pulls? people in\b|\bbrands will notice\b|\bwill (do well|perform|take off)\b/i.test(text);
+const MUTATING_TOOLS = new Set(["block_move", "block_drop", "block_add", "week_replan", "partnership_draft", "partnership_update", "partnership_send"]);
+export function claimsUnsupportedAction(text: string, trace: Array<{ tool?: string; ok?: boolean }>): boolean {
+  const claims = /\b(done|moved|booked|scheduled|added|updated|removed|dropped|locked in)\b/i.test(text);
+  return claims && !trace.some((turn) => turn.ok && turn.tool && MUTATING_TOOLS.has(turn.tool));
+}
 
-const CRITIC_PROMPT = `You are the critic for a creator's assistant named Maya. Read one outbound message and judge it against the standard below. Return ONLY JSON: {"pass": true|false, "problems": ["no_reaction"|"slop"|"invented_number"|"unsupported_claim"|"wrong_request"|"leak"|"off_voice"|"unsafe"|"no_link"|"no_action"|"directive_violation"|"too_long"|"generic_line"|"vague_sound"|"invented_sound"|"mixed_basis"], "note": "≤160 chars, what to fix"}.
+const CRITIC_PROMPT = `You are the critic for a creator's assistant named Maya. Read one outbound message and judge it against the standard below. Return ONLY JSON: {"pass": true|false, "problems": ["no_reaction"|"slop"|"invented_number"|"unsupported_claim"|"wrong_request"|"false_action"|"leak"|"off_voice"|"unsafe"|"no_link"|"no_action"|"directive_violation"|"too_long"|"generic_line"|"vague_sound"|"invented_sound"|"mixed_basis"], "note": "≤160 chars, what to fix"}.
 
 Fail it if ANY of these is true:
 - no_reaction: a message about one of THEIR posts (a read, an opinion, a scout idea) that opens on a number, a multiple or a metric word instead of what got her as a viewer. The first line is the moment, named from the evidence; the numbers come after.
@@ -48,6 +54,7 @@ Fail it if ANY of these is true:
 - invented_number: a metric, view count, multiple, date or trend that is not in the evidence given.
 - unsupported_claim: says a format "gets followers", "pulls people in", caused growth, or will perform when the evidence has no follower conversion or causal result. A strong view is fine; invented certainty about why people followed is not.
 - wrong_request: mainly answers an earlier conversation turn instead of the current theirMessage in the evidence. A useful callback may support the current answer; it may never replace it.
+- false_action: says something was moved, booked, scheduled, added, updated, removed, dropped, or done when the tool trace has no successful matching action.
 - leak: vendor names, model names, "endpoint", "scrape", "prompt", ids, stack traces, "as an AI".
 - off_voice: it does not read like a friend who works in the industry texting; it lectures; two questions; more than one question when none was needed.
 - unsafe: medical, legal, financial claims; anything that would get the creator's account flagged; targeting a private person.
@@ -63,6 +70,7 @@ export async function critique(
   input: { creatorId: Id<"creators">; kind: string; text: string; evidence: unknown; voice: unknown; directives: string[] },
 ): Promise<CritiqueResult> {
   if (reusesVoiceExample(input.text)) return { pass: false, problems: ["slop"], note: "copied the voice example instead of answering this message" };
+  if (assertsUnprovenCause(input.text)) return { pass: false, problems: ["unsupported_claim"], note: "states a cause the available performance evidence cannot prove" };
   const spec = REGISTRY.critic;
   const user = `Kind: ${input.kind}\n\nHouse rules:\n${input.directives.map((d) => `- ${d}`).join("\n") || "- none"}\n\nCreator voice block:\n${JSON.stringify(input.voice ?? {})}\n\nEvidence the message may cite:\n${JSON.stringify(input.evidence ?? {})}\n\nMessage:\n"""\n${input.text}\n"""`;
   let result = await callModel(ctx, { creatorId: input.creatorId, purpose: "critic", model: spec.primary, timeoutMs: CRITIC_TIMEOUT_MS, messages: [{ role: "system", content: CRITIC_PROMPT }, { role: "user", content: user }], temperature: 0, maxTokens: spec.maxTokens, apiKey: process.env.OPENROUTER_API_KEY ?? "" });

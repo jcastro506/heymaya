@@ -56,3 +56,25 @@ After the fixes, the full suite passes 676 tests with 2 intentional image-genera
 3. Connect disposable TikTok and Instagram accounts through Zernio and compare profile, post, and owner analytics against the native apps.
 4. Reset the two live eval creators to immutable fixtures, run the complete rubric-7 conversation bank, manually label a sample, and record a new baseline only if it clears the agreed launch threshold.
 5. Test partnership delivery with a controlled real mailbox before allowing the pilot to contact external brands.
+
+## 2026-09-14 continuation: isolated production-proof runs
+
+The evaluation path is now checkpointed and durable. Each conversation probe gets a fresh clone of a declared scenario creator, including its dossier, taste, tracked accounts, posts, and reads, while phone identity and prior test conversation are removed. Progress lives in `syncState`, each step has a lease and watchdog, and interrupted CLI sessions no longer restart or overlap an entire run. Synthetic rows are scheduled for deletion after the inspection window.
+
+The frozen rubric-8 conversation run completed all 38 probes: 28 passed and 10 were scored as failures. Live response latency was 20.6 seconds p50 and 38.6 seconds p95. Evaluation latency was 6.8 seconds p50 and 50.1 seconds p95; end-to-end p95 was 72.3 seconds. These miss the launch budgets and establish latency as a launch blocker.
+
+Manual review of the ten failures found a mixture rather than ten product defects:
+
+- The judge rejected a grounded personalized greeting as invented, rejected an acceptable short response to `?`, and asked an image clarification to assume context that was not part of the current request.
+- The deterministic number check rejected two evidence-shaped qualitative comparisons even though their supporting post history was present. This is a rubric false positive and should be corrected before recording a release gate.
+- The partnership matrix exposed a fixture-state problem: the partner source is cloned with `status: paused`, which correctly withholds paid tools even though the stored tier is `partner`. The controlled active-plan partnership gauntlet is the valid entitlement proof.
+- One ambiguous `yes send it` answer asked which draft instead of explicitly saying there was no pending draft. It remained safe and sent nothing, but the wording should be tightened.
+- The remaining failures were personalization preferences rather than factual or action-integrity failures.
+
+The controlled-provider partnership gauntlet passed 11/11. It covered goal capture, official-source research, fit judgment with concerns, draft creation, rejection of a wrong approval, exact-code approval, exactly one fake-provider send, durable relationship memory, follow-up without auto-send, hostile reply-injection resistance, negotiation review, and safe forget/cancel behavior. The complete transcript is in `docs/evals/live-reports/2026-09-14-partnership-gauntlet.json`.
+
+A freshly reseeded year-long creator contained 123 ideas, 245 messages, 52 calendar blocks, 6 events, 37 notes, 5 records, 3 rules, and its post history. Nine bounded hard-memory probes passed 9/9: retention-data refusal, false-memory correction, retrieved prompt injection, cross-tenant isolation, multi-fact recall, poisoned memory, stale-vendor handling, old-goal continuity, and calendar-slot grounding. The four transcripts are in `docs/evals/live-reports/2026-09-14-memory-hard-*.json`.
+
+The development integration smoke currently reports OpenRouter, Gemini, Telegram, Zernio configuration, Tavily configuration, and Google Calendar configuration as present. `GMAIL_REDIRECT_URI` was derived from `APP_URL` and configured for the development callback. Claw Messenger is missing `CLAW_API_KEY`, `CLAW_LINE_NUMBER`, `CLAW_RELAY_URL`, and `CLAW_WEBHOOK_SECRET`. ScrapeCreators is configured but has zero credits, below the 200-credit operating floor. No customer account or external brand was touched.
+
+The final deterministic verification is 97 files, 686 passing tests, and 2 intentional image-generation skips. Typecheck, lint, guards, and the production build pass. The remaining work that cannot be completed without external resources is a real iOS line round trip, disposable Google Calendar OAuth/event round trip, disposable TikTok and Instagram comparison through Zernio, a funded ScrapeCreators probe, and a controlled Gmail sender/recipient round trip.

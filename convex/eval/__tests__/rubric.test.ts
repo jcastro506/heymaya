@@ -23,7 +23,7 @@ function rubricHash(): string {
   return createHash("sha256").update(checks).update(prompt).digest("hex").slice(0, 16);
 }
 
-const RECORDED = "a3d5ff4691e2c90b"; // rubric 7: no_internal_ids (2026-09-12)
+const RECORDED = "3f65576b8a88a9b0"; // rubric 8: task-aware judge + emoji sentence ending (2026-09-14)
 
 describe("the rubric", () => {
   it("has not changed without its version being bumped", () => {

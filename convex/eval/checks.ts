@@ -17,7 +17,7 @@ import { INTERNAL_ID, checkPlainLanguage } from "../core/plainLanguage";
  *
  * `rubric.test.ts` fails if the checks change without this being bumped.
  */
-export const RUBRIC_VERSION = "7";
+export const RUBRIC_VERSION = "8";
 
 
 export interface Check { name: string; pass: boolean; detail: string; /** Measured and reported, never a fail: a habit we are moving, not a promise we enforce. */ advisory?: boolean }
@@ -102,7 +102,7 @@ export function runChecks(input: { text: string; evidence: unknown; kind: string
 
   // A message that stops mid-thought, or carries markdown or a draft label, is a budget or a leak problem, never a style.
   const trimmed = text.trim();
-  const complete = trimmed.length < 40 || /[.!?…"”)\]]$/.test(trimmed) || /https?:\/\/\S+$/.test(trimmed);
+  const complete = trimmed.length < 40 || /[.!?…“”)\]]$/.test(trimmed) || /\p{Extended_Pictographic}(?:\uFE0F)?$/u.test(trimmed) || /https?:\/\/\S+$/.test(trimmed);
   checks.push({ name: "complete", pass: complete, detail: complete ? "ends on a sentence" : `ends with "…${trimmed.slice(-30)}"` });
   const markdown = /\*\*|^#{1,6}\s|```/m.test(text) || /\b(refining|draft|revised|final answer)\b.*[:*]/i.test(text.split("\n")[0] ?? "");
   checks.push({ name: "no_markdown", pass: !markdown, detail: markdown ? "markdown or a draft label in chat" : "clean" });

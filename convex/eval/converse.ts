@@ -46,7 +46,7 @@ export const probes = internalQuery({
   handler: async (): Promise<Probe[]> => [...PROBES],
 });
 
-type JudgeScores = { corny?: number; generic?: number; flattering?: number; toolSpeak?: number; wouldSend?: number };
+type JudgeScores = { corny?: number; generic?: number; flattering?: number; toolSpeak?: number; wouldSend?: number; note?: string };
 
 /** Explain every rubric failure. A failed eval with no reason is not actionable. */
 export function judgeProblems(judge?: JudgeScores): string[] {
@@ -57,6 +57,7 @@ export function judgeProblems(judge?: JudgeScores): string[] {
     if (typeof score === "number" && score > 1) problems.push(`judge: ${key} ${score}`);
   }
   if (typeof judge.wouldSend === "number" && judge.wouldSend < 2) problems.push(`judge: wouldSend ${judge.wouldSend}`);
+  if (problems.length && judge.note?.trim()) problems.push(`judge note: ${judge.note.trim().slice(0, 160)}`);
   return problems;
 }
 

@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { runChecks } from "../../eval/checks";
-import { reusesVoiceExample } from "../critic";
+import { assertsUnprovenCause, claimsUnsupportedAction, reusesVoiceExample } from "../critic";
 
 const converse = readFileSync(new URL("../converse.ts", import.meta.url), "utf8");
 const critic = readFileSync(new URL("../critic.ts", import.meta.url), "utf8");
@@ -16,6 +16,19 @@ describe("the reply path is judged", () => {
   it("catches a lightly paraphrased voice example before delivery", () => {
     expect(reusesVoiceExample("yep, software. still watched that interval run three times though.")).toBe(true);
     expect(reusesVoiceExample("yep, i can move that to thursday.")).toBe(false);
+  });
+
+  it("catches causal certainty that views cannot prove", () => {
+    expect(assertsUnprovenCause("that post worked because strangers knew the stakes")).toBe(true);
+    expect(assertsUnprovenCause("brands will notice fast")).toBe(true);
+    expect(assertsUnprovenCause("which is why it stayed around 1k views")).toBe(true);
+    expect(assertsUnprovenCause("my read is the clear stakes make this easier to follow")).toBe(false);
+  });
+
+  it("requires a successful mutating tool before claiming an action", () => {
+    expect(claimsUnsupportedAction("done, moved it to thursday", [{ tool: "week_plan", ok: true }, { tool: "block_move", ok: false }])).toBe(true);
+    expect(claimsUnsupportedAction("done, moved it to thursday", [{ tool: "block_move", ok: true }])).toBe(false);
+    expect(claimsUnsupportedAction("thursday at 5 work? i'll lock it in", [])).toBe(false);
   });
 
   it("converse critiques its reply before sending", () => {

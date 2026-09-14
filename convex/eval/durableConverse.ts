@@ -106,9 +106,28 @@ export const finish = internalMutation({
     delete state.leaseUntil;
     state.updatedAt = Date.now();
     const total = state.creatorIds.length * state.probes.length;
-    if (state.cursor >= total) { state.status = "complete"; state.completedAt = Date.now(); }
+    if (state.cursor >= total) {
+      state.status = "complete";
+      state.completedAt = Date.now();
+      await ctx.scheduler.runAfter(24 * 60 * 60_000, internal.eval.durableConverse.cleanup, { runId: a.runId });
+    }
     await ctx.db.patch(row._id, { value: JSON.stringify(state), updatedAt: state.updatedAt });
     return { accepted: true, done: state.status === "complete" };
+  },
+});
+
+/** Retain live rows for one day of inspection, then remove every synthetic creator. */
+export const cleanup = internalAction({
+  args: { runId: v.string() },
+  handler: async (ctx, a): Promise<{ deleted: number }> => {
+    const state = await ctx.runQuery(internal.eval.durableConverse.load, a);
+    if (!state || state.status !== "complete") return { deleted: 0 };
+    let deleted = 0;
+    for (const creatorId of new Set(state.results.map((result) => result.creatorId))) {
+      const result = await ctx.runMutation(internal.account.deletion.purgeRows, { creatorId: creatorId as Id<"creators"> });
+      deleted += result.deleted;
+    }
+    return { deleted };
   },
 });
 
@@ -122,8 +141,9 @@ export const start = internalAction({
       return { runId, summary: summarizeState(existing) };
     }
     const sourceCreatorIds = (await ctx.runQuery(internal.eval.run.scenarioCreators, {})).ids;
-    const creatorIds: string[] = [];
-    for (const sourceId of sourceCreatorIds) creatorIds.push(String(await ctx.runMutation(internal.eval.scenarios.cloneForRun, { sourceId, runId })));
+    // These IDs define the matrix size. Each probe receives its own clone in `step`, so
+    // an earlier test cannot manufacture the pending item a later test assumes is absent.
+    const creatorIds = sourceCreatorIds.map(String);
     const selected = a.categories ? new Set(a.categories) : null;
     const probes = PROBES.filter((p) => (!a.category || p.category === a.category) && (!selected || selected.has(p.category))).slice(0, a.limit ?? PROBES.length);
     const now = Date.now();
@@ -143,7 +163,8 @@ export const step = internalAction({
       return { done: !state || state.status === "complete" };
     }
     const { state, ordinal } = claimed;
-    const creatorId = state.creatorIds[Math.floor(ordinal / state.probes.length)] as Id<"creators">;
+    const sourceId = (state.sourceCreatorIds?.[Math.floor(ordinal / state.probes.length)] ?? state.creatorIds[Math.floor(ordinal / state.probes.length)]) as Id<"creators">;
+    const creatorId = await ctx.runMutation(internal.eval.scenarios.cloneForRun, { sourceId, runId: `${a.runId}:probe:${ordinal}` });
     const probe = state.probes[ordinal % state.probes.length];
     const t0 = Date.now();
     let result: Result;

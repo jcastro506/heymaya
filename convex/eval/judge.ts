@@ -23,13 +23,15 @@ And 0–3 where 3 is best:
 - wouldSend: would a sharp friend in the industry send exactly this for the stated purpose. A short direct answer can score 3; it does not need creator trivia.
 - soundsLikeThem: if the message proposes a caption, hook or on-screen text, could THIS creator have written that line, judged against their own quoted lines in the evidence. 3 = indistinguishable from their own writing. 0 = any creator in the niche could post it word for word, or it explains its own joke, or it leans on an abstract noun (discipline, motivation, journey, grind). Score 3 when the message proposes no line at all, so this never penalises a message that was not writing one.
 If the message mainly answers an earlier conversation turn instead of the current theirMessage in the evidence, wouldSend must be 0 and the note must say so.
+Your scores and note must agree: if the note says nothing needs fixing, wouldSend must be at least 2.
 Output ONLY JSON: {"corny": 0, "generic": 0, "flattering": 0, "toolSpeak": 0, "specific": 0, "wouldSend": 0, "soundsLikeThem": 0, "note": "≤120 chars, the one thing to fix"}`;
 
 export async function judge(ctx: ActionCtx, input: { creatorId?: Id<"creators">; text: string; kind: string; evidence: unknown }): Promise<Judgement | null> {
   const spec = REGISTRY.critic; // a different family from the writer, by registry rule
+  const evidence = input.evidence && typeof input.evidence === "object" ? input.evidence as { theirMessage?: unknown; expect?: unknown } : {};
   const messages = [
     { role: "system" as const, content: JUDGE_PROMPT },
-    { role: "user" as const, content: `Purpose: ${input.kind}\n\nMessage:\n${input.text}\n\nEvidence she had:\n${JSON.stringify(input.evidence ?? null).slice(0, 4000)}` },
+    { role: "user" as const, content: `Purpose: ${input.kind}\nCurrent user request: ${JSON.stringify(evidence.theirMessage ?? null)}\nExpected job: ${JSON.stringify(evidence.expect ?? null)}\n\nMessage being judged:\n${input.text}\n\nEvidence she had:\n${JSON.stringify(input.evidence ?? null).slice(0, 4000)}` },
   ];
   /**
    * ⚠️ Same fallback and the same short timeout as the critic. The judge had neither, so

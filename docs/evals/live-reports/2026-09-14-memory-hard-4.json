@@ -1,0 +1,20 @@
+{
+  "creatorId": "jn76kg3bqtxzef8rw72e4jwmvh8edd14",
+  "at": 1789389779600,
+  "steps": [
+    {
+      "step": "hard_marathon_slot",
+      "said": [
+        "[reply] marathon is saturday the 19th, so two full days off puts you at tuesday the 22nd. \n\ni put you in for tuesday at 8 am. perfect timing for an unglamorous post-race hobble or the sore legs reality check, right after whatever shakeout walk you manage."
+      ],
+      "facts": {
+        "added": [
+          "film: Post-marathon recovery run / check-in @ 2026-09-22T12:00:00.000Z"
+        ],
+        "marathon": "2026-09-19T12:32:07.589Z"
+      },
+      "ok": true,
+      "why": "a block at least two days after the race"
+    }
+  ]
+}

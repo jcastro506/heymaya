@@ -8,11 +8,12 @@ import { isActionReplyKey, judgeProblems } from "../converse";
 
 describe("durable conversation eval", () => {
   it("explains every model-judge failure", () => {
-    expect(judgeProblems({ corny: 2, generic: 3, flattering: 0, toolSpeak: 2, wouldSend: 1 })).toEqual([
+    expect(judgeProblems({ corny: 2, generic: 3, flattering: 0, toolSpeak: 2, wouldSend: 1, note: "too much" })).toEqual([
       "judge: corny 2",
       "judge: generic 3",
       "judge: toolSpeak 2",
       "judge: wouldSend 1",
+      "judge note: too much",
     ]);
   });
 
