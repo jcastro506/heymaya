@@ -1,6 +1,7 @@
 /** §3 budgets, never booleans: every priced event lands on the creator's day; the gate refuses proactive at the cap; replies are never throttled here. */
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
+import { summarizeLatency } from "../costs";
 import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
@@ -10,6 +11,16 @@ import { THRESHOLDS } from "../../config/thresholds";
 import type { Id } from "../../_generated/dataModel";
 
 describe("budgets", () => {
+  it("reports model latency and failures by purpose", () => {
+    expect(summarizeLatency([
+      { kind: "critic:model-a", latencyMs: 100, succeeded: true },
+      { kind: "critic:model-b", latencyMs: 900, succeeded: false, failureKind: "timeout" },
+      { kind: "writer:model-a", latencyMs: 300, succeeded: true },
+    ])).toEqual([
+      { purpose: "critic", calls: 2, p50Ms: 100, p95Ms: 900, failures: 1, failureKinds: { timeout: 1 } },
+      { purpose: "writer", calls: 1, p50Ms: 300, p95Ms: 300, failures: 0, failureKinds: {} },
+    ]);
+  });
   it("classifies cost events into budget kinds", () => {
     expect(kindForCost("scrapecreators", "read", "/v1/x")).toBe("credits");
     // The one-time catalogue watch is counted apart from the daily operating cap: onboarding

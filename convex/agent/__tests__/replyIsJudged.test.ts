@@ -6,12 +6,18 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { runChecks } from "../../eval/checks";
+import { reusesVoiceExample } from "../critic";
 
 const converse = readFileSync(new URL("../converse.ts", import.meta.url), "utf8");
 const critic = readFileSync(new URL("../critic.ts", import.meta.url), "utf8");
 const soul = readFileSync(new URL("../soul.ts", import.meta.url), "utf8");
 
 describe("the reply path is judged", () => {
+  it("catches a lightly paraphrased voice example before delivery", () => {
+    expect(reusesVoiceExample("yep, software. still watched that interval run three times though.")).toBe(true);
+    expect(reusesVoiceExample("yep, i can move that to thursday.")).toBe(false);
+  });
+
   it("converse critiques its reply before sending", () => {
     expect(converse).toMatch(/critique\(ctx, \{[^}]*kind: "reply"/);
   });

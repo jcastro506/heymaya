@@ -89,7 +89,7 @@ describe("every skill sees it", () => {
 
   it("the critic can name a generic line, a vague sound and an invented one", () => {
     const critic = readFileSync(new URL("../critic.ts", import.meta.url), "utf8");
-    for (const tell of ["generic_line", "vague_sound", "invented_sound"]) expect(critic).toContain(tell);
+    for (const tell of ["generic_line", "vague_sound", "invented_sound", "unsupported_claim", "wrong_request"]) expect(critic).toContain(tell);
     expect(critic, "the tells must be spelled out, not just named").toMatch(/pov:/);
   });
 

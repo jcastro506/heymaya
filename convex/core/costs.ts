@@ -4,7 +4,7 @@
  * usage when the vendor gives it; the row is never computed from local price math.
  */
 
-import { internalMutation } from "../_generated/server";
+import { internalMutation, internalQuery } from "../_generated/server";
 import { v } from "convex/values";
 import { applyBump, emptyDay, kindForCost } from "./budgets";
 import type { Doc } from "../_generated/dataModel";
@@ -20,6 +20,31 @@ const vendorArg = v.union(
   v.literal("claw"),
   v.literal("tavily"),
 );
+
+export function summarizeLatency(rows: Array<{ kind: string; latencyMs?: number; succeeded?: boolean; failureKind?: string }>): Array<{ purpose: string; calls: number; p50Ms: number; p95Ms: number; failures: number; failureKinds: Record<string, number> }> {
+  const groups = new Map<string, typeof rows>();
+  for (const row of rows) {
+    if (typeof row.latencyMs !== "number") continue;
+    const purpose = row.kind.split(":", 1)[0];
+    groups.set(purpose, [...(groups.get(purpose) ?? []), row]);
+  }
+  return [...groups.entries()].map(([purpose, values]) => {
+    const times = values.map((row) => row.latencyMs!).sort((a, b) => a - b);
+    const at = (p: number) => times[Math.min(times.length - 1, Math.ceil(times.length * p) - 1)];
+    const failureKinds: Record<string, number> = {};
+    for (const row of values.filter((value) => value.succeeded === false)) failureKinds[row.failureKind ?? "unknown"] = (failureKinds[row.failureKind ?? "unknown"] ?? 0) + 1;
+    return { purpose, calls: values.length, p50Ms: at(0.5), p95Ms: at(0.95), failures: values.filter((value) => value.succeeded === false).length, failureKinds };
+  }).sort((a, b) => b.p95Ms - a.p95Ms);
+}
+
+export const latencyReport = internalQuery({
+  args: { since: v.number(), creatorIds: v.optional(v.array(v.id("creators"))) },
+  handler: async (ctx, a) => {
+    const allowed = a.creatorIds ? new Set(a.creatorIds.map(String)) : null;
+    const rows = await ctx.db.query("costEvents").withIndex("by_at", (q) => q.gte("at", a.since)).collect();
+    return summarizeLatency(rows.filter((row) => !allowed || (row.creatorId && allowed.has(String(row.creatorId)))));
+  },
+});
 
 export const record = internalMutation({
   args: {

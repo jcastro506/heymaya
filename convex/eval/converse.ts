@@ -105,7 +105,8 @@ export const run = internalAction({
         if (!r.ok || replies.length === 0) { silent.push(`${probe.category}: ${probe.text} (${r.reason ?? "no reply row"})`); continue; }
         replied++;
         for (const reply of replies) {
-          const res = await ctx.runAction(internal.eval.run.evaluate, { suite: "converse", skill: "reply", text: reply.text, evidence: { theirMessage: probe.text, category: probe.category, expect: probe.expect }, creatorId, messageId: reply.messageId, actionTaken: reply.actionTaken });
+          const context = await ctx.runQuery(internal.agent.context.gather, { creatorId, messageId });
+          const res = await ctx.runAction(internal.eval.run.evaluate, { suite: "converse", skill: "reply", text: reply.text, evidence: { theirMessage: probe.text, category: probe.category, expect: probe.expect, creatorContext: context?.personal ?? "", conversation: context?.history ?? "" }, creatorId, messageId: reply.messageId, creatorUsesEmoji: !/\b0% use an emoji\b/.test(context?.voice ?? ""), actionTaken: reply.actionTaken });
           if (res.pass) passed++;
           else failed.push({ category: probe.category, text: reply.text.slice(0, 160), problems: await ctx.runQuery(internal.eval.converse.failedChecks, { id: res.id }) });
         }

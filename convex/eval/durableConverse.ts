@@ -113,7 +113,7 @@ export const finish = internalMutation({
 });
 
 export const start = internalAction({
-  args: { runId: v.optional(v.string()), category: v.optional(v.string()), limit: v.optional(v.number()) },
+  args: { runId: v.optional(v.string()), category: v.optional(v.string()), categories: v.optional(v.array(v.string())), limit: v.optional(v.number()) },
   handler: async (ctx, a): Promise<{ runId: string; summary: ReturnType<typeof summarizeState> }> => {
     const runId = a.runId?.trim() || `${new Date().toISOString().replace(/[:.]/g, "-")}-${Math.random().toString(36).slice(2, 8)}`;
     const existing = await ctx.runQuery(internal.eval.durableConverse.load, { runId });
@@ -124,7 +124,8 @@ export const start = internalAction({
     const sourceCreatorIds = (await ctx.runQuery(internal.eval.run.scenarioCreators, {})).ids;
     const creatorIds: string[] = [];
     for (const sourceId of sourceCreatorIds) creatorIds.push(String(await ctx.runMutation(internal.eval.scenarios.cloneForRun, { sourceId, runId })));
-    const probes = PROBES.filter((p) => !a.category || p.category === a.category).slice(0, a.limit ?? PROBES.length);
+    const selected = a.categories ? new Set(a.categories) : null;
+    const probes = PROBES.filter((p) => (!a.category || p.category === a.category) && (!selected || selected.has(p.category))).slice(0, a.limit ?? PROBES.length);
     const now = Date.now();
     const state: State = { runId, status: "running", creatorIds, sourceCreatorIds: sourceCreatorIds.map(String), probes: [...probes], cursor: 0, results: [], startedAt: now, updatedAt: now };
     await ctx.runMutation(internal.eval.durableConverse.store, { runId, value: JSON.stringify(state) });
@@ -154,8 +155,9 @@ export const step = internalAction({
       const replies = await ctx.runQuery(internal.eval.converse.repliesTo, { creatorId, inboundId: messageId, since: t0 });
       if (!turn.ok || replies.length === 0) throw new Error(turn.reason ?? "no reply row");
       const reply = replies[0];
+      const context = await ctx.runQuery(internal.agent.context.gather, { creatorId, messageId });
       const evaluateAt = Date.now();
-      const scored = await ctx.runAction(internal.eval.run.evaluate, { suite: `converse:${a.runId}`, skill: "reply", text: reply.text, evidence: { theirMessage: probe.text, category: probe.category, expect: probe.expect }, creatorId, messageId: reply.messageId, actionTaken: reply.actionTaken, trace: { runId: a.runId, ordinal, converseMs } });
+      const scored = await ctx.runAction(internal.eval.run.evaluate, { suite: `converse:${a.runId}`, skill: "reply", text: reply.text, evidence: { theirMessage: probe.text, category: probe.category, expect: probe.expect, creatorContext: context?.personal ?? "", conversation: context?.history ?? "" }, creatorId, messageId: reply.messageId, creatorUsesEmoji: !/\b0% use an emoji\b/.test(context?.voice ?? ""), actionTaken: reply.actionTaken, trace: { runId: a.runId, ordinal, converseMs } });
       const evaluateMs = Date.now() - evaluateAt;
       const problems = scored.pass ? [] : await ctx.runQuery(internal.eval.converse.failedChecks, { id: scored.id });
       result = { ordinal, creatorId, category: probe.category, prompt: probe.text, reply: reply.text, pass: scored.pass, problems, latencyMs: { total: Date.now() - t0, converse: converseMs, evaluate: evaluateMs } };
