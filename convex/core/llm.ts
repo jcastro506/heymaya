@@ -138,6 +138,7 @@ export async function callModel(
   if (fakeModelEnabled()) return fakeAnswer(input.purpose, input.messages);
   const { callOpenRouter } = await import("../integrations/openrouter/client");
 
+  const callStartedAt = Date.now();
   const result = await callOpenRouter({
     model: input.model,
     messages: input.messages,
@@ -180,6 +181,9 @@ export async function callModel(
       costUsd: usage?.costUsd,
       promptTokens: usage?.promptTokens,
       completionTokens: usage?.completionTokens,
+      latencyMs: Date.now() - callStartedAt,
+      succeeded: result.ok,
+      failureKind: result.ok ? undefined : timedOut ? "timeout" : "provider_error",
     });
   } catch (error) {
     console.error(`[llm] cost recording failed for ${input.purpose}: ${String(error)}`);

@@ -684,6 +684,9 @@ export default defineSchema({
     costUsd: v.number(),
     costSource: v.union(v.literal("vendor_reported"), v.literal("endpoint_table"), v.literal("tier_table")),
     environment: v.string(),
+    latencyMs: v.optional(v.number()),
+    succeeded: v.optional(v.boolean()),
+    failureKind: v.optional(v.string()),
     at: v.number(),
   })
     .index("by_at", ["at"])

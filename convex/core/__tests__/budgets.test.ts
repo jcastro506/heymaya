@@ -39,13 +39,15 @@ describe("budgets", () => {
     const t = convexTest(schema, modules);
     const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { timezone: "America/Los_Angeles", channel: { paired: true } }));
     const now = Date.UTC(2026, 8, 3, 5, 0); // 22:00 PDT on Sep 2
-    await t.mutation(internal.core.costs.record, { creatorId, vendor: "openrouter", resource: "google/gemini-3.7-flash", purpose: "scout", costUsd: 0.5, promptTokens: 100, completionTokens: 50, now });
+    await t.mutation(internal.core.costs.record, { creatorId, vendor: "openrouter", resource: "google/gemini-3.7-flash", purpose: "scout", costUsd: 0.5, promptTokens: 100, completionTokens: 50, latencyMs: 4321, succeeded: false, failureKind: "timeout", now });
     await t.mutation(internal.core.costs.record, { creatorId, vendor: "openrouter", resource: "google/gemini-3.7-flash", purpose: "scout", costUsd: 0.3, promptTokens: 100, completionTokens: 50, now });
     const rows = await t.run((ctx) => ctx.db.query("budgets").collect());
     expect(rows).toHaveLength(1);
     expect(rows[0].day).toBe("2026-09-02");
     expect(rows[0].spentUsd).toBeCloseTo(0.8, 6);
     expect(rows[0].writerTokens).toBe(300);
+    const costs = await t.run((ctx) => ctx.db.query("costEvents").withIndex("by_at").collect());
+    expect(costs[0]).toMatchObject({ latencyMs: 4321, succeeded: false, failureKind: "timeout" });
     const g = await t.query(internal.scout.gate.railsFor, { creatorId, now: Date.UTC(2026, 8, 2, 20, 0) }); // 13:00 PDT same day
     expect(g?.rails.ok).toBe(false);
     expect(g?.rails.reason).toMatch(/budget exhausted/);

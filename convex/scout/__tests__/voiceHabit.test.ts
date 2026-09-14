@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { respectEmojiHabit } from "../scout";
+import { respectEmojiHabit } from "../../agent/voice";
 
 describe("scout voice habits", () => {
   it("removes emoji when the creator's measured voice uses none", () => {

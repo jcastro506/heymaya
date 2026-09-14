@@ -30,6 +30,9 @@ export const record = internalMutation({
     costUsd: v.optional(v.number()),
     promptTokens: v.optional(v.number()),
     completionTokens: v.optional(v.number()),
+    latencyMs: v.optional(v.number()),
+    succeeded: v.optional(v.boolean()),
+    failureKind: v.optional(v.string()),
     now: v.optional(v.number()),
     costSource: v.optional(v.union(v.literal("vendor_reported"), v.literal("endpoint_table"), v.literal("tier_table"))),
   },
@@ -42,6 +45,9 @@ export const record = internalMutation({
       costUsd: a.costUsd ?? 0,
       costSource: a.costSource ?? "vendor_reported",
       environment: process.env.ENVIRONMENT_NAME ?? "local",
+      latencyMs: a.latencyMs,
+      succeeded: a.succeeded,
+      failureKind: a.failureKind,
       at: a.now ?? Date.now(),
     });
     // §3: budgets, never booleans. Every priced event lands on the creator's day.

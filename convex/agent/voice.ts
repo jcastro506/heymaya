@@ -42,6 +42,12 @@ export interface StyleFacts {
   medianHashtags: number | null;
 }
 
+/** A measured zero-emoji voice preference is stable enough to enforce before delivery. */
+export function respectEmojiHabit(text: string, voice: string): string {
+  if (!/\b0% use an emoji\b/.test(voice)) return text;
+  return text.replace(/\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*/gu, "").replace(/[ \t]+\n/g, "\n").replace(/ {2,}/g, " ").trim();
+}
+
 const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
 
 function median(xs: number[]): number | null {

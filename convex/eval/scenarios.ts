@@ -21,6 +21,65 @@ export const SCENARIOS: ReadonlyArray<{ handle: string; platform: "tiktok"; admi
 ];
 
 export const subjectFor = (handle: string) => `eval:${handle}`;
+const isolatedSubjectFor = (runId: string, sourceId: Id<"creators">) => `eval-run:${runId}:${sourceId}`;
+
+/**
+ * Give every durable run fresh creator state. This keeps old eval messages, management
+ * commands, and scheduled plans from leaking into a later score while preserving the
+ * source creator's dossier, taste, and post evidence.
+ */
+export const cloneForRun = internalMutation({
+  args: { sourceId: v.id("creators"), runId: v.string() },
+  handler: async (ctx, a): Promise<Id<"creators">> => {
+    const clerkUserId = isolatedSubjectFor(a.runId, a.sourceId);
+    const existing = await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", clerkUserId)).first();
+    if (existing) return existing._id;
+    const source = await ctx.db.get(a.sourceId);
+    if (!source) throw new Error(`scenario source ${a.sourceId} is missing`);
+    const { _id: _sourceId, _creationTime, ...copy } = source;
+    void _sourceId; void _creationTime;
+    const creatorId = await ctx.db.insert("creators", {
+      ...copy,
+      clerkUserId,
+      email: `${clerkUserId.replace(/[^a-z0-9-]/gi, "-")}@eval.invalid`,
+      phone: undefined,
+      phoneVerifiedAt: undefined,
+      telegramChatId: undefined,
+      pairingToken: undefined,
+      pairingExpiresAt: undefined,
+      channel: { paired: false },
+      plan: { founding: false, status: "paused", tier: source.plan.tier },
+      openQuestionId: undefined,
+      notes: source.notes.map(({ sourceMessageId: _messageId, ...note }) => { void _messageId; return note; }),
+      firstWeek: undefined,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    const tracked = await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", a.sourceId)).collect();
+    for (const row of tracked) {
+      const { _id, _creationTime: _created, creatorId: _oldCreator, ...fields } = row;
+      void _id; void _created; void _oldCreator;
+      await ctx.db.insert("trackedAccounts", { ...fields, creatorId });
+    }
+    const posts = await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.sourceId)).order("desc").take(100);
+    const postIds = new Map<string, Id<"ownPosts">>();
+    for (const row of [...posts].reverse()) {
+      const { _id, _creationTime: _created, creatorId: _oldCreator, crossPostOf: _crossPost, ...fields } = row;
+      void _created; void _oldCreator; void _crossPost;
+      postIds.set(String(_id), await ctx.db.insert("ownPosts", { ...fields, creatorId }));
+    }
+    const reads = await ctx.db.query("ownPostReads").withIndex("by_creator", (q) => q.eq("creatorId", a.sourceId)).collect();
+    for (const row of reads) {
+      const ownPostId = postIds.get(String(row.ownPostId));
+      if (!ownPostId) continue;
+      const { _id, _creationTime: _created, creatorId: _oldCreator, ownPostId: _oldPost, ...fields } = row;
+      void _id; void _created; void _oldCreator; void _oldPost;
+      await ctx.db.insert("ownPostReads", { ...fields, creatorId, ownPostId });
+    }
+    return creatorId;
+  },
+});
 
 export const seedOne = internalMutation({
   args: { handle: v.string(), admired: v.array(v.string()), niche: v.string() },

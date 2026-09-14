@@ -46,13 +46,27 @@ export const probes = internalQuery({
   handler: async (): Promise<Probe[]> => [...PROBES],
 });
 
+type JudgeScores = { corny?: number; generic?: number; flattering?: number; toolSpeak?: number; wouldSend?: number };
+
+/** Explain every rubric failure. A failed eval with no reason is not actionable. */
+export function judgeProblems(judge?: JudgeScores): string[] {
+  if (!judge) return [];
+  const problems: string[] = [];
+  for (const key of ["corny", "generic", "flattering", "toolSpeak"] as const) {
+    const score = judge[key];
+    if (typeof score === "number" && score > 1) problems.push(`judge: ${key} ${score}`);
+  }
+  if (typeof judge.wouldSend === "number" && judge.wouldSend < 2) problems.push(`judge: wouldSend ${judge.wouldSend}`);
+  return problems;
+}
+
 export const failedChecks = internalQuery({
   args: { id: v.id("evalRuns") },
   handler: async (ctx, a): Promise<string[]> => {
     const row = (await ctx.db.get(a.id)) as (Doc<"evalRuns"> & { checks?: Array<{ name: string; pass: boolean }> }) | null;
     const names = (row?.checks ?? []).filter((c) => !c.pass).map((c) => c.name);
-    const j = (row as { judge?: { wouldSend?: number } } | null)?.judge;
-    return j && typeof j.wouldSend === "number" && j.wouldSend < 2 ? [...names, `judge: wouldSend ${j.wouldSend}`] : names;
+    const j = (row as { judge?: JudgeScores } | null)?.judge;
+    return [...names, ...judgeProblems(j)];
   },
 });
 

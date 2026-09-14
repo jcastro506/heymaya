@@ -31,6 +31,23 @@ describe("scenario creators are their own rows, never customers (2026-09-06)", (
     expect(set.ids).toEqual([]);
     expect(set.missing).toContain("vanessaalopezz");
   });
+
+  it("clones knowledge but strips channels and conversation state for each run", async () => {
+    const t = convexTest(schema, modules);
+    const sourceId = await t.run((ctx) => ctx.db.insert("creators", { clerkUserId: subjectFor("vanessaalopezz"), email: "source@example.com", phone: "+15555550123", telegramChatId: "123", handles: { tiktok: "vanessaalopezz" }, ownership: "unverified", niche: "running", timezone: "UTC", quietHours: { start: "22:00", end: "07:00" }, tone: "friend", mode: "full", dossierVersion: 1, dossier: { persona: { summary: "runner" } }, notes: [{ id: "n", text: "training for chicago", kind: "life", at: 1 }], affinities: [], experiments: [], channel: { paired: true, kind: "telegram" }, plan: { status: "active", founding: true, tier: "partner" }, createdAt: 1 } as never));
+    await t.run((ctx) => ctx.db.insert("messages", { creatorId: sourceId, direction: "in", surface: "telegram", body: "old conversation", ts: 2, dedupeKey: "old" } as never));
+    const cloneId = await t.mutation(internal.eval.scenarios.cloneForRun, { sourceId, runId: "isolated" });
+    const clone = await t.run((ctx) => ctx.db.get(cloneId));
+    expect(clone?.dossier).toEqual({ persona: { summary: "runner" } });
+    expect(clone?.notes[0]?.text).toBe("training for chicago");
+    expect(clone?.phone).toBeUndefined();
+    expect(clone?.telegramChatId).toBeUndefined();
+    expect(clone?.channel.paired).toBe(false);
+    expect(clone?.plan).toMatchObject({ status: "paused", tier: "partner" });
+    const messages = await t.run((ctx) => ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", cloneId)).collect());
+    expect(messages).toEqual([]);
+    expect(await t.mutation(internal.eval.scenarios.cloneForRun, { sourceId, runId: "isolated" })).toBe(cloneId);
+  });
 });
 
 describe("the conversation gauntlet", () => {

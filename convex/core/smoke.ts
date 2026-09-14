@@ -12,6 +12,20 @@ import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { resolveTelegramBotIdentity } from "../integrations/telegram/client";
 
+type Readiness = { vendor: string; check: string; ok: boolean; detail: Record<string, boolean | string> };
+
+/** Configuration checks are useful even when a safe, free provider call does not exist. */
+export function integrationReadiness(env: Record<string, string | undefined>): Readiness[] {
+  const present = (key: string) => Boolean(env[key]?.trim());
+  return [
+    { vendor: "claw", check: "configuration", ok: ["CLAW_API_KEY", "CLAW_LINE_NUMBER", "CLAW_RELAY_URL", "CLAW_WEBHOOK_SECRET"].every(present), detail: { apiKey: present("CLAW_API_KEY"), lineNumber: present("CLAW_LINE_NUMBER"), relayUrl: present("CLAW_RELAY_URL"), webhookSecret: present("CLAW_WEBHOOK_SECRET") } },
+    { vendor: "zernio", check: "configuration", ok: ["ZERNIO_API_KEY", "ZERNIO_WEBHOOK_SECRET"].every(present), detail: { apiKey: present("ZERNIO_API_KEY"), webhookSecret: present("ZERNIO_WEBHOOK_SECRET") } },
+    { vendor: "tavily", check: "configuration", ok: present("TAVILY_API_KEY"), detail: { apiKey: present("TAVILY_API_KEY") } },
+    { vendor: "google", check: "calendar-configuration", ok: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "APP_URL"].every(present), detail: { clientId: present("GOOGLE_CLIENT_ID"), clientSecret: present("GOOGLE_CLIENT_SECRET"), appUrl: present("APP_URL") } },
+    { vendor: "gmail", check: "configuration", ok: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GMAIL_REDIRECT_URI"].every(present), detail: { clientId: present("GOOGLE_CLIENT_ID"), clientSecret: present("GOOGLE_CLIENT_SECRET"), redirectUri: present("GMAIL_REDIRECT_URI"), sendingEnabled: env.PARTNERSHIP_EMAIL_SEND_ENABLED === "true" } },
+  ];
+}
+
 export const record = internalMutation({
   args: { vendor: v.string(), check: v.string(), ok: v.boolean(), detail: v.optional(v.any()) },
   handler: async (ctx, a): Promise<null> => {
@@ -38,6 +52,11 @@ export const run = internalAction({
   args: {},
   handler: async (ctx): Promise<Record<string, boolean>> => {
     const out: Record<string, boolean> = {};
+
+    for (const check of integrationReadiness(process.env)) {
+      await ctx.runMutation(internal.core.smoke.record, check);
+      out[`${check.vendor}Config`] = check.ok;
+    }
 
     // §23 the phone channel: the vendor's relay answers, and our own relay is connected (when configured).
     const claw = process.env.CLAW_API_KEY ? (process.env.CLAW_BASE_URL ?? "https://claw-messenger.onrender.com") : null;

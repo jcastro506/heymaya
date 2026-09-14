@@ -22,6 +22,7 @@ import { critique, tooLong } from "../agent/critic";
 import { localHourMinute } from "./gate";
 import { internalQuery } from "../_generated/server";
 import { LOOKUPS } from "../agent/playbooks";
+import { respectEmojiHabit } from "../agent/voice";
 
 /** The share URL without its tracking query: what a person would paste. */
 export function cleanLink(url: string): string {
@@ -37,12 +38,6 @@ export function hasLink(text: string, url: string): boolean {
   const id = url.match(/\/(?:video|photo)\/(\d+)/)?.[1] ?? url.match(/instagram\.com\/(?:p|reel|reels)\/([A-Za-z0-9_-]+)/)?.[1] ?? null;
   if (id && text.includes(id)) return true;
   return text.includes(cleanLink(url));
-}
-
-/** A measured zero-emoji voice preference is stable enough to enforce before delivery. */
-export function respectEmojiHabit(text: string, voice: string): string {
-  if (!/\b0% use an emoji\b/.test(voice)) return text;
-  return text.replace(/\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*/gu, "").replace(/[ \t]+\n/g, "\n").replace(/ {2,}/g, " ").trim();
 }
 
 export const SCOUT_SKILL = `scout
