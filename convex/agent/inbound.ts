@@ -6,7 +6,9 @@
  * decides what they want: code never guesses intent from patterns.
  */
 
-export type CommandName = "stop" | "resume" | "forget" | "person" | "delete";
+import { missionControlTabFromText } from "./missionControl";
+
+export type CommandName = "stop" | "resume" | "forget" | "person" | "delete" | "mission_control";
 
 export type Route =
   | { route: "command"; command: CommandName; topic?: string }
@@ -57,6 +59,9 @@ export function classifyInbound(input: { text: string; kind: string; mime?: stri
   // Live 2026-09-09: "forget what i told you about my sister" went to the writer, who answered "wiped" and deleted nothing.
   const topical = input.text.match(/^\s*forget\s+(?:(?:what|everything|the (?:thing|bit|part|note|stuff))\s+(?:i\s+(?:told|said|mentioned)(?:\s+to)?\s+you\s+)?)?about\s+(.{2,80}?)\s*[.!]*\s*$/i);
   if (topical) return { route: "command", command: "forget", topic: topical[1].trim() };
+  if (/^\s*(?:(?:send|text|give)\s+me\s+|(?:open|show)(?:\s+me)?\s+|where(?:'s| is)\s+|can i (?:get|see)\s+)(?:a\s+|the\s+|my\s+)?(?:mission control|dashboard)(?:\s+(?:link|url))?(?:\s+(?:for|to|with)\s+.+)?[?.!]*\s*$/i.test(input.text)) {
+    return { route: "command", command: "mission_control", topic: missionControlTabFromText(input.text) };
+  }
   for (const c of COMMANDS) if (c.re.test(input.text)) return { route: "command", command: c.command };
   const link = parseLink(input.text);
   if (link) {

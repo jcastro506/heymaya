@@ -13,7 +13,7 @@ export default function Page() {
       <section>
         <h2>Welcome back.</h2>
         <p className="muted small">Pick up where you left off.</p>
-        <SignIn forceRedirectUrl="/start" appearance={appearance} />
+        <SignIn fallbackRedirectUrl="/start" appearance={appearance} />
       </section>
     </OnboardShell>
   );

@@ -21,6 +21,8 @@ describe("classifyInbound", () => {
     expect(classifyInbound({ text: "forget that", kind: "inbound", handles })).toEqual({ route: "command", command: "forget" });
     expect(classifyInbound({ text: "can i talk to a real person", kind: "inbound", handles })).toEqual({ route: "command", command: "person" });
     expect(classifyInbound({ text: "delete my account", kind: "inbound", handles })).toEqual({ route: "command", command: "delete" });
+    expect(classifyInbound({ text: "send me my mission control link", kind: "inbound", handles })).toEqual({ route: "command", command: "mission_control", topic: "today" });
+    expect(classifyInbound({ text: "show me my Mission Control for this week's plan", kind: "inbound", handles })).toEqual({ route: "command", command: "mission_control", topic: "plan" });
     expect(classifyInbound({ text: "should i stop doing skits?", kind: "inbound", handles }).route).toBe("text");
   });
 
@@ -76,6 +78,22 @@ describe("commands are rows", () => {
     const r = await t.mutation(internal.agent.commands.apply, { creatorId, command: "delete" });
     expect(r.body).toMatch(/Settings/);
     expect((await t.run((ctx) => ctx.db.get(creatorId)))?.plan.status).not.toBe("deleting");
+  });
+
+  it("returns an account-protected Mission Control tab without putting a creator id or token in the URL", async () => {
+    const previous = process.env.APP_URL;
+    process.env.APP_URL = "https://staging.hey-maya.ai";
+    try {
+      const t = convexTest(schema, modules);
+      const creatorId = await t.run((ctx) => seedCreator(ctx, "a"));
+      const r = await t.mutation(internal.agent.commands.apply, { creatorId, command: "mission_control", topic: "ideas" });
+      expect(r.body).toContain("https://staging.hey-maya.ai/app/ideas");
+      expect(r.body).not.toContain(String(creatorId));
+      expect(r.body).not.toMatch(/token=/i);
+    } finally {
+      if (previous === undefined) delete process.env.APP_URL;
+      else process.env.APP_URL = previous;
+    }
   });
 });
 

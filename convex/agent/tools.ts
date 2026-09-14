@@ -14,6 +14,7 @@ import type { Id } from "../_generated/dataModel";
 import { parseLink } from "./inbound";
 import { DIAGNOSIS_WORDS } from "../connections/numbers";
 import { PARTNERSHIP_TOOLS, runPartnershipTool } from "../partnerships/tools";
+import { MISSION_CONTROL_TABS, missionControlUrl, type MissionControlTab } from "./missionControl";
 
 export const SUMMARY_CAP = 1800; // characters of tool result the model sees, per call
 
@@ -21,13 +22,14 @@ export interface ToolBudget { calls: number; credits: number; deadlineAt: number
 export const DEFAULT_BUDGET = (): ToolBudget => ({ calls: 6, credits: 40, deadlineAt: Date.now() + 60_000 });
 
 /** Approximate credit prices per call (the ledger records the vendor's real number). */
-export const TOOL_CREDITS: Record<string, number> = { post_info: 10, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, sound_reels: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, search_reels: 1, search_ig_hashtag: 1, ig_popular: 1, trending_tiktok: 1, trending_reels: 1, suggestions: 1, discover_creators: 1, discover_profiles: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0, recall: 0, lane_benchmark: 0, week_plan: 0, block_move: 0, block_drop: 0, block_add: 0, week_replan: 0, own_post_numbers: 0, post_diagnosis: 0, growth_plan: 0, calendar_free: 0 };
+export const TOOL_CREDITS: Record<string, number> = { post_info: 10, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, sound_reels: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, search_reels: 1, search_ig_hashtag: 1, ig_popular: 1, trending_tiktok: 1, trending_reels: 1, suggestions: 1, discover_creators: 1, discover_profiles: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0, recall: 0, lane_benchmark: 0, week_plan: 0, block_move: 0, block_drop: 0, block_add: 0, week_replan: 0, own_post_numbers: 0, post_diagnosis: 0, growth_plan: 0, calendar_free: 0, mission_control_link: 0 };
 
 const str = { type: "string" } as const;
 for (const tool of PARTNERSHIP_TOOLS) TOOL_CREDITS[tool.function.name] = 0;
 
 export const TOOLS: OpenRouterTool[] = [
   ...PARTNERSHIP_TOOLS,
+  { type: "function", function: { name: "mission_control_link", description: "The creator's secure Mission Control link, optionally opened to the most useful tab. Free. Use when they ask for Mission Control or when a richer view would materially help them inspect ideas, their week, results, lane, or settings. Do not add it as a routine call to action. The link contains no tenant id; their signed-in browser resolves their account.", parameters: { type: "object", properties: { tab: { type: "string", enum: [...MISSION_CONTROL_TABS] }, why: str }, required: ["tab", "why"] } } },
   { type: "function", function: { name: "post_info", description: "Full detail for one post: sound id, media, caption, author, length, stats. 10 credits when the vendor finds the media, so use account_posts (1 credit, the whole feed with stats) when numbers are all you need; post_info is for the sound id or a link they sent.", parameters: { type: "object", properties: { url: str, why: str }, required: ["url", "why"] } } },
   { type: "function", function: { name: "post_transcript", description: "What is said in the post, as text. 1 credit. You have NOT watched it; this is the words.", parameters: { type: "object", properties: { url: str, why: str }, required: ["url", "why"] } } },
   { type: "function", function: { name: "post_comments", description: "The top comments: what people are reacting to. 1 credit on TikTok, 15 on Instagram (replies are fetched too), so on Instagram only when it decides something.", parameters: { type: "object", properties: { url: str, why: str }, required: ["url", "why"] } } },
@@ -170,6 +172,12 @@ export async function runTool(ctx: ActionCtx, creatorId: Id<"creators">, call: {
     return `refused: the credit budget (${budget.credits}) would be exceeded. Answer with what you have.`;
   }
   try {
+    if (call.name === "mission_control_link") {
+      const tab = MISSION_CONTROL_TABS.includes(call.args.tab as MissionControlTab) ? call.args.tab as MissionControlTab : "today";
+      const url = missionControlUrl(process.env.APP_URL, tab);
+      record(true, 0);
+      return `Use this exact secure link: ${url}. It opens ${tab}. Do not alter the URL or claim the link signs them in.`;
+    }
     if (call.name.startsWith("partnership_")) {
       const result = await runPartnershipTool(ctx, creatorId, call.name, call.args, sourceMessageId);
       record(!result.startsWith("refused"), 0);

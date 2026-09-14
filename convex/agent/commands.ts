@@ -12,13 +12,18 @@ import { deliverNow } from "../core/scheduler";
 import { resolveTelegramBotIdentity, sendTelegramMessage } from "../integrations/telegram/client";
 import { forgetEvidence, recordVisible } from "./personalHistory";
 import { Draft, Opportunity } from "../partnerships/contracts";
+import { MISSION_CONTROL_TABS, missionControlUrl, type MissionControlTab } from "./missionControl";
 
 export const apply = internalMutation({
-  args: { creatorId: v.id("creators"), command: v.union(v.literal("stop"), v.literal("resume"), v.literal("forget"), v.literal("delete")), topic: v.optional(v.string()) },
+  args: { creatorId: v.id("creators"), command: v.union(v.literal("stop"), v.literal("resume"), v.literal("forget"), v.literal("delete"), v.literal("mission_control")), topic: v.optional(v.string()) },
   handler: async (ctx, a): Promise<{ body: string }> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c) return { body: "" };
     const now = Date.now();
+    if (a.command === "mission_control") {
+      const tab = MISSION_CONTROL_TABS.includes(a.topic as MissionControlTab) ? a.topic as MissionControlTab : "today";
+      return { body: `here's your Mission Control: ${missionControlUrl(process.env.APP_URL, tab)}` };
+    }
     if (a.command === "stop") {
       if (c.plan.status !== "paused") await ctx.db.patch(c._id, { plan: { ...c.plan, status: "paused" }, updatedAt: now });
       return { body: "paused. i'll stop texting first. say resume whenever, and i'm still here if you write." };

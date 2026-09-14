@@ -58,6 +58,21 @@ describe("runTool", () => {
     for (const n of ["post_info", "post_transcript", "post_comments", "sound_info", "sound_videos", "sound_reels", "profile", "account_posts", "search_keyword", "search_hashtag", "search_reels", "search_ig_hashtag", "ig_popular", "trending_tiktok", "trending_reels", "suggestions", "discover_creators", "discover_profiles", "own_rhymes", "calendar_upcoming", "recall", "lane_benchmark"]) expect(names).toContain(n);
   });
 
+  it("makes a zero-cost Mission Control link for a permitted tab without tenant data", async () => {
+    const previous = process.env.APP_URL;
+    process.env.APP_URL = "https://staging.hey-maya.ai/";
+    try {
+      const trace: ToolCallRecord[] = [];
+      const out = await runTool(fakeCtx(), creatorId, { name: "mission_control_link", args: { tab: "results", why: "they asked to inspect their numbers" } }, DEFAULT_BUDGET(), trace);
+      expect(out).toContain("https://staging.hey-maya.ai/app/results");
+      expect(out).not.toContain(String(creatorId));
+      expect(trace).toMatchObject([{ tool: "mission_control_link", ok: true, credits: 0 }]);
+    } finally {
+      if (previous === undefined) delete process.env.APP_URL;
+      else process.env.APP_URL = previous;
+    }
+  });
+
   it("every judgment skill carries its lookup playbook", () => {
     for (const k of ["scout", "opinion", "explainPost", "profile", "review"] as const) expect(LOOKUPS[k].length).toBeGreaterThan(200);
   });

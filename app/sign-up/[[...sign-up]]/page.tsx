@@ -13,7 +13,7 @@ export default function Page() {
       <section>
         <h2>Meet your content person.</h2>
         <p className="muted small">Two minutes to set up. Then she goes to work.</p>
-        <SignUp forceRedirectUrl="/start" appearance={appearance} />
+        <SignUp fallbackRedirectUrl="/start" appearance={appearance} />
       </section>
     </OnboardShell>
   );

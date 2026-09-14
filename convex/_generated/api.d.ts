@@ -24,6 +24,7 @@ import type * as agent_inbound from "../agent/inbound.js";
 import type * as agent_investigate from "../agent/investigate.js";
 import type * as agent_manage from "../agent/manage.js";
 import type * as agent_memory from "../agent/memory.js";
+import type * as agent_missionControl from "../agent/missionControl.js";
 import type * as agent_moment from "../agent/moment.js";
 import type * as agent_opinion from "../agent/opinion.js";
 import type * as agent_personalHistory from "../agent/personalHistory.js";
@@ -188,6 +189,7 @@ declare const fullApi: ApiFromModules<{
   "agent/investigate": typeof agent_investigate;
   "agent/manage": typeof agent_manage;
   "agent/memory": typeof agent_memory;
+  "agent/missionControl": typeof agent_missionControl;
   "agent/moment": typeof agent_moment;
   "agent/opinion": typeof agent_opinion;
   "agent/personalHistory": typeof agent_personalHistory;
