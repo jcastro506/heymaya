@@ -14,18 +14,27 @@ import type { DiscoveredProfile } from "../../reads/profiles";
 const prof = (platform: "tiktok" | "instagram", handle: string, followerCount: number | null, extra: Partial<DiscoveredProfile> = {}): DiscoveredProfile => ({ platform, handle, displayName: null, followerCount, avatarUrl: null, bio: null, isPrivate: false, ...extra });
 
 describe("keywords", () => {
-  it("prefer the dossier, then hashtags weighted by how the post did, never the generic tags", () => {
-    const own = [
-      { platform: "tiktok" as const, caption: "", hashtags: ["fyp", "marathontraining", "running"], multiple: 6, views: 60000 },
-      { platform: "tiktok" as const, caption: "", hashtags: ["running", "viral"], multiple: 1, views: 1000 },
-      { platform: "tiktok" as const, caption: "", hashtags: ["hostel"], multiple: 0.5, views: 500 },
-    ];
-    expect(keywordsFrom(own, undefined, [])).toEqual(["running", "marathontraining"]);
+  const post = (hashtags: string[], multiple: number | null = 1) => ({ platform: "instagram" as const, caption: "", hashtags, multiple, views: 1000 });
+  it("prefer the dossier, then hashtags that recur, weighted by how the post did, never the generic tags", () => {
+    const own = [post(["fyp", "marathontraining", "running"], 6), post(["running", "viral", "marathontraining"], 1), post(["hostel"], 0.5)];
+    expect(keywordsFrom(own, undefined, [])).toEqual(["marathontraining", "running"]);
     expect(keywordsFrom(own, undefined, ["solo travel"])[0]).toBe("solo travel");
-    expect(keywordsFrom([], "I make practical style videos", [])).toEqual(["make", "practical"]);
-    expect(keywordsFrom([], undefined, [])).toEqual([]);
     expect(bandFor(0)).toBe("10K-100K");
     expect(bandFor(2_500_000)).toBe("1M-10M");
+  });
+
+  it("adversarial, live 2026-09-14: their own name as a hashtag and a one-off tag are never search terms", () => {
+    const own = [post(["charliejohnson", "clientwin"], 18), post(["charliejohnson"], 3), post(["coachingbusiness"], 2), post(["coachingbusiness"], 1)];
+    const k = keywordsFrom(own, "coaching fitness coaches on getting high ticket clients", [], 2, ["charliejohnsonfitness"]);
+    expect(k).not.toContain("charliejohnson");
+    expect(k).not.toContain("clientwin");
+    expect(k).toEqual(["coachingbusiness", "coaching fitness"]);
+  });
+
+  it("fall back to a two-word phrase from their sentence, skipping filler; nothing when there is nothing", () => {
+    expect(keywordsFrom([], "I make practical style videos for people", [])).toEqual(["practical style"]);
+    expect(keywordsFrom([], undefined, [])).toEqual([]);
+    expect(keywordsFrom([post(["solo"])], "travel", [], 2)).toEqual(["travel"]);
   });
 });
 

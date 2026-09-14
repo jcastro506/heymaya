@@ -47,17 +47,31 @@ export function clip(text: string, max: number): string {
   return chars.length <= max ? text : chars.slice(0, max).join("");
 }
 
-/** Search terms: the dossier's, else hashtags weighted by how the post did, else their sentence. Pure. */
-export function keywordsFrom(posts: OwnPost[], niche: string | undefined, dossierKeywords: string[], max: number = SUGGEST.keywords): string[] {
+const STOP = new Set(["about", "make", "makes", "making", "videos", "video", "content", "people", "their", "getting", "with", "that", "this", "from", "into", "your", "what", "they", "them", "just", "like", "who", "for", "and", "the", "help", "helping", "things", "stuff", "creator", "posts"]);
+
+/**
+ * Search terms (§27; tightened live 2026-09-14, when an Instagram coach's own-name hashtag
+ * "charliejohnson" and a one-off tag returned namesakes and strangers): the dossier's; else
+ * hashtags that recur on at least two of their posts, weighted by how those posts did, never one
+ * containing their own handle; else a two-word phrase from their own sentence. Pure.
+ */
+export function keywordsFrom(posts: OwnPost[], niche: string | undefined, dossierKeywords: string[], max: number = SUGGEST.keywords, ownHandles: string[] = []): string[] {
+  const stems = ownHandles.map((h) => h.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/(fitness|official|tv|show|\d+)$/g, "")).filter((h) => h.length >= 4);
+  const isOwn = (tag: string) => stems.some((st) => tag.includes(st) || st.includes(tag));
   const score = new Map<string, number>();
-  for (const p of posts) for (const h of p.hashtags) {
-    const k = h.toLowerCase();
-    if (k.length < 3 || GENERIC.has(k)) continue;
-    score.set(k, (score.get(k) ?? 0) + Math.max(1, p.multiple ?? 1));
+  const seenOn = new Map<string, number>();
+  for (const p of posts) for (const h of new Set(p.hashtags.map((x) => x.toLowerCase()))) {
+    if (h.length < 3 || GENERIC.has(h) || isOwn(h)) continue;
+    score.set(h, (score.get(h) ?? 0) + Math.max(1, p.multiple ?? 1));
+    seenOn.set(h, (seenOn.get(h) ?? 0) + 1);
   }
-  const tags = [...score.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k);
-  const out = [...dossierKeywords.map((k) => k.toLowerCase().trim()).filter(Boolean), ...tags];
-  if (out.length === 0 && niche) out.push(...niche.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 3).slice(0, 3));
+  const tags = [...score.entries()].filter(([k]) => (seenOn.get(k) ?? 0) >= 2).sort((a, b) => b[1] - a[1]).map(([k]) => k);
+  const out = [...dossierKeywords.map((k) => k.toLowerCase().trim()).filter((k) => k && !isOwn(k.replace(/\s+/g, ""))), ...tags];
+  if (out.length < max && niche) {
+    const words = niche.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 3 && !STOP.has(w));
+    if (words.length >= 2) out.push(`${words[0]} ${words[1]}`);
+    else if (words.length === 1) out.push(words[0]);
+  }
   return [...new Set(out)].slice(0, max);
 }
 
@@ -209,7 +223,7 @@ export const suggestFor = internalAction({
       const f = Number((await read("profile", { platform: p, handle: gg.handles[p] }) as { followerCount?: number } | null)?.followerCount ?? 0);
       if (f > 0) ownFollowers[p] = f;
     }));
-    const keywords = keywordsFrom(gg.own, gg.niche, gg.keywords);
+    const keywords = keywordsFrom(gg.own, gg.niche, gg.keywords, SUGGEST.keywords, [gg.handles.tiktok, gg.handles.instagram].filter((h): h is string => Boolean(h)));
     const pool: Pooled[] = [];
     const jobs: Array<Promise<void>> = [];
     if (platforms.includes("tiktok")) {
