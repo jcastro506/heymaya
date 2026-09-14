@@ -60,12 +60,23 @@ describe("the shortlist", () => {
 describe("what reaches a card", () => {
   it("stats read only what the posts say; TikTok seconds become milliseconds", () => {
     const now = Date.UTC(2026, 8, 14);
-    const posts = [1000, 2000, 3000, 20000].map((views, i) => ({ caption: ` post ${i} `, views, postedAt: Math.floor((now - i * 86_400_000) / 1000) }));
+    const posts = [1000, 2000, 3000, 4000, 20000].map((views, i) => ({ caption: ` post ${i} `, views, postedAt: Math.floor((now - i * 86_400_000) / 1000) }));
     const s = statsFor([...posts, { caption: "old", views: null, postedAt: now - 60 * 86_400_000 }], now);
-    expect(s).toMatchObject({ medianViews: 3000, bestMultiple: 6.7, postsLast30: 4 });
-    expect(s.topCaptions[0]).toBe("post 3");
-    expect(fallbackWhy(s)).toBe("Posts steadily, 4 times in the last month, and their best recent post did 6.7× their usual views.");
-    expect(fallbackWhy({ medianViews: null, bestMultiple: null, postsLast30: 0, topCaptions: [] })).not.toMatch(/\d/);
+    expect(s).toMatchObject({ medianViews: 3000, bestMultiple: 6.7, postsLast30: 5, runawayPost: false });
+    expect(s.topCaptions[0]).toBe("post 4");
+    expect(fallbackWhy(s)).toBe("Posts steadily, 5 times in the last month, and their best recent post did 6.7× their usual views.");
+    expect(fallbackWhy({ medianViews: null, bestMultiple: null, postsLast30: 0, topCaptions: [], runawayPost: false })).not.toMatch(/\d/);
+  });
+
+  it("adversarial, live 2026-09-14: no multiple on a thin normal, and a runaway post is named, never quoted as 1374.7x", () => {
+    const thin = statsFor([100, 150, 200000].map((views) => ({ caption: "c", views, postedAt: null })), 0);
+    expect(thin.bestMultiple, "three view counts are not a normal").toBeNull();
+    const tinyMedian = statsFor([50, 80, 100, 120, 150, 206_000].map((views) => ({ caption: "c", views, postedAt: null })), 0);
+    expect(tinyMedian.bestMultiple, "a median under 500 views is not a normal").toBeNull();
+    const runaway = statsFor([900, 1000, 1100, 1200, 1300, 1_374_700].map((views) => ({ caption: "c", views, postedAt: null })), 0);
+    expect(runaway).toMatchObject({ bestMultiple: null, runawayPost: true });
+    expect(fallbackWhy(runaway)).toBe("One recent post took off far beyond their usual reach.");
+    expect(fallbackWhy(runaway)).not.toMatch(/\d/);
   });
 
   it("adversarial model output: ids off the shortlist, duplicates, empty and giant reasons, and ungrounded numbers are dropped", () => {

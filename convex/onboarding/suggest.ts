@@ -17,7 +17,7 @@ type Platform = "tiktok" | "instagram";
 export interface Suggestion { platform: Platform; handle: string; followers: number | null; why: string; displayName?: string; avatarUrl?: string }
 export interface OwnPost { platform: Platform; caption: string; hashtags: string[]; multiple: number | null; views: number }
 export interface CandidatePost { caption: string; views: number | null; postedAt: number | null }
-export interface CandidateStats { medianViews: number | null; bestMultiple: number | null; postsLast30: number; topCaptions: string[] }
+export interface CandidateStats { medianViews: number | null; bestMultiple: number | null; postsLast30: number; topCaptions: string[]; /** One post far above a thin normal: real, but no multiple is quoted for it. */ runawayPost: boolean }
 type Pooled = DiscoveredProfile & { following?: boolean };
 
 export const SUGGEST = {
@@ -109,21 +109,29 @@ export function shortlist(input: { candidates: Pooled[]; platforms: Platform[]; 
   return [...picked, ...rest].slice(0, SUGGEST.single);
 }
 
+export const STATS = { minViewPosts: 5, minMedianViews: 500, maxQuotedMultiple: 50 } as const;
+
 /** What their recent posts say, from numbers the read returned. Pure. */
 export function statsFor(posts: CandidatePost[], now: number): CandidateStats {
   const views = posts.map((p) => p.views).filter((x): x is number => typeof x === "number" && x > 0).sort((a, b) => a - b);
   const medianViews = views.length ? views[Math.floor(views.length / 2)] : null;
-  const bestMultiple = medianViews && views.length >= 3 ? Math.round((views[views.length - 1] / medianViews) * 10) / 10 : null;
+  // Live 2026-09-14: "1374.7x their normal" was true arithmetic on a handful of view counts with a
+  // tiny median, and meant nothing. A multiple is quoted only on a real normal, and a runaway post
+  // is named as one rather than as a four-digit number.
+  const ratio = medianViews && views.length >= STATS.minViewPosts && medianViews >= STATS.minMedianViews ? views[views.length - 1] / medianViews : null;
+  const runawayPost = ratio !== null && ratio > STATS.maxQuotedMultiple;
+  const bestMultiple = ratio !== null && !runawayPost ? Math.round(ratio * 10) / 10 : null;
   const postsLast30 = posts.filter((p) => p.postedAt && toMs(p.postedAt) >= now - 30 * 86_400_000).length;
   const topCaptions = [...posts].sort((a, b) => (b.views ?? 0) - (a.views ?? 0)).map((p) => clip(p.caption.replace(/\s+/g, " ").trim(), 120)).filter(Boolean).slice(0, 3);
-  return { medianViews, bestMultiple, postsLast30, topCaptions };
+  return { medianViews, bestMultiple, postsLast30, topCaptions, runawayPost };
 }
 
 /** The reason when the model is unavailable: only what the numbers show. Pure. */
 export function fallbackWhy(s: CandidateStats): string {
   const steady = s.postsLast30 >= 4 ? `Posts steadily, ${s.postsLast30} times in the last month` : "";
   const best = s.bestMultiple && s.bestMultiple >= 1.5 ? `${steady ? ", and their" : "Their"} best recent post did ${s.bestMultiple}× their usual views` : "";
-  return steady || best ? `${steady}${best}.` : "Active near your lane and close to your size.";
+  const runaway = !best && s.runawayPost ? `${steady ? ", and one" : "One"} recent post took off far beyond their usual reach` : "";
+  return steady || best || runaway ? `${steady}${best}${runaway}.` : "Active near your lane and close to your size.";
 }
 
 /** Every number in the sentence appears in the evidence. Pure. */
@@ -249,7 +257,7 @@ export const suggestFor = internalAction({
     if (usable.length) {
       const evidence = JSON.stringify({
         theirBestPosts: gg.own.slice(0, 6).map((p) => ({ platform: p.platform, caption: clip(p.caption, 140), timesTheirNormal: p.multiple })),
-        shortlist: usable.map((d) => ({ id: d.id, platform: d.c.platform, handle: d.c.handle, followers: d.c.followerCount, bio: clip(d.c.bio ?? "", 120), postsLast30Days: d.stats.postsLast30, medianViews: d.stats.medianViews, bestRecentTimesTheirNormal: d.stats.bestMultiple, topRecentCaptions: d.stats.topCaptions })),
+        shortlist: usable.map((d) => ({ id: d.id, platform: d.c.platform, handle: d.c.handle, followers: d.c.followerCount, bio: clip(d.c.bio ?? "", 120), postsLast30Days: d.stats.postsLast30, medianViews: d.stats.medianViews, bestRecentTimesTheirNormal: d.stats.bestMultiple, oneRunawayPost: d.stats.runawayPost, topRecentCaptions: d.stats.topCaptions })),
       });
       for (const model of [REGISTRY.writer.primary, REGISTRY.writer.fallback]) {
         const r = await callModel(ctx, { creatorId: a.creatorId, purpose: "onboarding_suggest", model, messages: [{ role: "system", content: SUGGEST_SKILL }, { role: "user", content: evidence }], temperature: 0.3, maxTokens: 900, timeoutMs: 25_000, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
