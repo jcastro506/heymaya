@@ -9,6 +9,19 @@ import { seedCreator } from "../../../tests/lib/creatorRow";
 const vec = (seed: number) => Array.from({ length: 768 }, (_, i) => Math.sin(seed + i));
 
 describe("memory", () => {
+  it("hydrates a remembered commitment with its recorded block outcome", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await t.run((ctx) => seedCreator(ctx, "commitment-outcome"));
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      const source = await ctx.db.insert("messages", { creatorId, direction: "in", surface: "telegram", body: "i'll film the 5am alarm one", ts: now });
+      const blockId = await ctx.db.insert("calendarBlocks", { creatorId, kind: "film", start: now + 100, end: now + 200, title: "film: the 5am alarm", status: "confirmed", consentAt: now + 10, touches: [], missedAt: now + 300, createdAt: now + 10 });
+      await ctx.db.insert("personalRecords", { creatorId, key: "commitment:alarm", kind: "commitment", text: "i'll film the 5am alarm one", sourceMessageIds: [source], sourcePostIds: [], sourceNoteIds: [], blockId, active: true, at: now });
+    });
+    const rows = await t.query(internal.agent.memory.personal, { creatorId, query: "alarm" });
+    expect(rows[0]?.text).toContain("Recorded outcome: missed; it was not filmed in that commitment.");
+  });
+
   it("upsert is keyed by (creator, ref); byIds never returns another creator's row", async () => {
     const t = convexTest(schema, modules);
     const a = await t.run((ctx) => seedCreator(ctx, "a", { notes: [{ id: "idea_1", text: "the shoe rack list, edited", kind: "fact", at: Date.now() }] }));

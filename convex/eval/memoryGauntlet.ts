@@ -193,7 +193,7 @@ export const run = internalAction({
       // Long tenure (2026-09-09): questions only a year of memory can answer. Seeded by eval/longTenure.
       if (want("why_broll")) {
         const said = await say("remind me why i stopped doing the sunrise b-roll with quotes?");
-        const ok = said.some((s) => /everyone else'?s feed|not (you|me)|look(s|ed) like everyone/i.test(s));
+        const ok = said.some((s) => /everyone else'?s feed|not (you|me)|looks? like everyone|looked like everyone/i.test(s));
         record("why_broll", said, {}, ok, ok ? "the March reason, in their words" : "the reason was not recalled");
       }
       if (want("mornings_rule")) {
@@ -208,7 +208,7 @@ export const run = internalAction({
       }
       if (want("alarm_missed")) {
         const said = await say("and the 5am alarm one, did that get made?");
-        const ok = said.some((s) => /didn'?t happen|never (got )?(made|filmed)|missed|no/i.test(s));
+        const ok = said.some((s) => /didn'?t happen|never (got )?(made|filmed)|missed|\bno\b/i.test(s));
         record("alarm_missed", said, {}, ok, ok ? "read from the block: missed" : "claimed or hedged");
       }
       if (want("style_change")) {

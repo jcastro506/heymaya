@@ -221,7 +221,7 @@ export const run = internalAction({
     }
 
     const b = await ctx.runQuery(internal.eval.gate.latestBaseline, { suite });
-    if (!b) return { ok: true, comparable: false, reason: "no baseline yet — run with record:true on a commit you trust", summary, baseline: null, deltas: [] };
+    if (!b) return { ok: false, comparable: false, reason: "no baseline yet — run with record:true on a commit you trust", summary, baseline: null, deltas: [] };
 
     /**
      * ⚠️ Same ruler, or no comparison. A baseline taken with different checks will report a
@@ -229,7 +229,7 @@ export const run = internalAction({
      * worthless.
      */
     if ((b.rubricVersion ?? "1") !== RUBRIC_VERSION) {
-      return { ok: true, comparable: false, reason: `baseline was measured with rubric ${b.rubricVersion ?? "1"}, this run is rubric ${RUBRIC_VERSION} — re-record a baseline before comparing`, summary, baseline: { at: b.at, gitSha: b.gitSha, note: b.note }, deltas: [] };
+      return { ok: false, comparable: false, reason: `baseline was measured with rubric ${b.rubricVersion ?? "1"}, this run is rubric ${RUBRIC_VERSION} — re-record a baseline before comparing`, summary, baseline: { at: b.at, gitSha: b.gitSha, note: b.note }, deltas: [] };
     }
 
     const before: Summary = { n: b.n, sent: b.sent, judged: b.judged ?? 0, passRate: b.passRate, sentRate: b.n ? round(b.sent / b.n) : 0, scenarios: b.scenarios, judge: b.judge };

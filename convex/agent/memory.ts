@@ -13,7 +13,15 @@ export const personal = internalQuery({
     if (!creator || creator.plan.status === "deleting" || !a.query.trim()) return [];
     const rows = await ctx.db.query("personalRecords").withSearchIndex("by_text", (q) => q.search("text", a.query.slice(0, 500)).eq("creatorId", a.creatorId).eq("active", true)).take(12);
     const out = [];
-    for (const r of rows) if (await recordVisible(ctx, r, a.creatorId)) out.push({ text: `${r.text}${r.reason ? ` Reason: ${r.reason}` : ""}`, at: r.at, kind: r.kind, sourceIds: [...r.sourceMessageIds, ...r.sourcePostIds] });
+    for (const r of rows) if (await recordVisible(ctx, r, a.creatorId)) {
+      const block = r.blockId ? await ctx.db.get(r.blockId) : null;
+      const outcome = block?.filmedAt
+        ? " Recorded outcome: filmed."
+        : block?.missedAt
+          ? " Recorded outcome: missed; it was not filmed in that commitment."
+          : "";
+      out.push({ text: `${r.text}${r.reason ? ` Reason: ${r.reason}` : ""}${outcome}`, at: r.at, kind: r.kind, sourceIds: [...r.sourceMessageIds, ...r.sourcePostIds] });
+    }
     return out.slice(0, 4);
   },
 });

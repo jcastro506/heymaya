@@ -19,6 +19,9 @@ describe("what she may say about money and leaving (live 2026-09-06)", () => {
     const prefix = buildPrefix({ creator: c, directives: [], skill: "x" });
     expect(prefix).toContain("# Their plan");
     expect(prefix.indexOf("# Their plan")).toBeGreaterThan(prefix.indexOf("# The creator"));
+    expect(prefix).toContain("Quiet hours: 22:00–07:00 on their clock (America/New_York)");
+    expect(prefix).toMatch(/Current settings beat remembered settings/);
+    expect(prefix).toMatch(/does not prove a specific commitment happened/);
   });
 
   it("the soul forbids inventing money facts and deleting from a text", () => {
@@ -30,5 +33,6 @@ describe("what she may say about money and leaving (live 2026-09-06)", () => {
     expect(SOUL).toMatch(/capitalise however reads naturally/);
     expect(SOUL).not.toMatch(/lowercase is fine, fragments are fine/);
     expect(SOUL).toMatch(/If a sentence could sit in an email from a company/);
+    expect(SOUL).toMatch(/never turn a result into a cause/);
   });
 });

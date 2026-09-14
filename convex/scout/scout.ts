@@ -39,6 +39,12 @@ export function hasLink(text: string, url: string): boolean {
   return text.includes(cleanLink(url));
 }
 
+/** A measured zero-emoji voice preference is stable enough to enforce before delivery. */
+export function respectEmojiHabit(text: string, voice: string): string {
+  if (!/\b0% use an emoji\b/.test(voice)) return text;
+  return text.replace(/\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*/gu, "").replace(/[ \t]+\n/g, "\n").replace(/ {2,}/g, " ").trim();
+}
+
 export const SCOUT_SKILL = `scout
 If the idea is a breakout, a sound or a shape of the week, it goes stale in days: say so in one clause and point at the nearest free window in the prefix. Say what got you about it as a viewer first, one line, before any number: the moment, named from the evidence you were given, never a timestamp or a detail you were not given. Then why it worked and their version. Send the message the way a person texts: two or three short texts, not one block. Put a line containing only --- between them inside "message"; the link is the very last line of the last text, after your question, never in the middle.
 When: the gate has passed and there are candidates. Six kinds: "breakout" (an account they admire, above its own normal), "shape" (the top of their lane for one of their keywords this week; the account is not one they named), "win" (THEIR OWN post crossing 3× their normal; the message is a real, specific celebration and one thing to do while it's moving, nothing else), "sound" (a sound two or more accounts in their lane used this week; look it up with sound_info and sound_videos before judging: is it rising, is it the kind of sound they use, what would THEIR video on it be), "worth_seeing" (a post from outside their lane, often from the platform's trending feed, whose FORMAT the screener marked as transferable; the topic is not theirs and that is fine; at most one of these a day), and "calendar" (something on THEIR OWN calendar two or more days out that a post could ride: the message names the event, the shape of the post it makes possible, and proposes ONE filming block before it, with a day and a time on their clock; "version.block" carries that block and the question at the end is whether to block it).
@@ -49,6 +55,7 @@ The judgment: which of these, if any, is notable (a real breakout above that acc
 Sound: name a real one or say original audio. If you name a sound it must be one a lookup actually returned (sound_info, sound_videos, or the candidate's own sound), and you say in three words why it fits. "a trending sound", "whatever is on your fyp" or "an upbeat track" is a refusal to do the work: say "your own audio" instead, which is honest and often right.
 
 The on-screen text and the hook are the part they will actually read on the screen, so they are held to the voice rules above: their length, their case, their kind of joke, one concrete noun from their life, and a line no other creator in the niche could post word for word.
+The reason it fits must name one concrete bit, post, preference, or recurring subject from THIS creator's context. "totally your lane" is not a reason. Follow their measured writing habits in the voice section, including emoji: when it says 0% use an emoji, use none.
 "forYou" (§24): on a day nothing is an idea for them, one candidate they would simply enjoy (their humour, their world, a bit you two have), with one line and NO ask: "saw this, thought of you" in your words. Only when it is genuinely for them; null is the default.
 Taste: each candidate carries "taste", their history with things like it; the prefix carries the note you keep on what they take. Weigh it, don't obey it: a "passed on" is a reason to pick something else unless this one is clearly different, and say what's different. Name the idea's features honestly in "features"; they are how you learn from what they do next. If the prompt says the explore slot is open, you may pick something outside their usual, set "newForYou": true, and say in the message that it's not their usual.
 Output ONLY JSON:
@@ -201,7 +208,7 @@ export const run = internalAction({
     // The critic (§15.5): different family, one rewrite, then drop with a verdict.
     const dossierVoice = (gathered.creator.dossier as { voice?: unknown; persona?: unknown } | undefined);
     const directiveTexts = gathered.directives.map((d) => d.verbatim);
-    let text = pick.message.trim();
+    let text = respectEmojiHabit(pick.message.trim(), gathered.voice);
     /**
      * ⭐ The link is a FACT, not prose, so code guarantees it — and BEFORE the critic, so the
      * critic judges the message as it will actually be sent. With the append after the critic,
@@ -227,7 +234,7 @@ export const run = internalAction({
     if (!verdict.pass) {
       const rewrite = await callModel(ctx, { creatorId: args.creatorId, purpose: "scout_rewrite", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `${user}\n\nYour previous message was rejected by the critic for: ${verdict.problems.join(", ")} (${verdict.note}). Rewrite ONLY the message text for post ${pick.postId}, fixing exactly that. Output the message text only, no JSON.` }], temperature: 0.4, maxTokens: 600, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
       if (rewrite.ok && rewrite.content.trim()) {
-        text = rewrite.content.trim();
+        text = respectEmojiHabit(rewrite.content.trim(), gathered.voice);
         verdict = tooLong(text) ? { pass: false, problems: ["too_long" as const], note: "still over the length cap" } : await critique(ctx, { creatorId: args.creatorId, kind: "scout", text, evidence: ev, voice: { voice: dossierVoice?.voice, persona: dossierVoice?.persona }, directives: directiveTexts });
         criticSkipped = criticSkipped || Boolean(verdict.skipped);
       }

@@ -62,6 +62,20 @@ export const twinId = internalQuery({
   handler: async (ctx): Promise<Id<"creators"> | null> => ((await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", subjectFor(TWIN_HANDLE))).first()) as Doc<"creators"> | null)?._id ?? null,
 });
 
+/** Distinguish a fully/partly seeded twin from an interrupted create-only row. */
+export const twinSeedState = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ empty: boolean; ideas: number; posts: number }> => {
+    const [ideas, posts] = await Promise.all([
+      ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect(),
+      ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect(),
+    ]);
+    // startCreator may legitimately enqueue an onboarding message. The year seed
+    // itself has not started until it writes either an idea or an own-post row.
+    return { empty: ideas.length === 0 && posts.length === 0, ideas: ideas.length, posts: posts.length };
+  },
+});
+
 /** The creator row itself, copied from the source scenario's dossier and roster. */
 export const createTwin = internalMutation({
   args: { fromHandle: v.string(), now: v.number() },
@@ -306,7 +320,12 @@ export const seed = internalAction({
     const now = Date.now();
     const from = a.fromHandle ?? "vanessaalopezz";
     const { creatorId, created } = await ctx.runMutation(internal.eval.longTenure.createTwin, { fromHandle: from, now });
-    if (!created) return { creatorId, created, posts: 0, cards: 0, ideas: 0, messages: 0, arc: null, snapshots: 0, indexed: 0 };
+    if (!created) {
+      const state = await ctx.runQuery(internal.eval.longTenure.twinSeedState, { creatorId });
+      if (!state.empty) return { creatorId, created, posts: 0, cards: 0, ideas: 0, messages: 0, arc: null, snapshots: 0, indexed: 0 };
+      // A previous action can stop after createTwin and before the first seed write.
+      // Reuse that empty row so the harness does not stay permanently unseedable.
+    }
     const copied = await ctx.runMutation(internal.eval.longTenure.copyPosts, { creatorId, fromHandle: from, now });
     let ideas = 0, messages = 0;
     for (let month = 0; month < 12; month++) { const r = await ctx.runMutation(internal.eval.longTenure.seedMonth, { creatorId, now, month }); ideas += r.ideas; messages += r.messages; }
