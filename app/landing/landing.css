@@ -360,7 +360,7 @@
   font-family: var(--font-instrument), sans-serif;
   font-size: 16px;
   line-height: 1.6;
-  overflow: clip; /* not hidden: hidden makes this a scroll container and the snap points attach to it, not the page (2026-09-08) */;
+  overflow: clip; /* not hidden: hidden would make this a scroll container and break page-level scrolling */
 }
 .maya-site * {
   box-sizing: border-box;
@@ -2931,28 +2931,7 @@
 /* Room between how-it-starts and the price card (2026-09-08) */
 .maya-start { padding-block: 96px 48px; }
 
-/* Let each chapter settle into place without taking control away from the person scrolling.
-   A single set of proximity targets avoids the tug-of-war caused by mandatory section snaps
-   plus nested card snaps. The short platform strip stays part of the hero's natural flow. */
-html:has(.maya-site) {
-  scroll-behavior: smooth;
-  scroll-padding-top: 20px;
-  scroll-snap-type: y proximity;
-}
-.maya-site main > section:not(.platform-strip) {
-  scroll-margin-top: 20px;
-  scroll-snap-align: start;
-  scroll-snap-stop: normal;
-}
-@media (prefers-reduced-motion: reduce) {
-  html:has(.maya-site) {
-    scroll-behavior: auto;
-    scroll-snap-type: none;
-  }
-}
-
-/* Three short sections, each its own screen (2026-09-08): the manifesto, how it starts, the price.
-   Each fills the viewport with its content centred, so one wheel flick lands on one of them. */
-.maya-site .maya-manifesto,
-.maya-site .maya-start { min-height: 100dvh; display: grid; align-content: center; }
-.maya-site .maya-pricing { min-height: 100dvh; align-content: center; }
+/* Section snapping removed (2026-09-14): it read as jitter and fought the person scrolling.
+   The page scrolls naturally; in-page links still land a little below the top edge. */
+html:has(.maya-site) { scroll-padding-top: 20px; }
+.maya-site main > section { scroll-margin-top: 20px; }
