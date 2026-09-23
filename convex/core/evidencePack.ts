@@ -108,7 +108,26 @@ export function buildEvidencePack(post: PackPost, others: PackPost[], timezone: 
     facts.thin = `only ${peers.length} other posts on this platform to compare with`;
   }
 
+  // The same video on their other platform (a cross-post): the strongest clue there is. If it
+  // broke out on both, it's the video; if only on one, it's something about that platform or day.
+  const twin = crossPostOf(post, others);
+  if (twin) {
+    const twinNormal = normalViews(others, twin.platform, now);
+    facts.sameVideoOtherPlatform = { platform: twin.platform, views: twin.metrics.views, multiple: twinNormal ? Number((twin.metrics.views / twinNormal.value).toFixed(2)) : null, postedDaysApart: Math.round(Math.abs(twin.createTime - post.createTime) / 86_400_000) };
+  }
+
   return { keys: Object.keys(facts), facts };
+}
+
+const titleOf = (caption: string): string => caption.split("\n")[0].toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
+
+/** Pure: their post on the OTHER platform with the same opening line, posted within a week. */
+export function crossPostOf(post: PackPost, others: PackPost[]): PackPost | null {
+  const t = titleOf(post.caption);
+  if (t.length < 12) return null; // too short to be sure it's the same video
+  return others
+    .filter((o) => o.platform !== post.platform && Math.abs(o.createTime - post.createTime) <= 7 * 86_400_000)
+    .find((o) => { const u = titleOf(o.caption); return u.length >= 12 && (u === t || u.startsWith(t) || t.startsWith(u)); }) ?? null;
 }
 
 export interface Hypothesis { cause: string; evidence: string[]; confidence: string }

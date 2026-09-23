@@ -14,7 +14,7 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { buildEvidencePack, supportedHypotheses, type PackPost } from "../../core/evidencePack";
+import { buildEvidencePack, crossPostOf, supportedHypotheses, type PackPost } from "../../core/evidencePack";
 import { judgeLadder, ownPostFloor, profileFloor } from "../guarded";
 import type { CritiqueResult } from "../critic";
 
@@ -173,5 +173,23 @@ describe("their own post, whatever the link looks like (Instagram bench, 2026-09
     const reply = out.find((m) => m.direction === "out");
     expect(reply?.kind).toBe("explain");
     expect(reply?.body).not.toMatch(/couldn't open that link/);
+  });
+});
+
+describe("cross-posts (both platforms)", () => {
+  it("finds the same video on their other platform, with its multiple there", () => {
+    const tt = Array.from({ length: 8 }, (_, i) => post(5 + i, 360_000, { caption: `meal prep number ${i} for the week` }));
+    const ttTwin = post(34, 5_963_900, { caption: "Save Your Life With Meal Prep‼️ Meal prep these bad BOYS" });
+    const ig = Array.from({ length: 8 }, (_, i) => post(5 + i, 363_000, { platform: "instagram", caption: `insta prep ${i} for the week` }));
+    const reel = post(34.2, 9_005_637, { platform: "instagram", caption: "Save Your Life With Meal Prep‼️  Meal prep these bad BOYS an" });
+    const p = buildEvidencePack(reel, [...tt, ttTwin, ...ig], "UTC", NOW);
+    expect(p.facts.sameVideoOtherPlatform).toMatchObject({ platform: "tiktok", views: 5_963_900, postedDaysApart: 0 });
+    expect((p.facts.sameVideoOtherPlatform as { multiple: number }).multiple).toBeGreaterThan(10);
+  });
+  it("doesn't match short or unrelated captions", () => {
+    const a = post(4, 1000, { caption: "day 3" });
+    const b = post(4, 1000, { platform: "instagram", caption: "day 3" });
+    expect(crossPostOf(a, [b])).toBeNull();
+    expect(crossPostOf(post(4, 1, { caption: "crunchwraps for the week" }), [post(4, 1, { platform: "instagram", caption: "frozen pizza for the week" })])).toBeNull();
   });
 });

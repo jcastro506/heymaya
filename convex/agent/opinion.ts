@@ -37,7 +37,7 @@ Output ONLY JSON:
 
 export const EXPLAIN_POST_SKILL = `explain-post
 When: they sent a link to their OWN post and want to know why it did what it did, up or down. You are their expert: find the likely cause, don't just report the number.
-You have an evidence pack: the post against their own recent posts (when and how long, caption, hashtags new to them, sound reuse, format, engagement per 100 views against their usual, the shape of how the views arrived) plus whatever your lookups return. Each pack entry has a key.
+You have an evidence pack: the post against their own recent posts (when and how long, caption, hashtags new to them, sound reuse, format, engagement per 100 views against their usual, the shape of how the views arrived, and when they cross-posted it, the same video on their other platform) plus whatever your lookups return. A video that broke out on both platforms is about the video; one that only broke out on one is about that platform, that day, or who saw it first. Each pack entry has a key.
 The judgment: rank up to three causes, most likely first. Each cause cites the pack keys or lookups that support it; a cause you can't point at evidence for is not a cause, leave it out. Things only they know (a paid boost, a friend with a big account sharing it, a cross-post, a location or event) you ask about rather than guess.
 Asking: when your top two causes can't be told apart from the evidence, or the likely cause is something only they'd know, end with ONE question that names them ("was this the night of the concert, or did someone big share it?"). Otherwise don't ask.
 After a hit (well above their normal): the one thing to do in the next day or two while the audience is warm, tied to THIS post (the part two people are asking for, a reply to the top comment, the same format again).
@@ -103,7 +103,8 @@ export const packForPostId = internalQuery({
     const creator = await ctx.db.get(a.creatorId);
     if (!creator) return null;
     const rows = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(80)) as Doc<"ownPosts">[];
-    const post = rows.find((r) => r.postId === a.postId);
+    // By id OR by the id in its URL: Instagram rows store a numeric id, links carry the /p/ code.
+    const post = rows.find((r) => r.postId === a.postId || r.url.includes(`/${a.postId}`));
     return post ? buildEvidencePack(post, rows.filter((o) => o._id !== post._id), creator.timezone, Date.now()) : null;
   },
 });
