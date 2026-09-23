@@ -256,7 +256,34 @@ Every sprint also runs the five mandatory categories: cross-tenant, budget fail-
 
 **Merge memory:** partnership preferences become `personalRecords` kinds (deal types, paid-only, excluded brands, rate floor, region), and the partnership profile is *derived* from them.
 
-### 8.3 Sprint B6 — Opportunity engine (6–8 d, after B2)
+### 8.3 Relationship lifecycle: dedupe, contacts, applications, follow-ups
+
+**What the code does today (verified in `partnerships/store.ts`, `delivery.ts`, `drafts.ts`):**
+
+| Question | Today | Gap |
+|---|---|---|
+| Does she know what she's already found? | **Yes, per brand domain.** Saving a brand that's already in the record returns `existingRelationship` instead of creating a second cold lead. Refreshed research can't reopen a rejection or reset a thread. A `suppressed` contact can't be resumed. Excluded brands and paid-only are enforced by code. | (1) Identity is **only the domain the model supplies**: `gymshark.com` vs `gymshark.co.uk`, or a program hosted on a third-party platform, would be two leads. (2) The check happens at **save**, after research credits are spent. (3) A brand they said no to in chat is only remembered if the model recorded it. (4) Past **searches** aren't consulted, so she can repeat the same query next week. |
+| Contact info | **Only from the brand's own website.** The email must appear literally in extracted text from an official-domain page (code-checked). Links must be linked from official pages. No guessed addresses, no contact-enrichment services. With no published email she hands off an official Instagram/TikTok DM for the user to send. | Many brands publish a business email only in their **Instagram/TikTok bio**. That's official and public, but it isn't accepted today. |
+| "Apply on our site" | **Supported.** The route is `application` with the official URL. Only questions visible in the extracted page are drafted; missing answers are marked. She never submits forms or accepts terms. The user gets the link and the answers and submits them. | (1) After the handoff nothing tracks it: the status stays "unknown" until the user happens to report it. (2) Forms rendered by JavaScript (Typeform, Google Forms, Airtable) often extract as empty, so she falls back to "here's the link". (3) Answers arrive as one text blob in Messages, which is hard to copy field by field. |
+| Follow-ups | **Partly.** After an email is sent: `followUpAt = +7 days`. The 30-minute poll checks the thread; with no reply by then she texts "want me to prepare a follow-up for you to review?". Every follow-up needs its own draft and SEND code. Replies, bounces, and "unsubscribe" stop it (bounce/unsubscribe → `suppressed`). There are also deadline (2 days out) and deliverable-due nudges. | (1) **No cap.** Each follow-up send sets another +7 days, so she'd keep offering follow-ups forever. (2) The follow-up costs **an extra round trip** (she asks, they say yes, then she drafts). (3) **Nothing for DMs or applications.** (4) Each opportunity nudges independently, so 4 quiet brands could mean 4 separate texts (the rails cap the day, but it isn't batched). |
+
+**The design:**
+
+1. **Brand identity is canonical, and checked before research.** The key is the normalized brand name plus the official domain(s) plus official social handles, stored on the relationship. The opportunity engine and `partnership_research` both check the relationship record **before** spending a credit. A brand they decline is written as a `personalRecord` ("not interested in X — reason"), so it survives outside the partnership tables. Search history (query + date) is kept, and she doesn't repeat a query within 30 days unless asked.
+2. **Contacts: add exactly one new official source.** The brand's **verified Instagram/TikTok profile business email or bio email** (ScrapeCreators profile read, 1 credit), stored with the profile URL as evidence and held to the same "must appear literally" check. **Still no** guessed patterns (`partnerships@…`), no enrichment vendors, and no personal emails of employees. That's for deliverability, for the creator's Gmail reputation, and because it's the honest line.
+3. **Follow-up cadence, code-enforced: at most 2 follow-ups (3 touches in total), then close.**
+
+   | Route | Touch 1 | Follow-up 1 | Follow-up 2 | Then |
+   |---|---|---|---|---|
+   | Email (tracked thread) | sent with SEND | **+5 days** with no reply: she **pre-drafts** the follow-up and sends the review with its SEND code in the same text ("no word from X — here's a short follow-up, reply SEND … to send it") | **+7 days** after that: same | **+7 days**: status `no_response`, told once, visible in the app, never contacted again unless the user asks |
+   | DM (user sends) | the user says they sent it (status `contacted`, basis user report) | +5 days: "did X answer your DM?"; if not, a follow-up DM draft to copy | +7 days: same | close as `no_response` |
+   | Application (user submits) | handoff with link + answers | **+2 days, once**: "did you get to submit the X application?" → `applied` | at the program's stated response window (from the page) or 14 days: one check-in | close; no chasing a brand through a form they chose |
+
+   Stop conditions (already partly built): any reply, bounce, unsubscribe, deadline passed, user pause, or the user saying stop. `followUpCount` lives on the opportunity, and `followUpEligible()` refuses the third. **Every send still needs its own SEND code.** No standing approval for emails in the creator's name.
+4. **One partnerships text a day, batched:** "2 brands haven't replied — follow-ups for both are ready. SEND … / SEND …". It stays within the existing rails (`railsOnly`) and the one-per-day dedupe.
+5. **Applications in the app**: a screen per application with **each question and its drafted answer, a Copy button on each, and an "Open the form" button**, plus "I submitted it". For forms that didn't extract, the page shows the link and her suggested answers to the questions such forms usually ask, clearly labelled as general.
+
+### 8.4 Sprint B6 — Opportunity engine (6–8 d, after B2)
 **Build:** §8.2.
 **Tests:**
 - the bench gains an opportunities section of ~25 cases (lane #ad → a correct brand; own-post product mention → a natural-fit pitch; paid-only → disqualifies gifting; excluded brand never surfaced; UGC fit judged on portfolio, not followers);
@@ -264,7 +291,16 @@ Every sprint also runs the five mandatory categories: cross-tenant, budget fail-
 - cross-tenant (one creator's signals never seed another's opportunities, though the fleet's shared lane reads may);
 - the allowance fails closed at 0 for non-partner tiers;
 - adversarial (a brand page or email carrying instructions).
-**Exit, live:** for 3 partner-tier pilots, the weekly pass surfaces at least 3 signal-backed opportunities each, and the operator rates ≥2 of 3 as "would pursue".
+**Plus lifecycle tests (§8.3):**
+- the same brand via two domains or a social handle resolves to one relationship;
+- research is refused for a brand already in the record, before any credit is spent;
+- a third follow-up is refused by `followUpEligible`;
+- reply, bounce, or unsubscribe stops the chain, and `no_response` closes it after the last touch;
+- a bio email is accepted only when it appears literally in the brand's official profile read;
+- application check-ins fire at most once each;
+- several due follow-ups batch into one text.
+
+**Exit, live:** for 3 partner-tier pilots, the weekly pass surfaces at least 3 signal-backed opportunities each, and the operator rates ≥2 of 3 as "would pursue". One real email relationship runs the full cadence on staging (send → follow-up 1 → follow-up 2 → `no_response`) with time compressed, and every touch was approved by SEND.
 
 ## 9. Operator decisions
 
