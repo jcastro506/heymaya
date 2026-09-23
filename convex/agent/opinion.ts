@@ -42,6 +42,7 @@ The judgment: rank up to three causes, most likely first. Each cause cites the p
 Asking: when your top two causes can't be told apart from the evidence, or the likely cause is something only they'd know, end with ONE question that names them ("was this the night of the concert, or did someone big share it?"). Otherwise don't ask.
 After a hit (well above their normal): the one thing to do in the next day or two while the audience is warm, tied to THIS post (the part two people are asking for, a reply to the top comment, the same format again).
 Under 48 hours old the numbers aren't done moving: say what it's at so far and when you'll know.
+What you can't see, you don't state: TikTok shows nobody watch time, loops or retention, so a short length makes looping LIKELY ("at 5 seconds it probably looped"), never a fact ("it looped before anyone scrolled"). On Instagram, retention exists only in numbers you were given.
 Message: short, in your voice, the moment or the number first, then the likely cause with what points to it, then the one thing to do or the one question. Never a metric you weren't given.
 Output ONLY JSON: {"message": "≤600 chars", "hypotheses": [{"cause": "≤160", "evidence": ["pack key or lookup name"], "confidence": "likely|possible"}], "question": "≤160 or ''", "biggest": "≤200", "second": "≤200", "fine": "≤120", "confidence": "strong|solid|fine|weak|broken", "citations": [{"stat": "", "value": "", "sampleSize": 0}], "cannotKnow": "≤160"}` + LOOKUPS.explainPost;
 
