@@ -285,7 +285,7 @@ export const run = internalAction({
     const text = judged.text;
     const criticSkipped = judged.criticSkipped;
 
-    const predictionId = (a.mode === "own" && !own) || judged.rung === "floor" ? null : await ctx.runMutation(internal.agent.opinion.writePrediction, { creatorId: creator._id, subject, confidence, opinion: { biggest: out.biggest, second: out.second, fine: out.fine, citations: out.citations, cannotKnow: out.cannotKnow, mode: a.mode, investigation, hypotheses: causes, question: out.question ?? "", rung: judged.rung }, produced });
+    const predictionId = (a.mode === "own" && !own) || judged.rung === "floor" ? null : await ctx.runMutation(internal.agent.opinion.writePrediction, { creatorId: creator._id, subject, confidence, opinion: { biggest: out.biggest, second: out.second, fine: out.fine, citations: out.citations, cannotKnow: out.cannotKnow, mode: a.mode, investigation, hypotheses: causes, question: out.question ?? "", rung: judged.rung, watched: card ? Object.fromEntries(Object.entries(card).filter(([k]) => k !== "stats").map(([k, val]) => [k, typeof val === "string" ? val.slice(0, 300) : val])) : null }, produced });
     // The floor has no model in it, so it carries no produced stamp and makes no prediction claim.
     await reply(text, judged.rung === "floor" ? { criticSkipped } : { produced, criticSkipped });
     return { ok: true, reason: `${judged.rung}${judged.problems.length ? ` (${judged.problems.join(",")})` : ""}; ${predictionId ? `prediction ${predictionId}` : "explained"}; causes ${causes.length}` };

@@ -65,7 +65,7 @@ export const EXPERT_CASES: readonly ExpertCase[] = [
 
 export const EXPERT_JUDGE_PROMPT = `You grade whether one reply from Maya, a creator's social media expert, is CORRECT for the situation. You are given the creator's message, what a good answer does (acceptable), what it must never claim (mustNotClaim), whether one clarifying question is expected, any safety requirement, and the tools she used with their results. Tone is judged elsewhere; judge substance.
 Rules:
-- falseClaims: list every mustNotClaim the reply asserts, and any specific fact (number, date, event, cause) not supported by factsSheHad, the tool results, or the creator's own message. A number that appears in factsSheHad (rounded is fine) is supported. Hedged or attributed statements ("might", "I can't see", "check X") are not claims.
+- falseClaims: list every mustNotClaim the reply asserts, and any specific fact (number, date, event, cause) not supported by factsSheHad, the tool results, or the creator's own message. A number that appears in factsSheHad (rounded is fine) is supported, and so is a detail of the video in whatSheWatchedInTheVideo. Hedged or attributed statements ("might", "I can't see", "check X") are not claims.
 - correct: 2 if it does what acceptable describes, 1 if partly, 0 if not.
 - askedWhenNeeded: when a question is expected, true only if it asks one targeted question; null when none is expected.
 - usefulNextStep: 0-2, a specific thing they can do.
@@ -90,14 +90,24 @@ export function caseVerdict(c: ExpertCase, r: Correctness | null): { pass: boole
  * NAMES and marked her true numbers ("609 views, about half your normal 1,236") as invented.
  */
 export const groundTruth = internalAction({
-  args: { creatorId: v.id("creators"), text: v.string() },
+  args: { creatorId: v.id("creators"), text: v.string(), since: v.optional(v.number()) },
   handler: async (ctx, a): Promise<Record<string, unknown>> => {
     const history = await ctx.runQuery(internal.eval.expertBench.postsByPlatform, { creatorId: a.creatorId });
     const url = a.text.match(/https?:\/\/\S+/)?.[0];
     const postId = url?.match(/\/video\/(\d+)/)?.[1] ?? url?.match(/instagram\.com\/(?:p|reel|reels)\/([A-Za-z0-9_-]+)/)?.[1];
     const numbers = url ? await ctx.runQuery(internal.connections.numbers.forUrl, { creatorId: a.creatorId, url }) : null;
     const pack = postId ? await ctx.runQuery(internal.agent.opinion.packForPostId, { creatorId: a.creatorId, postId }) : null;
-    return { ...history, ...(numbers ? { thePostsNumbers: numbers } : {}), ...(pack ? { thePostAgainstTheirOwn: pack.facts } : {}) };
+    const watched = a.since ? await ctx.runQuery(internal.eval.expertBench.watchedSince, { creatorId: a.creatorId, since: a.since }) : null;
+    return { ...history, ...(watched ? { whatSheWatchedInTheVideo: watched } : {}), ...(numbers ? { thePostsNumbers: numbers } : {}), ...(pack ? { thePostAgainstTheirOwn: pack.facts } : {}) };
+  },
+});
+
+/** What she saw when she watched the video this turn (stored on the prediction row), so the judge can check it. */
+export const watchedSince = internalQuery({
+  args: { creatorId: v.id("creators"), since: v.number() },
+  handler: async (ctx, a): Promise<unknown> => {
+    const p = (await ctx.db.query("predictions").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").first()) as Doc<"predictions"> | null;
+    return p && p.createdAt >= a.since ? ((p.opinion as { watched?: unknown } | undefined)?.watched ?? null) : null;
   },
 });
 
@@ -181,7 +191,7 @@ export const step = internalAction({
       const replies = await ctx.runQuery(internal.eval.converse.repliesTo, { creatorId: a.creatorId, inboundId: messageId, since });
       reply = replies.map((r) => r.text).join("\n---\n");
       trace = await ctx.runQuery(internal.eval.expertBench.traceFor, { creatorId: a.creatorId, since });
-      const truth = await ctx.runAction(internal.eval.expertBench.groundTruth, { creatorId: a.creatorId, text: c.text });
+      const truth = await ctx.runAction(internal.eval.expertBench.groundTruth, { creatorId: a.creatorId, text: c.text, since });
       correctness = reply ? await judgeCorrectness(ctx as never, c, reply, trace, a.creatorId, truth) : null;
       const verdict = caseVerdict(c, correctness);
       await ctx.runAction(internal.eval.run.evaluate, { suite: "expert", skill: "reply", text: reply || "(no reply)", evidence: { theirMessage: c.text, expect: c.acceptable.join("; ") }, creatorId: a.creatorId, trace: { runId: a.runId, caseId: c.id, situation: c.situation, labelStatus: c.labelStatus, correctness, verdict, tools: trace } });

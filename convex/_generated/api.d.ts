@@ -79,6 +79,7 @@ import type * as core_embeddings from "../core/embeddings.js";
 import type * as core_envelope from "../core/envelope.js";
 import type * as core_evidencePack from "../core/evidencePack.js";
 import type * as core_fakeModel from "../core/fakeModel.js";
+import type * as core_fanout from "../core/fanout.js";
 import type * as core_ideaActs from "../core/ideaActs.js";
 import type * as core_identity from "../core/identity.js";
 import type * as core_imessage from "../core/imessage.js";
@@ -258,6 +259,7 @@ declare const fullApi: ApiFromModules<{
   "core/envelope": typeof core_envelope;
   "core/evidencePack": typeof core_evidencePack;
   "core/fakeModel": typeof core_fakeModel;
+  "core/fanout": typeof core_fanout;
   "core/ideaActs": typeof core_ideaActs;
   "core/identity": typeof core_identity;
   "core/imessage": typeof core_imessage;

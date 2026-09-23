@@ -21,6 +21,7 @@ export interface PackPost {
   contentType?: string;
   metrics: { views: number; likes: number; comments: number; shares: number; saves?: number };
   history?: Point[];
+  multiple?: number; // the stored multiple the app shows; the pack says the same number
 }
 
 export interface EvidencePack {
@@ -63,7 +64,7 @@ export function buildEvidencePack(post: PackPost, others: PackPost[], timezone: 
   facts.posted = { date: when.date, weekday: when.weekday, hourLocal: when.hour, hoursOld: Math.round((now - post.createTime) / 3_600_000), settled: now - post.createTime >= SETTLED_HOURS * 3_600_000 };
 
   const normal = normalViews([post, ...others], post.platform, now);
-  if (normal) facts.againstNormal = { views: post.metrics.views, normal: normal.value, multiple: Number((post.metrics.views / normal.value).toFixed(2)), basedOnPosts: normal.n, lowerBound: now - post.createTime < SETTLED_HOURS * 3_600_000 };
+  if (normal) facts.againstNormal = { views: post.metrics.views, normal: normal.value, multiple: post.multiple ?? Number((post.metrics.views / normal.value).toFixed(2)), basedOnPosts: normal.n, lowerBound: now - post.createTime < SETTLED_HOURS * 3_600_000 };
 
   const shape: Shape = shapeOf(post, now);
   facts.shape = { shape, readings: (post.history ?? []).length };
@@ -113,7 +114,7 @@ export function buildEvidencePack(post: PackPost, others: PackPost[], timezone: 
   const twin = crossPostOf(post, others);
   if (twin) {
     const twinNormal = normalViews(others, twin.platform, now);
-    facts.sameVideoOtherPlatform = { platform: twin.platform, views: twin.metrics.views, multiple: twinNormal ? Number((twin.metrics.views / twinNormal.value).toFixed(2)) : null, postedDaysApart: Math.round(Math.abs(twin.createTime - post.createTime) / 86_400_000) };
+    facts.sameVideoOtherPlatform = { platform: twin.platform, views: twin.metrics.views, multiple: twin.multiple ?? (twinNormal ? Number((twin.metrics.views / twinNormal.value).toFixed(2)) : null), postedDaysApart: Math.round(Math.abs(twin.createTime - post.createTime) / 86_400_000) };
   }
 
   return { keys: Object.keys(facts), facts };
