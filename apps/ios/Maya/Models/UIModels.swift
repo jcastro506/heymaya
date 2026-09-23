@@ -320,6 +320,7 @@ struct PostNumbers: Decodable, Equatable {
   let multiple: Multiple?
   let derived: Derived?
   let read: String?
+  var shape: String? = nil
   let cannotKnow: [String]
 
   struct Derived: Decodable, Equatable {

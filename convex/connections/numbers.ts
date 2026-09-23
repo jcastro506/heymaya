@@ -8,8 +8,9 @@
 import { v } from "convex/values";
 import { internalQuery, type QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
-import { derive, type Connected, type Derived } from "./analytics";
+import { derive, derivePublic, type Connected, type Derived } from "./analytics";
 import { normalReach } from "./sync";
+import { shapeOf, type Shape } from "../core/normal";
 
 /** Connected numbers older than this are said with their age, and the public number is used for judgments. */
 export const STALE_AFTER_MS = 48 * 3_600_000;
@@ -25,6 +26,8 @@ export interface PostNumbers {
   lines: string[];       // citeable facts, each carrying its basis in words
   cannotKnow: string[];  // what this platform does not give her, in words
   derived: Derived | null;
+  /** B1: how the views arrived (core/normal.shapeOf): early, spike, slow_burn, steady, unknown. */
+  shape: Shape;
 }
 
 export function connectedFrom(p: Doc<"ownPosts">): Connected | null {
@@ -65,11 +68,12 @@ export function numbersFor(p: Doc<"ownPosts">, siblings: Doc<"ownPosts">[], now:
   }
   lines.push(`${p.metrics.views.toLocaleString()} views (public count, read ${Math.round((now - p.metricsAsOf) / 3_600_000)}h ago)`);
 
+  if (!derived) derived = derivePublic(multiple?.value ?? null, now - p.createTime >= 48 * 3_600_000);
   if (p.platform === "tiktok") cannotKnow.push("watch time, retention and the skip rate: TikTok does not expose them to anyone");
   if (p.platform === "instagram" && (!c || c.durationSec === null)) cannotKnow.push("retention: it is only reported on Reels with a known duration");
   if (!c) cannotKnow.push("reach and impressions: no account connected, so only the public count");
 
-  return { url: p.url, platform: p.platform, ageHours, headline, multiple, lines, cannotKnow, derived };
+  return { url: p.url, platform: p.platform, ageHours, headline, multiple, lines, cannotKnow, derived, shape: shapeOf(p, now) };
 }
 
 export async function numbersForPost(ctx: QueryCtx, ownPostId: Id<"ownPosts">, now = Date.now()): Promise<PostNumbers | null> {
@@ -107,6 +111,8 @@ export const normals = internalQuery({
 
 /** The words for a diagnosis, once, so every skill says the same thing. */
 export const DIAGNOSIS_WORDS: Record<NonNullable<Derived["diagnosis"]>, string> = {
+  broke_out: "it broke out: well past their normal. Worth finding out why before the moment passes.",
+  below_normal: "below their normal on the public count. Without connected numbers, whether few people were shown it or they scrolled can't be told apart.",
   not_distributed: "the platform barely showed it: reach well under their normal. The post itself is not the problem yet; the first three seconds and the posting time are the levers.",
   distributed_scrolled: "it was shown to the usual number of people and they scrolled: the promise in the first line did not land for this audience.",
   hook_lost_them: "the hook lost them: most viewers left inside three seconds. The open is the fix, not the topic.",

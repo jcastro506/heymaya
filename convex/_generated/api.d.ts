@@ -78,6 +78,7 @@ import type * as core_imessage from "../core/imessage.js";
 import type * as core_jobs from "../core/jobs.js";
 import type * as core_llm from "../core/llm.js";
 import type * as core_messages from "../core/messages.js";
+import type * as core_normal from "../core/normal.js";
 import type * as core_pairing from "../core/pairing.js";
 import type * as core_plainLanguage from "../core/plainLanguage.js";
 import type * as core_quality from "../core/quality.js";
@@ -248,6 +249,7 @@ declare const fullApi: ApiFromModules<{
   "core/jobs": typeof core_jobs;
   "core/llm": typeof core_llm;
   "core/messages": typeof core_messages;
+  "core/normal": typeof core_normal;
   "core/pairing": typeof core_pairing;
   "core/plainLanguage": typeof core_plainLanguage;
   "core/quality": typeof core_quality;

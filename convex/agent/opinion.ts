@@ -8,6 +8,7 @@
  */
 
 import { v } from "convex/values";
+import { normalViews } from "../core/normal";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -52,8 +53,11 @@ export const ownHistory = internalQuery({
     const recent = posts.slice(0, 5);
     const pick = new Map<string, Doc<"ownPosts">>();
     for (const p of [...top, ...recent]) pick.set(p._id, p);
-    const views = posts.map((p) => p.metrics.views).filter((x) => x > 0).sort((x, y) => x - y);
-    const normal = views.length ? views[Math.floor(views.length / 2)] : null;
+    // The one definition (core/normal.ts): settled posts, their main platform.
+    const counts = new Map<string, number>();
+    for (const p of posts) counts.set(p.platform, (counts.get(p.platform) ?? 0) + 1);
+    const main = [...counts.entries()].sort((x, y) => y[1] - x[1])[0]?.[0];
+    const normal = main ? normalViews(posts, main, Date.now())?.value ?? null : null;
     const preds = (await ctx.db.query("predictions").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(10)) as Doc<"predictions">[];
     return {
       posts: Array.from(pick.values()).map((p) => ({ url: p.url, views: p.metrics.views, multiple: p.multiple ?? null, caption: (p.caption ?? "").slice(0, 120), createTime: p.createTime })),

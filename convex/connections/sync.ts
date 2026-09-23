@@ -15,6 +15,7 @@
  */
 
 import { v } from "convex/values";
+import { appendHistory } from "../core/normal";
 import { entitlementsFor, accountsWithinPlan } from "../billing/tiers";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
@@ -72,6 +73,7 @@ export const upsert = internalMutation({
       await ctx.db.patch(match._id, {
         connected,
         ...(reachMultiple !== undefined ? { reachMultiple } : {}),
+        ...(newer && c.views !== null ? { history: appendHistory(match.history, { at: c.asOf ?? now, views: c.views }) } : {}),
         ...(newer && c.views !== null ? { metrics: { ...match.metrics, views: c.views, likes: c.likes ?? match.metrics.likes, comments: c.comments ?? match.metrics.comments, shares: c.shares ?? match.metrics.shares, saves: c.saves ?? match.metrics.saves }, metricsAsOf: c.asOf ?? now, source: "zernio" as const } : {}),
       });
       return { ownPostId: match._id, created: false };
@@ -91,6 +93,7 @@ export const upsert = internalMutation({
       hashtags: Array.from(caption.matchAll(/#([\p{L}\p{N}_]+)/gu)).map((m) => m[1].toLowerCase()).slice(0, 20),
       metrics: { views: c.views ?? 0, likes: c.likes ?? 0, comments: c.comments ?? 0, shares: c.shares ?? 0, saves: c.saves ?? undefined },
       metricsAsOf: c.asOf ?? now,
+      history: c.views !== null ? [{ at: c.asOf ?? now, views: c.views }] : [],
       source: "zernio",
       connected,
       ...(reachMultiple !== undefined ? { reachMultiple } : {}),
@@ -196,6 +199,7 @@ export const delta = internalAction({
     const c = client();
     let cur = await ctx.runQuery(internal.connections.sync.cursor, { key: "zernio:analytics:delta" });
     let pages = 0, rows = 0, written = 0, skipped = 0;
+    const touched = new Set<Id<"creators">>();
     try {
       for (;;) {
         const res = await c.request<{ data?: Array<Record<string, unknown>>; nextCursor?: string; hasMore?: boolean }>("/api/v1/analytics/delta", { query: cur ? { cursor: cur } : {} });
@@ -209,6 +213,7 @@ export const delta = internalAction({
           const creatorId = accountId ? await ctx.runQuery(internal.connections.sync.creatorForAccount, { accountId }) : null;
           if (!conn || !creatorId) { skipped++; continue; }
           await ctx.runMutation(internal.connections.sync.upsert, { creatorId, connected: conn, caption: row.content ?? "" });
+          touched.add(creatorId);
           written++;
         }
         if (res.nextCursor) { cur = res.nextCursor; await ctx.runMutation(internal.connections.sync.setCursor, { key: "zernio:analytics:delta", value: res.nextCursor }); }
@@ -218,6 +223,15 @@ export const delta = internalAction({
       await ctx.runMutation(internal.connections.zernio.recordHealth, { check: "delta", ok: true, detail: `${written} written, ${skipped} skipped over ${pages} pages` });
     } catch (e) {
       await ctx.runMutation(internal.connections.zernio.recordHealth, { check: "delta", ok: false, detail: e instanceof Error ? e.message.slice(0, 200) : "delta failed" });
+    }
+    // B1: a connected post that pops is noticed within the hour, not at the next readback.
+    for (const creatorId of touched) {
+      try {
+        await ctx.runMutation(internal.onboarding.ingest.computeMultiples, { creatorId });
+        await ctx.runMutation(internal.scout.readback.writeWins, { creatorId, now: Date.now() });
+      } catch (e) {
+        console.error(`[zernio delta] wins for ${creatorId}: ${e instanceof Error ? e.message.slice(0, 120) : "failed"}`);
+      }
     }
     return { pages, rows, written, skipped };
   },

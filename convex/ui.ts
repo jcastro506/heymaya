@@ -362,7 +362,8 @@ function postNumbersView(p: Doc<"ownPosts">, siblings: Doc<"ownPosts">[], now: n
     headline: n.headline,
     multiple: n.multiple,
     derived: n.derived ? { distribution: n.derived.distribution, reachMultiple: n.derived.reachMultiple, engagementPerReach: n.derived.engagementPerReach, retention: n.derived.retention, diagnosis: n.derived.diagnosis, basis: n.derived.basis } : null,
-    read: n.derived ? DIAGNOSIS_WORDS[n.derived.diagnosis] : null,
+    read: n.derived && n.derived.diagnosis !== "unknown" ? DIAGNOSIS_WORDS[n.derived.diagnosis] : null,
+    shape: n.shape,
     cannotKnow: n.cannotKnow,
   };
 }

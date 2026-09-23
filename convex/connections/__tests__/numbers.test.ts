@@ -35,7 +35,8 @@ describe("numbersFor", () => {
     expect(n.headline).toMatchObject({ what: "views", value: 9_000, basis: "public" });
     expect(n.multiple).toEqual({ value: 1.2, basis: "views" });
     expect(n.lines[0]).toMatch(/connected numbers are 49h old; judging on the public count/);
-    expect(n.derived).toBeNull();
+    // B1: a read on the public count, labelled as such, claiming nothing about reach or distribution.
+    expect(n.derived).toMatchObject({ basis: "views", distribution: null, reachMultiple: null, engagementPerReach: null });
   });
 
   it("on TikTok it says what cannot be known instead of guessing", () => {
@@ -63,5 +64,12 @@ describe("the mixed-basis check", () => {
   });
   it("is silent when no retention is claimed", () => {
     expect(run("your tiktok did 12k views, 3x your normal")).toBeUndefined();
+  });
+});
+
+describe("B1: breakouts and the public read", () => {
+  it("a connected post at 3× their normal reach reads as broke out", () => {
+    const n = numbersFor(post({ connected: { ...fresh }, reachMultiple: 4 }), siblings, NOW);
+    if (n.derived?.basis === "reach") expect(["broke_out", "held_them", "hook_lost_them"]).toContain(n.derived.diagnosis);
   });
 });

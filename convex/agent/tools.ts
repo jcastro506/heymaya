@@ -257,7 +257,8 @@ export async function runTool(ctx: ActionCtx, creatorId: Id<"creators">, call: {
       const mult = n.multiple ? `${n.multiple.value}× their normal on ${n.multiple.basis}` : "no normal yet";
       if (call.name === "post_diagnosis") {
         const d = n.derived?.diagnosis ?? "unknown";
-        return cap(`${DIAGNOSIS_WORDS[d]}\nbasis: ${n.derived?.basis ?? "none"} · ${head} · ${mult}${n.cannotKnow.length ? `\ncannot know: ${n.cannotKnow.join("; ")}` : ""}`);
+        const shapeWords: Record<string, string> = { early: "under two days old: still growing", spike: "most of its views came in the first two days", slow_burn: "a big share of its views came after the first week (search or a resurfacing)", steady: "its views came in steadily", unknown: "not enough readings to say how its views arrived" };
+        return cap(`${DIAGNOSIS_WORDS[d]}\nhow the views arrived: ${shapeWords[n.shape]}\nbasis: ${n.derived?.basis ?? "none"} · ${head} · ${mult}${n.cannotKnow.length ? `\ncannot know: ${n.cannotKnow.join("; ")}` : ""}`);
       }
       return cap(`${head} · ${mult} · ${n.ageHours}h old\n${n.lines.map((l) => `- ${l}`).join("\n")}${n.cannotKnow.length ? `\ncannot know: ${n.cannotKnow.join("; ")}` : ""}`);
     }

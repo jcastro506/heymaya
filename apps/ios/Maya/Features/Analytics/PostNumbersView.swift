@@ -90,6 +90,13 @@ struct PostNumbersView: View {
       .background(Palette.wash, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
+    if let shape = n.shape, let words = ShapeWords.text(shape) {
+      Label(words, systemImage: shape == "slow_burn" ? "chart.line.uptrend.xyaxis" : shape == "spike" ? "bolt.fill" : "clock")
+        .font(MayaFont.callout).foregroundStyle(Palette.ink)
+        .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+        .background(Palette.panel, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
     if !n.cannotKnow.isEmpty {
       VStack(alignment: .leading, spacing: 10) {
         SectionHeader(text: "What \(n.platform == "instagram" ? "Instagram" : "TikTok") doesn't show")
@@ -143,5 +150,18 @@ struct MetricTile: Identifiable {
     add("perPerson", "views per person", n.derived?.distribution.map { $0.formatted(.number.precision(.fractionLength(1))) })
     add("engaged", "engaged per person reached", n.derived?.engagementPerReach.map { "\(($0 * 100).formatted(.number.precision(.fractionLength(1))))%" })
     return out
+  }
+}
+
+/// How a post's views arrived, from her readings over time (server: core/normal.shapeOf).
+enum ShapeWords {
+  static func text(_ shape: String) -> String? {
+    switch shape {
+    case "early": "Under two days old, still growing. Its multiple is \"so far\"."
+    case "spike": "Most of its views came in the first two days."
+    case "slow_burn": "A big share of its views came after the first week, likely search or a resurfacing."
+    case "steady": "Its views came in steadily."
+    default: nil // not enough readings yet: say nothing rather than guess
+    }
   }
 }

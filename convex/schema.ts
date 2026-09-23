@@ -247,7 +247,9 @@ export default defineSchema({
     // Sprint 4f: the post's embedding, kept so the cluster read embeds each post once and the quota is spent once.
     embedding: v.optional(v.array(v.float64())),
     embeddedText: v.optional(v.string()),
-    multiple: v.optional(v.number()), // views / creator baseline at capture
+    multiple: v.optional(v.number()), // views ÷ their settled normal on this platform (core/normal.ts); a lower bound while < 48 h old
+    /** B1: bounded view readings (core/normal.appendHistory), so a spike can be told from a slow burn. */
+    history: v.optional(v.array(v.object({ at: v.number(), views: v.number() }))),
     matchCheckedAt: v.optional(v.number()), // §13.5: match-post has judged this post against recent ideas
     transcript: v.optional(v.string()),
     sample: v.optional(v.array(v.string())), // top | weak | recent | outlier | history

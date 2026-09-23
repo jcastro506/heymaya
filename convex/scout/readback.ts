@@ -1,6 +1,6 @@
 /**
- * The daily readback (plan §6 Sprint 4, §21.5): refresh the creator's own posts and
- * metrics once a day, recompute multiples, and turn a post crossing 3× their baseline
+ * The readback (plan §6 Sprint 4, §21.5; every 6 h since B1): refresh the creator's own posts
+ * and metrics, recompute multiples, and turn a post crossing 3× their baseline
  * into a `win` signal so she can say something while it is happening. Idea matching
  * (§13.5, the `match-post` skill) attaches here next.
  */
@@ -61,7 +61,7 @@ export const run = internalAction({
   args: {},
   handler: async (ctx): Promise<{ creators: number; wins: number; failed: number }> => {
     const now = Date.now();
-    const day = new Date(now).toISOString().slice(0, 10);
+    const bucket = `${new Date(now).toISOString().slice(0, 10)}-${Math.floor(new Date(now).getUTCHours() / 6)}`; // one feed read per 6 h slot
     const creators = await ctx.runQuery(internal.scout.readback.pairedCreators, {});
     let wins = 0, failed = 0;
     for (const c of creators) {
@@ -69,7 +69,7 @@ export const run = internalAction({
         for (const platform of ["tiktok", "instagram"] as const) {
           const handle = c.handles[platform];
           if (!handle) continue;
-          const r = await ctx.runAction(internal.reads.read.read, { kind: "account.posts", params: { platform, handle, sort: "latest", slot: `readback-${day}` }, creatorId: c.id });
+          const r = await ctx.runAction(internal.reads.read.read, { kind: "account.posts", params: { platform, handle, sort: "latest", slot: `readback-${bucket}` }, creatorId: c.id });
           const posts = Array.isArray(r.value) ? r.value : [];
           const up = await ctx.runMutation(internal.onboarding.ingest.upsertOwnPosts, { creatorId: c.id, posts, now, handle });
           // 2026-09-07: her picture of them froze at onboarding; every new post is watched too,

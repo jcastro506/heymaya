@@ -129,7 +129,7 @@ export function normalizeConnected(row: ZernioPostRow): Connected | null {
 
 // --------------------------------------------------------------- derived facts
 
-export type Diagnosis = "not_distributed" | "distributed_scrolled" | "hook_lost_them" | "held_them" | "normal" | "unknown";
+export type Diagnosis = "broke_out" | "below_normal" | "not_distributed" | "distributed_scrolled" | "hook_lost_them" | "held_them" | "normal" | "unknown";
 
 export interface Derived {
   /** views ÷ reach: how many times each person saw it. */
@@ -146,6 +146,7 @@ export interface Derived {
 }
 
 export const DIAGNOSE = {
+  brokeOutAtLeast: 3,         // 3× their normal (reach, or views on the public count) is a breakout
   notDistributedBelow: 0.5,   // reach under half their normal reach
   scrolledEngagementBelow: 0.01, // fewer than 1 in 100 reached people did anything
   hookLostSkipAbove: 55,      // % leaving in the first 3 s
@@ -167,7 +168,8 @@ export function derive(c: Connected, normals: { reach: number | null; engagement
     diagnosis = c.skipRatePct >= DIAGNOSE.hookLostSkipAbove ? "hook_lost_them" : retention >= DIAGNOSE.heldRetentionAbove ? "held_them" : "normal";
   } else if (reachMultiple !== null) {
     basis = "reach";
-    if (reachMultiple < DIAGNOSE.notDistributedBelow) diagnosis = "not_distributed";
+    if (reachMultiple >= DIAGNOSE.brokeOutAtLeast) diagnosis = "broke_out";
+    else if (reachMultiple < DIAGNOSE.notDistributedBelow) diagnosis = "not_distributed";
     else if (engagementPerReach !== null && engagementPerReach < DIAGNOSE.scrolledEngagementBelow) diagnosis = "distributed_scrolled";
     else diagnosis = "normal";
   } else if (c.views !== null) {
@@ -184,4 +186,15 @@ export function citeable(c: Connected): { line: string; basis: "connected" | "pu
   if (c.avgWatchMs !== null && c.durationSec) out.push({ line: `watched ${Math.round((c.avgWatchMs / (c.durationSec * 1000)) * 100)}% on average`, basis: "connected" });
   if (c.skipRatePct !== null) out.push({ line: `${Math.round(c.skipRatePct)}% left in the first 3 seconds (Meta's estimate)`, basis: "connected" });
   return out;
+}
+
+/**
+ * The same read on the public count when no account is connected (B1): only what views can
+ * say — broke out, below their normal, or about normal. Never why; that's her judgment.
+ * A fresh post can be called a breakout (its multiple is a lower bound) but never "below".
+ */
+export function derivePublic(multiple: number | null | undefined, settledPost: boolean): Derived | null {
+  if (multiple === null || multiple === undefined) return null;
+  const diagnosis: Diagnosis = multiple >= DIAGNOSE.brokeOutAtLeast ? "broke_out" : !settledPost ? "unknown" : multiple < DIAGNOSE.notDistributedBelow ? "below_normal" : "normal";
+  return { distribution: null, reachMultiple: null, engagementPerReach: null, retention: null, diagnosis, basis: "views" };
 }

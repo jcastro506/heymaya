@@ -7,6 +7,7 @@
 
 import { v } from "convex/values";
 import { coverKey, rememberMedia } from "../media";
+import { appendHistory, normalsByPlatform, multipleFor } from "../core/normal";
 import { internalAction, internalMutation, internalQuery, type MutationCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -73,6 +74,7 @@ export const upsertOwnPosts = internalMutation({
         await ctx.db.patch(existing._id, {
           metrics,
           metricsAsOf: a.now,
+          history: appendHistory(existing.history, { at: a.now, views: metrics.views }),
           contentType: p.mediaType === "carousel" ? "carousel" : p.mediaType === "image" ? "photo" : "video",
           ...(p.videoDurationSec ? { durationSec: p.videoDurationSec } : {}),
         });
@@ -99,6 +101,7 @@ export const upsertOwnPosts = internalMutation({
         continue;
       }
       insertedIds.push(await ctx.db.insert("ownPosts", {
+        history: [{ at: a.now, views: metrics.views }],
         creatorId: a.creatorId,
         platform: p.platform,
         postId: p.postId,
@@ -119,18 +122,25 @@ export const upsertOwnPosts = internalMutation({
   },
 });
 
-/** Baseline = median views of the last 20 posts; every post gets a multiple against it. */
+/**
+ * Every post's multiple against their settled normal on its own platform (core/normal.ts, the
+ * one definition). `baseline` reports the normal of the platform they post most on.
+ */
 export const computeMultiples = internalMutation({
   args: { creatorId: v.id("creators") },
   handler: async (ctx, a): Promise<{ baseline: number | null; posts: number }> => {
     const rows = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").collect()) as Doc<"ownPosts">[];
     if (rows.length === 0) return { baseline: null, posts: 0 };
-    const last20 = rows.slice(0, 20).map((r) => r.metrics.views).sort((x, y) => x - y);
-    const baseline = last20.length >= 5 ? last20[Math.floor(last20.length / 2)] : null;
+    const now = Date.now();
+    const normals = normalsByPlatform(rows, now);
     for (const r of rows) {
-      await ctx.db.patch(r._id, { multiple: baseline && baseline > 0 ? Number((r.metrics.views / baseline).toFixed(2)) : undefined });
+      const m = multipleFor(r, normals);
+      if (m !== r.multiple) await ctx.db.patch(r._id, { multiple: m });
     }
-    return { baseline, posts: rows.length };
+    const counts = new Map<string, number>();
+    for (const r of rows) counts.set(r.platform, (counts.get(r.platform) ?? 0) + 1);
+    const main = [...counts.entries()].sort((x, y) => y[1] - x[1])[0][0];
+    return { baseline: normals.get(main)?.value ?? null, posts: rows.length };
   },
 });
 
