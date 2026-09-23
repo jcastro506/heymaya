@@ -410,6 +410,22 @@ Each exit criterion is demonstrated on **TestFlight against staging**, not in a 
 - every server string the app renders gets a no-third-person check in the eval checks.
 **Exit:** the operator reads every screen on their phone and signs off the words.
 
+### P1 — Plans, billing and gating (4–6 d; before the TestFlight cohort, after D9 is decided)
+**Why:** pricing and feature gates are scattered (`billing/tiers.ts`, `billing/plan.ts`, `partnerships/store.ts`, `agent/converse.ts`, `connections/zernio.ts`), and nothing proves them end to end on a real device. One missed door is a leak (paid work given free) or a broken promise (paid work refused).
+**Build:**
+1. **Decide and encode D9** (pricing). Whatever the tiers are, `billing/tiers.ts` stays the only source. Stripe test prices for every tier × interval exist and their env keys are set on dev and staging.
+2. **An entitlements matrix as code:** one table of *feature → allowance per tier* (accounts, partnerships research/opportunities/drafts, diagnoses, share-extension reads, anything B-sprints add). Every door reads it; nothing checks a tier name directly.
+3. **Manage plan and billing in the app:** the Stripe portal with `return_url` = a universal link back into the app (today it returns to the web settings page), plus the subscription-update flow for upgrades and downgrades with proration (§11.1), and cancel, resume, and payment-method update.
+4. **Upgrade lands everywhere at once:** the webhook sets the tier; the app's Deals tab, Settings, and every locked surface flip live; Maya's next turn has the skills; she texts once (§11.1 step 6).
+5. **Downgrade and lapse:** the doors close at period end, open partnership threads keep syncing replies for 30 days, and nothing is deleted.
+**Tests:**
+- a **gate matrix test**: for every tier × plan status (trialing, active, past_due, canceled, paused, comped, pilot comp) × feature, assert allowed/refused at the server door, *and* that the app shows the matching locked/unlocked state (contract fixture per tier);
+- **sibling coherence**: every `TIERS` allowance has a door that reads it, and every door reads the matrix (grep test);
+- webhook replay and out-of-order events (updated before created) land the right tier once;
+- the price shown in the app always equals `tiers.ts` (no literal prices in Swift; a grep test);
+- fail-closed: an unknown price id or a missing tier never unlocks anything.
+**Exit, live (TestFlight, Stripe test mode):** on a real phone, subscribe to solo → Deals is locked; upgrade to partner in the app → Deals unlocks within seconds and Maya's next reply can research a brand; open "Manage plan" → portal → downgrade → at period end the doors close and the app locks again; every step returns to the app, not the web.
+
 ### M3 — Onboarding and login in the app (7–9 d)
 **Build:** §4 and §5 in full: sign-in, plan and Stripe link-out, Zernio and Google auth sessions, creator-picture screen, watch picks, her-number pairing, done state, resumability, `/join` attribution with campaign tokens; App Clip spike.
 **Tests:** Maestro kill-and-resume at every step; auth-session cancel at every provider; checkout replay idempotency; duplicate-identity linking; content-inventory test (no Telegram, YouTube, vendor names, or "AI"); the old doc's onboarding acceptance list, re-run.
