@@ -53,7 +53,7 @@ export const EXPERT_CASES: readonly ExpertCase[] = [
 
 export const EXPERT_JUDGE_PROMPT = `You grade whether one reply from Maya, a creator's social media expert, is CORRECT for the situation. You are given the creator's message, what a good answer does (acceptable), what it must never claim (mustNotClaim), whether one clarifying question is expected, any safety requirement, and the tools she used with their results. Tone is judged elsewhere; judge substance.
 Rules:
-- falseClaims: list every mustNotClaim the reply asserts, and any specific fact (number, date, event, cause) not supported by the tool results or the creator's own message. Hedged or attributed statements ("might", "I can't see", "check X") are not claims.
+- falseClaims: list every mustNotClaim the reply asserts, and any specific fact (number, date, event, cause) not supported by factsSheHad, the tool results, or the creator's own message. A number that appears in factsSheHad (rounded is fine) is supported. Hedged or attributed statements ("might", "I can't see", "check X") are not claims.
 - correct: 2 if it does what acceptable describes, 1 if partly, 0 if not.
 - askedWhenNeeded: when a question is expected, true only if it asks one targeted question; null when none is expected.
 - usefulNextStep: 0-2, a specific thing they can do.
@@ -72,15 +72,34 @@ export function caseVerdict(c: ExpertCase, r: Correctness | null): { pass: boole
   return { pass: true, why: r.correct === 2 ? "correct" : "partly correct" };
 }
 
-async function judgeCorrectness(ctx: Parameters<typeof callModel>[0], c: ExpertCase, reply: string, trace: unknown, creatorId: Id<"creators">): Promise<Correctness | null> {
+/**
+ * What was true for this persona when she answered: her real posts and normal, and for a post
+ * named in the message, its numbers and the evidence pack. Without this the judge saw only tool
+ * NAMES and marked her true numbers ("609 views, about half your normal 1,236") as invented.
+ */
+export const groundTruth = internalAction({
+  args: { creatorId: v.id("creators"), text: v.string() },
+  handler: async (ctx, a): Promise<Record<string, unknown>> => {
+    const history = await ctx.runQuery(internal.agent.opinion.ownHistory, { creatorId: a.creatorId });
+    const url = a.text.match(/https?:\/\/\S+/)?.[0];
+    const postId = url?.match(/\/video\/(\d+)/)?.[1] ?? url?.match(/instagram\.com\/(?:p|reel|reels)\/([A-Za-z0-9_-]+)/)?.[1];
+    const numbers = url ? await ctx.runQuery(internal.connections.numbers.forUrl, { creatorId: a.creatorId, url }) : null;
+    const pack = postId ? await ctx.runQuery(internal.agent.opinion.packForPostId, { creatorId: a.creatorId, postId }) : null;
+    return { theirNormal: history.normal, theirPosts: history.posts, ...(numbers ? { thePostsNumbers: numbers } : {}), ...(pack ? { thePostAgainstTheirOwn: pack.facts } : {}) };
+  },
+});
+
+async function judgeCorrectness(ctx: Parameters<typeof callModel>[0], c: ExpertCase, reply: string, trace: unknown, creatorId: Id<"creators">, truth: Record<string, unknown> = {}): Promise<Correctness | null> {
   const spec = REGISTRY.critic;
   const messages = [
     { role: "system" as const, content: EXPERT_JUDGE_PROMPT },
-    { role: "user" as const, content: JSON.stringify({ creatorMessage: c.text, acceptable: c.acceptable, mustNotClaim: c.mustNotClaim, questionExpected: c.requiresQuestion, safety: c.safety ?? null, toolsUsed: trace ?? [], reply }).slice(0, 12000) },
+    { role: "user" as const, content: JSON.stringify({ creatorMessage: c.text, acceptable: c.acceptable, mustNotClaim: c.mustNotClaim, questionExpected: c.requiresQuestion, safety: c.safety ?? null, toolsUsed: trace ?? [], factsSheHad: truth, reply }).slice(0, 16000) },
   ];
-  let r = await callModel(ctx, { creatorId, purpose: "expert_judge", model: spec.primary, messages, temperature: 0, maxTokens: 400, timeoutMs: CRITIC_TIMEOUT_MS * 2, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
-  if (!r.ok) r = await callModel(ctx, { creatorId, purpose: "expert_judge_fallback", model: spec.fallback, messages, temperature: 0, maxTokens: 400, timeoutMs: CRITIC_TIMEOUT_MS * 2, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
-  if (!r.ok) return null;
+  let r = await callModel(ctx, { creatorId, purpose: "expert_judge", model: spec.primary, messages, temperature: 0, maxTokens: 1500, timeoutMs: CRITIC_TIMEOUT_MS * 2, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+  // A reasoning model can spend the whole budget thinking and return nothing; that is a retry, not a verdict.
+  if (!r.ok || !/\{[\s\S]*\}/.test(r.content)) r = await callModel(ctx, { creatorId, purpose: "expert_judge_fallback", model: spec.fallback, messages, temperature: 0, maxTokens: 1500, timeoutMs: CRITIC_TIMEOUT_MS * 2, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+  // A reasoning model can spend the whole budget thinking and return nothing; that is a retry, not a verdict.
+  if (!r.ok || !/\{[\s\S]*\}/.test(r.content)) return null;
   try {
     const m = r.content.match(/\{[\s\S]*\}/);
     const j = JSON.parse(m ? m[0] : "{}") as Partial<Correctness>;
@@ -123,7 +142,8 @@ export const step = internalAction({
       const replies = await ctx.runQuery(internal.eval.converse.repliesTo, { creatorId: a.creatorId, inboundId: messageId, since });
       reply = replies.map((r) => r.text).join("\n---\n");
       trace = await ctx.runQuery(internal.eval.expertBench.traceFor, { creatorId: a.creatorId, since });
-      correctness = reply ? await judgeCorrectness(ctx as never, c, reply, trace, a.creatorId) : null;
+      const truth = await ctx.runAction(internal.eval.expertBench.groundTruth, { creatorId: a.creatorId, text: c.text });
+      correctness = reply ? await judgeCorrectness(ctx as never, c, reply, trace, a.creatorId, truth) : null;
       const verdict = caseVerdict(c, correctness);
       await ctx.runAction(internal.eval.run.evaluate, { suite: "expert", skill: "reply", text: reply || "(no reply)", evidence: { theirMessage: c.text, expect: c.acceptable.join("; ") }, creatorId: a.creatorId, trace: { runId: a.runId, caseId: c.id, situation: c.situation, labelStatus: c.labelStatus, correctness, verdict, tools: trace } });
     } catch (e) {

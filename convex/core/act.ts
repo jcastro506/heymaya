@@ -17,6 +17,7 @@ export const AWARENESS: Record<string, Awareness> = {
   "idea.unsave": "state",
   "idea.pass": "noticed",
   "idea.posted": "noticed",
+  "idea.restore": "noticed",
   "rule.revoke": "noticed",
   "correction.add": "noticed",
   "settings.update": "state",

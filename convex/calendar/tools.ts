@@ -57,7 +57,14 @@ export const write = internalAction({
       if (!["film", "edit", "post"].includes(kind)) return { ok: false, reason: "kind must be film, edit or post" };
       const minutes = Math.max(10, Math.min(240, Number(args.minutes) || 45));
       const title = `${kind}: ${String(args.title ?? "").slice(0, 70) || "as asked"}`;
-      const blockId = await ctx.runMutation(internal.calendar.blocks.propose, { creatorId: a.creatorId, kind, start: when.at, end: when.at + minutes * 60_000, title });
+      // I1: a block may carry one of THEIR ideas (idea_plan); a foreign id is refused, never attached.
+      let ideaId: Id<"ideas"> | undefined;
+      if (typeof args.ideaId === "string" && args.ideaId) {
+        const idea = await ctx.runQuery(internal.agent.ideaTools.get, { creatorId: a.creatorId, ideaId: args.ideaId });
+        if (!idea) return { ok: false, reason: "that idea is not on their list" };
+        ideaId = idea._id;
+      }
+      const blockId = await ctx.runMutation(internal.calendar.blocks.propose, { creatorId: a.creatorId, kind, start: when.at, end: when.at + minutes * 60_000, title, ideaId });
       // They asked, so the ask is the consent: book it now.
       const r = await ctx.runAction(internal.calendar.blocks.confirm, { blockId });
       await ctx.runAction(internal.calendar.reminders.scheduleFor, { blockId });

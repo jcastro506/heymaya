@@ -12,6 +12,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { applyEvent, featureKeys, TASTE, WEIGHTS, type Affinity } from "./affinities";
 import { creatorForIdentity } from "../core/identity";
 import { ensureSeparated, isOutcome } from "./separation";
+import { applyIdeaAct } from "../core/ideaActs";
 
 const STATUS_FOR: Record<string, Doc<"ideas">["status"] | undefined> = { posted: "posted", heart: "hearted", notme: "passed", thumbs_down: "passed", ignored: "expired" };
 
@@ -99,18 +100,9 @@ export const expireIgnored = internalMutation({
 export const markPosted = mutation({
   args: { ideaId: v.id("ideas") },
   handler: async (ctx, a): Promise<{ ok: boolean }> => {
-    let c = await creatorForIdentity(ctx);
-    const idea = (await ctx.db.get(a.ideaId)) as Doc<"ideas"> | null;
-    if (!c || !idea || idea.creatorId !== c._id) return { ok: false };
-    c = await ensureSeparated(ctx, c);
-    if (idea.status === "posted") return { ok: true };
-    const now = Date.now();
-    const keys = featureKeys(idea.features);
-    const weight = idea.newForYou ? WEIGHTS.posted * 2 : WEIGHTS.posted;
-    await ctx.db.insert("tasteEvents", { creatorId: c._id, ideaId: idea._id, kind: "posted", weight, features: keys, at: now });
-    if (keys.length) await ctx.db.patch(c._id, { affinities: applyEvent((c.affinities ?? []) as Affinity[], keys, weight, now), updatedAt: now });
-    await ctx.db.patch(idea._id, { status: "posted", postedAt: now, matchConfidence: "certain" });
-    await recordAction(ctx, { creatorId: c._id, kind: "idea.posted", objectId: idea._id, summary: `marked your idea "${(idea.version as { hook?: string } | undefined)?.hook ?? idea.messageText.slice(0, 60)}" as posted` });
-    return { ok: true };
+    const c = await creatorForIdentity(ctx);
+    if (!c) return { ok: false };
+    // I1: the one idea-act path, shared with her chat tools.
+    return { ok: (await applyIdeaAct(ctx, c._id, a.ideaId, "posted", { origin: "app" })).ok };
   },
 });

@@ -5,6 +5,7 @@
  */
 
 import { v } from "convex/values";
+import { applyIdeaAct } from "./core/ideaActs";
 import { entitlementsFor, TIERS } from "./billing/tiers";
 import { partnershipsOpen } from "./partnerships/store";
 import { connectedFrom, DIAGNOSIS_WORDS, numbersFor } from "./connections/numbers";
@@ -180,13 +181,18 @@ export const passIdea = mutation({
   args: { id: v.id("ideas") },
   handler: async (ctx, a): Promise<{ ok: boolean }> => {
     const c = await me(ctx);
-    const row = (await ctx.db.get(a.id)) as Doc<"ideas"> | null;
-    if (!c || !row || row.creatorId !== c._id) return { ok: false };
-    if (row.status === "passed") return { ok: true };
-    await ctx.db.patch(a.id, { status: "passed" });
-    await ctx.scheduler.runAfter(0, internal.taste.events.record, { creatorId: c._id, kind: "notme", ideaId: a.id });
-    await recordAction(ctx, { creatorId: c._id, kind: "idea.pass", objectId: a.id, summary: `passed on your idea "${(row.version as { hook?: string } | undefined)?.hook ?? row.messageText.slice(0, 60)}"` });
-    return { ok: true };
+    if (!c) return { ok: false };
+    return { ok: (await applyIdeaAct(ctx, c._id, a.id, "pass", { origin: "app" })).ok };
+  },
+});
+
+/** Bring a passed idea back (I1; chat has the same act through `idea_status`). */
+export const restoreIdea = mutation({
+  args: { id: v.id("ideas") },
+  handler: async (ctx, a): Promise<{ ok: boolean }> => {
+    const c = await me(ctx);
+    if (!c) return { ok: false };
+    return { ok: (await applyIdeaAct(ctx, c._id, a.id, "restore", { origin: "app" })).ok };
   },
 });
 
@@ -195,19 +201,8 @@ export const saveIdea = mutation({
   args: { id: v.id("ideas"), saved: v.boolean() },
   handler: async (ctx, a): Promise<{ ok: boolean }> => {
     const c = await me(ctx);
-    const row = (await ctx.db.get(a.id)) as Doc<"ideas"> | null;
-    if (!c || !row || row.creatorId !== c._id) return { ok: false };
-    if (!a.saved) {
-      await ctx.db.patch(a.id, { savedAt: undefined });
-      await recordAction(ctx, { creatorId: c._id, kind: "idea.unsave", objectId: a.id, summary: `unsaved your idea "${(row.version as { hook?: string } | undefined)?.hook ?? row.messageText.slice(0, 60)}"` });
-      return { ok: true };
-    }
-    if (row.savedAt) return { ok: true };
-    await ctx.db.patch(a.id, { savedAt: Date.now() });
-    await recordAction(ctx, { creatorId: c._id, kind: "idea.save", objectId: a.id, summary: `saved your idea "${(row.version as { hook?: string } | undefined)?.hook ?? row.messageText.slice(0, 60)}"` });
-    await ctx.scheduler.runAfter(0, internal.taste.events.record, { creatorId: c._id, kind: "save", ideaId: a.id });
-    await ctx.scheduler.runAfter(0, internal.agent.memory.index, { creatorId: c._id, kind: "swipe", refId: String(a.id), text: `${(row.version as { hook?: string } | undefined)?.hook ?? ""}\n${row.messageText}` });
-    return { ok: true };
+    if (!c) return { ok: false };
+    return { ok: (await applyIdeaAct(ctx, c._id, a.id, a.saved ? "save" : "unsave", { origin: "app" })).ok };
   },
 });
 
