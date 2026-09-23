@@ -57,6 +57,17 @@ export default function OpsPage() {
           <div className="border border-white/10 rounded p-3"><div className="text-[11px] uppercase tracking-wide opacity-50">Activation · weekly active</div><div className="text-lg tabular-nums">{mx.activation ?? "—"}% · {mx.weeklyActive ?? "—"}%</div><div className="text-[11px] opacity-50">first reply within 48h of the first read · replied this week, of paying</div></div>
           <div className="border border-white/10 rounded p-3"><div className="text-[11px] uppercase tracking-wide opacity-50">North star</div><div className="text-lg tabular-nums">{mx.ideasPostedPerCreatorMonth}</div><div className="text-[11px] opacity-50">ideas posted per creator per month (target ≥ 2)</div></div>
           <div className="border border-white/10 rounded p-3"><div className="text-[11px] uppercase tracking-wide opacity-50">Silence · funnel</div><div className="text-lg tabular-nums">{mx.silence.proactivePerCreatorWeek}/wk · {mx.silence.mutePct}% paused</div><div className="text-[11px] opacity-50">first message p50 {mx.funnel.timeToFirstMessageMinP50 ?? "—"} min · p95 {mx.funnel.p95 ?? "—"} min</div></div>
+          {mx.cogsLive && (
+            <div className="border border-white/10 rounded p-3 col-span-full">
+              <div className="text-[11px] uppercase tracking-wide opacity-50">COGS, live (real creators, last 30 days; COGS model §7)</div>
+              <div className="text-lg tabular-nums">${mx.cogsLive.avgMonthlyUsd.total}/creator/mo · blended margin {mx.cogsLive.blendedMarginPct ?? "—"}% · {mx.cogsLive.realCreators} creators</div>
+              <div className="text-[11px] opacity-60 tabular-nums">ledger ${mx.cogsLive.avgMonthlyUsd.ledger} · messaging ${mx.cogsLive.avgMonthlyUsd.messaging} · Zernio ${mx.cogsLive.avgMonthlyUsd.zernio} · Stripe ${mx.cogsLive.avgMonthlyUsd.stripe} (est.) · fixed ${mx.cogsLive.avgMonthlyUsd.fixedShare} · eval spend (ours, excluded) ${mx.cogsLive.evalSpend30dUsd}</div>
+              {mx.cogsLive.below30.length > 0 && (
+                <div className="text-[11px] mt-2">Under 30% margin: {mx.cogsLive.below30.map((c) => `${c.name} ${c.marginPct}% ($${c.totalUsd})`).join(" · ")}</div>
+              )}
+              <div className="text-[11px] mt-2 opacity-60">Reconcile: {mx.cogsLive.reconcile.map((r) => `${r.vendor} ${r.ok ? "ok" : "OFF"} (${r.detail})`).join(" · ") || "no readings yet"}</div>
+            </div>
+          )}
           <div className="border border-white/10 rounded p-3"><div className="text-[11px] uppercase tracking-wide opacity-50">COGS (§3.6)</div><div className="text-lg tabular-nums">${mx.cogs.perCreatorMonthlyUsd}/creator/mo</div><div className="text-[11px] opacity-50">margin {mx.cogs.marginAt19 ?? "—"}% at $19 · {mx.cogs.marginAt29 ?? "—"}% at $29 · week: {Object.entries(mx.cogs.byVendorWeek).map(([k, v2]) => `${k} $${v2}`).join(", ") || "—"}</div></div>
         </section>
       )}

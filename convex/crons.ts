@@ -80,6 +80,7 @@ crons.daily("zernio followers", { hourUTC: 4, minuteUTC: 40 }, internal.connecti
 crons.hourly("human cadence", { minuteUTC: 55 }, internal.agent.cadence.runAll, {});
 
 crons.daily("cost reconcile", { hourUTC: 23, minuteUTC: 30 }, internal.core.reconcile.run, {});
+crons.daily("openrouter reconcile", { hourUTC: 23, minuteUTC: 40 }, internal.core.reconcile.openRouter, {});
 
 crons.interval("partnership reply sync", { minutes: 30 }, internal.partnerships.delivery.poll, {});
 export default crons;

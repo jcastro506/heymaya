@@ -53,3 +53,53 @@ export const run = internalAction({
     return { ok: r.ok, detail: r.detail };
   },
 });
+
+/** Our ledger's OpenRouter spend in a window (every creator, eval runs included: the key pays for both). */
+export const ledgerOpenRouterSince = internalQuery({
+  args: { since: v.number() },
+  handler: async (ctx, a): Promise<number> => {
+    const rows = (await ctx.db.query("costEvents").withIndex("by_at", (q) => q.gte("at", a.since)).collect()) as Doc<"costEvents">[];
+    return rows.filter((r) => r.vendor === "openrouter").reduce((s, r) => s + r.costUsd, 0);
+  },
+});
+
+/**
+ * COGS §7: OpenRouter's own bill against our ledger, daily. The key endpoint reports lifetime
+ * usage in USD; we keep yesterday's reading and compare the difference with what the ledger
+ * recorded over the same window. Beyond 10% is a vendorHealth failure the operator alert sees.
+ */
+export const openRouter = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{ ok: boolean; detail: string }> => {
+    const key = process.env.OPENROUTER_API_KEY;
+    if (!key) return { ok: false, detail: "no OPENROUTER_API_KEY" };
+    let usage: number | null = null;
+    try {
+      const res = await fetch("https://openrouter.ai/api/v1/key", { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(15_000) });
+      const body = (await res.json().catch(() => null)) as { data?: { usage?: number } } | null;
+      usage = typeof body?.data?.usage === "number" ? body.data.usage : null;
+    } catch {
+      usage = null;
+    }
+    const prevRaw = await ctx.runQuery(internal.connections.sync.cursor, { key: "openrouter:usage" });
+    const now = Date.now();
+    if (usage !== null) await ctx.runMutation(internal.connections.sync.setCursor, { key: "openrouter:usage", value: JSON.stringify({ usage, at: now }) });
+    if (usage === null) {
+      await ctx.runMutation(internal.core.smoke.record, { vendor: "openrouter", check: "reconcile", ok: false, detail: "vendor gave no number" });
+      return { ok: false, detail: "vendor gave no number" };
+    }
+    const prev = prevRaw ? (JSON.parse(prevRaw) as { usage: number; at: number }) : null;
+    if (!prev) {
+      await ctx.runMutation(internal.core.smoke.record, { vendor: "openrouter", check: "reconcile", ok: true, detail: "first reading kept; compares from tomorrow" });
+      return { ok: true, detail: "first reading" };
+    }
+    const vendorUsd = Math.max(0, usage - prev.usage);
+    const ledgerUsd = await ctx.runQuery(internal.core.reconcile.ledgerOpenRouterSince, { since: prev.at });
+    const base = Math.max(vendorUsd, ledgerUsd, 0.01);
+    const delta = (vendorUsd - ledgerUsd) / base;
+    const ok = Math.abs(delta) <= TOLERANCE || vendorUsd + ledgerUsd < 0.05; // pennies aren't a finding
+    const detail = `vendor $${vendorUsd.toFixed(2)} vs ledger $${ledgerUsd.toFixed(2)} (${Math.round(delta * 100)}%)`;
+    await ctx.runMutation(internal.core.smoke.record, { vendor: "openrouter", check: "reconcile", ok, detail });
+    return { ok, detail };
+  },
+});

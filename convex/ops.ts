@@ -5,6 +5,7 @@
  */
 
 import { v } from "convex/values";
+import { creatorCogs, isRealCreator, tierPriceUsd } from "./config/costs";
 import { query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { pulseWord } from "./review/pulse";
@@ -76,6 +77,8 @@ export const metrics = query({
     let activated = 0, withFirstRead = 0, weeklyActive = 0, postedIdeas = 0, mutes = 0;
     const ttfm: number[] = [];
     const perCreatorSpend: number[] = [];
+    const real: Array<{ id: string; name: string; priceUsd: number; ledgerUsd: number; messages: number; accounts: number }> = [];
+    let evalSpend = 0;
     const byVendor: Record<string, number> = {};
     for (const c of creators) {
       const msgs = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", c._id)).collect()) as Doc<"messages">[];
@@ -89,10 +92,22 @@ export const metrics = query({
       if (c.plan.status === "paused") mutes++;
       const ideas = (await ctx.db.query("ideas").withIndex("by_creator_status", (q) => q.eq("creatorId", c._id).eq("status", "posted")).collect()) as Doc<"ideas">[];
       postedIdeas += ideas.filter((i) => (i.postedAt ?? 0) >= month && (i.matchConfidence === "certain" || i.matchConfidence === "likely")).length;
-      const costs = (await ctx.db.query("costEvents").withIndex("by_creator_at", (q) => q.eq("creatorId", c._id).gte("at", week)).collect()) as Doc<"costEvents">[];
+      const costs30 = (await ctx.db.query("costEvents").withIndex("by_creator_at", (q) => q.eq("creatorId", c._id).gte("at", month)).collect()) as Doc<"costEvents">[];
+      if (!isRealCreator(c)) {
+        evalSpend += costs30.reduce((s, x) => s + x.costUsd, 0); // ours, not COGS
+        continue;
+      }
+      const costs = costs30.filter((x) => x.at >= week);
       const spend = costs.reduce((s, x) => s + x.costUsd, 0);
       perCreatorSpend.push(spend);
       for (const x of costs) byVendor[x.vendor] = (byVendor[x.vendor] ?? 0) + x.costUsd;
+      const conn = (await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", c._id).eq("provider", "zernio")).first()) as Doc<"connections"> | null;
+      real.push({
+        id: c._id, name: c.handles.tiktok ?? c.handles.instagram ?? c.email, priceUsd: tierPriceUsd(c.plan),
+        ledgerUsd: costs30.reduce((s, x) => s + x.costUsd, 0),
+        messages: msgs.filter((m) => m.ts >= month && (m.surface === "imessage" || m.surface === "telegram")).length,
+        accounts: (conn?.zernioAccounts ?? []).filter((x) => !x.needsReconnect).length,
+      });
     }
     const sorted = [...ttfm].sort((x, y) => x - y);
     const q = (p: number) => (sorted.length ? Math.round(sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))]) : null);
@@ -102,7 +117,13 @@ export const metrics = query({
     const med = (xs: number[]) => { const s = [...xs].sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : null; };
     const record = ["strong", "solid", "fine", "weak", "broken"].map((k) => ({ confidence: k, medianActual: med(byConf.get(k) ?? []), n: (byConf.get(k) ?? []).length }));
     const weeklySpend = perCreatorSpend.reduce((s, x) => s + x, 0);
-    const perCreatorMonthly = creators.length ? (weeklySpend / creators.length) * (30 / 7) : 0;
+    const perCreatorMonthly = real.length ? (weeklySpend / real.length) * (30 / 7) : 0;
+    // COGS §7: every line, real creators only, last 30 days.
+    const fleet = { creators: real.length, messages: real.reduce((s, x) => s + x.messages, 0), accounts: real.reduce((s, x) => s + x.accounts, 0), lines: Number(process.env.CLAW_LINES ?? "1") || 1 };
+    const perCreator = real.map((x) => ({ id: x.id, name: x.name, ...creatorCogs({ ledgerUsd: x.ledgerUsd, messages: x.messages, accounts: x.accounts, priceUsd: x.priceUsd, fleet }) }));
+    const avg = (f: (c: (typeof perCreator)[number]) => number) => (perCreator.length ? Math.round((perCreator.reduce((s, c) => s + f(c), 0) / perCreator.length) * 100) / 100 : 0);
+    const revenue = perCreator.reduce((s, c) => s + c.priceUsd, 0);
+    const cost = perCreator.reduce((s, c) => s + c.totalUsd, 0);
     const proactiveWeek = (await ctx.db.query("messages").withIndex("by_creator_and_ts").order("desc").take(1000)).filter((m) => m.direction === "out" && m.proactive && m.ts >= week).length;
     return {
       creators: creators.length,
@@ -113,7 +134,22 @@ export const metrics = query({
       trackRecord: record,
       silence: { proactivePerCreatorWeek: creators.length ? Math.round((proactiveWeek / creators.length) * 10) / 10 : 0, mutePct: creators.length ? Math.round((mutes / creators.length) * 100) : 0 },
       funnel: { timeToFirstMessageMinP50: q(0.5), p95: q(0.95), withFirstMessage: withFirstRead },
+      cogsLive: {
+        realCreators: perCreator.length,
+        evalSpend30dUsd: Math.round(evalSpend * 100) / 100,
+        avgMonthlyUsd: { ledger: avg((c) => c.ledgerUsd), messaging: avg((c) => c.messagingUsd), zernio: avg((c) => c.zernioUsd), stripe: avg((c) => c.stripeUsd), fixedShare: avg((c) => c.fixedShareUsd), total: avg((c) => c.totalUsd) },
+        blendedMarginPct: revenue > 0 ? Math.round((1 - cost / revenue) * 100) : null,
+        below30: perCreator.filter((c) => c.marginPct !== null && c.marginPct < 30).sort((x, y) => (x.marginPct ?? 0) - (y.marginPct ?? 0)).slice(0, 20),
+        reconcile: latestReconcile((await ctx.db.query("vendorHealth").order("desc").take(500)) as Doc<"vendorHealth">[]),
+      },
       cogs: { weeklySpendUsd: Math.round(weeklySpend * 100) / 100, perCreatorMonthlyUsd: Math.round(perCreatorMonthly * 100) / 100, byVendorWeek: Object.fromEntries(Object.entries(byVendor).map(([k, v2]) => [k, Math.round(v2 * 100) / 100])), marginAt19: perCreatorMonthly ? Math.round((1 - perCreatorMonthly / 19) * 100) : null, marginAt29: perCreatorMonthly ? Math.round((1 - perCreatorMonthly / 29) * 100) : null },
     };
   },
 });
+
+/** The latest reconcile reading per vendor. Pure. */
+function latestReconcile(rows: Array<{ vendor: string; check: string; ok: boolean; detail?: unknown; at: number }>): Array<{ vendor: string; ok: boolean; detail: string; at: number }> {
+  const seen = new Map<string, { vendor: string; ok: boolean; detail: string; at: number }>();
+  for (const r of rows) if (r.check === "reconcile" && !seen.has(r.vendor)) seen.set(r.vendor, { vendor: r.vendor, ok: r.ok, detail: String(r.detail ?? ""), at: r.at });
+  return [...seen.values()];
+}

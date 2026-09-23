@@ -57,6 +57,7 @@ import type * as calendar_sync from "../calendar/sync.js";
 import type * as calendar_time from "../calendar/time.js";
 import type * as calendar_tools from "../calendar/tools.js";
 import type * as calendar_weekPlan from "../calendar/weekPlan.js";
+import type * as config_costs from "../config/costs.js";
 import type * as config_thresholds from "../config/thresholds.js";
 import type * as connections_analytics from "../connections/analytics.js";
 import type * as connections_numbers from "../connections/numbers.js";
@@ -228,6 +229,7 @@ declare const fullApi: ApiFromModules<{
   "calendar/time": typeof calendar_time;
   "calendar/tools": typeof calendar_tools;
   "calendar/weekPlan": typeof calendar_weekPlan;
+  "config/costs": typeof config_costs;
   "config/thresholds": typeof config_thresholds;
   "connections/analytics": typeof connections_analytics;
   "connections/numbers": typeof connections_numbers;
