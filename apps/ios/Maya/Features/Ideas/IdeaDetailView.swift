@@ -45,6 +45,7 @@ struct IdeaDetailView: View {
     let link = idea.evidenceLinks.first ?? ""
     return PostCover(url: link, stored: idea.firstCover, cornerRadius: 0) { preview in
       ZStack(alignment: .bottomLeading) {
+        LoopingPost(url: link)
         LinearGradient(stops: [.init(color: .black.opacity(0.55), location: 0), .init(color: .clear, location: 0.22), .init(color: .clear, location: 0.5), .init(color: .black.opacity(0.85), location: 1)], startPoint: .top, endPoint: .bottom)
         VStack(alignment: .leading, spacing: 12) {
           Spacer()
