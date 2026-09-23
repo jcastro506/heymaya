@@ -16,7 +16,7 @@
 - Every exit is shown live, not in a harness.
 - The five mandatory test categories run in every sprint.
 
-_Updated 2026-09-23._
+_Updated 2026-09-23 (evening)._
 
 ---
 
@@ -31,6 +31,10 @@ _Updated 2026-09-23._
 | **O1** Live COGS | ✅ Done | /ops shows every cost line for real creators only, margin, under-30% list; OpenRouter reconcile daily. |
 | **B0** Expert Bench | ✅ Harness + baseline (labels draft) | **8/16 pass, 4 false claims.** Worst: distress read as content fatigue; "why did it pop" got no answer. See audit §7 "B0 baseline". **Needs your label sign-off.** |
 | **M4 core** Awareness | ✅ Done | `userActions` + awareness levels; app actions reach her context once; seen only when she speaks. (Block `rev` guards moved to I1.) |
+| **B4** Care | ✅ Done, live | Three paths, her judgment picks: content frustration → normal Maya; ambiguous ("i'm giving up") → a light question in her voice, no hotline; clearly about them → a check-in with a crisis line, 24 h pause, your alert. Live: distress passes; "giving up on tiktok" cases added. |
+| **B2** Diagnosis brain | 🔄 Built, live bench running | Evidence pack (the post against their own posts), causes that must cite evidence, the ask, after-a-hit; **rejected never means silent** (read → rewrite → cautious → a floor built from real numbers). Live: "why did it pop" went from silence to a grounded read; the flop case passes. |
+| **I1** Ideas in chat | ✅ Done (live exit pending) | 5 tools on one shared idea-act path with the app; parity matrix; app "Bring it back". |
+| Instagram in the bench | ✅ Added | 5 cases on a real both-platform creator. **First run found a real bug:** her own Instagram links were treated as strangers' ("couldn't open that link"). Fixed. |
 | Cadence test failures (pre-existing) | 🔄 In a separate session | Not blocking. |
 
 ## The order
@@ -56,6 +60,8 @@ Three tracks run side by side where they don't depend on each other: **Brain** (
 | 8 | **I1**: Maya's full chat control of ideas, equal to the app; she resolves "the humidity one" by judgment | Brain/app | 7 | — |
 | 9 | **B3**: world knowledge + **web search on every skill**; location in memory; critic grounding check | Brain | 6 | `TAVILY_API_KEY` on dev/staging |
 | 10 | **B4**: health, safety, business playbooks (crisis → resources + your alert) | Brain | 6 | Run the safety scenarios by text |
+| 10a | **S0**: scale the fleet jobs (below) | Platform | — | — |
+| 10b | **N1**: new ideas reach them in Messages (below) | Brain/app | 8, 10a | — |
 
 ### Phase 3 — Money and words (≈ 2 weeks)
 
@@ -95,6 +101,53 @@ Three tracks run side by side where they don't depend on each other: **Brain** (
 
 ---
 
+## S0 — Scale the fleet jobs (research, 2026-09-23)
+
+N1 lives inside the hourly jobs, so first a look at all of them. **29 crons** in `convex/crons.ts`; the ones that text a creator: scout (hourly :05), human cadence (hourly :55), weekly review and week plan (hourly, Sunday on their clock), first week (hourly), creator status (hourly), calendar reminders, roster offers. What breaks as the creator count grows:
+
+| # | Finding | Where | Breaks at | Fix |
+|---|---|---|---|---|
+| 1 | **Every hourly job reads the whole `creators` table** (`.collect()`), full documents with dossier, notes and affinities, to find who's due this hour. | 14 modules (`scout.dueForScout`, `cadence.dueNow`, `review.dueForReview`, `status`, `alerts`, `consolidate`, `formats`, `firstWeek`, `sweep`, `sounds`, `readback`, `taste.profile`, `eval.run`, `ops`) | When the table's bytes pass Convex's per-query read limit, **every** hourly job fails at once (measure the average creator doc to set the number; a 20 KB dossier puts it in the high hundreds). | A small `schedule` row per creator (paired, status, timezone, and the next due time for each touch), indexed by due time. "Who's due" becomes an indexed range read of only the due rows. Weigh against the schema's TS ceiling: one table, not one per touch. |
+| 2 | **The scout and the week plan run every due creator one after another inside ONE action.** A scout pass with model calls takes 20–60 s; actions stop at 10 minutes. | `scout.runAll`, `weekPlan.runAll` | Roughly 15 due creators in the same hour: the rest **silently never run**. | Fan out through the scheduler like cadence and review already do, one action per creator, with jitter across the hour to spread vendor load. |
+| 3 | The week plan reads `creators.take(500)`. | `weekPlan.due` | Creator 501 never gets a week plan, silently. | Folded into #1. |
+| 4 | **The daily text cap is checked by each sender, then counted at send.** Two jobs in the same hour can both read "0 sent" and both send. | 7+ proactive senders; `messages.send` counts but doesn't refuse | Rare now; routine at scale (scout :05 and cadence :55 are the same hour for many creators). | The cap is enforced **inside** the send mutation, transactionally: one function decides send-or-hold (architecture principle 9). Callers get a named "held: daily cap" result, never a silent drop. |
+| 5 | Silence on an idea becomes a negative taste event after 72 h, **including ideas that only ever sat in the app** and were never shown to them. | `taste.events.expireIgnored` | Wrong now: with the app, most ideas are never texted, so her taste model learns "they dislike this" from ideas they never saw. | Only an idea they were **shown** (texted, mentioned, or seen in the app) can be "ignored". Lands with N1's seen/surfaced fields. |
+
+**Tests:** a seeded simulation with 2,000 creators across 24 timezones (convex-test): every hourly job's "who's due" reads only due rows (a count assertion on documents read); a fan-out test (a 60 s fake scout × 40 due creators all complete); a cap race (two senders in one transaction window → exactly the cap sent, the other held with its reason); the taste fix (a never-shown idea expires with no taste event).
+**Exit, live:** on dev, 500 seeded (unpaired-safe) creators; one full day of crons runs with no job over 10% of its limit, and /ops shows per-job duration and rows read.
+
+## N1 — New ideas reach them in Messages
+
+**The rule: the text is the delivery; the app is the closet.** Nobody should need to open the app to get value. Operator, 2026-09-23: "we can't just rely on the user to come into the app all the time to swipe."
+
+**Design:**
+1. **No "you have new ideas!" text, ever.** Every text is worth reading by itself; a nudge-to-open trains people to mute her.
+2. **The best idea travels; the rest ride along.** Her one proactive idea text leads with the best new idea, complete, and ends with a clause code appends: "+2 more in your ideas" with a link. The count is computed by the **same function** as the app's "N new" badge, so they can never disagree.
+3. **She mentions them when they come to her.** Unseen ideas appear as a small context section on her reply turns ("3 new since tuesday; best: the chipotle one"). She decides whether the moment is right: not mid-problem, never in a care moment, never on a check-in. Once shown to her on a reply that went out, that batch is marked offered: **each batch is offered once**.
+4. **Swiping by text.** "what else you got" / "send me more" → she sends the next best unseen idea with the I1 tools; "save it", "nah", "plan it for thursday" work on it.
+5. **The app counts as seeing.** A card on screen for a beat marks it seen; she never brings up an idea they already swiped. Urgent ideas (a breakout that goes stale in days) are the ones she texts first.
+6. **Silent badge.** The app icon shows the unseen count. It's system UI, not her voice, so it respects "push is never Maya" (ships with M6's push).
+
+**How it's built so it holds at scale (after S0):**
+- **No new cron and no new sender.** The ride-along rides the scout's existing text; the mention rides replies (which aren't proactive and don't spend the cap); "seen" rides app mutations. N1 adds zero fleet scans.
+- **Fields, not a table** (schema ceiling): `ideas.surfacedAt` (texted or offered) and `ideas.seenAt` (on screen in the app), plus an index `by_creator_unseen` so the count is an indexed read, never a scan.
+- **One definition of "unseen"** (pure function, unit-tested): open status, no `seenAt`, no `surfacedAt`, not expired, produced in the last 7 days. The app badge, the ride-along count and her context section all call it.
+- **Seen marking is batched and idempotent:** the app sends ids in one mutation as cards appear (debounced); replays are no-ops.
+
+**Tests (five categories plus):**
+- sibling coherence: the app's "N new", the ride-along count, and her context section agree on one fixture (one function, three callers);
+- mention-once: a batch offered on a reply is never offered again; a new idea starts a new batch;
+- never during care, a check-in, or an open question;
+- an idea seen in the app is never mentioned or ridden along;
+- no new proactive sends: a grep test that N1 adds no `proactive: true` path;
+- cross-tenant: counts and sections never include another creator's ideas;
+- adversarial: idea text in the section is quoted data;
+- scale: the unseen count on a creator with 500 ideas is one indexed read.
+
+**Exit, live:** on dev with both personas (TikTok-only and both-platform), three ideas land in a day. The scout text carries "+2 more" with the right count. A reply to an unrelated message mentions them once, in her voice. Swiping them in the app makes her stop mentioning them. The badge matches.
+
+---
+
 ## Your blockers, in the order they're needed
 
 1. **Apple Developer account** (team id into `apps/ios/Config/Local.xcconfig`): lets me put builds on TestFlight from M1 on.
@@ -113,8 +166,8 @@ Three tracks run side by side where they don't depend on each other: **Brain** (
 
 ## What "next" means right now
 
-Phase 1 is complete (pending your M1 sign-off and B0 labels). **Next: Phase 2**, in this order:
-1. **B4 first** (moved up): the distress case failed the baseline, and nothing ships to creators until crisis language is handled 100%.
-2. **B2**, including a fallback so a critic-rejected read never becomes silence.
-3. **I1** (Maya's chat control of ideas, plus `rev` guards).
+Phase 1 is complete (pending your M1 sign-off and B0 labels). Phase 2 so far: **B4 done, I1 done, B2 built** (live bench results being recorded). **Next, in this order:**
+1. **S0**: scale the fleet jobs (findings above; #2 and #4 are real risks at a few dozen creators, not thousands).
+2. **N1**: new ideas reach them in Messages.
+3. B2 follow-ups from the bench; block `rev` guards (moved from M4).
 4. **B3** once `TAVILY_API_KEY` is real (dev currently holds a placeholder).
