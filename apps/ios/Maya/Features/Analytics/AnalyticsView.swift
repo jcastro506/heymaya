@@ -159,6 +159,7 @@ struct AnalyticsTile: View {
         }
         .foregroundStyle(.white)
         .padding(7)
+        .dynamicTypeSize(...DynamicTypeSize.large)
       }
     }
     .aspectRatio(9 / 16, contentMode: .fit)

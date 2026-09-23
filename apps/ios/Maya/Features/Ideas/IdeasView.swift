@@ -183,6 +183,7 @@ struct IdeaCard: View {
           IdeaMeta(idea: idea, onDark: true)
         }
         .padding(20)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge) // over a fixed-size card; the brief shows it full size
 
         // Swipe stamps
         Stamp(text: "SAVE", color: Palette.coral).opacity(Double(max(0, drag.width) / 110)).rotationEffect(.degrees(-12))
@@ -207,6 +208,7 @@ struct IdeaTile: View {
             .foregroundStyle(.white).lineLimit(4).multilineTextAlignment(.leading)
         }
         .padding(12)
+        .dynamicTypeSize(...DynamicTypeSize.xLarge)
       }
     }
     .aspectRatio(9 / 14, contentMode: .fit)

@@ -9,6 +9,7 @@ struct TodayView: View {
   @State private var plan = Live<Plan?>("ui:plan")
   @State private var results = Live<Results?>("ui:results")
   @Namespace private var zoom
+  @Environment(\.dynamicTypeSize) private var typeSize
 
   var body: some View {
     Screen(title: "Today") {
@@ -61,7 +62,8 @@ struct TodayView: View {
         IdeaDetailView(idea: idea).navigationTransition(.zoom(sourceID: idea.id, in: zoom))
       } label: {
         HeroCard(kicker: "Her latest idea", tint: Palette.purple) {
-          HStack(alignment: .top, spacing: 14) {
+          let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 14)) : AnyLayout(HStackLayout(alignment: .top, spacing: 14))
+          layout {
             if let link = idea.evidenceLinks.first {
               PostCover(url: link, stored: idea.firstCover, cornerRadius: 12)
                 .frame(width: 92, height: 164)
@@ -132,7 +134,7 @@ struct StatusPill: View {
       Text(text).font(MayaFont.callout).foregroundStyle(Palette.ink)
     }
     .padding(.horizontal, 12).padding(.vertical, 8)
-    .background(Palette.wash, in: Capsule())
+    .background(Palette.wash, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
   }
 }
 
@@ -277,6 +279,7 @@ struct PostTile: View {
           .foregroundStyle(.white)
           .padding(10)
         }
+        .dynamicTypeSize(...DynamicTypeSize.xLarge) // text over a fixed-size cover can't grow forever
       }
       .frame(width: 124, height: 220)
     }
