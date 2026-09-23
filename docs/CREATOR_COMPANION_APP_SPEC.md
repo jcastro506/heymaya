@@ -431,6 +431,25 @@ Each exit criterion is demonstrated on **TestFlight against staging**, not in a 
 - fail-closed: an unknown price id or a missing tier never unlocks anything.
 **Exit, live (TestFlight, Stripe test mode):** on a real phone, subscribe to solo → Deals is locked; upgrade to partner in the app → Deals unlocks within seconds and Maya's next reply can research a brand; open "Manage plan" → portal → downgrade → at period end the doors close and the app locks again; every step returns to the app, not the web.
 
+### I1 — Ideas: full control in chat, equal to the app (4–5 d; before the TestFlight cohort)
+**Why (verified in code, 2026-09-23):** the app can now save, unsave, pass, restore, mark posted, and open any idea. Maya, by text, can only act on **her most recent idea** (classifier intents `edit_idea` / `drop_idea` → `moment.latestIdea`), plus button taps on the message she sent. She can't list ideas by status, act on an older idea by description, unsave or restore, mark a named idea posted when told (only `scout/matchPost` detects posts), or tie a filming block to a specific idea (`block_add` takes a title, not an idea). That breaks §1 rule 1: everything in the app must be possible in chat.
+**Build:**
+- Tools on her belt, all thin callers of the same `act()` kinds the app uses (§7.2):
+  - `ideas_list` (status, saved, text query, newest first);
+  - `idea_get` (id);
+  - `idea_update` (any idea: hook, length, on-screen text, sound, shot list, caption);
+  - `idea_status` (save, unsave, pass, restore, posted with an optional post link);
+  - `idea_plan` (idea → a film block via `calendar/tools`, carrying the `ideaId`).
+- **Reference resolution:** "the humidity one", "the one from Tuesday", "that 5am alarm idea" resolve by search over the creator's own ideas (text + recency + the ids in the recent conversation). She asks one question only when two ideas tie.
+- Classifier `edit_idea` / `drop_idea` stop assuming "latest" when the text names another idea.
+- App actions on ideas land in `userActions` as **Noticed** (§7.3), so "saw you saved the humidity one" is possible and never invented.
+**Tests:**
+- a **parity matrix**: every idea action in the app has a chat tool, and both write the same row and taste event (sibling coherence);
+- cross-tenant: a tool call with another creator's idea id is refused;
+- adversarial: an idea description containing instructions is data;
+- a real-model eval of 12 phrasings ("save the humidity one", "what did i save last week", "bring back the alarm idea", "i posted the 400m one: <link>", "put the bus idea on thursday"), scored on the right idea, the right change, and no false claims.
+**Exit, live:** by text on staging, the operator saves an idea from a week ago, restores a passed one, and marks one posted with its link. The app reflects each within seconds, and her replies name the right idea.
+
 ### M3 — Onboarding and login in the app (7–9 d)
 **Build:** §4 and §5 in full: sign-in, plan and Stripe link-out, Zernio and Google auth sessions, creator-picture screen, watch picks, her-number pairing, done state, resumability, `/join` attribution with campaign tokens; App Clip spike.
 **Tests:** Maestro kill-and-resume at every step; auth-session cancel at every provider; checkout replay idempotency; duplicate-identity linking; content-inventory test (no Telegram, YouTube, vendor names, or "AI"); the old doc's onboarding acceptance list, re-run.
