@@ -9,7 +9,7 @@ struct IdeaDetailView: View {
   @State private var saved: Bool
   @State private var showMessage = false
 
-  enum Outcome { case posted, passed }
+  enum Outcome { case posted, passed, restored }
 
   init(idea: Idea) {
     self.idea = idea
@@ -171,7 +171,7 @@ struct IdeaDetailView: View {
   private var actionBar: some View {
     HStack(spacing: 10) {
       if let outcome {
-        Label(outcome == .posted ? "Nice. She'll read how it does." : "Passed. She'll weigh that next time.", systemImage: "checkmark.circle.fill")
+        Label(outcome == .posted ? "Nice. She'll read how it does." : outcome == .restored ? "It's back in your ideas." : "Passed. She'll weigh that next time.", systemImage: "checkmark.circle.fill")
           .font(MayaFont.headline).foregroundStyle(Palette.ok)
           .frame(maxWidth: .infinity, minHeight: 52)
           .transition(.opacity)
@@ -179,6 +179,16 @@ struct IdeaDetailView: View {
         Label("You posted this one", systemImage: "checkmark.seal.fill")
           .font(MayaFont.headline).foregroundStyle(Palette.ok)
           .frame(maxWidth: .infinity, minHeight: 52)
+      } else if idea.status == "passed" || idea.status == "expired" {
+        Button {
+          Task { if await Actions.restoreIdea(ideaId: idea.id) { withAnimation { outcome = .restored } } }
+        } label: {
+          Label("Bring it back", systemImage: "arrow.uturn.backward")
+            .font(MayaFont.headline)
+            .frame(maxWidth: .infinity, minHeight: 52)
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
       } else {
         if idea.status == "sent" || idea.status == "hearted" {
           BarIcon(icon: "xmark", label: "Not for me") {

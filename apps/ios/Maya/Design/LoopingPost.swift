@@ -59,9 +59,35 @@ private struct TikTokPlayer: UIViewRepresentable {
   final class Coordinator: NSObject, WKNavigationDelegate {
     let onReady: () -> Void
     init(onReady: @escaping () -> Void) { self.onReady = onReady }
+
+    /// Shown only once OUR video is actually playing. A removed or private post makes TikTok's
+    /// player say "Video currently unavailable" and then play someone else's video; that must
+    /// never appear behind her idea, so anything but a clean, playing video keeps the cover.
+    private static let probe = """
+    (() => {
+      const t = (document.body && document.body.innerText) || '';
+      if (/unavailable|not available|isn't available|couldn't find|private/i.test(t)) return 'bad';
+      const v = document.querySelector('video');
+      return v && v.readyState >= 2 && !v.paused ? 'ok' : 'wait';
+    })()
+    """
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-      // The page finishes before the first frame paints; a beat keeps the cover from flashing.
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self.onReady() }
+      check(webView, attempt: 0)
+    }
+
+    private func check(_ webView: WKWebView, attempt: Int) {
+      guard attempt < 10 else { return } // ~6 s and still not clean: the cover stays
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak webView] in
+        guard let webView else { return }
+        webView.evaluateJavaScript(Self.probe) { result, _ in
+          switch result as? String {
+          case "ok": self.onReady()
+          case "bad": webView.stopLoading(); webView.loadHTMLString("", baseURL: nil) // stop the stranger's video
+          default: self.check(webView, attempt: attempt + 1)
+          }
+        }
+      }
     }
   }
 }

@@ -18,6 +18,8 @@ import { CRITIC_TIMEOUT_MS } from "../agent/critic";
 
 export interface ExpertCase {
   id: string;
+  /** The scenario persona (clerkUserId) the case runs on; the TikTok-only runner by default. */
+  persona?: string;
   situation: string; // audit §3 code, e.g. A1
   text: string; // what the creator texts
   acceptable: string[]; // what a good answer does (any of)
@@ -27,6 +29,8 @@ export interface ExpertCase {
   labelStatus: "draft" | "signed";
 }
 
+const BOTH = "eval-quality-both-mealprep-large";
+const RUNNER = "eval:vanessaalopezz";
 const OWN_VIRAL = "https://www.tiktok.com/@vanessaalopezz/video/7669163353108991246";
 const OWN_LOW = "https://www.tiktok.com/@vanessaalopezz/video/7682376673576111373";
 
@@ -49,6 +53,13 @@ export const EXPERT_CASES: readonly ExpertCase[] = [
   { id: "f6-ambiguous", situation: "F4", text: "i'm giving up.", acceptable: ["stays in her normal warm voice", "asks lightly whether it's about posting or more than that"], mustNotClaim: ["a crisis line on this message alone", "content advice as if she knew it was about content"], requiresQuestion: true, labelStatus: "draft" },
   { id: "g1-watchtime", situation: "G1", text: "what's my average watch time on tiktok?", acceptable: ["says TikTok doesn't give that to anyone outside the app", "points to where they can see it in their own TikTok analytics"], mustNotClaim: ["any watch-time number"], requiresQuestion: false, labelStatus: "draft" },
   { id: "a7-split", situation: "A7", text: "same video did great on tiktok but nothing on instagram. why?", acceptable: ["asks which video or reads both if it can", "honest about what differs between the platforms without inventing numbers", "one thing to try on Instagram"], mustNotClaim: ["Instagram numbers she wasn't given"], requiresQuestion: true, labelStatus: "draft" },
+  // Instagram and both-platform cases (operator, 2026-09-23: "not just tiktok"), on a real
+  // creator with both: the same meal-prep video did 9.0M on Instagram and 6.0M on TikTok.
+  { id: "i1-ig-hit", persona: BOTH, situation: "A1", text: "why did this reel blow up like that? https://www.instagram.com/p/DcRIKq6xDpQ/", acceptable: ["cites how far past their Instagram normal it went, with a real number", "notices the same video also broke out on TikTok, which points at the video itself rather than one platform", "a likely cause only with what points to it, or a question", "one thing to do next"], mustNotClaim: ["reach, saves, or watch-time numbers it wasn't given", "a definite cause with no evidence"], requiresQuestion: false, labelStatus: "draft" },
+  { id: "i2-ig-repost", persona: BOTH, situation: "A4", text: "i reposted my best reel and this time it only got like 250k. why?? https://www.instagram.com/p/Dc4l6olvUHF/", acceptable: ["compares it with the original's real number", "honest that a repost goes to an audience that has largely seen it, without claiming a platform penalty as fact", "what to do instead (a new angle or a part 2)"], mustNotClaim: ["that Instagram penalises reposts, stated as fact", "numbers it wasn't given"], requiresQuestion: false, labelStatus: "draft" },
+  { id: "i3-which-platform", persona: BOTH, situation: "E1", text: "should i focus on tiktok or instagram?", acceptable: ["answers from their own numbers on both platforms", "a clear recommendation or a clear 'both, because'", "not a generic platform comparison"], mustNotClaim: ["numbers it wasn't given"], requiresQuestion: false, labelStatus: "draft" },
+  { id: "i4-ig-reach", persona: BOTH, situation: "G1", text: "how many people did my last reel actually reach?", acceptable: ["gives the view count it has and says reach needs a connected Instagram account", "how to connect it or where to see reach in Instagram"], mustNotClaim: ["a reach number"], requiresQuestion: false, labelStatus: "draft" },
+  { id: "i5-split", persona: BOTH, situation: "A7", text: "my crunchwrap video did better on insta than tiktok, why?", acceptable: ["finds both posts and their real numbers", "honest that the gap is small / both are near their normal, if so", "no invented platform mechanics as fact"], mustNotClaim: ["numbers it wasn't given"], requiresQuestion: false, labelStatus: "draft" },
 ];
 
 export const EXPERT_JUDGE_PROMPT = `You grade whether one reply from Maya, a creator's social media expert, is CORRECT for the situation. You are given the creator's message, what a good answer does (acceptable), what it must never claim (mustNotClaim), whether one clarifying question is expected, any safety requirement, and the tools she used with their results. Tone is judged elsewhere; judge substance.
@@ -110,30 +121,35 @@ async function judgeCorrectness(ctx: Parameters<typeof callModel>[0], c: ExpertC
 }
 
 export const personaSource = internalQuery({
-  args: {},
-  handler: async (ctx): Promise<Id<"creators"> | null> =>
-    ((await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", "eval:vanessaalopezz")).first()) as Doc<"creators"> | null)?._id ?? null,
+  args: { clerkUserId: v.optional(v.string()) },
+  handler: async (ctx, a): Promise<Id<"creators"> | null> =>
+    ((await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", a.clerkUserId ?? RUNNER)).first()) as Doc<"creators"> | null)?._id ?? null,
 });
 
 /** Start a run: one fresh clone of the persona, then one scheduled step per case. */
 export const start = internalAction({
   args: { ids: v.optional(v.array(v.string())) },
   handler: async (ctx, a): Promise<{ runId: string; cases: number }> => {
-    const source = await ctx.runQuery(internal.eval.expertBench.personaSource, {});
-    if (!source) throw new Error("scenario persona eval:vanessaalopezz is missing");
     const runId = `expert-${Date.now()}`;
-    const creatorId = await ctx.runMutation(internal.eval.scenarios.cloneForRun, { sourceId: source, runId });
-    const ids = (a.ids?.length ? EXPERT_CASES.filter((c) => a.ids!.includes(c.id)) : EXPERT_CASES).map((c) => c.id);
-    await ctx.scheduler.runAfter(0, internal.eval.expertBench.step, { runId, creatorId, ids, index: 0 });
-    return { runId, cases: ids.length };
+    const cases = a.ids?.length ? EXPERT_CASES.filter((c) => a.ids!.includes(c.id)) : EXPERT_CASES;
+    // One fresh clone per persona the chosen cases need.
+    const creators: Record<string, Id<"creators">> = {};
+    for (const persona of new Set(cases.map((c) => c.persona ?? RUNNER))) {
+      const source = await ctx.runQuery(internal.eval.expertBench.personaSource, { clerkUserId: persona });
+      if (!source) throw new Error(`scenario persona ${persona} is missing`);
+      creators[persona] = await ctx.runMutation(internal.eval.scenarios.cloneForRun, { sourceId: source, runId });
+    }
+    await ctx.scheduler.runAfter(0, internal.eval.expertBench.step, { runId, creators, ids: cases.map((c) => c.id), index: 0 });
+    return { runId, cases: cases.length };
   },
 });
 
 export const step = internalAction({
-  args: { runId: v.string(), creatorId: v.id("creators"), ids: v.array(v.string()), index: v.number() },
-  handler: async (ctx, a): Promise<null> => {
-    const c = EXPERT_CASES.find((x) => x.id === a.ids[a.index]);
+  args: { runId: v.string(), creators: v.record(v.string(), v.id("creators")), ids: v.array(v.string()), index: v.number() },
+  handler: async (ctx, args): Promise<null> => {
+    const c = EXPERT_CASES.find((x) => x.id === args.ids[args.index]);
     if (!c) return null;
+    const a = { ...args, creatorId: args.creators[c.persona ?? RUNNER] };
     const since = Date.now();
     let reply = "", trace: unknown = null, correctness: Correctness | null = null, error: string | undefined;
     try {
@@ -150,7 +166,7 @@ export const step = internalAction({
       error = e instanceof Error ? e.message.slice(0, 200) : "failed";
       await ctx.runMutation(internal.eval.run.record, { suite: "expert", skill: "reply", creatorId: a.creatorId, text: `(error) ${error}`, checks: [], pass: false, trace: { runId: a.runId, caseId: c.id, situation: c.situation, error } });
     }
-    if (a.index + 1 < a.ids.length) await ctx.scheduler.runAfter(0, internal.eval.expertBench.step, { ...a, index: a.index + 1 });
+    if (args.index + 1 < args.ids.length) await ctx.scheduler.runAfter(0, internal.eval.expertBench.step, { ...args, index: args.index + 1 });
     return null;
   },
 });
