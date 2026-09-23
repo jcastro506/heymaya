@@ -5,6 +5,8 @@ import SwiftUI
 /// placeholder in Maya's colours with the platform and handle. Never a broken image.
 struct PostCover<Overlay: View>: View {
   let url: String
+  /// The cover the server stored (both platforms). Preferred over TikTok's oEmbed.
+  var stored: String? = nil
   var cornerRadius: CGFloat = 16
   @ViewBuilder var overlay: (PostPreview?) -> Overlay
   @State private var preview: PostPreview?
@@ -15,7 +17,7 @@ struct PostCover<Overlay: View>: View {
     Color.clear
       .overlay { FallbackCover(platform: preview?.platform ?? PostPreview.platform(of: url)) }
       .overlay {
-        if let thumb = preview?.thumbnail {
+        if let thumb = stored.flatMap(URL.init(string:)) ?? preview?.thumbnail {
           LazyImage(url: thumb) { state in
             if let image = state.image {
               image.resizable().aspectRatio(contentMode: .fill)
@@ -28,6 +30,7 @@ struct PostCover<Overlay: View>: View {
       .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
       .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
       .task(id: url) {
+        guard stored == nil || preview == nil else { return }
         let p = await PostPreviews.shared.preview(for: url)
         withAnimation(.easeOut(duration: 0.25)) { preview = p }
       }
@@ -35,8 +38,8 @@ struct PostCover<Overlay: View>: View {
 }
 
 extension PostCover where Overlay == EmptyView {
-  init(url: String, cornerRadius: CGFloat = 16) {
-    self.init(url: url, cornerRadius: cornerRadius) { _ in EmptyView() }
+  init(url: String, stored: String? = nil, cornerRadius: CGFloat = 16) {
+    self.init(url: url, stored: stored, cornerRadius: cornerRadius) { _ in EmptyView() }
   }
 }
 

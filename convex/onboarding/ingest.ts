@@ -6,6 +6,7 @@
  */
 
 import { v } from "convex/values";
+import { coverKey, rememberMedia } from "../media";
 import { internalAction, internalMutation, internalQuery, type MutationCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -28,6 +29,7 @@ interface PostIn {
   metrics: { likeCount: number | null; commentCount: number | null; viewCount: number | null; shareCount: number | null; saveCount: number | null };
   mediaType: string;
   videoDurationSec: number | null;
+  thumbnailUrl?: string | null;
 }
 
 export const creatorHandles = internalQuery({
@@ -48,6 +50,8 @@ export const upsertOwnPosts = internalMutation({
   args: { creatorId: v.id("creators"), posts: v.any(), now: v.number(), handle: v.optional(v.string()) },
   handler: async (ctx, a): Promise<{ inserted: number; total: number; insertedIds: Id<"ownPosts">[] }> => {
     const posts = a.posts as PostIn[];
+    // Covers for both platforms, kept once (convex/media.ts); the read already carried them.
+    await rememberMedia(ctx, posts.filter((p) => p.postId && p.thumbnailUrl).map((p) => ({ platform: p.platform, kind: "cover" as const, key: coverKey(p.platform, p.url, p.postId) ?? p.postId, url: p.thumbnailUrl! })));
     let inserted = 0;
     const insertedIds: Id<"ownPosts">[] = [];
     for (const p of posts) {

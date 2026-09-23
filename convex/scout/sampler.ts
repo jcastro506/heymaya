@@ -11,6 +11,7 @@
  */
 
 import { v } from "convex/values";
+import { coverKey, rememberMedia } from "../media";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -23,6 +24,7 @@ interface PostIn {
   postedAt: number | null;
   metrics: { viewCount: number | null; likeCount: number | null; commentCount: number | null; shareCount: number | null; saveCount: number | null };
   clipId?: string | null;
+  thumbnailUrl?: string | null;
   raw?: { is_ad?: boolean } | null;
 }
 
@@ -75,6 +77,9 @@ export const recordAccountPage = internalMutation({
   args: { platform: v.union(v.literal("tiktok"), v.literal("instagram")), handle: v.string(), posts: v.any(), now: v.number() },
   handler: async (ctx, a): Promise<{ baseline: number | null; n: number; candidates: Array<{ postId: string; url: string; ratio: number; views: number; ageHours: number; clipId: string | null }> }> => {
     const posts = (a.posts as PostIn[]).filter((p) => p.postId);
+    // Covers of posts young enough to become a breakout (and so an idea's proof), kept once.
+    await rememberMedia(ctx, posts.filter((p) => p.thumbnailUrl && p.postedAt && a.now - (p.postedAt < 1e12 ? p.postedAt * 1000 : p.postedAt) <= THRESHOLDS.breakoutMaxAgeHours * 3_600_000)
+      .map((p) => ({ platform: a.platform, kind: "cover" as const, key: coverKey(a.platform, p.url, p.postId) ?? p.postId, url: p.thumbnailUrl! })));
     const rows: Array<{ postId: string; url: string; views: number; ageHours: number; velocity: number; clipId: string | null; paid: boolean }> = [];
     for (const p of posts) {
       const createTime = p.postedAt ? (p.postedAt < 1e12 ? p.postedAt * 1000 : p.postedAt) : a.now;

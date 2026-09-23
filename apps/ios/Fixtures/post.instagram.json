@@ -16,9 +16,10 @@
   "skipRatePct": null,
   "views": 3
  },
- "connectedAsOf": 1790188216955,
+ "connectedAsOf": 1790193199669,
  "contentType": "photo",
- "createTime": 1789932616955,
+ "cover": null,
+ "createTime": 1789937599669,
  "derived": {
   "basis": "views",
   "diagnosis": "unknown",
@@ -36,7 +37,7 @@
  "id": "000000000000000000010003ownPosts",
  "multiple": null,
  "platform": "instagram",
- "publicAsOf": 1790188216955,
+ "publicAsOf": 1790193199669,
  "publicCounts": {
   "comments": 0,
   "likes": 0,

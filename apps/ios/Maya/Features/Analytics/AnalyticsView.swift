@@ -145,7 +145,7 @@ struct PostsChart: View {
 struct AnalyticsTile: View {
   let post: AnalyticsPost
   var body: some View {
-    PostCover(url: post.url, cornerRadius: 12) { _ in
+    PostCover(url: post.url, stored: post.cover, cornerRadius: 12) { _ in
       ZStack(alignment: .bottomLeading) {
         CoverScrim()
         PlatformMark(platform: post.platform).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing).padding(6)

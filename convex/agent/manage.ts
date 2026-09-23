@@ -7,6 +7,7 @@
  */
 
 import { v } from "convex/values";
+import { internal } from "../_generated/api";
 import { internalMutation } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 
@@ -76,6 +77,7 @@ export const addAdmired = internalMutation({
   handler: async (ctx, a): Promise<{ ok: boolean; body: string }> => {
     const existing = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"trackedAccounts">[];
     const r = await addTracked(ctx as never, a.creatorId, a.platform, a.handle, existing);
+    if (r.ok) await ctx.scheduler.runAfter(0, internal.media.refreshAvatars, { creatorId: a.creatorId });
     if (!r.ok) return { ok: false, body: r.error === "ten is the most she can watch closely" ? "you're at ten, which is the most i can watch closely. tell me who to drop and i'll swap." : `couldn't add that one: ${r.error}.` };
     return { ok: true, body: `watching @${a.handle.replace(/^@/, "").toLowerCase()} on ${a.platform} now. i'll know their normal in a day or two.` };
   },

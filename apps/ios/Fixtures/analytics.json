@@ -4,7 +4,7 @@
    "connected": true,
    "followers": 2000,
    "followers30dAgo": 1800,
-   "followersAsOf": 1790105416819,
+   "followersAsOf": 1790110399518,
    "handle": "kevin.castro9996",
    "needsReconnect": false,
    "platform": "tiktok",
@@ -24,7 +24,8 @@
  "posts": [
   {
    "contentType": "video",
-   "createTime": 1790105416819,
+   "cover": null,
+   "createTime": 1790110399518,
    "diagnosis": null,
    "headline": {
     "asOfHours": null,
@@ -39,7 +40,8 @@
   },
   {
    "contentType": "photo",
-   "createTime": 1789932616819,
+   "cover": null,
+   "createTime": 1789937599518,
    "diagnosis": "unknown",
    "headline": {
     "asOfHours": 1,
@@ -54,7 +56,8 @@
   },
   {
    "contentType": "photo",
-   "createTime": 1789846216819,
+   "cover": null,
+   "createTime": 1789851199518,
    "diagnosis": "unknown",
    "headline": {
     "asOfHours": 1,
@@ -69,7 +72,8 @@
   },
   {
    "contentType": "photo",
-   "createTime": 1789759816819,
+   "cover": null,
+   "createTime": 1789764799518,
    "diagnosis": "unknown",
    "headline": {
     "asOfHours": 1,
@@ -84,7 +88,8 @@
   },
   {
    "contentType": "video",
-   "createTime": 1789673416819,
+   "cover": null,
+   "createTime": 1789678399518,
    "diagnosis": "unknown",
    "headline": {
     "asOfHours": null,

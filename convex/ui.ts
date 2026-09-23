@@ -8,6 +8,7 @@ import { v } from "convex/values";
 import { entitlementsFor, TIERS } from "./billing/tiers";
 import { partnershipsOpen } from "./partnerships/store";
 import { connectedFrom, DIAGNOSIS_WORDS, numbersFor } from "./connections/numbers";
+import { avatarKey, coverForUrl, coverKey, mediaUrl } from "./media";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
@@ -50,7 +51,7 @@ export const today = query({
       dossier: Boolean(c.dossier),
       sentToday,
       nextBlock: block ? { kind: block.kind, start: block.start, end: block.end, title: block.title, status: block.status } : null,
-      week: posts.map((p) => ({ id: p._id, url: p.url, platform: p.platform, createTime: p.createTime, views: p.metrics.views, multiple: p.multiple ?? null, metricsAsOf: p.metricsAsOf })),
+      week: await Promise.all(posts.map(async (p) => ({ id: p._id, url: p.url, platform: p.platform, createTime: p.createTime, views: p.metrics.views, multiple: p.multiple ?? null, metricsAsOf: p.metricsAsOf, cover: await mediaUrl(ctx, p.platform, "cover", coverKey(p.platform, p.url, p.postId)) }))),
     };
   },
 });
@@ -62,10 +63,11 @@ export const ideas = query({
     const c = await me(ctx);
     if (!c) return null;
     const rows = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").take(100)) as Doc<"ideas">[];
-    return rows
+    const mapped = rows
       .filter((i) => !a.unpostedOnly || i.status !== "posted")
       .filter((i) => !a.savedOnly || i.savedAt)
       .map((i) => ({ id: i._id, status: i.status, saved: Boolean(i.savedAt), reaction: i.reaction ?? null, newForYou: Boolean(i.newForYou), features: i.features ?? null, fitWhy: i.fitWhy, evidenceLinks: i.evidenceLinks, version: i.version as { hook?: string; onScreenText?: string; lengthSec?: number; sound?: string } | null, messageText: i.messageText, sentAt: i.sentAt ?? null, postedAt: i.postedAt ?? null, matchedPostId: i.matchedPostId ?? null }));
+    return await Promise.all(mapped.map(async (m) => ({ ...m, evidenceCovers: await Promise.all(m.evidenceLinks.map((l) => coverForUrl(ctx, l))) })));
   },
 });
 
@@ -80,7 +82,7 @@ export const lane = query({
     const lastByAccount = new Map<Id<"trackedAccounts">, Doc<"signals">>();
     for (const s of signals) if (s.trackedAccountId && !lastByAccount.has(s.trackedAccountId)) lastByAccount.set(s.trackedAccountId, s);
     return {
-      accounts: tracked.filter((t) => t.status !== "removed").map((t) => ({
+      accounts: await Promise.all(tracked.filter((t) => t.status !== "removed").map(async (t) => ({
         id: t._id,
         platform: t.platform,
         handle: t.handle,
@@ -88,8 +90,9 @@ export const lane = query({
         baseline: t.medianPace24h ?? null,
         baselineN: t.baselineN,
         lastSampledAt: t.lastSampledAt ?? null,
+        avatar: await mediaUrl(ctx, t.platform, "avatar", avatarKey(t.handle)),
         lastBreakout: lastByAccount.get(t._id) ? { score: lastByAccount.get(t._id)!.score, verdict: lastByAccount.get(t._id)!.verdict, why: lastByAccount.get(t._id)!.why, at: lastByAccount.get(t._id)!.createdAt } : null,
-      })),
+      }))),
       rising: signals.filter((s) => s.kind === "shape").slice(0, 10).map((s) => ({ id: s._id, why: s.why, verdict: s.verdict, at: s.createdAt })),
       keywords: ((c.dossier as { keywords?: string[] } | undefined)?.keywords ?? []),
     };
@@ -106,6 +109,7 @@ export const settings = query({
     const d = c.dossier as { persona?: { summary?: string; register?: string }; works?: Array<{ claim: string }>; doesNot?: Array<{ claim: string }>; keywords?: string[]; mode?: string } | undefined;
     return {
       handles: c.handles,
+      avatars: { tiktok: c.handles.tiktok ? await mediaUrl(ctx, "tiktok", "avatar", avatarKey(c.handles.tiktok)) : null, instagram: c.handles.instagram ? await mediaUrl(ctx, "instagram", "avatar", avatarKey(c.handles.instagram)) : null },
       niche: c.niche,
       timezone: c.timezone,
       quietHours: c.quietHours,
@@ -336,7 +340,7 @@ export const opportunities = query({
 type Fields = Record<string, number | null>;
 
 /** The numbers a post actually has, per basis, and nothing it doesn't. Pure. */
-function postNumbersView(p: Doc<"ownPosts">, siblings: Doc<"ownPosts">[], now: number) {
+function postNumbersView(p: Doc<"ownPosts">, siblings: Doc<"ownPosts">[], now: number, cover: string | null = null) {
   const n = numbersFor(p, siblings, now);
   const c = connectedFrom(p);
   const publicCounts: Fields = { views: p.metrics.views, likes: p.metrics.likes, comments: p.metrics.comments, shares: p.metrics.shares, saves: p.metrics.saves ?? null };
@@ -349,6 +353,7 @@ function postNumbersView(p: Doc<"ownPosts">, siblings: Doc<"ownPosts">[], now: n
     platform: p.platform,
     createTime: p.createTime,
     contentType: p.contentType,
+    cover,
     caption: p.caption.slice(0, 300),
     publicCounts,
     publicAsOf: p.metricsAsOf,
@@ -396,10 +401,10 @@ export const analytics = query({
           posts: posts.filter((p) => p.platform === pl).length,
         };
       }),
-      posts: posts.slice(0, 30).map((p) => {
-        const v = postNumbersView(p, posts, now);
-        return { id: v.id, url: v.url, platform: v.platform, createTime: v.createTime, contentType: v.contentType, headline: v.headline, multiple: v.multiple, diagnosis: v.derived?.diagnosis ?? null };
-      }),
+      posts: await Promise.all(posts.slice(0, 30).map(async (p) => {
+        const v = postNumbersView(p, posts, now, await mediaUrl(ctx, p.platform, "cover", coverKey(p.platform, p.url, p.postId)));
+        return { id: v.id, url: v.url, platform: v.platform, createTime: v.createTime, contentType: v.contentType, cover: v.cover, headline: v.headline, multiple: v.multiple, diagnosis: v.derived?.diagnosis ?? null };
+      })),
     };
   },
 });
@@ -413,6 +418,6 @@ export const post = query({
     const p = (await ctx.db.get(a.id)) as Doc<"ownPosts"> | null;
     if (!p || p.creatorId !== c._id) return null; // another creator's post is not found, not forbidden
     const siblings = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").take(40)) as Doc<"ownPosts">[];
-    return postNumbersView(p, siblings, Date.now());
+    return postNumbersView(p, siblings, Date.now(), await mediaUrl(ctx, p.platform, "cover", coverKey(p.platform, p.url, p.postId)));
   },
 });

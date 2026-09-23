@@ -1,3 +1,4 @@
+import NukeUI
 import SwiftUI
 
 /// You, as she sees you: her read, what works, who she watches for you, your rules.
@@ -68,7 +69,7 @@ struct YouView: View {
             HStack(spacing: 10) {
               ForEach(l.accounts) { a in
                 VStack(spacing: 8) {
-                  Avatar(text: a.handle, size: 56)
+                  Avatar(text: a.handle, size: 56, image: a.avatar)
                   Text("@\(a.handle)").font(.caption.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1)
                   Text(a.lastSampledAt.map { Format.ago($0) } ?? "soon").font(.caption2).foregroundStyle(Palette.muted)
                   PlatformBadge(platform: a.platform)
@@ -118,7 +119,7 @@ struct ProfileHeader: View {
   var body: some View {
     let name = settings.handles.tiktok ?? settings.handles.instagram ?? "you"
     HStack(spacing: 16) {
-      Avatar(text: name, size: 72)
+      Avatar(text: name, size: 72, image: settings.avatars?.tiktok ?? settings.avatars?.instagram)
       VStack(alignment: .leading, spacing: 6) {
         Text("@\(name)").font(MayaFont.title).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
         HStack(spacing: 6) {
@@ -135,7 +136,22 @@ struct ProfileHeader: View {
 struct Avatar: View {
   let text: String
   let size: CGFloat
+  /// Their real profile picture when the server kept one; initials on a gradient otherwise.
+  var image: String? = nil
   var body: some View {
+    if let url = image.flatMap(URL.init(string:)) {
+      LazyImage(url: url) { state in
+        if let img = state.image { img.resizable().aspectRatio(contentMode: .fill) } else { initials }
+      }
+      .frame(width: size, height: size)
+      .clipShape(Circle())
+      .accessibilityHidden(true)
+    } else {
+      initials
+    }
+  }
+
+  private var initials: some View {
     Text(String(text.trimmingCharacters(in: CharacterSet(charactersIn: "@_. ")).prefix(1)).uppercased())
       .font(.system(size: size * 0.42, weight: .bold, design: .rounded))
       .foregroundStyle(.white)

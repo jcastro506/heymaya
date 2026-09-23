@@ -152,7 +152,7 @@ struct IdeaCard: View {
 
   var body: some View {
     let cover = idea.evidenceLinks.first ?? ""
-    PostCover(url: cover, cornerRadius: 28) { preview in
+    PostCover(url: cover, stored: idea.firstCover, cornerRadius: 28) { preview in
       // Cards waiting underneath show only their cover; text on them would bleed together.
       if isTop { content(preview) }
     }
@@ -196,7 +196,7 @@ struct IdeaCard: View {
 struct IdeaTile: View {
   let idea: Idea
   var body: some View {
-    PostCover(url: idea.evidenceLinks.first ?? "", cornerRadius: 18) { _ in
+    PostCover(url: idea.evidenceLinks.first ?? "", stored: idea.firstCover, cornerRadius: 18) { _ in
       ZStack(alignment: .bottomLeading) {
         CoverScrim()
         VStack(alignment: .leading, spacing: 6) {

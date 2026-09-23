@@ -1,5 +1,9 @@
 {
   "accountCap": 1,
+  "avatars": {
+    "instagram": null,
+    "tiktok": "https://impressive-roadrunner-997.convex.cloud/api/storage/7a83b5a0-e878-4f8b-b26d-abd345a4eee7"
+  },
   "currentPeriodEnd": null,
   "founding": true,
   "handles": {

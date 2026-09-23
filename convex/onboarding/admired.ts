@@ -52,7 +52,9 @@ export const add = mutation({
     const creator = await creatorFor(ctx);
     if (!creator) return { ok: false, error: "sign in first" };
     const existing = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).collect()) as Doc<"trackedAccounts">[];
-    return await addTracked(ctx as never, creator._id, a.platform, a.handle, existing, { addedBy: a.addedBy ?? "creator", why: a.why }); // one rule for the web and the chat; §27 keeps the label
+    const r = await addTracked(ctx as never, creator._id, a.platform, a.handle, existing, { addedBy: a.addedBy ?? "creator", why: a.why }); // one rule for the web and the chat; §27 keeps the label
+    if (r.ok) await ctx.scheduler.runAfter(0, internal.media.refreshAvatars, { creatorId: creator._id });
+    return r;
   },
 });
 

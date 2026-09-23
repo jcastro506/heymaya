@@ -43,7 +43,7 @@ struct IdeaDetailView: View {
 
   private var hero: some View {
     let link = idea.evidenceLinks.first ?? ""
-    return PostCover(url: link, cornerRadius: 0) { preview in
+    return PostCover(url: link, stored: idea.firstCover, cornerRadius: 0) { preview in
       ZStack(alignment: .bottomLeading) {
         LinearGradient(stops: [.init(color: .black.opacity(0.55), location: 0), .init(color: .clear, location: 0.22), .init(color: .clear, location: 0.5), .init(color: .black.opacity(0.85), location: 1)], startPoint: .top, endPoint: .bottom)
         VStack(alignment: .leading, spacing: 12) {
@@ -84,7 +84,7 @@ struct IdeaDetailView: View {
       HStack(alignment: .center, spacing: 18) {
         ZStack(alignment: .top) {
           // The inspiring post's own frame, blurred, so the mock reads as a real video.
-          PostCover(url: idea.evidenceLinks.first ?? "", cornerRadius: 22)
+          PostCover(url: idea.evidenceLinks.first ?? "", stored: idea.firstCover, cornerRadius: 22)
             .blur(radius: 6)
             .overlay(Color.black.opacity(0.25))
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -154,9 +154,9 @@ struct IdeaDetailView: View {
       SectionHeader(text: "More proof")
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: 10) {
-          ForEach(idea.evidenceLinks.dropFirst(), id: \.self) { link in
+          ForEach(Array(idea.evidenceLinks.enumerated()).dropFirst(), id: \.offset) { i, link in
             Link(destination: URL(string: link) ?? URL(string: "https://www.tiktok.com")!) {
-              PostCover(url: link, cornerRadius: 14).frame(width: 110, height: 196)
+              PostCover(url: link, stored: idea.evidenceCovers?[safe: i] ?? nil, cornerRadius: 14).frame(width: 110, height: 196)
             }
           }
         }

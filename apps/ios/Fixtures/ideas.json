@@ -1,5 +1,8 @@
 [
   {
+    "evidenceCovers": [
+      null
+    ],
     "evidenceLinks": [
       "https://www.tiktok.com/@andi.renay/video/7682956096855739679?_r=1&u_code=f07i95ge4i51a1&preview_pb=0&sharer_language=en&_d=f08babdmf8d44c&share_item_id=7682956096855739679&source=h5_m"
     ],
@@ -39,6 +42,7 @@
     }
   },
   {
+    "evidenceCovers": [],
     "evidenceLinks": [],
     "features": null,
     "fitWhy": "dev seed from a dry-run pick",
@@ -59,6 +63,7 @@
     }
   },
   {
+    "evidenceCovers": [],
     "evidenceLinks": [],
     "features": null,
     "fitWhy": "dev seed from a dry-run pick",

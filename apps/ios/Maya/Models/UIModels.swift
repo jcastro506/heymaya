@@ -39,6 +39,7 @@ struct OwnPost: Decodable, Equatable, Identifiable {
   let views: Double
   let multiple: Double?
   let metricsAsOf: Double
+  var cover: String? = nil
 }
 
 struct Idea: Decodable, Equatable, Identifiable {
@@ -54,8 +55,11 @@ struct Idea: Decodable, Equatable, Identifiable {
   let messageText: String
   let sentAt: Double?
   let postedAt: Double?
+  var evidenceCovers: [String?]? = nil
 
   var hook: String? { version?.hook }
+  /// The stored cover for the idea's first proof post, when the server kept one.
+  var firstCover: String? { evidenceCovers?.first ?? nil }
 }
 
 struct IdeaFeatures: Decodable, Equatable {
@@ -77,6 +81,7 @@ struct IdeaVersion: Decodable, Equatable {
 
 struct CreatorSettings: Decodable, Equatable {
   let handles: Handles
+  var avatars: Avatars? = nil
   let niche: String
   let timezone: String
   let quietHours: QuietHours
@@ -94,6 +99,11 @@ struct CreatorSettings: Decodable, Equatable {
 }
 
 struct Handles: Decodable, Equatable {
+  let tiktok: String?
+  let instagram: String?
+}
+
+struct Avatars: Decodable, Equatable {
   let tiktok: String?
   let instagram: String?
 }
@@ -218,6 +228,7 @@ struct WatchedAccount: Decodable, Equatable, Identifiable {
   let status: String
   let baseline: Double?
   let lastSampledAt: Double?
+  var avatar: String? = nil
 }
 
 struct Opportunities: Decodable, Equatable {
@@ -284,6 +295,7 @@ struct AnalyticsPost: Decodable, Equatable, Identifiable, Hashable {
   let platform: String
   let createTime: Double
   let contentType: String
+  var cover: String? = nil
   let headline: Headline
   let multiple: Multiple?
   let diagnosis: String?
@@ -298,6 +310,7 @@ struct PostNumbers: Decodable, Equatable {
   let platform: String
   let createTime: Double
   let contentType: String
+  var cover: String? = nil
   let caption: String
   let publicCounts: [String: Double?]
   let publicAsOf: Double

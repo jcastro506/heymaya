@@ -164,6 +164,21 @@ export default defineSchema({
     .index("by_author", ["platform", "authorHandle", "sampledAt"])
     .index("by_sampledAt", ["sampledAt"]),
 
+  // ---------------------------------------------------------------------- media
+  // Public post covers and account avatars, mirrored once into Convex storage so the app
+  // shows real images for BOTH platforms (TikTok's oEmbed covers only TikTok; Instagram's
+  // needs a Meta token). Shared across tenants like readCache: public media, no PII.
+  media: defineTable({
+    platform: v.string(),
+    kind: v.union(v.literal("cover"), v.literal("avatar")),
+    key: v.string(), // cover: the post id in its URL (TikTok numeric id, Instagram shortcode); avatar: lowercase handle
+    sourceUrl: v.string(),
+    state: v.union(v.literal("pending"), v.literal("stored"), v.literal("failed")),
+    storageId: v.optional(v.id("_storage")),
+    attempts: v.number(),
+    at: v.number(),
+  }).index("by_key", ["platform", "kind", "key"]),
+
   // ----------------------------------------------------------------- readCache
   // Every vendor read, keyed by kind + normalized params. Shared across tenants. No PII.
   readCache: defineTable({

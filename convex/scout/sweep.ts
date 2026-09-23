@@ -10,6 +10,7 @@
  */
 
 import { v } from "convex/values";
+import { coverKey, rememberMedia } from "../media";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -24,6 +25,7 @@ interface Post {
   postedAt: number | null;
   metrics: { viewCount: number | null; likeCount: number | null; commentCount: number | null; shareCount: number | null; saveCount: number | null };
   authorHandle?: string | null;
+  thumbnailUrl?: string | null;
   raw?: { is_ad?: boolean; author?: { unique_id?: string } } | null;
 }
 
@@ -46,6 +48,7 @@ export const recordSearch = internalMutation({
   args: { platform: v.union(v.literal("tiktok"), v.literal("instagram")), keyword: v.string(), posts: v.any(), now: v.number() },
   handler: async (ctx, a): Promise<Array<{ postId: string; url: string; author: string; velocity: number; views: number; ageHours: number }>> => {
     const posts = (a.posts as Post[]).filter((p) => p.postId);
+    await rememberMedia(ctx, posts.filter((p) => p.thumbnailUrl).slice(0, 12).map((p) => ({ platform: a.platform, kind: "cover" as const, key: coverKey(a.platform, p.url, p.postId) ?? p.postId, url: p.thumbnailUrl! })));
     const out: Array<{ postId: string; url: string; author: string; velocity: number; views: number; ageHours: number }> = [];
     for (const p of posts) {
       const createTime = p.postedAt ? (p.postedAt < 1e12 ? p.postedAt * 1000 : p.postedAt) : a.now;

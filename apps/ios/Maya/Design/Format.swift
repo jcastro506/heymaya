@@ -25,3 +25,7 @@ enum Format {
     Date(timeIntervalSince1970: ms / 1000).formatted(date: .omitted, time: .shortened)
   }
 }
+
+extension Array {
+  subscript(safe i: Int) -> Element? { indices.contains(i) ? self[i] : nil }
+}

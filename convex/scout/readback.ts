@@ -83,6 +83,8 @@ export const run = internalAction({
           }
         }
         await ctx.runMutation(internal.onboarding.ingest.computeMultiples, { creatorId: c.id });
+        // Avatars for their handles and the accounts they watch, only the ones still missing.
+        try { await ctx.runAction(internal.media.refreshAvatars, { creatorId: c.id }); } catch (err) { console.error(`[readback] avatars: ${String(err).slice(0, 120)}`); }
         await ctx.runMutation(internal.review.predictions.scoreDue, { creatorId: c.id, now }); // §13.6: the 48 h outcome beside the call
         const { written } = await ctx.runMutation(internal.scout.readback.writeWins, { creatorId: c.id, now });
         wins += written;

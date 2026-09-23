@@ -7,7 +7,8 @@
  "connected": null,
  "connectedAsOf": null,
  "contentType": "video",
- "createTime": 1790105416960,
+ "cover": null,
+ "createTime": 1790110399671,
  "derived": null,
  "headline": {
   "asOfHours": null,
@@ -18,7 +19,7 @@
  "id": "000000000000000000010007ownPosts",
  "multiple": null,
  "platform": "tiktok",
- "publicAsOf": 1790184616960,
+ "publicAsOf": 1790189599671,
  "publicCounts": {
   "comments": 12,
   "likes": 300,

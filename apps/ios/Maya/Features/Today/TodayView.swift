@@ -63,7 +63,7 @@ struct TodayView: View {
         HeroCard(kicker: "Her latest idea", tint: Palette.purple) {
           HStack(alignment: .top, spacing: 14) {
             if let link = idea.evidenceLinks.first {
-              PostCover(url: link, cornerRadius: 12)
+              PostCover(url: link, stored: idea.firstCover, cornerRadius: 12)
                 .frame(width: 92, height: 164)
                 .matchedTransitionSource(id: idea.id, in: zoom)
             }
@@ -257,10 +257,10 @@ struct PostTile: View {
     NavigationLink {
       PostNumbersView(post: AnalyticsPost(
         id: post.id, url: post.url, platform: post.platform, createTime: post.createTime, contentType: "video",
-        headline: Headline(value: post.views, what: "views", basis: "public", asOfHours: nil),
+        cover: post.cover, headline: Headline(value: post.views, what: "views", basis: "public", asOfHours: nil),
         multiple: post.multiple.map { Multiple(value: $0, basis: "views") }, diagnosis: nil))
     } label: {
-      PostCover(url: post.url, cornerRadius: 14) { _ in
+      PostCover(url: post.url, stored: post.cover, cornerRadius: 14) { _ in
         ZStack(alignment: .bottomLeading) {
           CoverScrim()
           PlatformMark(platform: post.platform).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing).padding(8)

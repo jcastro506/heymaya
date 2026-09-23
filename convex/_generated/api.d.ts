@@ -121,6 +121,7 @@ import type * as integrations_scrapeCreators_schemas from "../integrations/scrap
 import type * as integrations_telegram_client from "../integrations/telegram/client.js";
 import type * as integrations_zernio_index from "../integrations/zernio/index.js";
 import type * as lib_encryption from "../lib/encryption.js";
+import type * as media from "../media.js";
 import type * as onboarding_admired from "../onboarding/admired.js";
 import type * as onboarding_clusters from "../onboarding/clusters.js";
 import type * as onboarding_conversation from "../onboarding/conversation.js";
@@ -290,6 +291,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/telegram/client": typeof integrations_telegram_client;
   "integrations/zernio/index": typeof integrations_zernio_index;
   "lib/encryption": typeof lib_encryption;
+  media: typeof media;
   "onboarding/admired": typeof onboarding_admired;
   "onboarding/clusters": typeof onboarding_clusters;
   "onboarding/conversation": typeof onboarding_conversation;

@@ -15,6 +15,7 @@ final class ContractTests: XCTestCase {
     XCTAssertFalse(t.statusLine.isEmpty)
     XCTAssertEqual(t.week.count, 7)
     XCTAssertTrue(t.week.allSatisfy { $0.url.hasPrefix("https://") })
+    XCTAssertTrue(t.week.allSatisfy { $0.cover?.hasPrefix("https://") == true }, "every recent post carries its stored cover")
   }
 
   func testIdeas() throws {
@@ -27,6 +28,7 @@ final class ContractTests: XCTestCase {
     let s = try load("settings", as: CreatorSettings.self)
     XCTAssertNotNil(s.knows)
     XCTAssertEqual(s.tier, "solo")
+    XCTAssertNotNil(s.avatars?.tiktok, "their own avatar is stored")
   }
 
   func testPlan() throws { _ = try load("plan", as: Plan.self) }
@@ -39,6 +41,7 @@ final class ContractTests: XCTestCase {
   func testLane() throws {
     let l = try load("lane", as: Lane.self)
     XCTAssertFalse(l.accounts.isEmpty)
+    XCTAssertTrue(l.accounts.allSatisfy { $0.avatar != nil }, "watched accounts carry their avatars")
   }
 
   func testOpportunitiesLockedTeaserIsGrounded() throws {

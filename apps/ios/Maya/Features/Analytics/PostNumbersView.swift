@@ -35,7 +35,7 @@ struct PostNumbersView: View {
   private var header: some View {
     HStack(alignment: .bottom, spacing: 16) {
       Button { if let u = URL(string: post.url) { openURL(u) } } label: {
-        PostCover(url: post.url, cornerRadius: 16) { _ in
+        PostCover(url: post.url, stored: post.cover, cornerRadius: 16) { _ in
           Image(systemName: "play.fill").font(.title3).foregroundStyle(.white)
             .frame(width: 44, height: 44).background(.ultraThinMaterial, in: Circle())
         }
