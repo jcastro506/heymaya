@@ -207,7 +207,7 @@ export const skip = internalMutation({
   args: { creatorId: v.id("creators"), planKey: v.string() },
   handler: async (ctx, a): Promise<{ dropped: number }> => {
     const blocks = ((await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(300)) as Doc<"calendarBlocks">[]).filter((b) => b.planKey === a.planKey && b.status !== "deleted");
-    for (const b of blocks) await ctx.db.patch(b._id, { status: "deleted" });
+    for (const b of blocks) await ctx.db.patch(b._id, { status: "deleted", rev: (b.rev ?? 0) + 1 });
     return { dropped: blocks.length };
   },
 });

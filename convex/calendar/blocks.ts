@@ -105,10 +105,18 @@ export const setStatus = internalMutation({
   args: { blockId: v.id("calendarBlocks"), status: v.union(v.literal("proposed"), v.literal("confirmed"), v.literal("moved"), v.literal("deleted")), start: v.optional(v.number()), end: v.optional(v.number()) },
   handler: async (ctx, a): Promise<null> => {
     const { blockId, ...rest } = a;
-    await ctx.db.patch(blockId, rest);
+    const b = (await ctx.db.get(blockId)) as Doc<"calendarBlocks"> | null;
+    await ctx.db.patch(blockId, { ...rest, rev: (b?.rev ?? 0) + 1 });
     return null;
   },
 });
+
+/** Pure: a write decided on revision `expected` may go ahead only if nothing changed since. */
+export function staleRev(current: number | undefined, expected: number | undefined): boolean {
+  return expected !== undefined && (current ?? 0) !== expected;
+}
+
+export const CHANGED = "that block just changed (they may have moved it in the app); read week_plan again before touching it";
 
 /** The creator said yes: consent row first, then the Google write, then the id on the row. */
 export const confirm = internalAction({
@@ -147,10 +155,11 @@ export const decline = internalMutation({
 
 /** Move a confirmed block; the calendar event follows. */
 export const move = internalAction({
-  args: { blockId: v.id("calendarBlocks"), start: v.number(), end: v.number() },
+  args: { blockId: v.id("calendarBlocks"), start: v.number(), end: v.number(), expectedRev: v.optional(v.number()) },
   handler: async (ctx, a): Promise<{ ok: boolean; reason?: string }> => {
     const b = await ctx.runQuery(internal.calendar.blocks.byId, { blockId: a.blockId });
     if (!b) return { ok: false, reason: "block not found" };
+    if (staleRev(b.rev, a.expectedRev)) return { ok: false, reason: CHANGED };
     if (b.externalEventId && b.consentAt) {
       const conn = await ctx.runQuery(internal.calendar.oauth.connection, { creatorId: b.creatorId });
       if (!conn || conn.status !== "connected") return { ok: false, reason: "calendar not connected" };
@@ -169,10 +178,11 @@ export const move = internalAction({
 
 /** Delete a block; the calendar event goes with it (404 counts as gone). */
 export const remove = internalAction({
-  args: { blockId: v.id("calendarBlocks") },
+  args: { blockId: v.id("calendarBlocks"), expectedRev: v.optional(v.number()) },
   handler: async (ctx, a): Promise<{ ok: boolean; reason?: string }> => {
     const b = await ctx.runQuery(internal.calendar.blocks.byId, { blockId: a.blockId });
     if (!b) return { ok: false, reason: "block not found" };
+    if (staleRev(b.rev, a.expectedRev)) return { ok: false, reason: CHANGED };
     if (b.externalEventId) {
       const conn = await ctx.runQuery(internal.calendar.oauth.connection, { creatorId: b.creatorId });
       if (conn && conn.status === "connected") {

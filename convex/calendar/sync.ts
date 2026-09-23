@@ -154,11 +154,11 @@ export const upsertEvents = internalMutation({
       const linked = (await ctx.db.query("calendarBlocks").withIndex("by_creator_event", (q) => q.eq("creatorId", a.creatorId).eq("externalEventId", r.externalId)).first()) as Doc<"calendarBlocks"> | null;
       if (linked && linked.status !== "deleted") {
         if (r.cancelled) {
-          await ctx.db.patch(linked._id, { status: "deleted" });
+          await ctx.db.patch(linked._id, { status: "deleted", rev: (linked.rev ?? 0) + 1 });
           dropped.push({ blockId: linked._id, title: linked.title, start: linked.start });
         } else if (r.start !== linked.start) {
           const delta = r.start - linked.start;
-          await ctx.db.patch(linked._id, { start: r.start, end: linked.end + delta, status: "moved" });
+          await ctx.db.patch(linked._id, { start: r.start, end: linked.end + delta, status: "moved", rev: (linked.rev ?? 0) + 1 }); // they dragged it in their calendar
           moved.push({ blockId: linked._id, from: linked.start, to: r.start, title: linked.title });
         }
       }

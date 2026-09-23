@@ -286,7 +286,7 @@ export const plan = query({
     return {
       connected: conn?.status === "connected",
       timezone: c.timezone,
-      blocks: blocks.filter((b) => b.status !== "deleted").map((b) => ({ id: b._id, kind: b.kind, title: b.title, start: b.start, end: b.end, status: b.status, onCalendar: Boolean(b.externalEventId), ideaId: b.ideaId ?? null })),
+      blocks: blocks.filter((b) => b.status !== "deleted").map((b) => ({ id: b._id, rev: b.rev ?? 0, kind: b.kind, title: b.title, start: b.start, end: b.end, status: b.status, onCalendar: Boolean(b.externalEventId), ideaId: b.ideaId ?? null })),
       events: events.filter((e) => e.status === "active" && e.class !== "private").map((e) => ({ id: e.externalId, title: e.title, start: e.start, end: e.end, allDay: e.allDay, class: e.class, link: e.htmlLink ?? null })),
       bestHours,
     };
@@ -295,16 +295,18 @@ export const plan = query({
 
 /** A block control from the web has the same effect as the words in chat (§1). Writes go through the same actions. */
 export const blockControl = mutation({
-  args: { id: v.id("calendarBlocks"), op: v.union(v.literal("confirm"), v.literal("delete"), v.literal("move")), start: v.optional(v.number()), end: v.optional(v.number()) },
-  handler: async (ctx, a): Promise<{ ok: boolean }> => {
+  args: { expectedRev: v.optional(v.number()), id: v.id("calendarBlocks"), op: v.union(v.literal("confirm"), v.literal("delete"), v.literal("move")), start: v.optional(v.number()), end: v.optional(v.number()) },
+  handler: async (ctx, a): Promise<{ ok: boolean; changed?: boolean }> => {
     const c = await me(ctx);
     const b = (await ctx.db.get(a.id)) as Doc<"calendarBlocks"> | null;
     if (!c || !b || b.creatorId !== c._id) return { ok: false };
+    // The app shows a block at a revision; if Maya (or another device) changed it since, say so instead of clobbering.
+    if (a.expectedRev !== undefined && (b.rev ?? 0) !== a.expectedRev) return { ok: false, changed: true };
     const when = a.start ? new Date(a.start).toISOString().slice(0, 16).replace("T", " ") : "";
     await recordAction(ctx, { creatorId: c._id, kind: `block.${a.op === "delete" ? "drop" : a.op}`, objectId: a.id, summary: a.op === "confirm" ? `booked the "${b.title}" block` : a.op === "delete" ? `dropped the "${b.title}" block` : `moved the "${b.title}" block to ${when} UTC` });
     if (a.op === "confirm") await ctx.scheduler.runAfter(0, internal.calendar.blocks.confirm, { blockId: a.id });
-    else if (a.op === "delete") await ctx.scheduler.runAfter(0, internal.calendar.blocks.remove, { blockId: a.id });
-    else if (a.start && a.end && a.end > a.start) await ctx.scheduler.runAfter(0, internal.calendar.blocks.move, { blockId: a.id, start: a.start, end: a.end });
+    else if (a.op === "delete") await ctx.scheduler.runAfter(0, internal.calendar.blocks.remove, { blockId: a.id, expectedRev: a.expectedRev });
+    else if (a.start && a.end && a.end > a.start) await ctx.scheduler.runAfter(0, internal.calendar.blocks.move, { blockId: a.id, start: a.start, end: a.end, expectedRev: a.expectedRev });
     else return { ok: false };
     return { ok: true };
   },

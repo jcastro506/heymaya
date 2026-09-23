@@ -399,6 +399,8 @@ export default defineSchema({
     end: v.number(),
     title: v.string(),
     ideaId: v.optional(v.id("ideas")),
+    /** Revision: bumped by every change, so a move or drop decided on a stale read is refused, not a clobber (M4/I1). */
+    rev: v.optional(v.number()),
     /** Sprint 4b: the week plan a block belongs to, so one tap books all of it. */
     planKey: v.optional(v.string()),
     /** Which reminder touches went out for this block; at most two, ever (Sprint 4b). */

@@ -15,7 +15,7 @@ const MAX_DAYS_AHEAD = 21;
 
 export const weekRows = internalQuery({
   args: { creatorId: v.id("creators"), now: v.number() },
-  handler: async (ctx, a): Promise<Array<{ id: string; when: string; kind: string; title: string; state: string }>> => {
+  handler: async (ctx, a): Promise<Array<{ id: string; when: string; kind: string; title: string; state: string; rev: number }>> => {
     const creator = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!creator) return [];
     const blocks = ((await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("start", a.now - 3_600_000).lte("start", a.now + 8 * 86_400_000)).take(60)) as Doc<"calendarBlocks">[])
@@ -27,6 +27,7 @@ export const weekRows = internalQuery({
       kind: b.kind,
       title: b.title.replace(/^(film|edit|post)( \(experiment\))?: /, ""),
       state: !b.consentAt ? "proposed, not booked" : b.filmedAt ? "booked, filmed" : "booked",
+      rev: b.rev ?? 0,
     }));
   },
 });
@@ -76,15 +77,17 @@ export const write = internalAction({
     // Cross-tenant: a block id from another creator's plan is not theirs to touch.
     if (!b || b.creatorId !== a.creatorId) return { ok: false, reason: "no such block on their plan; read week_plan for the ids" };
 
+    // What she decided on: the revision she read in week_plan this turn (passed by the tool runner).
+    const expectedRev = typeof args.expectedRev === "number" ? args.expectedRev : undefined;
     if (a.op === "block_drop") {
-      const r = await ctx.runAction(internal.calendar.blocks.remove, { blockId });
+      const r = await ctx.runAction(internal.calendar.blocks.remove, { blockId, expectedRev });
       return r.ok ? { ok: true, detail: `dropped ${b.kind} block ${fmt(b.start)} (${b.title})` } : { ok: false, reason: r.reason ?? "could not drop it" };
     }
 
     const when = parseWhen(args.whenLocal, tz, now);
     if (!when.ok) return { ok: false, reason: when.reason };
     const len = b.end - b.start;
-    const r = await ctx.runAction(internal.calendar.blocks.move, { blockId, start: when.at, end: when.at + len });
+    const r = await ctx.runAction(internal.calendar.blocks.move, { blockId, start: when.at, end: when.at + len, expectedRev });
     if (!r.ok) return { ok: false, reason: r.reason ?? "could not move it" };
     if (b.consentAt) await ctx.runAction(internal.calendar.reminders.scheduleFor, { blockId });
     return { ok: true, detail: `moved ${b.kind} block to ${fmt(when.at)} (was ${fmt(b.start)})` };

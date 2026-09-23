@@ -303,11 +303,15 @@ export async function runTool(ctx: ActionCtx, creatorId: Id<"creators">, call: {
     }
     if (call.name === "week_plan") {
       const rows = await ctx.runQuery(internal.calendar.tools.weekRows, { creatorId, now: Date.now() });
-      record(true, 0);
+      // The revisions she read, kept on the trace so a move she decides on them can't clobber a newer change.
+      record(true, 0, `revs:${JSON.stringify(Object.fromEntries(rows.map((r) => [r.id, r.rev])))}`);
       return rows.length ? cap(rows.map((r) => `${r.id} · ${r.when} · ${r.kind}: ${r.title} · ${r.state}`).join("\n")) : "no plan this week; week_replan lays one out";
     }
     if (call.name === "block_move" || call.name === "block_drop" || call.name === "block_add") {
-      const r = await ctx.runAction(internal.calendar.tools.write, { creatorId, op: call.name, args: call.args });
+      const seen = [...trace].reverse().find((t) => t.tool === "week_plan" && t.detail?.startsWith("revs:"));
+      const revs = seen ? (JSON.parse(seen.detail!.slice(5)) as Record<string, number>) : {};
+      const blockId = String(call.args.blockId ?? "");
+      const r = await ctx.runAction(internal.calendar.tools.write, { creatorId, op: call.name, args: { ...call.args, ...(blockId in revs ? { expectedRev: revs[blockId] } : {}) } });
       record(r.ok, 0, r.ok ? undefined : r.reason);
       // A refusal is an answer, not an exception: she tells them what she could not do.
       return r.ok ? `done: ${r.detail}` : `refused: ${r.reason}`;
