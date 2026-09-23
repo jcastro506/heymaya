@@ -13,6 +13,13 @@ enum Actions {
     await ok("ui:passIdea", ["id": ideaId])
   }
 
+  /// N1: these were on screen; she won't bring them up in Messages as new. Quiet: no haptic.
+  static func markIdeasSeen(_ ids: [String]) async {
+    guard !ids.isEmpty, !Fixtures.enabled else { return }
+    struct R: Decodable { let ok: Bool }
+    _ = try? await convex.mutation("ui:markIdeasSeen", with: ["ids": ids.map { $0 as ConvexEncodable? }]) as R
+  }
+
   static func restoreIdea(ideaId: String) async -> Bool {
     await ok("ui:restoreIdea", ["id": ideaId])
   }

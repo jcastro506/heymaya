@@ -46,6 +46,8 @@ struct Idea: Decodable, Equatable, Identifiable {
   let id: String
   let status: String
   let saved: Bool
+  /// N1: in the app but not yet texted, offered, or on their screen. The server decides.
+  var unseen: Bool? = nil
   let reaction: String?
   let newForYou: Bool
   let features: IdeaFeatures?

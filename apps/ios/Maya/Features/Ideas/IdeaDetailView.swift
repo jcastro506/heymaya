@@ -35,6 +35,7 @@ struct IdeaDetailView: View {
     .toolbar(.hidden, for: .tabBar)
     .navigationBarTitleDisplayMode(.inline)
     .safeAreaInset(edge: .bottom) { actionBar }
+    .task { if idea.unseen == true { await Actions.markIdeasSeen([idea.id]) } }
     .sensoryFeedback(.success, trigger: outcome)
     .sensoryFeedback(.impact(weight: .light), trigger: saved)
   }

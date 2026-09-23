@@ -7,6 +7,8 @@
 
 import { v } from "convex/values";
 import { HOURLY_SPREAD_MS, spreadDelays } from "../core/fanout";
+import { rideAlongLine } from "../core/unseen";
+import { missionControlUrl } from "../agent/missionControl";
 import { enqueueRender, shouldDrawProactively } from "../agent/frames";
 import { internalAction, internalMutation } from "../_generated/server";
 import { internal } from "../_generated/api";
@@ -279,7 +281,11 @@ export const run = internalAction({
         ];
       }
     }
-    const body = links.length && !hasLink(pick.message, links[0]) ? `${pick.message}\n\n${cleanLink(links[0])}` : pick.message;
+    const withLink = links.length && !hasLink(pick.message, links[0]) ? `${pick.message}\n\n${cleanLink(links[0])}` : pick.message;
+    // N1: the best idea travels; the rest ride along as one exact line (same count as the app's "new").
+    const others = args.dryRun ? [] : await ctx.runQuery(internal.core.unseen.listUnseen, { creatorId: args.creatorId, except: ideaId, now });
+    const ride = rideAlongLine(others.length, missionControlUrl(process.env.APP_URL, "ideas"));
+    const body = ride ? `${withLink}\n\n${ride}` : withLink;
     const { messageId, held } = await ctx.runMutation(internal.core.messages.send, {
       creatorId: args.creatorId,
       surface: "telegram",
@@ -297,6 +303,7 @@ export const run = internalAction({
     // S0: held by the cap inside send (another job texted first this hour). The idea stays in their app.
     if (held) return { sent: false, reason: held };
     if (messageId) await ctx.runMutation(internal.scout.scout.linkIdeaMessage, { ideaId, messageId, sentAt: now });
+    if (messageId && others.length) await ctx.runMutation(internal.core.unseen.markSurfaced, { creatorId: args.creatorId, ids: others, now });
     // §22: a pick that lives in how it looks gets drawn, within the week's sketches; the album follows the idea by a minute.
     if (shouldDrawProactively({ visual: Boolean(pick.visual), weekCount: await ctx.runQuery(internal.agent.frames.weekCount, { creatorId: args.creatorId, now }), sent: Boolean(messageId) })) await enqueueRender(ctx as never, { creatorId: args.creatorId, ideaId, requestedBy: "scout", requestId: "scout" });
     await ctx.scheduler.runAfter(0, internal.agent.memory.index, { creatorId: args.creatorId, kind: "idea", refId: String(ideaId), text: `${(pick.version as { hook?: string } | undefined)?.hook ?? ""}\n${pick.message}` });

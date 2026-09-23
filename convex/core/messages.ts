@@ -20,6 +20,7 @@
 
 import { v } from "convex/values";
 import { markActionsSeen } from "./act";
+import { markOffered } from "./unseen";
 import { internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { unwrapModelEnvelope } from "./envelope";
@@ -310,6 +311,9 @@ export const send = internalMutation({
     // M4 core: a model-written message means she had a turn with the app actions in her context.
     // Code-written confirmations carry no `produced` stamp and leave them unseen for her next turn.
     if (args.produced) await markActionsSeen(ctx, args.creatorId, Date.now());
+    // N1: a reply she wrote had the new-ideas section in front of her; each batch is offered once.
+    // Proactive texts don't count here: the scout marks what its "+N more" actually offered.
+    if (args.produced && !args.proactive) await markOffered(ctx, args.creatorId, Date.now());
 
     /**
      * ⭐ Delivery latency is the CALLER's call, not this function's.

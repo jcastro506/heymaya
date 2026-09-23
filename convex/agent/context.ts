@@ -7,6 +7,7 @@
 import { internalQuery, type QueryCtx } from "../_generated/server";
 import { v } from "convex/values";
 import { appActionsSection, unseenActions } from "../core/act";
+import { unseenIdeas, unseenSection } from "../core/unseen";
 import type { Doc, Id } from "../_generated/dataModel";
 import { SOUL, SOUL_VERSION, REGISTER_ADDENDA } from "./soul";
 import { entitlementsFor, planLineFor } from "../billing/tiers";
@@ -61,7 +62,9 @@ export const gather = internalQuery({
     const partnershipHistory = partnershipRows.length ? `# Partnership relationships (use partnership_read for sourced details and older history)\n${partnershipRows.map(r => `${r.data.brand}: ${r.data.status}; relationship ${r._id}; domain ${r.brandDomain}`).join("\n")}\nDrafted is not sent; contacted may be a user report. Check the event evidence before claiming execution.` : "";
     // M4 core: what they did in the app since she last spoke, so she knows THAT it happened.
     const appActions = appActionsSection(await unseenActions(ctx, creator._id, Date.now()), Date.now());
-    const history = [historySection(h), growth, callbacks, personalHistory, partnershipHistory, appActions].filter(Boolean).join("\n\n");
+    // N1: new ideas that only live in the app so far; she may mention them once, when it's light.
+    const newIdeas = unseenSection(await unseenIdeas(ctx, creator._id, Date.now()), Date.now());
+    const history = [historySection(h), growth, callbacks, personalHistory, partnershipHistory, appActions, newIdeas].filter(Boolean).join("\n\n");
     return { creator, directives, recent: recent.filter((m) => !m.memoryExcludedAt).reverse(), target, personal, voice, history };
   },
 });

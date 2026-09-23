@@ -359,6 +359,10 @@ export default defineSchema({
     // 2026-09-07: a breakout goes stale in days, an evergreen format does not; the calendar picks the window by this.
     urgency: v.optional(v.union(v.literal("now"), v.literal("any"))),
     savedAt: v.optional(v.number()),
+    /** N1: she offered it in Messages (texted it, or named it in a reply / a "+N more"). */
+    surfacedAt: v.optional(v.number()),
+    /** N1: it was on their screen in the app. Either one means she never brings it up as new. */
+    seenAt: v.optional(v.number()),
     /** Sprint 4c: the outcome has been folded into taste, once, ever. */
     outcomeLearnedAt: v.optional(v.number()),
     outcomeMultiple: v.optional(v.number()), // the swipe file (§11.3 save): kept, filterable, never expires

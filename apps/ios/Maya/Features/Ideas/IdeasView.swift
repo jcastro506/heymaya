@@ -41,6 +41,7 @@ struct IdeasView: View {
           LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
             ForEach(shown) { idea in
               Button { selected = idea } label: { IdeaTile(idea: idea) }
+                .task { if idea.unseen == true { await Actions.markIdeasSeen([idea.id]) } }
                 .buttonStyle(PressableStyle())
                 .matchedTransitionSource(id: idea.id, in: zoom)
             }
@@ -119,6 +120,7 @@ struct IdeaStack: View {
               .allowsHitTesting(index == 0)
               .gesture(index == 0 ? swipe(idea) : nil)
               .onTapGesture { if index == 0 { open(idea) } }
+              .task(id: index == 0 ? idea.id : "") { if index == 0, idea.unseen == true { await Actions.markIdeasSeen([idea.id]) } }
               .accessibilityAddTraits(.isButton)
               .accessibilityHint("Swipe right to save, left if it's not for you")
           }
@@ -131,7 +133,7 @@ struct IdeaStack: View {
           RoundAction(icon: "arrow.up.right", tint: Palette.purple, label: "Open", small: true) { open(ideas[0]) }
           RoundAction(icon: "bookmark.fill", tint: Palette.coral, label: "Save") { fling(ideas[0], save: true) }
         }
-        Text("\(ideas.count) new").font(MayaFont.caption).foregroundStyle(Palette.muted)
+        Text("\(ideas.count) to go").font(MayaFont.caption).foregroundStyle(Palette.muted)
       }
       .sensoryFeedback(.selection, trigger: ideas.count)
     }
@@ -178,7 +180,8 @@ struct IdeaCard: View {
         VStack(alignment: .leading, spacing: 10) {
           HStack(spacing: 6) {
             if idea.newForYou { CoverChip(text: "not your usual", tint: Palette.coral) }
-            if let sent = idea.sentAt { CoverChip(text: Format.ago(sent), tint: .black.opacity(0.35)) }
+            if idea.unseen == true { CoverChip(text: "new", tint: Palette.purple) }
+            else if let sent = idea.sentAt { CoverChip(text: Format.ago(sent), tint: .black.opacity(0.35)) }
             Spacer()
           }
           Spacer()

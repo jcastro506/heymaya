@@ -97,6 +97,7 @@ import type * as core_smoke from "../core/smoke.js";
 import type * as core_status from "../core/status.js";
 import type * as core_telegram from "../core/telegram.js";
 import type * as core_telegramFiles from "../core/telegramFiles.js";
+import type * as core_unseen from "../core/unseen.js";
 import type * as crons from "../crons.js";
 import type * as eval_checks from "../eval/checks.js";
 import type * as eval_converse from "../eval/converse.js";
@@ -277,6 +278,7 @@ declare const fullApi: ApiFromModules<{
   "core/status": typeof core_status;
   "core/telegram": typeof core_telegram;
   "core/telegramFiles": typeof core_telegramFiles;
+  "core/unseen": typeof core_unseen;
   crons: typeof crons;
   "eval/checks": typeof eval_checks;
   "eval/converse": typeof eval_converse;

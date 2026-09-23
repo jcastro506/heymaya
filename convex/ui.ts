@@ -6,6 +6,7 @@
 
 import { v } from "convex/values";
 import { applyIdeaAct } from "./core/ideaActs";
+import { isUnseen } from "./core/unseen";
 import { entitlementsFor, TIERS } from "./billing/tiers";
 import { partnershipsOpen } from "./partnerships/store";
 import { connectedFrom, DIAGNOSIS_WORDS, numbersFor } from "./connections/numbers";
@@ -68,7 +69,7 @@ export const ideas = query({
     const mapped = rows
       .filter((i) => !a.unpostedOnly || i.status !== "posted")
       .filter((i) => !a.savedOnly || i.savedAt)
-      .map((i) => ({ id: i._id, status: i.status, saved: Boolean(i.savedAt), reaction: i.reaction ?? null, newForYou: Boolean(i.newForYou), features: i.features ?? null, fitWhy: i.fitWhy, evidenceLinks: i.evidenceLinks, version: i.version as { hook?: string; onScreenText?: string; lengthSec?: number; sound?: string } | null, messageText: i.messageText, sentAt: i.sentAt ?? null, postedAt: i.postedAt ?? null, matchedPostId: i.matchedPostId ?? null }));
+      .map((i) => ({ id: i._id, status: i.status, saved: Boolean(i.savedAt), unseen: isUnseen(i, Date.now()), reaction: i.reaction ?? null, newForYou: Boolean(i.newForYou), features: i.features ?? null, fitWhy: i.fitWhy, evidenceLinks: i.evidenceLinks, version: i.version as { hook?: string; onScreenText?: string; lengthSec?: number; sound?: string } | null, messageText: i.messageText, sentAt: i.sentAt ?? null, postedAt: i.postedAt ?? null, matchedPostId: i.matchedPostId ?? null }));
     return await Promise.all(mapped.map(async (m) => ({ ...m, evidenceCovers: await Promise.all(m.evidenceLinks.map((l) => coverForUrl(ctx, l))) })));
   },
 });
@@ -183,6 +184,27 @@ export const passIdea = mutation({
     const c = await me(ctx);
     if (!c) return { ok: false };
     return { ok: (await applyIdeaAct(ctx, c._id, a.id, "pass", { origin: "app" })).ok };
+  },
+});
+
+/**
+ * N1: ideas that were on their screen. Batched and idempotent (the app sends ids as cards appear);
+ * owner-checked; a seen idea is never offered in Messages as new.
+ */
+export const markIdeasSeen = mutation({
+  args: { ids: v.array(v.id("ideas")) },
+  handler: async (ctx, a): Promise<{ ok: boolean; marked: number }> => {
+    const c = await me(ctx);
+    if (!c) return { ok: false, marked: 0 };
+    const now = Date.now();
+    let marked = 0;
+    for (const id of a.ids.slice(0, 50)) {
+      const i = (await ctx.db.get(id)) as Doc<"ideas"> | null;
+      if (!i || i.creatorId !== c._id || i.seenAt) continue;
+      await ctx.db.patch(id, { seenAt: now });
+      marked++;
+    }
+    return { ok: true, marked };
   },
 });
 
