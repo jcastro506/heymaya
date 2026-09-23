@@ -397,6 +397,19 @@ Each exit criterion is demonstrated on **TestFlight against staging**, not in a 
 **Tests:** Maestro flows for every tab with a seeded day-one creator and a 30-day creator; cross-tenant route test (another creator's `/o/idea/<id>` → not-found); a replay of every Maya link sent on staging in the last 30 days, all of which must resolve; performance budgets measured on device.
 **Exit, live:** the operator uses the app for a week against their own staging creator, with no web Mission Control, and nothing they wanted was missing.
 
+### C1 — Copy: how Maya explains herself (3–4 d, before M3; **brainstorm with the operator first**)
+**Why:** the app is the first place a creator reads *about* Maya rather than *from* her. How she's explained has to be clear, and her own screen text has to sound like her, not a report. Operator request, 2026-09-23.
+**Starts with a working session** on: the one-line explanation of what she is; the welcome, onboarding, and "you're in" screens; how the app explains Messages vs the app; every empty state; the App Store listing and screenshots; the locked Opportunities teaser.
+**Findings already logged from the M0 preview (real data, 2026-09-23):**
+- "Why it fits you" (`ideas.fitWhy`) is written *about* the creator in the third person ("her top runner-meme format… her normal"). It's an internal note shown to the user. Fix it in the scout prompt (write it to them) or render a user-facing field.
+- "What she knows about you" (the dossier) reads as a clinical profile ("Runner documenting…", "performs far above baseline"). Her soul bans "baseline" to a human. The app needs a first-person rendering of it ("you're funniest when…"), or a separate user-facing summary written by her.
+- The status line was the only copy that still named Telegram (fixed on `codex/creator-ios-app`). The rest of the server-side copy that reaches the app needs the same sweep.
+- The welcome copy ("She watches your lane, finds what's working, and texts you the idea worth making") is a placeholder until this session.
+**Tests:**
+- extend the existing copy-grep content inventory to the iOS strings (no "AI", no vendor names, no "baseline", no "Telegram");
+- every server string the app renders gets a no-third-person check in the eval checks.
+**Exit:** the operator reads every screen on their phone and signs off the words.
+
 ### M3 — Onboarding and login in the app (7–9 d)
 **Build:** §4 and §5 in full: sign-in, plan and Stripe link-out, Zernio and Google auth sessions, creator-picture screen, watch picks, her-number pairing, done state, resumability, `/join` attribution with campaign tokens; App Clip spike.
 **Tests:** Maestro kill-and-resume at every step; auth-session cancel at every provider; checkout replay idempotency; duplicate-identity linking; content-inventory test (no Telegram, YouTube, vendor names, or "AI"); the old doc's onboarding acceptance list, re-run.
