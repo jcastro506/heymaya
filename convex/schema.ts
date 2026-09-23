@@ -164,6 +164,20 @@ export default defineSchema({
     .index("by_author", ["platform", "authorHandle", "sampledAt"])
     .index("by_sampledAt", ["sampledAt"]),
 
+  // ------------------------------------------------------------------ userActions
+  // App spec §7.2 (M4 core): one row per thing the creator did in the app (or by share /
+  // widget), so Maya knows THAT it happened and who did it, not just the new state.
+  // `seenByAgentAt` is set once she has had a turn with it in her context.
+  userActions: defineTable({
+    creatorId: v.id("creators"),
+    kind: v.string(), // stable id: idea.pass, idea.save, idea.unsave, idea.posted, rule.revoke, settings.update, correction.add, block.confirm|move|drop, account.add|remove
+    source: v.union(v.literal("app"), v.literal("chat"), v.literal("share_ext"), v.literal("widget")),
+    objectId: v.optional(v.string()),
+    summary: v.string(), // plain words for her context, e.g. passed the idea "the bus to the start line"
+    at: v.number(),
+    seenByAgentAt: v.optional(v.number()),
+  }).index("by_creator_at", ["creatorId", "at"]),
+
   // ---------------------------------------------------------------------- media
   // Public post covers and account avatars, mirrored once into Convex storage so the app
   // shows real images for BOTH platforms (TikTok's oEmbed covers only TikTok; Instagram's

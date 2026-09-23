@@ -6,6 +6,7 @@
  */
 
 import { v } from "convex/values";
+import { recordAction } from "../core/act";
 import { internalMutation, internalQuery, mutation } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { applyEvent, featureKeys, TASTE, WEIGHTS, type Affinity } from "./affinities";
@@ -109,6 +110,7 @@ export const markPosted = mutation({
     await ctx.db.insert("tasteEvents", { creatorId: c._id, ideaId: idea._id, kind: "posted", weight, features: keys, at: now });
     if (keys.length) await ctx.db.patch(c._id, { affinities: applyEvent((c.affinities ?? []) as Affinity[], keys, weight, now), updatedAt: now });
     await ctx.db.patch(idea._id, { status: "posted", postedAt: now, matchConfidence: "certain" });
+    await recordAction(ctx, { creatorId: c._id, kind: "idea.posted", objectId: idea._id, summary: `marked your idea "${(idea.version as { hook?: string } | undefined)?.hook ?? idea.messageText.slice(0, 60)}" as posted` });
     return { ok: true };
   },
 });

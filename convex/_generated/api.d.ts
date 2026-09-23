@@ -64,6 +64,7 @@ import type * as connections_numbers from "../connections/numbers.js";
 import type * as connections_sync from "../connections/sync.js";
 import type * as connections_zernio from "../connections/zernio.js";
 import type * as contracts_dossier from "../contracts/dossier.js";
+import type * as core_act from "../core/act.js";
 import type * as core_alerts from "../core/alerts.js";
 import type * as core_breaker from "../core/breaker.js";
 import type * as core_budgets from "../core/budgets.js";
@@ -237,6 +238,7 @@ declare const fullApi: ApiFromModules<{
   "connections/sync": typeof connections_sync;
   "connections/zernio": typeof connections_zernio;
   "contracts/dossier": typeof contracts_dossier;
+  "core/act": typeof core_act;
   "core/alerts": typeof core_alerts;
   "core/breaker": typeof core_breaker;
   "core/budgets": typeof core_budgets;

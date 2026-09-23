@@ -4,6 +4,7 @@
  */
 
 import { v } from "convex/values";
+import { recordAction } from "../core/act";
 import { action, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -53,7 +54,10 @@ export const add = mutation({
     if (!creator) return { ok: false, error: "sign in first" };
     const existing = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).collect()) as Doc<"trackedAccounts">[];
     const r = await addTracked(ctx as never, creator._id, a.platform, a.handle, existing, { addedBy: a.addedBy ?? "creator", why: a.why }); // one rule for the web and the chat; §27 keeps the label
-    if (r.ok) await ctx.scheduler.runAfter(0, internal.media.refreshAvatars, { creatorId: creator._id });
+    if (r.ok) {
+      await ctx.scheduler.runAfter(0, internal.media.refreshAvatars, { creatorId: creator._id });
+      await recordAction(ctx, { creatorId: creator._id, kind: "account.add", objectId: r.id, summary: `started watching @${a.handle.replace(/^@/, "").toLowerCase()} on ${a.platform}` });
+    }
     return r;
   },
 });
@@ -65,6 +69,7 @@ export const remove = mutation({
     const row = (await ctx.db.get(a.id)) as Doc<"trackedAccounts"> | null;
     if (!creator || !row || row.creatorId !== creator._id) return { ok: false };
     await ctx.db.patch(a.id, { status: "removed" }); // history kept
+    await recordAction(ctx, { creatorId: creator._id, kind: "account.remove", objectId: a.id, summary: `stopped watching @${row.handle} on ${row.platform}` });
     return { ok: true };
   },
 });

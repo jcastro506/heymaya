@@ -9,6 +9,7 @@ import { entitlementsFor, TIERS } from "./billing/tiers";
 import { partnershipsOpen } from "./partnerships/store";
 import { connectedFrom, DIAGNOSIS_WORDS, numbersFor } from "./connections/numbers";
 import { avatarKey, coverForUrl, coverKey, mediaUrl } from "./media";
+import { recordAction } from "./core/act";
 import { internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
@@ -140,6 +141,8 @@ export const updateSettings = mutation({
     if (a.timezone) patch.timezone = a.timezone;
     if (a.niche !== undefined) patch.niche = a.niche.slice(0, 300);
     await ctx.db.patch(c._id, patch);
+    const changed = [a.quietHours && `quiet hours ${a.quietHours.start}–${a.quietHours.end}`, a.tone && `tone ${a.tone}`, a.timezone && `time zone ${a.timezone}`, a.niche !== undefined && "what they make"].filter(Boolean).join(", ");
+    if (changed) await recordAction(ctx, { creatorId: c._id, kind: "settings.update", summary: `changed ${changed}` });
     return { ok: true };
   },
 });
@@ -151,6 +154,7 @@ export const correct = mutation({
     const c = await me(ctx);
     if (!c || !a.text.trim()) return { ok: false };
     await ctx.db.insert("directives", { creatorId: c._id, kind: "correction", verbatim: a.text.trim().slice(0, 500), active: true, source: "settings", createdAt: Date.now() });
+    await recordAction(ctx, { creatorId: c._id, kind: "correction.add", summary: `corrected you: "${a.text.trim().slice(0, 140)}"` });
     if (c.dossier) await ctx.scheduler.runAfter(5 * 60_000, internal.onboarding.ingest.synthesize, { creatorId: c._id, reason: "correction" }); // batched: several corrections, one rewrite
     return { ok: true };
   },
@@ -163,6 +167,7 @@ export const revokeRule = mutation({
     const row = (await ctx.db.get(a.id)) as Doc<"directives"> | null;
     if (!c || !row || row.creatorId !== c._id) return { ok: false };
     await ctx.db.patch(a.id, { active: false, supersededAt: Date.now() }); // history kept
+    await recordAction(ctx, { creatorId: c._id, kind: "rule.revoke", objectId: a.id, summary: `removed their rule "${row.verbatim.slice(0, 120)}"` });
     return { ok: true };
   },
 });
@@ -180,6 +185,7 @@ export const passIdea = mutation({
     if (row.status === "passed") return { ok: true };
     await ctx.db.patch(a.id, { status: "passed" });
     await ctx.scheduler.runAfter(0, internal.taste.events.record, { creatorId: c._id, kind: "notme", ideaId: a.id });
+    await recordAction(ctx, { creatorId: c._id, kind: "idea.pass", objectId: a.id, summary: `passed on your idea "${(row.version as { hook?: string } | undefined)?.hook ?? row.messageText.slice(0, 60)}"` });
     return { ok: true };
   },
 });
@@ -193,10 +199,12 @@ export const saveIdea = mutation({
     if (!c || !row || row.creatorId !== c._id) return { ok: false };
     if (!a.saved) {
       await ctx.db.patch(a.id, { savedAt: undefined });
+      await recordAction(ctx, { creatorId: c._id, kind: "idea.unsave", objectId: a.id, summary: `unsaved your idea "${(row.version as { hook?: string } | undefined)?.hook ?? row.messageText.slice(0, 60)}"` });
       return { ok: true };
     }
     if (row.savedAt) return { ok: true };
     await ctx.db.patch(a.id, { savedAt: Date.now() });
+    await recordAction(ctx, { creatorId: c._id, kind: "idea.save", objectId: a.id, summary: `saved your idea "${(row.version as { hook?: string } | undefined)?.hook ?? row.messageText.slice(0, 60)}"` });
     await ctx.scheduler.runAfter(0, internal.taste.events.record, { creatorId: c._id, kind: "save", ideaId: a.id });
     await ctx.scheduler.runAfter(0, internal.agent.memory.index, { creatorId: c._id, kind: "swipe", refId: String(a.id), text: `${(row.version as { hook?: string } | undefined)?.hook ?? ""}\n${row.messageText}` });
     return { ok: true };
@@ -275,6 +283,8 @@ export const blockControl = mutation({
     const c = await me(ctx);
     const b = (await ctx.db.get(a.id)) as Doc<"calendarBlocks"> | null;
     if (!c || !b || b.creatorId !== c._id) return { ok: false };
+    const when = a.start ? new Date(a.start).toISOString().slice(0, 16).replace("T", " ") : "";
+    await recordAction(ctx, { creatorId: c._id, kind: `block.${a.op === "delete" ? "drop" : a.op}`, objectId: a.id, summary: a.op === "confirm" ? `booked the "${b.title}" block` : a.op === "delete" ? `dropped the "${b.title}" block` : `moved the "${b.title}" block to ${when} UTC` });
     if (a.op === "confirm") await ctx.scheduler.runAfter(0, internal.calendar.blocks.confirm, { blockId: a.id });
     else if (a.op === "delete") await ctx.scheduler.runAfter(0, internal.calendar.blocks.remove, { blockId: a.id });
     else if (a.start && a.end && a.end > a.start) await ctx.scheduler.runAfter(0, internal.calendar.blocks.move, { blockId: a.id, start: a.start, end: a.end });
