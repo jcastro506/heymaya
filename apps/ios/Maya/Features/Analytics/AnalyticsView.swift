@@ -111,30 +111,30 @@ struct PostsChart: View {
         ForEach(Array(ordered.enumerated()), id: \.element.id) { i, p in
           let m = p.multiple!.value
           BarMark(x: .value("Post", String(i)), y: .value("× your normal", min(m, cap)), width: .ratio(0.6))
-            .foregroundStyle(m >= 1.5 ? Palette.ok.gradient : m >= 1 ? Palette.purple.gradient : Palette.purple.opacity(0.35).gradient)
+            .foregroundStyle(m >= 1 ? Palette.purple : Palette.purple.opacity(0.25))
             .clipShape(RoundedRectangle(cornerRadius: 3))
             .annotation(position: .top, spacing: 2) {
               if m >= cap {
-                Text(Format.count(m) + "×").font(.system(size: 9, weight: .bold)).foregroundStyle(Palette.ok)
+                Text(Format.count(m) + "×").font(.system(size: 9, weight: .bold)).foregroundStyle(Palette.purple)
                   .fixedSize().rotationEffect(.degrees(-35))
               }
             }
         }
         RuleMark(y: .value("Your normal", 1))
-          .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
-          .foregroundStyle(Palette.coral)
-          .annotation(position: .top, alignment: .leading) {
-            Text("your normal").font(.caption2.weight(.semibold)).foregroundStyle(Palette.coral)
-          }
+          .lineStyle(StrokeStyle(lineWidth: 1.5))
+          .foregroundStyle(Palette.ink.opacity(0.25))
       }
       .chartXAxis(.hidden)
       .chartYScale(domain: 0...cap + 0.6)
-      .chartYAxis { AxisMarks(position: .trailing, values: [0, 1, 2, 5]) { v in
-        AxisGridLine()
-        AxisValueLabel { if let n = v.as(Double.self) { Text("\(Int(n))×").font(.caption2) } }
+      .chartYAxis { AxisMarks(position: .trailing, values: [1, 2, 5]) { v in
+        AxisValueLabel {
+          if let n = v.as(Double.self) {
+            Text(n == 1 ? "normal" : "\(Int(n))×").font(.caption2.weight(n == 1 ? .semibold : .regular))
+          }
+        }
       } }
       .frame(height: 170)
-      Text("Oldest to newest. Each bar is a post against your normal.")
+      Text("Each bar is a post, oldest to newest. Solid bars beat your normal.")
         .font(MayaFont.caption).foregroundStyle(Palette.muted)
     }
     .padding(14)

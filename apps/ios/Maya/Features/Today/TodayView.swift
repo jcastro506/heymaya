@@ -205,25 +205,29 @@ struct PostsSection: View {
   }
 
   private func chart(normal: Double) -> some View {
-    Chart {
-      ForEach(Array(posts.reversed().enumerated()), id: \.offset) { i, p in
-        BarMark(x: .value("Post", String(i)), y: .value("Views", p.views), width: .ratio(0.62))
-          .foregroundStyle((p.multiple ?? 0) >= 1 ? Palette.purple : Palette.purple.opacity(0.35))
-          .clipShape(RoundedRectangle(cornerRadius: 4))
-      }
-      RuleMark(y: .value("Your normal", normal))
-        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
-        .foregroundStyle(Palette.coral)
-        .annotation(position: .top, alignment: .leading) {
-          Text("your normal").font(.caption2.weight(.semibold)).foregroundStyle(Palette.coral)
+    VStack(alignment: .leading, spacing: 8) {
+      Chart {
+        ForEach(Array(posts.reversed().enumerated()), id: \.offset) { i, p in
+          BarMark(x: .value("Post", String(i)), y: .value("Views", p.views), width: .ratio(0.62))
+            .foregroundStyle(p.views >= normal ? Palette.purple : Palette.purple.opacity(0.25))
+            .clipShape(RoundedRectangle(cornerRadius: 5))
         }
+      }
+      .chartXAxis(.hidden)
+      .chartYAxis(.hidden)
+      .frame(height: 84)
+      HStack(spacing: 14) {
+        LegendDot(filled: true, text: "above your normal")
+        LegendDot(filled: false, text: "below")
+        Spacer()
+        Text("normal ≈ \(Format.count(normal))").font(MayaFont.caption.monospacedDigit()).foregroundStyle(Palette.muted)
+      }
+      if let first = posts.first {
+        Text("Updated \(Format.ago(first.metricsAsOf))").font(.caption2).foregroundStyle(Palette.muted)
+      }
     }
-    .chartXAxis(.hidden)
-    .chartYAxis { AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { v in
-      AxisValueLabel { if let n = v.as(Double.self) { Text(Format.count(n)).font(.caption2) } }
-    } }
-    .frame(height: 110)
-    .accessibilityLabel("Views of your last \(posts.count) posts against your normal of \(Format.count(normal))")
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("Views of your last \(posts.count) posts; \(posts.filter { $0.views >= normal }.count) were above your normal of \(Format.count(normal))")
   }
 
   /// Their normal, recovered from the server's multiples (views ÷ multiple), median of those.
@@ -233,6 +237,17 @@ struct PostsSection: View {
       return p.views / m
     }.sorted()
     return normals.isEmpty ? nil : normals[normals.count / 2]
+  }
+}
+
+struct LegendDot: View {
+  let filled: Bool
+  let text: String
+  var body: some View {
+    HStack(spacing: 5) {
+      RoundedRectangle(cornerRadius: 3).fill(filled ? Palette.purple : Palette.purple.opacity(0.25)).frame(width: 10, height: 10)
+      Text(text).font(MayaFont.caption).foregroundStyle(Palette.muted)
+    }
   }
 }
 
