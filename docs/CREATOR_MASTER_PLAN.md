@@ -81,6 +81,8 @@ Three tracks run side by side where they don't depend on each other: **Brain** (
 | 15 | **X1**: messaging: the vCard contact card live test; move to Linq direct (or confirm Claw) with recipients-per-line in writing; Twilio SMS/RCS failover; outbound:inbound ratio rail; start the Apple Messages for Business application | Platform | — | **Linq/Claw quotes** |
 | 16 | **M3**: onboarding and login in the app (Welcome → plan → connect → "here's what I see" → watch picks → calendar → text START → opening texts §5.5) | App | 12, 14, 15 | Clerk dashboard: register the iOS app, enable Sign in with Apple |
 | 17 | **B5**: re-bench, model decision for diagnosis, sign-off on the scorecard | Brain | 6–10, 13 | Sign the scorecard |
+| 17a | **R1**: the creator product's release path (below) | Platform | 10a | **Go/no-go on replacing the product on staging, then prod** |
+| 17b | **W1**: the landing page for an app (below) | App/web | 11, 14, R1 | The C1 copy session; App Store link once live |
 
 ### Phase 5 — Native surfaces (≈ 1.5 weeks)
 
@@ -146,6 +148,34 @@ N1 lives inside the hourly jobs, so first a look at all of them. **29 crons** in
 
 **Exit, live:** on dev with both personas (TikTok-only and both-platform), three ideas land in a day. The scout text carries "+2 more" with the right count. A reply to an unrelated message mentions them once, in her voice. Swiping them in the app makes her stop mentioning them. The badge matches.
 
+## R1 — The creator product's release path (found 2026-09-23)
+
+**Finding:** nothing of the creator product has shipped. `creator` is **282 commits** ahead of `staging` and has never been merged; this app's branch sits on top of it. Staging (`precise-canary-781` + Vercel preview) and production (`hey-maya.ai`, Vercel project `clawlaunch`) still serve the **previous product**. Everything verified so far was verified on the creator dev deployment (`impressive-roadrunner-997`). Pushes to `staging`/`main` deploy through Vercel on PR merge; `codex/*` branches don't deploy.
+
+**Build:**
+- A written cutover plan: what replaces what on staging, data on staging (keep, migrate, or start clean), env vars the creator product needs on staging and prod (Zernio, ScrapeCreators, OpenRouter, Gemini, Claw/Linq, Stripe prices per tier, Tavily, `APPLE_TEAM_ID`, `APP_URL`), the Clerk instance for each environment, and the rollback.
+- Merge `creator` (with this branch) → `staging` by PR; `npm run convex:staging` (never bare `npx convex deploy`); Vercel preview up.
+- The same for `main` only after staging holds for a week with pilot creators, using `npm run convex:prod` (it refuses unless on a clean `main`).
+- CI: typecheck + tests green on the merge (the 4 cadence failures fixed first; they're being fixed in another session).
+
+**Tests:** the full suite on the merge commit; a staging smoke run (sign in, connect, text START, first read, an idea, the app on staging data); the AASA and `/o/*` fallback served from the staging domain.
+**Exit, live:** the app on TestFlight talks to staging; a pilot creator completes onboarding on staging with no operator help.
+
+## W1 — The landing page for an app
+
+**Finding:** `app/landing/Landing.tsx` (637 lines) sells the previous shape: **Telegram** (7 mentions, "open Telegram and tap Start") and a **web dashboard** ("the dashboard is there when you want a bigger view"). Both are gone in the new design: she lives in Messages, and the web dashboard is retired for the app.
+
+**Build (after C1, which sets the words, and D9, which sets the price):**
+- The story in one screen: "she texts you" (Messages) + "everything she's found, in one place" (the app), with real screens from the app, not mockups (§ grounded or silent applies to marketing too).
+- The CTA becomes **Get the app** (App Store badge + a QR on desktop), with `/join` attribution carried through the install (campaign token → first open), per M3.
+- Both platforms in every example: a TikTok and an Instagram post, side by side.
+- Pricing from `billing/tiers.ts` (one source; the page never hardcodes a number).
+- Removed: Telegram, the dashboard, and any "AI" wording (standing rule). The web keeps only the landing, legal pages, `/o/*` fallbacks and the AASA.
+- A smart app banner on mobile Safari; the desktop page explains the QR.
+
+**Tests:** a content-inventory test (no "Telegram", "dashboard", vendor names or "AI" in the rendered page); prices on the page equal `billing/tiers.ts`; every CTA carries attribution; Lighthouse ≥ 90 on mobile; the page renders at phone width with no horizontal scroll.
+**Exit, live:** on staging, a phone visitor taps Get the app, installs from TestFlight/App Store, and the first open is attributed to the campaign.
+
 ---
 
 ## Your blockers, in the order they're needed
@@ -161,6 +191,7 @@ N1 lives inside the hourly jobs, so first a look at all of them. **29 crons** in
 9. **Pilot creators:** 3 for the brain exits (B2, B6), 5 for the cohort (M7).
 10. **Deals unlock** on TestFlight: hide it, or trim the ladder (before M7).
 11. **Buy the 500k ScrapeCreators pack** when the pilot starts spending (cost lever, COGS §6).
+12. **R1 go/no-go:** the creator product replaces the previous one on staging (then prod). Nothing of it has shipped yet.
 
 ---
 
