@@ -31,6 +31,8 @@ export interface ExpertCase {
 }
 
 const BOTH = "eval-quality-both-mealprep-large";
+/** One case every 4 minutes: longer than a case takes (1–2 min), so cases on one clone don't overlap. */
+const STEP_BEAT_MS = 4 * 60_000;
 const RUNNER = "eval:vanessaalopezz";
 const OWN_VIRAL = "https://www.tiktok.com/@vanessaalopezz/video/7669163353108991246";
 const OWN_LOW = "https://www.tiktok.com/@vanessaalopezz/video/7682376673576111373";
@@ -183,6 +185,9 @@ export const step = internalAction({
     const c = EXPERT_CASES.find((x) => x.id === args.ids[args.index]);
     if (!c) return null;
     const a = { ...args, creatorId: args.creators[c.persona ?? RUNNER] };
+    // The next case is scheduled FIRST, on a fixed beat: a case whose action dies (timeout, deploy)
+    // used to end the chain silently, and a run of 18 stopped at 4 with no error anywhere.
+    if (args.index + 1 < args.ids.length) await ctx.scheduler.runAfter(STEP_BEAT_MS, internal.eval.expertBench.step, { ...args, index: args.index + 1 });
     const since = Date.now();
     let reply = "", trace: unknown = null, correctness: Correctness | null = null, error: string | undefined;
     try {
@@ -199,7 +204,6 @@ export const step = internalAction({
       error = e instanceof Error ? e.message.slice(0, 200) : "failed";
       await ctx.runMutation(internal.eval.run.record, { suite: "expert", skill: "reply", creatorId: a.creatorId, text: `(error) ${error}`, checks: [], pass: false, trace: { runId: a.runId, caseId: c.id, situation: c.situation, error } });
     }
-    if (args.index + 1 < args.ids.length) await ctx.scheduler.runAfter(0, internal.eval.expertBench.step, { ...args, index: args.index + 1 });
     return null;
   },
 });
