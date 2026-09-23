@@ -210,7 +210,11 @@ Every sprint also runs the five mandatory categories: cross-tenant, budget fail-
 
 ## 8. Operator decisions
 
-1. **World-context vendor:** a web and news search API (Tavily, Exa, or Brave). Price per query × expected calls must be checked first, per the standing rule. The Tavily key is already on the blocked list.
-2. **Order:** confirm the B-sprints run before app M2 (recommended), with app M0 and M1 in parallel.
+1. **World-context vendor — DECIDED 2026-09-23: Tavily.** Price check (Sep 2026): Tavily $5–8 / 1k, Brave $5 / 1k, Exa $7 / 1k, Gemini 3 Google Search grounding $14 / 1k after 5,000 free a month. Expected volume is about 20–40 world-context queries per creator per month, only in diagnosis and seasonal planning. At 200 creators that's roughly 8k queries, about $40–65 a month for any vendor, so price doesn't decide it. Fit does:
+   - **Tavily is already integrated** (partnership research: `partnerships/research.ts`, cost vendor, budget unit, smoke check, eval fakes). Choosing it means one key, one budget path, and one fake, with no new client.
+   - **Google grounding was rejected for this use.** Its terms require showing Google's Search Suggestions UI wherever grounded results reach a user, and Maya's answers arrive as texts, where that can't be rendered. It would also move the writer off OpenRouter. Revisit only if grounding's display terms change.
+   - B3 records real Tavily responses for date-and-place queries (news topic, date range) as fixtures before building on them. If date filtering proves weak, Exa (date-bounded neural search) is the fallback behind the same tool interface.
+   - Still blocked on the operator: `TAVILY_API_KEY` on dev/staging.
+2. **Order — DECIDED 2026-09-23:** the B-sprints run before app M2; app M0 and M1 run in parallel.
 3. **Labelling time:** B0 needs about 4–6 operator hours to sign off ~120 cases. The bench is only as good as those labels.
 4. **Pilot creators:** 3 who consent to having their real outliers and flops used as live exit cases.
