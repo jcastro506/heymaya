@@ -52,4 +52,37 @@ describe("care path", () => {
     expect(r.reason).not.toBe("care");
     expect((await t.run((ctx) => ctx.db.get(a)))?.careUntil).toBeUndefined();
   });
+
+  it("ambiguous 'i'm giving up' gets a light check-in in her voice: no hotline, no pause", async () => {
+    const t = convexTest(schema, modules);
+    const a = await t.run((ctx) => seedCreator(ctx, "a", { clerkUserId: "user_a", timezone: "America/New_York", channel: { paired: true } }));
+    const { messageId } = await t.mutation(internal.core.messages.recordInbound, { creatorId: a, surface: "telegram", body: "i'm giving up" });
+    const r = await t.action(internal.agent.converse.run, { creatorId: a, messageId });
+    expect(r).toMatchObject({ ok: true, reason: "check_in" });
+    const out = await t.run((ctx) => ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a)).collect());
+    const sent = out.filter((m) => m.direction === "out");
+    expect(sent).toHaveLength(1);
+    expect(hasResource(sent[0].body)).toBe(false);
+    expect(sent[0].kind).not.toBe("care");
+    expect((await t.run((ctx) => ctx.db.get(a)))?.careUntil).toBeUndefined();
+  });
+
+  it("giving up on content is just conversation", async () => {
+    const t = convexTest(schema, modules);
+    const a = await t.run((ctx) => seedCreator(ctx, "a", { clerkUserId: "user_a", channel: { paired: true } }));
+    const { messageId } = await t.mutation(internal.core.messages.recordInbound, { creatorId: a, surface: "telegram", body: "i'm giving up on tiktok, nothing works" });
+    const r = await t.action(internal.agent.converse.run, { creatorId: a, messageId });
+    expect(r.reason ?? "").not.toMatch(/care|check_in/);
+  });
+
+  it("after a check-in, 'it's more than posting' gets care", async () => {
+    const t = convexTest(schema, modules);
+    const a = await t.run((ctx) => seedCreator(ctx, "a", { clerkUserId: "user_a", timezone: "America/New_York", channel: { paired: true } }));
+    const first = await t.mutation(internal.core.messages.recordInbound, { creatorId: a, surface: "telegram", body: "i'm giving up" });
+    await t.action(internal.agent.converse.run, { creatorId: a, messageId: first.messageId });
+    const second = await t.mutation(internal.core.messages.recordInbound, { creatorId: a, surface: "telegram", body: "honestly it's not just posting" });
+    const r = await t.action(internal.agent.converse.run, { creatorId: a, messageId: second.messageId });
+    expect(r).toMatchObject({ reason: "care" });
+    expect((await t.run((ctx) => ctx.db.get(a)))?.careUntil).toBeGreaterThan(Date.now());
+  });
 });

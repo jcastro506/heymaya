@@ -16,6 +16,8 @@ import { callModel } from "../core/llm";
 import { REGISTRY, WATCH_MODEL_TOP } from "./registry";
 import { buildPrefix, producedStamp } from "./context";
 import { critique, tooLong } from "./critic";
+import { CAUTIOUS_ASK, judgeLadder, ownPostFloor } from "./guarded";
+import { buildEvidencePack, supportedHypotheses, type EvidencePack } from "../core/evidencePack";
 import { deliverNow } from "../core/scheduler";
 import { fetchMedia, watchMedia } from "../integrations/gemini/client";
 import { WATCH_PROMPT } from "../onboarding/watch";
@@ -34,8 +36,14 @@ Output ONLY JSON:
 {"message": "≤700 chars, in your voice: your reaction as a viewer first (one line, the moment that got you or lost you, named from the card or their words, never a detail you were not given), then the read, then the three fixes, then the confidence word in a sentence, no bullets", "biggest": "≤200", "second": "≤200", "fine": "≤120 what already works", "confidence": "strong|solid|fine|weak|broken", "citations": [{"stat": "", "value": "", "sampleSize": 0}], "cannotKnow": "≤160"}` + LOOKUPS.opinion;
 
 export const EXPLAIN_POST_SKILL = `explain-post
-When: they sent a link to their OWN post. Four lines, not four paragraphs: what it did against their normal (a number they were given), the one thing most likely responsible, one thing to keep, one thing to change next time. If the numbers are too fresh to mean anything (under 48 hours), say so and say when you'll know. Never invent a metric.
-Output ONLY JSON: {"message": "≤500 chars, in your voice", "biggest": "≤200", "second": "≤200", "fine": "≤120", "confidence": "strong|solid|fine|weak|broken", "citations": [{"stat": "", "value": "", "sampleSize": 0}], "cannotKnow": "≤160"}` + LOOKUPS.explainPost;
+When: they sent a link to their OWN post and want to know why it did what it did, up or down. You are their expert: find the likely cause, don't just report the number.
+You have an evidence pack: the post against their own recent posts (when and how long, caption, hashtags new to them, sound reuse, format, engagement per 100 views against their usual, the shape of how the views arrived) plus whatever your lookups return. Each pack entry has a key.
+The judgment: rank up to three causes, most likely first. Each cause cites the pack keys or lookups that support it; a cause you can't point at evidence for is not a cause, leave it out. Things only they know (a paid boost, a friend with a big account sharing it, a cross-post, a location or event) you ask about rather than guess.
+Asking: when your top two causes can't be told apart from the evidence, or the likely cause is something only they'd know, end with ONE question that names them ("was this the night of the concert, or did someone big share it?"). Otherwise don't ask.
+After a hit (well above their normal): the one thing to do in the next day or two while the audience is warm, tied to THIS post (the part two people are asking for, a reply to the top comment, the same format again).
+Under 48 hours old the numbers aren't done moving: say what it's at so far and when you'll know.
+Message: short, in your voice, the moment or the number first, then the likely cause with what points to it, then the one thing to do or the one question. Never a metric you weren't given.
+Output ONLY JSON: {"message": "≤600 chars", "hypotheses": [{"cause": "≤160", "evidence": ["pack key or lookup name"], "confidence": "likely|possible"}], "question": "≤160 or ''", "biggest": "≤200", "second": "≤200", "fine": "≤120", "confidence": "strong|solid|fine|weak|broken", "citations": [{"stat": "", "value": "", "sampleSize": 0}], "cannotKnow": "≤160"}` + LOOKUPS.explainPost;
 
 const SCREENSHOT_PROMPT = `This is a screenshot from a creator's phone: analytics, a profile, or a post. Read every number you can see with its label, exactly as written. Return STRICT JSON: {"kind": "analytics|profile|post|other", "platform": "tiktok|instagram|unknown", "numbers": [{"label": "", "value": ""}], "postTitleOrCaption": "≤120 or ''", "period": "≤40 or ''"}. If a number is unreadable, leave it out. Never guess.`;
 
@@ -73,6 +81,30 @@ export const ownPostByUrl = internalQuery({
     const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(200)) as Doc<"ownPosts">[];
     const p = posts.find((x) => x.postId === a.postId || x.url.includes(a.postId));
     return p ? { id: p._id, url: p.url, views: p.metrics.views, multiple: p.multiple ?? null, metricsAsOf: p.metricsAsOf, createTime: p.createTime, caption: (p.caption ?? "").slice(0, 200) } : null;
+  },
+});
+
+/** The B2 evidence pack for one of their posts, against their own recent posts. */
+export const packFor = internalQuery({
+  args: { creatorId: v.id("creators"), ownPostId: v.id("ownPosts") },
+  handler: async (ctx, a): Promise<EvidencePack | null> => {
+    const post = (await ctx.db.get(a.ownPostId)) as Doc<"ownPosts"> | null;
+    const creator = await ctx.db.get(a.creatorId);
+    if (!post || !creator || post.creatorId !== a.creatorId) return null;
+    const others = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(80)) as Doc<"ownPosts">[];
+    return buildEvidencePack(post, others.filter((o) => o._id !== post._id), creator.timezone ?? "UTC", Date.now());
+  },
+});
+
+/** The same pack by platform post id, for a win signal (scout), scoped to the creator. */
+export const packForPostId = internalQuery({
+  args: { creatorId: v.id("creators"), postId: v.string() },
+  handler: async (ctx, a): Promise<EvidencePack | null> => {
+    const creator = await ctx.db.get(a.creatorId);
+    if (!creator) return null;
+    const rows = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(80)) as Doc<"ownPosts">[];
+    const post = rows.find((r) => r.postId === a.postId);
+    return post ? buildEvidencePack(post, rows.filter((o) => o._id !== post._id), creator.timezone, Date.now()) : null;
   },
 });
 
@@ -192,6 +224,7 @@ export const run = internalAction({
     const skill = a.mode === "own" ? EXPLAIN_POST_SKILL : OPINION_SKILL;
     const prefix = buildPrefix({ creator, directives, skill, personal: g.personal, voice: g.voice, history: g.history });
     const spec = REGISTRY.writer;
+    const pack = own ? await ctx.runQuery(internal.agent.opinion.packFor, { creatorId: creator._id, ownPostId: own.id }) : null;
     const evidence = {
       what: a.mode === "own" ? "their own post" : a.mode === "video" ? "a draft they sent as a file" : "a link they sent",
       theirWords: target.body.slice(0, 400),
@@ -200,10 +233,11 @@ export const run = internalAction({
       // Sprint 4e: the labelled numbers and the four-way read, or what the platform hides.
       ownPost: own ? { ...own, hoursOld: Math.round((Date.now() - own.createTime) / 3_600_000), metricsHoursOld: Math.round((Date.now() - own.metricsAsOf) / 3_600_000), numbers: await ctx.runQuery(internal.connections.numbers.forPost, { ownPostId: own.id }) } : null,
       theirHistory: history,
+      ...(pack ? { pack: pack.facts } : {}),
     };
     const user = `Evidence (everything you may cite is here; nothing else):\n${JSON.stringify(evidence)}`;
     const ask = async (purpose: string, extra = "") => callModel(ctx, { creatorId: creator._id, purpose, model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: user + extra }], temperature: 0.4, maxTokens: 1600, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
-    type Out = { message: string; biggest: string; second: string; fine: string; confidence: string; citations: Array<{ stat: string; value: string | number; sampleSize?: number }>; cannotKnow: string };
+    type Out = { message: string; hypotheses?: unknown; question?: string; biggest: string; second: string; fine: string; confidence: string; citations: Array<{ stat: string; value: string | number; sampleSize?: number }>; cannotKnow: string };
     // §13.11: for a link she may look up the sound, the comments and the author's normal before the read.
     let r: { ok: boolean; content: string; reason?: string };
     let investigation: Array<{ tool: string; params: Record<string, unknown>; why: string; credits?: number; ms: number; ok: boolean }> = [];
@@ -216,8 +250,11 @@ export const run = internalAction({
       r = first.ok ? { ok: true, content: first.content } : { ok: false, content: "", reason: first.reason };
     }
     let out = r.ok ? parseJson<Out>(r.content) : null;
-    if (!out || !Array.isArray(out.citations) || out.citations.length === 0 || !out.message?.trim()) {
-      const retry = await ask("opinion_retry", "\n\nYour previous answer had no citation or no message. Cite at least one number from the evidence, and output the JSON only.");
+    // B2: a cause survives only if it cites a pack key or a lookup that actually ran.
+    const citable = [...(pack?.keys ?? []), ...investigation.filter((t) => t.ok).map((t) => t.tool), "card", "transcript", "theirWords", "ownPost", "theirHistory"];
+    const causesOk = (o: Out | null) => a.mode !== "own" || supportedHypotheses(o?.hypotheses, citable).length > 0 || Boolean(o?.question?.trim());
+    if (!out || !Array.isArray(out.citations) || out.citations.length === 0 || !out.message?.trim() || !causesOk(out)) {
+      const retry = await ask("opinion_retry", "\n\nYour previous answer had no citation, no message, or no cause backed by evidence. Cite at least one number from the evidence; every cause must list pack keys or lookups that support it, and if none can, ask them the one question instead. Output the JSON only.");
       r = retry.ok ? { ok: true, content: retry.content } : { ok: false, content: "", reason: retry.reason };
       out = r.ok ? parseJson<Out>(r.content) : null;
     }
@@ -228,27 +265,29 @@ export const run = internalAction({
     const confidence = (["strong", "solid", "fine", "weak", "broken"] as const).includes(out.confidence as never) ? (out.confidence as "strong" | "solid" | "fine" | "weak" | "broken") : "fine";
     const produced = producedStamp(spec.primary);
 
-    // ── the critic, one rewrite ──────────────────────────────────────────
+    // ── the critic ladder: read → rewrite → cautious → floor; never silent (B2) ──
     const dossierVoice = creator.dossier as { voice?: unknown; persona?: unknown } | undefined;
-    let text = out.message.trim();
-    let verdict = tooLong(text) ? { pass: false, problems: ["too_long" as const], note: "over the length cap" } : await critique(ctx, { creatorId: creator._id, kind: "opinion", text, evidence, voice: { voice: dossierVoice?.voice, persona: dossierVoice?.persona }, directives: directives.map((d) => d.verbatim) });
-    let criticSkipped = Boolean(verdict.skipped);
-    if (!verdict.pass) {
-      const rw = await ask("opinion_rewrite", `\n\nYour previous message was rejected by the critic for: ${verdict.problems.join(", ")} (${verdict.note}). Rewrite ONLY the message text, fixing exactly that; keep the same confidence word. Output the message text only.`);
-      if (rw.ok && rw.content.trim()) {
-        text = rw.content.trim();
-        verdict = tooLong(text) ? { pass: false, problems: ["too_long" as const], note: "still over" } : await critique(ctx, { creatorId: creator._id, kind: "opinion", text, evidence, voice: { voice: dossierVoice?.voice, persona: dossierVoice?.persona }, directives: directives.map((d) => d.verbatim) });
-        criticSkipped = criticSkipped || Boolean(verdict.skipped);
-      }
-      if (!verdict.pass) {
-        await reply("i have a read on it but it didn't pass my own check. ask me again in a bit and i'll do it properly.");
-        return { ok: true, reason: `critic: ${verdict.problems.join(", ")}` };
-      }
-    }
+    const causes = a.mode === "own" ? supportedHypotheses(out.hypotheses, citable) : [];
+    const judgedEvidence = causes.length ? { ...evidence, causesWithEvidence: causes } : evidence;
+    const judge = async (text: string) => (tooLong(text) ? { pass: false, problems: ["too_long" as const], note: "over the length cap" } : await critique(ctx, { creatorId: creator._id, kind: a.mode === "own" ? "explain" : "opinion", text, evidence: judgedEvidence, voice: { voice: dossierVoice?.voice, persona: dossierVoice?.persona }, directives: directives.map((d) => d.verbatim), causesEvidenced: causes.length > 0 }));
+    const plain = async (purpose: string, extra: string) => {
+      const rw = await ask(purpose, extra);
+      return rw.ok && rw.content.trim() ? rw.content.trim() : null;
+    };
+    const judged = await judgeLadder({
+      first: out.message,
+      judge,
+      rewrite: (v) => plain("opinion_rewrite", `\n\nYour previous message was rejected by the critic for: ${v.problems.join(", ")} (${v.note}). Rewrite ONLY the message text, fixing exactly that; keep the same confidence word. Output the message text only, no JSON.\n\nPrevious message:\n${out!.message}`),
+      cautious: (v) => plain("opinion_cautious", CAUTIOUS_ASK(v.problems, v.note)),
+      floor: ownPostFloor(own ? { views: own.views, multiple: own.multiple, hoursOld: Math.round((Date.now() - own.createTime) / 3_600_000) } : null),
+    });
+    const text = judged.text;
+    const criticSkipped = judged.criticSkipped;
 
-    const predictionId = a.mode === "own" && !own ? null : await ctx.runMutation(internal.agent.opinion.writePrediction, { creatorId: creator._id, subject, confidence, opinion: { biggest: out.biggest, second: out.second, fine: out.fine, citations: out.citations, cannotKnow: out.cannotKnow, mode: a.mode, investigation }, produced });
-    await reply(text, { produced, criticSkipped });
-    return { ok: true, reason: predictionId ? `prediction ${predictionId}` : "explained" };
+    const predictionId = (a.mode === "own" && !own) || judged.rung === "floor" ? null : await ctx.runMutation(internal.agent.opinion.writePrediction, { creatorId: creator._id, subject, confidence, opinion: { biggest: out.biggest, second: out.second, fine: out.fine, citations: out.citations, cannotKnow: out.cannotKnow, mode: a.mode, investigation, hypotheses: causes, question: out.question ?? "", rung: judged.rung }, produced });
+    // The floor has no model in it, so it carries no produced stamp and makes no prediction claim.
+    await reply(text, judged.rung === "floor" ? { criticSkipped } : { produced, criticSkipped });
+    return { ok: true, reason: `${judged.rung}${judged.problems.length ? ` (${judged.problems.join(",")})` : ""}; ${predictionId ? `prediction ${predictionId}` : "explained"}; causes ${causes.length}` };
   },
 });
 

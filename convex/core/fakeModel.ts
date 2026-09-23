@@ -55,9 +55,11 @@ export function fakeAnswer(purpose: string, messages: OpenRouterMessage[]): Open
     case "critic":
     case "critic_fallback":
       return ok(JSON.stringify({ pass: true, problems: [], note: "fine" }));
+    case "check_in":
+      return ok("oof. giving up on posting, or is it more of a rough patch generally? either's fine to say.");
     case "classify":
       // Test-only stand-in for the model's judgment (B4 care path tests).
-      return ok(JSON.stringify({ intent: /don't see the point|not okay|want to disappear/i.test(user) ? "distress" : "text" }));
+      return ok(JSON.stringify({ intent: /don't see the point|not okay|want to disappear|not just posting/i.test(user) ? "distress" : /Their message: "?(i'm giving up|i'm done)[.!]*"?$/im.test(user) ? "check_in" : "text" }));
     case "converse":
     case "converse_rewrite":
     case "converse_fallback":

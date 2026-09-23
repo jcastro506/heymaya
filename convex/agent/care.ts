@@ -1,5 +1,7 @@
 /**
- * B4: when someone may not be okay (audit §5 capability 8). The classifier's judgment decides
+ * B4: when someone may not be okay (audit §5 capability 8). Three paths, the classifier's judgment
+ * picks: content frustration → normal Maya; ambiguous → `checkIn` (light, her voice, no hotline);
+ * clearly about them → `respond`. The classifier's judgment decides
  * that it's distress; this path then keeps the promises in code, because prompts drift:
  * - the reply is short, warm, asks if they're safe, and ALWAYS carries a crisis resource
  *   (appended by code if the model left it out, a fixed message if the model fails);
@@ -35,13 +37,44 @@ export function hasResource(text: string): boolean {
 }
 
 export const CARE_SKILL = `care
-They just said something that sounds like they may not be okay as a person, not about content. Drop everything else: no ideas, no posts, no numbers, no growth, no "take a break from the app" framing. Be a warm, steady friend for a moment: say you're glad they told you, ask plainly whether they're safe right now, and tell them they don't have to go through it alone. Two or three short sentences, no questions stacked, no advice lists, no therapy language, no diagnosing. Include a way to reach someone right now; the prefix gives you the right line for where they are. Output only the message text.`;
+They just made it clear they may not be okay as a person, not about content. Drop everything else: no ideas, no posts, no numbers, no growth, no "take a break from the app" framing. You're still you (lowercase, the way you always text them), just gentle: say you're glad they told you, ask plainly whether they're safe right now, and that they don't have to go through it alone. Two or three short sentences, one question, no advice lists, no therapy language, no diagnosing. Include a way to reach someone right now; the prompt gives you the right line for where they are. Output only the message text.`;
+
+/**
+ * The middle path (operator, 2026-09-23): "i'm giving up" is usually about posting. Maya stays
+ * herself, answers lightly, and asks which it is. No hotline, no pause, no alert. If they say it's
+ * more than posting, the classifier reads that reply (with this message as her last) as distress.
+ */
+export const CHECK_IN_SKILL = `check-in
+They said something that could be about their content or about them as a person, and you can't tell which. Stay completely yourself: warm, casual, a little funny if it fits. One or two short lines: react like a friend would, then ask lightly which it is, making both answers easy to give ("giving up on posting, or is it a rough patch more generally? either's fine to say"). No crisis language, no hotline, no advice yet, no numbers. Output only the message text.`;
+
+export const CHECK_IN_FALLBACK = "wait, giving up on posting, or is it a rough patch more generally? either's fine to say.";
 
 export const setCare = internalMutation({
   args: { creatorId: v.id("creators"), until: v.number() },
   handler: async (ctx, a): Promise<null> => {
     await ctx.db.patch(a.creatorId, { careUntil: a.until });
     return null;
+  },
+});
+
+export const checkIn = internalAction({
+  args: { creatorId: v.id("creators"), messageId: v.id("messages") },
+  handler: async (ctx, a): Promise<{ ok: boolean }> => {
+    const g = await ctx.runQuery(internal.agent.context.gather, { creatorId: a.creatorId, messageId: a.messageId });
+    if (!g?.target) return { ok: false };
+    const r = await callModel(ctx, {
+      creatorId: a.creatorId, purpose: "check_in", model: REGISTRY.writer.primary,
+      messages: [
+        { role: "system", content: CHECK_IN_SKILL },
+        { role: "user", content: `What they said: ${JSON.stringify(g.target.body.slice(0, 1000))}` },
+      ],
+      temperature: 0.5, maxTokens: 200, apiKey: process.env.OPENROUTER_API_KEY ?? "",
+    });
+    const raw = r.ok ? r.content.trim() : "";
+    const text = raw && !raw.startsWith("{") ? raw : CHECK_IN_FALLBACK;
+    await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: text, dedupeKey: `checkin:${a.messageId}`, proactive: false, kind: "reply" });
+    await deliverNow(ctx as never);
+    return { ok: true };
   },
 });
 

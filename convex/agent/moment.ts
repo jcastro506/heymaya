@@ -15,6 +15,7 @@ import { callModel } from "../core/llm";
 import { REGISTRY, WATCH_MODEL_TOP } from "./registry";
 import { buildPrefix, producedStamp } from "./context";
 import { critique, tooLong } from "./critic";
+import { judgeLadder } from "./guarded";
 import { deliverNow } from "../core/scheduler";
 import { watchMedia } from "../integrations/gemini/client";
 
@@ -125,25 +126,30 @@ export const run = internalAction({
 
     const dossierVoice = creator.dossier as { voice?: unknown; persona?: unknown } | undefined;
     let text = out.message.trim();
-    let verdict = tooLong(text) ? { pass: false, problems: ["too_long" as const], note: "over the length cap" } : await critique(ctx, { creatorId: creator._id, kind: "moment", text, evidence, voice: { voice: dossierVoice?.voice, persona: dossierVoice?.persona }, directives: directives.map((d) => d.verbatim) });
-    if (!verdict.pass) {
-      const rw = await callModel(ctx, { creatorId: creator._id, purpose: "moment_rewrite", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `The moment:\n${JSON.stringify(evidence)}\n\nYour previous message was rejected by the critic for: ${verdict.problems.join(", ")} (${verdict.note}). Rewrite ONLY the message text, fixing exactly that. Output the text only.` }], temperature: 0.5, maxTokens: 900, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
-      if (rw.ok && rw.content.trim()) {
-        text = rw.content.trim();
-        verdict = tooLong(text) ? { pass: false, problems: ["too_long" as const], note: "still over" } : await critique(ctx, { creatorId: creator._id, kind: "moment", text, evidence, voice: { voice: dossierVoice?.voice, persona: dossierVoice?.persona }, directives: directives.map((d) => d.verbatim) });
-      }
-      if (!verdict.pass) {
-        await reply("i've got two angles but they didn't pass my own check. thirty seconds, ask me again.");
-        return { ok: true, reason: `critic: ${verdict.problems.join(", ")}` };
-      }
+    // B2: rejected never means silent. A moment's angles are tied to the idea it saves, so there's
+    // no cautious rung: after the rewrite, the floor is one question that gets her what she needs.
+    const judged = await judgeLadder({
+      first: text,
+      judge: async (t) => (tooLong(t) ? { pass: false, problems: ["too_long" as const], note: "over the length cap" } : await critique(ctx, { creatorId: creator._id, kind: "moment", text: t, evidence, voice: { voice: dossierVoice?.voice, persona: dossierVoice?.persona }, directives: directives.map((d) => d.verbatim) })),
+      rewrite: async (v) => {
+        const rw = await callModel(ctx, { creatorId: creator._id, purpose: "moment_rewrite", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `The moment:\n${JSON.stringify(evidence)}\n\nYour previous message was rejected by the critic for: ${v.problems.join(", ")} (${v.note}). Rewrite ONLY the message text, fixing exactly that. Output the text only.` }], temperature: 0.5, maxTokens: 900, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+        return rw.ok && rw.content.trim() ? rw.content.trim() : null;
+      },
+      cautious: async () => null,
+      floor: scene ? `i can see it (${scene.slice(0, 100)}…) and i've got angles, but i want them to fit you. what's the story here for you?` : "tell me one more thing about where you are and i'll give you two angles that fit.",
+    });
+    if (judged.rung === "floor") {
+      await reply(judged.text);
+      return { ok: true, reason: `floor (${judged.problems.join(",")})` };
     }
+    text = judged.text;
 
     const pick = out.ideas[Math.min(Math.max(0, Number(out.recommended) || 0), out.ideas.length - 1)];
     const produced = producedStamp(spec.primary);
     const ideaId = await ctx.runMutation(internal.agent.moment.writeMomentIdea, { creatorId: creator._id, messageId: a.messageId, idea: { hook: String(pick.hook ?? "").slice(0, 120), shots: (pick.shots ?? []).map(String).slice(0, 6), lengthSec: Math.max(5, Math.min(180, Number(pick.lengthSec) || 20)), onScreenText: String(pick.onScreenText ?? "").slice(0, 80) }, messageText: text, features: out.features, produced });
     await reply(text, {
       produced,
-      criticSkipped: Boolean(verdict.skipped),
+      criticSkipped: judged.criticSkipped,
       awaitingAnswer: /\?\s*$/.test(text),
       buttons: [
         { id: `idea:${ideaId}:shotlist`, label: "shot list" },

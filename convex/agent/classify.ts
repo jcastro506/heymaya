@@ -25,6 +25,7 @@ export type Intent =
   | { intent: "opinion_ask" }
   | { intent: "calendar_answer" }
   | { intent: "distress" }
+  | { intent: "check_in" }
   | { intent: "text" };
 
 export const CLASSIFY_PROMPT = `You label one message a content creator sent to their assistant. Pick exactly one label:
@@ -41,10 +42,12 @@ export const CLASSIFY_PROMPT = `You label one message a content creator sent to 
 - "moment": they are somewhere or something is happening NOW and they want to make content about it ("i'm at this ramen place, want to do something", "we're at the start line, ideas?", "just got the medal").
 - "edit_idea": they want to change the most recent idea she sent: give "field" (hook | lengthSec | onScreenText | sound | shotList | caption) and "text" (the new value, or the instruction in their words if it is a rewrite like "make the hook meaner").
 - "drop_idea": scrap the most recent idea ("scrap that", "nah not that one", "kill it").
-- "distress": they sound like they may not be okay as a PERSON: hopelessness about life, not wanting to be here, self-harm, feeling unsafe, a crisis. Read the whole message: "i don't see the point anymore, of any of it" is distress; "i'm so over tiktok", "this post flopped and i'm annoyed", "i want to quit posting" are frustration about content and are "text". When unsure between the two, choose "distress": a gentle check-in costs nothing.
+- "distress": they CLEARLY mean themselves as a person, not their content: not wanting to be here, self-harm, feeling unsafe, hopelessness about life itself ("i don't see the point anymore, of any of it", "i don't want to be here"). Also distress: her last message asked lightly whether it was about posting or more than that, and they say it's more ("honestly it's not just posting", "no, everything's a lot").
+- "check_in": it COULD be about them as a person or just about content, and nothing in the message or her last message settles it ("i'm giving up", "i'm done", "what's even the point", "i can't do this anymore" with no content words around it).
+- Frustration about content is "text", never these two: "i'm giving up on tiktok", "i'm so over posting", "this flopped and i'm done", "i want to quit posting", "what's the point if nobody watches". When unsure between "text" and "check_in", choose "text" if content is anywhere in the message or in her last message. When unsure between "check_in" and "distress", choose "check_in".
 - "text": anything else, including answers about goals ("brand deals", "just staying consistent", "I already have 100k, I want better partnerships"), motivation, or uncertainty. These are conversation, not niche changes or calendar consent. Follow a new concrete request normally even during onboarding.
 Examples: "i'm at a rooftop bar with the whole run club, what do i shoot" → moment · "make it 15 seconds" → edit_idea lengthSec "15" · "change the hook to 'nobody trains for this part'" → edit_idea hook · "scrap that" → drop_idea · "add @runwithcarly to the list" → manage/add_admired handle runwithcarly · "watch @gymgirl on insta" → manage/add_admired instagram · "be blunter with me" → manage/tone blunt · "go easier on me" → manage/tone friend · "don't text me before 9am" → manage/quiet_hours end 09:00 (start from current) · "stop watching @x" → manage/stop_watching · "i only do gear reviews now" → manage/niche · "why is @x blowing up" → profile_ask · "what was that shoe rack idea" → recall · "should i post at 7 or 9" → opinion_ask.
-Output ONLY JSON: {"intent": "profile_ask|recall|opinion_ask|calendar_answer|manage|moment|edit_idea|drop_idea|distress|text", "handle": "", "platform": "tiktok|instagram", "action": "", "start": "", "end": "", "tone": "", "field": "", "text": ""}`;
+Output ONLY JSON: {"intent": "profile_ask|recall|opinion_ask|calendar_answer|manage|moment|edit_idea|drop_idea|distress|check_in|text", "handle": "", "platform": "tiktok|instagram", "action": "", "start": "", "end": "", "tone": "", "field": "", "text": ""}`;
 
 export async function classifyText(ctx: ActionCtx, input: { creatorId: Id<"creators">; text: string; ownHandles: { tiktok?: string; instagram?: string }; lastOutbound?: string; quietHours?: { start: string; end: string } }): Promise<Intent> {
   const r = await callModel(ctx, {
@@ -64,6 +67,7 @@ export async function classifyText(ctx: ActionCtx, input: { creatorId: Id<"creat
     const m = r.content.match(/\{[\s\S]*\}/);
     const j = JSON.parse(m ? m[0] : "{}") as { intent?: string; handle?: string; platform?: string; action?: string; start?: string; end?: string; tone?: string; text?: string; field?: string; value?: string };
     if (j.intent === "distress") return { intent: "distress" };
+    if (j.intent === "check_in") return { intent: "check_in" };
     if (j.intent === "moment") return { intent: "moment" };
     if (j.intent === "drop_idea") return { intent: "drop_idea" };
     if (j.intent === "edit_idea") {

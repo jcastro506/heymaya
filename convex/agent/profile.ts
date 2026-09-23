@@ -14,6 +14,7 @@ import { callModel } from "../core/llm";
 import { REGISTRY } from "./registry";
 import { buildPrefix, producedStamp } from "./context";
 import { critique, tooLong } from "./critic";
+import { CAUTIOUS_ASK, judgeLadder, profileFloor } from "./guarded";
 import { deliverNow } from "../core/scheduler";
 import { investigate } from "./investigate";
 import { LOOKUPS } from "./playbooks";
@@ -95,20 +96,23 @@ export const run = internalAction({
       return { ok: true, reason: "no message" };
     }
     const dossierVoice = creator.dossier as { voice?: unknown; persona?: unknown } | undefined;
-    let text = out.message.trim();
-    let verdict = tooLong(text) ? { pass: false, problems: ["too_long" as const], note: "over the length cap" } : await critique(ctx, { creatorId: creator._id, kind: "profile", text, evidence, voice: { voice: dossierVoice?.voice, persona: dossierVoice?.persona }, directives: directives.map((d) => d.verbatim) });
-    let criticSkipped = Boolean(verdict.skipped);
-    if (!verdict.pass) {
-      const rw = await callModel(ctx, { creatorId: creator._id, purpose: "profile_rewrite", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `Evidence:\n${JSON.stringify(evidence)}\n\nYour previous answer was rejected by the critic for: ${verdict.problems.join(", ")} (${verdict.note}). Rewrite ONLY the message text, fixing exactly that. Output the text only.` }], temperature: 0.4, maxTokens: 800, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
-      if (rw.ok && rw.content.trim()) {
-        text = rw.content.trim();
-        verdict = tooLong(text) ? { pass: false, problems: ["too_long" as const], note: "still over" } : await critique(ctx, { creatorId: creator._id, kind: "profile", text, evidence, voice: { voice: dossierVoice?.voice, persona: dossierVoice?.persona }, directives: directives.map((d) => d.verbatim) });
-        criticSkipped = criticSkipped || Boolean(verdict.skipped);
-      }
-      if (!verdict.pass) {
-        await reply(`i have a read on @${handle} but it didn't pass my own check. give me a minute and ask again.`);
-        return { ok: true, reason: `critic: ${verdict.problems.join(", ")}` };
-      }
+    const again = async (purpose: string, extra: string) => {
+      const rw = await callModel(ctx, { creatorId: creator._id, purpose, model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `Evidence:\n${JSON.stringify(evidence)}${extra}` }], temperature: 0.3, maxTokens: 900, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+      return rw.ok && rw.content.trim() ? rw.content.trim() : null;
+    };
+    // B2: rejected never means silent. Read → rewrite → cautious → a floor built from their facts.
+    const judged = await judgeLadder({
+      first: out.message,
+      judge: async (text) => (tooLong(text) ? { pass: false, problems: ["too_long" as const], note: "over the length cap" } : await critique(ctx, { creatorId: creator._id, kind: "profile", text, evidence, voice: { voice: dossierVoice?.voice, persona: dossierVoice?.persona }, directives: directives.map((d) => d.verbatim) })),
+      rewrite: (v) => again("profile_rewrite", `\n\nYour previous answer was rejected by the critic for: ${v.problems.join(", ")} (${v.note}). Rewrite ONLY the message, fixing exactly that. Output the message text only.\n\nPrevious message:\n${out!.message}`),
+      cautious: (v) => again("profile_cautious", CAUTIOUS_ASK(v.problems, v.note)),
+      floor: profileFloor(handle, f),
+    });
+    const text = judged.text;
+    const criticSkipped = judged.criticSkipped;
+    if (judged.rung === "floor") {
+      await reply(text, { criticSkipped });
+      return { ok: true, reason: `floor (${judged.problems.join(",")})` };
     }
     await reply(text, { produced: producedStamp(spec.primary), criticSkipped });
     return { ok: true };
