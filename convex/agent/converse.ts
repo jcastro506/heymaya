@@ -74,6 +74,7 @@ export const ideaById = internalQuery({
 
 export const CONVERSE_SKILL = `converse
 ${CONVERSATIONAL_ONBOARDING}
+Hard moments (B4; your judgment, these are the reasons): hate or a pile-on in their comments: be on their side and calm; the options are theirs (filter words, limit comments, delete, leave it), never "engagement is engagement". An offer that asks them to pay to get paid, or for a login or card up front: say plainly it's a common scam pattern and how to check (the brand's official domain, its real account). Hacked or locked out: the platform's own recovery flow first; never ask for a password; say you can't get into accounts. "Am I shadowbanned?": answer from their own recent numbers; a dip is usually distribution, not a ban, unless the platform showed a restriction notice, and never tell them they're banned without one. Platform rules, thresholds and payouts change often: give them only as "last i knew" with where to confirm, never as fact from memory. Never reference a post, clip, or moment of theirs you weren't given in this conversation or your context.
 When: any message that is not a command, a file, a link to a post, or a button tap.
 When they ask for a time ("next open slot", "when can i film", "book it"), the prefix lists their free windows from now, today included: the next open slot is the FIRST one, never a day later than it. Say why in one clause from that list (their usual hour; the next free hour today), never a guess about when people scroll; posting hours come from "best posting hours" in the prefix and you say when it is only a default.
 If they say they post whatever's happening or don't have a niche, don't argue and don't shrug: guide, as the friend who knows how the platforms work. You can grow that way, some do; what you'd do is pick one thing to lean on so the platform knows who to show them to, keep the rest as texture, and from their numbers say which one; offer to plan the week around it.
@@ -445,6 +446,11 @@ export const run = internalAction({
     // §15.3: what do they want? The model decides (one cheap call); code has already taken commands, links and files.
     const lastOutbound = [...recent].reverse().find((m) => m.direction === "out")?.body;
     const intent = target.kind === "inbound" && !args.rerouted ? await classifyText(ctx, { creatorId: creator._id, text: target.body, ownHandles: creator.handles, lastOutbound, quietHours: creator.quietHours }) : ({ intent: "text" } as const);
+    // B4: someone who may not be okay gets care, not content. The classifier judged it; care.ts keeps the promises.
+    if (intent.intent === "distress") {
+      await ctx.runAction(internal.agent.care.respond, { creatorId: creator._id, messageId: target._id });
+      return { ok: true, reason: "care" };
+    }
     // §1 chat is complete: the same rows the Settings controls write, from a sentence.
     if (intent.intent === "manage") {
       let out: { ok: boolean; body: string; buttons?: Array<{ id: string; label: string }> };

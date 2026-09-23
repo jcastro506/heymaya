@@ -49,6 +49,8 @@ export function checkRails(input: { creator: Doc<"creators">; sentToday: number;
   // §19.3: past due keeps proactive for three days of grace, then it pauses; nothing is deleted.
   if (creator.plan.status === "past_due" && creator.plan.pastDueSince && now - creator.plan.pastDueSince > 3 * 86_400_000) return { ok: false, reason: "plan is past due for more than three days", localHour: hour, sentToday: input.sentToday };
   if (!creator.channel.paired) return { ok: false, reason: "not paired", localHour: hour, sentToday: input.sentToday };
+  // B4: someone who just told her they're not okay doesn't get "3 hooks for thursday".
+  if (creator.careUntil && now < creator.careUntil) return { ok: false, reason: "care pause after a distress message", localHour: hour, sentToday: input.sentToday };
   // Live 2026-09-07: the hourly scout landed on top of the first read. The read gets half an
   // hour to be read before any idea, whichever path the scout arrives by.
   if (input.firstReadAt && now - input.firstReadAt < READ_SETTLE_MS) return { ok: false, reason: "the first read just landed; let it settle", localHour: hour, sentToday: input.sentToday };

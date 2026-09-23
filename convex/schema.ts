@@ -17,6 +17,8 @@ export default defineSchema({
   // ---------------------------------------------------------------- creators
   creators: defineTable({
     clerkUserId: v.string(),
+    /** B4: after a distress message, no proactive texts until this time (ms). Replies still flow. */
+    careUntil: v.optional(v.number()),
     email: v.string(),
     phone: v.optional(v.string()),
     phoneVerifiedAt: v.optional(v.number()),
