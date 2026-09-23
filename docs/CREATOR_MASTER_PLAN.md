@@ -24,12 +24,14 @@ _Updated 2026-09-23._
 
 | Sprint | Status | Notes |
 |---|---|---|
-| **M0** Foundation | ✅ Done | Native SwiftUI app, Clerk + Convex, contract tests on real query output, preview mode. Not yet on TestFlight (needs the Apple account). |
-| **M1** Design system and screens | 🟡 ~70% | Today (briefing), Ideas (swipe stack + grid), idea brief, You, Settings, Deals (locked teaser), Your numbers + post screen, both platforms, only real Zernio data. **Left:** server-side covers for both platforms, largest text sizes, motion/loading pass, moving video in the idea hero, your sign-off on your phone. |
-| **Backend fixes shipped along the way** | ✅ | `ui.opportunities`, `ui.saveIdea`, `ui.passIdea` teaches taste, `ui.analytics`, `ui.post`, status-line copy. 19 backend tests, deployed to dev. |
-| Cadence test failures (pre-existing on `creator`) | 🔄 In a separate session | Four date-dependent failures; not blocking. |
-
----
+| **M0** Foundation | ✅ Done | Native SwiftUI app, Clerk + Convex, contract tests on real query output, preview mode. Not on TestFlight yet (needs the Apple account). |
+| **M1** Design system and screens | ✅ Done (your sign-off pending) | Today, Ideas (swipe stack), idea brief with **moving video**, You, Settings, Deals, Your numbers + post. **Real covers and avatars for both platforms, stored server-side** (`convex/media.ts`). Largest text sizes adapted. |
+| **M2** Deep links | ✅ Done | `/o/idea/<id>` and `/o/post/<id>`; Maya's link tool links only her creator's own objects; "this changed" states; web fallback page + AASA (needs `APPLE_TEAM_ID`). |
+| **B1** Numbers foundation | ✅ Done | One normal, per platform, settled posts only; view history + shape; "broke out"; detection every 6 h and hourly on Zernio. Live: the 879K post that read "normal" reads "broke out (711×)". |
+| **O1** Live COGS | ✅ Done | /ops shows every cost line for real creators only, margin, under-30% list; OpenRouter reconcile daily. |
+| **B0** Expert Bench | ✅ Harness + baseline (labels draft) | **8/16 pass, 4 false claims.** Worst: distress read as content fatigue; "why did it pop" got no answer. See audit §7 "B0 baseline". **Needs your label sign-off.** |
+| **M4 core** Awareness | ✅ Done | `userActions` + awareness levels; app actions reach her context once; seen only when she speaks. (Block `rev` guards moved to I1.) |
+| Cadence test failures (pre-existing) | 🔄 In a separate session | Not blocking. |
 
 ## The order
 
@@ -111,4 +113,8 @@ Three tracks run side by side where they don't depend on each other: **Brain** (
 
 ## What "next" means right now
 
-**Next up: #1 M1 finish** (starting with covers and avatars stored server-side for both platforms, which fixes Instagram and gives real avatars), **alongside #2 B0** (the bench harness can be built before your labels).
+Phase 1 is complete (pending your M1 sign-off and B0 labels). **Next: Phase 2**, in this order:
+1. **B4 first** (moved up): the distress case failed the baseline, and nothing ships to creators until crisis language is handled 100%.
+2. **B2**, including a fallback so a critic-rejected read never becomes silence.
+3. **I1** (Maya's chat control of ideas, plus `rev` guards).
+4. **B3** once `TAVILY_API_KEY` is real (dev currently holds a placeholder).
