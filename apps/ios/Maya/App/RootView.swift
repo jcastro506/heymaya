@@ -34,7 +34,10 @@ struct RootView: View {
     }
     .animation(.smooth(duration: 0.25), value: stateKey)
     .task {
-      for await state in convex.authState.values { auth = state }
+      for await state in convex.authState.values {
+        auth = state
+        if case .authenticated = state { await ShareSetup.ensureToken() }
+      }
     }
   }
 

@@ -69,6 +69,7 @@ enum SessionActions {
   /// Through the Convex client, so its auth state flips to signed-out (and RootView shows
   /// the welcome screen) as well as ending the Clerk session.
   static func signOut() async {
+    ShareSetup.forget() // the share extension stops sending as them
     await convex.logout()
   }
 }

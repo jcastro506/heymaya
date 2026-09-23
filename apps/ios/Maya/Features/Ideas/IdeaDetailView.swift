@@ -196,6 +196,9 @@ struct IdeaDetailView: View {
             Task { if await Actions.passIdea(ideaId: idea.id) { withAnimation { outcome = .passed } } }
           }
         }
+        BarIcon(icon: "bubble.left.and.text.bubble.right", label: "Ask Maya", tint: Palette.purple) {
+          Task { await Actions.askMaya(kind: "idea", id: idea.id) }
+        }
         BarIcon(icon: saved ? "bookmark.fill" : "bookmark", label: saved ? "Saved" : "Save", tint: Palette.coral) {
           let next = !saved
           saved = next

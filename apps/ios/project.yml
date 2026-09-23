@@ -37,6 +37,7 @@ targets:
     platform: iOS
     sources:
       - path: Maya
+      - path: Shared
       # Debug-only preview data (launch argument -MayaFixtures); stripped from Release below.
       - path: Fixtures
         buildPhase: resources
@@ -70,7 +71,9 @@ targets:
       path: Maya/Maya.entitlements
       properties:
         com.apple.developer.associated-domains: ["applinks:hey-maya.ai"]
+        com.apple.security.application-groups: ["group.ai.heymaya.maya"]
     dependencies:
+      - target: MayaShare
       - package: ConvexMobile
         product: ConvexMobile
       - package: Clerk
@@ -81,6 +84,36 @@ targets:
         product: ClerkConvex
       - package: Nuke
         product: NukeUI
+  # M5: "Send to Maya" from the TikTok / Instagram share sheet (app spec §10.1).
+  MayaShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: MayaShare
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.heymaya.maya.share
+        PRODUCT_NAME: MayaShare
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Maya
+    info:
+      path: MayaShare/Info.plist
+      properties:
+        MayaConvexURL: $(MAYA_CONVEX_URL)
+        CFBundleDisplayName: Maya
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsText: true
+    entitlements:
+      path: MayaShare/MayaShare.entitlements
+      properties:
+        com.apple.security.application-groups: ["group.ai.heymaya.maya"]
   MayaTests:
     type: bundle.unit-test
     platform: iOS

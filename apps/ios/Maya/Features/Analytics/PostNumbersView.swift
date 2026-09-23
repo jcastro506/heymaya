@@ -29,6 +29,13 @@ struct PostNumbersView: View {
     .background(Palette.ground.ignoresSafeArea())
     .navigationTitle(Format.day(post.createTime))
     .navigationBarTitleDisplayMode(.inline)
+    .toolbar {
+      ToolbarItem(placement: .topBarTrailing) {
+        Button { Task { await Actions.askMaya(kind: "post", id: post.id) } } label: {
+          Label("Ask Maya", systemImage: "bubble.left.and.text.bubble.right")
+        }
+      }
+    }
     .task { await data.run() }
   }
 

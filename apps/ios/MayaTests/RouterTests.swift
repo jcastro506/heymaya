@@ -27,3 +27,19 @@ final class RouterTests: XCTestCase {
     XCTAssertEqual(r("https://www.hey-maya.ai/o/idea/1"), .idea("1"))
   }
 }
+
+/// M5: the share extension finds the post link inside what TikTok and Instagram actually share.
+final class ShareLinkTests: XCTestCase {
+  func testFindsPostLinkInSharedText() {
+    let tt = ShareLink.postLink(in: ["Check out Noah's video! #TikTok https://vm.tiktok.com/ZMabc123/ "])
+    XCTAssertEqual(tt?.platform, "TikTok")
+    XCTAssertEqual(tt?.url, "https://vm.tiktok.com/ZMabc123/")
+    let ig = ShareLink.postLink(in: ["https://www.instagram.com/reel/DcRIKq6xDpQ/?igsh=abc"])
+    XCTAssertEqual(ig?.platform, "Instagram")
+    XCTAssertNil(ShareLink.postLink(in: ["https://youtube.com/watch?v=1", "no link here"]))
+  }
+
+  func testShareEndpointIsTheSiteTwin() {
+    XCTAssertEqual(ShareLink.shareEndpoint(convexURL: "https://impressive-roadrunner-997.convex.cloud")?.absoluteString, "https://impressive-roadrunner-997.convex.site/share")
+  }
+}

@@ -20,6 +20,16 @@ enum Actions {
     _ = try? await convex.mutation("ui:markIdeasSeen", with: ["ids": ids.map { $0 as ConvexEncodable? }]) as R
   }
 
+  /// Ask Maya (§7.4): she'll know what they tapped for ten minutes; Messages opens with a draft.
+  static func askMaya(kind: String, id: String) async {
+    Haptics.tap()
+    guard !Fixtures.enabled else { return }
+    struct R: Decodable { let ok: Bool; let url: String? }
+    guard let r: R = try? await convex.mutation("share:askMaya", with: ["kind": kind, "id": id]), r.ok,
+          let s = r.url, let url = URL(string: s) else { return }
+    await UIApplication.shared.open(url)
+  }
+
   static func restoreIdea(ideaId: String) async -> Bool {
     await ok("ui:restoreIdea", ["id": ideaId])
   }
