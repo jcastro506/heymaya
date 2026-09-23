@@ -240,6 +240,10 @@ Every sprint also runs the five mandatory categories: cross-tenant, budget fail-
 
 ### 8.2 Redesign: the opportunity engine
 
+> **Operator decision 2026-09-23 (see app spec §0 D6, D7):** lead with money a small creator can realistically get: **TikTok Shop affiliate** (products matching what they already make and show), **UGC platforms** (content for brands' own channels, where portfolio matters more than followers), and **gifting**. Cold brand pitches sit at the top of the ladder. **v1 sends nothing from their Gmail:** drafts open in their own mail app, and replies are tracked by a Maya reply-to/BCC address or by the creator's report. The Gmail send/read code stays behind `PARTNERSHIP_EMAIL_SEND_ENABLED=false`. The follow-up cadence in §8.3 applies unchanged, with "send" meaning "open the pre-filled draft".
+
+
+
 **Signals, collected by code (mostly free byproducts of what already runs):**
 1. **Brands paying your lane:** paid-promotion posts from tracked and lane accounts: the brand (from the caption tag, @mention, or "paid partnership" label), the creator's size, the format, and the date. *Zero new credits.*
 2. **Brands you already use:** products and brands in their own captions, transcripts, and watched-post cards. Each hit keeps the post id, so a pitch can say "I already use it, here's the post".

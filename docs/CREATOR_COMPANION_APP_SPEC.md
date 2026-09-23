@@ -7,6 +7,20 @@
 
 ---
 
+## 0. Decisions from the operator brainstorm (2026-09-23) — these override anything below that conflicts
+
+| # | Decision | Replaces |
+|---|---|---|
+| D1 | **Native SwiftUI, iOS first.** Android later in Kotlin/Compose from this spec. Agents keep two native codebases in step. Convex's official Swift client (`convex-swift`) and Clerk's native SDK (`clerk-ios` + `clerk-convex-swift`) cover the platform. **Required discipline:** every Convex query or mutation the app calls gets an explicit `returns` validator, and the app's Swift models are checked against them in CI, so a backend change fails the build, not the app. | §3's Expo/React Native recommendation. EAS Update is lost; TestFlight internal builds need no review, and App Review is about a day. |
+| D2 | **Three tabs: Today · Ideas · You.** Week and last week's results live in Today; Watching and Opportunities live in You (Opportunities is promoted to a tab only if the pilot shows it's used). | §6's five/six tabs |
+| D3 | **Awareness v1 = State + Noticed.** The only "Reacted" kinds are the share extension, Ask Maya, and plan upgrade. The rest waits for pilot data. | §7.3's full table |
+| D4 | **A read-only conversation mirror in the app**, which becomes a live fallback reply box only when her number is down (a flagged line, vendor outage). Insurance for the one channel we don't own; not a second front door. | §1's "no chat box" (still true in normal operation) |
+| D5 | **The pilot is the TestFlight app.** Creators test Maya through the app plus Messages. The operator pushes builds to TestFlight. | Testing on web first |
+| D6 | **Partnerships reframed as "Maya finds you money":** TikTok Shop affiliate products that fit what they already make, UGC platforms, and gifting first, with cold brand pitches as the top of the ladder. See the audit doc §8. | Cold outreach as the core |
+| D7 | **No Gmail read or send in v1.** She drafts. One tap opens it in their own mail app with the recipient, subject, and body filled in, and they press send. Replies are tracked through a Maya reply-to/BCC address, or by the creator telling her. Removes Google's restricted-scope review and the ~$1.5k/yr security assessment. | The SEND-code Gmail send path (kept in code, switched off) |
+| D8 | **Expert Bench starts at ~40 cases** (no invented causes, asks when unsure, catches the obvious: sound, event, a big account's stitch) and grows from real pilot posts. A stronger model is tested for diagnosis only. | 120 cases up front |
+| D9 | **Pricing, open:** consider one plan around $29 with "finds you money" as the upgrade, instead of tiers split by account count. **Operator decision; nothing changes in code until it's made.** | — |
+
 ## 1. The decision, and the line that doesn't move
 
 Maya gets a native App Store app. The web Mission Control (`/app/*`) and the web onboarding (`/start`) are retired.
