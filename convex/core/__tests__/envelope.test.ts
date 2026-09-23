@@ -20,7 +20,7 @@ describe("a person never receives a JSON envelope (live 2026-09-06)", () => {
     const t = convexTest(schema, modules);
     const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { channel: { paired: true } }));
     const r = await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: '{"message": "hello there", "rungOverride": null}', dedupeKey: "env:1", proactive: true, kind: "review" });
-    const row = await t.run(async (ctx) => await ctx.db.get(r.messageId));
+    const row = await t.run(async (ctx) => await ctx.db.get(r.messageId!));
     expect(row?.body).toBe("hello there");
     await expect(t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: '{"verdict": "x"}', dedupeKey: "env:2", proactive: true })).rejects.toThrow(/no message field/);
   });

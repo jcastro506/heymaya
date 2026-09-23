@@ -32,6 +32,17 @@ import { dayKeyInZone } from "./cadence";
 import { checkPlainLanguage } from "./plainLanguage";
 import { dayScanFloor, isSameDayInZone } from "./cadence";
 import { applyBump, emptyDay } from "./budgets";
+import { THRESHOLDS } from "../config/thresholds";
+
+/**
+ * S0: the ONE definition of what spends the daily allowance of interruptions. Used by the rails,
+ * the counter, and the hold inside `send`. Reminders about a block THEY booked and status notes
+ * don't count (reminders have their own per-block budget). The gate used to count reminders and
+ * the counter didn't: two definitions of one promise.
+ */
+export function countsTowardCap(m: Pick<Doc<"messages">, "direction" | "proactive" | "kind">): boolean {
+  return m.direction === "out" && m.proactive === true && m.kind !== "reminder" && m.kind !== "status";
+}
 
 const SURFACE = v.union(
   v.literal("telegram"),
@@ -231,11 +242,17 @@ export const send = internalMutation({
     links: v.optional(v.array(v.string())),
     frames: v.optional(v.array(v.object({ storageId: v.id("_storage"), caption: v.string() }))),
     criticSkipped: v.optional(v.boolean()),
+    /**
+     * S0: a discretionary interruption (an idea, a check-in, a morning line). The daily cap is
+     * enforced HERE, inside the transaction, so two jobs in the same hour can't both read "0 sent"
+     * and both send. A held message returns `held` with the reason; nothing is written.
+     */
+    capped: v.optional(v.boolean()),
   },
   handler: async (
     ctx,
     args,
-  ): Promise<{ messageId: Id<"messages">; sent: boolean }> => {
+  ): Promise<{ messageId: Id<"messages"> | null; sent: boolean; held?: string }> => {
     // Scoped to the creator. `brief:2026-07-31` is the same string for every
     // creator in the fleet, so a global dedupe lookup silently suppressed
     // everyone's brief after the first — found by the fleet sweep, invisible
@@ -247,6 +264,16 @@ export const send = internalMutation({
       )
       .first();
     if (existing) return { messageId: existing._id, sent: false };
+    if (args.capped && args.proactive) {
+      const now = args.ts ?? Date.now();
+      const tz = ((await ctx.db.get(args.creatorId)) as Doc<"creators"> | null)?.timezone ?? "UTC";
+      const today = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", args.creatorId).gte("ts", dayScanFloor(now))).collect()) as Doc<"messages">[];
+      const spent = today.filter((m) => countsTowardCap(m) && isSameDayInZone(m.ts, now, tz)).length;
+      if (spent >= THRESHOLDS.dailyMessageCap) {
+        console.warn(`[messages] held ${args.kind ?? "message"} for ${args.creatorId}: daily cap (${THRESHOLDS.dailyMessageCap}) reached`);
+        return { messageId: null, sent: false, held: `daily cap (${THRESHOLDS.dailyMessageCap}) reached` };
+      }
+    }
     // A person never receives a JSON envelope. Unwrapped here, or refused loudly.
     const envelope = unwrapModelEnvelope(args.body);
     if (envelope.unwrapped) console.error(`[messages] unwrapped a JSON envelope for ${args.kind ?? "message"} ${args.dedupeKey}; the caller sent the raw model output`);
@@ -481,16 +508,7 @@ export const proactiveSentToday = internalQuery({
         q.eq("creatorId", args.creatorId).gte("ts", dayScanFloor(now)),
       )
       .collect();
-    return rows.filter(
-      (row) =>
-        row.direction === "out" &&
-        row.proactive === true &&
-        // Reminders about a block THEY booked, and status notes, are not her spending the
-        // day's allowance on ideas (Sprint 4b: reminders have their own per-block budget).
-        row.kind !== "reminder" &&
-        row.kind !== "status" &&
-        isSameDayInZone(row.ts, now, timezone),
-    ).length;
+    return rows.filter((row) => countsTowardCap(row) && isSameDayInZone(row.ts, now, timezone)).length;
   },
 });
 

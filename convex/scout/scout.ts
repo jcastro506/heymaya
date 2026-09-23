@@ -6,6 +6,7 @@
  */
 
 import { v } from "convex/values";
+import { HOURLY_SPREAD_MS, spreadDelays } from "../core/fanout";
 import { enqueueRender, shouldDrawProactively } from "../agent/frames";
 import { internalAction, internalMutation } from "../_generated/server";
 import { internal } from "../_generated/api";
@@ -279,12 +280,13 @@ export const run = internalAction({
       }
     }
     const body = links.length && !hasLink(pick.message, links[0]) ? `${pick.message}\n\n${cleanLink(links[0])}` : pick.message;
-    const { messageId } = await ctx.runMutation(internal.core.messages.send, {
+    const { messageId, held } = await ctx.runMutation(internal.core.messages.send, {
       creatorId: args.creatorId,
       surface: "telegram",
       body,
       dedupeKey: `scout:${signal._id}`,
       proactive: true,
+      capped: true,
       awaitingAnswer: /\?\s*$/.test(pick.message),
       kind: "scout",
       links,
@@ -292,6 +294,8 @@ export const run = internalAction({
       produced,
       criticSkipped,
     });
+    // S0: held by the cap inside send (another job texted first this hour). The idea stays in their app.
+    if (held) return { sent: false, reason: held };
     if (messageId) await ctx.runMutation(internal.scout.scout.linkIdeaMessage, { ideaId, messageId, sentAt: now });
     // §22: a pick that lives in how it looks gets drawn, within the week's sketches; the album follows the idea by a minute.
     if (shouldDrawProactively({ visual: Boolean(pick.visual), weekCount: await ctx.runQuery(internal.agent.frames.weekCount, { creatorId: args.creatorId, now }), sent: Boolean(messageId) })) await enqueueRender(ctx as never, { creatorId: args.creatorId, ideaId, requestedBy: "scout", requestId: "scout" });
@@ -334,19 +338,27 @@ export const dueForScout = internalQuery({
 
 export const runAll = internalAction({
   args: {},
-  handler: async (ctx): Promise<{ creators: number; sent: number }> => {
+  handler: async (ctx): Promise<{ creators: number; scheduled: number }> => {
     const now = Date.now();
     const due = await ctx.runQuery(internal.scout.scout.dueForScout, { now });
-    let sent = 0;
-    for (const creatorId of due) {
-      try {
-        const r = await ctx.runAction(internal.scout.scout.run, { creatorId });
-        if (r.sent) sent += 1;
-      } catch (error) {
-        console.error(`[scout] ${creatorId}: ${error instanceof Error ? error.message : String(error)}`);
-      }
+    // S0: fanned out, one action each, spread over the hour (a sequential loop hit the 10-minute action limit).
+    const delays = spreadDelays(due.length, HOURLY_SPREAD_MS);
+    for (let i = 0; i < due.length; i++) await ctx.scheduler.runAfter(delays[i], internal.scout.scout.runOne, { creatorId: due[i] });
+    return { creators: due.length, scheduled: due.length };
+  },
+});
+
+/** One creator's pass from the hourly fan-out; a failure is logged against that creator, never the fleet. */
+export const runOne = internalAction({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ sent: boolean; reason: string }> => {
+    try {
+      const r = await ctx.runAction(internal.scout.scout.run, { creatorId: a.creatorId });
+      return { sent: r.sent, reason: r.reason };
+    } catch (error) {
+      console.error(`[scout] ${a.creatorId}: ${error instanceof Error ? error.message : String(error)}`);
+      return { sent: false, reason: "failed" };
     }
-    return { creators: due.length, sent };
   },
 });
 

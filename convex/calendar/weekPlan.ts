@@ -8,6 +8,7 @@
  */
 
 import { v } from "convex/values";
+import { HOURLY_SPREAD_MS, spreadDelays } from "../core/fanout";
 import { eventDescription, ideaForEvent } from "./eventBody";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
@@ -232,12 +233,11 @@ export const runAll = internalAction({
   handler: async (ctx): Promise<{ due: number; planned: number }> => {
     const now = Date.now();
     const ids = await ctx.runQuery(internal.calendar.weekPlan.due, { now });
-    let planned = 0;
-    for (const creatorId of ids) {
-      const r = await ctx.runAction(internal.calendar.weekPlan.draft, { creatorId, now });
-      if (r.sent) planned++;
-    }
-    return { due: ids.length, planned };
+    // S0: fanned out (a sequential loop hit the 10-minute action limit). `now` travels with each
+    // so a delayed draft still plans the week it was due for.
+    const delays = spreadDelays(ids.length, HOURLY_SPREAD_MS);
+    for (let i = 0; i < ids.length; i++) await ctx.scheduler.runAfter(delays[i], internal.calendar.weekPlan.draft, { creatorId: ids[i], now });
+    return { due: ids.length, planned: ids.length };
   },
 });
 

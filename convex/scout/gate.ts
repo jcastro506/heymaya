@@ -6,6 +6,7 @@
  */
 
 import { v } from "convex/values";
+import { countsTowardCap } from "../core/messages";
 import { internalMutation, internalQuery } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { rankMultiplier, tasteHint, TASTE, type Affinity } from "../taste/affinities";
@@ -70,7 +71,7 @@ export const railsOnly = internalQuery({
     if (!creator) return null;
     const day = dayKeyInZone(a.now, creator.timezone);
     const recent = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(50)) as Doc<"messages">[];
-    const sentToday = recent.filter((m) => m.direction === "out" && m.proactive && dayKeyInZone(m.ts, creator.timezone) === day && m.kind !== "status").length;
+    const sentToday = recent.filter((m) => countsTowardCap(m) && dayKeyInZone(m.ts, creator.timezone) === day).length;
     const openQuestion = recent.some((m) => m.direction === "out" && m.awaitingAnswer);
     const budget = (await ctx.db.query("budgets").withIndex("by_creator_day", (q) => q.eq("creatorId", a.creatorId).eq("day", day)).first()) as Doc<"budgets"> | null;
     const firstReadAt = recent.find((m) => m.direction === "out" && m.kind === "first_read")?.ts ?? null;
@@ -87,7 +88,7 @@ export const railsFor = internalQuery({
     creator = await separatedCreator(ctx, creator);
     const day = dayKeyInZone(a.now, creator.timezone);
     const recent = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(50)) as Doc<"messages">[];
-    const sentToday = recent.filter((m) => m.direction === "out" && m.proactive && dayKeyInZone(m.ts, creator.timezone) === day && m.kind !== "status").length;
+    const sentToday = recent.filter((m) => countsTowardCap(m) && dayKeyInZone(m.ts, creator.timezone) === day).length;
     // An open question blocks, full stop. It stops being open when they answer (either
     // inbound door closes it) or when their day ends (the nightly sweep). A fixed TTL here
     // was a second, contradictory rule for the same thing.

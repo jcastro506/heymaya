@@ -212,7 +212,8 @@ describe("her number: rows and doors, on the fake vendor", () => {
     const t = convexTest(schema, modules);
     const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { phone: PHONE, channel: { paired: true, kind: "imessage", pairedAt: NOW } }));
     const ideaId = await t.run((ctx) => ctx.db.insert("ideas", { creatorId, evidenceLinks: [], fit: "yes", fitWhy: "x", version: { hook: "h" }, messageText: "m", produced: { skillVersion: "t", model: "m", thresholdsVersion: "t" }, sentAt: NOW, status: "sent", createdAt: NOW } as never));
-    const { messageId } = await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: "an idea", dedupeKey: "idea:2", proactive: true, kind: "scout" });
+    const { messageId: sentId } = await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: "an idea", dedupeKey: "idea:2", proactive: true, kind: "scout" });
+    const messageId = sentId!;
     await t.run((ctx) => ctx.db.patch(messageId, { ideaId, channelMessageId: "vendor-out-1" }));
     const heart = await t.action(internal.core.imessage.handleReaction, { from: PHONE, aboutChannelMessageId: "vendor-out-1", reactionType: "love", added: true });
     expect(heart.ok).toBe(true);
@@ -237,7 +238,8 @@ describe("her number: rows and doors, on the fake vendor", () => {
   it("delivery: the menu line rides on the last text; no key is a named failure on the row (fail-closed)", async () => {
     const t = convexTest(schema, modules);
     const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { phone: PHONE, channel: { paired: true, kind: "imessage", pairedAt: NOW } }));
-    const { messageId } = await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: "first\n---\nsecond", dedupeKey: "d:1", proactive: false, kind: "reply", buttons: [{ id: "idea:x:save", label: "save" }] });
+    const { messageId: sentId } = await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: "first\n---\nsecond", dedupeKey: "d:1", proactive: false, kind: "reply", buttons: [{ id: "idea:x:save", label: "save" }] });
+    const messageId = sentId!;
     const r = await t.action(internal.core.telegram.deliverMessage, { messageId });
     expect(r).toEqual({ delivered: true });
     const row = await t.run((ctx) => ctx.db.get(messageId));
@@ -246,15 +248,16 @@ describe("her number: rows and doors, on the fake vendor", () => {
     expect(row?.channelMessageId).toMatch(/^fake_/);
     delete process.env.CLAW_API_KEY;
     const { messageId: m2 } = await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: "again", dedupeKey: "d:2", proactive: false, kind: "reply" });
-    const r2 = await t.action(internal.core.telegram.deliverMessage, { messageId: m2 });
+    const r2 = await t.action(internal.core.telegram.deliverMessage, { messageId: m2! });
     expect(r2).toMatchObject({ delivered: false, reason: "the phone channel isn't configured" });
-    expect((await t.run((ctx) => ctx.db.get(m2)))?.deliveryError).toBe("the phone channel isn't configured");
+    expect((await t.run((ctx) => ctx.db.get(m2!)))?.deliveryError).toBe("the phone channel isn't configured");
   });
 
   it("a creator without a number still goes to Telegram: nothing existing changes", async () => {
     const t = convexTest(schema, modules);
     const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { channel: { paired: true, pairedAt: NOW }, telegramChatId: "42" }));
-    const { messageId } = await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: "hi", dedupeKey: "t:1", proactive: false, kind: "reply" });
+    const { messageId: sentId } = await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: "hi", dedupeKey: "t:1", proactive: false, kind: "reply" });
+    const messageId = sentId!;
     expect((await t.run((ctx) => ctx.db.get(messageId)))?.surface).toBe("telegram");
   });
 });
