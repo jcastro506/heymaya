@@ -440,7 +440,7 @@ Each exit criterion is demonstrated on **TestFlight against staging**, not in a 
   - `idea_update` (any idea: hook, length, on-screen text, sound, shot list, caption);
   - `idea_status` (save, unsave, pass, restore, posted with an optional post link);
   - `idea_plan` (idea → a film block via `calendar/tools`, carrying the `ideaId`).
-- **Reference resolution:** "the humidity one", "the one from Tuesday", "that 5am alarm idea" resolve by search over the creator's own ideas (text + recency + the ids in the recent conversation). She asks one question only when two ideas tie.
+- **Reference resolution is her judgment, not a scoring rule:** for "the humidity one", "the one from Tuesday", or "that 5am alarm idea", she calls `ideas_list` / `idea_get` and decides which idea they meant from the ideas and the conversation. She asks one question only when she can't tell. Code only guarantees she can act on the creator's own ideas.
 - Classifier `edit_idea` / `drop_idea` stop assuming "latest" when the text names another idea.
 - App actions on ideas land in `userActions` as **Noticed** (§7.3), so "saw you saved the humidity one" is possible and never invented.
 **Tests:**
