@@ -9,6 +9,7 @@
  */
 
 import { v } from "convex/values";
+import { normalViews } from "../core/normal";
 import { internalAction, internalMutation, internalQuery, query } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -91,12 +92,34 @@ export function caseVerdict(c: ExpertCase, r: Correctness | null): { pass: boole
 export const groundTruth = internalAction({
   args: { creatorId: v.id("creators"), text: v.string() },
   handler: async (ctx, a): Promise<Record<string, unknown>> => {
-    const history = await ctx.runQuery(internal.agent.opinion.ownHistory, { creatorId: a.creatorId });
+    const history = await ctx.runQuery(internal.eval.expertBench.postsByPlatform, { creatorId: a.creatorId });
     const url = a.text.match(/https?:\/\/\S+/)?.[0];
     const postId = url?.match(/\/video\/(\d+)/)?.[1] ?? url?.match(/instagram\.com\/(?:p|reel|reels)\/([A-Za-z0-9_-]+)/)?.[1];
     const numbers = url ? await ctx.runQuery(internal.connections.numbers.forUrl, { creatorId: a.creatorId, url }) : null;
     const pack = postId ? await ctx.runQuery(internal.agent.opinion.packForPostId, { creatorId: a.creatorId, postId }) : null;
-    return { theirNormal: history.normal, theirPosts: history.posts, ...(numbers ? { thePostsNumbers: numbers } : {}), ...(pack ? { thePostAgainstTheirOwn: pack.facts } : {}) };
+    return { ...history, ...(numbers ? { thePostsNumbers: numbers } : {}), ...(pack ? { thePostAgainstTheirOwn: pack.facts } : {}) };
+  },
+});
+
+/** Both platforms, separately: their normal, their latest posts, and whether Zernio is connected. */
+export const postsByPlatform = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<Record<string, unknown>> => {
+    const rows = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(120)) as Doc<"ownPosts">[];
+    const now = Date.now();
+    const out: Record<string, unknown> = {};
+    for (const platform of ["tiktok", "instagram"]) {
+      const mine = rows.filter((r) => r.platform === platform).sort((x, y) => y.createTime - x.createTime);
+      if (!mine.length) continue;
+      out[platform] = {
+        normal: normalViews(mine, platform, now)?.value ?? null,
+        latest: mine.slice(0, 6).map((p) => ({ url: p.url.replace(/\?.*$/, ""), views: p.metrics.views, multiple: p.multiple ?? null, daysOld: Math.round((now - p.createTime) / 86_400_000), caption: p.caption.slice(0, 80) })),
+        best: [...mine].sort((x, y) => y.metrics.views - x.metrics.views).slice(0, 3).map((p) => ({ url: p.url.replace(/\?.*$/, ""), views: p.metrics.views, multiple: p.multiple ?? null, caption: p.caption.slice(0, 80) })),
+      };
+    }
+    const zernio = await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect();
+    out.accountConnected = zernio.some((c) => c.provider === "zernio" && c.status === "connected");
+    return out;
   },
 });
 

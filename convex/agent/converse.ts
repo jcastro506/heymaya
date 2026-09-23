@@ -150,7 +150,11 @@ export const run = internalAction({
       return { ok: true };
     }
     if (route.route === "link") {
-      const r = await ctx.runAction(internal.agent.opinion.run, { creatorId: creator._id, messageId: target._id, mode: route.own ? "own" : "link", link: route.link });
+      // Theirs if it's one of THEIR posts, whatever the URL looks like: Instagram /p/ links and
+      // TikTok short links carry no @handle, so the handle check alone sent every Instagram post
+      // of theirs down the stranger path ("couldn't open that link"), found by the Instagram bench.
+      const mine = route.own || (route.link.postId ? Boolean(await ctx.runQuery(internal.agent.opinion.ownPostByUrl, { creatorId: creator._id, postId: route.link.postId })) : false);
+      const r = await ctx.runAction(internal.agent.opinion.run, { creatorId: creator._id, messageId: target._id, mode: mine ? "own" : "link", link: route.link });
       return { ok: r.ok, reason: r.reason };
     }
     if (route.route === "file") {

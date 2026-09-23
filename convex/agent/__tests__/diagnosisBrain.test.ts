@@ -157,3 +157,21 @@ describe("cross-tenant", () => {
     expect(await t.query(internal.agent.opinion.packFor, { creatorId: b, ownPostId: postA })).toBeNull();
   });
 });
+
+describe("their own post, whatever the link looks like (Instagram bench, 2026-09-23)", () => {
+  it("an Instagram /p/ link with no @handle is read as THEIR post, not a stranger's", async () => {
+    const t = convexTest(schema, modules);
+    const a = await t.run(async (ctx) => {
+      const a = await seedCreator(ctx, "a", { clerkUserId: "user_a", timezone: "UTC", channel: { paired: true }, handles: { instagram: "noahperlofit" } });
+      for (let i = 0; i < 6; i++) await ctx.db.insert("ownPosts", { creatorId: a, platform: "instagram", postId: `36${i}_1`, url: `https://www.instagram.com/p/Other${i}/`, createTime: Date.now() - (3 + i) * 24 * H, contentType: "video", caption: "c", hashtags: [], metrics: { views: 300_000, likes: 1, comments: 1, shares: 1 }, metricsAsOf: Date.now(), source: "scrape" });
+      await ctx.db.insert("ownPosts", { creatorId: a, platform: "instagram", postId: "3967988664340068944_45547698410", url: "https://www.instagram.com/p/DcRIKq6xDpQ/", createTime: Date.now() - 30 * 24 * H, contentType: "video", caption: "Save Your Life With Meal Prep", hashtags: [], metrics: { views: 9_005_637, likes: 1, comments: 1, shares: 1 }, metricsAsOf: Date.now(), source: "scrape" });
+      return a;
+    });
+    const { messageId } = await t.mutation(internal.core.messages.recordInbound, { creatorId: a, surface: "telegram", body: "why did this reel blow up? https://www.instagram.com/p/DcRIKq6xDpQ/" });
+    await t.action(internal.agent.converse.run, { creatorId: a, messageId });
+    const out = await t.run((ctx) => ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a)).collect());
+    const reply = out.find((m) => m.direction === "out");
+    expect(reply?.kind).toBe("explain");
+    expect(reply?.body).not.toMatch(/couldn't open that link/);
+  });
+});
