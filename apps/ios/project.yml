@@ -34,9 +34,13 @@ targets:
     platform: iOS
     sources:
       - path: Maya
-    resources:
-      - path: Maya/Resources
+      # Debug-only preview data (launch argument -MayaFixtures); stripped from Release below.
+      - path: Fixtures
+        buildPhase: resources
     settings:
+      configs:
+        Release:
+          EXCLUDED_SOURCE_FILE_NAMES: "*.json"
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ai.heymaya.maya
         PRODUCT_NAME: Maya
@@ -69,8 +73,8 @@ targets:
     platform: iOS
     sources:
       - path: MayaTests
-    resources:
-      - path: MayaTests/Fixtures
+      - path: Fixtures
+        buildPhase: resources
     dependencies:
       - target: Maya
     settings:

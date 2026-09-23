@@ -6,6 +6,14 @@ struct RootView: View {
   @State private var auth: AuthState<String> = .loading
 
   var body: some View {
+    if Fixtures.enabled {
+      MainTabs()
+    } else {
+      authed
+    }
+  }
+
+  private var authed: some View {
     Group {
       switch auth {
       case .loading:

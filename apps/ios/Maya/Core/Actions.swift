@@ -20,6 +20,10 @@ enum Actions {
   private struct OkResult: Decodable { let ok: Bool }
 
   private static func ok(_ name: String, _ args: [String: ConvexEncodable?]) async -> Bool {
+    if Fixtures.enabled {
+      Haptics.success()
+      return true
+    }
     do {
       let r: OkResult = try await convex.mutation(name, with: args)
       Haptics.success()

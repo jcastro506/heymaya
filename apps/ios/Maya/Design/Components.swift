@@ -11,7 +11,7 @@ struct Screen<Content: View>: View {
         VStack(alignment: .leading, spacing: 28) { content }
           .padding(.horizontal, 20)
           .padding(.top, 8)
-          .padding(.bottom, 40)
+          .padding(.bottom, 120) // room above the floating tab bar
           .frame(maxWidth: .infinity, alignment: .leading)
       }
       .background(Palette.ground.ignoresSafeArea())
@@ -58,6 +58,34 @@ struct MayaBubble: View {
       .padding(14)
       .background(Palette.wash, in: UnevenRoundedRectangle(topLeadingRadius: 4, bottomLeadingRadius: 18, bottomTrailingRadius: 18, topTrailingRadius: 18, style: .continuous))
     }
+  }
+}
+
+/// Her message as she sent it: `---` separates texts, and links go to the proof, not the bubble.
+struct MayaThread: View {
+  let text: String
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      ForEach(Array(MessageText.bubbles(text).enumerated()), id: \.offset) { _, part in
+        MayaBubble(text: part)
+      }
+    }
+  }
+}
+
+enum MessageText {
+  /// Split on her `---` separator lines and drop bare URLs (shown as proof cards instead).
+  static func bubbles(_ text: String) -> [String] {
+    text.components(separatedBy: "\n---")
+      .map { part in
+        part.split(separator: "\n", omittingEmptySubsequences: false)
+          .map(String.init)
+          .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("http") }
+          .joined(separator: "\n")
+          .replacingOccurrences(of: "---", with: "")
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+      }
+      .filter { !$0.isEmpty }
   }
 }
 

@@ -47,6 +47,13 @@ final class ContractTests: XCTestCase {
     XCTAssertNil(t)
   }
 
+  func testMessageSplitsIntoTextsWithoutLinksOrSeparators() {
+    let parts = MessageText.bubbles("made me laugh.\n---\nit works because x.\n---\ntry it?\nhttps://www.tiktok.com/@a/video/1")
+    XCTAssertEqual(parts, ["made me laugh.", "it works because x.", "try it?"])
+    XCTAssertFalse(parts.joined().contains("http"))
+    XCTAssertFalse(parts.joined().contains("---"))
+  }
+
   func testEvidenceLabelNeverShowsARawLink() {
     XCTAssertEqual(EvidenceLabel.text("https://www.tiktok.com/@andi.renay/video/1"), "@andi.renay on TikTok")
     XCTAssertEqual(EvidenceLabel.text("https://www.instagram.com/reel/abc"), "A post on Instagram")

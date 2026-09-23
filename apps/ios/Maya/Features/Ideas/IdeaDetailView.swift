@@ -9,7 +9,7 @@ struct IdeaDetailView: View {
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 24) {
-        MayaBubble(text: idea.messageText)
+        MayaThread(text: idea.messageText)
 
         if let v = idea.version {
           VStack(alignment: .leading, spacing: 10) {
@@ -48,6 +48,7 @@ struct IdeaDetailView: View {
         actions
       }
       .padding(20)
+      .padding(.bottom, 100) // room above the floating tab bar
     }
     .background(Palette.ground.ignoresSafeArea())
     .navigationTitle("Idea")

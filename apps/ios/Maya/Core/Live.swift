@@ -23,6 +23,10 @@ final class Live<T: Decodable & Equatable> {
 
   /// Runs for the life of the view's `.task`; cancelled when the view goes away.
   func run() async {
+    if Fixtures.enabled {
+      if let value = Fixtures.load(name, as: T.self) { state = .value(value) } else { state = .failed("No preview data for \(name).") }
+      return
+    }
     let stream = convex.subscribe(to: name, with: args, yielding: T.self)
       .removeDuplicates()
       .values
