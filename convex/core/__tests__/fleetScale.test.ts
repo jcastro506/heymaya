@@ -85,3 +85,14 @@ describe("fan-out, not a loop", () => {
     expect(scheduled.filter((s) => s.name.includes("runOne"))).toHaveLength(5);
   });
 });
+
+describe("the creators-table scan is never a silent cliff", () => {
+  it("the operator hears about it from 40% of the read limit", async () => {
+    const { composeAlert, scanBytes, READ_LIMIT_BYTES } = await import("../alerts");
+    expect(scanBytes([{ a: "x".repeat(1000) }])).toBeGreaterThan(1000);
+    expect(READ_LIMIT_BYTES).toBe(16 * 1024 * 1024);
+    const msg = composeAlert({ scale: { creators: 500, pctOfReadLimit: 45 }, deadJobs: [], undelivered: [], smokeFailed: [], attention: [] }, "dev");
+    expect(msg).toMatch(/45% of the per-query read limit/);
+    expect(composeAlert({ scale: null, deadJobs: [], undelivered: [], smokeFailed: [], attention: [] }, "dev")).toBeNull();
+  });
+});

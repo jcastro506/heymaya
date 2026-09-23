@@ -11,7 +11,16 @@ import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { resolveTelegramBotIdentity, sendTelegramMessage } from "../integrations/telegram/client";
 
-export interface Findings { deadJobs: Array<{ id: string; kind: string; error: string }>; undelivered: Array<{ id: string; creatorId: string; ageMin: number; error: string }>; smokeFailed: Array<{ vendor: string; check: string }>; attention: Array<{ creatorId: string; provider: string; detail: string }> }
+export interface Findings { scale?: { creators: number; pctOfReadLimit: number } | null; deadJobs: Array<{ id: string; kind: string; error: string }>; undelivered: Array<{ id: string; creatorId: string; ageMin: number; error: string }>; smokeFailed: Array<{ vendor: string; check: string }>; attention: Array<{ creatorId: string; provider: string; detail: string }> }
+
+export const READ_LIMIT_BYTES = 16 * 1024 * 1024; // Convex: data read per query or mutation
+export const SCALE_WARN_PCT = 40;
+/** Pure: roughly what a full scan of these documents reads. */
+export function scanBytes(rows: unknown[]): number {
+  let n = 0;
+  for (const r of rows) n += JSON.stringify(r).length;
+  return n;
+}
 
 /** Pure: the message, or null when there is nothing to say. */
 export function composeAlert(f: Findings, env: string): string | null {
@@ -20,6 +29,7 @@ export function composeAlert(f: Findings, env: string): string | null {
   if (f.undelivered.length) lines.push(`📭 ${f.undelivered.length} undelivered for over an hour: ${f.undelivered.slice(0, 5).map((u) => `creator ${u.creatorId.slice(-6)} ${u.ageMin}m (${u.error.slice(0, 50)})`).join("; ")}`);
   if (f.smokeFailed.length) lines.push(`🩺 smoke failed: ${f.smokeFailed.map((s) => `${s.vendor}/${s.check}`).join(", ")}`);
   if (f.attention.length) lines.push(`🔌 ${f.attention.length} connection${f.attention.length === 1 ? "" : "s"} need attention: ${f.attention.slice(0, 5).map((a) => `${a.provider} for creator ${a.creatorId.slice(-6)}: ${a.detail.slice(0, 60)}`).join("; ")}`);
+  if (f.scale) lines.push(`📈 the creators table is ${f.scale.pctOfReadLimit}% of the per-query read limit (${f.scale.creators} creators). Every hourly job that scans it fails at 100%: do S0 #1 (schedule rows) now.`);
   if (!lines.length) return null;
   return `maya · ${env}\n${lines.join("\n")}`;
 }
@@ -30,6 +40,10 @@ export const findings = internalQuery({
     const jobs = (await ctx.db.query("jobs").order("desc").take(300)) as Doc<"jobs">[];
     const deadJobs = jobs.filter((j) => j.status === "dead" && j.updatedAt >= a.since).map((j) => ({ id: j._id, kind: j.kind, error: j.lastError ?? "" }));
     const creators = (await ctx.db.query("creators").collect()) as Doc<"creators">[];
+    // S0 #1: every hourly job scans this table and Convex stops a query at 16 MiB read. Say so
+    // long before (from 40%), once a day, instead of every job failing on the same morning.
+    const pct = Math.round((scanBytes(creators) / READ_LIMIT_BYTES) * 100);
+    const scale = pct >= SCALE_WARN_PCT && new Date(a.now).getUTCHours() === 12 ? { creators: creators.length, pctOfReadLimit: pct } : null;
     const undelivered: Findings["undelivered"] = [];
     for (const c of creators) {
       const rows = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", c._id).gte("ts", a.now - 24 * 3_600_000)).collect()) as Doc<"messages">[];
@@ -50,7 +64,7 @@ export const findings = internalQuery({
     }
     const conns = (await ctx.db.query("connections").collect()) as Doc<"connections">[];
     const attention = conns.filter((x) => (x.status === "attention" || x.status === "needs_reconnect") && x.updatedAt >= a.since).map((x) => ({ creatorId: x.creatorId, provider: x.provider, detail: x.detail ?? x.status }));
-    return { deadJobs, undelivered, smokeFailed, attention };
+    return { scale, deadJobs, undelivered, smokeFailed, attention };
   },
 });
 
