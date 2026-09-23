@@ -1,0 +1,5 @@
+Maya.xcodeproj/
+Config/Local.xcconfig
+build/
+DerivedData/
+*.xcuserstate

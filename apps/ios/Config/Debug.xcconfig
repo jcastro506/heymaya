@@ -1,0 +1,5 @@
+#include "Shared.xcconfig"
+// Creator dev deployment (impressive-roadrunner-997) and its Clerk development instance.
+// The Clerk publishable key is public by design; it ships in every client.
+MAYA_CONVEX_URL = https:/$()/impressive-roadrunner-997.convex.cloud
+MAYA_CLERK_PUBLISHABLE_KEY = pk_test_cHJvZm91bmQtc2t1bmstNjMuY2xlcmsuYWNjb3VudHMuZGV2JA

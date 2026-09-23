@@ -1,0 +1,87 @@
+# XcodeGen spec for the Maya iOS app (docs/CREATOR_COMPANION_APP_SPEC.md §0 D1).
+# Generate the project with `xcodegen` from this folder; Maya.xcodeproj is not committed.
+name: Maya
+options:
+  bundleIdPrefix: ai.heymaya
+  deploymentTarget:
+    iOS: "17.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+configFiles:
+  Debug: Config/Debug.xcconfig
+  Release: Config/Release.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: targeted
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: $(MAYA_DEVELOPMENT_TEAM)
+    CODE_SIGN_STYLE: Automatic
+packages:
+  ConvexMobile:
+    url: https://github.com/get-convex/convex-swift
+    from: "0.8.1"
+  Clerk:
+    url: https://github.com/clerk/clerk-ios
+    from: "1.5.6"
+  ClerkConvex:
+    url: https://github.com/clerk/clerk-convex-swift
+    from: "0.1.0"
+targets:
+  Maya:
+    type: application
+    platform: iOS
+    sources:
+      - path: Maya
+    resources:
+      - path: Maya/Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.heymaya.maya
+        PRODUCT_NAME: Maya
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Maya
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+    info:
+      path: Maya/Info.plist
+      properties:
+        MayaConvexURL: $(MAYA_CONVEX_URL)
+        MayaClerkPublishableKey: $(MAYA_CLERK_PUBLISHABLE_KEY)
+        LSApplicationQueriesSchemes: [sms, tiktok, instagram]
+        UILaunchScreen: {}
+        ITSAppUsesNonExemptEncryption: false
+    dependencies:
+      - package: ConvexMobile
+        product: ConvexMobile
+      - package: Clerk
+        product: ClerkKit
+      - package: Clerk
+        product: ClerkKitUI
+      - package: ClerkConvex
+        product: ClerkConvex
+  MayaTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: MayaTests
+    resources:
+      - path: MayaTests/Fixtures
+    dependencies:
+      - target: Maya
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Maya:
+    build:
+      targets:
+        Maya: all
+        MayaTests: [test]
+    test:
+      targets:
+        - MayaTests

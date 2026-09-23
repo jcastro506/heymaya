@@ -1,0 +1,5 @@
+#include "Shared.xcconfig"
+// The TestFlight pilot runs against the same creator dev deployment as Debug until the
+// creator stack has a staging deployment of its own; change both lines together when it does.
+MAYA_CONVEX_URL = https:/$()/impressive-roadrunner-997.convex.cloud
+MAYA_CLERK_PUBLISHABLE_KEY = pk_test_cHJvZm91bmQtc2t1bmstNjMuY2xlcmsuYWNjb3VudHMuZGV2JA
