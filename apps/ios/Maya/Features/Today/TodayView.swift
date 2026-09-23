@@ -39,13 +39,6 @@ struct TodayView: View {
 
     hero(t)
 
-    if !t.sentToday.isEmpty {
-      VStack(alignment: .leading, spacing: 12) {
-        SectionHeader(text: "From Maya today")
-        ForEach(t.sentToday.prefix(3)) { m in MessagePreview(message: m) }
-      }
-    }
-
     PostsSection(posts: t.week, reading: !t.dossier)
     comingUp
     weekCard
@@ -130,33 +123,6 @@ struct TodayView: View {
 }
 
 // MARK: - Pieces
-
-/// One of her texts, folded to its first bubble; tap to read the rest.
-struct MessagePreview: View {
-  let message: SentMessage
-  @State private var open = false
-
-  var body: some View {
-    let parts = MessageText.bubbles(message.body)
-    VStack(alignment: .leading, spacing: 6) {
-      if open {
-        ForEach(Array(parts.enumerated()), id: \.offset) { _, p in MayaBubble(text: p) }
-      } else if let first = parts.first {
-        MayaBubble(text: first).lineLimit(3)
-      }
-      HStack(spacing: 6) {
-        Text(Format.time(message.ts) + (message.error != nil ? " · not delivered" : ""))
-        if parts.count > 1 {
-          Text("·")
-          Text(open ? "Show less" : "\(parts.count - 1) more").foregroundStyle(Palette.purple)
-        }
-      }
-      .font(MayaFont.caption).foregroundStyle(Palette.muted).padding(.leading, 36)
-    }
-    .contentShape(Rectangle())
-    .onTapGesture { if parts.count > 1 { withAnimation(.spring(duration: 0.3)) { open.toggle() } } }
-  }
-}
 
 struct StatusPill: View {
   let text: String
