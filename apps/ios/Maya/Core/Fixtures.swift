@@ -15,7 +15,9 @@ enum Fixtures {
   /// "ui:today" → Fixtures/today.json
   static func load<T: Decodable>(_ query: String, as type: T.Type) -> T? {
     let name = query.split(separator: ":").last.map(String.init) ?? query
-    guard let url = Bundle.main.url(forResource: name, withExtension: "json"),
+    // The labelled preview set (Fixtures/make_preview.py) wins over the raw capture.
+    guard let url = Bundle.main.url(forResource: "preview.\(name)", withExtension: "json")
+      ?? Bundle.main.url(forResource: name, withExtension: "json"),
       let data = try? Data(contentsOf: url)
     else { return nil }
     return try? JSONDecoder().decode(T.self, from: data)

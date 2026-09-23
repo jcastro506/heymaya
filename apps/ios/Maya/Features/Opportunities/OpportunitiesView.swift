@@ -51,7 +51,7 @@ struct LockedDealsView: View {
       }
 
       VStack(alignment: .leading, spacing: 14) {
-        ladderRow("bag", "TikTok Shop products that fit what you already make", "Earn commission on things you'd post about anyway.")
+        ladderRow("bag", "Affiliate products that fit what you already make", "TikTok Shop and brands' own affiliate programs, for Reels and TikToks alike. Commission on things you'd post about anyway.")
         ladderRow("camera.aperture", "UGC gigs", "Brands pay for content on their own channels. Your work matters more than your follower count.")
         ladderRow("gift", "Gifting and brand programs", "Official creator programs, with what they ask for and how to apply.")
         ladderRow("envelope", "Pitches, when you're ready", "She drafts it from your real posts. You send it.")

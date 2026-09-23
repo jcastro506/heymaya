@@ -1,0 +1,207 @@
+{
+  "accountCap": 1,
+  "currentPeriodEnd": null,
+  "founding": true,
+  "handles": {
+    "tiktok": "vanessa_year"
+  },
+  "knows": {
+    "doesNot": [
+      "Generic scenic travel b-roll paired with earnest motivational text consistently underperforms baseline."
+    ],
+    "keywords": [
+      "running",
+      "runtok",
+      "runner humor",
+      "solo travel",
+      "australia travel",
+      "working holiday"
+    ],
+    "mode": "thin",
+    "register": "casual",
+    "summary": "Runner who centers relatable workout exhaustion and morning routines as her core focus, documenting summer travel and her working holiday in Australia on the side.",
+    "works": [
+      "Short candid running clips with self-deprecating text overlays about workout exhaustion drive massive viral performance.",
+      "Situational humor about unglamorous tourist struggles performs far above baseline."
+    ]
+  },
+  "niche": "running stays the main thing, travel is summer texture",
+  "notes": [
+    {
+      "at": 1757854327589,
+      "id": "y_0",
+      "kind": "fact",
+      "text": "call them Vanessa"
+    },
+    {
+      "at": 1757854327589,
+      "id": "y_1",
+      "kind": "fact",
+      "text": "Mochi is the dog; in half the posts"
+    },
+    {
+      "at": 1763469127589,
+      "id": "y_2",
+      "kind": "fact",
+      "text": "my sister films most of my stuff when she's in town"
+    },
+    {
+      "at": 1770381127589,
+      "id": "y_4",
+      "kind": "bit",
+      "text": "the 5am alarm face is a running bit"
+    },
+    {
+      "at": 1767789127589,
+      "id": "y_6",
+      "kind": "bit",
+      "text": "flew a slice of new york pizza to naples for the bit"
+    },
+    {
+      "at": 1761741127589,
+      "id": "y_8",
+      "kind": "fact",
+      "text": "coffee first, always"
+    },
+    {
+      "at": 1762605127589,
+      "id": "y_9",
+      "kind": "fact",
+      "text": "coffee first, always"
+    },
+    {
+      "at": 1764333127589,
+      "id": "y_11",
+      "kind": "fact",
+      "text": "dropped the tripod in the river"
+    },
+    {
+      "at": 1765197127589,
+      "id": "y_12",
+      "kind": "fact",
+      "text": "coffee first, always"
+    },
+    {
+      "at": 1767789127589,
+      "id": "y_15",
+      "kind": "fact",
+      "text": "hates voiceover, will only talk to camera"
+    },
+    {
+      "at": 1769517127589,
+      "id": "y_17",
+      "kind": "fact",
+      "text": "training block: long runs sundays"
+    },
+    {
+      "at": 1770381127589,
+      "id": "y_18",
+      "kind": "fact",
+      "text": "training block: long runs sundays"
+    },
+    {
+      "at": 1772109127589,
+      "id": "y_20",
+      "kind": "fact",
+      "text": "training block: long runs sundays"
+    },
+    {
+      "at": 1774701127589,
+      "id": "y_23",
+      "kind": "fact",
+      "text": "coffee first, always"
+    },
+    {
+      "at": 1775565127589,
+      "id": "y_24",
+      "kind": "fact",
+      "text": "coffee first, always"
+    },
+    {
+      "at": 1777293127589,
+      "id": "y_26",
+      "kind": "fact",
+      "text": "prefers filming after a run, never before"
+    },
+    {
+      "at": 1778157127589,
+      "id": "y_27",
+      "kind": "fact",
+      "text": "new shoes, the orange ones"
+    },
+    {
+      "at": 1779885127589,
+      "id": "y_29",
+      "kind": "fact",
+      "text": "training block: long runs sundays"
+    },
+    {
+      "at": 1780749127589,
+      "id": "y_30",
+      "kind": "fact",
+      "text": "prefers filming after a run, never before"
+    },
+    {
+      "at": 1782477127589,
+      "id": "y_32",
+      "kind": "fact",
+      "text": "training block: long runs sundays"
+    },
+    {
+      "at": 1783341127589,
+      "id": "y_33",
+      "kind": "fact",
+      "text": "training block: long runs sundays"
+    },
+    {
+      "at": 1785933127589,
+      "id": "y_36",
+      "kind": "fact",
+      "text": "hates voiceover, will only talk to camera"
+    }
+  ],
+  "paired": false,
+  "plan": "paused",
+  "quietHours": {
+    "end": "09:00",
+    "start": "23:00"
+  },
+  "rules": [
+    {
+      "at": 1775565127589,
+      "id": "js71dnbk8v8c4vse76km8hqen98edvr2",
+      "text": "never suggest dance trends"
+    },
+    {
+      "at": 1789389631086,
+      "id": "js7fb9cq3n6t9t1dpd1b401yx18ecew5",
+      "text": "quiet hours 11pm to 9am"
+    },
+    {
+      "at": 1789389694443,
+      "id": "js783axdbva9047n8a56yvn77x8ecjex",
+      "text": "from now on my normal is 500k views. use that as my baseline for everything."
+    }
+  ],
+  "taste": {
+    "dislikes": [
+      "format vlog (-3.19, 24)",
+      "topic rest-days (-1.17, 22)"
+    ],
+    "events": true,
+    "likes": [
+      "source breakout (+9.23, 161)",
+      "sound none (+6.92, 93)",
+      "format list (+6.22, 32)",
+      "tone deadpan (+5.56, 138)",
+      "topic solo-travel (+5.51, 26)",
+      "length <15 (+4.67, 47)"
+    ],
+    "note": "You take deadpan lists and text-on-screen running posts with travel texture, favoring silence or original audio at under 15s or 30 to 60s. You pass hard on vlogs, rest-day concepts, and any dance trends. Talk to you straight against a 500k normal and hold quiet hours 11pm to 9am. Next to try: a sharp 15-second deadpan skit around race-travel logistics, testing if short skits work without drifting into vlog territory.",
+    "updatedAt": 1789462841707
+  },
+  "tier": "solo",
+  "timezone": "America/New_York",
+  "tone": "friend",
+  "trialEndsAt": null
+}

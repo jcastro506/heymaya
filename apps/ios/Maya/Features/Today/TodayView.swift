@@ -1,10 +1,14 @@
+import Charts
 import SwiftUI
 
-/// Is she working, what did she send, what needs me, how did the week go (spec §0 D2).
+/// Today is a briefing, not a dashboard: the one thing that matters, what she said, how your
+/// posts are doing, what's coming, and how the week went.
 struct TodayView: View {
   @State private var today = Live<Today?>("ui:today")
+  @State private var ideas = Live<[Idea]?>("ui:ideas", args: ["unpostedOnly": false, "savedOnly": false])
   @State private var plan = Live<Plan?>("ui:plan")
   @State private var results = Live<Results?>("ui:results")
+  @Namespace private var zoom
 
   var body: some View {
     Screen(title: "Today") {
@@ -20,80 +24,94 @@ struct TodayView: View {
       }
     }
     .task { await today.run() }
+    .task { await ideas.run() }
     .task { await plan.run() }
     .task { await results.run() }
   }
 
   @ViewBuilder
   private func content(_ t: Today) -> some View {
-    MayaBubble(text: t.statusLine)
-
-    if let block = t.nextBlock, block.status == "proposed" {
-      VStack(alignment: .leading, spacing: 10) {
-        SectionHeader(text: "Needs you")
-        Card {
-          Text(block.title).font(MayaFont.headline).foregroundStyle(Palette.ink)
-          Text("\(Format.day(block.start)) · \(Format.time(block.start))")
-            .font(MayaFont.callout).foregroundStyle(Palette.muted)
-          Text("Reply yes to her in Messages to book it.")
-            .font(MayaFont.caption).foregroundStyle(Palette.muted)
-        }
-      }
-    }
-
     VStack(alignment: .leading, spacing: 10) {
-      SectionHeader(text: "What she sent today")
-      if t.sentToday.isEmpty {
-        EmptyNote(text: "Nothing yet. She only texts when something is worth your time.")
-      } else {
-        ForEach(t.sentToday) { m in
-          MayaBubble(text: m.body, caption: "\(Format.time(m.ts))\(m.error != nil ? " · not delivered" : "")")
-        }
+      Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day()).uppercased())
+        .font(MayaFont.kicker).kerning(0.8).foregroundStyle(Palette.muted)
+      StatusPill(text: t.statusLine)
+    }
+
+    hero(t)
+
+    if !t.sentToday.isEmpty {
+      VStack(alignment: .leading, spacing: 12) {
+        SectionHeader(text: "From Maya today")
+        ForEach(t.sentToday.prefix(3)) { m in MessagePreview(message: m) }
       }
     }
 
-    upcoming
-
-    VStack(alignment: .leading, spacing: 10) {
-      SectionHeader(text: "Your recent posts")
-      if t.week.isEmpty {
-        EmptyNote(text: t.dossier ? "No posts read yet." : "She's reading your posts now.")
-      } else {
-        Card(padding: 4) {
-          ForEach(t.week) { p in PostRow(post: p) }
-        }
-        if let first = t.week.first {
-          Text("Numbers as of \(Format.ago(first.metricsAsOf))")
-            .font(MayaFont.caption).foregroundStyle(Palette.muted)
-        }
-      }
-    }
-
-    lastWeek
+    PostsSection(posts: t.week, reading: !t.dossier)
+    comingUp
+    weekCard
   }
 
+  // MARK: hero — the single most important thing right now
+
   @ViewBuilder
-  private var upcoming: some View {
+  private func hero(_ t: Today) -> some View {
+    if let block = t.nextBlock, block.status == "proposed" {
+      HeroCard(kicker: "Needs you", tint: Palette.coral) {
+        Text(block.title).font(MayaFont.title).foregroundStyle(Palette.ink)
+        Label("\(Format.day(block.start)) at \(Format.time(block.start))", systemImage: "calendar")
+          .font(MayaFont.callout).foregroundStyle(Palette.muted)
+        Text("Reply yes to her in Messages and it's booked.")
+          .font(MayaFont.caption).foregroundStyle(Palette.muted)
+      }
+    } else if case .value(let all?) = ideas.state, let idea = all.first(where: { $0.status == "sent" || $0.status == "hearted" }) {
+      NavigationLink {
+        IdeaDetailView(idea: idea).navigationTransition(.zoom(sourceID: idea.id, in: zoom))
+      } label: {
+        HeroCard(kicker: "Her latest idea", tint: Palette.purple) {
+          HStack(alignment: .top, spacing: 14) {
+            if let link = idea.evidenceLinks.first {
+              PostCover(url: link, cornerRadius: 12)
+                .frame(width: 92, height: 164)
+                .matchedTransitionSource(id: idea.id, in: zoom)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+              Text(idea.hook ?? "Her idea").font(MayaFont.title).foregroundStyle(Palette.ink)
+                .multilineTextAlignment(.leading).lineLimit(4)
+              Text(idea.fitWhy).font(MayaFont.callout).foregroundStyle(Palette.muted)
+                .multilineTextAlignment(.leading).lineLimit(3)
+              Label("Open the idea", systemImage: "arrow.right")
+                .font(MayaFont.callout.weight(.semibold)).foregroundStyle(Palette.purple)
+                .labelStyle(TrailingIcon())
+            }
+          }
+        }
+      }
+      .buttonStyle(PressableStyle())
+    }
+  }
+
+  // MARK: coming up
+
+  @ViewBuilder
+  private var comingUp: some View {
     if case .value(let p?) = plan.state {
-      let blocks = p.blocks.filter { $0.start >= Date.now.timeIntervalSince1970 * 1000 }.sorted { $0.start < $1.start }
-      VStack(alignment: .leading, spacing: 10) {
+      let upcoming = p.blocks.filter { $0.start >= Date.now.timeIntervalSince1970 * 1000 }.sorted { $0.start < $1.start }
+      VStack(alignment: .leading, spacing: 12) {
         SectionHeader(text: "Coming up")
-        if blocks.isEmpty {
+        if upcoming.isEmpty {
           EmptyNote(text: p.connected
-            ? "Nothing planned yet. She proposes a filming block when something on your calendar is worth filming around."
+            ? "Nothing planned. She'll propose a filming block when something's worth filming around."
             : "Nothing planned yet. Connect your calendar and she'll plan around your real week.")
         } else {
-          Card(padding: 4) {
-            ForEach(blocks.prefix(5)) { b in
-              HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                  Text(b.title).font(MayaFont.callout).foregroundStyle(Palette.ink)
-                  Text("\(Format.day(b.start)) · \(Format.time(b.start))").font(MayaFont.caption).foregroundStyle(Palette.muted)
-                }
-                Spacer()
-                Chip(text: b.status == "proposed" ? "waiting for you" : "booked", color: b.status == "proposed" ? Palette.warn : Palette.ok)
+          ForEach(upcoming.prefix(4)) { b in
+            HStack(spacing: 14) {
+              DateTile(ms: b.start)
+              VStack(alignment: .leading, spacing: 3) {
+                Text(b.title).font(MayaFont.headline).foregroundStyle(Palette.ink)
+                Text(Format.time(b.start)).font(MayaFont.callout).foregroundStyle(Palette.muted)
               }
-              .padding(12)
+              Spacer()
+              Chip(text: b.status == "proposed" ? "waiting for you" : "booked", color: b.status == "proposed" ? Palette.warn : Palette.ok)
             }
           }
         }
@@ -101,65 +119,297 @@ struct TodayView: View {
     }
   }
 
+  // MARK: the week
+
   @ViewBuilder
-  private var lastWeek: some View {
+  private var weekCard: some View {
     if case .value(let r?) = results.state {
-      VStack(alignment: .leading, spacing: 10) {
-        SectionHeader(text: "Last week")
-        Card {
-          Text(RungWords.text(r.rung.rung)).font(MayaFont.callout).foregroundStyle(Palette.ink)
-          Text(r.rung.why).font(MayaFont.caption).foregroundStyle(Palette.muted)
-          if r.lane.usable, let median = r.lane.medianViews {
-            Text("Your lane's median this week: \(Format.count(median)) views.")
-              .font(MayaFont.caption).foregroundStyle(Palette.muted)
-          }
-        }
-        if let review = r.lastReview {
-          MayaBubble(text: review.body, caption: "Sunday review · \(Format.day(review.ts))")
+      WeekCard(results: r)
+    }
+  }
+}
+
+// MARK: - Pieces
+
+/// One of her texts, folded to its first bubble; tap to read the rest.
+struct MessagePreview: View {
+  let message: SentMessage
+  @State private var open = false
+
+  var body: some View {
+    let parts = MessageText.bubbles(message.body)
+    VStack(alignment: .leading, spacing: 6) {
+      if open {
+        ForEach(Array(parts.enumerated()), id: \.offset) { _, p in MayaBubble(text: p) }
+      } else if let first = parts.first {
+        MayaBubble(text: first).lineLimit(3)
+      }
+      HStack(spacing: 6) {
+        Text(Format.time(message.ts) + (message.error != nil ? " · not delivered" : ""))
+        if parts.count > 1 {
+          Text("·")
+          Text(open ? "Show less" : "\(parts.count - 1) more").foregroundStyle(Palette.purple)
         }
       }
+      .font(MayaFont.caption).foregroundStyle(Palette.muted).padding(.leading, 36)
     }
+    .contentShape(Rectangle())
+    .onTapGesture { if parts.count > 1 { withAnimation(.spring(duration: 0.3)) { open.toggle() } } }
+  }
+}
+
+struct StatusPill: View {
+  let text: String
+  var body: some View {
+    HStack(spacing: 8) {
+      FlowerMark(size: 18)
+      Text(text).font(MayaFont.callout).foregroundStyle(Palette.ink)
+    }
+    .padding(.horizontal, 12).padding(.vertical, 8)
+    .background(Palette.wash, in: Capsule())
+  }
+}
+
+struct HeroCard<Content: View>: View {
+  let kicker: String
+  let tint: Color
+  @ViewBuilder var content: Content
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Text(kicker.uppercased()).font(MayaFont.kicker).kerning(0.8).foregroundStyle(tint)
+      content
+    }
+    .padding(18)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background {
+      RoundedRectangle(cornerRadius: 24, style: .continuous)
+        .fill(Palette.panel)
+        .shadow(color: tint.opacity(0.14), radius: 24, y: 10)
+    }
+    .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(tint.opacity(0.25), lineWidth: 1))
+  }
+}
+
+struct DateTile: View {
+  let ms: Double
+  var body: some View {
+    let d = Date(timeIntervalSince1970: ms / 1000)
+    VStack(spacing: 0) {
+      Text(d.formatted(.dateTime.weekday(.abbreviated)).uppercased()).font(.caption2.weight(.bold)).foregroundStyle(Palette.coral)
+      Text(d.formatted(.dateTime.day())).font(.title3.weight(.bold)).foregroundStyle(Palette.ink)
+    }
+    .frame(width: 48, height: 52)
+    .background(Palette.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Palette.line))
+  }
+}
+
+/// Your last posts: a chart against your normal, then the posts themselves as covers.
+struct PostsSection: View {
+  let posts: [OwnPost]
+  let reading: Bool
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack(alignment: .firstTextBaseline) {
+        SectionHeader(text: "Your posts")
+        Spacer()
+        if let first = posts.first {
+          Text("as of \(Format.ago(first.metricsAsOf))").font(MayaFont.caption).foregroundStyle(Palette.muted)
+        }
+      }
+      if posts.isEmpty {
+        EmptyNote(text: reading ? "She's reading your posts now." : "No posts read yet.")
+      } else {
+        if let normal = Self.normal(posts) { chart(normal: normal) }
+        ScrollView(.horizontal, showsIndicators: false) {
+          HStack(spacing: 10) {
+            ForEach(posts) { PostTile(post: $0) }
+          }
+          .scrollTargetLayout()
+        }
+        .scrollTargetBehavior(.viewAligned)
+        .scrollClipDisabled()
+      }
+    }
+  }
+
+  private func chart(normal: Double) -> some View {
+    Chart {
+      ForEach(Array(posts.reversed().enumerated()), id: \.offset) { i, p in
+        BarMark(x: .value("Post", i), y: .value("Views", p.views), width: .ratio(0.62))
+          .foregroundStyle((p.multiple ?? 0) >= 1 ? Palette.purple : Palette.purple.opacity(0.35))
+          .clipShape(RoundedRectangle(cornerRadius: 4))
+      }
+      RuleMark(y: .value("Your normal", normal))
+        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+        .foregroundStyle(Palette.coral)
+        .annotation(position: .top, alignment: .leading) {
+          Text("your normal").font(.caption2.weight(.semibold)).foregroundStyle(Palette.coral)
+        }
+    }
+    .chartXAxis(.hidden)
+    .chartYAxis { AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { v in
+      AxisValueLabel { if let n = v.as(Double.self) { Text(Format.count(n)).font(.caption2) } }
+    } }
+    .frame(height: 110)
+    .accessibilityLabel("Views of your last \(posts.count) posts against your normal of \(Format.count(normal))")
+  }
+
+  /// Their normal, recovered from the server's multiples (views ÷ multiple), median of those.
+  static func normal(_ posts: [OwnPost]) -> Double? {
+    let normals = posts.compactMap { p -> Double? in
+      guard let m = p.multiple, m > 0 else { return nil }
+      return p.views / m
+    }.sorted()
+    return normals.isEmpty ? nil : normals[normals.count / 2]
+  }
+}
+
+struct PostTile: View {
+  let post: OwnPost
+  var body: some View {
+    Link(destination: URL(string: post.url) ?? URL(string: "https://www.tiktok.com")!) {
+      PostCover(url: post.url, cornerRadius: 14) { _ in
+        ZStack(alignment: .bottomLeading) {
+          CoverScrim()
+          VStack(alignment: .leading, spacing: 4) {
+            if let m = post.multiple {
+              Text(Format.multiple(m))
+                .font(.caption.weight(.bold).monospacedDigit())
+                .padding(.horizontal, 7).padding(.vertical, 3)
+                .background(m >= 1.5 ? Palette.ok : .black.opacity(0.35), in: Capsule())
+            }
+            Text(Format.count(post.views)).font(.headline.monospacedDigit())
+            Text(Format.day(post.createTime)).font(.caption2)
+          }
+          .foregroundStyle(.white)
+          .padding(10)
+        }
+      }
+      .frame(width: 124, height: 220)
+    }
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("Post from \(Format.day(post.createTime)), \(Format.count(post.views)) views\(post.multiple.map { ", \(Format.multiple($0)) your normal" } ?? "")")
+  }
+}
+
+/// How the week went, in her words, with the Sunday review a tap away (not pasted inline).
+struct WeekCard: View {
+  let results: Results
+  @State private var showReview = false
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      SectionHeader(text: "Your week")
+      VStack(alignment: .leading, spacing: 14) {
+        Text(RungWords.headline(results.rung.rung)).font(MayaFont.title).foregroundStyle(Palette.ink)
+        HStack(spacing: 10) {
+          StatTile(value: results.rung.planned.map { "\(Int(results.rung.posted)) of \(Int($0))" } ?? "\(Int(results.rung.posted))", label: "posted")
+          StatTile(value: results.rung.medianMultiple.map(Format.multiple) ?? "—", label: "vs your normal")
+          StatTile(value: results.lane.usable ? results.lane.medianViews.map(Format.count) ?? "—" : "—", label: "lane median")
+        }
+        if results.lastReview != nil || !results.experiments.isEmpty {
+          Button {
+            showReview = true
+          } label: {
+            HStack {
+              FlowerMark(size: 22)
+              Text("Read her Sunday review").font(MayaFont.headline)
+              Spacer()
+              Image(systemName: "chevron.right").font(.caption.weight(.bold))
+            }
+            .foregroundStyle(Palette.ink)
+            .padding(14)
+            .background(Palette.wash, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+          }
+          .buttonStyle(PressableStyle())
+        }
+      }
+      .padding(18)
+      .background(Palette.panel, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+      .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Palette.line))
+    }
+    .sheet(isPresented: $showReview) { ReviewSheet(results: results) }
+  }
+}
+
+struct StatTile: View {
+  let value: String
+  let label: String
+  var body: some View {
+    VStack(alignment: .leading, spacing: 2) {
+      Text(value).font(.title3.weight(.bold).monospacedDigit()).foregroundStyle(Palette.ink)
+        .minimumScaleFactor(0.7).lineLimit(1)
+      Text(label).font(MayaFont.caption).foregroundStyle(Palette.muted)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(12)
+    .background(Palette.ground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+  }
+}
+
+struct ReviewSheet: View {
+  let results: Results
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    NavigationStack {
+      ScrollView {
+        VStack(alignment: .leading, spacing: 24) {
+          if let review = results.lastReview {
+            Text("Sunday, \(Format.day(review.ts))").font(MayaFont.kicker).foregroundStyle(Palette.muted)
+            MayaThread(text: review.body)
+          }
+          if !results.experiments.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+              SectionHeader(text: "What she wants you to try")
+              ForEach(results.experiments) { e in
+                HStack(alignment: .top, spacing: 12) {
+                  Image(systemName: e.result == "held" ? "checkmark.circle.fill" : e.result == "failed" ? "xmark.circle" : "circle.dashed")
+                    .foregroundStyle(e.result == "held" ? Palette.ok : e.result == "failed" ? Palette.err : Palette.purple)
+                  Text(e.text).font(MayaFont.callout).foregroundStyle(Palette.ink)
+                }
+              }
+            }
+          }
+        }
+        .padding(20)
+      }
+      .background(Palette.ground.ignoresSafeArea())
+      .navigationTitle("Her review")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+    }
+    .presentationDetents([.medium, .large])
+    .presentationBackground(Palette.ground)
   }
 }
 
 enum RungWords {
-  static func text(_ rung: String) -> String {
+  static func headline(_ rung: String) -> String {
     switch rung {
-    case "L0": "You posted less than you planned. Nothing else to diagnose yet."
-    case "L1": "Nobody saw it. Reach fell well under your normal — a format problem before a topic one."
-    case "L2": "They saw it and scrolled. Reach held; engagement didn't. That's the topic or the promise."
-    case "healthy": "Healthy week. Reach and engagement both in your range."
-    default: "Not enough posts with two days of numbers to say anything honest."
+    case "L0": "You posted less than you planned"
+    case "L1": "Not many people were shown it"
+    case "L2": "They saw it, then scrolled"
+    case "healthy": "A healthy week"
+    default: "Too early to call"
     }
   }
 }
 
-struct PostRow: View {
-  let post: OwnPost
-  var body: some View {
-    Link(destination: URL(string: post.url) ?? URL(string: "https://hey-maya.ai")!) {
-      HStack {
-        Image(systemName: post.platform == "tiktok" ? "music.note" : "camera")
-          .frame(width: 28)
-          .foregroundStyle(Palette.purple)
-        VStack(alignment: .leading, spacing: 2) {
-          Text(Format.day(post.createTime)).font(MayaFont.callout).foregroundStyle(Palette.ink)
-          Text(post.platform == "tiktok" ? "TikTok" : "Instagram").font(MayaFont.caption).foregroundStyle(Palette.muted)
-        }
-        Spacer()
-        VStack(alignment: .trailing, spacing: 2) {
-          Text("\(Format.count(post.views)) views").font(MayaFont.number).foregroundStyle(Palette.ink)
-          if let m = post.multiple {
-            Text("\(Format.multiple(m)) your normal")
-              .font(MayaFont.caption.monospacedDigit())
-              .foregroundStyle(m >= 1.5 ? Palette.ok : Palette.muted)
-          }
-        }
-      }
-      .padding(12)
-      .contentShape(Rectangle())
-    }
-    .accessibilityElement(children: .combine)
+struct TrailingIcon: LabelStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    HStack(spacing: 4) { configuration.title; configuration.icon }
+  }
+}
+
+/// A gentle press: scale down a touch, spring back.
+struct PressableStyle: ButtonStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .scaleEffect(configuration.isPressed ? 0.97 : 1)
+      .animation(.spring(duration: 0.25, bounce: 0.3), value: configuration.isPressed)
   }
 }
 

@@ -1,0 +1,24 @@
+{
+  "experiments": [],
+  "lane": {
+    "computedAt": 1790190140326,
+    "medianViews": 31072,
+    "p75Views": 59748,
+    "usable": true,
+    "why": "90 posts from 3 accounts this week"
+  },
+  "lastReview": null,
+  "openPredictions": 0,
+  "override": null,
+  "rung": {
+    "baselineEngagement": 0.014136551752160399,
+    "engagementRatio": null,
+    "medianMultiple": null,
+    "planned": 7,
+    "posted": 0,
+    "rung": "L0",
+    "why": "posted 0, planned 7"
+  },
+  "trackRecord": [],
+  "week": []
+}

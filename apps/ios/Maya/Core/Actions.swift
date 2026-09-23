@@ -13,6 +13,10 @@ enum Actions {
     await ok("ui:passIdea", ["id": ideaId])
   }
 
+  static func saveIdea(ideaId: String, saved: Bool = true) async -> Bool {
+    await ok("ui:saveIdea", ["id": ideaId, "saved": saved])
+  }
+
   static func revokeRule(id: String) async -> Bool {
     await ok("ui:revokeRule", ["id": id])
   }

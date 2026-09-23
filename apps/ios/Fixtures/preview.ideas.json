@@ -1,0 +1,825 @@
+[
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@andi.renay/video/7682956096855739679?_r=1&u_code=f07i95ge4i51a1&preview_pb=0&sharer_language=en&_d=f08babdmf8d44c&share_item_id=7682956096855739679&source=h5_m"
+  ],
+  "features": {
+   "account": "@andi.renay",
+   "format": "pov",
+   "lengthBucket": "<15",
+   "sound": "original",
+   "source": "breakout",
+   "tone": "ironic",
+   "topics": [
+    "running humor",
+    "internal monologue",
+    "relatable fitness"
+   ]
+  },
+  "fitWhy": "The frantic mid-run internal monologue swings directly mirror her top runner-meme format (610x her normal) while fitting her active texture in Australia.",
+  "id": "jx7f9zetcj2wy2s6mpzpdwk2nn8e35ak",
+  "matchedPostId": null,
+  "messageText": "the switch between \"i can't do this\" and \"i love running\" mid-hill made me laugh. andi.renay posted this an hour ago and it's doing 8.55x her normal at 8,146 views.\n---\nit works because the manic monologue says what every runner actually thinks. you could shoot a quick 15-second version on your next river run in brisbane.\ntext overlay: running in queensland heat (it's 7 am)\nsound: your own audio\n---\ntomorrow 5 pm is your next open slot, want to try a quick take of this?\nhttps://www.tiktok.com/@andi.renay/video/7682956096855739679",
+  "newForYou": false,
+  "postedAt": null,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1790186698456,
+  "status": "sent",
+  "version": {
+   "block": {
+    "lengthMin": 30,
+    "startLocal": "2026-09-09T17:00",
+    "title": "film: running internal monologue"
+   },
+   "hook": "i love running vs running in 90% humidity",
+   "lengthSec": 15,
+   "onScreenText": "my internal monologue every 30 seconds on a run",
+   "sound": "original audio"
+  }
+ },
+ {
+  "evidenceLinks": [],
+  "features": null,
+  "fitWhy": "dev seed from a dry-run pick",
+  "id": "jx74yzjkw9nbyw93ftmwt737cs8e1c9b",
+  "matchedPostId": null,
+  "messageText": "your 472x post worked because it was pure exhaustion, not fitness grind. same setup: the alarm on the nightstand, the pivot back under the covers, then the front door at dawn with the text doing the work. under 20s, your own audio.",
+  "newForYou": false,
+  "postedAt": null,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1790183098456,
+  "status": "sent",
+  "version": {
+   "hook": "the 5am alarm, then straight back to bed, then the run anyway",
+   "lengthSec": 18,
+   "onScreenText": "it is 5:00 am. no.",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [],
+  "features": null,
+  "fitWhy": "dev seed from a dry-run pick",
+  "id": "jx7dremm5zpxafbrs781rw959s8e1zgx",
+  "matchedPostId": null,
+  "messageText": "andi renay did 3x her normal on a track split countdown two days ago. she paced out 8x400s and talked through hating every rep as it happened. you could take the exact structure for your interval session in brisbane. on-screen: lap 4 of 8 (i am questioning every life choice). hook: running 400m repeats so i have an excuse to lie on the floor all afternoon. length: 20s. sound: your own audio.",
+  "newForYou": false,
+  "postedAt": null,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1790179498456,
+  "status": "sent",
+  "version": {
+   "hook": "running 400m repeats so i have an excuse to lie on the floor all afternoon",
+   "lengthSec": 20,
+   "onScreenText": "lap 4 of 8 (i am questioning every life choice)",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1787884327"
+  ],
+  "features": {
+   "format": "text-on-screen",
+   "lengthBucket": "30-60",
+   "sound": "original",
+   "source": "breakout",
+   "tone": "deadpan",
+   "topics": [
+    "running"
+   ]
+  },
+  "fitWhy": "text-on-screen is theirs",
+  "id": "jx70e2qx8gt3fse7pj4d216mcs8edksm",
+  "matchedPostId": null,
+  "messageText": "@runwithcarly is at 4.9\u00d7 their normal with a text-on-screen on running. your version: the bus to the start line. want the shot list?",
+  "newForYou": false,
+  "postedAt": null,
+  "reaction": null,
+  "saved": true,
+  "sentAt": 1787884327589,
+  "status": "hearted",
+  "version": {
+   "hook": "the bus to the start line",
+   "lengthSec": 20,
+   "onScreenText": "the bus to the start line",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1785875527"
+  ],
+  "features": {
+   "format": "text-on-screen",
+   "lengthBucket": "<15",
+   "sound": "original",
+   "source": "breakout",
+   "tone": "deadpan",
+   "topics": [
+    "marathon training"
+   ]
+  },
+  "fitWhy": "text-on-screen is theirs",
+  "id": "jx7cy9rm0e3j7aapk3tevzfkvs8ec64g",
+  "matchedPostId": null,
+  "messageText": "@runwithcarly is at 7.9\u00d7 their normal with a text-on-screen on marathon training. your version: the bus to the start line. want the shot list?",
+  "newForYou": false,
+  "postedAt": null,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1785875527589,
+  "status": "hearted",
+  "version": {
+   "hook": "the bus to the start line",
+   "lengthSec": 20,
+   "onScreenText": "the bus to the start line",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1784061127"
+  ],
+  "features": {
+   "format": "skit",
+   "lengthBucket": "30-60",
+   "sound": "none",
+   "source": "breakout",
+   "tone": "ironic",
+   "topics": [
+    "rest days"
+   ]
+  },
+  "fitWhy": "skit is theirs",
+  "id": "jx715a24e6qztm7qcapjbk56vn8ec03n",
+  "matchedPostId": null,
+  "messageText": "@aliabdaal is at 6.0\u00d7 their normal with a skit on rest days. your version: km vs miles, one take. want the shot list?",
+  "newForYou": false,
+  "postedAt": null,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1784061127589,
+  "status": "hearted",
+  "version": {
+   "hook": "km vs miles, one take",
+   "lengthSec": 20,
+   "onScreenText": "km vs miles",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1783899127"
+  ],
+  "features": {
+   "format": "skit",
+   "lengthBucket": "<15",
+   "sound": "none",
+   "source": "breakout",
+   "tone": "ironic",
+   "topics": [
+    "gear"
+   ]
+  },
+  "fitWhy": "skit is theirs",
+  "id": "jx7fxn2sdpnrh1mh9t7461e9rd8edbd0",
+  "matchedPostId": null,
+  "messageText": "@runwithcarly is at 6.3\u00d7 their normal with a skit on gear. your version: the split i lied about. want the shot list?",
+  "newForYou": false,
+  "postedAt": null,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1783899127589,
+  "status": "hearted",
+  "version": {
+   "hook": "the split i lied about",
+   "lengthSec": 20,
+   "onScreenText": "the split i lied about",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1781814727"
+  ],
+  "features": {
+   "format": "list",
+   "lengthBucket": "15-30",
+   "sound": "none",
+   "source": "breakout",
+   "tone": "deadpan",
+   "topics": [
+    "solo travel"
+   ]
+  },
+  "fitWhy": "list is theirs",
+  "id": "jx78dcgc33tzct9s18c4qmb0t58ecwzb",
+  "matchedPostId": null,
+  "messageText": "@andi.renay is at 6.2\u00d7 their normal with a list on solo travel. your version: the 5am face, five seconds. want the shot list?",
+  "newForYou": false,
+  "postedAt": null,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1781814727589,
+  "status": "hearted",
+  "version": {
+   "hook": "the 5am face, five seconds",
+   "lengthSec": 20,
+   "onScreenText": "the 5am face",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1779579127"
+  ],
+  "features": {
+   "format": "talking-head",
+   "lengthBucket": "<15",
+   "sound": "none",
+   "source": "breakout",
+   "tone": "deadpan",
+   "topics": [
+    "marathon training"
+   ]
+  },
+  "fitWhy": "talking-head is theirs",
+  "id": "jx74ag73e2kza3m6c9ynpk0sbn8ec7xd",
+  "matchedPostId": null,
+  "messageText": "@aliabdaal is at 7.1\u00d7 their normal with a talking-head on marathon training. your version: the split i lied about. want the shot list?",
+  "newForYou": false,
+  "postedAt": null,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1779579127589,
+  "status": "hearted",
+  "version": {
+   "hook": "the split i lied about",
+   "lengthSec": 20,
+   "onScreenText": "the split i lied about",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1787949127"
+  ],
+  "features": {
+   "format": "text-on-screen",
+   "lengthBucket": "30-60",
+   "sound": "original",
+   "source": "breakout",
+   "tone": "deadpan",
+   "topics": [
+    "solo travel"
+   ]
+  },
+  "fitWhy": "text-on-screen is theirs",
+  "id": "jx79yhzhtnqz4ehwnaqv9wnr058ecnjj",
+  "matchedPostId": null,
+  "messageText": "@aliabdaal is at 2.2\u00d7 their normal with a text-on-screen on solo travel. your version: what a long run costs in snacks. want the shot list?",
+  "newForYou": false,
+  "postedAt": 1788121927589,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1787949127589,
+  "status": "posted",
+  "version": {
+   "hook": "what a long run costs in snacks",
+   "lengthSec": 20,
+   "onScreenText": "what a long run costs in snacks",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1787700727"
+  ],
+  "features": {
+   "format": "list",
+   "lengthBucket": "<15",
+   "sound": "none",
+   "source": "breakout",
+   "tone": "deadpan",
+   "topics": [
+    "solo travel"
+   ]
+  },
+  "fitWhy": "list is theirs",
+  "id": "jx78nbvjbddt9r5h8ms09vb8ds8edvw0",
+  "matchedPostId": null,
+  "messageText": "@runwithcarly is at 3.4\u00d7 their normal with a list on solo travel. your version: hostel kitchen at 6am. want the shot list?",
+  "newForYou": false,
+  "postedAt": 1787873527589,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1787700727589,
+  "status": "posted",
+  "version": {
+   "hook": "hostel kitchen at 6am",
+   "lengthSec": 20,
+   "onScreenText": "hostel kitchen at 6am",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1786663927"
+  ],
+  "features": {
+   "format": "list",
+   "lengthBucket": "15-30",
+   "sound": "original",
+   "source": "breakout",
+   "tone": "deadpan",
+   "topics": [
+    "brisbane"
+   ]
+  },
+  "fitWhy": "list is theirs",
+  "id": "jx736ce435qkx402fembcbcqph8edv7v",
+  "matchedPostId": null,
+  "messageText": "@andi.renay is at 7.4\u00d7 their normal with a list on brisbane. your version: what a long run costs in snacks. want the shot list?",
+  "newForYou": false,
+  "postedAt": 1786836727589,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1786663927589,
+  "status": "posted",
+  "version": {
+   "hook": "what a long run costs in snacks",
+   "lengthSec": 20,
+   "onScreenText": "what a long run costs in snacks",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1785972727"
+  ],
+  "features": {
+   "format": "vlog",
+   "lengthBucket": "30-60",
+   "sound": "none",
+   "source": "breakout",
+   "tone": "deadpan",
+   "topics": [
+    "marathon training"
+   ]
+  },
+  "fitWhy": "vlog is theirs",
+  "id": "jx7ff7an96jsdshn9wn4s1e1sn8ecyy1",
+  "matchedPostId": "kh7a347ssbqhkg2sgrt39xbyr58ecnyc",
+  "messageText": "@andi.renay is at 6.3\u00d7 their normal with a vlog on marathon training. your version: the split i lied about. want the shot list?",
+  "newForYou": false,
+  "postedAt": 1786145527589,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1785972727589,
+  "status": "posted",
+  "version": {
+   "hook": "the split i lied about",
+   "lengthSec": 20,
+   "onScreenText": "the split i lied about",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1784503927"
+  ],
+  "features": {
+   "format": "list",
+   "lengthBucket": "<15",
+   "sound": "none",
+   "source": "breakout",
+   "tone": "deadpan",
+   "topics": [
+    "gear"
+   ]
+  },
+  "fitWhy": "list is theirs",
+  "id": "jx75817v7b0fwngdn91976avcd8ed7tq",
+  "matchedPostId": "kh7a347ssbqhkg2sgrt39xbyr58ecnyc",
+  "messageText": "@andi.renay is at 3.5\u00d7 their normal with a list on gear. your version: rest day guilt, deadpan. want the shot list?",
+  "newForYou": false,
+  "postedAt": 1784676727589,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1784503927589,
+  "status": "posted",
+  "version": {
+   "hook": "rest day guilt, deadpan",
+   "lengthSec": 20,
+   "onScreenText": "rest day guilt",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1782505927"
+  ],
+  "features": {
+   "format": "skit",
+   "lengthBucket": "<15",
+   "sound": "none",
+   "source": "breakout",
+   "tone": "ironic",
+   "topics": [
+    "hostel life"
+   ]
+  },
+  "fitWhy": "skit is theirs",
+  "id": "jx7f5x1f0f096m9cjdb3pp2z4s8ec13r",
+  "matchedPostId": "kh71r579wtxmznf59fdvv9p8s18edz05",
+  "messageText": "@aliabdaal is at 7.1\u00d7 their normal with a skit on hostel life. your version: hostel kitchen at 6am. want the shot list?",
+  "newForYou": false,
+  "postedAt": 1782678727589,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1782505927589,
+  "status": "posted",
+  "version": {
+   "hook": "hostel kitchen at 6am",
+   "lengthSec": 20,
+   "onScreenText": "hostel kitchen at 6am",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1788294727"
+  ],
+  "features": {
+   "format": "vlog",
+   "lengthBucket": "30-60",
+   "sound": "original",
+   "source": "breakout",
+   "tone": "deadpan",
+   "topics": [
+    "rest days"
+   ]
+  },
+  "fitWhy": "vlog is theirs",
+  "id": "jx78keh0x0dfbte6sf0fpz9y0d8ect0b",
+  "matchedPostId": null,
+  "messageText": "@aliabdaal is at 7.1\u00d7 their normal with a vlog on rest days. your version: the shoe rack list. want the shot list?",
+  "newForYou": false,
+  "postedAt": null,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1788294727589,
+  "status": "passed",
+  "version": {
+   "hook": "the shoe rack list",
+   "lengthSec": 20,
+   "onScreenText": "the shoe rack list",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1787171527"
+  ],
+  "features": {
+   "format": "vlog",
+   "lengthBucket": "15-30",
+   "sound": "none",
+   "source": "breakout",
+   "tone": "deadpan",
+   "topics": [
+    "hostel life"
+   ]
+  },
+  "fitWhy": "vlog is theirs",
+  "id": "jx79309px7hxpt0pg50r359nh98ec7yd",
+  "matchedPostId": null,
+  "messageText": "@runwithcarly is at 6.6\u00d7 their normal with a vlog on hostel life. your version: the 5am face, five seconds. want the shot list?",
+  "newForYou": false,
+  "postedAt": null,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1787171527589,
+  "status": "passed",
+  "version": {
+   "hook": "the 5am face, five seconds",
+   "lengthSec": 20,
+   "onScreenText": "the 5am face",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1786415527"
+  ],
+  "features": {
+   "format": "vlog",
+   "lengthBucket": "15-30",
+   "sound": "original",
+   "source": "breakout",
+   "tone": "deadpan",
+   "topics": [
+    "running"
+   ]
+  },
+  "fitWhy": "vlog is theirs",
+  "id": "jx71j0dr2rcfwby3jbjz8gqfpn8ecq4a",
+  "matchedPostId": null,
+  "messageText": "@andi.renay is at 4.1\u00d7 their normal with a vlog on running. your version: the split i lied about. want the shot list?",
+  "newForYou": false,
+  "postedAt": null,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1786415527589,
+  "status": "passed",
+  "version": {
+   "hook": "the split i lied about",
+   "lengthSec": 20,
+   "onScreenText": "the split i lied about",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1784601127"
+  ],
+  "features": {
+   "format": "vlog",
+   "lengthBucket": "15-30",
+   "sound": "none",
+   "source": "breakout",
+   "tone": "deadpan",
+   "topics": [
+    "hostel life"
+   ]
+  },
+  "fitWhy": "vlog is theirs",
+  "id": "jx7aaqepzvjmv46s3b769azbtx8echad",
+  "matchedPostId": null,
+  "messageText": "@runwithcarly is at 6.4\u00d7 their normal with a vlog on hostel life. your version: what a long run costs in snacks. want the shot list?",
+  "newForYou": false,
+  "postedAt": null,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1784601127589,
+  "status": "passed",
+  "version": {
+   "hook": "what a long run costs in snacks",
+   "lengthSec": 20,
+   "onScreenText": "what a long run costs in snacks",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1783294327"
+  ],
+  "features": {
+   "format": "talking-head",
+   "lengthBucket": "30-60",
+   "sound": "original",
+   "source": "breakout",
+   "tone": "deadpan",
+   "topics": [
+    "brisbane"
+   ]
+  },
+  "fitWhy": "talking-head is theirs",
+  "id": "jx73skmnrpx6axrr0jpm85sg8x8edc2k",
+  "matchedPostId": null,
+  "messageText": "@andi.renay is at 4.1\u00d7 their normal with a talking-head on brisbane. your version: the shoe rack list. want the shot list?",
+  "newForYou": false,
+  "postedAt": null,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1783294327589,
+  "status": "passed",
+  "version": {
+   "hook": "the shoe rack list",
+   "lengthSec": 20,
+   "onScreenText": "the shoe rack list",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1782689527"
+  ],
+  "features": {
+   "format": "vlog",
+   "lengthBucket": "15-30",
+   "sound": "original",
+   "source": "breakout",
+   "tone": "deadpan",
+   "topics": [
+    "rest days"
+   ]
+  },
+  "fitWhy": "vlog is theirs",
+  "id": "jx7ff9qh5s2qqf2mw57qh91hz98ec7nr",
+  "matchedPostId": null,
+  "messageText": "@andi.renay is at 4.0\u00d7 their normal with a vlog on rest days. your version: the 5am face, five seconds. want the shot list?",
+  "newForYou": false,
+  "postedAt": null,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1782689527589,
+  "status": "passed",
+  "version": {
+   "hook": "the 5am face, five seconds",
+   "lengthSec": 20,
+   "onScreenText": "the 5am face",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1788575527"
+  ],
+  "features": {
+   "format": "list",
+   "lengthBucket": "<15",
+   "sound": "original",
+   "source": "breakout",
+   "tone": "deadpan",
+   "topics": [
+    "marathon training"
+   ]
+  },
+  "fitWhy": "list is theirs",
+  "id": "jx784yp3bwn4hr63z8y7f7hhx18edcmg",
+  "matchedPostId": null,
+  "messageText": "@aliabdaal is at 7.8\u00d7 their normal with a list on marathon training. your version: the bus to the start line. want the shot list?",
+  "newForYou": false,
+  "postedAt": null,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1788575527589,
+  "status": "expired",
+  "version": {
+   "hook": "the bus to the start line",
+   "lengthSec": 20,
+   "onScreenText": "the bus to the start line",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1788564727"
+  ],
+  "features": {
+   "format": "list",
+   "lengthBucket": "<15",
+   "sound": "none",
+   "source": "breakout",
+   "tone": "deadpan",
+   "topics": [
+    "hostel life"
+   ]
+  },
+  "fitWhy": "list is theirs",
+  "id": "jx7b2hk453m4svbwm1dkek1tnd8ed7qa",
+  "matchedPostId": null,
+  "messageText": "@andi.renay is at 6.8\u00d7 their normal with a list on hostel life. your version: km vs miles, one take. want the shot list?",
+  "newForYou": false,
+  "postedAt": null,
+  "reaction": null,
+  "saved": true,
+  "sentAt": 1788564727589,
+  "status": "expired",
+  "version": {
+   "hook": "km vs miles, one take",
+   "lengthSec": 20,
+   "onScreenText": "km vs miles",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1787365927"
+  ],
+  "features": {
+   "format": "vlog",
+   "lengthBucket": "30-60",
+   "sound": "none",
+   "source": "breakout",
+   "tone": "deadpan",
+   "topics": [
+    "rest days"
+   ]
+  },
+  "fitWhy": "vlog is theirs",
+  "id": "jx7f6s7b9nmf57ebb2rmfhpy398ecymh",
+  "matchedPostId": null,
+  "messageText": "@andi.renay is at 4.0\u00d7 their normal with a vlog on rest days. your version: km vs miles, one take. want the shot list?",
+  "newForYou": false,
+  "postedAt": null,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1787365927589,
+  "status": "expired",
+  "version": {
+   "hook": "km vs miles, one take",
+   "lengthSec": 20,
+   "onScreenText": "km vs miles",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1787268727"
+  ],
+  "features": {
+   "format": "talking-head",
+   "lengthBucket": "<15",
+   "sound": "none",
+   "source": "breakout",
+   "tone": "deadpan",
+   "topics": [
+    "rest days"
+   ]
+  },
+  "fitWhy": "talking-head is theirs",
+  "id": "jx78hjjq0n16pgkqw36r36ge318ec7a2",
+  "matchedPostId": null,
+  "messageText": "@aliabdaal is at 7.8\u00d7 their normal with a talking-head on rest days. your version: the 5am face, five seconds. want the shot list?",
+  "newForYou": false,
+  "postedAt": null,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1787268727589,
+  "status": "expired",
+  "version": {
+   "hook": "the 5am face, five seconds",
+   "lengthSec": 20,
+   "onScreenText": "the 5am face",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1786739527"
+  ],
+  "features": {
+   "format": "talking-head",
+   "lengthBucket": "15-30",
+   "sound": "none",
+   "source": "breakout",
+   "tone": "deadpan",
+   "topics": [
+    "brisbane"
+   ]
+  },
+  "fitWhy": "talking-head is theirs",
+  "id": "jx707bsg2js30j049t3p60ta758edz8r",
+  "matchedPostId": null,
+  "messageText": "@andi.renay is at 5.0\u00d7 their normal with a talking-head on brisbane. your version: the bus to the start line. want the shot list?",
+  "newForYou": false,
+  "postedAt": null,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1786739527589,
+  "status": "expired",
+  "version": {
+   "hook": "the bus to the start line",
+   "lengthSec": 20,
+   "onScreenText": "the bus to the start line",
+   "sound": ""
+  }
+ },
+ {
+  "evidenceLinks": [
+   "https://www.tiktok.com/@x/video/1785983527"
+  ],
+  "features": {
+   "format": "text-on-screen",
+   "lengthBucket": "30-60",
+   "sound": "original",
+   "source": "breakout",
+   "tone": "deadpan",
+   "topics": [
+    "running"
+   ]
+  },
+  "fitWhy": "text-on-screen is theirs",
+  "id": "jx79hjrrs7h3jeftd39094wa3d8ec8xs",
+  "matchedPostId": null,
+  "messageText": "@runwithcarly is at 2.6\u00d7 their normal with a text-on-screen on running. your version: what a long run costs in snacks. want the shot list?",
+  "newForYou": false,
+  "postedAt": null,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1785983527589,
+  "status": "expired",
+  "version": {
+   "hook": "what a long run costs in snacks",
+   "lengthSec": 20,
+   "onScreenText": "what a long run costs in snacks",
+   "sound": ""
+  }
+ }
+]
