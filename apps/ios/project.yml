@@ -61,8 +61,15 @@ targets:
         MayaConvexURL: $(MAYA_CONVEX_URL)
         MayaClerkPublishableKey: $(MAYA_CLERK_PUBLISHABLE_KEY)
         LSApplicationQueriesSchemes: [sms, tiktok, instagram]
+        CFBundleURLTypes:
+          - CFBundleURLName: ai.heymaya.maya
+            CFBundleURLSchemes: [maya]
         UILaunchScreen: {}
         ITSAppUsesNonExemptEncryption: false
+    entitlements:
+      path: Maya/Maya.entitlements
+      properties:
+        com.apple.developer.associated-domains: ["applinks:hey-maya.ai"]
     dependencies:
       - package: ConvexMobile
         product: ConvexMobile

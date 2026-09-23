@@ -9,7 +9,7 @@ import { entitlementsFor, TIERS } from "./billing/tiers";
 import { partnershipsOpen } from "./partnerships/store";
 import { connectedFrom, DIAGNOSIS_WORDS, numbersFor } from "./connections/numbers";
 import { avatarKey, coverForUrl, coverKey, mediaUrl } from "./media";
-import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { summarize, type Affinity } from "./taste/affinities";
@@ -419,5 +419,35 @@ export const post = query({
     if (!p || p.creatorId !== c._id) return null; // another creator's post is not found, not forbidden
     const siblings = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").take(40)) as Doc<"ownPosts">[];
     return postNumbersView(p, siblings, Date.now(), await mediaUrl(ctx, p.platform, "cover", coverKey(p.platform, p.url, p.postId)));
+  },
+});
+
+/** Is this idea or post theirs? For the app-link tool: no link to a foreign or made-up object. */
+export const ownsObject = internalQuery({
+  args: { creatorId: v.id("creators"), kind: v.union(v.literal("idea"), v.literal("post")), id: v.string() },
+  handler: async (ctx, a): Promise<boolean> => {
+    const table = a.kind === "idea" ? "ideas" : "ownPosts";
+    const id = ctx.db.normalizeId(table, a.id);
+    if (!id) return false;
+    const row = (await ctx.db.get(id)) as { creatorId?: Id<"creators"> } | null;
+    return row?.creatorId === a.creatorId;
+  },
+});
+
+/** One idea for the app's deep link (/o/idea/<id>): theirs, or null ("this changed / not found"). */
+export const idea = query({
+  args: { id: v.string() },
+  handler: async (ctx, a) => {
+    const c = await me(ctx);
+    if (!c) return null;
+    const id = ctx.db.normalizeId("ideas", a.id);
+    const i = id ? ((await ctx.db.get(id)) as Doc<"ideas"> | null) : null;
+    if (!i || i.creatorId !== c._id) return null;
+    return {
+      id: i._id, status: i.status, saved: Boolean(i.savedAt), reaction: i.reaction ?? null, newForYou: Boolean(i.newForYou), features: i.features ?? null, fitWhy: i.fitWhy,
+      evidenceLinks: i.evidenceLinks, version: i.version as { hook?: string; onScreenText?: string; lengthSec?: number; sound?: string } | null, messageText: i.messageText,
+      sentAt: i.sentAt ?? null, postedAt: i.postedAt ?? null, matchedPostId: i.matchedPostId ?? null,
+      evidenceCovers: await Promise.all(i.evidenceLinks.map((l) => coverForUrl(ctx, l))),
+    };
   },
 });

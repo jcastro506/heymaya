@@ -6,6 +6,8 @@ struct IdeasView: View {
   @State private var filter: IdeaFilter = .new
   @State private var handled: Set<String> = []
   @State private var selected: Idea?
+  @State private var linked: LinkedID?
+  @Environment(Router.self) private var router
   @Namespace private var zoom
 
   var body: some View {
@@ -17,6 +19,7 @@ struct IdeasView: View {
       .navigationDestination(item: $selected) { idea in
         IdeaDetailView(idea: idea).navigationTransition(.zoom(sourceID: idea.id, in: zoom))
       }
+      .navigationDestination(item: $linked) { IdeaByIdView(id: $0.id) }
 
       switch ideas.state {
       case .loading:
@@ -46,8 +49,16 @@ struct IdeasView: View {
       }
     }
     .task { await ideas.run() }
+    .onChange(of: router.pendingIdea, initial: true) { _, id in
+      guard let id else { return }
+      linked = LinkedID(id: id)
+      router.pendingIdea = nil
+    }
   }
 }
+
+/// An id from a link, pushable as a navigation item.
+struct LinkedID: Identifiable, Hashable { let id: String }
 
 enum IdeaFilter: String, CaseIterable, Identifiable {
   case new, saved, posted, passed

@@ -10,6 +10,8 @@ struct TodayView: View {
   @State private var results = Live<Results?>("ui:results")
   @Namespace private var zoom
   @Environment(\.dynamicTypeSize) private var typeSize
+  @Environment(Router.self) private var router
+  @State private var linkedPost: LinkedID?
 
   var body: some View {
     Screen(title: "Today") {
@@ -23,6 +25,13 @@ struct TodayView: View {
       case .value(let t?):
         content(t)
       }
+      Color.clear.frame(height: 0)
+        .navigationDestination(item: $linkedPost) { PostByIdView(id: $0.id) }
+    }
+    .onChange(of: router.pendingPost, initial: true) { _, id in
+      guard let id else { return }
+      linkedPost = LinkedID(id: id)
+      router.pendingPost = nil
     }
     .task { await today.run() }
     .task { await ideas.run() }

@@ -14,7 +14,7 @@ import type { Id } from "../_generated/dataModel";
 import { parseLink } from "./inbound";
 import { DIAGNOSIS_WORDS } from "../connections/numbers";
 import { PARTNERSHIP_TOOLS, runPartnershipTool } from "../partnerships/tools";
-import { MISSION_CONTROL_TABS, missionControlUrl, type MissionControlTab } from "./missionControl";
+import { appObjectUrl, MISSION_CONTROL_TABS, missionControlUrl, type MissionControlTab } from "./missionControl";
 
 export const SUMMARY_CAP = 1800; // characters of tool result the model sees, per call
 
@@ -29,7 +29,7 @@ for (const tool of PARTNERSHIP_TOOLS) TOOL_CREDITS[tool.function.name] = 0;
 
 export const TOOLS: OpenRouterTool[] = [
   ...PARTNERSHIP_TOOLS,
-  { type: "function", function: { name: "mission_control_link", description: "The creator's secure Mission Control link, optionally opened to the most useful tab. Free. Use when they ask for Mission Control or when a richer view would materially help them inspect ideas, their week, results, lane, or settings. Do not add it as a routine call to action. The link contains no tenant id; their signed-in browser resolves their account.", parameters: { type: "object", properties: { tab: { type: "string", enum: [...MISSION_CONTROL_TABS] }, why: str }, required: ["tab", "why"] } } },
+  { type: "function", function: { name: "mission_control_link", description: "A link that opens their Maya app: to one exact idea (idea id) or one of their own posts (post id) when you're talking about that thing, or to a tab. Free. Use when opening the app would genuinely help them look at something (an idea's proof and version, a post's numbers), or when they ask for it. Never as a routine sign-off. The link carries no account details; their signed-in app resolves it.", parameters: { type: "object", properties: { tab: { type: "string", enum: [...MISSION_CONTROL_TABS] }, idea: str, post: str, why: str }, required: ["why"] } } },
   { type: "function", function: { name: "post_info", description: "Full detail for one post: sound id, media, caption, author, length, stats. 10 credits when the vendor finds the media, so use account_posts (1 credit, the whole feed with stats) when numbers are all you need; post_info is for the sound id or a link they sent.", parameters: { type: "object", properties: { url: str, why: str }, required: ["url", "why"] } } },
   { type: "function", function: { name: "post_transcript", description: "What is said in the post, as text. 1 credit. You have NOT watched it; this is the words.", parameters: { type: "object", properties: { url: str, why: str }, required: ["url", "why"] } } },
   { type: "function", function: { name: "post_comments", description: "The top comments: what people are reacting to. 1 credit on TikTok, 15 on Instagram (replies are fetched too), so on Instagram only when it decides something.", parameters: { type: "object", properties: { url: str, why: str }, required: ["url", "why"] } } },
@@ -173,6 +173,15 @@ export async function runTool(ctx: ActionCtx, creatorId: Id<"creators">, call: {
   }
   try {
     if (call.name === "mission_control_link") {
+      // An object link only for an object that is theirs: a foreign or made-up id is refused.
+      for (const kind of ["idea", "post"] as const) {
+        const id = typeof call.args[kind] === "string" ? String(call.args[kind]) : "";
+        if (!id) continue;
+        const owned = await ctx.runQuery(internal.ui.ownsObject, { creatorId, kind, id });
+        record(owned, 0, owned ? undefined : `not their ${kind}`);
+        if (!owned) return `refused: that ${kind} is not one of theirs. Link a tab instead, or read the ${kind} first.`;
+        return `Use this exact link: ${appObjectUrl(process.env.APP_URL, kind, id)}. It opens that ${kind} in their app. Do not alter the URL.`;
+      }
       const tab = MISSION_CONTROL_TABS.includes(call.args.tab as MissionControlTab) ? call.args.tab as MissionControlTab : "today";
       const url = missionControlUrl(process.env.APP_URL, tab);
       record(true, 0);

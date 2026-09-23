@@ -4,12 +4,20 @@ import SwiftUI
 /// Signed out → the welcome screen. Signed in → the three tabs (spec §0 D2).
 struct RootView: View {
   @State private var auth: AuthState<String> = .loading
+  @State private var router = Router()
 
   var body: some View {
-    if Fixtures.enabled {
-      MainTabs()
-    } else {
-      authed
+    Group {
+      if Fixtures.enabled {
+        MainTabs()
+      } else {
+        authed
+      }
+    }
+    .environment(router)
+    .onOpenURL { router.open($0) }
+    .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+      if let url = activity.webpageURL { router.open(url) }
     }
   }
 
@@ -40,16 +48,23 @@ struct RootView: View {
 }
 
 struct MainTabs: View {
+  @Environment(Router.self) private var router
+
   var body: some View {
-    TabView {
+    @Bindable var router = router
+    TabView(selection: $router.tab) {
       TodayView()
         .tabItem { Label("Today", systemImage: "sun.max") }
+        .tag(AppTab.today)
       IdeasView()
         .tabItem { Label("Ideas", systemImage: "lightbulb") }
+        .tag(AppTab.ideas)
       OpportunitiesView()
         .tabItem { Label("Deals", systemImage: "dollarsign.circle") }
+        .tag(AppTab.deals)
       YouView()
         .tabItem { Label("You", systemImage: "person.crop.circle") }
+        .tag(AppTab.you)
     }
   }
 }

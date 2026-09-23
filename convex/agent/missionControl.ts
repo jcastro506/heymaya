@@ -19,3 +19,11 @@ export function missionControlUrl(appUrl: string | undefined, tab: MissionContro
   const base = (appUrl?.trim() || "https://hey-maya.ai").replace(/\/+$/, "");
   return `${base}/app/${tab}`;
 }
+
+/** The exact object in the app (app spec §6.7): a universal link that opens the app when it's
+ * installed and a fallback page when it isn't. Carries no tenant id; the session resolves it. */
+export type AppObjectKind = "idea" | "post";
+export function appObjectUrl(appUrl: string | undefined, kind: AppObjectKind, id: string): string {
+  const base = (appUrl?.trim() || "https://hey-maya.ai").replace(/\/+$/, "");
+  return `${base}/o/${kind}/${encodeURIComponent(id)}`;
+}
