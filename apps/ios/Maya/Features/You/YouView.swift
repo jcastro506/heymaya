@@ -1,14 +1,17 @@
-import ClerkKit
 import SwiftUI
 
 /// What she knows, who she watches, how she texts you, and the account (spec §0 D2).
 struct YouView: View {
   @State private var settings = Live<CreatorSettings?>("ui:settings")
   @State private var lane = Live<Lane?>("ui:lane")
-  @State private var confirmSignOut = false
 
   var body: some View {
-    Screen(title: "You") {
+    Screen(title: "You", trailing: {
+      if case .value(let s?) = settings.state {
+        NavigationLink { SettingsView(settings: s) } label: { Image(systemName: "gearshape") }
+          .accessibilityLabel("Settings")
+      }
+    }) {
       switch settings.state {
       case .loading:
         SkeletonRows(count: 4)
@@ -20,16 +23,7 @@ struct YouView: View {
         knows(s)
         watching
         rules(s)
-        texting(s)
-        account(s)
       }
-      Button("Sign out", role: .destructive) { confirmSignOut = true }
-        .font(MayaFont.callout)
-        .confirmationDialog("Sign out of Maya on this phone?", isPresented: $confirmSignOut, titleVisibility: .visible) {
-          Button("Sign out", role: .destructive) { Task { try? await Clerk.shared.auth.signOut() } }
-        } message: {
-          Text("She keeps working and texting you. This only signs this app out.")
-        }
     }
     .task { await settings.run() }
     .task { await lane.run() }
@@ -101,35 +95,11 @@ struct YouView: View {
     }
   }
 
-  private func texting(_ s: CreatorSettings) -> some View {
-    VStack(alignment: .leading, spacing: 10) {
-      SectionHeader(text: "How she texts you")
-      Card {
-        row("Quiet hours", "\(s.quietHours.start)–\(s.quietHours.end)")
-        row("Tone", s.tone.capitalized)
-        row("Time zone", s.timezone.replacingOccurrences(of: "_", with: " "))
-      }
-    }
-  }
 
-  private func account(_ s: CreatorSettings) -> some View {
-    VStack(alignment: .leading, spacing: 10) {
-      SectionHeader(text: "Account")
-      Card {
-        row("Plan", s.tier.capitalized)
-        if let tiktok = s.handles.tiktok { row("TikTok", "@\(tiktok)") }
-        if let ig = s.handles.instagram { row("Instagram", "@\(ig)") }
-      }
-    }
-  }
 
-  private func row(_ label: String, _ value: String) -> some View {
-    HStack {
-      Text(label).font(MayaFont.callout).foregroundStyle(Palette.muted)
-      Spacer()
-      Text(value).font(MayaFont.callout).foregroundStyle(Palette.ink)
-    }
-  }
+
+
+
 
   private func bullets(_ title: String, _ items: [String], _ color: Color) -> some View {
     VStack(alignment: .leading, spacing: 6) {

@@ -41,6 +41,14 @@ final class ContractTests: XCTestCase {
     XCTAssertFalse(l.accounts.isEmpty)
   }
 
+  func testOpportunitiesLockedTeaserIsGrounded() throws {
+    let o = try load("opportunities", as: Opportunities.self)
+    XCTAssertFalse(o.unlocked)
+    XCTAssertTrue(o.opportunities.isEmpty, "a locked plan never receives a pipeline")
+    XCTAssertEqual(o.unlockTier, "partner")
+    XCTAssertGreaterThanOrEqual(o.teaser.paidPostsInLane, o.teaser.accountsPaid)
+  }
+
   func testNullMeansNoAccount() throws {
     // Every ui query returns null when the signed-in identity has no creator row.
     let t = try JSONDecoder().decode(Today?.self, from: Data("null".utf8))

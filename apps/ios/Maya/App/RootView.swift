@@ -46,6 +46,8 @@ struct MainTabs: View {
         .tabItem { Label("Today", systemImage: "sun.max") }
       IdeasView()
         .tabItem { Label("Ideas", systemImage: "lightbulb") }
+      OpportunitiesView()
+        .tabItem { Label("Deals", systemImage: "dollarsign.circle") }
       YouView()
         .tabItem { Label("You", systemImage: "person.crop.circle") }
     }

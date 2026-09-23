@@ -219,3 +219,32 @@ struct WatchedAccount: Decodable, Equatable, Identifiable {
   let baseline: Double?
   let lastSampledAt: Double?
 }
+
+struct Opportunities: Decodable, Equatable {
+  let unlocked: Bool
+  let tier: String
+  let unlockTier: String
+  let unlockPriceUsd: Double
+  let teaser: Teaser
+  let opportunities: [Opportunity]
+
+  struct Teaser: Decodable, Equatable {
+    let paidPostsInLane: Double
+    let accountsPaid: Double
+    let days: Double
+  }
+}
+
+struct Opportunity: Decodable, Equatable, Identifiable {
+  let id: String
+  let brand: String
+  let campaign: String
+  let type: String
+  let fit: String
+  let status: String
+  let verdict: String
+  let route: String
+  let compensation: String
+  let deadline: Double?
+  let updatedAt: Double
+}

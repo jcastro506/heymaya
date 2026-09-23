@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// A screen's scrolling body on Maya's warm ground.
-struct Screen<Content: View>: View {
+/// A screen's scrolling body on Maya's warm ground, with an optional trailing toolbar item.
+struct Screen<Content: View, Trailing: View>: View {
   let title: String
+  @ViewBuilder var trailing: Trailing
   @ViewBuilder var content: Content
 
   var body: some View {
@@ -17,7 +18,14 @@ struct Screen<Content: View>: View {
       .background(Palette.ground.ignoresSafeArea())
       .navigationTitle(title)
       .toolbarBackground(Palette.ground, for: .navigationBar)
+      .toolbar { ToolbarItem(placement: .topBarTrailing) { trailing } }
     }
+  }
+}
+
+extension Screen where Trailing == EmptyView {
+  init(title: String, @ViewBuilder content: () -> Content) {
+    self.init(title: title, trailing: { EmptyView() }, content: content)
   }
 }
 

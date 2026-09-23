@@ -5,7 +5,8 @@
  */
 
 import { v } from "convex/values";
-import { entitlementsFor } from "./billing/tiers";
+import { entitlementsFor, TIERS } from "./billing/tiers";
+import { partnershipsOpen } from "./partnerships/store";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
@@ -249,5 +250,57 @@ export const blockControl = mutation({
     else if (a.start && a.end && a.end > a.start) await ctx.scheduler.runAfter(0, internal.calendar.blocks.move, { blockId: a.id, start: a.start, end: a.end });
     else return { ok: false };
     return { ok: true };
+  },
+});
+
+/**
+ * Opportunities (app spec §6.6): the pipeline when their plan carries partnerships, and a
+ * grounded teaser when it doesn't. The teaser counts real paid-partnership posts from the
+ * accounts she watches for them in the last 30 days (the sampler's `paidPromotion` flag);
+ * with none, the count is 0 and the app shows no number. Never invented, never another
+ * creator's rows.
+ */
+export const opportunities = query({
+  args: {},
+  handler: async (ctx) => {
+    const c = await me(ctx);
+    if (!c) return null;
+    const unlocked = partnershipsOpen(c);
+    const since = Date.now() - 30 * 86_400_000;
+    const tracked = ((await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).collect()) as Doc<"trackedAccounts">[]).filter((t) => t.status === "active");
+    const paidPosts = new Set<string>();
+    const paidAccounts = new Set<string>();
+    for (const t of tracked) {
+      const rows = (await ctx.db.query("observations").withIndex("by_author", (q) => q.eq("platform", t.platform).eq("authorHandle", t.handle).gte("sampledAt", since)).take(200)) as Doc<"observations">[];
+      for (const r of rows) {
+        if (!r.paidPromotion) continue;
+        paidPosts.add(`${r.platform}:${r.postId}`);
+        paidAccounts.add(`${r.platform}:${r.authorHandle}`);
+      }
+    }
+    const rows = unlocked ? ((await ctx.db.query("partnershipOpportunities").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").take(100)) as Doc<"partnershipOpportunities">[]) : [];
+    return {
+      unlocked,
+      tier: entitlementsFor(c.plan).tier,
+      unlockTier: "partner" as const,
+      unlockPriceUsd: TIERS.partner.priceUsd,
+      teaser: { paidPostsInLane: paidPosts.size, accountsPaid: paidAccounts.size, days: 30 },
+      opportunities: rows.map((r) => {
+        const o = r.data as { brand?: string; campaign?: string; type?: string; fit?: string; status?: string; route?: string; compensation?: string; deadline?: number; assessment?: { verdict?: string } };
+        return {
+          id: r._id,
+          brand: String(o.brand ?? r.brandDomain),
+          campaign: String(o.campaign ?? ""),
+          type: String(o.type ?? "unknown"),
+          fit: String(o.fit ?? ""),
+          status: String(o.status ?? "discovered"),
+          verdict: String(o.assessment?.verdict ?? "investigate"),
+          route: String(o.route ?? "unknown"),
+          compensation: String(o.compensation ?? ""),
+          deadline: typeof o.deadline === "number" ? o.deadline : null,
+          updatedAt: r.updatedAt,
+        };
+      }),
+    };
   },
 });
