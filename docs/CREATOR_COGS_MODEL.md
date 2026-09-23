@@ -95,6 +95,26 @@ Convex Pro + usage ~65 · Vercel Pro 20 · Clerk Pro 25 · Fly (claw relay) 5 ·
 3. **Zernio band semantics** (graduated vs all-units). At 200 creators that's $1.73 vs $1.00 per account.
 4. **Whether Zernio is needed for solo.** Solo users' public numbers come from ScrapeCreators anyway. Zernio adds connected reach and retention. Keeping it is right for accuracy, but it's the second-biggest line.
 
+### 5.1 The messaging vendor: Claw vs the alternatives
+
+**Claw is a reseller of Linq.** It's a relay (Render/Supabase/Vercel) in front of Linq's iMessage fleet, run by a solo founder largely through an AI agent, at about $1.1k MRR. It has no SLA, stores message bodies, and its outbound media support is undocumented. Fine for a pilot. Not what you want carrying the product at 200+ creators.
+
+| Option | What it is | Reliability | Cost shape | Verdict |
+|---|---|---|---|---|
+| **Linq, direct** | The fleet Claw resells | SOC 2 Type II, **99.95% SLA**, deletes message bodies every 24 h, ~7,000 msgs/line/day | Quote-only (~$500+ setup, per line) | **Recommended once past the pilot.** Same blue bubble, no middleman, a contract with an SLA |
+| Sendblue | Established iMessage API | Mature; the outbound-first plan is enterprise | ~$100/line replies-only; outbound-first ~$1k/line | Too expensive for proactive-first Maya |
+| Blooio, LoopMessage | Smaller resellers | Unproven at our scale | ~$39/line (Blooio) | Not better than Claw on the risk that matters |
+| Twilio RCS / SMS | Official carrier messaging | High, official, verified sender | $0.0083/msg (≈ $1.75 per creator), no line fee, 4–6 weeks of registration | **Fallback lane.** Green bubble on iPhone, but official and ban-proof |
+| Apple Messages for Business | Apple's official lane | Official, no ban risk | Via an Apple-approved provider; needs Apple review (Poke was the first AI agent approved, June 2026), AI labelling, human support | **The long-term lane.** Worth applying for once there's traction |
+
+**The structural risk isn't the vendor.** Every iMessage reseller runs real Apple IDs on Apple hardware, which is a grey area with Apple, and the ban risk comes with the lane itself (Lindy's own-Mac ban, 2026). So:
+1. Keep the transport behind the one writer (`messages.send` → `deliverMessage`, already built that way).
+2. **Add a second provider for failover** (Twilio SMS/RCS) so a flagged line degrades to a green bubble instead of silence.
+3. Enforce the outbound:inbound ratio rail already recommended in the messaging research.
+4. Move from Claw to **Linq direct** before ~100 creators, and start the Apple Messages for Business application in parallel.
+
+Cost: Linq direct is likely similar to or cheaper than Claw per creator at scale (no reseller margin), but it's quote-only. Get the quote with the recipients-per-line question (§5.1) answered in writing.
+
 ## 6. Levers, in order of effort
 
 | Lever | Effect at 1,000 creators | Effort |
@@ -124,7 +144,7 @@ Re-run `scripts/cogs/model.py` with the pilot's real frequencies after 30 days o
 
 ## 8. Decisions for the operator
 
-1. **Ask Claw** for the recipients-per-line limit and a written quote at 200 and 1,000 creators. It's the largest unknown.
+1. **Ask Linq directly (and Claw)** for the recipients-per-line limit and a written quote at 200 and 1,000 creators. It's the largest unknown, and Linq direct is the likely destination (§5.1).
 2. **Approve the cap change** (proactive $0.30 a day, with replies degrading instead of refusing).
 3. **Buy the 500k ScrapeCreators pack** once the pilot starts spending.
 4. **Solo pricing:** keep $19 and accept ~40–55% margins on solo, or move it to $24.

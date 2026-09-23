@@ -135,11 +135,13 @@ Rules: at most five bubbles; plain language, no vendor names or "AI"; every capa
 
 ## 6. Information architecture
 
-Five tabs. They consolidate the six web tabs and the six views in the old §6.
+Five tabs, plus Opportunities. They consolidate the six web tabs and the six views in the old §6.
 
 ```
-Today · Ideas · Week · Watching · You
+Today · Ideas · Week · Watching · Opportunities · You
 ```
+
+Six is the most a tab bar holds comfortably. If Opportunities earns its place (M7 cohort data), it stays a tab. If not, it moves to the top of You.
 
 ### 6.1 Today — "is she working, and what needs me"
 
@@ -179,10 +181,26 @@ Segmented: **Coming up | Last week**.
 - **House rules**: directives, verbatim. Add or revoke.
 - **How she texts you**: her number, quiet hours, tone, timezone.
 - **Connected**: Instagram and TikTok (Zernio), Google Calendar with calendar selection, partnership mailbox.
-- **Partnerships** (tier-gated): opportunities, fit, drafts to approve or edit, follow-ups.
+- **Partnership preferences** (deal types, paid-only, brands to avoid, rate floor). The pipeline itself lives in the Opportunities tab (§6.6).
 - **Plan and billing** (Stripe portal in an auth session), **Export my data**, **Sign out**, **Delete my account**.
 
-### 6.6 Global
+### 6.6 Opportunities — visible to everyone, unlocked on the partner tier
+
+**Unlocked (partner tier):** a pipeline of brand opportunities, from the opportunity engine (`CREATOR_MAYA_EXPERTISE_AUDIT.md` §8.2):
+- stages: **Found → Shortlisted → Pitched → Replied → Negotiating → Agreed → Delivered**;
+- each card: brand, deal type, why it fits (citing their own posts), what's still unknown, the source link;
+- a **media kit** screen (their numbers, top posts, audience where known, rate range with its basis) and a share link;
+- drafts awaiting SEND, and brand replies that need a decision, also appear in Today's "Needs you";
+- actions: shortlist, pass, "draft a pitch" (a request to Maya, and approval still happens in Messages with the SEND code), mark agreed or delivered, and set preferences (deal types, paid-only, excluded brands, rate floor).
+
+**Locked (solo, duo):** the tab is there with a lock, and the screen is a **real, grounded teaser, not a blur of fake cards**:
+- "3 brands paid creators in your lane this month", with the brands' names hidden. The count comes from the lane sampler's paid-promotion flags, so it costs nothing extra and is never invented. With no signal yet, the teaser explains the feature in one line instead, never a fake number;
+- their media kit preview (their own numbers are theirs, and showing them is free);
+- **one button: "Unlock with Partner — $29.99/mo"** (price read from `billing/tiers.ts`).
+
+I recommend the lock: the feature sells itself when the teaser is built from their own lane.
+
+### 6.7 Global
 
 - Every object has a stable route: `/o/idea/<id>`, `/o/block/<id>`, `/o/post/<id>`, `/o/account/<id>`, `/o/record/<id>`, `/o/partnership/<id>`, `/o/week`, `/o/review/<isoWeek>`.
 - Deleted or superseded objects render "this changed" with a link to the replacement. Never a blank screen or a 404.
@@ -284,6 +302,39 @@ Small: next filming block with its hook. Medium: today's best idea plus "Needs y
 - Since May 2025, US apps may link to external purchase with no entitlement and, for now, **0% commission**. The Ninth Circuit (Dec 2025) held Apple may charge *some* commission on link-outs, and the district court is still setting it. Budget for a nonzero fee arriving in 2027.
 - This reuses `billing/tiers.ts`, the Stripe prices, the webhook, and the portal. Apple Pay works in the auth-session browser.
 - **Fallback, not built:** StoreKit via RevenueCat at the 15% Small Business rate, mapped to the same tiers. Build it if the link-out commission makes IAP competitive, or before launching outside the US.
+
+### 11.1 Upgrading and downgrading in the app
+
+**The backend already does most of this.** The tier lands on `creators.plan.tier` from the Stripe price id (`billing/plan.ts`, on `customer.subscription.updated`). Every door reads it live: `partnershipsOpen`, `converseSkillFor`, and `investigate({partnerships})` are evaluated **per turn**. So the moment the webhook lands, her *next* reply has the partnership skill and tools. No redeploy, no session reset.
+
+**The flow:**
+1. Tap **Unlock** (Opportunities tab, You → Plan, or any locked surface).
+2. The app calls `billing.checkout.changePlan({tier})` 🆕. For an **existing subscriber**, this is **not a new Checkout**: it's the Stripe Customer Portal's *subscription update confirm* flow, preset to the partner price. It opens in the in-app browser sheet and shows the prorated amount, with Apple Pay available. A new subscription is never created, so no one is double-billed.
+3. The return is a universal link. The app shows "Unlocking…" and waits **reactively** for `plan.tier` to change (Convex pushes it). Typical: seconds. After 60 s it says "payment received, finishing up" and keeps listening. It never shows "failed" for a slow webhook.
+4. `act({kind: "plan.upgraded"})` is logged. **Reacted.**
+5. The Opportunities tab unlocks live. First, a **30-second preferences sheet**: deal types, paid-only, brands to avoid, rate floor (optional), each written as `personalRecords`. Then an optional "connect Gmail so she can send approved pitches" card. Drafts work without Gmail.
+6. **Maya texts**, once, grounded: what's now possible, plus the first concrete thing, e.g. "you're on partnerships now. 3 brands paid creators in your lane this month — want me to dig into them?" If the preferences sheet was skipped, she asks the one question that matters most instead.
+
+**Downgrade:** Portal → the tier changes at period end (Stripe default, so they keep what they paid for). After that, allowances go to 0 through the same doors. Open threads keep **syncing replies for 30 days**, so a brand's answer isn't lost. No new research, drafts, or sends. The data is kept read-only, and she says so once, plainly.
+
+**Allowance on upgrade mid-month:** the full monthly allowance immediately (simplest, and cheap: $0.32 of Tavily at the cap).
+
+**Tests (M4):**
+- a webhook replay → the tier lands once;
+- the next converse turn after the tier change has the partnership skill; the turn before doesn't;
+- downgrade → the doors are closed and `partnership_draft` is refused, with reply sync continuing for 30 days;
+- an upgrade while a reply is mid-flight never gives that turn half-open tools (the tier is read once, at turn start);
+- the locked teaser count equals the sampler's paid-promotion rows for their lane (grounded), and 0 signals shows no number.
+
+### 11.2 Are we avoiding Apple's cut?
+
+**In the US, today: yes, fully.** Since May 2025, US App Store apps may link to external purchase with no entitlement and **0% commission**, and they don't have to offer IAP alongside (Spotify and Kindle do exactly this). Users don't need to sign up on the web first. The in-app "Unlock" button can go straight to Stripe. The COGS model already assumes this (no Apple fee).
+
+**Not guaranteed to stay free:**
+- The Ninth Circuit (Dec 2025) held Apple may charge *some* commission on link-outs, and the district court is still setting the rate. If it lands at, say, 12%, that's ~$2.28 on solo, about −12 margin points.
+- **Outside the US**, IAP is effectively required (15% under the Small Business Program).
+
+**Plan:** ship Stripe link-out, US only. Keep RevenueCat and StoreKit designed but unbuilt, and revisit the moment the district court sets a rate or we launch abroad. **Don't** build a "sign up on the web to avoid the fee" funnel. It adds friction for nothing while link-outs are free, and it's the first thing to re-evaluate if they stop being free.
 
 ## 12. How we get a beautiful, seamless app
 

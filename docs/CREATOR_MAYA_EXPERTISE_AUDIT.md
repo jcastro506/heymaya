@@ -208,7 +208,65 @@ These **run before app sprint M2.** The app is a shell around her brain, and a b
 
 Every sprint also runs the five mandatory categories: cross-tenant, budget fail-closed, adversarial input, sibling coherence, and TODO grep.
 
-## 8. Operator decisions
+## 8. Opportunities (partnerships / UGC) — audit and redesign
+
+### 8.1 What exists (`convex/partnerships/*`, built in the operator's pilot)
+
+**Strong, keep all of it:**
+- the durable relationship record (profile, opportunities, drafts, events);
+- the Zod contracts;
+- a fit assessment that must cite the creator's own posts, messages, or records;
+- every web page and email treated as untrusted evidence;
+- emails sent only after the user types an exact SEND code shown by code;
+- no form submission;
+- the reply tracker (`partnership reply sync`, every 30 min);
+- tier allowances (40 research / 10 opportunities / 30 drafts a month).
+
+**Weak, the part your question is about:**
+
+| Question | Today |
+|---|---|
+| How does she find opportunities? | **Only when asked, and only by web search.** `partnership_research` = Tavily basic search, 5 results, inside a single reply turn (6 tool calls, 60 s). No cron, no proactive discovery, no marketplace or program catalogue. |
+| Does she use who they are? | **Partly.** The skill *tells* the model to use their goals, paid-only preference, region, availability, and actual posts, and the assessment must cite creator evidence. But nothing *computes* a creator profile for matching. Follower count, engagement, niche, and top formats sit in other tables, and the model has to rediscover them each turn. |
+| Location? | `region` defaults to `"unknown"` and is set only when they state it. It isn't derived from their profile, posts, or timezone. |
+| Audience? | Never read. The TikTok audience endpoint exists in the client (26 credits) but isn't wired up. Demographics are correctly "unknown unless sourced", and they're never sourced. |
+| Their analytics? | Not in the opportunity flow unless the model happens to pull them. |
+| Brands they already use? | **Not detected**, even though her post watching (Gemini cards, transcripts, captions) sees the products on screen. It's the strongest natural-fit signal and it goes unused. |
+| Brands paying creators like them? | **Thrown away.** The lane sampler already flags paid-promotion posts from the accounts she watches (`scout/sampler.ts` `paidPromotion`, `sweep.ts` skips `is_ad`). That's a free, grounded list of brands paying creators in *their* lane, and it's used only to exclude those posts from breakouts. |
+| Rates? | "Never invent rates", which is correct, but there's no grounded rate guidance, and "what should I charge" is the first question every creator asks. |
+| One memory? | **No.** Partnership preferences live in `partnershipProfiles.data` (`v.any()`), separate from `personalRecords`. The onboarding spec says onboarding "must not create a separate profile that drifts away from the agent", and this one can drift. |
+
+**Verdict:** a safe, honest *outreach executor*, not yet an *opportunity finder*. She'll help well with a brand you bring her. She won't bring you brands, and when asked she searches the web generically instead of starting from what she already knows about you and your lane.
+
+### 8.2 Redesign: the opportunity engine
+
+**Signals, collected by code (mostly free byproducts of what already runs):**
+1. **Brands paying your lane:** paid-promotion posts from tracked and lane accounts: the brand (from the caption tag, @mention, or "paid partnership" label), the creator's size, the format, and the date. *Zero new credits.*
+2. **Brands you already use:** products and brands in their own captions, transcripts, and watched-post cards. Each hit keeps the post id, so a pitch can say "I already use it, here's the post".
+3. **Audience demand:** comments on their posts asking "where's that from / link?".
+4. **Brands actively buying creator-style ads:** the Meta Ad Library read (built for the old product; see the memory note on ad intel) for brands in their niche.
+5. **Official programs and marketplaces:** a curated, dated knowledge-base list (brand creator programs, TikTok's and Instagram's creator marketplaces, UGC platforms) with join requirements. Tavily fills specifics (program page, route, requirements) *after* a signal names the brand, not as the discovery step.
+6. **Local:** location, derived from their profile, bio, posts, and timezone, confirmed once. Used for local businesses and events.
+
+**The creator's media kit, computed and stored, not re-derived per turn:** lanes, followers per platform, median views and engagement (connected where available), top 5 posts with multiples, audience (TikTok audience read monthly for partner tier; IG demographics via Zernio if exposed), location, deal preferences, rate floor. Stored as `personalRecords`, so it's one memory. It's shown in the app and powers pitches. It also doubles as a **shareable media-kit page** (the one kind of public web page worth keeping).
+
+**Matching and cadence:** a weekly opportunity pass (partner tier only) scores signal-backed candidates with the existing assessment schema. At most **one opportunities text a week**, within the rails. Everything lands in the app's Opportunities tab. Asked-for searches still work as today, but they start from the media kit and the signals.
+
+**Rates:** a range from their own numbers against dated benchmarks in the knowledge base, always labelled as a range with its basis. It's never presented as the rate.
+
+**Merge memory:** partnership preferences become `personalRecords` kinds (deal types, paid-only, excluded brands, rate floor, region), and the partnership profile is *derived* from them.
+
+### 8.3 Sprint B6 — Opportunity engine (6–8 d, after B2)
+**Build:** §8.2.
+**Tests:**
+- the bench gains an opportunities section of ~25 cases (lane #ad → a correct brand; own-post product mention → a natural-fit pitch; paid-only → disqualifies gifting; excluded brand never surfaced; UGC fit judged on portfolio, not followers);
+- **zero invented facts in pitches** (hard gate; reuses the existing no-invention rules);
+- cross-tenant (one creator's signals never seed another's opportunities, though the fleet's shared lane reads may);
+- the allowance fails closed at 0 for non-partner tiers;
+- adversarial (a brand page or email carrying instructions).
+**Exit, live:** for 3 partner-tier pilots, the weekly pass surfaces at least 3 signal-backed opportunities each, and the operator rates ≥2 of 3 as "would pursue".
+
+## 9. Operator decisions
 
 1. **World-context vendor — DECIDED 2026-09-23: Tavily.** Price check (Sep 2026): Tavily $5–8 / 1k, Brave $5 / 1k, Exa $7 / 1k, Gemini 3 Google Search grounding $14 / 1k after 5,000 free a month. Expected volume is about 20–40 world-context queries per creator per month, only in diagnosis and seasonal planning. At 200 creators that's roughly 8k queries, about $40–65 a month for any vendor, so price doesn't decide it. Fit does:
    - **Tavily is already integrated** (partnership research: `partnerships/research.ts`, cost vendor, budget unit, smoke check, eval fakes). Choosing it means one key, one budget path, and one fake, with no new client.
