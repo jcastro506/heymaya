@@ -61,7 +61,7 @@ Three tracks run side by side where they don't depend on each other: **Brain** (
 | 9 | **B3**: world knowledge + **web search on every skill**; location in memory; critic grounding check | Brain | 6 | `TAVILY_API_KEY` on dev/staging |
 | 10 | **B4**: health, safety, business playbooks (crisis → resources + your alert) | Brain | 6 | Run the safety scenarios by text |
 | 10a | **S0**: scale the fleet jobs (below) | Platform | — | — |
-| 10b | **N1**: new ideas reach them in Messages (below) | Brain/app | 8, 10a | — |
+| 10b | **N1**: new ideas reach them in Messages (below) — ✅ built | Brain/app | 8, 10a | — |
 
 ### Phase 3 — Money and words (≈ 2 weeks)
 
@@ -109,15 +109,15 @@ N1 lives inside the hourly jobs, so first a look at all of them. **29 crons** in
 
 | # | Finding | Where | Breaks at | Fix |
 |---|---|---|---|---|
-| 1 | **Every hourly job reads the whole `creators` table** (`.collect()`), full documents with dossier, notes and affinities, to find who's due this hour. | 14 modules (`scout.dueForScout`, `cadence.dueNow`, `review.dueForReview`, `status`, `alerts`, `consolidate`, `formats`, `firstWeek`, `sweep`, `sounds`, `readback`, `taste.profile`, `eval.run`, `ops`) | When the table's bytes pass Convex's per-query read limit, **every** hourly job fails at once (measure the average creator doc to set the number; a 20 KB dossier puts it in the high hundreds). | A small `schedule` row per creator (paired, status, timezone, and the next due time for each touch), indexed by due time. "Who's due" becomes an indexed range read of only the due rows. Weigh against the schema's TS ceiling: one table, not one per touch. |
-| 2 | **The scout and the week plan run every due creator one after another inside ONE action.** A scout pass with model calls takes 20–60 s; actions stop at 10 minutes. | `scout.runAll`, `weekPlan.runAll` | Roughly 15 due creators in the same hour: the rest **silently never run**. | Fan out through the scheduler like cadence and review already do, one action per creator, with jitter across the hour to spread vendor load. |
+| 1 | **Every hourly job reads the whole `creators` table** (`.collect()`), full documents with dossier, notes and affinities, to find who's due this hour. | 14 modules (`scout.dueForScout`, `cadence.dueNow`, `review.dueForReview`, `status`, `alerts`, `consolidate`, `formats`, `firstWeek`, `sweep`, `sounds`, `readback`, `taste.profile`, `eval.run`, `ops`) | **Measured:** creator docs are 12.7 KB median, 17 KB p90 on dev, and grow with tenure (dossier, previous dossier, notes). Convex stops a query at **16 MiB** read, so every hourly job fails at once at roughly **1,000 creators**. An operator alert now fires daily from 40% of the limit. | A small `schedule` row per creator (paired, status, timezone, and the next due time for each touch), indexed by due time. "Who's due" becomes an indexed range read of only the due rows. Weigh against the schema's TS ceiling: one table, not one per touch. |
+| 2 | **The scout and the week plan run every due creator one after another inside ONE action.** A scout pass with model calls takes 20–60 s; actions stop at 10 minutes (Node) or 30 (Convex runtime). | `scout.runAll`, `weekPlan.runAll` | Roughly 15 due creators in the same hour: the rest **silently never run**. | Fan out through the scheduler like cadence and review already do, one action per creator, with jitter across the hour to spread vendor load. |
 | 3 | The week plan reads `creators.take(500)`. | `weekPlan.due` | Creator 501 never gets a week plan, silently. | Folded into #1. |
 | 4 | **The daily text cap is checked by each sender, then counted at send.** Two jobs in the same hour can both read "0 sent" and both send. | 7+ proactive senders; `messages.send` counts but doesn't refuse | Rare now; routine at scale (scout :05 and cadence :55 are the same hour for many creators). | The cap is enforced **inside** the send mutation, transactionally: one function decides send-or-hold (architecture principle 9). Callers get a named "held: daily cap" result, never a silent drop. |
 | 5 | ~~Never-shown ideas teach her "they dislike this"~~ **Checked and wrong:** `expireIgnored` already skips ideas that were never texted (it requires `sentAt`). The real problem there: it finds stale ideas with an **unindexed filter over every creator's ideas**, so its cost grows with the whole fleet's history. | `taste.events.expireIgnored` | Grows with total ideas ever written, not with today's work. | An index on `[status, createdAt]` (or per-creator through the schedule rows in #1). |
 
 **Tests:** a seeded simulation with 2,000 creators across 24 timezones (convex-test): every hourly job's "who's due" reads only due rows (a count assertion on documents read); a fan-out test (a 60 s fake scout × 40 due creators all complete); a cap race (two senders in one transaction window → exactly the cap sent, the other held with its reason).
 
-**Progress (2026-09-23):** #2 fixed (scout and week plan fan out, one action per creator, spread over 40 min); #4 fixed (the cap holds inside `send`; one `countsTowardCap` definition for the rails, the counter and the hold). #1, #3, #5 open.
+**Progress (2026-09-23):** #1 has an alarm (daily operator alert from 40% of the read limit), with the refactor due before ~500 creators; #2 fixed (scout and week plan fan out, one action per creator, spread over 40 min); #4 fixed (the cap holds inside `send`; one `countsTowardCap` definition for the rails, the counter and the hold). #1, #3, #5 open.
 **Exit, live:** on dev, 500 seeded (unpaired-safe) creators; one full day of crons runs with no job over 10% of its limit, and /ops shows per-job duration and rows read.
 
 ## N1 — New ideas reach them in Messages
@@ -147,6 +147,9 @@ N1 lives inside the hourly jobs, so first a look at all of them. **29 crons** in
 - cross-tenant: counts and sections never include another creator's ideas;
 - adversarial: idea text in the section is quoted data;
 - scale: the unseen count on a creator with 500 ideas is one indexed read.
+
+**Built (2026-09-23):** `core/unseen` (one definition, indexed per creator), the scout's exact "+N more" line, her reply-turn section with offered-once marking, `ui.markIdeasSeen` and the app's "new" chip. 9 tests incl. coherence, cross-tenant, and "no new sender".
+**What I found building it:** today **every idea Maya writes is texted** (the scout writes an idea only when it sends one). The app holds untexted ideas only when the new daily cap holds a scout text. So N1's machinery matters most once the app carries more ideas than she texts, which is the open product question: should the scout keep its strong runner-up as an app-only idea? That costs one more writer call per scout pass.
 
 **Exit, live:** on dev with both personas (TikTok-only and both-platform), three ideas land in a day. The scout text carries "+2 more" with the right count. A reply to an unrelated message mentions them once, in her voice. Swiping them in the app makes her stop mentioning them. The badge matches.
 
