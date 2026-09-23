@@ -63,15 +63,8 @@ async function getMessage(
 
 /** Record something the founder said. Inbound is never deduped — if they sent
  *  it twice, they meant it twice, and swallowing one would lose a directive. */
-export const recordInbound = internalMutation({
-  args: {
-    creatorId: v.id("creators"),
-    surface: SURFACE,
-    body: v.string(),
-    turnId: v.optional(v.string()),
-    ts: v.optional(v.number()),
-  },
-  handler: async (ctx, args): Promise<{ messageId: Id<"messages"> }> => {
+/** Every inbound door writes through here (Telegram, iMessage, the web/dev door, the share extension), so they can't disagree. */
+export async function writeInbound(ctx: MutationCtx, args: { creatorId: Id<"creators">; surface: Doc<"messages">["surface"]; body: string; turnId?: string; ts?: number }): Promise<{ messageId: Id<"messages"> }> {
     const messageId = await ctx.db.insert("messages", {
       creatorId: args.creatorId,
       direction: "in",
@@ -95,7 +88,17 @@ export const recordInbound = internalMutation({
       .collect()) as Doc<"messages">[];
     for (const row of open) await ctx.db.patch(row._id, { awaitingAnswer: false });
     return { messageId };
+}
+
+export const recordInbound = internalMutation({
+  args: {
+    creatorId: v.id("creators"),
+    surface: SURFACE,
+    body: v.string(),
+    turnId: v.optional(v.string()),
+    ts: v.optional(v.number()),
   },
+  handler: async (ctx, args): Promise<{ messageId: Id<"messages"> }> => await writeInbound(ctx, args),
 });
 
 /**

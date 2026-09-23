@@ -12,6 +12,8 @@ import { internalMutation, type MutationCtx, type QueryCtx } from "../_generated
 import type { Doc, Id } from "../_generated/dataModel";
 
 export type Awareness = "state" | "noticed" | "reacted";
+export const ASK_WINDOW_MS = 10 * 60_000;
+
 export const AWARENESS: Record<string, Awareness> = {
   "idea.save": "state",
   "idea.unsave": "state",
@@ -40,7 +42,8 @@ const WINDOW_MS = 14 * 86_400_000;
 /** Unseen noticed/reacted actions, newest last, for her context. Scoped to the creator. */
 export async function unseenActions(ctx: QueryCtx, creatorId: Id<"creators">, now: number): Promise<Doc<"userActions">[]> {
   const rows = (await ctx.db.query("userActions").withIndex("by_creator_at", (q) => q.eq("creatorId", creatorId).gte("at", now - WINDOW_MS)).order("desc").take(40)) as Doc<"userActions">[];
-  return rows.filter((r) => !r.seenByAgentAt && (AWARENESS[r.kind] ?? "state") !== "state").reverse();
+  // An Ask Maya tap they didn't follow with a message within 10 minutes expires silently (§7.4).
+  return rows.filter((r) => !r.seenByAgentAt && (AWARENESS[r.kind] ?? "state") !== "state" && !(r.kind === "ask" && now - r.at > ASK_WINDOW_MS)).reverse();
 }
 
 /** The context section. Collapses repeats of one kind ("passed 4 ideas: …"). Pure. */
