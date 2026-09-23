@@ -1,0 +1,101 @@
+{
+ "accounts": [
+  {
+   "connected": true,
+   "followers": 2000,
+   "followers30dAgo": 1800,
+   "followersAsOf": 1790105416819,
+   "handle": "kevin.castro9996",
+   "needsReconnect": false,
+   "platform": "tiktok",
+   "posts": 2
+  },
+  {
+   "connected": true,
+   "followers": null,
+   "followers30dAgo": null,
+   "followersAsOf": null,
+   "handle": "heymaya",
+   "needsReconnect": false,
+   "platform": "instagram",
+   "posts": 3
+  }
+ ],
+ "posts": [
+  {
+   "contentType": "video",
+   "createTime": 1790105416819,
+   "diagnosis": null,
+   "headline": {
+    "asOfHours": null,
+    "basis": "public",
+    "value": 5000,
+    "what": "views"
+   },
+   "id": "000000000000000000010007ownPosts",
+   "multiple": null,
+   "platform": "tiktok",
+   "url": "https://www.tiktok.com/@kevin.castro9996/video/999"
+  },
+  {
+   "contentType": "photo",
+   "createTime": 1789932616819,
+   "diagnosis": "unknown",
+   "headline": {
+    "asOfHours": 1,
+    "basis": "connected",
+    "value": 3,
+    "what": "reach"
+   },
+   "id": "000000000000000000010003ownPosts",
+   "multiple": null,
+   "platform": "instagram",
+   "url": "https://www.instagram.com/p/DbrZ8lIlxma/"
+  },
+  {
+   "contentType": "photo",
+   "createTime": 1789846216819,
+   "diagnosis": "unknown",
+   "headline": {
+    "asOfHours": 1,
+    "basis": "connected",
+    "value": 3,
+    "what": "reach"
+   },
+   "id": "000000000000000000010004ownPosts",
+   "multiple": null,
+   "platform": "instagram",
+   "url": "https://www.instagram.com/p/DbrZs7kjIvF/"
+  },
+  {
+   "contentType": "photo",
+   "createTime": 1789759816819,
+   "diagnosis": "unknown",
+   "headline": {
+    "asOfHours": 1,
+    "basis": "connected",
+    "value": 3,
+    "what": "reach"
+   },
+   "id": "000000000000000000010005ownPosts",
+   "multiple": null,
+   "platform": "instagram",
+   "url": "https://www.instagram.com/p/DbrZX_HDLhk/"
+  },
+  {
+   "contentType": "video",
+   "createTime": 1789673416819,
+   "diagnosis": "unknown",
+   "headline": {
+    "asOfHours": null,
+    "basis": "public",
+    "value": 107,
+    "what": "views"
+   },
+   "id": "000000000000000000010006ownPosts",
+   "multiple": null,
+   "platform": "tiktok",
+   "url": "https://www.tiktok.com/@kevin.castro9996/video/7670709537535544590?utm_campaign=tt4d_open_api&utm_source=aw4smjxfftapkprm"
+  }
+ ]
+}

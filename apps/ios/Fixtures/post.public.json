@@ -1,0 +1,31 @@
+{
+ "cannotKnow": [
+  "watch time, retention and the skip rate: TikTok does not expose them to anyone",
+  "reach and impressions: no account connected, so only the public count"
+ ],
+ "caption": "public only",
+ "connected": null,
+ "connectedAsOf": null,
+ "contentType": "video",
+ "createTime": 1790105416960,
+ "derived": null,
+ "headline": {
+  "asOfHours": null,
+  "basis": "public",
+  "value": 5000,
+  "what": "views"
+ },
+ "id": "000000000000000000010007ownPosts",
+ "multiple": null,
+ "platform": "tiktok",
+ "publicAsOf": 1790184616960,
+ "publicCounts": {
+  "comments": 12,
+  "likes": 300,
+  "saves": null,
+  "shares": 9,
+  "views": 5000
+ },
+ "read": null,
+ "url": "https://www.tiktok.com/@kevin.castro9996/video/999"
+}

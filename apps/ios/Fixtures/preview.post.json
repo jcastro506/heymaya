@@ -1,0 +1,34 @@
+{
+  "cannotKnow": [
+    "watch time, retention and the skip rate: TikTok does not expose them to anyone",
+    "reach and impressions: no account connected, so only the public count"
+  ],
+  "caption": "if you’re too scared to go, go anyways because you never know what can come out of it :) #travel #solotravel #traveltips #backpacking #alone ",
+  "connected": null,
+  "connectedAsOf": null,
+  "contentType": "video",
+  "createTime": 1788693844000,
+  "derived": null,
+  "headline": {
+    "asOfHours": null,
+    "basis": "public",
+    "value": 968,
+    "what": "views"
+  },
+  "id": "kh76eawbnmtrx7htm7hck4c0q98dz5dr",
+  "multiple": {
+    "basis": "views",
+    "value": 0.71
+  },
+  "platform": "tiktok",
+  "publicAsOf": 1788743911528,
+  "publicCounts": {
+    "comments": 5,
+    "likes": 147,
+    "saves": 7,
+    "shares": 5,
+    "views": 968
+  },
+  "read": null,
+  "url": "https://www.tiktok.com/@vanessaalopezz/video/7682381346961886477?_r=1&u_code=f0hhk8d5ec8b2i&preview_pb=0&sharer_language=en&_d=f0hhjdik57k9bl&share_item_id=7682381346961886477&source=h5_m"
+}

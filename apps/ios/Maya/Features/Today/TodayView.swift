@@ -177,17 +177,21 @@ struct PostsSection: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      HStack(alignment: .firstTextBaseline) {
-        SectionHeader(text: "Your posts")
-        Spacer()
-        if let first = posts.first {
-          Text("as of \(Format.ago(first.metricsAsOf))").font(MayaFont.caption).foregroundStyle(Palette.muted)
+      NavigationLink { AnalyticsView() } label: {
+        HStack(alignment: .firstTextBaseline) {
+          SectionHeader(text: "Your numbers")
+          Spacer()
+          Label("See all", systemImage: "chevron.right").labelStyle(TrailingIcon())
+            .font(MayaFont.callout.weight(.semibold)).foregroundStyle(Palette.purple)
         }
       }
+      .buttonStyle(.plain)
       if posts.isEmpty {
         EmptyNote(text: reading ? "She's reading your posts now." : "No posts read yet.")
       } else {
-        if let normal = Self.normal(posts) { chart(normal: normal) }
+        if let normal = Self.normal(posts) {
+          NavigationLink { AnalyticsView() } label: { chart(normal: normal) }.buttonStyle(.plain)
+        }
         ScrollView(.horizontal, showsIndicators: false) {
           HStack(spacing: 10) {
             ForEach(posts) { PostTile(post: $0) }
@@ -203,7 +207,7 @@ struct PostsSection: View {
   private func chart(normal: Double) -> some View {
     Chart {
       ForEach(Array(posts.reversed().enumerated()), id: \.offset) { i, p in
-        BarMark(x: .value("Post", i), y: .value("Views", p.views), width: .ratio(0.62))
+        BarMark(x: .value("Post", String(i)), y: .value("Views", p.views), width: .ratio(0.62))
           .foregroundStyle((p.multiple ?? 0) >= 1 ? Palette.purple : Palette.purple.opacity(0.35))
           .clipShape(RoundedRectangle(cornerRadius: 4))
       }
@@ -235,10 +239,16 @@ struct PostsSection: View {
 struct PostTile: View {
   let post: OwnPost
   var body: some View {
-    Link(destination: URL(string: post.url) ?? URL(string: "https://www.tiktok.com")!) {
+    NavigationLink {
+      PostNumbersView(post: AnalyticsPost(
+        id: post.id, url: post.url, platform: post.platform, createTime: post.createTime, contentType: "video",
+        headline: Headline(value: post.views, what: "views", basis: "public", asOfHours: nil),
+        multiple: post.multiple.map { Multiple(value: $0, basis: "views") }, diagnosis: nil))
+    } label: {
       PostCover(url: post.url, cornerRadius: 14) { _ in
         ZStack(alignment: .bottomLeading) {
           CoverScrim()
+          PlatformMark(platform: post.platform).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing).padding(8)
           VStack(alignment: .leading, spacing: 4) {
             if let m = post.multiple {
               Text(Format.multiple(m))
@@ -255,6 +265,7 @@ struct PostTile: View {
       }
       .frame(width: 124, height: 220)
     }
+    .buttonStyle(PressableStyle())
     .accessibilityElement(children: .ignore)
     .accessibilityLabel("Post from \(Format.day(post.createTime)), \(Format.count(post.views)) views\(post.multiple.map { ", \(Format.multiple($0)) your normal" } ?? "")")
   }

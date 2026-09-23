@@ -7,6 +7,7 @@
 import { v } from "convex/values";
 import { entitlementsFor, TIERS } from "./billing/tiers";
 import { partnershipsOpen } from "./partnerships/store";
+import { connectedFrom, DIAGNOSIS_WORDS, numbersFor } from "./connections/numbers";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
@@ -327,5 +328,91 @@ export const opportunities = query({
         };
       }),
     };
+  },
+});
+
+// ------------------------------------------------------------------ analytics (app)
+
+type Fields = Record<string, number | null>;
+
+/** The numbers a post actually has, per basis, and nothing it doesn't. Pure. */
+function postNumbersView(p: Doc<"ownPosts">, siblings: Doc<"ownPosts">[], now: number) {
+  const n = numbersFor(p, siblings, now);
+  const c = connectedFrom(p);
+  const publicCounts: Fields = { views: p.metrics.views, likes: p.metrics.likes, comments: p.metrics.comments, shares: p.metrics.shares, saves: p.metrics.saves ?? null };
+  const connected: Fields | null = c
+    ? { views: c.views, likes: c.likes, comments: c.comments, shares: c.shares, saves: c.saves, reach: c.reach, impressions: c.impressions, follows: c.follows, avgWatchMs: c.avgWatchMs, skipRatePct: c.skipRatePct, durationSec: c.durationSec }
+    : null;
+  return {
+    id: p._id,
+    url: p.url,
+    platform: p.platform,
+    createTime: p.createTime,
+    contentType: p.contentType,
+    caption: p.caption.slice(0, 300),
+    publicCounts,
+    publicAsOf: p.metricsAsOf,
+    connected,
+    connectedAsOf: c?.asOf ?? null,
+    headline: n.headline,
+    multiple: n.multiple,
+    derived: n.derived ? { distribution: n.derived.distribution, reachMultiple: n.derived.reachMultiple, engagementPerReach: n.derived.engagementPerReach, retention: n.derived.retention, diagnosis: n.derived.diagnosis, basis: n.derived.basis } : null,
+    read: n.derived ? DIAGNOSIS_WORDS[n.derived.diagnosis] : null,
+    cannotKnow: n.cannotKnow,
+  };
+}
+
+/**
+ * Analytics overview for the app: each platform's account (connected or public-only,
+ * followers now and ~30 days ago from Zernio's daily snapshots) and the recent posts with
+ * their honest headline number. Only what Zernio / the public counts actually give; every
+ * number keeps its basis. Scoped to the signed-in creator.
+ */
+export const analytics = query({
+  args: {},
+  handler: async (ctx) => {
+    const c = await me(ctx);
+    if (!c) return null;
+    const now = Date.now();
+    const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").take(40)) as Doc<"ownPosts">[];
+    const conn = (await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", c._id).eq("provider", "zernio")).first()) as Doc<"connections"> | null;
+    const snaps = (await ctx.db.query("followerSnapshots").withIndex("by_creator_day", (q) => q.eq("creatorId", c._id)).order("desc").take(400)) as Doc<"followerSnapshots">[];
+    const platforms = (["tiktok", "instagram"] as const).filter((pl) => c.handles[pl] || posts.some((p) => p.platform === pl));
+    const monthAgo = now - 30 * 86_400_000;
+    return {
+      accounts: platforms.map((pl) => {
+        const acct = (conn?.zernioAccounts ?? []).find((a) => a.platform === pl);
+        const mine = snaps.filter((s) => s.platform === pl).sort((x, y) => y.at - x.at);
+        const latest = mine[0] ?? null;
+        const past = mine.find((s) => s.at <= monthAgo) ?? null;
+        return {
+          platform: pl,
+          handle: c.handles[pl] ?? acct?.username ?? null,
+          connected: Boolean(acct && !acct.needsReconnect && acct.canFetchAnalytics),
+          needsReconnect: Boolean(acct?.needsReconnect),
+          followers: latest?.followers ?? null,
+          followersAsOf: latest?.at ?? null,
+          followers30dAgo: past?.followers ?? null,
+          posts: posts.filter((p) => p.platform === pl).length,
+        };
+      }),
+      posts: posts.slice(0, 30).map((p) => {
+        const v = postNumbersView(p, posts, now);
+        return { id: v.id, url: v.url, platform: v.platform, createTime: v.createTime, contentType: v.contentType, headline: v.headline, multiple: v.multiple, diagnosis: v.derived?.diagnosis ?? null };
+      }),
+    };
+  },
+});
+
+/** One post's full numbers for the app, with its basis, its age, her read, and what the platform hides. */
+export const post = query({
+  args: { id: v.id("ownPosts") },
+  handler: async (ctx, a) => {
+    const c = await me(ctx);
+    if (!c) return null;
+    const p = (await ctx.db.get(a.id)) as Doc<"ownPosts"> | null;
+    if (!p || p.creatorId !== c._id) return null; // another creator's post is not found, not forbidden
+    const siblings = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").take(40)) as Doc<"ownPosts">[];
+    return postNumbersView(p, siblings, Date.now());
   },
 });

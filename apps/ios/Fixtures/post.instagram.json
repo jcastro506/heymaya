@@ -1,0 +1,49 @@
+{
+ "cannotKnow": [
+  "retention: it is only reported on Reels with a known duration"
+ ],
+ "caption": "third pipeline test, this one should get its link back",
+ "connected": {
+  "avgWatchMs": null,
+  "comments": 0,
+  "durationSec": null,
+  "follows": 0,
+  "impressions": 3,
+  "likes": 0,
+  "reach": 3,
+  "saves": 0,
+  "shares": 0,
+  "skipRatePct": null,
+  "views": 3
+ },
+ "connectedAsOf": 1790188216955,
+ "contentType": "photo",
+ "createTime": 1789932616955,
+ "derived": {
+  "basis": "views",
+  "diagnosis": "unknown",
+  "distribution": 1,
+  "engagementPerReach": 0,
+  "reachMultiple": null,
+  "retention": null
+ },
+ "headline": {
+  "asOfHours": 1,
+  "basis": "connected",
+  "value": 3,
+  "what": "reach"
+ },
+ "id": "000000000000000000010003ownPosts",
+ "multiple": null,
+ "platform": "instagram",
+ "publicAsOf": 1790188216955,
+ "publicCounts": {
+  "comments": 0,
+  "likes": 0,
+  "saves": 0,
+  "shares": 0,
+  "views": 3
+ },
+ "read": "not enough connected data to say why; only the public count.",
+ "url": "https://www.instagram.com/p/DbrZ8lIlxma/"
+}

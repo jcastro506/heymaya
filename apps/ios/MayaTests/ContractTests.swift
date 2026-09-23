@@ -49,6 +49,32 @@ final class ContractTests: XCTestCase {
     XCTAssertGreaterThanOrEqual(o.teaser.paidPostsInLane, o.teaser.accountsPaid)
   }
 
+  func testAnalyticsConnectedBothPlatforms() throws {
+    let a = try load("analytics", as: Analytics.self)
+    XCTAssertEqual(Set(a.accounts.map(\.platform)), ["tiktok", "instagram"])
+    XCTAssertTrue(a.posts.allSatisfy { ["connected", "public"].contains($0.headline.basis) })
+  }
+
+  func testTikTokPostNeverShowsWatchTime() throws {
+    let n = try load("post.tiktok", as: PostNumbers.self)
+    let labels = MetricTile.tiles(for: n).map(\.label)
+    XCTAssertFalse(labels.contains("watched on average"))
+    XCTAssertFalse(labels.contains("left in the first 3s"))
+    XCTAssertFalse(n.cannotKnow.isEmpty)
+  }
+
+  func testInstagramPostShowsConnectedReach() throws {
+    let n = try load("post.instagram", as: PostNumbers.self)
+    XCTAssertEqual(n.headline.basis, "connected")
+    XCTAssertTrue(MetricTile.tiles(for: n).map(\.label).contains("people reached"))
+  }
+
+  func testPublicOnlyPostShowsOnlyPublicCounts() throws {
+    let n = try load("post.public", as: PostNumbers.self)
+    XCTAssertNil(n.connected)
+    XCTAssertFalse(MetricTile.tiles(for: n).map(\.label).contains("people reached"))
+  }
+
   func testNullMeansNoAccount() throws {
     // Every ui query returns null when the signed-in identity has no creator row.
     let t = try JSONDecoder().decode(Today?.self, from: Data("null".utf8))

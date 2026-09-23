@@ -248,3 +248,73 @@ struct Opportunity: Decodable, Equatable, Identifiable {
   let deadline: Double?
   let updatedAt: Double
 }
+
+struct Analytics: Decodable, Equatable {
+  let accounts: [AnalyticsAccount]
+  let posts: [AnalyticsPost]
+}
+
+struct AnalyticsAccount: Decodable, Equatable, Identifiable {
+  var id: String { platform }
+  let platform: String
+  let handle: String?
+  let connected: Bool
+  let needsReconnect: Bool
+  let followers: Double?
+  let followersAsOf: Double?
+  let followers30dAgo: Double?
+  let posts: Double
+}
+
+struct Headline: Decodable, Equatable {
+  let value: Double
+  let what: String   // "reach" | "views"
+  let basis: String  // "connected" | "public"
+  let asOfHours: Double?
+}
+
+struct Multiple: Decodable, Equatable {
+  let value: Double
+  let basis: String  // "reach" | "views"
+}
+
+struct AnalyticsPost: Decodable, Equatable, Identifiable, Hashable {
+  let id: String
+  let url: String
+  let platform: String
+  let createTime: Double
+  let contentType: String
+  let headline: Headline
+  let multiple: Multiple?
+  let diagnosis: String?
+
+  func hash(into hasher: inout Hasher) { hasher.combine(id) }
+  static func == (a: AnalyticsPost, b: AnalyticsPost) -> Bool { a.id == b.id && a.headline == b.headline }
+}
+
+struct PostNumbers: Decodable, Equatable {
+  let id: String
+  let url: String
+  let platform: String
+  let createTime: Double
+  let contentType: String
+  let caption: String
+  let publicCounts: [String: Double?]
+  let publicAsOf: Double
+  let connected: [String: Double?]?
+  let connectedAsOf: Double?
+  let headline: Headline
+  let multiple: Multiple?
+  let derived: Derived?
+  let read: String?
+  let cannotKnow: [String]
+
+  struct Derived: Decodable, Equatable {
+    let distribution: Double?
+    let reachMultiple: Double?
+    let engagementPerReach: Double?
+    let retention: Double?
+    let diagnosis: String
+    let basis: String
+  }
+}
