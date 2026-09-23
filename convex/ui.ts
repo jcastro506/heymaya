@@ -162,13 +162,38 @@ export const revokeRule = mutation({
   },
 });
 
+/**
+ * "Not for me" from the app. Same effect as saying it in chat: the idea is passed AND her
+ * taste learns from it (the old web path only flipped the status; audit gap 1).
+ */
 export const passIdea = mutation({
   args: { id: v.id("ideas") },
   handler: async (ctx, a): Promise<{ ok: boolean }> => {
     const c = await me(ctx);
     const row = (await ctx.db.get(a.id)) as Doc<"ideas"> | null;
     if (!c || !row || row.creatorId !== c._id) return { ok: false };
+    if (row.status === "passed") return { ok: true };
     await ctx.db.patch(a.id, { status: "passed" });
+    await ctx.scheduler.runAfter(0, internal.taste.events.record, { creatorId: c._id, kind: "notme", ideaId: a.id });
+    return { ok: true };
+  },
+});
+
+/** Save (or unsave) from the app: into the swipe file and her searchable memory, like "save" in chat. */
+export const saveIdea = mutation({
+  args: { id: v.id("ideas"), saved: v.boolean() },
+  handler: async (ctx, a): Promise<{ ok: boolean }> => {
+    const c = await me(ctx);
+    const row = (await ctx.db.get(a.id)) as Doc<"ideas"> | null;
+    if (!c || !row || row.creatorId !== c._id) return { ok: false };
+    if (!a.saved) {
+      await ctx.db.patch(a.id, { savedAt: undefined });
+      return { ok: true };
+    }
+    if (row.savedAt) return { ok: true };
+    await ctx.db.patch(a.id, { savedAt: Date.now() });
+    await ctx.scheduler.runAfter(0, internal.taste.events.record, { creatorId: c._id, kind: "save", ideaId: a.id });
+    await ctx.scheduler.runAfter(0, internal.agent.memory.index, { creatorId: c._id, kind: "swipe", refId: String(a.id), text: `${(row.version as { hook?: string } | undefined)?.hook ?? ""}\n${row.messageText}` });
     return { ok: true };
   },
 });
