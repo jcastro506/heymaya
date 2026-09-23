@@ -117,6 +117,22 @@ Query parameters don't survive an install, and since ATT there is no clean deter
 
 The loss is measured in the M3 exit, not guessed.
 
+### 5.5 Maya's opening texts (after START)
+
+The user texts first (screen 6), which is also the consent record. Maya then opens with a few short texts, a few seconds apart, like a person typing:
+
+1. **hello**: "hey, it's maya"
+2. **contact card**: a `.vcf` with her name and photo, plus "save me so you know it's me". *Prerequisite (M3):* a live test that Claw delivers the attachment as a tappable card on a real iPhone (iMessage) and a real Android (RCS/SMS). The Claw client's media parts are undocumented (`integrations/claw/client.ts:34`). Also ask Claw/Linq whether the line supports iMessage "Share Name and Photo". **Fallback:** the in-app new-contact sheet before START.
+3. **what she does**, assembled from **their actual state**. Code decides which clauses are true, and the model phrases them: the number of accounts she watches; the calendar clause only if one is connected; partnerships only if the tier includes them; the Sunday review. Example: "here's what I do: every day I watch the 6 accounts you picked and what's rising in your lane. when something's worth making, I text you the idea with the proof and how to shoot it. I'll fit filming around your calendar, and every sunday I tell you what worked and why."
+4. **how to use her**: "we'll talk in here, so whenever you need me just text. send me a post you like, ask what I think of a draft, tell me to move thursday — anything." (Any post, from any platform, not just TikTok.)
+5. **the first grounded observation**, from the first read, ending with one question that opens the goal conversation. If the read isn't finished: "reading your posts now, back with what I see shortly", then the observation when it lands.
+
+Rules: at most five bubbles; plain language, no vendor names or "AI"; every capability claim matches a connected capability; text 5 is mandatory.
+
+**Unpaired users:** a paid user who never sends START gets a pinned "Text Maya to finish" on Today, one system push the next day, then silence. /ops counts paid-but-unpaired users.
+
+**Tests (M3):** eval checks that (a) every capability clause maps to a connected capability or tier entitlement, (b) a grounded observation is present, (c) there are ≤5 bubbles and no vendor names. The state-driven template gets a unit test per connection combination.
+
 ## 6. Information architecture
 
 Five tabs. They consolidate the six web tabs and the six views in the old §6.
@@ -340,6 +356,8 @@ Each exit criterion is demonstrated on **TestFlight against staging**, not in a 
 **Build:** store listing, screenshots, review notes and demo account, privacy label, 5.1.2(i) consent screen, export and delete in-app; the universal-link fallback page; retired routes redirected; `/app/*` and `/start` UI code removed; docs and appendix updated.
 **Tests:** a deletion end-to-end test through the app (all nine steps verified in rows); a fallback page test for every object kind signed out and on desktop; a TODO grep; a full Maestro suite on the release build.
 **Exit, live:** the app is approved; a 5-creator TestFlight → App Store cohort completes onboarding with no operator help and uses the app for 7 days; the old web routes serve only fallbacks.
+
+**Order with the brain sprints:** `CREATOR_MAYA_EXPERTISE_AUDIT.md` B0–B5 run before M2. M0 and M1 run in parallel with them.
 
 **Total:** roughly 8–10 weeks of build. Android follows M7: the same code, plus Play review, the Android share target, and Glance widgets (about 2 weeks).
 
