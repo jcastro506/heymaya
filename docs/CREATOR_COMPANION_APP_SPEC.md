@@ -392,6 +392,11 @@ Each exit criterion is demonstrated on **TestFlight against staging**, not in a 
 **Tests:** a component test per kit component (Jest + React Native Testing Library) for states and accessibility props; gallery visual baselines; contrast validator on the tokens; the largest Dynamic Type renders without truncating primary actions.
 **Exit, live:** the operator walks every screen mock on their own phone and signs off the look. **No data wiring starts before this sign-off.**
 
+### M1 additions (from the 2026-09-23 design review)
+- **Post covers for both platforms, stored server-side.** Covers come from TikTok's oEmbed today. Instagram's needs a Meta app token, so Instagram creators see fallback cards, which is unacceptable for a two-platform product. Store `thumbnailUrl` (TikTok and IG) and avatars into Convex storage when her readers already fetch them (the parsers already extract them; the schema drops them). The app then reads one field for both platforms. Also gives real avatars for the accounts she watches.
+- **Moving video in the idea hero (upgrade):** the inspiring post plays muted and looping behind the hook, via TikTok's official embed player (autoplay, muted, loop, no controls) and Instagram's post embed, with the cover shown until it's ready. Detail screen only, never in lists.
+- **Deals ladder must not promise B6 before B6** (D2 honesty gate).
+
 ### M2 — Read the world (5–7 d)
 **Build:** five tabs over the existing queries; object routes; "this changed" states; empty states; skeletons; legacy `/app/*` link mapping; post, account, and evidence detail.
 **Tests:** Maestro flows for every tab with a seeded day-one creator and a 30-day creator; cross-tenant route test (another creator's `/o/idea/<id>` → not-found); a replay of every Maya link sent on staging in the last 30 days, all of which must resolve; performance budgets measured on device.
