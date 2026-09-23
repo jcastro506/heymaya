@@ -1,5 +1,7 @@
 # Maya expertise audit — is she actually a social media expert?
 
+> **Build order lives in `docs/CREATOR_MASTER_PLAN.md`.** This doc defines what each sprint contains.
+
 **Date:** 2026-09-23 · **Branch read:** `creator` @ `3519c9b`
 **Scope:** every skill, tool, memory path, and eval, judged against the situations creators actually face.
 **Method, and its limit:** this is a **code audit**. It says what she *can* and *cannot* do given her tools, data, and instructions. It does not yet say how well she does the things she can do. That takes a behavioural benchmark against real cases, which is Sprint B0 below. Nothing in this document is "verified" until B0 has run.

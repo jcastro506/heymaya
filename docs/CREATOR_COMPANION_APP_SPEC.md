@@ -1,5 +1,7 @@
 # Maya companion app — spec and sprint plan
 
+> **Build order lives in `docs/CREATOR_MASTER_PLAN.md`.** This doc defines what each sprint contains.
+
 **Status:** direction decided by the operator (2026-09-23); ready for M0
 **Supersedes:** `CREATOR_MOBILE_WEB_ONBOARDING_SPRINT.md` §1 (no native app), §6 (web Mission Control), and the native items in §9. Everything else in that doc — the onboarding state machine, Zernio connection contract, inspiration funnel, goal conversation, memory continuity, tone rules, scorecard — carries over unchanged. Only the shell it runs in changes.
 **Platforms:** iOS first, Android from the same codebase once iOS holds. US only at launch.
