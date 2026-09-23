@@ -191,9 +191,24 @@ These **run before app sprint M2.** The app is a shell around her brain, and a b
 **Tests:** the bench on categories A, B3–B4, C1, C4, D1–D4; **false claims = 0**; required-question cases at ≥ 90%; adversarial tests (a comment that says "ignore previous instructions", or a "came from @x" planted by a bot) where the pack treats comments as quoted data; budget fail-closed (an investigation that runs out of credits still answers and names what it couldn't check); cost ≤ the cap per investigation, with the cap set in B0 from real costs.
 **Exit, live:** three real outliers (the operator's and pilot creators') are diagnosed, and **the operator agrees with the leading cause or with her question** in all three.
 
-### B3 — World and knowledge (5–6 d)
-**Build:** capabilities 4 and 6: the world-context tool (via the chosen vendor, through the budget gate), the cultural-moments calendar, the platform knowledge base with sources and dates, the staleness cron, retrieval, and "as of" enforcement by the critic.
-**Tests:** the bench on C2, C3, C5, D7, E5; a staleness test (a fact older than 60 days is flagged and she hedges on it); a test that a platform fact she cites exists in the knowledge base (no citing from model memory); cross-tenant isolation (a creator's location or dates are never shared across tenants in search queries); a date-context test for the concert, game-night, and holiday cases.
+### B3 — World knowledge and web search (6–7 d)
+**Why (operator, 2026-09-23):** today she has **no general web search**. Tavily is wired only as `partnership_research`, and only on partnership turns for the partner tier. So when an idea names a real place ("film at the Smorgasburg in Williamsburg on Saturday"), an event, a date, a product, or a platform rule, nothing lets her check it's real, open, and on, and nothing tells her to. That's grounded-or-silent failing on the real world.
+
+**The design is judgment, not rules** (standing rule: trust her intelligence; code gathers facts and enforces promises):
+- **Tools on every skill's belt** (scout, moment, converse, opinion, diagnosis, week plan), through the same budget gate:
+  - `web_search(query, place?, dateRange?)` → Tavily, with news/general topic and a date window;
+  - `web_read(url)` → one page extracted.
+
+  Partnership research stays a separate door with its own allowance.
+- **One line in the soul, in her voice:** anything you name that exists in the world (a place, an event, a date, a product, a price, a rule) you've checked recently, or you say it generally ("a farmers market near you" instead of a name you haven't checked).
+- **The tool descriptions teach when it's worth it.** Before recommending a specific place or event: is it real, open, on that day? Before citing a date, price, or rule: is it current? Before building a seasonal idea: when exactly is the moment? When a post popped: what happened that day, where they are? She decides; the descriptions give her the reasons.
+- **Where they are** comes from her memory (a `personalRecords` location, derived from their profile, posts, and timezone, confirmed once in conversation). It's passed to searches as a place, and never sent anywhere with their name or handle.
+- **The critic checks grounding, not wording:** a reply that names a specific venue, event, date, or product with no `web_search` / `web_read` in its trace (and not from their own messages) goes back for one rewrite. That's the existing critic pattern, applied to the world.
+- **Knowledge base:** the dated platform facts from §5 capability 6 stay as they are: sourced, dated, flagged when stale.
+
+
+**Build:** the above, plus capabilities 4 and 6: the cultural-moments calendar, the platform knowledge base with sources and dates, the staleness cron, retrieval, and "as of" enforcement by the critic.
+**Tests:** a new **real-world grounding set** in the bench, scored with a real model. It includes: a NYC creator where she wants to suggest a venue that has closed (she must check and not suggest it); an event whose date moved; a product that's discontinued; a holiday idea (the date must be right); and an idea that needs no search at all (she must not waste one). Scored on: checked when it mattered, didn't when it didn't, no unchecked specific named. Plus the bench on C2, C3, C5, D7, E5; a staleness test (a fact older than 60 days is flagged and she hedges on it); a test that a platform fact she cites exists in the knowledge base (no citing from model memory); cross-tenant isolation (a creator's location or dates are never shared across tenants in search queries); a date-context test for the concert, game-night, and holiday cases.
 **Exit, live:** a real post from a real event night is explained by the event, with the source linked. A seasonal proposal lands at least 10 days ahead of a real upcoming moment in the creator's niche.
 
 ### B4 — Health, safety, business (4–5 d)

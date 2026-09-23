@@ -397,6 +397,12 @@ Each exit criterion is demonstrated on **TestFlight against staging**, not in a 
 - **Moving video in the idea hero (upgrade):** the inspiring post plays muted and looping behind the hook, via TikTok's official embed player (autoplay, muted, loop, no controls) and Instagram's post embed, with the cover shown until it's ready. Detail screen only, never in lists.
 - **Deals ladder must not promise B6 before B6** (D2 honesty gate).
 
+### Post freshness (how Today and Your numbers stay current)
+The app never polls: it subscribes, so any row change reaches the screen in about a second. How fresh the rows are:
+- **Connected accounts (Zernio):** the hourly `zernio delta` cron inserts new posts and updates their numbers (`connections/sync.upsert`), so new posts appear within about an hour.
+- **Public-only accounts:** the daily `readback own posts` cron (01:15 UTC) scrapes the public feed, so new posts appear up to about 24 hours late. B1 moves recent-post detection to hourly for everyone.
+- Every numbers view shows "Updated … ago", so staleness is never hidden. Paused, test, and unpaired creators aren't read at all, and the label shows it.
+
 ### M2 — Read the world (5–7 d)
 **Build:** five tabs over the existing queries; object routes; "this changed" states; empty states; skeletons; legacy `/app/*` link mapping; post, account, and evidence detail.
 **Tests:** Maestro flows for every tab with a seeded day-one creator and a 30-day creator; cross-tenant route test (another creator's `/o/idea/<id>` → not-found); a replay of every Maya link sent on staging in the last 30 days, all of which must resolve; performance budgets measured on device.
