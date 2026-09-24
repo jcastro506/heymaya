@@ -38,7 +38,11 @@ export const reusesVoiceExample = (text: string): boolean => /\byep[,.] software
 export const assertsUnprovenCause = (text: string): boolean => /\b(worked|performed|took off) because\b|\bwhich is why\b.{0,100}\b(views|reach|followers)\b|\bthat'?s (really )?how people (find|follow)\b|\bwhat actually pulls? people in\b|\bbrands will notice\b|\bwill (do well|perform|take off)\b/i.test(text);
 const MUTATING_TOOLS = new Set(["block_move", "block_drop", "block_add", "idea_update", "idea_status", "idea_plan", "week_replan", "partnership_draft", "partnership_update", "partnership_send"]);
 export function claimsUnsupportedAction(text: string, trace: Array<{ tool?: string; ok?: boolean }>): boolean {
-  const claims = /\b(done|moved|booked|scheduled|added|updated|removed|dropped|locked in)\b/i.test(text);
+  // Only statements can claim an action: a question ("have you done a deal before?") can't, and
+  // neither can something THEY did ("you've done the hard part"). Bench o1: "have you done paid
+  // brand work before?" failed a correct reply and the forced rewrite threw away its best leads.
+  const claims = text.split(/(?<=[.!?\n])\s+/).filter((s) => !s.trim().endsWith("?"))
+    .some((s) => /\b(done|moved|booked|scheduled|added|updated|removed|dropped|locked in)\b/i.test(s.replace(/\b(you|you've|you have|you'd|they|they've)\s+(already\s+|just\s+)?(done|moved|booked|scheduled|added|updated|removed|dropped)\b/gi, "")));
   return claims && !trace.some((turn) => turn.ok && turn.tool && MUTATING_TOOLS.has(turn.tool));
 }
 

@@ -315,10 +315,10 @@ async function runToolInner(ctx: ActionCtx, creatorId: Id<"creators">, call: { n
       const kit = await ctx.runQuery(internal.partnerships.kit.mediaKit, { creatorId });
       record(true, 0);
       const paying = brands.length ? brands.map((b) => `@${b.handle} (${b.platform}) · paid ${b.creators.length} creator${b.creators.length === 1 ? "" : "s"} in their lane (${b.creators.map((c) => `@${c}`).join(", ")}) · ${b.posts} post${b.posts === 1 ? "" : "s"}`).join("\n") : "none seen in the last 30 days";
-      const tagged = kit?.taggedByThem.length ? kit.taggedByThem.map((t) => `@${t.handle} (${t.posts} of their posts, e.g. ${t.example})`).join("\n") : "none";
+      const tagged = kit?.taggedByThem.length ? kit.taggedByThem.map((t) => `@${t.handle} (${t.posts} of their posts, e.g. ${t.example.split("?")[0]})`).join("\n") : "none";
       // Choreography rides in the response: with no signal at all, the next step is theirs to give or a search, never a generic list.
       const next = !brands.length && !kit?.taggedByThem.length ? "\nnext: no brand signal yet. Ask what they already use and love on camera, or web_search brands running creator programs in their lane; don't offer generic categories as if they were leads." : "";
-      return cap(`paying creators in their lane:\n${paying}\ntagged in their own posts (a brand they use, or a friend: judge which):\n${tagged}${next}`);
+      return cap(`paying creators in their lane:\n${paying}\ntagged in their own posts (a brand they use, or a friend: judge which; a brand here is the strongest lead, lead with it):\n${tagged}${next}`);
     }
     if (call.name === "platform_fact") {
       const facts = factsFor(String(call.args.topic ?? ""), call.args.platform === "tiktok" || call.args.platform === "instagram" ? call.args.platform : "both");
