@@ -14,7 +14,7 @@ import { matchOwnPost, normalReach } from "../sync";
 import type { Connected } from "../analytics";
 
 const NOW = Date.UTC(2026, 8, 5, 12, 0);
-const conn = (over: Partial<Connected> = {}): Connected => ({ platform: "tiktok", postId: "7670709537535544590", url: "https://www.tiktok.com/@kevin.castro9996/video/7670709537535544590?utm_campaign=x", publishedAt: NOW - 86_400_000, asOf: NOW, syncStatus: "synced", views: 107, likes: 1, comments: 0, shares: 1, saves: 0, impressions: null, reach: null, clicks: 0, follows: null, avgWatchMs: null, totalWatchMs: null, skipRatePct: null, durationSec: null, ...over });
+const conn = (over: Partial<Connected> = {}): Connected => ({ platform: "tiktok", postId: "7670709537535544590", url: "https://www.tiktok.com/@kevin.castro9996/video/7670709537535544590?utm_campaign=x", publishedAt: NOW - 86_400_000, asOf: NOW, syncStatus: "synced", views: 107, likes: 1, comments: 0, shares: 1, saves: 0, impressions: null, reach: null, clicks: 0, follows: null, avgWatchMs: null, totalWatchMs: null, skipRatePct: null, durationSec: null, completionRate: null, profileViews: null, viewSources: null, viewerTypes: null, viewerCountries: null, ...over });
 
 describe("the join", () => {
   const rows = [

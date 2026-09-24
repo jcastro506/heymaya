@@ -84,6 +84,9 @@ struct PostNumbersView: View {
       }
     }
 
+    if let sources = n.viewSources, !sources.isEmpty { ShareBars(title: "Where the views came from", shares: sources) }
+    if let types = n.viewerTypes, !types.isEmpty { ShareBars(title: "Who watched", shares: types) }
+
     VStack(alignment: .leading, spacing: 12) {
       SectionHeader(text: "Her read")
       HStack(alignment: .top, spacing: 12) {
@@ -154,6 +157,8 @@ struct MetricTile: Identifiable {
     add("follows", "new followers", v("follows").map(Format.count))
     add("retention", "watched on average", n.derived?.retention.map { "\(Int(($0 * 100).rounded()))%" })
     add("skip", "left in the first 3s", v("skipRatePct").map { "\(Int($0.rounded()))%" })
+    add("completion", "watched to the end", v("completionRate").map { "\(Int(($0 * 100).rounded()))%" })
+    add("profileViews", "profile visits from it", v("profileViews").map(Format.count))
     add("perPerson", "views per person", n.derived?.distribution.map { $0.formatted(.number.precision(.fractionLength(1))) })
     add("engaged", "engaged per person reached", n.derived?.engagementPerReach.map { "\(($0 * 100).formatted(.number.precision(.fractionLength(1))))%" })
     return out
@@ -169,6 +174,34 @@ enum ShapeWords {
     case "slow_burn": "A big share of its views came after the first week, likely search or a resurfacing."
     case "steady": "Its views came in steadily."
     default: nil // not enough readings yet: say nothing rather than guess
+    }
+  }
+}
+
+
+/// A1: a labelled share list (fractions 0-1) as simple bars. Only what TikTok reported.
+struct ShareBars: View {
+  let title: String
+  let shares: [PostNumbers.Share]
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      SectionHeader(text: title)
+      VStack(spacing: 8) {
+        ForEach(shares, id: \.self) { s in
+          HStack(spacing: 10) {
+            Text(s.label).font(MayaFont.callout).foregroundStyle(Palette.ink).frame(width: 130, alignment: .leading)
+            GeometryReader { g in
+              Capsule().fill(Palette.purple.opacity(0.85)).frame(width: max(4, g.size.width * s.share), height: 10)
+                .frame(maxHeight: .infinity, alignment: .center)
+            }.frame(height: 18)
+            Text("\(Int((s.share * 100).rounded()))%").font(.callout.weight(.semibold).monospacedDigit()).foregroundStyle(Palette.ink).frame(width: 44, alignment: .trailing)
+          }
+          .accessibilityElement(children: .combine)
+        }
+      }
+      .padding(14)
+      .background(Palette.panel, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+      .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Palette.line))
     }
   }
 }

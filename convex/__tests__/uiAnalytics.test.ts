@@ -77,7 +77,7 @@ describe("analytics for the app", () => {
     const r = await t.withIdentity({ subject: "user_a" }).query(api.ui.post, { id: tiktok as never });
     expect(r?.connected?.avgWatchMs ?? null).toBeNull();
     expect(r?.connected?.skipRatePct ?? null).toBeNull();
-    expect(r?.cannotKnow.join(" ")).toMatch(/TikTok does not expose/);
+    expect(r?.cannotKnow.join(" ")).toMatch(/watch time/);
     save("post.tiktok", r);
   });
 

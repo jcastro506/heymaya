@@ -267,6 +267,12 @@ export default defineSchema({
       totalWatchMs: v.union(v.number(), v.null()),
       skipRatePct: v.union(v.number(), v.null()),
       durationSec: v.union(v.number(), v.null()),
+      // A1: TikTok (connected through the TikTok for Business app), filled T+24-48h. Absent = never reported.
+      completionRate: v.optional(v.union(v.number(), v.null())),
+      profileViews: v.optional(v.union(v.number(), v.null())),
+      viewSources: v.optional(v.union(v.record(v.string(), v.number()), v.null())),
+      viewerTypes: v.optional(v.union(v.record(v.string(), v.number()), v.null())),
+      viewerCountries: v.optional(v.union(v.record(v.string(), v.number()), v.null())),
     })),
     /** Sprint 4e: reach ÷ their normal reach, where reach exists. The multiple on views stays as `multiple`. */
     reachMultiple: v.optional(v.number()),

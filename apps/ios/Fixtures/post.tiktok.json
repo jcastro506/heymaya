@@ -14,7 +14,9 @@
   "saves": 0,
   "shares": 1,
   "skipRatePct": null,
-  "views": 107
+  "views": 107,
+  "completionRate": 0.31,
+  "profileViews": 42
  },
  "connectedAsOf": 1790193199664,
  "contentType": "video",
@@ -46,5 +48,33 @@
   "views": 107
  },
  "read": "not enough connected data to say why; only the public count.",
- "url": "https://www.tiktok.com/@kevin.castro9996/video/7670709537535544590?utm_campaign=tt4d_open_api&utm_source=aw4smjxfftapkprm"
+ "url": "https://www.tiktok.com/@kevin.castro9996/video/7670709537535544590?utm_campaign=tt4d_open_api&utm_source=aw4smjxfftapkprm",
+ "viewSources": [
+  {
+   "label": "For You",
+   "share": 0.84
+  },
+  {
+   "label": "Search",
+   "share": 0.06
+  },
+  {
+   "label": "Following",
+   "share": 0.05
+  },
+  {
+   "label": "Your profile",
+   "share": 0.03
+  }
+ ],
+ "viewerTypes": [
+  {
+   "label": "Not following yet",
+   "share": 0.9
+  },
+  {
+   "label": "Followers",
+   "share": 0.1
+  }
+ ]
 }

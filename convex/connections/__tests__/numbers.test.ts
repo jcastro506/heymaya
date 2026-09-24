@@ -41,7 +41,7 @@ describe("numbersFor", () => {
 
   it("on TikTok it says what cannot be known instead of guessing", () => {
     const n = numbersFor(post({ platform: "tiktok", connected: { ...fresh, avgWatchMs: null, totalWatchMs: null, skipRatePct: null, durationSec: null, follows: null } }), siblings, NOW);
-    expect(n.cannotKnow.join(" ")).toMatch(/TikTok does not expose/);
+    expect(n.cannotKnow.join(" ")).toMatch(/watch time/);
     expect(n.lines.join(" ")).not.toMatch(/watched/);
   });
 

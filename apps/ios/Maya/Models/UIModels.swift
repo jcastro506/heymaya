@@ -339,6 +339,14 @@ struct PostNumbers: Decodable, Equatable {
   let read: String?
   var shape: String? = nil
   let cannotKnow: [String]
+  /// A1: TikTok's own splits (connected through TikTok's business app), biggest first; nil when not reported.
+  var viewSources: [Share]? = nil
+  var viewerTypes: [Share]? = nil
+
+  struct Share: Decodable, Equatable, Hashable {
+    let label: String
+    let share: Double
+  }
 
   struct Derived: Decodable, Equatable {
     let distribution: Double?

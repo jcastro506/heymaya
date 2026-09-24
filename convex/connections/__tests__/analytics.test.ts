@@ -64,7 +64,7 @@ describe("normalizing the recorded rows", () => {
 });
 
 describe("the four-way read", () => {
-  const base: Connected = { platform: "instagram", postId: "x", url: null, publishedAt: null, asOf: null, syncStatus: "synced", views: 10_000, likes: 200, comments: 20, shares: 30, saves: 50, impressions: 12_000, reach: 8_000, clicks: 0, follows: null, avgWatchMs: null, totalWatchMs: null, skipRatePct: null, durationSec: null };
+  const base: Connected = { platform: "instagram", postId: "x", url: null, publishedAt: null, asOf: null, syncStatus: "synced", views: 10_000, likes: 200, comments: 20, shares: 30, saves: 50, impressions: 12_000, reach: 8_000, clicks: 0, follows: null, avgWatchMs: null, totalWatchMs: null, skipRatePct: null, durationSec: null, completionRate: null, profileViews: null, viewSources: null, viewerTypes: null, viewerCountries: null };
 
   it("not distributed: reach far under their normal", () => {
     const d = derive({ ...base, reach: 800 }, { reach: 8_000, engagementPerReach: 0.03 });
@@ -111,5 +111,30 @@ describe("the accounts call", () => {
     const client = { request: async (_p: string, opts?: { query?: Record<string, unknown> }) => { seen = opts?.query; return { accounts: [] }; } } as never;
     await listAccounts(client, "prof");
     expect(seen).toMatchObject({ profileId: "prof", page: 1, limit: 50 });
+  });
+});
+
+describe("A1: TikTok's own reads (TikTok for Business connection)", () => {
+  const row = (a: Record<string, unknown>) => ({ platform: "tiktok", publishedAt: "2026-09-20T10:00:00Z", platformPostUrl: "https://www.tiktok.com/@x/video/123", analytics: { views: 1000, likes: 50, lastUpdated: "2026-09-22 10:00:00", ...a } });
+  it("reads completion, sources, viewer types and profile views", async () => {
+    const { normalizeConnected } = await import("../analytics");
+    const c = normalizeConnected(row({ completionRate: 0.31, profileViews: 42, impressionSources: { forYou: 0.84, search: 0.06, follow: 0.05, other: 0.05 }, audienceTypes: { follower: 0.1, nonFollower: 0.9 }, audienceCountries: { US: 0.6, other: 0.4 } }) as never)!;
+    expect(c).toMatchObject({ completionRate: 0.31, profileViews: 42, viewSources: { forYou: 0.84, search: 0.06 }, viewerTypes: { nonFollower: 0.9 }, viewerCountries: { US: 0.6 } });
+  });
+  it("0 and {} mean 'not reported', never a finding; Instagram never carries them", async () => {
+    const { normalizeConnected } = await import("../analytics");
+    const c = normalizeConnected(row({ completionRate: 0, profileViews: 0, impressionSources: {}, audienceTypes: {} }) as never)!;
+    expect([c.completionRate, c.profileViews, c.viewSources, c.viewerTypes]).toEqual([null, null, null, null]);
+    const ig = normalizeConnected({ ...row({ completionRate: 0.5, impressionSources: { forYou: 1 } }), platform: "instagram", platformPostUrl: "https://www.instagram.com/p/abc/" } as never)!;
+    expect([ig.completionRate, ig.viewSources]).toEqual([null, null]);
+  });
+  it("junk in a share map is dropped (adversarial)", async () => {
+    const { shares01 } = await import("../analytics");
+    expect(shares01({ forYou: 0.5, "<script>": 0.2, big: 7, neg: -1, str: "0.3" })).toEqual({ forYou: 0.5 });
+    expect(shares01([0.1])).toBeNull();
+  });
+  it("the words she cites", async () => {
+    const { sourcesLine } = await import("../numbers");
+    expect(sourcesLine({ forYou: 0.84, search: 0.06, follow: 0.05, other: 0.01 })).toBe("84% from For You, 6% from Search, 5% from Following");
   });
 });

@@ -67,7 +67,7 @@ export const upsert = internalMutation({
     const match = matchOwnPost(rows, c);
     const normal = normalReach(rows.filter((r) => r._id !== match?._id));
     const reachMultiple = c.reach !== null && normal ? Math.round((c.reach / normal) * 100) / 100 : undefined;
-    const connected = { asOf: c.asOf, syncStatus: c.syncStatus, views: c.views, likes: c.likes, comments: c.comments, shares: c.shares, saves: c.saves, impressions: c.impressions, reach: c.reach, clicks: c.clicks, follows: c.follows, avgWatchMs: c.avgWatchMs, totalWatchMs: c.totalWatchMs, skipRatePct: c.skipRatePct, durationSec: c.durationSec };
+    const connected = { asOf: c.asOf, syncStatus: c.syncStatus, views: c.views, likes: c.likes, comments: c.comments, shares: c.shares, saves: c.saves, impressions: c.impressions, reach: c.reach, clicks: c.clicks, follows: c.follows, avgWatchMs: c.avgWatchMs, totalWatchMs: c.totalWatchMs, skipRatePct: c.skipRatePct, durationSec: c.durationSec, completionRate: c.completionRate ?? null, profileViews: c.profileViews ?? null, viewSources: c.viewSources ?? null, viewerTypes: c.viewerTypes ?? null, viewerCountries: c.viewerCountries ?? null };
     const now = Date.now();
     if (match) {
       const newer = c.asOf !== null && c.asOf >= match.metricsAsOf;
