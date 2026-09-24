@@ -51,3 +51,13 @@ describe("the queue at scale", () => {
     expect(await t.mutation(internal.core.jobs.start, { jobId: job._id, attempt: job.attempts - 1 })).toBe(false);
   });
 });
+
+describe("a burst schedules one drain, not one per message", () => {
+  it("50 texts at once leave a single pending drain", async () => {
+    const { t, ids } = await world(1);
+    for (let i = 0; i < 50; i++) await enqueue(t, ids[0], `burst${i}`);
+    const scheduled = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
+    const drains = scheduled.filter((s) => s.name.includes("drainJobs") && s.state.kind === "pending");
+    expect(drains.length).toBe(1);
+  });
+});
