@@ -61,3 +61,35 @@ describe("a burst schedules one drain, not one per message", () => {
     expect(drains.length).toBe(1);
   });
 });
+
+describe("a claim stays cheap and exact under a backlog", () => {
+  it("a creator who sent 25 more texts while one turn runs is still busy (the newest-20 lookup could not see it)", async () => {
+    vi.stubEnv("MAX_TURNS_IN_FLIGHT", "1000");
+    const { t, ids } = await world(2);
+    await t.run(async (ctx) => { await ctx.db.insert("jobs", { kind: "converse", idempotencyKey: "running", creatorId: ids[0], payloadJson: "{}", status: "running", attempts: 1, maxAttempts: 3, runAfter: 0, deadlineAt: Date.now() + 60_000, createdAt: 1, updatedAt: 0 } as never); });
+    for (let i = 0; i < 25; i++) await enqueue(t, ids[0], `spam${i}`);
+    await enqueue(t, ids[1], "other");
+    expect((await t.mutation(internal.core.jobs.claimNext, {}))?.idempotencyKey).toBe("other");
+    expect(await t.mutation(internal.core.jobs.claimNext, {}), "never a second turn for the busy creator").toBeNull();
+    vi.unstubAllEnvs();
+  });
+
+  it("a full cap returns nothing, whatever the backlog", async () => {
+    vi.stubEnv("MAX_TURNS_IN_FLIGHT", "1");
+    const { t, ids } = await world(150);
+    for (const [i, id] of ids.entries()) await enqueue(t, id, `b${i}`);
+    expect(await t.mutation(internal.core.jobs.claimNext, {})).not.toBeNull();
+    expect(await t.mutation(internal.core.jobs.claimNext, {})).toBeNull();
+    vi.unstubAllEnvs();
+  });
+
+  it("the drain inside a turn (deliverNow) never claims turns; the kick and the finished turn do that", async () => {
+    const src = (await import("node:fs")).readFileSync(new URL("../scheduler.ts", import.meta.url), "utf8");
+    const body = src.slice(src.indexOf("export async function deliverNow"), src.indexOf("\n}\n", src.indexOf("export async function deliverNow")));
+    expect(body).toMatch(/filter\(\(k\) => !TURN_KINDS\.has\(k\)\)/);
+    const { t, ids } = await world(1);
+    await enqueue(t, ids[0], "turn");
+    const kinds = ["deliver_message", "first_read", "ingest_catalogue", "render_frames"];
+    expect(await t.action(internal.core.scheduler.drainJobs, { kinds })).toMatchObject({ claimed: 0 });
+  });
+});
