@@ -141,4 +141,73 @@ describe("the widget (M6)", () => {
     expect((await s.t.fetch("/widget", { method: "GET" })).status).toBe(401);
     expect((await s.t.fetch("/widget", { method: "GET", headers: { authorization: `Bearer ${"a".repeat(64)}` } })).status).toBe(401);
   });
+
+  const produced = { skillVersion: "t", model: "t", thresholdsVersion: "t" };
+  const HOUR = 3_600_000;
+  const getWidget = async (s: Awaited<ReturnType<typeof setup>>, token: string) => (await s.t.fetch("/widget", { method: "GET", headers: { authorization: `Bearer ${token}` } })).json();
+  const ownPost = (creatorId: unknown, postId: string, createTime: number, views: number, multiple?: number) => ({
+    creatorId, platform: "tiktok", postId, url: `https://www.tiktok.com/@x/video/${postId}`, createTime, contentType: "video", caption: "c", hashtags: [],
+    metrics: { views, likes: 0, comments: 0, shares: 0 }, metricsAsOf: Date.now(), source: "scrape", ...(multiple === undefined ? {} : { multiple }),
+  });
+
+  it("carries the next two film blocks, the idea's own reason and cover, and the last three posts with their stored multiple", async () => {
+    const s = await setup();
+    const now = Date.now();
+    const coverKeyA = "7676142812504673567";
+    await s.t.run(async (c) => {
+      const storageId = await c.storage.store(new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" }));
+      await c.db.insert("media", { platform: "tiktok", kind: "cover", key: coverKeyA, sourceUrl: "https://p16.tiktokcdn.com/x.jpg", state: "stored", storageId, attempts: 1, at: now } as never);
+      const idea = await c.db.insert("ideas", { creatorId: s.a, evidenceLinks: [`https://www.tiktok.com/@noahperlofit/video/${coverKeyA}`], fit: "yes", fitWhy: "your humidity posts ran 2x", version: { hook: "humidity won today" }, messageText: "m", status: "sent", produced, createdAt: now - HOUR } as never);
+      for (const [i, status] of (["proposed", "confirmed", "moved", "deleted"] as const).entries()) {
+        const start = now + (i + 1) * 86_400_000;
+        await c.db.insert("calendarBlocks", { creatorId: s.a, kind: "film", start, end: start + HOUR, title: `film: block ${i}`, ideaId: idea, status, createdAt: now } as never);
+      }
+      await c.db.insert("calendarBlocks", { creatorId: s.a, kind: "post", start: now + HOUR, end: now + 2 * HOUR, title: "post: soonest but not filming", status: "confirmed", createdAt: now } as never);
+      await c.db.insert("ownPosts", ownPost(s.a, "1", now - 10 * 86_400_000, 100, 0.5) as never);
+      await c.db.insert("ownPosts", ownPost(s.a, "2", now - 5 * 86_400_000, 1300, 1.3) as never);
+      await c.db.insert("ownPosts", ownPost(s.a, "3", now - 3 * 86_400_000, 800) as never); // no normal yet: no multiple
+      await c.db.insert("ownPosts", ownPost(s.a, "4", now - 2 * HOUR, 400, 0.4) as never); // fresh: a lower bound
+      await c.db.insert("ownPosts", ownPost(s.b, "9", now - HOUR, 999_999, 9.9) as never);
+    });
+    const body = await getWidget(s, s.tokenA);
+    // Firm blocks first (confirmed, moved), soonest first; a deleted or non-film block never shows.
+    expect(body.blocks.map((b: { title: string }) => b.title)).toEqual(["block 1", "block 2"]);
+    expect(body.blocks[0]).toMatchObject({ kind: "film", hook: "humidity won today", ideaId: expect.any(String), booked: false, end: expect.any(Number) });
+    expect(body.nextBlock.title).toBe("block 1");
+    expect(body.bestIdea).toMatchObject({ hook: "humidity won today", fitWhy: "your humidity posts ran 2x", cover: expect.stringMatching(/^https?:/), coverPlatform: "tiktok", isNew: true });
+    expect(body.lastPosts.map((p: { views: number }) => p.views)).toEqual([400, 800, 1300]);
+    expect(body.lastPosts.map((p: { multiple: number | null }) => p.multiple)).toEqual([0.4, null, 1.3]);
+    expect(body.lastPosts.map((p: { settled: boolean }) => p.settled)).toEqual([false, true, true]);
+    expect(Object.keys(body.lastPosts[0]).sort()).toEqual(["cover", "createTime", "id", "multiple", "platform", "settled", "views"]);
+    expect(JSON.stringify(body)).not.toContain("999999");
+  });
+
+  it("unknown is null or empty, never zero; B's token never sees A's rows", async () => {
+    const s = await setup();
+    const now = Date.now();
+    await s.t.run(async (c) => {
+      await c.db.insert("ideas", { creatorId: s.a, evidenceLinks: ["https://www.tiktok.com/@a/video/123"], fit: "yes", fitWhy: "  ", version: { hook: "a's idea" }, messageText: "m", status: "sent", produced, createdAt: now } as never);
+      await c.db.insert("ownPosts", ownPost(s.a, "5", now - 3 * 86_400_000, 700, 1.1) as never);
+      await c.db.insert("calendarBlocks", { creatorId: s.a, kind: "film", start: now + HOUR, end: now + 2 * HOUR, title: "film: a's shoot", status: "confirmed", createdAt: now } as never);
+    });
+    const a = await getWidget(s, s.tokenA);
+    expect(a.bestIdea).toMatchObject({ fitWhy: null, cover: null, coverPlatform: "tiktok" }); // blank reason, no stored cover
+    expect(a.blocks[0]).toMatchObject({ hook: null, ideaId: null });
+    const tokenB = (await s.t.withIdentity({ subject: "user_b" }).mutation(api.share.mintShareToken, {})).token!;
+    const b = await getWidget(s, tokenB);
+    expect(b).toMatchObject({ ok: true, nextBlock: null, blocks: [], bestIdea: null, lastPosts: [], newIdeas: 0 });
+    expect(JSON.stringify(b)).not.toMatch(/a's (idea|shoot)/);
+  });
+
+  it("a block pointing at another creator's idea never leaks that idea", async () => {
+    const s = await setup();
+    const now = Date.now();
+    await s.t.run(async (c) => {
+      const theirs = await c.db.insert("ideas", { creatorId: s.b, evidenceLinks: [], fit: "yes", fitWhy: "f", version: { hook: "b's private hook" }, messageText: "m", status: "passed", produced, createdAt: now } as never);
+      await c.db.insert("calendarBlocks", { creatorId: s.a, kind: "film", start: now + HOUR, end: now + 2 * HOUR, title: "film: x", ideaId: theirs, status: "confirmed", createdAt: now } as never);
+    });
+    const a = await getWidget(s, s.tokenA);
+    expect(a.nextBlock).toMatchObject({ hook: null, ideaId: null });
+    expect(JSON.stringify(a)).not.toContain("b's private hook");
+  });
 });

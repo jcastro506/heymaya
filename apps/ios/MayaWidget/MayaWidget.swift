@@ -1,137 +1,118 @@
 import SwiftUI
 import WidgetKit
 
-/// M6: two read-only widgets (app spec §10.2). Small: the next filming block with its hook.
-/// Medium: today's best idea plus how many new ones are waiting. They fetch their own data with
-/// the creator's share token every 30 minutes, so they stay current without push. Never Maya's
-/// voice: facts from rows, and a tap opens the object in the app.
-
-struct WidgetData: Decodable {
-  struct Block: Decodable { let kind: String; let start: Double; let title: String; let hook: String?; let ideaId: String?; let booked: Bool }
-  struct Idea: Decodable { let id: String; let hook: String; let cover: String?; let isNew: Bool }
-  let nextBlock: Block?
-  let bestIdea: Idea?
-  let newIdeas: Int
-}
-
-struct MayaEntry: TimelineEntry {
-  let date: Date
-  let data: WidgetData?
-  let signedOut: Bool
-
-  static let placeholder = MayaEntry(date: .now, data: WidgetData(
-    nextBlock: .init(kind: "film", start: Date.now.addingTimeInterval(86_400).timeIntervalSince1970 * 1000, title: "humidity won today", hook: "i love running vs running in 90% humidity", ideaId: nil, booked: true),
-    bestIdea: .init(id: "", hook: "the 5am alarm negotiation", cover: nil, isNew: true), newIdeas: 3), signedOut: false)
-}
+/// M6, redesigned: the widgets fetch their own data with the creator's share token every 30
+/// minutes, so they stay current without push. Covers are downloaded here (views can't load
+/// URLs), shrunk, and handed to the entry. The last good answer is kept in the App Group so a
+/// failed refresh shows it with its age instead of going blank. Views: UI/WidgetViews.swift.
 
 struct Provider: TimelineProvider {
-  func placeholder(in context: Context) -> MayaEntry { .placeholder }
+  private static let savedKey = "maya.widget.lastGood"
+  private static let savedAtKey = "maya.widget.lastGoodAt"
+
+  func placeholder(in context: Context) -> MayaEntry { WidgetSamples.placeholder }
 
   func getSnapshot(in context: Context, completion: @escaping (MayaEntry) -> Void) {
-    if context.isPreview { completion(.placeholder); return }
-    Task { completion(await fetch()) }
+    if context.isPreview { completion(WidgetSamples.full()); return }
+    Task { completion(await entry(for: context.family)) }
   }
 
   func getTimeline(in context: Context, completion: @escaping (Timeline<MayaEntry>) -> Void) {
     Task {
-      let entry = await fetch()
-      completion(Timeline(entries: [entry], policy: .after(.now.addingTimeInterval(30 * 60))))
+      let e = await entry(for: context.family)
+      completion(Timeline(entries: [e], policy: .after(.now.addingTimeInterval(30 * 60))))
     }
   }
 
-  private func fetch() async -> MayaEntry {
+  private func entry(for family: WidgetFamily) async -> MayaEntry {
+    let (data, state, savedAt) = await fetchData()
+    guard let data else { return MayaEntry(date: .now, data: nil, state: state) }
+    var e = MayaEntry(date: .now, data: data, state: .ready, savedAt: savedAt)
+    // Only the images this size shows; accessory families show none.
+    switch family {
+    case .systemSmall, .systemMedium:
+      e.ideaCover = await WidgetImages.fetch(data.bestIdea?.cover, maxPixel: 480)
+    case .systemLarge, .systemExtraLarge:
+      async let idea = WidgetImages.fetch(data.bestIdea?.cover, maxPixel: 320)
+      var posts: [String: Data] = [:]
+      await withTaskGroup(of: (String, Data?).self) { group in
+        for p in data.lastPosts.prefix(3) { group.addTask { (p.id, await WidgetImages.fetch(p.cover, maxPixel: 300)) } }
+        for await (id, d) in group { if let d { posts[id] = d } }
+      }
+      e.ideaCover = await idea
+      e.postCovers = posts
+    default:
+      break
+    }
+    return e
+  }
+
+  private func fetchData() async -> (WidgetData?, WidgetState, Date?) {
     guard let token = ShareLink.token,
           let convexURL = Bundle.main.object(forInfoDictionaryKey: "MayaConvexURL") as? String,
-          let url = ShareLink.widgetEndpoint(convexURL: convexURL) else { return MayaEntry(date: .now, data: nil, signedOut: true) }
-    var req = URLRequest(url: url)
+          let url = ShareLink.widgetEndpoint(convexURL: convexURL) else { return (nil, .signedOut, nil) }
+    var req = URLRequest(url: url, timeoutInterval: 15)
     req.setValue("Bearer \(token)", forHTTPHeaderField: "authorization")
-    guard let (data, response) = try? await URLSession.shared.data(for: req),
-          (response as? HTTPURLResponse)?.statusCode == 200,
-          let decoded = try? JSONDecoder().decode(WidgetData.self, from: data) else {
-      return MayaEntry(date: .now, data: nil, signedOut: false)
+    let defaults = UserDefaults(suiteName: ShareLink.appGroup)
+    if let (body, response) = try? await URLSession.shared.data(for: req), let http = response as? HTTPURLResponse {
+      if http.statusCode == 401 { defaults?.removeObject(forKey: Self.savedKey); return (nil, .signedOut, nil) }
+      if http.statusCode == 200, let decoded = try? JSONDecoder().decode(WidgetData.self, from: body) {
+        defaults?.set(body, forKey: Self.savedKey)
+        defaults?.set(Date.now.timeIntervalSince1970, forKey: Self.savedAtKey)
+        return (decoded, .ready, nil)
+      }
     }
-    return MayaEntry(date: .now, data: decoded, signedOut: false)
+    // Offline or a server hiccup: the last good answer, labelled with its age, for up to a day.
+    if let saved = defaults?.data(forKey: Self.savedKey),
+       let at = defaults?.double(forKey: Self.savedAtKey), Date.now.timeIntervalSince1970 - at < 86_400,
+       let decoded = try? JSONDecoder().decode(WidgetData.self, from: saved) {
+      return (decoded, .ready, Date(timeIntervalSince1970: at))
+    }
+    return (nil, .unreachable, nil)
   }
 }
 
-private let purple = Color(red: 0x76 / 255, green: 0x61 / 255, blue: 0xB4 / 255)
-private let coral = Color(red: 1, green: 0x79 / 255, blue: 0x5F / 255)
-
-struct NextShootView: View {
+/// Wires the family and the container background into the shared views.
+struct WidgetRoot: View {
   let entry: MayaEntry
+  var blockFirst = false
+  @Environment(\.widgetFamily) private var family
+
   var body: some View {
-    VStack(alignment: .leading, spacing: 6) {
-      Label("Next shoot", systemImage: "video.fill").font(.caption2.weight(.semibold)).foregroundStyle(purple)
-      if let b = entry.data?.nextBlock {
-        Text(Date(timeIntervalSince1970: b.start / 1000), format: .dateTime.weekday(.abbreviated).hour().minute())
-          .font(.headline)
-        Text(b.hook ?? b.title).font(.caption).foregroundStyle(.secondary).lineLimit(3)
-        if !b.booked { Text("not booked yet").font(.caption2).foregroundStyle(coral) }
-      } else {
-        Spacer(minLength: 0)
-        Text(entry.signedOut ? "Open Maya to connect" : "Nothing booked. Text her to plan one.").font(.caption).foregroundStyle(.secondary)
+    MayaWidgetView(entry: entry, family: family, blockFirst: blockFirst)
+      .containerBackground(for: .widget) {
+        MayaWidgetBackground(entry: entry, family: family, blockFirst: blockFirst)
       }
-      Spacer(minLength: 0)
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .widgetURL(entry.data?.nextBlock?.ideaId.flatMap { URL(string: "maya://o/idea/\($0)") } ?? URL(string: "maya://app/today"))
   }
 }
 
-struct BestIdeaView: View {
-  let entry: MayaEntry
-  var body: some View {
-    HStack(alignment: .top, spacing: 12) {
-      VStack(alignment: .leading, spacing: 6) {
-        Label("Her best idea", systemImage: "lightbulb.fill").font(.caption2.weight(.semibold)).foregroundStyle(purple)
-        if let i = entry.data?.bestIdea {
-          Text(i.hook).font(.headline).lineLimit(3)
-        } else {
-          Text(entry.signedOut ? "Open Maya to connect" : "No ideas waiting.").font(.caption).foregroundStyle(.secondary)
-        }
-        Spacer(minLength: 0)
-        if let n = entry.data?.newIdeas, n > 0 {
-          Text("\(n) new in your ideas").font(.caption2.weight(.semibold)).foregroundStyle(coral)
-        }
-      }
-      Spacer(minLength: 0)
-      if let b = entry.data?.nextBlock {
-        VStack(alignment: .trailing, spacing: 4) {
-          Image(systemName: "video.fill").foregroundStyle(purple)
-          Text(Date(timeIntervalSince1970: b.start / 1000), format: .dateTime.weekday(.abbreviated).hour()).font(.caption2).foregroundStyle(.secondary)
-        }
-      }
+/// Kind kept from M6 so widgets people already placed keep working.
+struct BestIdeaWidget: Widget {
+  var body: some WidgetConfiguration {
+    StaticConfiguration(kind: "ai.heymaya.best-idea", provider: Provider()) { entry in
+      WidgetRoot(entry: entry)
     }
-    .widgetURL(entry.data?.bestIdea.flatMap { URL(string: "maya://o/idea/\($0.id)") } ?? URL(string: "maya://app/ideas"))
+    .configurationDisplayName("Maya")
+    .description("Her best new idea, your next shoot, and how your last posts did.")
+    .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .accessoryRectangular, .accessoryCircular, .accessoryInline])
   }
 }
 
 struct NextShootWidget: Widget {
   var body: some WidgetConfiguration {
     StaticConfiguration(kind: "ai.heymaya.next-shoot", provider: Provider()) { entry in
-      NextShootView(entry: entry).containerBackground(.fill.tertiary, for: .widget)
+      WidgetRoot(entry: entry, blockFirst: true)
     }
     .configurationDisplayName("Next shoot")
     .description("Your next filming block and what it's for.")
-    .supportedFamilies([.systemSmall])
-  }
-}
-
-struct BestIdeaWidget: Widget {
-  var body: some WidgetConfiguration {
-    StaticConfiguration(kind: "ai.heymaya.best-idea", provider: Provider()) { entry in
-      BestIdeaView(entry: entry).containerBackground(.fill.tertiary, for: .widget)
-    }
-    .configurationDisplayName("Maya's best idea")
-    .description("Her best idea right now, and how many new ones are waiting.")
-    .supportedFamilies([.systemMedium])
+    .supportedFamilies([.systemSmall, .accessoryRectangular, .accessoryInline])
   }
 }
 
 @main
 struct MayaWidgets: WidgetBundle {
   var body: some Widget {
-    NextShootWidget()
     BestIdeaWidget()
+    NextShootWidget()
   }
 }

@@ -38,6 +38,8 @@ targets:
     sources:
       - path: Maya
       - path: Shared
+      # The widget's views, compiled into the app too so MayaTests can render them to pictures.
+      - path: MayaWidget/UI
       # Debug-only preview data (launch argument -MayaFixtures); stripped from Release below.
       - path: Fixtures
         buildPhase: resources
@@ -115,13 +117,16 @@ targets:
       path: MayaShare/MayaShare.entitlements
       properties:
         com.apple.security.application-groups: ["group.ai.heymaya.maya"]
-  # M6: home-screen widgets (next shoot, best idea), fetching their own data with the share token.
+  # M6: home-screen and lock-screen widgets (Maya: small/medium/large; Next shoot), fetching their own data with the share token.
   MayaWidget:
     type: app-extension
     platform: iOS
     sources:
       - path: MayaWidget
       - path: Shared
+      # The app's colours and flower, so the widget looks like the app (one definition).
+      - path: Maya/Design/Palette.swift
+      - path: Maya/Design/FlowerMark.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ai.heymaya.maya.widget
