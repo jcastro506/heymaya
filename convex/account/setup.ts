@@ -54,8 +54,10 @@ export const check = internalAction({
       const handle = h?.[platform];
       if (!handle) continue;
       try {
-        const r = await ctx.runAction(internal.reads.read.read, { kind: "profile", params: { platform, handle }, creatorId: a.creatorId });
-        const t = (r.value as { accountType?: AccountType | null } | null)?.accountType ?? null;
+        let r = await ctx.runAction(internal.reads.read.read, { kind: "profile", params: { platform, handle }, creatorId: a.creatorId });
+        // A profile cached before account types were read has no such key: read it fresh, once.
+        if (r.value && typeof r.value === "object" && !("accountType" in (r.value as object))) r = await ctx.runAction(internal.reads.read.read, { kind: "profile", params: { platform, handle }, creatorId: a.creatorId, force: true });
+        const t =(r.value as { accountType?: AccountType | null } | null)?.accountType ?? null;
         out[platform] = t;
       } catch {
         // an unreadable profile keeps whatever we knew; the next weekly pass tries again
