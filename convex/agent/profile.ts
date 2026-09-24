@@ -18,6 +18,7 @@ import { CAUTIOUS_ASK, judgeLadder, profileFloor } from "./guarded";
 import { deliverNow } from "../core/scheduler";
 import { investigate } from "./investigate";
 import { LOOKUPS } from "./playbooks";
+import { clip } from "../lib/clip";
 
 export const PROFILE_SKILL = `profile-creator
 When: they asked why an account is growing, or what an account is doing. You have that account's recent posts with numbers and the transcripts of its top three. You have NOT watched anything, so say nothing about visuals.
@@ -77,7 +78,7 @@ export const run = internalAction({
         /* a missing transcript is a missing citation, not a failure */
       }
     }
-    const evidence = { handle: `@${handle}`, platform: a.platform, theirQuestion: target.body.slice(0, 300), facts: f, recentCaptions: posts.slice(0, 12).map((p) => ({ when: p.createTime ? new Date(p.createTime).toISOString().slice(0, 10) : null, views: p.metrics?.viewCount ?? null, caption: (p.caption ?? "").slice(0, 140) })), transcripts };
+    const evidence = { handle: `@${handle}`, platform: a.platform, theirQuestion: clip(target.body, 300), facts: f, recentCaptions: posts.slice(0, 12).map((p) => ({ when: p.createTime ? new Date(p.createTime).toISOString().slice(0, 10) : null, views: p.metrics?.viewCount ?? null, caption: (p.caption ?? "").slice(0, 140) })), transcripts };
     // Eval personas only: the bench judge sees what she read about this account (a no-op for real creators).
     await ctx.runMutation(internal.eval.expertBench.saveTrace, { creatorId: creator._id, trace: [{ tool: `account_posts @${handle}`, ok: true, result: JSON.stringify(evidence).slice(0, 2400) }] }).catch(() => undefined);
     const prefix = buildPrefix({ creator, directives, skill: PROFILE_SKILL, personal: g.personal, voice: g.voice, history: g.history });

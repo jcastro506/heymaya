@@ -23,6 +23,7 @@ import { internal } from "./_generated/api";
 import { summarize, type Affinity } from "./taste/affinities";
 import { computeRung, engagement } from "./review/rung";
 import { laneBenchmarkFor } from "./scout/benchmarks";
+import { clip } from "./lib/clip";
 
 async function me(ctx: QueryCtx | MutationCtx): Promise<Doc<"creators"> | null> {
   const identity = await ctx.auth.getUserIdentity();
@@ -450,7 +451,7 @@ function postNumbersView(p: Doc<"ownPosts">, siblings: Doc<"ownPosts">[], now: n
     createTime: p.createTime,
     contentType: p.contentType,
     cover,
-    caption: p.caption.slice(0, 300),
+    caption: clip(p.caption, 300),
     publicCounts,
     publicAsOf: p.metricsAsOf,
     connected,

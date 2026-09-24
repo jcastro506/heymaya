@@ -7,6 +7,7 @@
 import { v } from "convex/values";
 import { internalAction } from "../_generated/server";
 import { uploadFile } from "../integrations/gemini/client";
+import { clip } from "../lib/clip";
 
 export const BIG_MEDIA_MAX_BYTES = 150 * 1024 * 1024;
 
@@ -51,7 +52,7 @@ export const probeWatchByReference = internalAction({
     if (!up.ok) return { upload: `failed: ${up.reason}`, watch: "skipped" };
     const { watchMedia } = await import("../integrations/gemini/client");
     const r = await watchMedia({ model: process.env.MODEL_WATCH ?? "gemini-3.1-flash-lite", apiKey: process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY ?? "", prompt: 'Return JSON {"about": "≤80 chars: what happens in this video"}', media: { fileUri: up.uri, mimeType: a.mimeType }, resolution: "low", maxOutputTokens: 200 });
-    return { upload: "ok", watch: r.ok ? r.text.slice(0, 200) : `failed: ${r.reason}` };
+    return { upload: "ok", watch: r.ok ? clip(r.text, 200) : `failed: ${r.reason}` };
   },
 });
 

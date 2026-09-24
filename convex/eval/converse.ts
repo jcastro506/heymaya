@@ -13,6 +13,7 @@ import { v } from "convex/values";
 import { internalAction, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
+import { clip } from "../lib/clip";
 
 export interface Probe { category: string; text: string; expect: string }
 
@@ -109,7 +110,7 @@ export const run = internalAction({
           const context = await ctx.runQuery(internal.agent.context.gather, { creatorId, messageId });
           const res = await ctx.runAction(internal.eval.run.evaluate, { suite: "converse", skill: "reply", text: reply.text, evidence: { theirMessage: probe.text, category: probe.category, expect: probe.expect, creatorContext: context?.personal ?? "", conversation: context?.history ?? "" }, creatorId, messageId: reply.messageId, creatorUsesEmoji: !/\b0% use an emoji\b/.test(context?.voice ?? ""), actionTaken: reply.actionTaken });
           if (res.pass) passed++;
-          else failed.push({ category: probe.category, text: reply.text.slice(0, 160), problems: await ctx.runQuery(internal.eval.converse.failedChecks, { id: res.id }) });
+          else failed.push({ category: probe.category, text: clip(reply.text, 160), problems: await ctx.runQuery(internal.eval.converse.failedChecks, { id: res.id }) });
         }
       }
     }

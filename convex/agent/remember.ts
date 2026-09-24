@@ -14,6 +14,7 @@ import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
+import { clip } from "../lib/clip";
 
 export const REMEMBER_PROMPT = `You read one message a content creator sent to their assistant. Decide, strictly:
 - "note": a concrete fact about their life, plans, schedule, people, or situation that would matter to someone planning content with them later (e.g. "training for Chicago in October", "filming with my sister from now on", "off for two weeks in July"). Quote it in their words, ≤ 200 chars. Give expiresDays if it is time-bound (an event, a trip), else null. kind: "life" (plans, events), "fact" (stable facts), "bit" (a running joke or recurring bit they reference).
@@ -39,7 +40,7 @@ export const afterTurn = internalAction({
       messages: [
         { role: "system", content: REMEMBER_PROMPT },
         { role: "user", content: `Their existing plan (ids may link an explicit commitment, never manufacture one): ${g.personal}` },
-        { role: "user", content: `Recent context: ${JSON.stringify(g.recent.filter((m) => m.ts < g.target!.ts).slice(-3).map((m) => ({ who: m.direction === "in" ? "creator" : "assistant", text: m.body.slice(0, 400) })))}\nTheir message: ${text.slice(0, 800)}\n\nThings already kept: ${JSON.stringify((g.creator.notes ?? []).filter((n) => !n.tombstonedAt).map((n) => ({ id: n.id, text: n.text })))}\nRules already kept: ${JSON.stringify(g.directives.map((d) => d.verbatim))}` },
+        { role: "user", content: `Recent context: ${JSON.stringify(g.recent.filter((m) => m.ts < g.target!.ts).slice(-3).map((m) => ({ who: m.direction === "in" ? "creator" : "assistant", text: clip(m.body, 400) })))}\nTheir message: ${text.slice(0, 800)}\n\nThings already kept: ${JSON.stringify((g.creator.notes ?? []).filter((n) => !n.tombstonedAt).map((n) => ({ id: n.id, text: n.text })))}\nRules already kept: ${JSON.stringify(g.directives.map((d) => d.verbatim))}` },
       ],
       temperature: 0,
       maxTokens: 500,

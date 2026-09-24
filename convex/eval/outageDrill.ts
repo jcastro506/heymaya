@@ -29,6 +29,7 @@ import { fetchMedia } from "../integrations/gemini/client";
 import { Draft, Opportunity } from "../partnerships/contracts";
 import { FAULTS, faultsEnabled, VENDOR_OF, type Fault } from "./faults";
 import { mimeMessageId } from "./fakes";
+import { clip } from "../lib/clip";
 
 // ------------------------------------------------------------------ the plan (pure)
 
@@ -334,7 +335,7 @@ export const observe = internalQuery({
     const out: Observed = { outbound: [], jobs: [], health: [], failedModelCalls: 0, predictions: 0, finishes: 0, ideas: 0, signalsWritten: 0, insights: [], drafts: [], fakeSent: 0, cache: [] };
     for (const creatorId of a.creatorIds) {
       const msgs = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", creatorId).gte("ts", a.since)).take(200)) as Doc<"messages">[];
-      for (const m of msgs) if (m.direction === "out") out.outbound.push({ kind: m.kind ?? "", key: m.dedupeKey ?? "", head: m.body.slice(0, 120), body: m.body });
+      for (const m of msgs) if (m.direction === "out") out.outbound.push({ kind: m.kind ?? "", key: m.dedupeKey ?? "", head: clip(m.body, 120), body: m.body });
       const jobs = (await ctx.db.query("jobs").withIndex("by_creator_and_createdAt", (q) => q.eq("creatorId", creatorId).gte("createdAt", a.since)).take(100)) as Doc<"jobs">[];
       for (const j of jobs) out.jobs.push({ id: j._id, kind: j.kind, status: j.status, lastError: j.lastError ?? "", key: j.idempotencyKey });
       const costs = await ctx.db.query("costEvents").withIndex("by_creator_at", (q) => q.eq("creatorId", creatorId).gte("at", a.since)).take(500);

@@ -13,6 +13,7 @@ import { encrypt } from "../lib/encryption";
 import { Draft, Opportunity } from "../partnerships/contracts";
 import { FAKE_BRAND } from "./fakes";
 import { providerBase } from "../partnerships/providerConfig";
+import { clip } from "../lib/clip";
 
 interface Step { step: string; said: string[]; facts: Record<string, unknown>; ok: boolean; why: string }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -58,7 +59,7 @@ export const rows = internalQuery({
   handler: async (ctx, a) => {
     const opportunities = (await ctx.db.query("partnershipOpportunities").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()).map((r) => ({ id: r._id, domain: r.brandDomain, ...Opportunity.parse(r.data) }));
     const drafts = (await ctx.db.query("partnershipDrafts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()).map((r) => ({ id: r._id, ...Draft.parse(r.data) }));
-    const events = (await ctx.db.query("partnershipEvents").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()).map((e) => ({ kind: e.kind, text: e.text.slice(0, 160), at: e.at }));
+    const events = (await ctx.db.query("partnershipEvents").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()).map((e) => ({ kind: e.kind, text: clip(e.text, 160), at: e.at }));
     const profile = await ctx.db.query("partnershipProfiles").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).unique();
     const research = await ctx.db.query("partnershipResearch").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect();
     return { opportunities, drafts, events, profile: profile?.data ?? null, researchCalls: research.reduce((n, r) => n + r.calls, 0) };

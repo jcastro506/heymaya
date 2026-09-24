@@ -6,6 +6,7 @@ import { styleFacts } from "./voice";
 import { splitEvents } from "../taste/separation";
 import { internal } from "../_generated/api";
 import { forgetPartnershipEvidence } from "../partnerships/privacy";
+import { clip } from "../lib/clip";
 
 export const normalizeMemory = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
@@ -39,7 +40,7 @@ export async function captureStyle(ctx: MutationCtx, creatorId: Id<"creators">, 
   const reads = await ctx.db.query("ownPostReads").withIndex("by_creator", (q) => q.eq("creatorId", creatorId)).order("desc").take(200);
   const text = examples.map((p) => {
     const card = reads.find((r) => r.ownPostId === p._id)?.card as { signature?: string; them?: { humor?: string } } | undefined;
-    return `${new Date(p.createTime).toISOString().slice(0, 10)}: “${p.caption.slice(0, 120)}” [post ${p._id}]${card?.signature ? `; observed: ${card.signature.slice(0, 180)}` : ""}${card?.them?.humor ? `; humour observed: ${card.them.humor.slice(0, 120)}` : ""}`;
+    return `${new Date(p.createTime).toISOString().slice(0, 10)}: “${clip(p.caption, 120)}” [post ${p._id}]${card?.signature ? `; observed: ${card.signature.slice(0, 180)}` : ""}${card?.them?.humor ? `; humour observed: ${card.them.humor.slice(0, 120)}` : ""}`;
   }).join("\n");
   await ctx.db.insert("personalRecords", { creatorId, key, kind: "style", text, sourceMessageIds: [], sourceNoteIds: [], sourcePostIds: sample.map((p) => p._id), facts, periodStart: start, periodEnd: end, active: true, at: now });
 }

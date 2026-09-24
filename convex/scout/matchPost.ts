@@ -19,6 +19,7 @@ import { REGISTRY } from "../agent/registry";
 import { THRESHOLDS } from "../config/thresholds";
 import { WEIGHTS } from "../taste/affinities";
 import { deliverNow } from "../core/scheduler";
+import { clip } from "../lib/clip";
 
 const CONFIDENCE = v.union(v.literal("certain"), v.literal("likely"), v.literal("unsure"), v.literal("no"));
 
@@ -43,8 +44,8 @@ export const candidates = internalQuery({
     const reads = (await ctx.db.query("ownPostReads").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(80)) as Doc<"ownPostReads">[];
     const cardFor = new Map(reads.map((r) => [r.ownPostId, r.card]));
     return {
-      posts: posts.slice(0, 5).map((p) => ({ id: p._id, url: p.url, caption: p.caption.slice(0, 300), createTime: p.createTime, multiple: p.multiple ?? null, card: cardFor.get(p._id) ?? null })),
-      ideas: ideas.map((i) => ({ id: i._id, hook: (i.version as { hook?: string } | undefined)?.hook ?? null, message: i.messageText.slice(0, 400), sentAt: i.sentAt!, features: i.features ?? null })),
+      posts: posts.slice(0, 5).map((p) => ({ id: p._id, url: p.url, caption: clip(p.caption, 300), createTime: p.createTime, multiple: p.multiple ?? null, card: cardFor.get(p._id) ?? null })),
+      ideas: ideas.map((i) => ({ id: i._id, hook: (i.version as { hook?: string } | undefined)?.hook ?? null, message: clip(i.messageText, 400), sentAt: i.sentAt!, features: i.features ?? null })),
     };
   },
 });

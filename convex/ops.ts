@@ -10,6 +10,7 @@ import { creatorCogs, isRealCreator, tierPriceUsd } from "./config/costs";
 import { query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { pulseWord } from "./review/pulse";
+import { clip } from "./lib/clip";
 
 function authorized(token: string): boolean {
   const expected = process.env.OPS_TOKEN;
@@ -51,7 +52,7 @@ export const overview = query({
         takenWeek: pulseIn.week.taken,
         spendWeekUsd: Math.round(costs.reduce((s, x) => s + x.costUsd, 0) * 1000) / 1000,
         spendDayUsd: Math.round(costs.filter((x) => x.at >= day).reduce((s, x) => s + x.costUsd, 0) * 1000) / 1000,
-        lastOut: lastOut ? { ts: lastOut.ts, kind: lastOut.kind ?? "reply", delivered: Boolean(lastOut.deliveredAt), error: lastOut.deliveryError ?? null, body: lastOut.body.slice(0, 140) } : null,
+        lastOut: lastOut ? { ts: lastOut.ts, kind: lastOut.kind ?? "reply", delivered: Boolean(lastOut.deliveredAt), error: lastOut.deliveryError ?? null, body: clip(lastOut.body, 140) } : null,
         undelivered: messages.filter((m) => m.direction === "out" && !m.deliveredAt && m.ts >= day).length,
       });
     }

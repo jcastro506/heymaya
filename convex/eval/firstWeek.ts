@@ -46,6 +46,7 @@ import { normalizePhone } from "../integrations/claw/client";
 import { READ_SETTLE_MS, localHourMinute } from "../scout/gate";
 import { MIN_DAYS_BEFORE_REVIEW } from "../review/weekly";
 import { actorPromptFor, ageCreatorTable, CREATOR_INDEX, rng } from "./livingSim";
+import { clip } from "../lib/clip";
 
 const D = 86_400_000;
 const MIN = 60_000;
@@ -345,7 +346,7 @@ export const unseenFromMaya = internalQuery({
     const ideas = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(20)) as Doc<"ideas">[];
     const fresh = msgs.filter((m) => m._creationTime > a.since && m.direction === "out" && m.proactive).reverse();
     return {
-      messages: fresh.map((m) => ({ id: m._id, kind: m.kind ?? "", text: m.body.slice(0, 700), buttons: (m.buttons ?? []).map((b) => b.label) })),
+      messages: fresh.map((m) => ({ id: m._id, kind: m.kind ?? "", text: clip(m.body, 700), buttons: (m.buttons ?? []).map((b) => b.label) })),
       ideas: ideas.filter((x) => x._creationTime > a.since).map((x) => ({ id: x._id, hook: ((x.version as { hook?: string } | undefined)?.hook ?? x.messageText).slice(0, 160) })),
       newest: Math.max(a.since, ...msgs.map((m) => m._creationTime)),
     };
@@ -541,7 +542,7 @@ export const signupTick = internalAction({
         if (s.opts.admired > 0) {
           try {
             const r = await ctx.runAction(internal.onboarding.suggest.suggestFor, { creatorId: slot.creatorId, waitMs: 60_000 });
-            const picks = r.suggestions.slice(0, s.opts.admired).map((x) => ({ platform: x.platform, handle: x.handle, why: x.why.slice(0, 200) }));
+            const picks = r.suggestions.slice(0, s.opts.admired).map((x) => ({ platform: x.platform, handle: x.handle, why: clip(x.why, 200) }));
             const added = picks.length ? await ctx.runMutation(internal.eval.firstWeek.addAdmired, { creatorId: slot.creatorId, picks }) : { added: [], refused: [] };
             detail = `${r.suggestions.length} suggested; added ${added.added.join(", ") || "none"}${added.refused.length ? `; refused ${added.refused.join(", ")}` : ""}`;
             if (!r.suggestions.length) await ctx.runMutation(internal.eval.firstWeek.patchLog, { runId: a.runId, i: a.i, append: { failures: [{ d: 0, step: "admired", error: `no suggestions (${JSON.stringify(r.trace).slice(0, 160)})` }] } });
@@ -656,7 +657,7 @@ async function actorTurn(ctx: ActionCtx, s: RunState, i: number, log: CreatorLog
     const idea = seen.ideas.find((x) => x.id === t.ideaId);
     if (idea && (t.act === "save" || t.act === "pass")) {
       const ok = await ctx.runMutation(internal.eval.firstWeek.actOnIdea, { creatorId: slotRow.creatorId, ideaId: idea.id, act: t.act });
-      acts.push(`${t.act} ${idea.hook.slice(0, 60)}${ok ? "" : " (refused)"}`);
+      acts.push(`${t.act} ${clip(idea.hook, 60)}${ok ? "" : " (refused)"}`);
     }
   }
   if (!r.ok) acts.push(`actor model failed: ${r.reason}`);
@@ -790,12 +791,12 @@ export const judgeInputs = internalQuery({
   handler: async (ctx, a): Promise<Array<{ what: string; text: string; source: unknown }>> => {
     const items: Array<{ what: string; text: string; source: unknown }> = [];
     const fr = (await ctx.db.query("messages").withIndex("by_creator_and_dedupe", (q) => q.eq("creatorId", a.creatorId).eq("dedupeKey", `first_read:${a.creatorId}`)).first()) as Doc<"messages"> | null;
-    if (fr) items.push({ what: "first_read", text: fr.body.slice(0, 1500), source: "their posts and her dossier" });
+    if (fr) items.push({ what: "first_read", text: clip(fr.body, 1500), source: "their posts and her dossier" });
     const ideas = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("asc").take(3)) as Doc<"ideas">[];
     for (const x of ideas) {
       const sig = x.signalId ? ((await ctx.db.get(x.signalId)) as Doc<"signals"> | null) : null;
       const own = x.rhymesWithOwnPostId ? ((await ctx.db.get(x.rhymesWithOwnPostId)) as Doc<"ownPosts"> | null) : null;
-      items.push({ what: `idea${sig ? ` (${sig.kind})` : " (from their own posts)"}`, text: `${x.messageText.slice(0, 900)}\nhook: ${(x.version as { hook?: string } | undefined)?.hook ?? ""}\nwhy it's for you: ${x.fitWhy}`, source: { links: x.evidenceLinks, signal: sig ? { kind: sig.kind, url: sig.url, detected: sig.detected ?? sig.why } : null, rhymesWith: own ? { platform: own.platform, caption: own.caption.slice(0, 200), views: own.metrics.views } : null } });
+      items.push({ what: `idea${sig ? ` (${sig.kind})` : " (from their own posts)"}`, text: `${clip(x.messageText, 900)}\nhook: ${(x.version as { hook?: string } | undefined)?.hook ?? ""}\nwhy it's for you: ${x.fitWhy}`, source: { links: x.evidenceLinks, signal: sig ? { kind: sig.kind, url: sig.url, detected: sig.detected ?? sig.why } : null, rhymesWith: own ? { platform: own.platform, caption: clip(own.caption, 200), views: own.metrics.views } : null } });
     }
     return items;
   },
@@ -822,7 +823,7 @@ export const judge = internalAction({
         // A reasoning model can spend the whole budget thinking and return nothing; that is a retry, not a verdict.
         if (!r.ok || !/\{[\s\S]*\}/.test(r.content)) r = await callModel(ctx, { creatorId: slot.creatorId, purpose: "fw_judge_fallback", model: spec.fallback, messages, temperature: 0, maxTokens: 2000, timeoutMs: CRITIC_TIMEOUT_MS * 2, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
         const verdicts = r.ok ? parseJudged(r.content, items.length) : items.map(() => null);
-        judged = items.map((x, i) => ({ what: x.what, text: x.text.slice(0, 400), verdict: verdicts[i] }));
+        judged = items.map((x, i) => ({ what: x.what, text: clip(x.text, 400), verdict: verdicts[i] }));
       } else judged = [];
     } catch (e) {
       judged = { error: e instanceof Error ? e.message.slice(0, 200) : "judge failed" };

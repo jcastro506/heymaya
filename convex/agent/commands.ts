@@ -14,6 +14,7 @@ import { resolveTelegramBotIdentity, sendTelegramMessage } from "../integrations
 import { forgetEvidence, recordVisible } from "./personalHistory";
 import { Draft, Opportunity } from "../partnerships/contracts";
 import { MISSION_CONTROL_TABS, missionControlUrl, type MissionControlTab } from "./missionControl";
+import { clip } from "../lib/clip";
 
 export const apply = internalMutation({
   args: { creatorId: v.id("creators"), command: v.union(v.literal("stop"), v.literal("resume"), v.literal("forget"), v.literal("delete"), v.literal("mission_control")), topic: v.optional(v.string()) },
@@ -66,7 +67,7 @@ export const apply = internalMutation({
         const hit = live.find((n) => words.some((w) => n.text.toLowerCase().includes(w)));
         if (!hit) return { body: `i don't have anything kept about ${a.topic}. tell me the line and i'll drop it.` };
         await forgetEvidence(ctx, c, hit);
-        return { body: `forgotten: "${hit.text.slice(0, 80)}".` };
+        return { body: `forgotten: "${clip(hit.text, 80)}".` };
       }
       let last = live[0];
       const records = await ctx.db.query("personalRecords").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").take(30);
@@ -77,7 +78,7 @@ export const apply = internalMutation({
       }
       if (!last) return { body: "nothing recent to forget. tell me what you mean and i'll drop it." };
       await forgetEvidence(ctx, c, last);
-      return { body: `forgotten: "${last.text.slice(0, 80)}".` };
+      return { body: `forgotten: "${clip(last.text, 80)}".` };
     }
     // delete: the nine-step procedure (§16.5) runs from Settings after a confirm; never from a text alone.
     return { body: `deleting everything is a one-tap in Settings, so it can't happen by accident from a text. ${process.env.APP_URL ?? ""}/app/settings` };
@@ -94,7 +95,7 @@ export const person = internalAction({
     const identity = resolveTelegramBotIdentity();
     let forwarded = false;
     if (operator && identity) {
-      const thread = g.recent.slice(-8).map((m) => `${m.direction === "in" ? "them" : "maya"}: ${m.body.slice(0, 300)}`).join("\n");
+      const thread = g.recent.slice(-8).map((m) => `${m.direction === "in" ? "them" : "maya"}: ${clip(m.body, 300)}`).join("\n");
       const r = await sendTelegramMessage(identity, { chatId: operator, text: `👤 ${g.creator.handles.tiktok ? "@" + g.creator.handles.tiktok : g.creator.email} asked for a person (creator ${g.creator._id}).\n\n${thread}` }).catch(() => null);
       forwarded = Boolean(r && r.ok);
     }

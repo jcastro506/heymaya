@@ -11,6 +11,7 @@ import { internalAction, internalQuery } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
+import { clip } from "../lib/clip";
 
 export const seed = internalMutation({
   args: { tiktok: v.optional(v.string()), instagram: v.optional(v.string()), niche: v.optional(v.string()), timezone: v.optional(v.string()), email: v.optional(v.string()), admired: v.optional(v.array(v.string())) },
@@ -65,9 +66,9 @@ export const status = internalQuery({
       transcripts: posts.filter((p) => p.transcript).length,
       baselineSample: posts.slice(0, 3).map((p) => ({ id: p.postId, url: p.url, type: p.contentType, sec: p.durationSec, views: p.metrics.views, multiple: p.multiple, sample: p.sample, transcript: p.transcript ? p.transcript.slice(0, 80) : null })),
       jobs: jobs.map((j) => ({ kind: j.kind, status: j.status, attempts: j.attempts, lastError: j.lastError })),
-      messages: messages.map((m) => ({ dir: m.direction, kind: m.kind, body: m.body.slice(0, 160), delivered: m.deliveredAt ? true : m.deliveryError ?? "pending" })),
+      messages: messages.map((m) => ({ dir: m.direction, kind: m.kind, body: clip(m.body, 160), delivered: m.deliveredAt ? true : m.deliveryError ?? "pending" })),
       spendUsd: costs.reduce((s, c) => s + c.costUsd, 0),
-      signals: signals.map((x) => ({ kind: x.kind, score: x.score, verdict: x.verdict, why: x.why.slice(0, 200), investigation: (x.investigation ?? []).map((t) => `${t.tool}(${JSON.stringify(t.params).slice(0, 60)}) ${t.ok ? "ok" : "refused"} ${t.credits ?? 0}cr ${t.ms}ms — ${t.why.slice(0, 80)}`) })),
+      signals: signals.map((x) => ({ kind: x.kind, score: x.score, verdict: x.verdict, why: clip(x.why, 200), investigation: (x.investigation ?? []).map((t) => `${t.tool}(${JSON.stringify(t.params).slice(0, 60)}) ${t.ok ? "ok" : "refused"} ${t.credits ?? 0}cr ${t.ms}ms — ${clip(t.why, 80)}`) })),
     };
   },
 });
@@ -163,9 +164,9 @@ export const chatTrace = internalQuery({
     return {
       creator: creator._id,
       recentCosts: costs.map((c) => `${new Date(c.at).toISOString().slice(11, 19)} ${c.vendor} ${c.kind} $${c.costUsd.toFixed(4)}`),
-      predictions: predictions.map((p) => ({ confidence: p.confidence, expectedMultiple: p.expectedMultiple, subject: p.subject, citations: (p.opinion as { citations?: unknown }).citations, investigation: ((p.opinion as { investigation?: Array<{ tool: string; params: unknown; ok: boolean; credits?: number; why: string }> }).investigation ?? []).map((t) => `${t.tool}(${JSON.stringify(t.params).slice(0, 70)}) ${t.ok ? "ok" : "refused"} ${t.credits ?? 0}cr — ${t.why.slice(0, 80)}`) })),
+      predictions: predictions.map((p) => ({ confidence: p.confidence, expectedMultiple: p.expectedMultiple, subject: p.subject, citations: (p.opinion as { citations?: unknown }).citations, investigation: ((p.opinion as { investigation?: Array<{ tool: string; params: unknown; ok: boolean; credits?: number; why: string }> }).investigation ?? []).map((t) => `${t.tool}(${JSON.stringify(t.params).slice(0, 70)}) ${t.ok ? "ok" : "refused"} ${t.credits ?? 0}cr — ${clip(t.why, 80)}`) })),
       jobs: jobs.map((j) => ({ kind: j.kind, status: j.status, attempts: j.attempts, error: j.lastError ?? null })),
-      messages: messages.reverse().map((m) => ({ dir: m.direction, kind: m.kind, body: m.body.slice(0, 500), delivered: Boolean(m.deliveredAt), error: m.deliveryError ?? null })),
+      messages: messages.reverse().map((m) => ({ dir: m.direction, kind: m.kind, body: clip(m.body, 500), delivered: Boolean(m.deliveredAt), error: m.deliveryError ?? null })),
     };
   },
 });
@@ -464,7 +465,7 @@ export const audit = internalQuery({
         delivered: out.filter((m) => m.deliveredAt).length, deliveryErrors: out.filter((m) => m.deliveryError).map((m) => m.deliveryError).slice(0, 5),
         openQuestions: out.filter((m) => m.awaitingAnswer).length, criticSkipped: out.filter((m) => m.criticSkipped).length,
         withButtons: out.filter((m) => m.buttons?.length).length, reactions: count(out.filter((m) => m.reaction), (m) => m.reaction ?? "?"),
-        timeline: msgs.map((m) => `${local(m.ts)} ${m.direction === "out" ? "→" : "←"} ${m.kind ?? ""}${m.proactive ? "*" : ""}${m.buttons?.length ? ` [${m.buttons.map((b) => b.id.split(":")[0]).join(",")}]` : ""}${m.deliveryError ? " DELIVERY-ERROR" : ""} ${m.body.slice(0, 110).replace(/\n/g, " / ")}`),
+        timeline: msgs.map((m) => `${local(m.ts)} ${m.direction === "out" ? "→" : "←"} ${m.kind ?? ""}${m.proactive ? "*" : ""}${m.buttons?.length ? ` [${m.buttons.map((b) => b.id.split(":")[0]).join(",")}]` : ""}${m.deliveryError ? " DELIVERY-ERROR" : ""} ${clip(m.body, 110).replace(/\n/g, " / ")}`),
       },
       jobs: { byKindStatus: count(jobs, (j) => `${j.kind}:${j.status}`), failed: jobs.filter((j) => j.status === "failed" || j.lastError).slice(0, 8).map((j) => `${local(j.createdAt)} ${j.kind} x${j.attempts}: ${(j.lastError ?? "").slice(0, 140)}`) },
       spend: { totalUsd: Math.round(costs.reduce((s, e) => s + e.costUsd, 0) * 100) / 100, byVendorKind: costBy, budgetsByDay: budgets.sort((x, y) => x.day.localeCompare(y.day)).map((b) => `${b.day}: $${b.spentUsd.toFixed(2)} msgs ${b.messages} watches ${b.watches} onb ${b.onboardingWatches ?? 0} credits ${b.marginalCredits}`) },

@@ -17,6 +17,7 @@ import { parseLink } from "./inbound";
 import { DIAGNOSIS_WORDS } from "../connections/numbers";
 import { PARTNERSHIP_TOOLS, runPartnershipTool } from "../partnerships/tools";
 import { appObjectUrl, MISSION_CONTROL_TABS, missionControlUrl, type MissionControlTab } from "./missionControl";
+import { clip } from "../lib/clip";
 
 export const SUMMARY_CAP = 1800; // characters of tool result the model sees, per call
 
@@ -245,7 +246,7 @@ async function runToolInner(ctx: ActionCtx, creatorId: Id<"creators">, call: { n
       value = [...semantic, ...byWords].filter((p) => (seen.has(p.url) ? false : (seen.add(p.url), true))).slice(0, 6);
       record(true, 0);
       const rows = value as Array<{ url: string; multiple: number | null; caption: string; createTime: number }>;
-      return rows.length ? cap(rows.map((r) => `${r.url} · ${new Date(r.createTime).toISOString().slice(0, 10)} · ${r.multiple ?? "?"}× · "${r.caption.slice(0, 100)}"`).join("\n")) : "nothing of theirs rhymes with that";
+      return rows.length ? cap(rows.map((r) => `${r.url} · ${new Date(r.createTime).toISOString().slice(0, 10)} · ${r.multiple ?? "?"}× · "${clip(r.caption, 100)}"`).join("\n")) : "nothing of theirs rhymes with that";
     }
     if (call.name === "lane_benchmark") {
       const b = await ctx.runQuery(internal.scout.benchmarks.laneFor, { creatorId, now: Date.now() });
@@ -261,9 +262,9 @@ async function runToolInner(ctx: ActionCtx, creatorId: Id<"creators">, call: { n
       ]);
       record(true, 0);
       const evidence = [
-        ...personal.slice(0, 2).map((h) => `[${h.kind}; ${new Date(h.at).toISOString().slice(0, 10)}; sources ${h.sourceIds.join(",")}] ${h.text.slice(0, 650)}`),
-        ...conversations.slice(0, 2).map((h) => `[conversation ${new Date(h.at).toISOString().slice(0, 10)}; source ${h.sourceId}]\n${h.text.slice(0, 1100)}`),
-        ...hits.map((h) => `[${h.kind}; source ${h.refId}; indexed ${new Date(h.at).toISOString().slice(0, 10)}] ${h.text.slice(0, 400)}`),
+        ...personal.slice(0, 2).map((h) => `[${h.kind}; ${new Date(h.at).toISOString().slice(0, 10)}; sources ${h.sourceIds.join(",")}] ${clip(h.text, 650)}`),
+        ...conversations.slice(0, 2).map((h) => `[conversation ${new Date(h.at).toISOString().slice(0, 10)}; source ${h.sourceId}]\n${clip(h.text, 1100)}`),
+        ...hits.map((h) => `[${h.kind}; source ${h.refId}; indexed ${new Date(h.at).toISOString().slice(0, 10)}] ${clip(h.text, 400)}`),
       ];
       return evidence.length ? evidence.join("\n\n").slice(0, 4500) : "No matching evidence found. This is a search miss, not proof they never told you. Ask for one useful clue; never invent the past.";
     }

@@ -15,6 +15,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { ensureAccessToken } from "./oauth";
 import { createEvent, deleteEvent, patchEvent } from "../integrations/google/calendar";
 import { formatLocal } from "./time";
+import { clip } from "../lib/clip";
 
 const KIND = v.union(v.literal("film"), v.literal("edit"), v.literal("post"));
 
@@ -22,7 +23,7 @@ export const propose = internalMutation({
   args: { creatorId: v.id("creators"), kind: KIND, start: v.number(), end: v.number(), title: v.string(), ideaId: v.optional(v.id("ideas")) },
   handler: async (ctx, a): Promise<Id<"calendarBlocks">> => {
     if (!(a.end > a.start)) throw new Error("block must end after it starts");
-    return await ctx.db.insert("calendarBlocks", { creatorId: a.creatorId, kind: a.kind, start: a.start, end: a.end, title: a.title.slice(0, 80), ideaId: a.ideaId, status: "proposed", createdAt: Date.now() });
+    return await ctx.db.insert("calendarBlocks", { creatorId: a.creatorId, kind: a.kind, start: a.start, end: a.end, title: clip(a.title, 80), ideaId: a.ideaId, status: "proposed", createdAt: Date.now() });
   },
 });
 

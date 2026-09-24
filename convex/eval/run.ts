@@ -13,6 +13,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { passed, runChecks } from "./checks";
 import { judge, judgePass } from "./judge";
 import { allRows } from "../core/schedule";
+import { clip } from "../lib/clip";
 
 const EVAL_KINDS = new Set(["scout", "opinion", "explain", "review", "reply", "status"]);
 
@@ -177,8 +178,8 @@ export const report = query({
     const worst = [...rows].sort((x, y) => Number(x.pass) - Number(y.pass) || ((x.judge?.wouldSend ?? 3) - (y.judge?.wouldSend ?? 3))).slice(0, 8);
     return {
       perSkill: Array.from(bySkill.entries()).map(([skill, s]) => ({ skill, n: s.n, passRate: Math.round((s.pass / s.n) * 100), corny: s.judged ? Math.round((s.corny / s.judged) * 10) / 10 : null, generic: s.judged ? Math.round((s.generic / s.judged) * 10) / 10 : null, specific: s.judged ? Math.round((s.specific / s.judged) * 10) / 10 : null, wouldSend: s.judged ? Math.round((s.wouldSend / s.judged) * 10) / 10 : null })),
-      recent: rows.slice(0, 40).map((r) => ({ id: r._id, suite: r.suite, skill: r.skill, pass: r.pass, at: r.at, text: r.text.slice(0, 500), failed: r.checks.filter((c) => !c.pass).map((c) => `${c.name}: ${c.detail}`), judge: r.judge ? { corny: r.judge.corny, generic: r.judge.generic, flattering: r.judge.flattering, toolSpeak: r.judge.toolSpeak, specific: r.judge.specific, wouldSend: r.judge.wouldSend, note: r.judge.note } : null, label: labeled.get(String(r._id)) ?? labeled.get(String(r.messageId)) ?? null, messageId: r.messageId ?? null })),
-      worst: worst.map((r) => ({ id: r._id, skill: r.skill, text: r.text.slice(0, 300), note: r.judge?.note ?? r.checks.filter((c) => !c.pass).map((c) => c.detail).join("; ") })),
+      recent: rows.slice(0, 40).map((r) => ({ id: r._id, suite: r.suite, skill: r.skill, pass: r.pass, at: r.at, text: clip(r.text, 500), failed: r.checks.filter((c) => !c.pass).map((c) => `${c.name}: ${c.detail}`), judge: r.judge ? { corny: r.judge.corny, generic: r.judge.generic, flattering: r.judge.flattering, toolSpeak: r.judge.toolSpeak, specific: r.judge.specific, wouldSend: r.judge.wouldSend, note: r.judge.note } : null, label: labeled.get(String(r._id)) ?? labeled.get(String(r.messageId)) ?? null, messageId: r.messageId ?? null })),
+      worst: worst.map((r) => ({ id: r._id, skill: r.skill, text: clip(r.text, 300), note: r.judge?.note ?? r.checks.filter((c) => !c.pass).map((c) => c.detail).join("; ") })),
       labels: labels.length,
       agreement: (() => {
         const both = rows.filter((r) => labeled.has(String(r._id)));

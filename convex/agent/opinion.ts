@@ -26,6 +26,7 @@ import { WATCH_PROMPT } from "../onboarding/watch";
 import type { ParsedLink } from "./inbound";
 import { investigate } from "./investigate";
 import { LOOKUPS } from "./playbooks";
+import { clip } from "../lib/clip";
 
 export const CONFIDENCE_MULTIPLE: Record<string, number> = { strong: 1.8, solid: 1.3, fine: 1.0, weak: 0.7, broken: 0.4 }; // §13.6 (tune)
 
@@ -279,7 +280,7 @@ export const run = internalAction({
     const pack = own ? await ctx.runQuery(internal.agent.opinion.packFor, { creatorId: creator._id, ownPostId: own.id }) : null;
     const evidence = {
       what: a.mode === "own" ? "their own post" : a.mode === "video" ? "a draft they sent as a file" : "a link they sent",
-      theirWords: target.body.slice(0, 400),
+      theirWords: clip(target.body, 400),
       card: card ?? (cannotWatch ? { unavailable: cannotWatch } : null),
       transcript,
       // Sprint 4e: the labelled numbers and the four-way read, or what the platform hides.

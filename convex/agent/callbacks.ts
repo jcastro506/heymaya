@@ -8,6 +8,7 @@
 import type { Doc } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { tokens } from "./toolsData";
+import { clip } from "../lib/clip";
 
 export const CALLBACKS = { max: 3, recentPostDays: 60, staleIdeaDays: 7 } as const;
 
@@ -36,13 +37,13 @@ export function pickCallbacks(input: {
   const day = 86_400_000;
   // 1. A saved idea they never filmed, more than a week old: the friend who remembers what you said you'd do.
   const stale = input.ideas.filter((i) => i.savedAt && i.status !== "posted" && input.now - i.savedAt > CALLBACKS.staleIdeaDays * day).sort((a, b) => (a.savedAt ?? 0) - (b.savedAt ?? 0))[0];
-  if (stale) out.push({ kind: "unfilmed", line: `they saved "${stale.hook.slice(0, 70)}" ${Math.round((input.now - (stale.savedAt ?? input.now)) / day)} days ago; not marked posted (filming status unknown)`, why: "a saved idea worth checking on" });
+  if (stale) out.push({ kind: "unfilmed", line: `they saved "${clip(stale.hook, 70)}" ${Math.round((input.now - (stale.savedAt ?? input.now)) / day)} days ago; not marked posted (filming status unknown)`, why: "a saved idea worth checking on" });
   // 2. Their best recent post, by what it did, with what she saw in it.
   const win = input.posts.filter((p) => input.now - p.createTime < CALLBACKS.recentPostDays * day && (p.multiple ?? 0) >= 1.5).sort((a, b) => (b.multiple ?? 0) - (a.multiple ?? 0))[0];
-  if (win) out.push({ kind: "win", line: `their ${win.signature ? win.signature.toLowerCase() : `"${win.caption.slice(0, 60)}"`} did ${win.multiple}× their normal ${Math.round((input.now - win.createTime) / day)} days ago`, why: "a recent win worth calling back" });
+  if (win) out.push({ kind: "win", line: `their ${win.signature ? win.signature.toLowerCase() : `"${clip(win.caption, 60)}"`} did ${win.multiple}× their normal ${Math.round((input.now - win.createTime) / day)} days ago`, why: "a recent win worth calling back" });
   // 3. A live note about their life, soonest-expiring first: the trip, the race, the sister.
   const note = input.notes.filter((n) => n.kind !== "rule" && (!n.expiresHint || n.expiresHint > input.now)).sort((a, b) => (a.expiresHint ?? Infinity) - (b.expiresHint ?? Infinity))[0];
-  if (note) out.push({ kind: "note", line: `they told her: "${note.text.slice(0, 90)}"`, why: "something they said, still current" });
+  if (note) out.push({ kind: "note", line: `they told her: "${clip(note.text, 90)}"`, why: "something they said, still current" });
   // 4. Their world, when there is room: the recurring things a regular viewer would recognise.
   if (out.length < CALLBACKS.max && input.world) out.push({ kind: "world", line: `their world on camera: ${input.world.slice(0, 120)}`, why: "the recurring things a viewer knows" });
   return out.slice(0, CALLBACKS.max);
@@ -64,7 +65,7 @@ export async function callbacksFor(ctx: QueryCtx, creator: Doc<"creators">, now 
     now,
     world: persona?.world ?? null,
     posts: posts.map((p) => ({ caption: p.caption, createTime: p.createTime, multiple: p.reachMultiple ?? p.multiple ?? null, signature: sig.get(String(p._id)) ?? null })),
-    ideas: ideas.map((i) => ({ hook: (i.version as { hook?: string } | undefined)?.hook ?? i.messageText.slice(0, 80), savedAt: i.savedAt ?? null, sentAt: i.sentAt ?? null, status: i.status })),
+    ideas: ideas.map((i) => ({ hook: (i.version as { hook?: string } | undefined)?.hook ?? clip(i.messageText, 80), savedAt: i.savedAt ?? null, sentAt: i.sentAt ?? null, status: i.status })),
     notes: (creator.notes ?? []).filter((n) => !n.tombstonedAt).map((n) => ({ text: n.text, kind: (n as { kind?: string }).kind, expiresHint: n.expiresHint })),
   };
   // Generate candidates separately so a high-performing unrelated post cannot crowd out the topic.

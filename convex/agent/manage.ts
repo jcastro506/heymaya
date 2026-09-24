@@ -10,6 +10,7 @@ import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { internalMutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
+import { clip } from "../lib/clip";
 
 export const MANAGE_ACTIONS = ["quiet_hours", "tone", "add_admired", "stop_watching", "niche"] as const;
 export type ManageAction = (typeof MANAGE_ACTIONS)[number];
@@ -68,7 +69,7 @@ export async function addTracked(ctx: { db: { query: (t: "trackedAccounts") => u
   }
   if (existing.filter((r) => r.status !== "removed").length >= 10) return { ok: false, error: "ten is the most she can watch closely" };
   // §27: who added it, and why, so a suggestion's pick rate and its reason can be read back.
-  const id = await ctx.db.insert("trackedAccounts", { creatorId, platform, handle, status: "active", addedBy: opts.addedBy ?? "creator", ...(opts.why ? { why: opts.why.slice(0, 300) } : {}), baselineN: 0, createdAt: Date.now() } as never);
+  const id = await ctx.db.insert("trackedAccounts", { creatorId, platform, handle, status: "active", addedBy: opts.addedBy ?? "creator", ...(opts.why ? { why: clip(opts.why, 300) } : {}), baselineN: 0, createdAt: Date.now() } as never);
   return { ok: true, id };
 }
 

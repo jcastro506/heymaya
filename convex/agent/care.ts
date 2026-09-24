@@ -20,6 +20,7 @@ import { callModel } from "../core/llm";
 import { REGISTRY } from "./registry";
 import { deliverNow } from "../core/scheduler";
 import { resolveTelegramBotIdentity, sendTelegramMessage } from "../integrations/telegram/client";
+import { clip } from "../lib/clip";
 
 export const CARE_HOURS = 24;
 
@@ -67,7 +68,7 @@ export const checkIn = internalAction({
       creatorId: a.creatorId, purpose: "check_in", model: REGISTRY.writer.primary,
       messages: [
         { role: "system", content: CHECK_IN_SKILL },
-        { role: "user", content: `What they said: ${JSON.stringify(g.target.body.slice(0, 1000))}` },
+        { role: "user", content: `What they said: ${JSON.stringify(clip(g.target.body, 1000))}` },
       ],
       temperature: 0.5, maxTokens: 200, apiKey: process.env.OPENROUTER_API_KEY ?? "",
     });
@@ -89,7 +90,7 @@ export const respond = internalAction({
       creatorId: a.creatorId, purpose: "care", model: REGISTRY.writer.primary,
       messages: [
         { role: "system", content: `${CARE_SKILL}\n\nThe line for where they are: "${resource}"` },
-        { role: "user", content: `What they said: ${JSON.stringify(g.target.body.slice(0, 1000))}` },
+        { role: "user", content: `What they said: ${JSON.stringify(clip(g.target.body, 1000))}` },
       ],
       temperature: 0.4, maxTokens: 300, apiKey: process.env.OPENROUTER_API_KEY ?? "",
     });
@@ -105,7 +106,7 @@ export const respond = internalAction({
     const identity = resolveTelegramBotIdentity();
     if (operator && identity) {
       const who = g.creator.handles.tiktok ? `@${g.creator.handles.tiktok}` : g.creator.handles.instagram ? `@${g.creator.handles.instagram}` : g.creator.email;
-      const res = await sendTelegramMessage(identity, { chatId: operator, text: `🟠 care: ${who} (creator ${g.creator._id}) may not be okay. They said: "${g.target.body.slice(0, 400)}". Maya checked in and gave a crisis line; proactive texts are paused for ${CARE_HOURS}h.` }).catch(() => null);
+      const res = await sendTelegramMessage(identity, { chatId: operator, text: `🟠 care: ${who} (creator ${g.creator._id}) may not be okay. They said: "${clip(g.target.body, 400)}". Maya checked in and gave a crisis line; proactive texts are paused for ${CARE_HOURS}h.` }).catch(() => null);
       alerted = Boolean(res && res.ok);
     }
     return { ok: true, alerted };

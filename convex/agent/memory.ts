@@ -6,6 +6,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { MESSAGE_DAYS } from "../core/retention";
 import { recordVisible } from "./personalHistory";
+import { clip } from "../lib/clip";
 
 export const personal = internalQuery({
   args: { creatorId: v.id("creators"), query: v.string() },
@@ -159,7 +160,7 @@ export const conversations = internalQuery({
       const after = await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId).gt("ts", row.ts).lte("ts", row.ts + 30 * 60_000)).take(2);
       const passage = [...before.reverse(), ...after].filter((m) => !m.memoryExcludedAt && (m.direction === "in" || m.deliveredAt));
       passage.forEach((m) => used.add(m._id));
-      result.push({ at: row.ts, sourceId: row._id, text: passage.map((m) => `${m.direction === "in" ? "Creator said" : "Maya said (not proof an action happened)"}: ${m.body.slice(0, 700)}`).join("\n") });
+      result.push({ at: row.ts, sourceId: row._id, text: passage.map((m) => `${m.direction === "in" ? "Creator said" : "Maya said (not proof an action happened)"}: ${clip(m.body, 700)}`).join("\n") });
       if (result.length === 3) break;
     }
     return result;

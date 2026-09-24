@@ -20,6 +20,7 @@ import { availabilityFor, availabilitySection } from "../calendar/availability";
 import { callbacksFor, callbacksSection } from "./callbacks";
 import { personalHistoryFor } from "./personalHistory";
 import { separatedCreator } from "../taste/separation";
+import { clip } from "../lib/clip";
 
 export const RECENT_MESSAGES = 20;
 export const CONTEXT_VERSION = "ctx-2026-09-02.1";
@@ -89,7 +90,7 @@ export async function personalFor(ctx: QueryCtx, creator: Doc<"creators">): Prom
     const c = p.connected;
     const freshReach = c && c.reach !== null && c.asOf !== null && now - c.asOf < 48 * 3_600_000 ? c.reach : null;
     const head = freshReach !== null ? `reached ${freshReach.toLocaleString()} (connected)${p.reachMultiple !== undefined ? ` (${p.reachMultiple}× their normal reach)` : ""} · ${p.metrics.views.toLocaleString()} views` : `${p.metrics.views.toLocaleString()} views${p.multiple !== undefined ? ` (${p.multiple}× their normal)` : ""}`;
-    return `- ${day(p.createTime)} · ${head} · "${p.caption.slice(0, 70)}"${p.url ? ` · ${p.url}` : ""}`;
+    return `- ${day(p.createTime)} · ${head} · "${clip(p.caption, 70)}"${p.url ? ` · ${p.url}` : ""}`;
   });
   const life = events.filter((e) => e.status === "active" && e.class !== "private" && e.title).map((e) => `- ${day(e.start)} · ${e.title}${e.class === "filmable" ? " (could film around this)" : ""}`);
   const plan = blocks.slice(0, 15).map((b) => {

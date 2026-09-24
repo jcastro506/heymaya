@@ -32,6 +32,7 @@ import { TABLES_BY_CREATOR } from "../account/deletion";
 import { applyIdeaAct } from "../core/ideaActs";
 import { tiktok } from "../integrations/scrapeCreators/platforms/tiktok";
 import { THRESHOLDS } from "../config/thresholds";
+import { clip } from "../lib/clip";
 
 const D = 86_400_000;
 const STEP_GAP_MS = 5_000;
@@ -405,7 +406,7 @@ export const todayFromMaya = internalQuery({
     const msgs = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId).gte("ts", a.since)).take(40)) as Doc<"messages">[];
     const ideas = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(10)) as Doc<"ideas">[];
     return {
-      messages: msgs.filter((m) => m.direction === "out" && m.proactive).map((m) => ({ id: m._id, kind: m.kind ?? "", text: m.body.slice(0, 600) })),
+      messages: msgs.filter((m) => m.direction === "out" && m.proactive).map((m) => ({ id: m._id, kind: m.kind ?? "", text: clip(m.body, 600) })),
       ideas: ideas.filter((i) => i.createdAt >= a.since).map((i) => ({ id: i._id, hook: ((i.version as { hook?: string } | undefined)?.hook ?? i.messageText).slice(0, 140) })),
     };
   },

@@ -11,6 +11,7 @@ import { internal } from "../_generated/api";
 import { v } from "convex/values";
 import { providerBase } from "../partnerships/providerConfig";
 import { NORTHLINE_PAGE, worldPage, worldSearch } from "./dealsWorldData";
+import { clip } from "../lib/clip";
 
 /** A fictional brand with an official creator page and a published partnerships address. */
 export const FAKE_BRAND = {
@@ -114,7 +115,7 @@ export const gmail = httpAction(async (ctx, request) => {
   if (thread) {
     const threadId = decodeURIComponent(thread[1]);
     const sent = b.sent.filter((m) => m.threadId === threadId).map((m) => ({ id: m.id, threadId, internalDate: String(m.at), labelIds: ["SENT"], snippet: "sent by the creator", payload: { mimeType: "text/plain", body: { data: b64("(sent)") }, headers: [{ name: "Message-ID", value: mimeMessageId(m.raw) ?? `<${m.id}@example.com>` }] } }));
-    const replies = b.replies.filter((m) => m.threadId === threadId).map((m) => ({ id: m.id, threadId, internalDate: String(m.at), labelIds: ["INBOX"], snippet: m.text.slice(0, 80), payload: { mimeType: "text/plain", body: { data: b64(m.text) }, headers: [{ name: "Message-ID", value: `<${m.id}@${m.from?.split("@")[1] ?? "northlinerunning.com"}>` }] } }));
+    const replies = b.replies.filter((m) => m.threadId === threadId).map((m) => ({ id: m.id, threadId, internalDate: String(m.at), labelIds: ["INBOX"], snippet: clip(m.text, 80), payload: { mimeType: "text/plain", body: { data: b64(m.text) }, headers: [{ name: "Message-ID", value: `<${m.id}@${m.from?.split("@")[1] ?? "northlinerunning.com"}>` }] } }));
     return json({ id: threadId, messages: [...sent, ...replies].sort((x, y) => Number(x.internalDate) - Number(y.internalDate)) });
   }
   if (path.startsWith("messages")) {

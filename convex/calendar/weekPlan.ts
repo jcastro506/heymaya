@@ -21,6 +21,7 @@ import { habitsFor } from "./habits";
 import { buildIcs } from "./ics";
 import { localHourMinute } from "../scout/gate";
 import { pairedRows } from "../core/schedule";
+import { clip } from "../lib/clip";
 
 const WEEKDAY: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 /** Sunday, on their clock, after the review has had its hour. */
@@ -58,7 +59,7 @@ export const inputsFor = internalQuery({
       model,
       ideas: [...hearted, ...ideas].map((i) => ({
         ideaId: String(i._id),
-        hook: ((i.version as { hook?: string } | undefined)?.hook ?? i.messageText.slice(0, 80)).slice(0, 90),
+        hook: ((i.version as { hook?: string } | undefined)?.hook ?? clip(i.messageText, 80)).slice(0, 90),
         // The why: a seeded idea carries it in its version; a scout idea carries it as fitWhy (live 2026-09-07: the plan line had none).
         why: ((i.version as { why?: string } | undefined)?.why || i.fitWhy || null),
         // "saved" is a tap on an idea; it lives as `savedAt`, not as a status.

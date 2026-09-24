@@ -18,6 +18,7 @@ import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
 import { CRITIC_TIMEOUT_MS } from "../agent/critic";
 import { fetchMedia } from "../integrations/gemini/client";
+import { clip } from "../lib/clip";
 
 export interface ExpertCase {
   id: string;
@@ -182,10 +183,10 @@ export const postsByPlatform = internalQuery({
       if (!mine.length) continue;
       out[platform] = {
         normal: normalViews(mine, platform, now)?.value ?? null,
-        latest: mine.slice(0, 6).map((p) => ({ url: p.url.replace(/\?.*$/, ""), views: p.metrics.views, multiple: p.multiple ?? null, daysOld: Math.round((now - p.createTime) / 86_400_000), caption: p.caption.slice(0, 400) })),
+        latest: mine.slice(0, 6).map((p) => ({ url: p.url.replace(/\?.*$/, ""), views: p.metrics.views, multiple: p.multiple ?? null, daysOld: Math.round((now - p.createTime) / 86_400_000), caption: clip(p.caption, 400) })),
         // every post she can know about (a callback to an older post of theirs is supported)
-        all: mine.slice(0, 40).map((p) => ({ views: p.metrics.views, caption: p.caption.slice(0, 120) })),
-        best: [...mine].sort((x, y) => y.metrics.views - x.metrics.views).slice(0, 3).map((p) => ({ url: p.url.replace(/\?.*$/, ""), views: p.metrics.views, multiple: p.multiple ?? null, caption: p.caption.slice(0, 400) })),
+        all: mine.slice(0, 40).map((p) => ({ views: p.metrics.views, caption: clip(p.caption, 120) })),
+        best: [...mine].sort((x, y) => y.metrics.views - x.metrics.views).slice(0, 3).map((p) => ({ url: p.url.replace(/\?.*$/, ""), views: p.metrics.views, multiple: p.multiple ?? null, caption: clip(p.caption, 400) })),
       };
     }
     // What they've told her (her memory), so a callback to it isn't marked invented.
@@ -345,7 +346,7 @@ export const scorecard = query({
     const mine = rows.filter((r) => (r.trace as T | undefined)?.runId === runId);
     const cases = mine.map((r) => {
       const t = r.trace as T;
-      return { caseId: t.caseId, situation: t.situation, labelStatus: t.labelStatus, pass: t.verdict?.pass ?? false, why: t.verdict?.why ?? t.error ?? "", falseClaims: t.correctness?.falseClaims ?? [], correct: t.correctness?.correct ?? null, toneOk: r.pass, reply: r.text.slice(0, 600) };
+      return { caseId: t.caseId, situation: t.situation, labelStatus: t.labelStatus, pass: t.verdict?.pass ?? false, why: t.verdict?.why ?? t.error ?? "", falseClaims: t.correctness?.falseClaims ?? [], correct: t.correctness?.correct ?? null, toneOk: r.pass, reply: clip(r.text, 600) };
     });
     return { runId, total: cases.length, passed: cases.filter((c) => c.pass).length, falseClaimCases: cases.filter((c) => c.falseClaims.length).length, cases };
   },
