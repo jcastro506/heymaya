@@ -83,6 +83,19 @@ export const addAdmired = internalMutation({
   },
 });
 
+/** The chat tool's drop, after they confirmed it in the conversation. Scoped to their own rows; history kept. */
+export const stopWatchingNow = internalMutation({
+  args: { creatorId: v.id("creators"), handle: v.string() },
+  handler: async (ctx, a): Promise<{ ok: boolean; body: string }> => {
+    const handle = a.handle.trim().replace(/^@/, "").toLowerCase();
+    const rows = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"trackedAccounts">[];
+    const t = rows.find((r) => r.handle === handle && r.status !== "removed");
+    if (!t) return { ok: false, body: `@${handle} isn't on their list` };
+    await ctx.db.patch(t._id, { status: "removed" });
+    return { ok: true, body: `stopped watching @${handle}` };
+  },
+});
+
 /** "Stop watching @x" is destructive, so it becomes the same buttons the three-passes question uses. */
 export const stopWatchingButtons = internalMutation({
   args: { creatorId: v.id("creators"), handle: v.string() },
