@@ -150,3 +150,14 @@ describe("the doors, on rows", () => {
     expect(audit.find((e) => e.eventId === "evt_2")?.detail).toMatch(/matches no tier/);
   });
 });
+
+import { TIER_PRICES_CENTS } from "../../../scripts/stripe-products.mjs";
+describe("the Stripe price script matches tiers.ts", () => {
+  it("every tier × interval amount equals TIERS", async () => {
+    const { TIERS, TIER_NAMES } = await import("../tiers");
+    for (const t of TIER_NAMES) {
+      expect((TIER_PRICES_CENTS as Record<string, { monthly: number; annual: number }>)[t].monthly).toBe(Math.round(TIERS[t].priceUsd * 100));
+      expect((TIER_PRICES_CENTS as Record<string, { monthly: number; annual: number }>)[t].annual).toBe(Math.round(TIERS[t].annualUsd * 100));
+    }
+  });
+});

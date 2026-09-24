@@ -23,22 +23,34 @@ function envFromFile(path) {
   return out;
 }
 
-const key = process.env.STRIPE_SECRET_KEY ?? envFromFile(".env.local").STRIPE_SECRET_KEY;
-if (!key) {
-  console.error("STRIPE_SECRET_KEY not found");
-  process.exit(1);
-}
-const stripe = new Stripe(key);
-const mode = key.startsWith("sk_live") ? "LIVE" : "test";
-
-const PRICES = [
-  { lookup: "maya_founding_monthly", env: "STRIPE_PRICE_FOUNDING_MONTHLY", amount: 1900, interval: "month", nickname: "Founding · monthly" },
-  { lookup: "maya_founding_annual", env: "STRIPE_PRICE_FOUNDING_ANNUAL", amount: 18000, interval: "year", nickname: "Founding · annual" },
-  { lookup: "maya_list_monthly", env: "STRIPE_PRICE_LIST_MONTHLY", amount: 2900, interval: "month", nickname: "List · monthly" },
-  { lookup: "maya_list_annual", env: "STRIPE_PRICE_LIST_ANNUAL", amount: 29000, interval: "year", nickname: "List · annual" },
-];
+/**
+ * One price per tier × interval, amounts from convex/billing/tiers.ts (a test keeps these equal).
+ * The lookup key carries the amount, so a price change (D9) creates a new price instead of
+ * silently reusing the old one; the env keys are what `billing/tiers.ts` reads (priceEnvKey).
+ */
+export const TIER_PRICES_CENTS = {
+  solo: { monthly: 1900, annual: 19000 },
+  duo: { monthly: 2499, annual: 24990 },
+  partner: { monthly: 2999, annual: 29990 },
+};
+const PRICES = Object.entries(TIER_PRICES_CENTS).flatMap(([tier, byInterval]) =>
+  Object.entries(byInterval).map(([interval, amount]) => ({
+    lookup: `maya_${tier}_${interval}_${amount}`,
+    env: `STRIPE_PRICE_${tier.toUpperCase()}_${interval.toUpperCase()}`,
+    amount,
+    interval: interval === "monthly" ? "month" : "year",
+    nickname: `${tier} · ${interval}`,
+  })),
+);
 
 async function main() {
+  const key = process.env.STRIPE_SECRET_KEY ?? envFromFile(".env.local").STRIPE_SECRET_KEY;
+  if (!key) {
+    console.error("STRIPE_SECRET_KEY not found");
+    process.exit(1);
+  }
+  const stripe = new Stripe(key);
+  const mode = key.startsWith("sk_live") ? "LIVE" : "test";
   const products = await stripe.products.search({ query: "name:'Maya'" });
   let product = products.data.find((p) => p.metadata?.app === "maya-creator");
   if (!product) product = await stripe.products.create({ name: "Maya", description: "A creator's assistant who watches your posts, your calendar and your lane, and texts you ideas.", metadata: { app: "maya-creator" } });
@@ -53,7 +65,7 @@ async function main() {
   for (const l of lines) console.log(l);
 }
 
-main().catch((e) => {
+if (process.argv[1]?.endsWith("stripe-products.mjs")) main().catch((e) => {
   console.error(e.message);
   process.exit(1);
 });
