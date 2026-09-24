@@ -12,6 +12,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { dayKeyInZone } from "./cadence";
 import { localHourMinute } from "../scout/gate";
+import { pairedRows } from "./schedule";
 
 export const BEHIND = "behind today: my read on your lane didn't go through on my side. nothing you did. back on it, and i'll text when there's something worth it.";
 export const CANNOT_SEE = "heads up: i couldn't see tiktok properly today, so if i'm quiet that's why, not because nothing happened. trying again through the day.";
@@ -20,7 +21,6 @@ export const dueStatus = internalQuery({
   args: { now: v.number() },
   handler: async (ctx, a): Promise<Array<{ creatorId: Id<"creators">; kind: "behind" | "cannot_see"; day: string }>> => {
     const out: Array<{ creatorId: Id<"creators">; kind: "behind" | "cannot_see"; day: string }> = [];
-    const creators = (await ctx.db.query("creators").collect()) as Doc<"creators">[];
     const since = a.now - 6 * 3_600_000;
     /**
      * ⚠️ Only checks that mean READS ARE FAILING may tell a creator she cannot see their
@@ -32,18 +32,17 @@ export const dueStatus = internalQuery({
     const readChecks = new Set(["credit-balance", "read", "tiktok", "instagram"]);
     const recent = (await ctx.db.query("vendorHealth").withIndex("by_vendor_at", (q) => q.eq("vendor", "scrapecreators").gte("at", since)).order("desc").take(20)) as Doc<"vendorHealth">[];
     const scrapeDown = recent.find((r) => readChecks.has(r.check)) ?? null;
-    for (const c of creators) {
-      if (!c.channel.paired || c.plan.status === "paused" || c.plan.status === "canceled" || c.plan.status === "deleting") continue;
+    for (const c of await pairedRows(ctx, { activeOnly: true })) {
       const { hour } = localHourMinute(a.now, c.timezone);
       if (hour < 9 || hour >= 20) continue; // a status text at 3am helps nobody
       const day = dayKeyInZone(a.now, c.timezone);
-      const messages = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", c._id).gte("ts", a.now - 26 * 3_600_000)).collect()) as Doc<"messages">[];
+      const messages = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", c.creatorId).gte("ts", a.now - 26 * 3_600_000)).collect()) as Doc<"messages">[];
       const saidToday = (kind: string) => messages.some((m) => m.direction === "out" && m.dedupeKey === `status:${kind}:${day}`);
       const outboundRecently = messages.some((m) => m.direction === "out" && m.ts >= since && m.kind !== "status");
-      const jobs = (await ctx.db.query("jobs").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").take(40)) as Doc<"jobs">[];
+      const jobs = (await ctx.db.query("jobs").withIndex("by_creator", (q) => q.eq("creatorId", c.creatorId)).order("desc").take(40)) as Doc<"jobs">[];
       const diedRecently = jobs.some((j) => (j.status === "dead" || j.status === "failed") && j.updatedAt >= since && ["scout", "first_read", "ingest_catalogue", "deliver_message"].includes(j.kind));
-      if (diedRecently && !outboundRecently && !saidToday("behind")) out.push({ creatorId: c._id, kind: "behind", day });
-      if (scrapeDown && !scrapeDown.ok && !saidToday("cannot_see")) out.push({ creatorId: c._id, kind: "cannot_see", day });
+      if (diedRecently && !outboundRecently && !saidToday("behind")) out.push({ creatorId: c.creatorId, kind: "behind", day });
+      if (scrapeDown && !scrapeDown.ok && !saidToday("cannot_see")) out.push({ creatorId: c.creatorId, kind: "cannot_see", day });
     }
     return out;
   },

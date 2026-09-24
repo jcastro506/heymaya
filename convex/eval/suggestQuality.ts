@@ -5,7 +5,8 @@
  * re-checked by code against fresh reads and judged by a different model family.
  */
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";

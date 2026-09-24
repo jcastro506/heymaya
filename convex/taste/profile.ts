@@ -6,7 +6,8 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
@@ -14,6 +15,7 @@ import { REGISTRY } from "../agent/registry";
 import { SOUL } from "../agent/soul";
 import { summarize, TASTE, type Affinity } from "./affinities";
 import { isOutcome, separatedCreator } from "./separation";
+import { allRows } from "../core/schedule";
 
 export const TASTE_PROFILE_SKILL = `taste-profile
 When: weekly, or after their first few reactions. You are writing a private note to yourself about what THIS creator actually takes from you, as opposed to who they are (that's the dossier). Inputs: their affinities (feature, score, count; positive means they took it, negative means they passed) and the last twenty things they did with your ideas.
@@ -23,15 +25,16 @@ Output the note only.`;
 export const dueForProfile = internalQuery({
   args: { now: v.number() },
   handler: async (ctx, a): Promise<Id<"creators">[]> => {
-    const creators = (await ctx.db.query("creators").collect()) as Doc<"creators">[];
     const week = 7 * 86_400_000;
     const due: Id<"creators">[] = [];
-    for (const c of creators) {
-      const events = (await ctx.db.query("tasteEvents").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").take(TASTE.profileMinEvents)) as Doc<"tasteEvents">[];
+    for (const c of await allRows(ctx)) {
+      // Profiled within the week: not due, and no need to read a single event to know it.
+      if (c.tasteUpdatedAt !== undefined && a.now - c.tasteUpdatedAt < week) continue;
+      const events = (await ctx.db.query("tasteEvents").withIndex("by_creator", (q) => q.eq("creatorId", c.creatorId)).order("desc").take(TASTE.profileMinEvents)) as Doc<"tasteEvents">[];
       if (events.length < TASTE.profileMinEvents) continue;
-      const seen = c.taste?.eventsSeen ?? 0;
-      const total = (await ctx.db.query("tasteEvents").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).collect()).length;
-      if (!c.taste || (a.now - c.taste.updatedAt >= week && total > seen)) due.push(c._id);
+      const seen = c.tasteEventsSeen ?? 0;
+      const total = (await ctx.db.query("tasteEvents").withIndex("by_creator", (q) => q.eq("creatorId", c.creatorId)).collect()).length;
+      if (c.tasteUpdatedAt === undefined || total > seen) due.push(c.creatorId);
     }
     return due;
   },

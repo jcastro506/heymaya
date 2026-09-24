@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { z } from "zod";
-import { internalMutation, internalQuery } from "../_generated/server";
+import { internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { active, event, ownedOpportunity, profile, assertPersonalEvidence, partnershipAllowance } from "./store";

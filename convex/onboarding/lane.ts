@@ -14,7 +14,8 @@
  */
 
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "../_generated/server";
+import { internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { Lanes } from "./clusters";
 import { GROWTH, type GrowthPlan } from "../agent/growth";

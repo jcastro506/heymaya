@@ -5,7 +5,8 @@
  * and on the words second. Run: `eval/partnershipGauntlet:run {handle}`; report in syncState.
  */
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { encrypt } from "../lib/encryption";

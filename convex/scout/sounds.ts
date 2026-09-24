@@ -8,10 +8,12 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { THRESHOLDS } from "../config/thresholds";
+import { pairedRows } from "../core/schedule";
 
 export const MIN_ACCOUNTS = 2;
 const WEEK_MS = 7 * 86_400_000;
@@ -47,10 +49,8 @@ export const audienceFor = internalQuery({
     const tracked = (await ctx.db.query("trackedAccounts").collect()) as Doc<"trackedAccounts">[];
     for (const t of tracked) if (t.status === "active" && a.handles.includes(t.handle)) out.add(t.creatorId);
     if (a.keywords.length) {
-      const creators = (await ctx.db.query("creators").collect()) as Doc<"creators">[];
-      for (const c of creators) {
-        const kws = ((c.dossier as { keywords?: string[] } | undefined)?.keywords ?? []).map((k) => k.toLowerCase());
-        if (c.channel.paired && kws.some((k) => a.keywords.includes(k))) out.add(c._id);
+      for (const c of await pairedRows(ctx)) {
+        if (c.keywords.some((k) => a.keywords.includes(k))) out.add(c.creatorId);
       }
     }
     return Array.from(out);

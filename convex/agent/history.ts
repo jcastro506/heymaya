@@ -18,7 +18,8 @@
  */
 
 import { v } from "convex/values";
-import { internalMutation, internalQuery, type QueryCtx } from "../_generated/server";
+import { internalQuery, type QueryCtx } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
 
 export const HISTORY = {

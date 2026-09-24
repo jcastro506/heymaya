@@ -8,7 +8,8 @@
  */
 
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "../_generated/server";
+import { internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import type { Doc } from "../_generated/dataModel";
 
 const SAMPLE_MS = 48 * 3_600_000;

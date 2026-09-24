@@ -7,7 +7,8 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
@@ -19,6 +20,7 @@ import { critique } from "./critic";
 import { pickMilestone } from "./history";
 import { localHourMinute } from "../scout/gate";
 import { THRESHOLDS } from "../config/thresholds";
+import { pairedRows } from "../core/schedule";
 
 export const CADENCE = {
   morningHour: 8,
@@ -124,13 +126,12 @@ export function followerMilestone(followers: number | null, said: string[]): { k
 export const dueNow = internalQuery({
   args: { now: v.number() },
   handler: async (ctx, a): Promise<Array<{ creatorId: Id<"creators">; touch: "morning" | "quiet" }>> => {
-    const creators = (await ctx.db.query("creators").collect()) as Doc<"creators">[];
     const out: Array<{ creatorId: Id<"creators">; touch: "morning" | "quiet" }> = [];
-    for (const c of creators) {
-      if (!c.channel.paired || c.plan.status === "paused" || c.plan.status === "canceled" || c.plan.status === "deleting" || c.plan.status === "onboarding") continue;
+    for (const c of await pairedRows(ctx, { activeOnly: true })) {
+      if (c.status === "onboarding") continue;
       const { hour } = localHourMinute(a.now, c.timezone);
-      if (hour === morningHourFor(c.quietHours)) out.push({ creatorId: c._id, touch: "morning" });
-      if (hour === CADENCE.quietHourLocal) out.push({ creatorId: c._id, touch: "quiet" });
+      if (hour === morningHourFor(c.quietHours)) out.push({ creatorId: c.creatorId, touch: "morning" });
+      if (hour === CADENCE.quietHourLocal) out.push({ creatorId: c.creatorId, touch: "quiet" });
     }
     return out;
   },

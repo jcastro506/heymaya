@@ -8,7 +8,8 @@
  */
 
 import { v } from "convex/values";
-import { action, internalAction, internalMutation, internalQuery, mutation, query } from "../_generated/server";
+import { action, internalAction, internalQuery, query } from "../_generated/server";
+import { internalMutation, mutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { creatorForIdentity } from "../core/identity";
@@ -44,6 +45,7 @@ export const TABLES_BY_CREATOR = [
   "evalRuns",
   "evalLabels",
   "userActions",
+  "schedule",
 ] as const;
 
 export const FINAL_MESSAGE = "deleting everything now: your posts as i read them, every idea, every message, your calendar fields, your notes. this chat unpairs after this text. take care out there.";

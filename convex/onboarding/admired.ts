@@ -5,7 +5,8 @@
 
 import { v } from "convex/values";
 import { recordAction } from "../core/act";
-import { action, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "../_generated/server";
+import { action, internalQuery, query, type MutationCtx, type QueryCtx } from "../_generated/server";
+import { mutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { addTracked } from "../agent/manage";

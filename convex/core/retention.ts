@@ -6,7 +6,7 @@
  */
 
 import { v } from "convex/values";
-import { internalMutation } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import type { Doc } from "../_generated/dataModel";
 
 export const MESSAGE_DAYS = 365;

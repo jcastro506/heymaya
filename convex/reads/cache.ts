@@ -6,7 +6,8 @@
  * treated as abandoned and re-claimed.
  */
 
-import { internalMutation, internalQuery } from "../_generated/server";
+import { internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { v } from "convex/values";
 
 export const STALE_CLAIM_MS = 90_000;

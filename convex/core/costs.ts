@@ -4,7 +4,8 @@
  * usage when the vendor gives it; the row is never computed from local price math.
  */
 
-import { internalMutation, internalQuery } from "../_generated/server";
+import { internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { v } from "convex/values";
 import { applyBump, emptyDay, kindForCost } from "./budgets";
 import type { Doc } from "../_generated/dataModel";

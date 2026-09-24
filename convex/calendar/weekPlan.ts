@@ -10,7 +10,8 @@
 import { v } from "convex/values";
 import { HOURLY_SPREAD_MS, spreadDelays } from "../core/fanout";
 import { eventDescription, ideaForEvent } from "./eventBody";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { buildPostTimeModel } from "./postTime";
@@ -19,6 +20,7 @@ import { localDateKey } from "./time";
 import { habitsFor } from "./habits";
 import { buildIcs } from "./ics";
 import { localHourMinute } from "../scout/gate";
+import { pairedRows } from "../core/schedule";
 
 const WEEKDAY: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 /** Sunday, on their clock, after the review has had its hour. */
@@ -215,15 +217,15 @@ export const skip = internalMutation({
 export const due = internalQuery({
   args: { now: v.number() },
   handler: async (ctx, a): Promise<Id<"creators">[]> => {
-    const creators = (await ctx.db.query("creators").take(500)) as Doc<"creators">[];
-    return creators
-      .filter((c) => c.channel.paired && c.dossier)
+    // S0 #3: this read `creators.take(500)`, so creator 501 silently never got a week plan.
+    return (await pairedRows(ctx))
+      .filter((c) => c.hasDossier)
       .filter((c) => {
         const { hour } = localHourMinute(a.now, c.timezone);
         const weekday = new Date(new Intl.DateTimeFormat("en-US", { timeZone: c.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(a.now)).getDay();
         return weekday === 0 && hour === PLAN_HOUR_LOCAL;
       })
-      .map((c) => c._id);
+      .map((c) => c.creatorId);
   },
 });
 

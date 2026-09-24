@@ -32,7 +32,9 @@ describe("consolidate", () => {
     await t.run(async (ctx) => {
       for (let i = 0; i < 6; i++) await ctx.db.insert("messages", { creatorId, direction: "in", surface: "telegram", body: "hey", ts: Date.UTC(2026, 8, 2, 19, 0) - i * 86_400_000 * 2, kind: "inbound" });
     });
-    const r = await t.mutation(internal.agent.consolidate.nightly, { now: Date.UTC(2026, 8, 3, 3, 0) });
+    // The nightly fans out one mutation per creator (S0 #1); the counts come from that one.
+    expect(await t.mutation(internal.agent.consolidate.nightly, { now })).toEqual({ creators: 1 });
+    const r = await t.mutation(internal.agent.consolidate.consolidateOne, { creatorId, now });
     expect(r.expiredNotes).toBe(1);
     expect(r.hoursLearned).toBe(1);
     const c = await t.run((ctx) => ctx.db.get(creatorId));

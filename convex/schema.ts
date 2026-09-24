@@ -379,7 +379,9 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_creator", ["creatorId", "createdAt"])
-    .index("by_creator_status", ["creatorId", "status"]),
+    .index("by_creator_status", ["creatorId", "status"])
+    // S0 #5: the nightly ignore-expiry reads stale sent ideas by range, not by scanning every idea ever written.
+    .index("by_status_created", ["status", "createdAt"]),
 
   // --------------------------------------------------------------- predictions
   predictions: defineTable({
@@ -670,9 +672,40 @@ export default defineSchema({
     .index("by_creator_and_ts", ["creatorId", "ts"])
     .index("by_creator_and_dedupe", ["creatorId", "dedupeKey"])
     .index("by_creator_and_awaiting", ["creatorId", "awaitingAnswer"])
+    // S0: the hourly question expiry finds open questions fleet-wide without reading creators.
+    .index("by_awaiting", ["awaitingAnswer", "ts"])
     .index("by_channel_message", ["channelMessageId"])
     .index("by_delivery", ["direction", "deliveredAt"])
     .index("by_telegramUpdateId", ["telegramUpdateId"]),
+
+  // ------------------------------------------------------------------ schedule
+  /**
+   * S0 #1: one small row per creator holding only what the fleet jobs select on. Every
+   * hourly "who's due" reads these (~300 B) instead of full creator documents (13–17 KB,
+   * growing with tenure), which put every hourly job past Convex's 16 MiB read limit at
+   * roughly 1,000 creators. Kept in sync by a trigger on every creators write
+   * (lib/functions.ts), repaired nightly (core/schedule.ts). Never written directly.
+   */
+  schedule: defineTable({
+    creatorId: v.id("creators"),
+    paired: v.boolean(),
+    pairedAt: v.optional(v.number()),
+    status: v.string(),
+    timezone: v.string(),
+    quietHours: v.object({ start: v.string(), end: v.string() }),
+    hasDossier: v.boolean(),
+    keywords: v.array(v.string()),
+    preferredSendHour: v.optional(v.number()),
+    createdAt: v.number(),
+    firstWeekStartedAt: v.optional(v.number()),
+    inviteDrafted: v.boolean(),
+    handles: v.object({ tiktok: v.optional(v.string()), instagram: v.optional(v.string()) }),
+    tasteUpdatedAt: v.optional(v.number()),
+    tasteEventsSeen: v.optional(v.number()),
+    isEval: v.boolean(),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_paired_status", ["paired", "status"]),
 
   // ---------------------------------------------------------------------- jobs
   jobs: defineTable({

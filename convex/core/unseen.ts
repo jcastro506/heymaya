@@ -5,7 +5,8 @@
  * never the fleet.
  */
 import { v } from "convex/values";
-import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from "../_generated/server";
+import { internalQuery, type MutationCtx, type QueryCtx } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
 
 export const UNSEEN_WINDOW_MS = 7 * 86_400_000; // older than a week isn't "new" any more

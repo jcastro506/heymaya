@@ -11,10 +11,12 @@
 
 import { v } from "convex/values";
 import { coverKey, rememberMedia } from "../media";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { THRESHOLDS } from "../config/thresholds";
+import { pairedRows } from "../core/schedule";
 
 const PER_KEYWORD = 3;
 
@@ -33,12 +35,9 @@ interface Post {
 export const distinctKeywords = internalQuery({
   args: {},
   handler: async (ctx): Promise<Array<{ keyword: string; creatorIds: Id<"creators">[] }>> => {
-    const creators = (await ctx.db.query("creators").collect()) as Doc<"creators">[];
     const map = new Map<string, Id<"creators">[]>();
-    for (const c of creators) {
-      if (!c.channel.paired) continue;
-      const kws = ((c.dossier as { keywords?: string[] } | undefined)?.keywords ?? []).map((k) => k.trim().toLowerCase()).filter(Boolean);
-      for (const k of kws.slice(0, 8)) map.set(k, [...(map.get(k) ?? []), c._id]);
+    for (const c of await pairedRows(ctx)) {
+      for (const k of c.keywords.slice(0, 8)) map.set(k, [...(map.get(k) ?? []), c.creatorId]);
     }
     return [...map.entries()].map(([keyword, creatorIds]) => ({ keyword, creatorIds }));
   },

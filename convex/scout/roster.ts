@@ -19,10 +19,12 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { addTracked } from "../agent/manage";
+import { pairedRows } from "../core/schedule";
 
 export const ROSTER = {
   /** Below this, she is actively short of accounts and should ask sooner. */
@@ -180,5 +182,5 @@ export const run = internalAction({
 export const paired = internalQuery({
   args: {},
   handler: async (ctx): Promise<Id<"creators">[]> =>
-    ((await ctx.db.query("creators").take(500)) as Doc<"creators">[]).filter((c) => c.channel.paired && c.dossier).map((c) => c._id),
+    (await pairedRows(ctx)).filter((c) => c.hasDossier).map((c) => c.creatorId),
 });

@@ -50,6 +50,7 @@ crons.hourly("week plan", { minuteUTC: 40 }, internal.calendar.weekPlan.runAll, 
 
 // Nightly consolidation (§15.7 layer 3, code half): expired notes tombstoned, the reply hour learned.
 crons.daily("consolidate", { hourUTC: 3, minuteUTC: 0 }, internal.agent.consolidate.nightly, {});
+crons.daily("reconcile schedule rows", { hourUTC: 2, minuteUTC: 40 }, internal.core.schedule.reconcile, {});
 
 // The first week's day-4 invitation (§1): hers to initiate, enforced as a schedule row.
 crons.hourly("first week", { minuteUTC: 50 }, internal.scout.firstWeek.runAll, {});

@@ -13,11 +13,13 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { applyEvent, featureKeys, WEIGHTS, type Affinity } from "./affinities";
 import { ensureSeparated } from "./separation";
+import { allRows } from "../core/schedule";
 
 export const OUTCOME = {
   /** Two days of numbers before a post is evidence of anything (§13.7). */
@@ -111,5 +113,5 @@ export const runAll = internalAction({
 export const creatorsWithPosted = internalQuery({
   args: {},
   handler: async (ctx): Promise<Id<"creators">[]> =>
-    ((await ctx.db.query("creators").take(500)) as Doc<"creators">[]).filter((c) => c.dossier).map((c) => c._id),
+    (await allRows(ctx)).filter((c) => c.hasDossier).map((c) => c.creatorId),
 });

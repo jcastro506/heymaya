@@ -7,7 +7,8 @@
 
 import { v } from "convex/values";
 import { THRESHOLDS } from "../config/thresholds";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { resolveTelegramBotIdentity } from "../integrations/telegram/client";

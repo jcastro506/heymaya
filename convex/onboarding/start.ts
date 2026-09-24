@@ -6,7 +6,8 @@
 
 import { v } from "convex/values";
 import { normalizePhone } from "../integrations/claw/client";
-import { internalMutation, mutation, query, type MutationCtx } from "../_generated/server";
+import { query, type MutationCtx } from "../_generated/server";
+import { internalMutation, mutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { addTracked } from "../agent/manage";

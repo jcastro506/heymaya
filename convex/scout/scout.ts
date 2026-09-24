@@ -10,7 +10,8 @@ import { HOURLY_SPREAD_MS, spreadDelays } from "../core/fanout";
 import { rideAlongLine } from "../core/unseen";
 import { missionControlUrl } from "../agent/missionControl";
 import { enqueueRender, shouldDrawProactively } from "../agent/frames";
-import { internalAction, internalMutation } from "../_generated/server";
+import { internalAction } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
@@ -26,6 +27,7 @@ import { localHourMinute } from "./gate";
 import { internalQuery } from "../_generated/server";
 import { LOOKUPS } from "../agent/playbooks";
 import { respectEmojiHabit } from "../agent/voice";
+import { pairedRows } from "../core/schedule";
 
 /** The share URL without its tracking query: what a person would paste. */
 export function cleanLink(url: string): string {
@@ -329,15 +331,14 @@ export const trackedHandle = internalQuery({
 export const dueForScout = internalQuery({
   args: { now: v.number() },
   handler: async (ctx, a): Promise<Id<"creators">[]> => {
-    const creators = (await ctx.db.query("creators").collect()) as Doc<"creators">[];
     const due: Id<"creators">[] = [];
-    for (const c of creators) {
-      if (!c.channel.paired || !c.dossier) continue;
+    for (const c of await pairedRows(ctx)) {
+      if (!c.hasDossier) continue;
       const { hour } = localHourMinute(a.now, c.timezone);
       if (hour < 8 || hour >= 20) continue; // scouting is a daytime thing; the gate enforces quiet hours too
       // Learned cadence (§13.10): once she knows the hour they tend to reply in, she aims for the hour before it.
       if (c.preferredSendHour !== undefined && Math.abs(hour - (c.preferredSendHour - 1)) > 1) continue;
-      due.push(c._id);
+      due.push(c.creatorId);
     }
     return due;
   },

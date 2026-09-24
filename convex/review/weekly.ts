@@ -8,7 +8,8 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
@@ -26,6 +27,7 @@ import { separatedCreator } from "../taste/separation";
 import { laneBenchmarkFor } from "../scout/benchmarks";
 import { investigate } from "../agent/investigate";
 import { LOOKUPS } from "../agent/playbooks";
+import { pairedRows } from "../core/schedule";
 
 const WEEK_MS = 7 * 86_400_000;
 
@@ -44,19 +46,17 @@ Output ONLY JSON:
 export const dueForReview = internalQuery({
   args: { now: v.number() },
   handler: async (ctx, a): Promise<Id<"creators">[]> => {
-    const creators = (await ctx.db.query("creators").collect()) as Doc<"creators">[];
     const due: Id<"creators">[] = [];
-    for (const c of creators) {
-      if (!c.channel.paired || c.plan.status === "paused" || c.plan.status === "canceled" || c.plan.status === "deleting") continue;
+    for (const c of await pairedRows(ctx, { activeOnly: true })) {
       // Live 2026-09-06: a review fired on a three-hour-old account ("zero posts this week, we
       // just started"). A week's review needs a week together.
       if (a.now - c.createdAt < MIN_DAYS_BEFORE_REVIEW * 86_400_000) continue;
       const weekday = new Intl.DateTimeFormat("en-US", { timeZone: c.timezone, weekday: "short" }).format(a.now);
       const { hour } = localHourMinute(a.now, c.timezone);
       if (weekday !== "Sun" || hour < 9 || hour >= 20) continue;
-      const recent = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", c._id).gte("ts", a.now - 6 * 86_400_000)).collect()) as Doc<"messages">[];
+      const recent = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", c.creatorId).gte("ts", a.now - 6 * 86_400_000)).collect()) as Doc<"messages">[];
       if (recent.some((m) => m.direction === "out" && m.kind === "review")) continue;
-      due.push(c._id);
+      due.push(c.creatorId);
     }
     return due;
   },

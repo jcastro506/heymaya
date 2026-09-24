@@ -7,7 +7,8 @@
 
 import { v } from "convex/values";
 import { countsTowardCap } from "../core/messages";
-import { internalMutation, internalQuery } from "../_generated/server";
+import { internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
 import { rankMultiplier, tasteHint, TASTE, type Affinity } from "../taste/affinities";
 import { separatedCreator } from "../taste/separation";

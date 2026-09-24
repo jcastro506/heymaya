@@ -8,7 +8,8 @@
  * for a change the creator made, and never texts just because of a tap.
  */
 import { v } from "convex/values";
-import { internalMutation, type MutationCtx, type QueryCtx } from "../_generated/server";
+import { type MutationCtx, type QueryCtx } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
 
 export type Awareness = "state" | "noticed" | "reacted";

@@ -92,6 +92,7 @@ import type * as core_plainLanguage from "../core/plainLanguage.js";
 import type * as core_quality from "../core/quality.js";
 import type * as core_reconcile from "../core/reconcile.js";
 import type * as core_retention from "../core/retention.js";
+import type * as core_schedule from "../core/schedule.js";
 import type * as core_scheduler from "../core/scheduler.js";
 import type * as core_smoke from "../core/smoke.js";
 import type * as core_status from "../core/status.js";
@@ -132,6 +133,8 @@ import type * as integrations_scrapeCreators_schemas from "../integrations/scrap
 import type * as integrations_telegram_client from "../integrations/telegram/client.js";
 import type * as integrations_zernio_index from "../integrations/zernio/index.js";
 import type * as lib_encryption from "../lib/encryption.js";
+import type * as lib_functions from "../lib/functions.js";
+import type * as lib_scheduleRow from "../lib/scheduleRow.js";
 import type * as media from "../media.js";
 import type * as onboarding_admired from "../onboarding/admired.js";
 import type * as onboarding_clusters from "../onboarding/clusters.js";
@@ -274,6 +277,7 @@ declare const fullApi: ApiFromModules<{
   "core/quality": typeof core_quality;
   "core/reconcile": typeof core_reconcile;
   "core/retention": typeof core_retention;
+  "core/schedule": typeof core_schedule;
   "core/scheduler": typeof core_scheduler;
   "core/smoke": typeof core_smoke;
   "core/status": typeof core_status;
@@ -314,6 +318,8 @@ declare const fullApi: ApiFromModules<{
   "integrations/telegram/client": typeof integrations_telegram_client;
   "integrations/zernio/index": typeof integrations_zernio_index;
   "lib/encryption": typeof lib_encryption;
+  "lib/functions": typeof lib_functions;
+  "lib/scheduleRow": typeof lib_scheduleRow;
   media: typeof media;
   "onboarding/admired": typeof onboarding_admired;
   "onboarding/clusters": typeof onboarding_clusters;

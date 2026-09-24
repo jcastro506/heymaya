@@ -12,7 +12,8 @@
  */
 
 import { v } from "convex/values";
-import { httpAction, internalMutation, internalQuery, mutation } from "./_generated/server";
+import { httpAction, internalQuery } from "./_generated/server";
+import { internalMutation, mutation } from "./lib/functions";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { creatorForIdentity } from "./core/identity";

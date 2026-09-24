@@ -21,7 +21,8 @@
 import { v } from "convex/values";
 import { markActionsSeen } from "./act";
 import { markOffered } from "./unseen";
-import { internalMutation, internalQuery } from "../_generated/server";
+import { internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import { unwrapModelEnvelope } from "./envelope";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -551,7 +552,9 @@ export { getMessage };
  * thing that was actually broken.
  */
 async function expireFor(ctx: MutationCtx, creatorId: Id<"creators">, now: number): Promise<{ expired: number; question?: string }> {
-  const creator = (await ctx.db.get(creatorId)) as Doc<"creators"> | null;
+  // S0: the timezone from the slim schedule row, so the fleet sweep never loads full creator documents.
+  const creator = ((await ctx.db.query("schedule").withIndex("by_creator", (q) => q.eq("creatorId", creatorId)).first()) as { timezone: string } | null)
+    ?? ((await ctx.db.get(creatorId)) as Doc<"creators"> | null);
   if (!creator) return { expired: 0 };
   const today = dayKeyInZone(now, creator.timezone ?? "UTC");
 
@@ -606,11 +609,14 @@ export const expireStaleQuestionsAll = internalMutation({
   args: { now: v.optional(v.number()) },
   handler: async (ctx, args): Promise<{ creators: number; expired: number }> => {
     const now = args.now ?? Date.now();
-    const creators = (await ctx.db.query("creators").take(500)) as Doc<"creators">[];
+    // S0: straight to the open questions (at most one per creator), not `creators.take(500)`,
+    // which silently never reached creator 501.
+    const open = (await ctx.db.query("messages").withIndex("by_awaiting", (q) => q.eq("awaitingAnswer", true)).collect()) as Doc<"messages">[];
+    const creatorIds = [...new Set(open.map((m) => m.creatorId))];
     let expired = 0;
     let touched = 0;
-    for (const c of creators) {
-      const r = await expireFor(ctx, c._id, now);
+    for (const creatorId of creatorIds) {
+      const r = await expireFor(ctx, creatorId, now);
       if (r.expired > 0) touched += 1;
       expired += r.expired;
     }

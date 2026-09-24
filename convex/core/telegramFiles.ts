@@ -7,7 +7,8 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalMutation } from "../_generated/server";
+import { internalAction } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { TelegramInboundMessage } from "../integrations/telegram/client";

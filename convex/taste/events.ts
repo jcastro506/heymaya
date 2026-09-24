@@ -7,7 +7,8 @@
 
 import { v } from "convex/values";
 import { recordAction } from "../core/act";
-import { internalMutation, internalQuery, mutation } from "../_generated/server";
+import { internalQuery } from "../_generated/server";
+import { internalMutation, mutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
 import { applyEvent, featureKeys, TASTE, WEIGHTS, type Affinity } from "./affinities";
 import { creatorForIdentity } from "../core/identity";
@@ -72,7 +73,8 @@ export const expireIgnored = internalMutation({
   handler: async (ctx, a): Promise<{ expired: number }> => {
     const now = a.now ?? Date.now();
     const cutoff = now - TASTE.ignoreAfterHours * 3_600_000;
-    const stale = (await ctx.db.query("ideas").filter((q) => q.and(q.eq(q.field("status"), "sent"), q.lt(q.field("createdAt"), cutoff))).take(200)) as Doc<"ideas">[];
+    // S0 #5: an indexed range, not a filter over every idea the fleet ever wrote.
+    const stale = (await ctx.db.query("ideas").withIndex("by_status_created", (q) => q.eq("status", "sent").lt("createdAt", cutoff)).take(200)) as Doc<"ideas">[];
     let expired = 0;
     for (const idea of stale) {
       if (!idea.sentAt || idea.sentAt > cutoff) continue;

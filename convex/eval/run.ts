@@ -6,11 +6,13 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery, mutation, query } from "../_generated/server";
+import { internalAction, internalQuery, query } from "../_generated/server";
+import { internalMutation, mutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { passed, runChecks } from "./checks";
 import { judge, judgePass } from "./judge";
+import { allRows } from "../core/schedule";
 
 const EVAL_KINDS = new Set(["scout", "opinion", "explain", "review", "reply", "status"]);
 
@@ -38,9 +40,12 @@ export const recentOutbound = internalQuery({
   handler: async (ctx, a): Promise<Array<{ messageId: Id<"messages">; creatorId: Id<"creators">; skill: string; text: string; evidence: unknown; usesEmoji: boolean; actionTaken?: boolean }>> => {
     const done = new Set((await ctx.db.query("evalRuns").withIndex("by_at", (q) => q.gte("at", a.since)).collect()).map((r) => r.messageId).filter(Boolean));
     const out: Array<{ messageId: Id<"messages">; creatorId: Id<"creators">; skill: string; text: string; evidence: unknown; usesEmoji: boolean; actionTaken?: boolean }> = [];
-    const creators = (await ctx.db.query("creators").collect()) as Doc<"creators">[];
-    for (const c of creators) {
-      const rows = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", c._id).gte("ts", a.since)).collect()) as Doc<"messages">[];
+    for (const r of await allRows(ctx)) {
+      const rows = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", r.creatorId).gte("ts", a.since)).collect()) as Doc<"messages">[];
+      if (!rows.some((m) => m.direction === "out" && EVAL_KINDS.has(m.kind ?? "reply") && !done.has(m._id))) continue;
+      // The full document only for creators with something to judge (S0 #1).
+      const c = (await ctx.db.get(r.creatorId)) as Doc<"creators"> | null;
+      if (!c) continue;
       const inbound = rows.filter((m) => m.direction === "in");
       const usesEmoji = inbound.some((m) => /[\u{1F300}-\u{1FAFF}]/u.test(m.body));
       for (const m of rows) {
@@ -100,12 +105,11 @@ export const SCENARIO_HANDLES = ["vanessaalopezz", "brettconti"] as const;
 export const scenarioCreators = internalQuery({
   args: {},
   handler: async (ctx): Promise<{ ids: Id<"creators">[]; missing: string[] }> => {
-    const rows = (await ctx.db.query("creators").collect()) as Doc<"creators">[];
     const ids: Id<"creators">[] = [];
     const missing: string[] = [];
     for (const handle of SCENARIO_HANDLES) {
       // The scenario row, by its own subject: never a customer who happens to share the handle (2026-09-06).
-      const match = rows.find((c) => c.clerkUserId === `eval:${handle}`);
+      const match = (await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", `eval:${handle}`)).first()) as Doc<"creators"> | null;
       // Loud, not silent: a scenario that quietly vanishes turns a regression into a smaller suite.
       if (!match) { missing.push(handle); continue; }
       if (!match.dossier) { missing.push(`${handle} (no dossier yet)`); continue; }

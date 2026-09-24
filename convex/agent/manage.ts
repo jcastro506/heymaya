@@ -8,7 +8,7 @@
 
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
-import { internalMutation } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
 
 export const MANAGE_ACTIONS = ["quiet_hours", "tone", "add_admired", "stop_watching", "niche"] as const;

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { z } from "zod";
-import { internalMutation, internalQuery, query, type MutationCtx, type QueryCtx } from "../_generated/server";
+import { internalQuery, query, type MutationCtx, type QueryCtx } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
 import { creatorForIdentity } from "../core/identity";
 import { CLOSED, Draft, Evidence, Opportunity, Profile, publicUrl, followUpEligible, type OpportunityData } from "./contracts";

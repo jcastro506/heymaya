@@ -9,7 +9,8 @@
  */
 
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "../_generated/server";
+import { internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
 import { applyIdeaAct, hookOf, IDEA_ACTS, type IdeaAct } from "../core/ideaActs";
 

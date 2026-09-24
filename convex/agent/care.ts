@@ -13,7 +13,8 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalMutation } from "../_generated/server";
+import { internalAction } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "./registry";

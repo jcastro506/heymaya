@@ -1,6 +1,7 @@
 /** Source-checked hybrid recall. Text is durable before optional embeddings are attempted. */
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery, type QueryCtx } from "../_generated/server";
+import { internalAction, internalQuery, type QueryCtx } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { MESSAGE_DAYS } from "../core/retention";

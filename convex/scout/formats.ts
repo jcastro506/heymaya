@@ -7,12 +7,14 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
 import { THRESHOLDS } from "../config/thresholds";
+import { pairedRows } from "../core/schedule";
 
 export const KEEP_PER_DAY = 3;
 
@@ -45,8 +47,7 @@ export function fingerprint(format: string): string {
 export const pairedCreatorIds = internalQuery({
   args: {},
   handler: async (ctx): Promise<Id<"creators">[]> => {
-    const rows = (await ctx.db.query("creators").collect()) as Doc<"creators">[];
-    return rows.filter((c) => c.channel.paired && c.dossier && c.plan.status !== "paused" && c.plan.status !== "canceled" && c.plan.status !== "deleting").map((c) => c._id);
+    return (await pairedRows(ctx, { activeOnly: true })).filter((c) => c.hasDossier).map((c) => c.creatorId);
   },
 });
 

@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { active, event, ownedOpportunity, profile } from "./store";

@@ -9,10 +9,12 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { localHourMinute } from "./gate";
+import { pairedRows } from "../core/schedule";
 
 export const STEPS = ["first_read", "first_plan", "first_scout", "first_calendar_or_worth_seeing", "invite_draft", "first_review"] as const;
 export type Step = (typeof STEPS)[number];
@@ -35,18 +37,17 @@ export const markStep = internalMutation({
 export const dueForInvite = internalQuery({
   args: { now: v.number() },
   handler: async (ctx, a): Promise<Id<"creators">[]> => {
-    const creators = (await ctx.db.query("creators").collect()) as Doc<"creators">[];
     const due: Id<"creators">[] = [];
-    for (const c of creators) {
-      if (!c.channel.paired || !c.dossier || c.plan.status === "paused" || c.plan.status === "canceled" || c.plan.status === "deleting") continue;
-      const started = c.firstWeek?.startedAt ?? c.channel.pairedAt ?? c.createdAt;
+    for (const c of await pairedRows(ctx, { activeOnly: true })) {
+      if (!c.hasDossier) continue;
+      const started = c.firstWeekStartedAt ?? c.pairedAt ?? c.createdAt;
       const day = Math.floor((a.now - started) / 86_400_000) + 1;
       // Day two, not four (2026-09-06): the pilot asked for opinions unprompted by day two anyway.
       if (day < 2 || day > 10) continue;
-      if (c.firstWeek?.stepsDone.includes("invite_draft")) continue;
+      if (c.inviteDrafted) continue;
       const { hour } = localHourMinute(a.now, c.timezone);
       if (hour < 10 || hour >= 19) continue;
-      due.push(c._id);
+      due.push(c.creatorId);
     }
     return due;
   },

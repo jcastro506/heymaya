@@ -6,10 +6,12 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { resolveTelegramBotIdentity, sendTelegramMessage } from "../integrations/telegram/client";
+import { allRows } from "./schedule";
 
 export interface Findings { scale?: { creators: number; pctOfReadLimit: number } | null; deadJobs: Array<{ id: string; kind: string; error: string }>; undelivered: Array<{ id: string; creatorId: string; ageMin: number; error: string }>; smokeFailed: Array<{ vendor: string; check: string }>; attention: Array<{ creatorId: string; provider: string; detail: string }> }
 
@@ -39,19 +41,21 @@ export const findings = internalQuery({
   handler: async (ctx, a): Promise<Findings> => {
     const jobs = (await ctx.db.query("jobs").order("desc").take(300)) as Doc<"jobs">[];
     const deadJobs = jobs.filter((j) => j.status === "dead" && j.updatedAt >= a.since).map((j) => ({ id: j._id, kind: j.kind, error: j.lastError ?? "" }));
-    const creators = (await ctx.db.query("creators").collect()) as Doc<"creators">[];
-    // S0 #1: every hourly job scans this table and Convex stops a query at 16 MiB read. Say so
-    // long before (from 40%), once a day, instead of every job failing on the same morning.
-    const pct = Math.round((scanBytes(creators) / READ_LIMIT_BYTES) * 100);
-    const scale = pct >= SCALE_WARN_PCT && new Date(a.now).getUTCHours() === 12 ? { creators: creators.length, pctOfReadLimit: pct } : null;
+    /**
+     * S0 #1: the hourly jobs now scan the slim `schedule` rows, not creators. That scan is
+     * the one that still grows with the fleet, so it is the one measured: from 40% of the
+     * 16 MiB read limit, once a day, long before any job fails.
+     */
+    const rows = await allRows(ctx);
+    const pct = Math.round((scanBytes(rows) / READ_LIMIT_BYTES) * 100);
+    const scale = pct >= SCALE_WARN_PCT && new Date(a.now).getUTCHours() === 12 ? { creators: rows.length, pctOfReadLimit: pct } : null;
+    // Undelivered outbound, straight from the delivery index: no per-creator walk.
     const undelivered: Findings["undelivered"] = [];
-    for (const c of creators) {
-      const rows = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", c._id).gte("ts", a.now - 24 * 3_600_000)).collect()) as Doc<"messages">[];
-      for (const m of rows) {
-        if (m.direction !== "out" || m.deliveredAt || m.deliveryError === "no Telegram chat paired for this account") continue;
-        const ageMin = Math.round((a.now - m.ts) / 60_000);
-        if (ageMin >= 60 && m.ts >= a.since - 3_600_000) undelivered.push({ id: m._id, creatorId: c._id, ageMin, error: m.deliveryError ?? "not delivered" });
-      }
+    const pending = (await ctx.db.query("messages").withIndex("by_delivery", (q) => q.eq("direction", "out").eq("deliveredAt", undefined)).order("desc").take(500)) as Doc<"messages">[];
+    for (const m of pending) {
+      if (m.deliveryError === "no Telegram chat paired for this account" || m.ts < a.now - 24 * 3_600_000) continue;
+      const ageMin = Math.round((a.now - m.ts) / 60_000);
+      if (ageMin >= 60 && m.ts >= a.since - 3_600_000) undelivered.push({ id: m._id, creatorId: m.creatorId, ageMin, error: m.deliveryError ?? "not delivered" });
     }
     const health = (await ctx.db.query("vendorHealth").order("desc").take(60)) as Doc<"vendorHealth">[];
     const seen = new Set<string>();

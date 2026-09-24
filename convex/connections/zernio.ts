@@ -10,7 +10,8 @@
 
 import { v } from "convex/values";
 import { entitlementsFor } from "../billing/tiers";
-import { action, httpAction, internalAction, internalMutation, internalQuery, query, type ActionCtx } from "../_generated/server";
+import { action, httpAction, internalAction, internalQuery, query, type ActionCtx } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { creatorForIdentity } from "../core/identity";

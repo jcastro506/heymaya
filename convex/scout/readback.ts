@@ -6,18 +6,19 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { THRESHOLDS } from "../config/thresholds";
+import { pairedRows } from "../core/schedule";
 
 export const WIN_MULTIPLE = 3;
 
 export const pairedCreators = internalQuery({
   args: {},
   handler: async (ctx): Promise<Array<{ id: Id<"creators">; handles: { tiktok?: string; instagram?: string } }>> => {
-    const rows = (await ctx.db.query("creators").collect()) as Doc<"creators">[];
-    return rows.filter((c) => c.channel.paired && c.plan.status !== "deleting").map((c) => ({ id: c._id, handles: c.handles }));
+    return (await pairedRows(ctx)).filter((c) => c.status !== "deleting").map((c) => ({ id: c.creatorId, handles: c.handles }));
   },
 });
 

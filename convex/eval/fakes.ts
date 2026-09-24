@@ -5,7 +5,8 @@
  * real deployment never sets the base urls. State lives in syncState rows (the sent mail, the
  * injected replies), so a brand's reply can be planted between turns and read by the real sync.
  */
-import { httpAction, internalAction, internalMutation, internalQuery } from "../_generated/server";
+import { httpAction, internalAction, internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import { v } from "convex/values";
 import { providerBase } from "../partnerships/providerConfig";

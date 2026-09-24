@@ -8,7 +8,8 @@
 import { v } from "convex/values";
 import { coverKey, rememberMedia } from "../media";
 import { appendHistory, normalsByPlatform, multipleFor } from "../core/normal";
-import { internalAction, internalMutation, internalQuery, type MutationCtx } from "../_generated/server";
+import { internalAction, internalQuery, type MutationCtx } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";

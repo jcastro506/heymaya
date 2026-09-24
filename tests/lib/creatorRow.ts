@@ -5,6 +5,7 @@
 import type { WithoutSystemFields } from "convex/server";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 import type { MutationCtx } from "../../convex/_generated/server";
+import { syncSchedule } from "../../convex/lib/scheduleRow";
 
 type InsertCtx = Pick<MutationCtx, "db">;
 
@@ -32,5 +33,8 @@ export function creatorRow(suffix: string, overrides: Record<string, unknown> = 
 }
 
 export async function seedCreator(ctx: InsertCtx, suffix: string, overrides: Record<string, unknown> = {}): Promise<Id<"creators">> {
-  return await ctx.db.insert("creators", creatorRow(suffix, overrides) as WithoutSystemFields<Doc<"creators">>);
+  const id = await ctx.db.insert("creators", creatorRow(suffix, overrides) as WithoutSystemFields<Doc<"creators">>);
+  // `t.run` hands tests the raw writer, which skips the trigger; keep the schedule row true here.
+  await syncSchedule(ctx.db, id);
+  return id;
 }
