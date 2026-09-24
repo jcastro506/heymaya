@@ -23,6 +23,7 @@
 
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
+import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 
@@ -31,6 +32,23 @@ export const DEFAULT_MAX_ATTEMPTS = 5;
 
 /** How long a claimed job may run before the reaper assumes the worker died. */
 export const DEFAULT_LEASE_MS = 5 * 60 * 1000;
+
+/**
+ * How long a job may keep being deferred before it is declared dead. A defer
+ * never burns an attempt, so without this a delivery to a chat that will never
+ * pair (a bench clone, someone who abandoned onboarding) re-queues every ten
+ * minutes forever. Live 2026-09-24: 275 of them sat at the head of the queue
+ * and a shared reel's turn never ran. Pairing later still revives them
+ * (`wakeDeliveries` wakes dead deliveries too).
+ */
+export const DEFER_GIVE_UP_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Kinds answered strictly one at a time, in arrival order, per creator. Two
+ * texts sent a second apart must not be answered out of order or race on the
+ * same open question; across creators they run in parallel.
+ */
+export const SERIAL_KINDS: ReadonlySet<string> = new Set(["converse"]);
 
 /**
  * Exponential backoff with a ceiling. Deliberately not jittered: Convex
@@ -98,6 +116,14 @@ export const enqueue = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
+    /**
+     * ⭐ THE ONE KICK, for every inbound door (Telegram text and files, iMessage,
+     * Send to Maya). A turn someone is waiting on starts when it is due, not on
+     * the next minute tick of the cron. The cron stays as the backstop.
+     */
+    if (SERIAL_KINDS.has(args.kind)) {
+      await ctx.scheduler.runAfter(Math.max(0, (args.runAfter ?? now) - now), internal.core.scheduler.drainJobs, { kinds: [args.kind] });
+    }
     return { jobId, created: true };
   },
 });
@@ -132,10 +158,10 @@ export const claimNext = internalMutation({
       )
       .take(200);
 
-    const eligible = candidates.filter(
+    const wanted = candidates.filter(
       (row) => !args.kinds || args.kinds.includes(row.kind)
     );
-    if (eligible.length === 0) return null;
+    if (wanted.length === 0) return null;
 
     /**
      * ⭐ FAIR-SHARE, then deadline. §18 Sprint 9 asks the render queue for
@@ -157,6 +183,29 @@ export const claimNext = internalMutation({
       .query("jobs")
       .withIndex("by_status_and_runAfter", (q) => q.eq("status", "running"))
       .take(200)) as Doc<"jobs">[];
+
+    /**
+     * ⭐ ONE TURN AT A TIME PER CREATOR, IN ORDER. A serial kind is eligible only
+     * if that creator has none of it running and it is their oldest one queued.
+     * Other creators' turns are unaffected, so the fleet still runs in parallel.
+     */
+    const busy = new Set<string>();
+    for (const row of running) {
+      if (SERIAL_KINDS.has(row.kind) && row.creatorId) busy.add(`${row.kind}:${row.creatorId}`);
+    }
+    const oldest = new Map<string, Doc<"jobs">>();
+    for (const row of wanted) {
+      if (!SERIAL_KINDS.has(row.kind) || !row.creatorId) continue;
+      const key = `${row.kind}:${row.creatorId}`;
+      const prev = oldest.get(key);
+      if (!prev || row.createdAt < prev.createdAt) oldest.set(key, row);
+    }
+    const eligible = wanted.filter((row) => {
+      if (!SERIAL_KINDS.has(row.kind) || !row.creatorId) return true;
+      const key = `${row.kind}:${row.creatorId}`;
+      return !busy.has(key) && oldest.get(key)?._id === row._id;
+    });
+    if (eligible.length === 0) return null;
 
     const load = new Map<string, number>();
     for (const row of running) {
@@ -331,6 +380,11 @@ export const defer = internalMutation({
     const job = await ctx.db.get(args.jobId);
     if (!job) return null;
     const now = Date.now();
+    if (now - job.createdAt >= DEFER_GIVE_UP_MS) {
+      await ctx.db.patch(args.jobId, { status: "dead", lastError: `gave up after 24h waiting: ${args.reason}`, updatedAt: now });
+      console.error(`[maya.jobs] job ${job.kind} (${job.idempotencyKey}) DEAD — deferred for 24h: ${args.reason}`);
+      return null;
+    }
     await ctx.db.patch(args.jobId, { status: "queued", attempts: Math.max(0, job.attempts - 1), lastError: `deferred: ${args.reason}`, runAfter: now + args.delayMs, updatedAt: now });
     return null;
   },

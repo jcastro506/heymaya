@@ -120,7 +120,8 @@ export function pickMilestone(input: { topViews: number; ideasSent: number; mont
 }
 
 export const milestoneInputs = internalQuery({
-  args: { creatorId: v.id("creators") },
+  // `now` is the caller's clock (the morning runs on the touch's own time); wall clock otherwise.
+  args: { creatorId: v.id("creators"), now: v.optional(v.number()) },
   handler: async (ctx, a): Promise<{ topViews: number; ideasSent: number; monthsTogether: number; said: string[] } | null> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c) return null;
@@ -129,7 +130,7 @@ export const milestoneInputs = internalQuery({
     return {
       topViews: posts.reduce((m, p) => Math.max(m, p.metrics.views), 0),
       ideasSent: ideas.length,
-      monthsTogether: Math.floor((Date.now() - c.createdAt) / (30 * 86_400_000)),
+      monthsTogether: Math.floor(((a.now ?? Date.now()) - c.createdAt) / (30 * 86_400_000)),
       said: c.milestonesSaid ?? [],
     };
   },

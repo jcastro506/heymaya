@@ -5,7 +5,7 @@
  * the creator's channel; the reaction path finds the reacted message), and no TODOs.
  */
 import { convexTest } from "convex-test";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import schema from "../../schema";
 import { internal } from "../../_generated/api";
@@ -125,7 +125,7 @@ describe("her number: the pure parts", () => {
 
 describe("her number: rows and doors, on the fake vendor", () => {
   beforeEach(() => { process.env.MODEL_FAKE = "1"; process.env.CLAW_FAKE = "1"; process.env.CLAW_API_KEY = "cm_live_test"; process.env.CLAW_LINE_NUMBER = "+15550009999"; });
-  afterEach(() => { delete process.env.CLAW_FAKE; delete process.env.CLAW_API_KEY; delete process.env.CLAW_LINE_NUMBER; });
+  afterEach(() => { vi.useRealTimers(); delete process.env.CLAW_FAKE; delete process.env.CLAW_API_KEY; delete process.env.CLAW_LINE_NUMBER; });
 
   it("a creator who gave a number pairs by texting START, hears hello, and every row after is on the phone", async () => {
     const t = convexTest(schema, modules);
@@ -209,6 +209,7 @@ describe("her number: rows and doors, on the fake vendor", () => {
   });
 
   it("a tapback on an idea is a taste event; an unknown tapback, or one on a message we cannot find, breaks nothing", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     const t = convexTest(schema, modules);
     const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { phone: PHONE, channel: { paired: true, kind: "imessage", pairedAt: NOW } }));
     const ideaId = await t.run((ctx) => ctx.db.insert("ideas", { creatorId, evidenceLinks: [], fit: "yes", fitWhy: "x", version: { hook: "h" }, messageText: "m", produced: { skillVersion: "t", model: "m", thresholdsVersion: "t" }, sentAt: NOW, status: "sent", createdAt: NOW } as never));
@@ -222,8 +223,9 @@ describe("her number: rows and doors, on the fake vendor", () => {
     expect(rx?.telegramMessageId).toBe("vendor-out-1");
     const found = await t.query(internal.agent.converse.messageByTelegramId, { creatorId, telegramMessageId: "vendor-out-1" });
     expect(found?.ideaId, "the reaction path finds the reacted message by the vendor id").toBe(ideaId);
-    // Run her turn on it: a taste event lands, no reply is written.
-    await t.action(internal.agent.converse.run, { creatorId, messageId: rx!._id });
+    // Her turn runs through the queue the reaction already kicked (running it by hand as well
+    // would count the heart twice, which production never does): a taste event lands, no reply.
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
     const taste = await t.run((ctx) => ctx.db.query("tasteEvents").collect());
     expect(taste.map((e) => e.kind)).toEqual(["heart"]);
     const shrug = await t.action(internal.core.imessage.handleReaction, { from: PHONE, aboutChannelMessageId: "vendor-out-1", reactionType: "emphasize", added: true });

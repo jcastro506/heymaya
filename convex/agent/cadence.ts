@@ -146,7 +146,7 @@ export const morningInputs = internalQuery({
     const events = (await ctx.db.query("calendarEvents").withIndex("by_creator_start", (q) => q.eq("creatorId", a.creatorId).gte("start", a.now - 86_400_000).lte("start", to)).collect()) as Doc<"calendarEvents">[];
     const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("createTime", a.now - 13 * 7 * 86_400_000)).collect()) as Doc<"ownPosts">[];
     const snaps = (await ctx.db.query("followerSnapshots").withIndex("by_creator_day", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(4)) as Doc<"followerSnapshots">[];
-    const mi = await ctx.runQuery(internal.agent.history.milestoneInputs, { creatorId: a.creatorId });
+    const mi = await ctx.runQuery(internal.agent.history.milestoneInputs, { creatorId: a.creatorId, now: a.now });
     const said = creator.milestonesSaid ?? [];
     const followers = snaps.length ? snaps.reduce((s, r) => s + r.followers, 0) : null;
     const milestone = followerMilestone(followers, said) ?? (mi ? pickMilestone(mi) : null);

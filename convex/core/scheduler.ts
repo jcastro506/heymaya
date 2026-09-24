@@ -102,6 +102,14 @@ export async function deliverNow(ctx: { runAction: (ref: never, args: never) => 
 /** Jobs that take minutes. They never run inline in the drain. */
 export const LONG_KINDS: ReadonlySet<string> = new Set(["ingest_catalogue", "render_frames"]);
 
+/**
+ * A creator's turn gets its own action too. Run inline, 30 people texting in
+ * the same minute were answered one after another (the last one ~10 minutes
+ * later) and the minute cron skipped ticks while the drain ran. Order within
+ * one creator is kept by `claimNext` (`SERIAL_KINDS`), not by running serially.
+ */
+export const TURN_KINDS: ReadonlySet<string> = new Set(["converse"]);
+
 /** One claimed job, in its own action, so the drain is never blocked by it. */
 export const runJob = internalAction({
   args: { jobId: v.id("jobs") },
@@ -119,6 +127,9 @@ export const runJob = internalAction({
     } catch (error) {
       await ctx.runMutation(internal.core.jobs.fail, { jobId: job._id, error: error instanceof Error ? error.message : String(error) });
       return { ok: false };
+    } finally {
+      // Their next text was held behind this turn; it goes now, not on the next cron tick.
+      if (TURN_KINDS.has(job.kind)) await ctx.scheduler.runAfter(0, internal.core.scheduler.drainJobs, { kinds: [job.kind] });
     }
   },
 });
@@ -141,7 +152,7 @@ export const drainJobs = internalAction({
        * the ingest inline, so the minute drain stopped ticking and nothing else moved. Long
        * jobs run in their own action; the drain returns and keeps draining.
        */
-      if (LONG_KINDS.has(job.kind)) {
+      if (LONG_KINDS.has(job.kind) || TURN_KINDS.has(job.kind)) {
         await ctx.scheduler.runAfter(0, internal.core.scheduler.runJob, { jobId: job._id });
         continue;
       }

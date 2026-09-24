@@ -213,7 +213,9 @@ async function writeOutbound(
     else await ctx.db.insert("budgets", next);
   }
 
-  if (row.surface === "telegram" || row.surface === "imessage") {
+  // An eval clone is unpaired by construction; queueing its delivery only clogs the queue.
+  const isEvalPersona = /^eval(-run)?:/.test(creator?.clerkUserId ?? "");
+  if ((row.surface === "telegram" || row.surface === "imessage") && !isEvalPersona) {
     await ctx.runMutation(internal.core.jobs.enqueue, {
       kind: "deliver_message",
       idempotencyKey: `deliver:${messageId}`,
