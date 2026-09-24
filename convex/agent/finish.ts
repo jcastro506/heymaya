@@ -25,7 +25,9 @@ import { buildPrefix, producedStamp } from "./context";
 import { critique } from "./critic";
 import { deliverNow } from "../core/scheduler";
 import { investigate } from "./investigate";
-import { parseJson, watchBytes } from "./opinion";
+import { isOurSide, parseJson, watchBytes, WATCH_OUR_SIDE } from "./opinion";
+
+export const FINISH_WRITER_DOWN = "i watched it, but couldn't write the captions just now. that's on my side. send it again in a few minutes?";
 import type { ToolCallRecord } from "./tools";
 
 const WEEK_MS = 7 * 86_400_000;
@@ -189,7 +191,8 @@ export const run = internalAction({
     const card = w.text ? parseJson<Record<string, unknown>>(w.text) : null;
     if (!card) {
       const why = w.text ? "my notes on it came out garbled" : (w.reason ?? "the file didn't open");
-      await reply(`couldn't watch that one properly (${why}). send it again?`);
+      // A vendor's words ("The model is overloaded…") never reach them; an outage is said as ours.
+      await reply(!w.text && isOurSide(w.reason) ? WATCH_OUR_SIDE : `couldn't watch that one properly (${why}). send it again?`);
       return { ok: true, reason: `watch failed: ${w.text ? `unparsed: ${w.text.slice(0, 160)}` : w.reason}` };
     }
     const candidates = await ctx.runQuery(internal.agent.finish.soundCandidates, { creatorId: creator._id, now: Date.now() });
@@ -199,7 +202,8 @@ export const run = internalAction({
     const inv = await investigate(ctx, { creatorId: creator._id, sourceMessageId: a.messageId, purpose: "finish", prefix, user, budget: { calls: 5, credits: 12, deadlineAt: Date.now() + 60_000 }, temperature: 0.6, maxTokens: 1800 });
     let out = inv.content ? parseJson<Out>(inv.content) : null;
     if (!out || !Array.isArray(out.captions) || out.captions.length < 2 || !Array.isArray(out.sounds)) {
-      await reply("i watched it but my caption ideas came out wrong. send it again in a minute?");
+      // A writer outage is ours to own; "came out wrong" was only true when the model answered badly.
+      await reply(inv.ended === "model_error" ? FINISH_WRITER_DOWN : "i watched it but my caption ideas came out wrong. send it again in a minute?");
       return { ok: true, reason: `no usable finish: ${inv.ended}` };
     }
     // The critic reads the captions against their own lines (generic or cheesy gets one rewrite),

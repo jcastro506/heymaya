@@ -86,9 +86,9 @@ export async function access(ctx: ActionCtx, row: Doc<"partnershipMailboxes">): 
   await ctx.runMutation(internal.partnerships.mailbox.refreshed, { id: row._id, generation: row.generation, tokenRef: await encrypt(JSON.stringify(bundle)) });
   return bundle.access;
 }
-export async function gmail(token: string, path: string, body?: unknown): Promise<Record<string, unknown>> {
-  // GMAIL_BASE_URL: the eval fake, never set in production.
-  const response = await fetch(`${providerBase("gmail", token === "fake-access")}/${path}`, { method: body ? "POST" : "GET", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(15000) });
+export async function gmail(token: string, path: string, body?: unknown, fetchImpl: typeof fetch = fetch): Promise<Record<string, unknown>> {
+  // GMAIL_BASE_URL: the eval fake, never set in production. `fetchImpl`: the outage drill's failing Gmail (eval/faults.ts).
+  const response = await fetchImpl(`${providerBase("gmail", token === "fake-access")}/${path}`, { method: body ? "POST" : "GET", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(15000) });
   if (!response.ok) throw new Error(`Gmail request failed (${response.status})`);
   const raw = await response.text();
   if (raw.length > 2000000) throw new Error("Gmail response too large");

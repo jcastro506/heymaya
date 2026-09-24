@@ -19,6 +19,7 @@ import { critique, tooLong } from "./critic";
 import { judgeLadder } from "./guarded";
 import { deliverNow } from "../core/scheduler";
 import { watchMedia } from "../integrations/gemini/client";
+import { faultFetch, faultFor } from "../eval/faults";
 
 export const MOMENT_SKILL = `If the plan in the prefix shows a film block HAPPENING NOW, you are the producer on set: read what they sent against that block's hook and shot list, say what is working and the one thing to get before they wrap, and skip the general idea-finding. Mark nothing as filmed yourself; their clip is the sign.
 
@@ -40,7 +41,8 @@ export const kindOfMedia = internalAction({
     if (!m?.fileId) return "unknown";
     const file = await ctx.storage.get(m.fileId);
     if (!file) return "unknown";
-    const r = await watchMedia({ model: WATCH_MODEL_TOP, apiKey: process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY ?? "", prompt: sceneKindOf, media: { bytes: await file.arrayBuffer(), mimeType: m.fileMime ?? "image/jpeg" }, resolution: "low", maxOutputTokens: 5 });
+    const fault = await faultFor(ctx, m.creatorId, "gemini", { purpose: "media_kind" }); // outage drill; null in production
+    const r = await watchMedia({ model: WATCH_MODEL_TOP, apiKey: process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY ?? "", prompt: sceneKindOf, media: { bytes: await file.arrayBuffer(), mimeType: m.fileMime ?? "image/jpeg" }, resolution: "low", maxOutputTokens: 5, ...(fault ? { fetchImpl: faultFetch(fault) } : {}) });
     if (r.usage) await ctx.runMutation(internal.core.costs.record, { creatorId: m.creatorId, vendor: "gemini", resource: WATCH_MODEL_TOP, purpose: "media_kind", costUsd: r.usage.costUsd, promptTokens: r.usage.promptTokens, completionTokens: r.usage.outputTokens, costSource: "endpoint_table" });
     const w = r.ok ? r.text.trim().toLowerCase() : "";
     return w.startsWith("screenshot") ? "screenshot" : w.startsWith("draft") ? "draft" : w.startsWith("scene") ? "scene" : "unknown";

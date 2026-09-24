@@ -17,9 +17,18 @@ import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { INACTIVE_STATUSES, syncSchedule } from "../lib/scheduleRow";
 
-/** Paired creators, optionally without paused / canceled / deleting. One indexed read of slim rows. */
+/**
+ * Paired creators, optionally without paused / canceled / deleting. One indexed read of slim rows.
+ *
+ * ⚠️ Never an eval creator (`eval:` / `eval-run:`). The simulations pair their clones so the rails
+ * allow texting, then run each job themselves on a simulated clock. Until 2026-09-24 the hourly
+ * fleet jobs (scout, cadence, review, week plan, first week, sweep, readback) ALSO ran for every
+ * paired clone at the real hour, doubling their passes and spending real credits on them, while
+ * the comments in the simulations said the fleet skipped them. The load test's `eval-load:`
+ * creators are not `isEval` (they exist to load the fleet) and stay in.
+ */
 export async function pairedRows(ctx: Pick<QueryCtx, "db">, opts: { activeOnly?: boolean } = {}): Promise<Doc<"schedule">[]> {
-  const rows = (await ctx.db.query("schedule").withIndex("by_paired_status", (q) => q.eq("paired", true)).collect()) as Doc<"schedule">[];
+  const rows = ((await ctx.db.query("schedule").withIndex("by_paired_status", (q) => q.eq("paired", true)).collect()) as Doc<"schedule">[]).filter((r) => !r.isEval);
   return opts.activeOnly ? rows.filter((r) => !INACTIVE_STATUSES.has(r.status)) : rows;
 }
 

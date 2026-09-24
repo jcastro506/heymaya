@@ -13,6 +13,7 @@ import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { resolveTelegramBotIdentity, sendTelegramMessage } from "../integrations/telegram/client";
 import { allRows } from "./schedule";
+import { isDrillCheck } from "../eval/faults";
 
 export interface Findings { staleFacts?: string[]; scale?: { creators: number; pctOfReadLimit: number } | null; deadJobs: Array<{ id: string; kind: string; error: string }>; undelivered: Array<{ id: string; creatorId: string; ageMin: number; error: string }>; smokeFailed: Array<{ vendor: string; check: string }>; attention: Array<{ creatorId: string; provider: string; detail: string }> }
 
@@ -39,7 +40,8 @@ export function composeAlert(f: Findings, env: string): string | null {
 }
 
 export const findings = internalQuery({
-  args: { since: v.number(), now: v.number() },
+  // `includeDrill`: the outage drill asks what the operator WOULD be told about its own rows, which the hourly alert skips.
+  args: { since: v.number(), now: v.number(), includeDrill: v.optional(v.boolean()) },
   handler: async (ctx, a): Promise<Findings> => {
     const jobs = (await ctx.db.query("jobs").order("desc").take(300)) as Doc<"jobs">[];
     const deadJobs = jobs.filter((j) => j.status === "dead" && j.updatedAt >= a.since).map((j) => ({ id: j._id, kind: j.kind, error: j.lastError ?? "" }));
@@ -64,7 +66,7 @@ export const findings = internalQuery({
     const smokeFailed: Findings["smokeFailed"] = [];
     for (const h of health) {
       const k = `${h.vendor}:${h.check}`;
-      if (seen.has(k)) continue;
+      if (seen.has(k) || (isDrillCheck(h.check) && !a.includeDrill)) continue;
       seen.add(k);
       if (!h.ok && h.at >= a.since) smokeFailed.push({ vendor: h.vendor, check: h.check });
     }

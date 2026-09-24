@@ -58,13 +58,18 @@ export const runAll = internalAction({
   handler: async (ctx): Promise<{ invited: number }> => {
     const ids = await ctx.runQuery(internal.scout.firstWeek.dueForInvite, { now: Date.now() });
     let invited = 0;
-    for (const creatorId of ids) {
-      const { messageId } = await ctx.runMutation(internal.core.messages.send, { creatorId, surface: "telegram", body: INVITE_DRAFT, dedupeKey: `firstweek:invite:${creatorId}`, proactive: true, kind: "status" });
-      if (messageId) {
-        await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId, step: "invite_draft" });
-        invited++;
-      }
-    }
+    for (const creatorId of ids) if ((await ctx.runMutation(internal.scout.firstWeek.inviteOne, { creatorId })).invited) invited++;
     return { invited };
+  },
+});
+
+/** One creator's day-two invitation: the fleet job above and the first-week simulation both send it through here. */
+export const inviteOne = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ invited: boolean }> => {
+    const { messageId } = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: INVITE_DRAFT, dedupeKey: `firstweek:invite:${a.creatorId}`, proactive: true, kind: "status" });
+    if (!messageId) return { invited: false };
+    await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: a.creatorId, step: "invite_draft" });
+    return { invited: true };
   },
 });

@@ -193,9 +193,15 @@ export function pickSample(rows: Doc<"ownPosts">[]): Map<Id<"ownPosts">, string[
 }
 
 export const run = internalAction({
-  args: { creatorId: v.id("creators") },
+  /**
+   * `watchCap` / `transcriptCap`: fewer watched and transcribed posts than a real signup gets. Only
+   * the first-week simulation passes them (a watched post is 10 vendor credits); absent, the read is
+   * the product's own (TRANSCRIPT_CAP, WATCH_CAP).
+   */
+  args: { creatorId: v.id("creators"), watchCap: v.optional(v.number()), transcriptCap: v.optional(v.number()) },
   handler: async (ctx, args): Promise<{ ok: boolean; reason?: string }> => {
     const creator = await ctx.runQuery(internal.onboarding.ingest.creatorHandles, { creatorId: args.creatorId });
+    const transcriptCap = Math.max(0, Math.min(TRANSCRIPT_CAP, args.transcriptCap ?? TRANSCRIPT_CAP));
     if (!creator) return { ok: false, reason: "creator not found" };
     const now = Date.now();
     const platforms = (["tiktok", "instagram"] as const).filter((p) => creator.handles[p]);
@@ -231,7 +237,7 @@ export const run = internalAction({
     let transcribed = 0;
     for (const row of rows) {
       const tags = sample.get(row._id);
-      if (!tags || transcribed >= TRANSCRIPT_CAP || row.contentType !== "video" || !row.url) continue;
+      if (!tags || transcribed >= transcriptCap || row.contentType !== "video" || !row.url) continue;
       try {
         const r = await ctx.runAction(internal.reads.read.read, {
           kind: "post.transcript",
@@ -250,7 +256,7 @@ export const run = internalAction({
     // Pass three: watch the sample (Gemini, one post per call). Degrades per post, never blocks.
     let cards: Array<{ postId: string; depth: string; card: unknown }> = [];
     try {
-      const w = await ctx.runAction(internal.onboarding.watch.run, { creatorId: creator._id });
+      const w = await ctx.runAction(internal.onboarding.watch.run, { creatorId: creator._id, ...(args.watchCap !== undefined ? { max: args.watchCap } : {}) });
       readFrom.watched = w.watched;
       const reads = await ctx.runQuery(internal.onboarding.watch.readsFor, { creatorId: creator._id });
       cards = reads.map((r) => ({ postId: (r.card as { postId?: string })?.postId ?? "", depth: r.depth, card: r.card }));

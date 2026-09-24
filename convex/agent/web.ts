@@ -17,6 +17,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
 import { providerBase } from "../partnerships/providerConfig";
 import { publicUrl } from "../partnerships/contracts";
+import { faultFetch, faultFor, type Fault } from "../eval/faults";
 
 export const WEB_CALLS_PER_TURN = 2;
 export const TAVILY_USD_PER_CALL = 0.008; // basic search or a basic extract: one credit (COGS doc)
@@ -51,7 +52,9 @@ export type WebAnswer = { ok: true; checkedOn: string; results: WebResult[] } | 
  * web_search reached the real Tavily with the real key. Now a fixture on a local EVAL_FAKES deployment
  * gets the fake (and the fake token); everyone else gets the real endpoint, exactly as before.
  */
-async function call(path: "search" | "extract", body: Record<string, unknown>, fixture = false): Promise<Response> {
+async function call(path: "search" | "extract", body: Record<string, unknown>, fixture = false, fault: Fault | null = null): Promise<Response> {
+  // Outage drill (eval/faults.ts): Tavily failing for this eval creator. Null in production.
+  if (fault) return await faultFetch(fault)(`https://api.tavily.com/${path}`);
   const key = fixture ? "fake-research" : process.env.TAVILY_API_KEY;
   if (!key) throw new Error("web search isn't set up on this deployment");
   return await fetch(`${providerBase("tavily", fixture)}/${path}`, {
@@ -70,7 +73,7 @@ export const search = internalAction({
     if (!q) return { ok: false, reason: "that search had nothing public left in it" };
     await ctx.runMutation(internal.core.costs.record, { creatorId: a.creatorId, vendor: "tavily", resource: "search_basic", purpose: "web_search", costUsd: TAVILY_USD_PER_CALL, costSource: "tier_table" });
     try {
-      const r = await call("search", { query: q, topic: a.topic ?? "general", ...(a.days ? { days: Math.max(1, Math.min(365, Math.round(a.days))) } : {}), search_depth: "basic", max_results: 5, include_answer: false, include_raw_content: false }, await fixtureCreator(ctx, a.creatorId));
+      const r = await call("search", { query: q, topic: a.topic ?? "general", ...(a.days ? { days: Math.max(1, Math.min(365, Math.round(a.days))) } : {}), search_depth: "basic", max_results: 5, include_answer: false, include_raw_content: false }, await fixtureCreator(ctx, a.creatorId), await faultFor(ctx, a.creatorId, "tavily"));
       if (!r.ok) return { ok: false, reason: `search unavailable (${r.status})` };
       const body = (await r.json()) as { results?: Array<{ url?: string; title?: string; content?: string; published_date?: string }> };
       const results = (body.results ?? []).slice(0, 5).flatMap((x) => {
@@ -98,7 +101,7 @@ export const read = internalAction({
     }
     await ctx.runMutation(internal.core.costs.record, { creatorId: a.creatorId, vendor: "tavily", resource: "extract_basic", purpose: "web_read", costUsd: TAVILY_USD_PER_CALL, costSource: "tier_table" });
     try {
-      const r = await call("extract", { urls: [target], extract_depth: "basic" }, await fixtureCreator(ctx, a.creatorId));
+      const r = await call("extract", { urls: [target], extract_depth: "basic" }, await fixtureCreator(ctx, a.creatorId), await faultFor(ctx, a.creatorId, "tavily"));
       if (!r.ok) return { ok: false, reason: `page unavailable (${r.status})` };
       const body = (await r.json()) as { results?: Array<{ url?: string; raw_content?: string }> };
       const page = body.results?.[0];

@@ -21,6 +21,7 @@ import { CAUTIOUS_ASK, judgeLadder, ownPostFloor } from "./guarded";
 import { buildEvidencePack, supportedHypotheses, type EvidencePack } from "../core/evidencePack";
 import { deliverNow } from "../core/scheduler";
 import { fetchMedia, watchMedia } from "../integrations/gemini/client";
+import { faultFetch, faultFor } from "../eval/faults";
 import { WATCH_PROMPT } from "../onboarding/watch";
 import type { ParsedLink } from "./inbound";
 import { investigate } from "./investigate";
@@ -118,20 +119,39 @@ export const writePrediction = internalMutation({
     await ctx.db.insert("predictions", { creatorId: a.creatorId, subject: a.subject, confidence: a.confidence, expectedMultiple: CONFIDENCE_MULTIPLE[a.confidence] ?? 1, opinion: a.opinion, produced: a.produced, createdAt: Date.now() }),
 });
 
+/**
+ * Pure: was this failure on OUR side (a vendor out of credits, rate limited, down, overloaded or
+ * slow) rather than about their link or file? Found by the outage drill (2026-09-24): an
+ * out-of-credits read told a creator `couldn't open that link (read(post.info) failed:
+ * ScrapeCreators HTTP 402 for https://api.scrapecr…). if it's private or a draft, send the file
+ * instead.` That blamed their link for our bill, and put vendor plumbing in a text.
+ */
+export function isOurSide(detail: string | null | undefined): boolean {
+  return /\b(402|429|5\d\d)\b|out of credits|rate limit|timed out|timeout|overloaded|high demand|unavailable|unreachable|try again later|resource.?exhausted|in-flight wait/i.test(detail ?? "");
+}
+export const LINK_OUR_SIDE = "couldn't pull that post up just now. that's on my side, not your link. send it again in a bit and i'll take another look.";
+export const LINK_UNOPENABLE = "couldn't open that link. if it's private or a draft, send me the file instead.";
+export const WATCH_OUR_SIDE = "couldn't watch that one just now. that's on my side, not your video. send it again in a few minutes?";
+/** The writer was down (the model call failed), not "a read i'd stand behind": said as ours, and never "i watched it" when she didn't. */
+export const READ_WRITER_DOWN = "couldn't put a read together just now. that's on my side, not the post. send it again in a bit?";
+
 /** Pure: a failure that another model would likely not have (capacity), not one about the file. */
 export function isOverloaded(reason: string | undefined): boolean {
-  return /high demand|overloaded|unavailable|try again later|resource.?exhausted|\b(429|503)\b/i.test(reason ?? "");
+  return /high demand|overloaded|unavailable|try again later|resource.?exhausted|timed? ?out|timeout|\b(429|503|504)\b/i.test(reason ?? "");
 }
 
 export async function watchBytes(ctx: Parameters<typeof callModel>[0], creatorId: Id<"creators">, purpose: string, bytes: ArrayBuffer, mimeType: string, prompt: string, maxOutputTokens = 900): Promise<{ text: string | null; reason?: string }> {
   const apiKey = process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY ?? "";
+  // Outage drill (eval/faults.ts): Gemini failing for this eval creator, both models. Undefined in production.
+  const fault = await faultFor(ctx, creatorId, "gemini", { purpose });
+  const fetchImpl = fault ? faultFetch(fault) : undefined;
   // One draft at a time deserves the top model (§3.3 escalation); when it's overloaded, the everyday
   // watcher still sees and hears the video (living sim: ~1 in 5 drafts failed on "high demand").
-  let r = await watchMedia({ model: WATCH_MODEL_TOP, apiKey, prompt, media: { bytes, mimeType }, resolution: "default", maxOutputTokens });
+  let r = await watchMedia({ model: WATCH_MODEL_TOP, apiKey, prompt, media: { bytes, mimeType }, resolution: "default", maxOutputTokens, fetchImpl });
   let model = WATCH_MODEL_TOP;
   if (!r.ok && isOverloaded(r.reason)) {
     model = WATCH_MODEL;
-    r = await watchMedia({ model, apiKey, prompt, media: { bytes, mimeType }, resolution: "default", maxOutputTokens });
+    r = await watchMedia({ model, apiKey, prompt, media: { bytes, mimeType }, resolution: "default", maxOutputTokens, fetchImpl });
   }
   if (r.usage) await ctx.runMutation(internal.core.costs.record, { creatorId, vendor: "gemini", resource: model, purpose, costUsd: r.usage.costUsd, promptTokens: r.usage.promptTokens, completionTokens: r.usage.outputTokens, costSource: "endpoint_table" });
   return r.ok ? { text: r.text } : { text: null, reason: r.reason };
@@ -214,6 +234,8 @@ export const run = internalAction({
           if (media.ok) {
             const w = await watchBytes(ctx, creator._id, "watch_link", media.bytes, media.mimeType, WATCH_PROMPT);
             card = w.text ? parseJson<Card>(w.text) : null;
+            // Said in the evidence (`card: {unavailable}`), so a read from the transcript never sounds like she watched it.
+            if (!card) cannotWatch = w.reason ?? "the watch failed";
             if (card && value.caption) card.caption = value.caption;
             if (card && value.stats) card.stats = value.stats;
           } else cannotWatch = media.reason;
@@ -230,7 +252,7 @@ export const run = internalAction({
     }
 
     if (!card && !transcript && !own) {
-      await reply(a.mode === "video" ? `couldn't watch that one (${cannotWatch ?? "the file didn't open"}). try a smaller export, under 20 MB, or a link once it's up.` : `couldn't open that link (${cannotWatch ?? "nothing came back"}). if it's private or a draft, send the file instead.`);
+      await reply(a.mode === "video" ? (isOurSide(cannotWatch) ? WATCH_OUR_SIDE : `couldn't watch that one (${cannotWatch ?? "the file didn't open"}). try a smaller export, under 20 MB, or a link once it's up.`) : isOurSide(cannotWatch) ? LINK_OUR_SIDE : LINK_UNOPENABLE);
       return { ok: true, reason: `no evidence: ${cannotWatch ?? "none"}` };
     }
 
@@ -274,7 +296,7 @@ export const run = internalAction({
       out = r.ok ? parseJson<Out>(r.content) : null;
     }
     if (!out || !out.citations?.length || !out.message?.trim()) {
-      await reply("i watched it but i can't give you a read i'd stand behind right now. give me an hour and send it again?");
+      await reply(!r.ok ? READ_WRITER_DOWN : `${card ? "i watched it" : "i looked at it"} but i can't give you a read i'd stand behind right now. give me an hour and send it again?`);
       return { ok: true, reason: `no grounded opinion: ${r.ok ? `raw=${r.content.slice(0, 300).replace(/\s+/g, " ")}` : r.reason}` };
     }
     const confidence = (["strong", "solid", "fine", "weak", "broken"] as const).includes(out.confidence as never) ? (out.confidence as "strong" | "solid" | "fine" | "weak" | "broken") : "fine";
