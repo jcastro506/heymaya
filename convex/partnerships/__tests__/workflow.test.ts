@@ -6,7 +6,7 @@ import { api, internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { Draft, MAX_FOLLOW_UPS, Opportunity, followUpEligible, nextFollowUpAt, publicUrl, spentWithoutReply } from "../contracts";
+import { Draft, MAX_FOLLOW_UPS, Opportunity, applicationCheckIn, followUpEligible, nextFollowUpAt, publicUrl, spentWithoutReply } from "../contracts";
 import { mime } from "../delivery";
 import { encrypt, _resetEncryptionKeyCache } from "../../lib/encryption";
 import { forgetPartnershipEvidence } from "../privacy";
@@ -226,6 +226,34 @@ describe("approval and delivery races", () => {
     expect(again.repeated).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect((await f.t.run(ctx => ctx.db.query("costEvents").collect())).length).toBe(1);
+  });
+  it("B6 §8.3 applications: answers only for real questions; one check-in before submitting and one after", async () => {
+    const now = Date.now();
+    const f = await fixture();
+    const o = Opportunity.parse(f.input.opportunity);
+    const app = { ...o, route: "application" as const, routeUrl: "https://brand.com/apply" };
+    expect(applicationCheckIn({ ...app, applicationCheckInAt: now - 1 }, now)).toBe("submit");
+    expect(applicationCheckIn({ ...app, applicationCheckInAt: now - 1, applicationCheckIns: 1 }, now)).toBeNull(); // once
+    expect(applicationCheckIn({ ...app, appliedAt: now - 15 * 86400000, applicationCheckIns: 1, applicationCheckInAt: now - 1 }, now)).toBe("heard_back");
+    expect(applicationCheckIn({ ...app, appliedAt: now - 15 * 86400000, applicationCheckIns: 2, applicationCheckInAt: now - 1 }, now)).toBeNull();
+    expect(applicationCheckIn({ ...o, route: "email" as const, applicationCheckInAt: now - 1 }, now)).toBeNull();
+    // drafted answers only for questions the extracted form shows
+    await f.t.run(async (ctx) => { const row = await ctx.db.get(f.opportunityId); await ctx.db.patch(f.opportunityId, { data: { ...row!.data, route: "application", routeUrl: "https://brand.com/apply", applicationFields: [{ label: "Your TikTok handle", required: true, type: "text", sourceUrl: "https://brand.com/creators" }] } }); });
+    const prep = (answers: Array<{ label: string; answer: string }>) => f.t.mutation(internal.partnerships.drafts.prepare, { creatorId: f.a, sourceMessageId: f.source, input: { opportunityId: f.opportunityId, subject: "Application", body: "Answers below.", answers } });
+    await expect(prep([{ label: "Your bank account", answer: "x" }])).rejects.toThrow(/Not questions on the form/);
+    await prep([{ label: "Your TikTok handle", answer: "@runnerjane" }]);
+    expect((await f.t.withIdentity({ subject: "u_partner-a" }).query(api.ui.application, { id: f.opportunityId }))?.questions).toEqual([{ label: "Your TikTok handle", required: true, type: "text", answer: "@runnerjane" }]);
+    // the app's button and the chat path record the same submission
+    const asA = f.t.withIdentity({ subject: "u_partner-a" });
+    expect(await asA.mutation(api.ui.markApplied, { id: f.opportunityId })).toEqual({ ok: true });
+    const row = await f.t.run((ctx) => ctx.db.get(f.opportunityId));
+    expect(row?.data).toMatchObject({ status: "contacted", applicationCheckIns: 1 });
+    expect((row?.data as { applicationCheckInAt: number }).applicationCheckInAt).toBeGreaterThan(now + 13 * 86400000);
+    const view = await asA.query(api.ui.application, { id: f.opportunityId });
+    expect(view).toMatchObject({ brand: "Brand", formUrl: "https://brand.com/apply", applied: true });
+    // another creator can neither read nor mark it
+    expect(await f.t.withIdentity({ subject: "u_partner-b" }).query(api.ui.application, { id: f.opportunityId })).toBeNull();
+    expect(await f.t.withIdentity({ subject: "u_partner-b" }).mutation(api.ui.markApplied, { id: f.opportunityId })).toEqual({ ok: false });
   });
   it("isolates OAuth providers, sessions and single-use states", async () => {
     const f = await fixture();

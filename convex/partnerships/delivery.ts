@@ -1,10 +1,11 @@
 import { v } from "convex/values";
 import { internalAction, internalQuery } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
+import type { MutationCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { active, event, ownedOpportunity, profile } from "./store";
-import { CLOSED, Draft, Opportunity, email, line, followUpEligible, nextFollowUpAt, spentWithoutReply, type DraftData } from "./contracts";
+import { CLOSED, Draft, Opportunity, email, line, followUpEligible, nextFollowUpAt, spentWithoutReply, applicationCheckIn, APPLICATION_CHECK_IN_DAYS, type DraftData } from "./contracts";
 import { access, gmail } from "./mailbox";
 import { deliverNow } from "../core/scheduler";
 
@@ -167,10 +168,15 @@ export const checkOne = internalAction({ args: { creatorId: v.id("creators"), op
       if (unansweredReply) candidates.push({ key: `partner-reply:${a.opportunityId}:${data.lastInboundAt}`, body: `${data.brand}’s email conversation has a new message. want to look at it together?` });
       for (const item of data.deliverables) if (item.status === "agreed" && item.dueAt <= Date.now() + 86400000) candidates.push({ key: `partner-deliverable:${a.opportunityId}:${item.title}:${item.dueAt}`, body: `${item.title} for ${data.brand} ${item.dueAt < Date.now() ? "is past its recorded due date" : "is due within the next day"}. how’s it coming along?` });
       if (data.deadline && data.deadline > Date.now() && data.deadline <= Date.now() + 2 * 86400000 && ["discovered", "shortlisted"].includes(data.status)) candidates.push({ key: `partner-deadline:${a.opportunityId}:${data.deadline}`, body: `${data.brand}’s opportunity closes within two days, according to the saved program details. want to review it together?` });
+      // §8.3 applications: one "did you get to submit it?", then (after they did) one "heard back?".
+      const check = applicationCheckIn(data, Date.now());
+      if (check === "submit") candidates.push({ key: `partner-app-submit:${a.opportunityId}`, body: `did you get to submit the ${data.brand} application? tell me when you have, and i'll check back in a couple of weeks.` });
+      if (check === "heard_back") candidates.push({ key: `partner-app-heard:${a.opportunityId}`, body: `heard anything back from ${data.brand} about your application?` });
       if (followUpEligible(data, Date.now())) candidates.push({ key: `partner-followup:${a.opportunityId}:${data.followUpAt}`, body: data.followUpBasis === "user_requested" ? `you asked me to revisit ${data.brand} around now. want to work out the next step?` : `we haven’t received a reply from ${data.brand} in the tracked email conversation. want me to prepare a follow-up for you to review?` });
       for (const candidate of candidates) {
         if (await ctx.runQuery(internal.core.messages.exists, { creatorId: a.creatorId, dedupeKey: candidate.key })) continue;
         await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: candidate.body, dedupeKey: candidate.key, proactive: true, kind: "partnership", awaitingAnswer: true });
+        if (candidate.key.startsWith("partner-app-")) await ctx.runMutation(internal.partnerships.delivery.countCheckIn, { creatorId: a.creatorId, opportunityId: a.opportunityId });
         break; // One useful interruption, respecting the existing cadence rails.
       }
     } catch {
@@ -209,3 +215,18 @@ export const closeNoResponse = internalMutation({ args: { creatorId: v.id("creat
   await event(ctx, a.creatorId, a.opportunityId, `closed:no_response:${a.opportunityId}`, "closed", "No reply after three touches; closed as no response.");
   await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: `no word from ${o.brand} after three tries, so i've closed that one. say the word if you ever want to try them again.`, dedupeKey: `partner-closed:${a.opportunityId}`, proactive: true, kind: "partnership" });
 } });
+
+/** An application check-in went out: count it (at most one per stage). */
+export const countCheckIn = internalMutation({ args: { creatorId: v.id("creators"), opportunityId: v.id("partnershipOpportunities") }, handler: async (ctx, a) => {
+  const { data: o } = await ownedOpportunity(ctx, a.creatorId, a.opportunityId);
+  await ctx.db.patch(a.opportunityId, { data: Opportunity.parse({ ...o, applicationCheckIns: (o.applicationCheckIns ?? 0) + 1, applicationCheckInAt: undefined }), updatedAt: Date.now() });
+} });
+
+/** They submitted the application (the app's button, or they told her): one check-in in two weeks. */
+export async function markApplied(ctx: MutationCtx, creatorId: Doc<"creators">["_id"], opportunityId: Doc<"partnershipOpportunities">["_id"]): Promise<void> {
+  const { data: o } = await ownedOpportunity(ctx, creatorId, opportunityId);
+  if (o.appliedAt || CLOSED.has(o.status)) return;
+  const now = Date.now();
+  await ctx.db.patch(opportunityId, { data: Opportunity.parse({ ...o, status: "contacted", appliedAt: now, applicationCheckIns: 1, applicationCheckInAt: now + APPLICATION_CHECK_IN_DAYS.afterSubmit * 86_400_000 }), updatedAt: now });
+  await event(ctx, creatorId, opportunityId, `applied:${opportunityId}`, "applied", "They submitted the application (their report).");
+}

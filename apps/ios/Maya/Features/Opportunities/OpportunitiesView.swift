@@ -138,6 +138,17 @@ struct PipelineView: View {
       VStack(alignment: .leading, spacing: 10) {
         SectionHeader(text: title)
         ForEach(rows) { o in
+          if o.route == "application" {
+            NavigationLink { ApplicationView(id: o.id) } label: { card(o, application: true) }.buttonStyle(.plain)
+          } else {
+            card(o, application: false)
+          }
+        }
+      }
+    }
+  }
+
+  private func card(_ o: Opportunity, application: Bool) -> some View {
           Card {
             HStack {
               Text(o.brand).font(MayaFont.headline).foregroundStyle(Palette.ink)
@@ -147,10 +158,8 @@ struct PipelineView: View {
             if !o.campaign.isEmpty { Text(o.campaign).font(MayaFont.callout).foregroundStyle(Palette.muted) }
             Text(o.fit).font(MayaFont.callout).foregroundStyle(Palette.ink).lineLimit(3)
             if !o.compensation.isEmpty { Text(o.compensation).font(MayaFont.caption).foregroundStyle(Palette.muted) }
+            if application { Label("Application: answers ready to copy", systemImage: "doc.on.clipboard").font(MayaFont.caption.weight(.semibold)).foregroundStyle(Palette.purple) }
           }
-        }
-      }
-    }
   }
 }
 

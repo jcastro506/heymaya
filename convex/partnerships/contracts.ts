@@ -39,6 +39,10 @@ export const Opportunity = z.object({
   /** B6 (§8.3): follow-ups sent on this thread; code refuses a third. */
   followUpCount: z.number().int().min(0).default(0),
   closedReason: z.enum(["no_response"]).optional(),
+  /** B6 (§8.3) applications: when they said they submitted, and the next check-in (at most one per stage). */
+  appliedAt: z.number().finite().optional(),
+  applicationCheckInAt: z.number().finite().optional(),
+  applicationCheckIns: z.number().int().min(0).default(0),
   threadId: z.string().max(300).optional(), lastMessageId: z.string().max(500).optional(), mailboxGeneration: z.string().optional(),
   deliverables: z.array(z.object({ title: line, dueAt: z.number().finite(), status: z.enum(["proposed", "agreed", "completed"]) })).max(30).default([]),
 });
@@ -49,11 +53,23 @@ export const Draft = z.object({
   body: z.string().trim().min(1).max(12000), recipient: z.string().max(2000), sender: email.optional(),
   mailboxGeneration: z.string().optional(), threadId: z.string().optional(), inReplyTo: z.string().optional(),
   status: z.enum(["draft", "approved", "sending", "sent", "unknown", "failed", "canceled"]),
+  /** Applications: one drafted answer per question the extracted form page shows. */
+  answers: z.array(z.object({ label: line, answer: z.string().trim().min(1).max(3000) })).max(50).optional(),
   approvalCode: z.string(), approvalExpiresAt: z.number(), approvedBy: z.string().optional(),
   providerMessageId: z.string().optional(), error: z.string().optional(), createdAt: z.number(),
 });
 export type DraftData = z.infer<typeof Draft>;
 export const CLOSED = new Set(["declined", "closed", "suppressed", "completed"]);
+
+/** Days until the application check-ins: before they submit, then after. */
+export const APPLICATION_CHECK_IN_DAYS = { beforeSubmit: 2, afterSubmit: 14 } as const;
+
+/** Pure: which application check-in is due now, if any (one before submitting, one after). */
+export function applicationCheckIn(o: OpportunityData, now: number): "submit" | "heard_back" | null {
+  if (o.route !== "application" || CLOSED.has(o.status) || !o.applicationCheckInAt || o.applicationCheckInAt > now) return null;
+  if (!o.appliedAt) return (o.applicationCheckIns ?? 0) < 1 ? "submit" : null;
+  return (o.applicationCheckIns ?? 0) < 2 ? "heard_back" : null;
+}
 
 /** B6 (§8.3): at most two follow-ups (three touches), then the relationship closes. */
 export const MAX_FOLLOW_UPS = 2;

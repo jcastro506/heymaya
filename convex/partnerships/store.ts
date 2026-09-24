@@ -4,7 +4,7 @@ import { internalQuery, query, type MutationCtx, type QueryCtx } from "../_gener
 import { internalMutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
 import { creatorForIdentity } from "../core/identity";
-import { CLOSED, Draft, Evidence, Opportunity, Profile, publicUrl, followUpEligible, type OpportunityData } from "./contracts";
+import { APPLICATION_CHECK_IN_DAYS, CLOSED, Draft, Evidence, Opportunity, Profile, publicUrl, followUpEligible, type OpportunityData } from "./contracts";
 import { TIERS, entitlementsFor, type Entitlements } from "../billing/tiers";
 
 /** The operator's pilot list: a comp on top of the tier, never the gate (§26). */
@@ -209,6 +209,8 @@ export const change = internalMutation({
     const key = `user:${source._id}:${row._id}`;
     if (!await event(ctx, a.creatorId, row._id, key, "user_report", `User message ${source._id}: ${source.body}\nMaya summary: ${input.note}`)) return { unchanged: true };
     const next: OpportunityData = { ...data, ...(input.status ? { status: input.status } : {}), ...(input.deliverables ? { deliverables: input.deliverables } : {}), followUpAt: input.followUpAt, followUpBasis: input.followUpAt ? "user_requested" : undefined };
+    // Chat equals the app (§1): "i submitted it" on an application records the submission and one check-in in 14 days.
+    if (next.route === "application" && next.status === "contacted" && !next.appliedAt) Object.assign(next, { appliedAt: Date.now(), applicationCheckIns: 1, applicationCheckInAt: Date.now() + APPLICATION_CHECK_IN_DAYS.afterSubmit * 86_400_000 });
     await ctx.db.patch(row._id, { data: Opportunity.parse(next), updatedAt: now });
     // Any new report changes the facts an approval was based on.
     for (const d of await ctx.db.query("partnershipDrafts").withIndex("by_opportunity", q => q.eq("opportunityId", row._id)).collect()) {

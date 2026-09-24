@@ -31,6 +31,11 @@ enum Actions {
     await UIApplication.shared.open(url)
   }
 
+  /// B6: "I submitted it" on an application (the same record as telling her in Messages).
+  static func markApplied(id: String) async -> Bool {
+    await ok("ui:markApplied", ["id": id])
+  }
+
   static func restoreIdea(ideaId: String) async -> Bool {
     await ok("ui:restoreIdea", ["id": ideaId])
   }
