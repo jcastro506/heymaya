@@ -8,7 +8,7 @@
  * credits) starts when they say yes. At most one a week, inside the texting rails.
  */
 import { v } from "convex/values";
-import { internalAction, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery, type QueryCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { normalViews } from "../core/normal";
@@ -29,7 +29,14 @@ export const mediaKit = internalQuery({
   args: { creatorId: v.id("creators") },
   handler: async (ctx, a): Promise<MediaKit | null> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
-    if (!c) return null;
+    return c ? await readKit(ctx, c) : null;
+  },
+});
+
+/** Shared by the internal query and the public page (a query can't call a query). */
+export async function readKit(ctx: QueryCtx, c: Doc<"creators">): Promise<MediaKit> {
+  {
+    const a = { creatorId: c._id };
     const now = Date.now();
     const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(120)) as Doc<"ownPosts">[];
     const snaps = (await ctx.db.query("followerSnapshots").withIndex("by_creator_day", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(20)) as Doc<"followerSnapshots">[];
@@ -58,8 +65,8 @@ export const mediaKit = internalQuery({
     }
     const taggedByThem = [...tags.entries()].sort((a2, b2) => b2[1].posts - a2[1].posts).slice(0, 8).map(([handle, t]) => ({ handle, ...t }));
     return { taggedByThem, lane, platforms, prefs: { paidOnly: p.paidOnly, dealTypes: p.dealTypes, excludedBrands: p.excludedBrands, minimumRate: p.minimumRate, region: p.region } };
-  },
-});
+  }
+}
 
 /** Pure: the brands worth offering: paying their lane, not already a relationship, not excluded. */
 export function offerable(brands: LaneBrand[], known: Array<{ brandDomain: string; brand?: string }>, excluded: string[]): LaneBrand[] {

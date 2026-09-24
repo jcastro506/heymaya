@@ -29,6 +29,11 @@ describe("the reply path is judged", () => {
     expect(claimsUnsupportedAction("done, moved it to thursday", [{ tool: "week_plan", ok: true }, { tool: "block_move", ok: false }])).toBe(true);
     expect(claimsUnsupportedAction("done, moved it to thursday", [{ tool: "block_move", ok: true }])).toBe(false);
     expect(claimsUnsupportedAction("thursday at 5 work? i'll lock it in", [])).toBe(false);
+    // a question or their own doing is not her claiming an action (bench o1)
+    expect(claimsUnsupportedAction("lifeway is your strongest lead. have you done paid brand work before?", [])).toBe(false);
+    expect(claimsUnsupportedAction("you've done the hard part already, the recipe carries it.", [])).toBe(false);
+    expect(claimsUnsupportedAction("booked. thursday 5pm.", [])).toBe(true);
+    expect(claimsUnsupportedAction("ok! i added it to your plan. want another?", [])).toBe(true);
   });
 
   it("converse critiques its reply before sending", () => {

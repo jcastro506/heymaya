@@ -8,6 +8,7 @@ import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
 import { Draft, MAX_FOLLOW_UPS, Opportunity, applicationCheckIn, followUpEligible, nextFollowUpAt, publicUrl, spentWithoutReply } from "../contracts";
 import { mime } from "../delivery";
+import { linksProfile, profileTarget } from "../contracts";
 import { encrypt, _resetEncryptionKeyCache } from "../../lib/encryption";
 import { forgetPartnershipEvidence } from "../privacy";
 import { runTool, DEFAULT_BUDGET, type ToolCallRecord } from "../../agent/tools";
@@ -58,6 +59,28 @@ describe("partnership evidence and fit", () => {
     const f = await fixture();
     await expect(f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { ...f.input, opportunity: { ...f.input.opportunity, evidence: [{ ...f.evidence, excerpt: "CEO personally requested this pitch" }] } } })).rejects.toThrow("Evidence");
     await expect(f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { ...f.input, opportunity: { ...f.input.opportunity, contactEmail: "ceo@brand.com" } } })).rejects.toThrow("Email is not present");
+  });
+  it("a bio email counts only from the profile the brand's own site links, never a lookalike", async () => {
+    const f = await fixture();
+    const now = Date.now();
+    const site = { url: "https://shoeco.com/about", excerpt: "Shoe Co makes trail shoes. Follow us: https://instagram.com/shoeco", checkedAt: now, kind: "extract" };
+    const real = { url: "https://www.instagram.com/shoeco/", excerpt: "@shoeco\nbio: trail shoes. collabs: hello@shoeco.net", checkedAt: now, kind: "profile" };
+    const fake = { url: "https://www.instagram.com/shoeco_deals/", excerpt: "@shoeco_deals\nbio: official collabs: pay@shoeco-deals.net", checkedAt: now, kind: "profile" };
+    const id = await f.t.mutation(internal.partnerships.store.reserveResearch, { creatorId: f.a });
+    await f.t.mutation(internal.partnerships.store.saveResearch, { creatorId: f.a, id, results: [site, real, fake] });
+    const base = { ...f.input.opportunity, brand: "Shoe Co" };
+    await expect(f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "shoeco.com", opportunity: { ...base, contactEmail: "pay@shoeco-deals.net", evidence: [site, fake] } } })).rejects.toThrow("Email is not present");
+    await expect(f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "shoeco.com", opportunity: { ...base, contactEmail: "hello@shoeco.net", evidence: [real] } } })).rejects.toThrow("official website");
+    const ok = await f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "shoeco.com", opportunity: { ...base, contactEmail: "hello@shoeco.net", evidence: [site, real] } } }) as { id: string };
+    expect(ok.id).toBeTruthy();
+  });
+  it("profile specs and links are matched exactly (pure)", () => {
+    expect(profileTarget("instagram:@ShoeCo")).toEqual({ platform: "instagram", handle: "shoeco", url: "https://www.instagram.com/shoeco/" });
+    expect(profileTarget("youtube:shoeco")).toBeNull();
+    expect(profileTarget("instagram:shoe co; drop table")).toBeNull();
+    expect(linksProfile("follow instagram.com/shoeco!", "https://www.instagram.com/shoeco/")).toBe(true);
+    expect(linksProfile("follow instagram.com/shoeco_deals", "https://www.instagram.com/shoeco/")).toBe(false);
+    expect(linksProfile("tiktok.com/@shoeco", "https://www.tiktok.com/@shoeco")).toBe(true);
   });
   it("rejects borrowed personal evidence", async () => {
     const f = await fixture();

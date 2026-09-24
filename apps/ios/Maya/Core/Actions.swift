@@ -36,6 +36,21 @@ enum Actions {
     await ok("ui:markApplied", ["id": id])
   }
 
+  /// B6: their public media-kit page. On returns the link (the same one each time); off kills it.
+  static func mediaKitLink(on: Bool) async -> URL? {
+    struct R: Decodable { let url: String? }
+    if Fixtures.enabled { return on ? URL(string: "https://hey-maya.ai/k/fixturekit01") : nil }
+    do {
+      let r: R = try await convex.mutation("partnerships/kitPage:kitLink", with: ["on": on])
+      Haptics.success()
+      return r.url.flatMap(URL.init(string:))
+    } catch {
+      print("[Actions] kitLink: \(error)")
+      Haptics.warning()
+      return nil
+    }
+  }
+
   static func restoreIdea(ideaId: String) async -> Bool {
     await ok("ui:restoreIdea", ["id": ideaId])
   }

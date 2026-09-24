@@ -155,6 +155,7 @@ import type * as partnerships_contracts from "../partnerships/contracts.js";
 import type * as partnerships_delivery from "../partnerships/delivery.js";
 import type * as partnerships_drafts from "../partnerships/drafts.js";
 import type * as partnerships_kit from "../partnerships/kit.js";
+import type * as partnerships_kitPage from "../partnerships/kitPage.js";
 import type * as partnerships_mailbox from "../partnerships/mailbox.js";
 import type * as partnerships_privacy from "../partnerships/privacy.js";
 import type * as partnerships_providerConfig from "../partnerships/providerConfig.js";
@@ -346,6 +347,7 @@ declare const fullApi: ApiFromModules<{
   "partnerships/delivery": typeof partnerships_delivery;
   "partnerships/drafts": typeof partnerships_drafts;
   "partnerships/kit": typeof partnerships_kit;
+  "partnerships/kitPage": typeof partnerships_kitPage;
   "partnerships/mailbox": typeof partnerships_mailbox;
   "partnerships/privacy": typeof partnerships_privacy;
   "partnerships/providerConfig": typeof partnerships_providerConfig;

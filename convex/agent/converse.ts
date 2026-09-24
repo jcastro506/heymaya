@@ -593,6 +593,8 @@ export const run = internalAction({
       : await critique(ctx, { creatorId: creator._id, kind: "reply", text, evidence: { theirMessage: target.body.slice(0, 400), creatorContext: gathered.personal.slice(0, 12_000), toolsUsedThisTurn: toolsUsed, toolTrace: inv.trace, partnershipRecords: relationshipEvidence }, voice: (creator.dossier as { voice?: unknown; persona?: unknown } | undefined) ?? {}, directives: directives.map((d) => d.verbatim) });
     let criticSkipped = verdict.skipped === true;
     if (!verdict.pass) {
+      // Eval personas only (saveTrace no-ops for real creators): what the critic rejected, so the bench can see what a rewrite changed.
+      await ctx.runMutation(internal.eval.expertBench.saveTrace, { creatorId: creator._id, trace: [{ tool: "critic", ok: false, result: `${verdict.problems.join(", ")} (${verdict.note}) | draft: ${text.slice(0, 700)}` }] }).catch(() => undefined);
       const rewrite = await callModel(ctx, {
         creatorId: creator._id,
         purpose: "converse_rewrite",

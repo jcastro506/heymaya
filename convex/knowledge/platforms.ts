@@ -98,6 +98,22 @@ export const PLATFORM_FACTS: PlatformFact[] = [
     source: "https://about.instagram.com/blog/announcements/instagram-ranking-explained",
     verifiedOn: "2026-09-24",
   },
+  {
+    id: "tt-one-marketplace",
+    platform: "tiktok",
+    tags: ["brand deals", "brand deal", "creator marketplace", "tiktok one", "marketplace", "sponsorship", "get paid", "brands find me", "followers", "eligibility"],
+    fact: "TikTok One (formerly the Creator Marketplace), where brands find and hire creators: sign-up needs 18+, a country where it has launched, and following the Community Guidelines and Branded Content Policy. Sign-up itself has no follower minimum; brand projects need at least 1,000 followers plus requirements that vary by project. (Third-party guides quoting 10,000 are out of date.)",
+    source: "https://ads.tiktok.com/help/article/how-creators-can-sign-up-for-tiktok-one",
+    verifiedOn: "2026-09-24",
+  },
+  {
+    id: "ig-creator-marketplace",
+    platform: "instagram",
+    tags: ["brand deals", "brand deal", "creator marketplace", "marketplace", "sponsorship", "get paid", "brands find me", "partnership messages", "eligibility"],
+    fact: "Instagram's creator marketplace (brands find creators and send partnership messages) needs a professional (creator or business) account, 18+, an eligible country, and an account in line with the Partner Monetization Policies. Instagram's help page lists eligibility; confirm the current country list there.",
+    source: "https://help.instagram.com/1389278101788752",
+    verifiedOn: "2026-09-24",
+  },
 ];
 
 /** Pure: the facts that match a topic (by tag words), for one platform or both. */
