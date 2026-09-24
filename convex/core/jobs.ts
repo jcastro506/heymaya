@@ -35,6 +35,17 @@ export const DEFAULT_MAX_ATTEMPTS = 5;
 export const DEFAULT_LEASE_MS = 5 * 60 * 1000;
 
 /**
+ * How many turns may be claimed at once. Convex runs 8 scheduled jobs at a time on the Free/Starter
+ * deployment class (S16) and 256 on Professional (S256); claiming more only turns queue time into
+ * lease time, and an expired lease re-queues a turn that is still about to run. Set MAX_TURNS_IN_FLIGHT
+ * per deployment.
+ */
+export function maxTurnsInFlight(env: Record<string, string | undefined> = process.env): number {
+  const n = Number(env.MAX_TURNS_IN_FLIGHT);
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 12;
+}
+
+/**
  * How long a job may keep being deferred before it is declared dead. A defer
  * never burns an attempt, so without this a delivery to a chat that will never
  * pair (a bench clone, someone who abandoned onboarding) re-queues every ten
@@ -190,10 +201,18 @@ export const claimNext = internalMutation({
      * if that creator has none of it running and it is their oldest one queued.
      * Other creators' turns are unaffected, so the fleet still runs in parallel.
      */
+    // Exact, per creator (index), not a scan of the first 200 running rows: at 219 running the scan
+    // missed creators and two turns ran at once for one person (1,000-creator test, 2026-09-24).
     const busy = new Set<string>();
-    for (const row of running) {
-      if (SERIAL_KINDS.has(row.kind) && row.creatorId) busy.add(`${row.kind}:${row.creatorId}`);
+    const serialCreators = new Set(wanted.filter((r) => SERIAL_KINDS.has(r.kind) && r.creatorId).map((r) => `${r.kind}:${r.creatorId}`));
+    for (const key of serialCreators) {
+      const [kind, creatorId] = key.split(":") as [string, Id<"creators">];
+      const inFlight = await ctx.db.query("jobs").withIndex("by_creator_kind", (q) => q.eq("creatorId", creatorId).eq("kind", kind)).order("desc").take(20);
+      if (inFlight.some((r) => r.status === "running")) busy.add(key);
     }
+    // Claim no more turns than the deployment can actually run; the rest wait queued, not leased.
+    const turnsRunning = running.filter((r) => SERIAL_KINDS.has(r.kind)).length;
+    const turnCap = maxTurnsInFlight();
     const oldest = new Map<string, Doc<"jobs">>();
     for (const row of wanted) {
       if (!SERIAL_KINDS.has(row.kind) || !row.creatorId) continue;
@@ -203,6 +222,7 @@ export const claimNext = internalMutation({
     }
     const eligible = wanted.filter((row) => {
       if (!SERIAL_KINDS.has(row.kind) || !row.creatorId) return true;
+      if (turnsRunning >= turnCap) return false;
       const key = `${row.kind}:${row.creatorId}`;
       return !busy.has(key) && oldest.get(key)?._id === row._id;
     });
@@ -238,6 +258,17 @@ export const claimNext = internalMutation({
       updatedAt: now,
     });
     return (await ctx.db.get(job._id))!;
+  },
+});
+
+/** The turn's action is starting now: its lease starts now too. False if the job was re-claimed meanwhile. */
+export const start = internalMutation({
+  args: { jobId: v.id("jobs"), attempt: v.number() },
+  handler: async (ctx, a): Promise<boolean> => {
+    const job = (await ctx.db.get(a.jobId)) as Doc<"jobs"> | null;
+    if (!job || job.status !== "running" || job.attempts !== a.attempt) return false;
+    await ctx.db.patch(a.jobId, { deadlineAt: Date.now() + DEFAULT_LEASE_MS, updatedAt: Date.now() });
+    return true;
   },
 });
 

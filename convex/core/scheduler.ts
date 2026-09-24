@@ -112,10 +112,12 @@ export const TURN_KINDS: ReadonlySet<string> = new Set(["converse"]);
 
 /** One claimed job, in its own action, so the drain is never blocked by it. */
 export const runJob = internalAction({
-  args: { jobId: v.id("jobs") },
+  args: { jobId: v.id("jobs"), attempt: v.optional(v.number()) },
   handler: async (ctx, args): Promise<{ ok: boolean }> => {
     const job = await ctx.runQuery(internal.core.jobs.byId, { jobId: args.jobId });
     if (!job || job.status !== "running") return { ok: false };
+    // A copy scheduled before a lease expired and the job was claimed again must not run twice.
+    if (args.attempt !== undefined && !(await ctx.runMutation(internal.core.jobs.start, { jobId: args.jobId, attempt: args.attempt }))) return { ok: false };
     const handler = handlers[job.kind];
     if (!handler) { await ctx.runMutation(internal.core.jobs.fail, { jobId: job._id, error: `no handler for job kind "${job.kind}"` }); return { ok: false }; }
     try {
@@ -153,7 +155,7 @@ export const drainJobs = internalAction({
        * jobs run in their own action; the drain returns and keeps draining.
        */
       if (LONG_KINDS.has(job.kind) || TURN_KINDS.has(job.kind)) {
-        await ctx.scheduler.runAfter(0, internal.core.scheduler.runJob, { jobId: job._id });
+        await ctx.scheduler.runAfter(0, internal.core.scheduler.runJob, { jobId: job._id, attempt: job.attempts });
         continue;
       }
 
