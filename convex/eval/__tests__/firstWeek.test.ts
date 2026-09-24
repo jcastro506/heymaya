@@ -14,7 +14,7 @@ import { normalizePhone } from "../../integrations/claw/client";
 import { localHourMinute } from "../../scout/gate";
 import { MIN_DAYS_BEFORE_REVIEW } from "../../review/weekly";
 import { pairedRows } from "../../core/schedule";
-import { DEFAULT_SUBJECTS, dayPlan, inspirationPlatform, isFirstWeekSubject, parseJudged, phoneFor, resolveOpts, subjectFor, summarise, timezonesFor, weekdayOf, type CreatorLog, type RunState } from "../firstWeek";
+import { DEFAULT_SUBJECTS, balanceRefusal, estimateCredits, dayPlan, inspirationPlatform, isFirstWeekSubject, parseJudged, phoneFor, resolveOpts, subjectFor, summarise, timezonesFor, weekdayOf, type CreatorLog, type RunState } from "../firstWeek";
 
 const NOW = Date.UTC(2026, 8, 24, 15, 0, 0);
 const H = 3_600_000;
@@ -77,6 +77,26 @@ describe("the schedule", () => {
     expect(DEFAULT_SUBJECTS.filter((s) => s.tiktok && !s.instagram).length).toBeGreaterThan(0);
     expect(DEFAULT_SUBJECTS.filter((s) => s.instagram && !s.tiktok).length).toBeGreaterThan(0);
     expect(DEFAULT_SUBJECTS.filter((s) => s.instagram && s.tiktok).length).toBeGreaterThan(0);
+  });
+});
+
+describe("credits", () => {
+  it("the default run's estimate is explicit, and what it may spend is bounded by the ceiling", () => {
+    const e = estimateCredits(DEFAULT_SUBJECTS, resolveOpts({}));
+    expect(e.perCreator).toEqual([100, 100, 100, 100, 113, 113, 100, 113]);
+    expect(e.total).toBe(839);
+    expect(e.needed).toBe(600);
+    expect(estimateCredits([{ tiktok: "a" }], resolveOpts({ watchCap: 0, transcriptCap: 0, admired: 0, days: 1 })).total).toBe(3 + 22);
+  });
+  it("start refuses, by name, on an unknown balance or one below what the run may spend", () => {
+    expect(balanceRefusal(null, 600)).toMatch(/could not read/);
+    expect(balanceRefusal(599, 600)).toMatch(/balance is 599 credits; this run may spend 600/);
+    expect(balanceRefusal(600, 600)).toBeNull();
+  });
+  it("start refuses before creating anyone when the balance can't be read", async () => {
+    const t = convexTest(schema, modules);
+    await expect(t.action(internal.eval.firstWeek.start, { handles: [{ tiktok: "nobody_here" }] })).rejects.toThrow(/first-week run refused/);
+    expect(await t.run((ctx) => ctx.db.query("creators").collect())).toHaveLength(0);
   });
 });
 

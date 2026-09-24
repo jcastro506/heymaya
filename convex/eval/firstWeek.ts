@@ -396,9 +396,47 @@ export function resolveOpts(a: Partial<Opts>): Opts {
   return { ...o, watchCap: Math.max(0, Math.min(40, o.watchCap)), transcriptCap: Math.max(0, Math.min(40, o.transcriptCap)), admired: Math.max(0, Math.min(6, o.admired)) };
 }
 
+/**
+ * Pure: ScrapeCreators credits a run is expected to spend, per creator and in total, from the knobs.
+ * Per creator: the account-type check (1 a platform), the catalogue pages (2 a platform), transcripts
+ * (1 each), watched posts (10 each, `post.info`), the admired suggestions (~10 a platform: searches and
+ * shortlist reads) and the first roster sample (1 an account); then the week: the lane sweep once
+ * (~16: 8 keywords × 2 platforms, cached a day) and ~6 a day (roster samples, scout lookups, replies).
+ * An upper-middle estimate, not a bound; `maxCredits` is the bound. `needed` is what the run can spend.
+ */
+export function estimateCredits(subjects: Subject[], o: Opts): { perCreator: number[]; total: number; needed: number } {
+  const perCreator = subjects.map((sub) => {
+    const platforms = (sub.tiktok ? 1 : 0) + (sub.instagram ? 1 : 0);
+    const onboarding = platforms * 1 + platforms * 2 + o.transcriptCap + 10 * o.watchCap + (o.admired > 0 ? 10 * platforms : 0) + o.admired;
+    const week = 16 + 6 * o.days;
+    return onboarding + week;
+  });
+  const total = perCreator.reduce((x, y) => x + y, 0);
+  return { perCreator, total, needed: Math.min(total, o.maxCredits) };
+}
+
+const subjectsV = v.optional(v.array(v.object({ tiktok: v.optional(v.string()), instagram: v.optional(v.string()), timezone: v.optional(v.string()), note: v.optional(v.string()) })));
+
+/** The estimate for a run you are about to start (the same numbers `start` checks the balance against). */
+export const estimate = internalQuery({
+  args: { handles: subjectsV, ...optsV },
+  handler: async (_ctx, a): Promise<{ perCreator: number[]; total: number; needed: number; maxCredits: number }> => {
+    const { handles, ...rest } = a;
+    const o = resolveOpts(rest);
+    return { ...estimateCredits(handles?.length ? handles : DEFAULT_SUBJECTS, o), maxCredits: o.maxCredits };
+  },
+});
+
+/** Pure: refuse to start when the vendor balance can't cover what the run may spend. Unknown is a refusal. */
+export function balanceRefusal(balance: number | null, needed: number): string | null {
+  if (balance === null) return "could not read the ScrapeCreators credit balance (vendor.credits); not starting blind";
+  if (balance < needed) return `ScrapeCreators balance is ${balance} credits; this run may spend ${needed} (lower maxCredits, use fewer creators, or top up)`;
+  return null;
+}
+
 /** Which subjects are free to sign up here: a handle another creator holds is refused by the real signup rule. */
 export const preflight = internalQuery({
-  args: { handles: v.optional(v.array(v.object({ tiktok: v.optional(v.string()), instagram: v.optional(v.string()), timezone: v.optional(v.string()), note: v.optional(v.string()) }))) },
+  args: { handles: subjectsV },
   handler: async (ctx, a): Promise<Array<{ i: number; handles: string; free: boolean; heldBy?: string }>> => {
     const out: Array<{ i: number; handles: string; free: boolean; heldBy?: string }> = [];
     for (const [i, s] of (a.handles ?? DEFAULT_SUBJECTS).entries()) {
@@ -416,15 +454,24 @@ export const preflight = internalQuery({
 });
 
 export const start = internalAction({
-  args: {
-    handles: v.optional(v.array(v.object({ tiktok: v.optional(v.string()), instagram: v.optional(v.string()), timezone: v.optional(v.string()), note: v.optional(v.string()) }))),
-    ...optsV,
-  },
-  handler: async (ctx, a): Promise<{ runId: string; creators: Array<{ i: number; handles: string; timezone: string; creatorId?: string; error?: string }>; opts: Opts }> => {
+  args: { handles: subjectsV, ...optsV },
+  handler: async (ctx, a): Promise<{ runId: string; creators: Array<{ i: number; handles: string; timezone: string; creatorId?: string; error?: string }>; opts: Opts; credits: { balance: number | null; estimate: number; needed: number } }> => {
     const { handles, ...rest } = a;
     const opts = resolveOpts(rest);
     const subjects = handles?.length ? handles : DEFAULT_SUBJECTS;
     if (subjects.length > 12) throw new Error("at most 12 creators a run");
+    // Credits are scarce: read the balance fresh and refuse, by name, before creating anyone.
+    const est = estimateCredits(subjects, opts);
+    let balance: number | null = null;
+    try {
+      const r = await ctx.runAction(internal.reads.read.read, { kind: "vendor.credits", params: {}, force: true });
+      const c = (r.value as { credits?: unknown } | null)?.credits;
+      balance = typeof c === "number" && Number.isFinite(c) ? c : null;
+    } catch {
+      balance = null;
+    }
+    const refusal = balanceRefusal(balance, est.needed);
+    if (refusal) throw new Error(`first-week run refused: ${refusal}. Estimate: ${est.total} credits for ${subjects.length} creators (${est.perCreator.join(", ")}); ceiling ${opts.maxCredits}.`);
     const now = Date.now();
     const runId = `fw-${now.toString(36)}`;
     const zones = timezonesFor(subjects.length, now);
@@ -446,7 +493,7 @@ export const start = internalAction({
     }
     // The catalogue reads are queued; the minute drain would reach them, this just saves the minute.
     await ctx.scheduler.runAfter(0, internal.core.scheduler.drainJobs, { kinds: ["ingest_catalogue"] });
-    return { runId, creators: creators.map((c) => ({ i: c.i, handles: [c.handles.tiktok && `tiktok:@${c.handles.tiktok}`, c.handles.instagram && `instagram:@${c.handles.instagram}`].filter(Boolean).join(" "), timezone: c.timezone, ...(c.creatorId ? { creatorId: c.creatorId } : {}), ...(c.error ? { error: c.error } : {}) })), opts };
+    return { runId, creators: creators.map((c) => ({ i: c.i, handles: [c.handles.tiktok && `tiktok:@${c.handles.tiktok}`, c.handles.instagram && `instagram:@${c.handles.instagram}`].filter(Boolean).join(" "), timezone: c.timezone, ...(c.creatorId ? { creatorId: c.creatorId } : {}), ...(c.error ? { error: c.error } : {}) })), opts, credits: { balance, estimate: est.total, needed: est.needed } };
   },
 });
 

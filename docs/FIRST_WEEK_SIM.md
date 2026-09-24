@@ -38,6 +38,9 @@ export CONVEX_DEPLOYMENT=dev:impressive-roadrunner-997
 # deploy this branch to the dev deployment
 npx convex dev --once --typecheck disable
 
+# 0. what will it cost? (the same estimate `start` checks the balance against)
+npx convex run eval/firstWeek:estimate '{}'
+
 # 1. are the handles free? (a handle held by another creator is refused by the real signup rule)
 npx convex run eval/firstWeek:preflight '{}'
 
@@ -71,6 +74,17 @@ Needs on the deployment: `OPENROUTER_API_KEY`, `GOOGLE_API_KEY` (the watch pass)
 and **not** `SCRAPE_FIXTURES` (fixtures cost 0 credits but read fake accounts).
 
 ## Cost and time
+
+**The default run's estimate: 839 credits** (8 creators: 100 each for the five single-platform
+subjects, 113 each for the three on both), **bounded by the 600-credit ceiling, so the default run
+needs 600.** `estimateCredits` in the module is the formula; `eval/firstWeek:estimate` prints it for any
+handles and knobs.
+
+**`start` refuses to begin, with a named reason, before creating anyone**, when a fresh
+`reads/read` `vendor.credits` balance is below what the run may spend (`min(estimate, maxCredits)`), or
+when the balance can't be read at all (it does not start blind). Credits are nearly exhausted right now:
+check `estimate`, then lower `maxCredits`, pass fewer `handles`, or top up. For example, 3 creators
+(one TikTok, one Instagram, one both) with `"days": 7` estimate 313 credits.
 
 **ScrapeCreators credits (the ceiling: 600 for the run, checked before every step, fleet-wide).**
 Catalogue reads and search pages are 1 credit; `post.info` (the watch pass, and any post she looks at
