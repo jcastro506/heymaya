@@ -74,7 +74,10 @@ describe("the human cadence: pure", () => {
 
   it("sibling coherence: the cron, the buttons, the kinds; the image skill is gone", () => {
     const crons = readFileSync(new URL("../../crons.ts", import.meta.url), "utf8");
-    expect(crons).toMatch(/internal\.agent\.cadence\.runAll/);
+    // Direct, or through the timed wrapper (S0): the cron names the job, the wrapper maps it to the function.
+    const timed = readFileSync(new URL("../../core/timedJobs.ts", import.meta.url), "utf8");
+    const job = timed.match(/"([^"]+)": \{ kind: "\w+", ref: internal\.agent\.cadence\.runAll \}/)?.[1];
+    expect(/internal\.agent\.cadence\.runAll/.test(crons) || (job !== undefined && crons.includes(`timedJobs.run, { job: "${job}" }`))).toBe(true);
     const converse = readFileSync(new URL("../converse.ts", import.meta.url), "utf8");
     expect(converse).toMatch(/\^shot:\(\[a-zA-Z0-9\]\+\):\(yes\|no\)\$/);
     expect(converse).toMatch(/\^missed:\(\[a-zA-Z0-9\]\+\):\(rebook\|drop\)\$/);

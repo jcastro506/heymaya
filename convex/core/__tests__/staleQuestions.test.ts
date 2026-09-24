@@ -43,7 +43,10 @@ describe("an open question always gets closed", () => {
   it("the sweep is actually scheduled — the whole defect was a function with no caller", async () => {
     const { readFileSync } = await import("node:fs");
     const crons = readFileSync(new URL("../../crons.ts", import.meta.url), "utf8");
-    expect(crons).toMatch(/expireStaleQuestionsAll/);
+    // Direct, or through the timed wrapper (S0): the cron names the job, the wrapper maps it to the function.
+    const timed = readFileSync(new URL("../timedJobs.ts", import.meta.url), "utf8");
+    const job = timed.match(/"([^"]+)": \{ kind: "\w+", ref: internal\.core\.messages\.expireStaleQuestionsAll \}/)?.[1];
+    expect(/expireStaleQuestionsAll/.test(crons) || (job !== undefined && crons.includes(`timedJobs.run, { job: "${job}" }`))).toBe(true);
   });
 });
 
