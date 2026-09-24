@@ -21,6 +21,8 @@ export default defineSchema({
     careUntil: v.optional(v.number()),
     /** M5: the share extension's token, stored hashed; the app mints it, a new one replaces the old. */
     shareToken: v.optional(v.object({ hash: v.string(), issuedAt: v.number() })),
+    /** A1: each platform's account type from their public profile (weekly), for the setup advice. */
+    accountTypes: v.optional(v.object({ tiktok: v.optional(v.union(v.literal("personal"), v.literal("creator"), v.literal("business"))), instagram: v.optional(v.union(v.literal("personal"), v.literal("creator"), v.literal("business"))), checkedAt: v.number() })),
     /** B6: the public media-kit page's unguessable slug; public numbers only, revocable. */
     kitLink: v.optional(v.object({ slug: v.string(), createdAt: v.number() })),
     email: v.string(),
@@ -265,6 +267,12 @@ export default defineSchema({
       totalWatchMs: v.union(v.number(), v.null()),
       skipRatePct: v.union(v.number(), v.null()),
       durationSec: v.union(v.number(), v.null()),
+      // A1: TikTok (connected through the TikTok for Business app), filled T+24-48h. Absent = never reported.
+      completionRate: v.optional(v.union(v.number(), v.null())),
+      profileViews: v.optional(v.union(v.number(), v.null())),
+      viewSources: v.optional(v.union(v.record(v.string(), v.number()), v.null())),
+      viewerTypes: v.optional(v.union(v.record(v.string(), v.number()), v.null())),
+      viewerCountries: v.optional(v.union(v.record(v.string(), v.number()), v.null())),
     })),
     /** Sprint 4e: reach ÷ their normal reach, where reach exists. The multiple on views stays as `multiple`. */
     reachMultiple: v.optional(v.number()),
@@ -498,6 +506,21 @@ export default defineSchema({
     customerId: v.optional(v.string()),
     receivedAt: v.number(),
   }).index("by_event_id", ["eventId"]),
+
+  // B7 "finish this one": a draft they filmed, and the captions + sounds she offered with her reasons,
+  // so "why that one?" is answered from what she thought then, and what they posted teaches her.
+  finishes: defineTable({
+    creatorId: v.id("creators"),
+    messageId: v.id("messages"), // the draft they sent
+    fileId: v.optional(v.id("_storage")),
+    card: v.any(), // what she saw and heard in the draft
+    captions: v.array(v.object({ text: v.string(), shape: v.string(), why: v.string() })),
+    sounds: v.array(v.object({ name: v.string(), clipId: v.optional(v.string()), platform: v.string(), source: v.string(), why: v.string(), howToUse: v.string(), licensedForBusiness: v.optional(v.boolean()) })),
+    dropped: v.optional(v.array(v.string())), // sounds she named that no lookup backed; removed by code
+    lookups: v.array(v.string()),
+    outcome: v.optional(v.object({ ownPostId: v.id("ownPosts"), closestCaption: v.number(), soundUsed: v.union(v.string(), v.null()), lesson: v.string(), at: v.number() })),
+    createdAt: v.number(),
+  }).index("by_creator", ["creatorId", "createdAt"]),
 
   // Evidence-linked decisions, experiences and style history. No inferred action completion.
   personalRecords: defineTable({

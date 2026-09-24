@@ -168,7 +168,8 @@ export const run = internalAction({
           return { ok: r.ok, reason: r.reason };
         }
         if (route.media === "video") {
-          const r = await ctx.runAction(internal.agent.opinion.run, { creatorId: creator._id, messageId: target._id, mode: "video" });
+          // B7: a clip they filmed is a draft to FINISH (caption + sound, a read only if they ask).
+          const r = await ctx.runAction(internal.agent.finish.run, { creatorId: creator._id, messageId: target._id });
           return { ok: r.ok, reason: r.reason };
         }
       }

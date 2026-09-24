@@ -15,7 +15,7 @@ describe("derivePublic", () => {
     expect(derivePublic(null, true)).toBeNull();
   });
   it("connected: reach at 3× their normal is a breakout", () => {
-    const c = { platform: "tiktok" as const, postId: "1", url: null, publishedAt: null, asOf: null, syncStatus: "synced" as const, views: 30_000, likes: 3000, comments: 100, shares: 100, saves: 100, impressions: null, reach: 30_000, clicks: null, follows: null, avgWatchMs: null, totalWatchMs: null, skipRatePct: null, durationSec: null };
+    const c = { platform: "tiktok" as const, postId: "1", url: null, publishedAt: null, asOf: null, syncStatus: "synced" as const, views: 30_000, likes: 3000, comments: 100, shares: 100, saves: 100, impressions: null, reach: 30_000, clicks: null, follows: null, avgWatchMs: null, totalWatchMs: null, skipRatePct: null, durationSec: null, completionRate: null, profileViews: null, viewSources: null, viewerTypes: null, viewerCountries: null };
     expect(derive(c, { reach: 10_000, engagementPerReach: null }).diagnosis).toBe("broke_out");
   });
 });

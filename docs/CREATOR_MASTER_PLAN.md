@@ -193,6 +193,63 @@ N1 lives inside the hourly jobs, so first a look at all of them. **29 crons** in
 
 ---
 
+## B7 — Finish this one: caption + sound for a filmed draft (2026-09-24, built)
+
+**Why:** the ideal user (operator's partner) films first and then gets stuck on the caption and the sound. That's the moment to help.
+
+**Built:** a camera-roll video sent to Maya is watched AND listened to, then she sends three captions of different kinds in their voice and one to three sounds, each looked up this turn, with how to use it and a business-account warning where needed. Code drops any sound no lookup backed. Her reasons go on a `finishes` row (`finish_notes` answers "why?"). When they post, a daily job compares what went out with what she offered and keeps one caption habit as a preference.
+
+**Found while building it:**
+- sound lookups served from the cache came back empty;
+- Instagram single-post reads never found the video, so no Instagram link was ever watched;
+- drafts over 19 MB couldn't be watched, so they now upload to the watcher as files;
+- the bench judge cut off her reply once the facts grew.
+
+**Left:** real phone videos over 20 MB can't arrive by text (Telegram's bot limit; our iMessage intake cap). "Send to Maya" from Photos, uploading straight to storage, is the fix (M5 extension).
+
+## A1 — Account setup + analytics depth (planned 2026-09-24)
+
+**Research (Zernio docs):**
+- **Instagram requires a professional account**; personal accounts can't connect. Creator beats Business (Business gets a limited music library).
+- **TikTok: stay personal.** Business accounts lose trending sounds and the Creator Rewards Program. Zernio ties the richer TikTok metrics to its TikTok for Business connection, not to account type. Whether a personal account gets them is **unverified until a real account connects**.
+
+**Unused today:**
+- TikTok per post: completion rate, where views came from (For You, Following, Search, Profile, Sound), follower vs non-follower and new vs returning viewers, profile views, audience countries;
+- Instagram account: follows and unfollows, profile link taps, demographics (100+ followers);
+- follower history on both.
+
+**Build:**
+1. an onboarding check with a step-by-step sheet to switch Instagram to a Creator account (no nudge on TikTok);
+2. pull the unused metrics;
+3. app cards: "where your views came from" and "who's watching", plus follower growth;
+4. Maya cites them in "why did this do that";
+5. tests.
+
+**Exit, live:** a real TikTok and Instagram connected on dev (yours).
+
+## L1 — The living simulation: months of a creator, compressed (planned 2026-09-24)
+
+**Why:** operator: "watch her grow and change with the user … everything our Maya can do, sim it." One long-running check that the whole product holds over months, not one turn at a time.
+
+**Design:**
+- **Real history, replayed.** A persona starts N months back in her real timeline. Each simulated week, her real posts from that week go live with their real numbers, and so do the real posts of the accounts she watches.
+- **The clock moves by ageing the world.** Maya's code reads the real clock, so each simulated day shifts every one of that creator's rows a day into the past. Her real crons and turns run unchanged: scout, cadence, weekly review, week plan, finish lessons, deals.
+- **A creator actor.** A model plays the creator from her real captions plus a hidden script of life events (a race, a trip, a slump, a brand DM). She replies or ignores, taps ideas, films or misses blocks, and asks for captions. Before a real video goes live, she sends it as a camera-roll draft; then it posts with its real caption, so B7's lesson loop runs on what she really wrote.
+- **Deals** (partner tier): the weekly offer, research against the fakes, drafts approved by SEND, the fake Gmail send, follow-ups, a brand reply, a negotiation, a rejection, and "no response" closing.
+- **Measured weekly:**
+  - memory (records, notes, the dossier's lane);
+  - taste shifts;
+  - ideas sent, taken and passed;
+  - prediction accuracy;
+  - course changes when things aren't working;
+  - caps and quiet hours;
+  - cost.
+
+  Probes at months 1, 3 and 6 ask what only a real memory can answer.
+- **Output:** a timeline report.
+
+**Cost:** about 2 credits a simulated day for the watched accounts' replay, plus model turns. A 6-month run is a few hours in the background.
+
 ## Your blockers, in the order they're needed
 
 1. **Apple Developer account** (team id into `apps/ios/Config/Local.xcconfig`): lets me put builds on TestFlight from M1 on.

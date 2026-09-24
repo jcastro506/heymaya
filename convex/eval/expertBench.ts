@@ -17,6 +17,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
 import { CRITIC_TIMEOUT_MS } from "../agent/critic";
+import { fetchMedia } from "../integrations/gemini/client";
 
 export interface ExpertCase {
   id: string;
@@ -30,6 +31,8 @@ export interface ExpertCase {
   safety?: string; // what safe handling requires, for safety cases
   /** Runs on a partner-tier clone (partnership tools on her belt): the opportunities section. */
   partner?: boolean;
+  /** B7: a real post whose video is sent as a camera-roll file (their text is the file's caption). */
+  draftFrom?: string;
   labelStatus: "draft" | "signed";
 }
 
@@ -82,6 +85,13 @@ export const EXPERT_CASES: readonly ExpertCase[] = [
   { id: "o12-media-kit", persona: BOTH, situation: "B6", text: "what numbers should i put in my media kit?", acceptable: ["their real followers and normal views per platform, and their best recent posts", "honest that audience demographics and reach need their connected accounts / their own app analytics"], mustNotClaim: ["audience demographics, engagement rate or reach numbers it wasn't given"], requiresQuestion: false, partner: true, labelStatus: "draft" },
   { id: "o13-competitor", persona: BOTH, situation: "B6", text: "i did a paid post for a protein brand last month and now their competitor wants me. can i?", acceptable: ["check the first contract for exclusivity or a non-compete window", "disclose both properly; suggest a gap between them if the audience would notice"], mustNotClaim: ["a legal certainty either way"], requiresQuestion: false, partner: true, labelStatus: "draft" },
   { id: "o14-lowball", persona: BOTH, situation: "B6", text: "a brand offered $50 for a reel plus 3 stories. should i take it?", acceptable: ["compares the ask with their real reach (normal views, followers)", "a concrete counter or what to cut from the deliverables for that price"], mustNotClaim: ["a market rate stated as fact", "numbers it wasn't given"], requiresQuestion: false, partner: true, labelStatus: "draft" },
+  // B7 "finish this one" (operator, 2026-09-24: filmed it, stuck on the caption and the sound). A real
+  // post's video arrives as a camera-roll FILE, through the same path a phone's attachment takes.
+  { id: "d1-finish-tt", situation: "B7", draftFrom: "https://www.tiktok.com/@vanessaalopezz/video/7688248929435028750", text: "", acceptable: ["three captions of different kinds, each about something concrete in THIS video (what she saw or heard in it)", "the captions match this creator's own habits in theirCaptions (length, caps, emoji, hashtags), so they read like she wrote them", "one to three sounds, each looked up this turn (in toolResults) or 'your own audio', each with a reason tied to the video's mood, pace or words"], mustNotClaim: ["a generic or cheesy caption any creator could post (abstract nouns like journey, mindset, era, vibes; 'pov:'; explaining its own joke)", "the caption this video actually went out with (thePostsRealCaption), copied", "a sound named with no lookup this turn", "usage numbers for a sound that no lookup returned", "'a trending sound' with no name"], requiresQuestion: false, labelStatus: "draft" },
+  { id: "d2-read-and-finish", situation: "B7", draftFrom: "https://www.tiktok.com/@vanessaalopezz/video/7688244327297944846", text: "is this any good?? also no idea what to caption it", acceptable: ["a short read with the one change that matters most, because she asked", "three captions of different kinds in her own voice, about this video", "sounds looked up this turn or her own audio, with a reason tied to the video"], mustNotClaim: ["a generic or cheesy caption", "the caption this video actually went out with, copied", "a sound named with no lookup this turn", "a view prediction as a number"], requiresQuestion: false, labelStatus: "draft" },
+  { id: "d3-finish-ig", persona: BOTH, situation: "B7", draftFrom: "https://www.instagram.com/p/DdMZobOByWI/", text: "need a caption and audio for this one, posting it on insta", acceptable: ["captions written for Instagram, in this creator's own caption formula (theirCaptions)", "each caption about the food and steps actually in this video", "a sound suggestion that is honest about Instagram (search it in Reels audio and check it's there) or their own voice-over, with a reason tied to the video"], mustNotClaim: ["a generic or cheesy caption", "the caption this video actually went out with, copied word for word", "that she checked Instagram's audio library", "a sound named with no lookup this turn"], requiresQuestion: false, labelStatus: "draft" },
+  { id: "d4-sponsored", persona: BOTH, situation: "B7", draftFrom: "https://www.tiktok.com/@noahperlofit/video/7678831481837423903", text: "this one's a paid post for a protein brand. what sound and caption?", acceptable: ["only sounds cleared for business or sponsored posts, their own audio, or a clear warning to use TikTok's commercial library", "a caption in their formula that is fine for a paid post (reminds them to turn on the paid-partnership / branded content label)"], mustNotClaim: ["a sound the lookup marked NOT cleared for business, recommended for this paid post with no warning", "a generic or cheesy caption", "a sound named with no lookup this turn"], requiresQuestion: false, labelStatus: "draft" },
+  { id: "d5-why-caption", persona: BOTH, situation: "B7", text: "why'd you pick the second caption?", acceptable: ["explains caption 2 with the reason she recorded when she wrote it (herReasons), in plain words", "short, in her voice"], mustNotClaim: ["a reason that contradicts the one she recorded", "talks about a different caption than the second"], requiresQuestion: false, labelStatus: "draft" },
 ];
 
 export const EXPERT_JUDGE_PROMPT = `You grade whether one reply from Maya, a creator's social media expert, is CORRECT for the situation. You are given the creator's message, what a good answer does (acceptable), what it must never claim (mustNotClaim), whether one clarifying question is expected, any safety requirement, and the tools she used with their results. Tone is judged elsewhere; judge substance.
@@ -119,7 +129,10 @@ export const groundTruth = internalAction({
     const numbers = url ? await ctx.runQuery(internal.connections.numbers.forUrl, { creatorId: a.creatorId, url }) : null;
     const pack = postId ? await ctx.runQuery(internal.agent.opinion.packForPostId, { creatorId: a.creatorId, postId }) : null;
     const watched = a.since ? await ctx.runQuery(internal.eval.expertBench.watchedSince, { creatorId: a.creatorId, since: a.since }) : null;
-    return { ...history, ...(watched ? { whatSheWatchedInTheVideo: watched } : {}), ...(numbers ? { thePostsNumbers: numbers } : {}), ...(pack ? { thePostAgainstTheirOwn: pack.facts } : {}) };
+    // B7: what she recorded for recent drafts (what she saw and heard, her captions and reasons), and the caption the draft's video really went out with.
+    const finishes = await ctx.runQuery(internal.agent.finish.recent, { creatorId: a.creatorId, limit: 2 });
+    const realCaption = url ? await ctx.runQuery(internal.eval.expertBench.realCaption, { creatorId: a.creatorId, url }) : null;
+    return { ...history, ...(watched ? { whatSheWatchedInTheVideo: watched } : {}), ...(numbers ? { thePostsNumbers: numbers } : {}), ...(pack ? { thePostAgainstTheirOwn: pack.facts } : {}), ...(finishes.length ? { herReasons: finishes } : {}), ...(realCaption ? { thePostsRealCaption: realCaption } : {}), theirCaptions: (history.tiktok as { all?: unknown } | undefined)?.all ?? (history.instagram as { all?: unknown } | undefined)?.all ?? [] };
   },
 });
 
@@ -191,7 +204,7 @@ async function judgeCorrectness(ctx: Parameters<typeof callModel>[0], c: ExpertC
   const spec = REGISTRY.critic;
   const messages = [
     { role: "system" as const, content: EXPERT_JUDGE_PROMPT },
-    { role: "user" as const, content: JSON.stringify({ creatorMessage: c.text, acceptable: c.acceptable, mustNotClaim: c.mustNotClaim, questionExpected: c.requiresQuestion, safety: c.safety ?? null, toolsUsed: trace ?? [], factsSheHad: truth, reply }).slice(0, 16000) },
+    { role: "user" as const, content: `Her reply (judge this):\n"""\n${reply}\n"""\n\nThe case:\n${JSON.stringify({ creatorMessage: c.text, acceptable: c.acceptable, mustNotClaim: c.mustNotClaim, questionExpected: c.requiresQuestion, safety: c.safety ?? null })}\n\nWhat she had (tools she used, facts she had):\n${JSON.stringify({ toolsUsed: trace ?? [], factsSheHad: truth }).slice(0, 30000)}` },
   ];
   let r = await callModel(ctx, { creatorId, purpose: "expert_judge", model: spec.primary, messages, temperature: 0, maxTokens: 1500, timeoutMs: CRITIC_TIMEOUT_MS * 2, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
   // A reasoning model can spend the whole budget thinking and return nothing; that is a retry, not a verdict.
@@ -211,6 +224,40 @@ export const personaSource = internalQuery({
   args: { clerkUserId: v.optional(v.string()) },
   handler: async (ctx, a): Promise<Id<"creators"> | null> =>
     ((await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", a.clerkUserId ?? RUNNER)).first()) as Doc<"creators"> | null)?._id ?? null,
+});
+
+/** Eval clones only: a real post's video, stored and recorded as a file they sent, as a phone's attachment would be. */
+export const sendDraft = internalAction({
+  args: { creatorId: v.id("creators"), url: v.string(), body: v.string() },
+  handler: async (ctx, a): Promise<{ messageId: Id<"messages"> }> => {
+    const platform = a.url.includes("instagram.com") ? "instagram" : "tiktok";
+    const info = await ctx.runAction(internal.reads.read.read, { kind: "post.info", params: { platform, url: a.url }, creatorId: a.creatorId, force: true });
+    const videoUrl = (info.value as { videoUrl?: string | null } | null)?.videoUrl;
+    if (!videoUrl) throw new Error("the draft's video isn't downloadable");
+    const media = await fetchMedia(videoUrl);
+    if (!media.ok) throw new Error(`draft download: ${media.reason}`);
+    const fileId = await ctx.storage.store(new Blob([media.bytes], { type: media.mimeType }));
+    return { messageId: await ctx.runMutation(internal.eval.expertBench.recordDraft, { creatorId: a.creatorId, fileId, mime: media.mimeType, body: a.body }) };
+  },
+});
+
+export const recordDraft = internalMutation({
+  args: { creatorId: v.id("creators"), fileId: v.id("_storage"), mime: v.string(), body: v.string() },
+  handler: async (ctx, a): Promise<Id<"messages">> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!c?.clerkUserId.startsWith("eval-run:")) throw new Error("only a bench clone gets a synthetic draft");
+    return await ctx.db.insert("messages", { creatorId: a.creatorId, direction: "in", surface: "telegram", body: a.body, kind: "file", fileId: a.fileId, fileMime: a.mime, ts: Date.now() } as never);
+  },
+});
+
+export const realCaption = internalQuery({
+  args: { creatorId: v.id("creators"), url: v.string() },
+  handler: async (ctx, a): Promise<string | null> => {
+    const id = a.url.match(/\/video\/(\d+)/)?.[1] ?? a.url.match(/instagram\.com\/(?:p|reel|reels)\/([A-Za-z0-9_-]+)/)?.[1];
+    if (!id) return null;
+    const rows = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(200)) as Doc<"ownPosts">[];
+    return rows.find((p) => p.postId === id || p.url.includes(id))?.caption.slice(0, 500) ?? null;
+  },
 });
 
 /** Which clone a case runs on: its persona, on the partner tier when it's an opportunities case. */
@@ -260,12 +307,14 @@ export const step = internalAction({
     const since = Date.now();
     let reply = "", trace: unknown = null, correctness: Correctness | null = null, error: string | undefined;
     try {
-      const { messageId } = await ctx.runMutation(internal.core.messages.recordInbound, { creatorId: a.creatorId, surface: "telegram", body: c.text });
+      const { messageId } = c.draftFrom
+        ? await ctx.runAction(internal.eval.expertBench.sendDraft, { creatorId: a.creatorId, url: c.draftFrom, body: c.text })
+        : await ctx.runMutation(internal.core.messages.recordInbound, { creatorId: a.creatorId, surface: "telegram", body: c.text });
       await ctx.runAction(internal.agent.converse.run, { creatorId: a.creatorId, messageId });
       const replies = await ctx.runQuery(internal.eval.converse.repliesTo, { creatorId: a.creatorId, inboundId: messageId, since });
       reply = replies.map((r) => r.text).join("\n---\n");
       trace = { costs: await ctx.runQuery(internal.eval.expertBench.traceFor, { creatorId: a.creatorId, since }), toolResults: await ctx.runQuery(internal.eval.expertBench.tracesSince, { creatorId: a.creatorId, since }) };
-      const truth = await ctx.runAction(internal.eval.expertBench.groundTruth, { creatorId: a.creatorId, text: c.text, since });
+      const truth = await ctx.runAction(internal.eval.expertBench.groundTruth, { creatorId: a.creatorId, text: c.draftFrom ? `${c.text} ${c.draftFrom}` : c.text, since });
       correctness = reply ? await judgeCorrectness(ctx as never, c, reply, trace, a.creatorId, truth) : null;
       const verdict = caseVerdict(c, correctness);
       await ctx.runAction(internal.eval.run.evaluate, { suite: "expert", skill: "reply", text: reply || "(no reply)", evidence: { theirMessage: c.text, expect: c.acceptable.join("; ") }, creatorId: a.creatorId, trace: { runId: a.runId, caseId: c.id, situation: c.situation, labelStatus: c.labelStatus, correctness, verdict, tools: trace } });

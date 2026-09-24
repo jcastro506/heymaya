@@ -5,6 +5,7 @@
  */
 
 import { v } from "convex/values";
+import { setupAdvice } from "./account/setup";
 import { applyIdeaAct } from "./core/ideaActs";
 import { isUnseen } from "./core/unseen";
 import { TIERS, TIER_NAMES, entitlementsFor, price } from "./billing/tiers";
@@ -437,8 +438,10 @@ function postNumbersView(p: Doc<"ownPosts">, siblings: Doc<"ownPosts">[], now: n
   const c = connectedFrom(p);
   const publicCounts: Fields = { views: p.metrics.views, likes: p.metrics.likes, comments: p.metrics.comments, shares: p.metrics.shares, saves: p.metrics.saves ?? null };
   const connected: Fields | null = c
-    ? { views: c.views, likes: c.likes, comments: c.comments, shares: c.shares, saves: c.saves, reach: c.reach, impressions: c.impressions, follows: c.follows, avgWatchMs: c.avgWatchMs, skipRatePct: c.skipRatePct, durationSec: c.durationSec }
+    ? { views: c.views, likes: c.likes, comments: c.comments, shares: c.shares, saves: c.saves, reach: c.reach, impressions: c.impressions, follows: c.follows, avgWatchMs: c.avgWatchMs, skipRatePct: c.skipRatePct, durationSec: c.durationSec, completionRate: c.completionRate, profileViews: c.profileViews }
     : null;
+  // A1: TikTok's own splits, as labelled shares for the app (biggest first); null when TikTok reported none.
+  const shareList = (m: Record<string, number> | null, words: Record<string, string>) => (m ? Object.entries(m).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ label: words[k] ?? k, share: v })) : null);
   return {
     id: p._id,
     url: p.url,
@@ -457,6 +460,8 @@ function postNumbersView(p: Doc<"ownPosts">, siblings: Doc<"ownPosts">[], now: n
     read: n.derived && n.derived.diagnosis !== "unknown" ? DIAGNOSIS_WORDS[n.derived.diagnosis] : null,
     shape: n.shape,
     cannotKnow: n.cannotKnow,
+    viewSources: shareList(c?.viewSources ?? null, { forYou: "For You", follow: "Following", search: "Search", personalProfile: "Your profile", sound: "Sound page", directMessage: "Messages", other: "Other" }),
+    viewerTypes: shareList(c?.viewerTypes ?? null, { follower: "Followers", nonFollower: "Not following yet", newViewer: "New viewers", returnViewer: "Returning viewers" }),
   };
 }
 
@@ -492,6 +497,8 @@ export const analytics = query({
           followersAsOf: latest?.at ?? null,
           followers30dAgo: past?.followers ?? null,
           posts: posts.filter((p) => p.platform === pl).length,
+          accountType: c.accountTypes?.[pl] ?? null,
+          setup: setupAdvice(pl, c.accountTypes?.[pl] ?? null),
         };
       }),
       posts: await Promise.all(posts.slice(0, 30).map(async (p) => {

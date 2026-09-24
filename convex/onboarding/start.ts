@@ -133,6 +133,8 @@ export async function startCreator(ctx: MutationCtx, args: { subject: string; em
       creatorId,
       payloadJson: JSON.stringify({ reason: "onboarding" }),
     });
+    // A1: know each account's type before they try to connect (Instagram must be Creator or Business).
+    await ctx.scheduler.runAfter(0, internal.account.setup.check, { creatorId });
     return { ok: true, creatorId };
   }
 }

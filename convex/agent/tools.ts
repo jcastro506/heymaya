@@ -24,7 +24,7 @@ export interface ToolBudget { calls: number; credits: number; deadlineAt: number
 export const DEFAULT_BUDGET = (): ToolBudget => ({ calls: 6, credits: 40, deadlineAt: Date.now() + 60_000 });
 
 /** Approximate credit prices per call (the ledger records the vendor's real number). */
-export const TOOL_CREDITS: Record<string, number> = { post_info: 10, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, sound_reels: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, search_reels: 1, search_ig_hashtag: 1, ig_popular: 1, trending_tiktok: 1, trending_reels: 1, suggestions: 1, discover_creators: 1, discover_profiles: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0, recall: 0, lane_benchmark: 0, week_plan: 0, block_move: 0, block_drop: 0, block_add: 0, week_replan: 0, own_post_numbers: 0, post_diagnosis: 0, growth_plan: 0, calendar_free: 0, mission_control_link: 0, ideas_list: 0, idea_get: 0, idea_update: 0, idea_status: 0, idea_plan: 0, web_search: 0, web_read: 0, platform_fact: 0, lane_brands: 0, media_kit: 0, media_kit_link: 0 };
+export const TOOL_CREDITS: Record<string, number> = { post_info: 10, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, sound_reels: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, search_reels: 1, search_ig_hashtag: 1, ig_popular: 1, trending_tiktok: 1, trending_reels: 1, suggestions: 1, discover_creators: 1, discover_profiles: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0, recall: 0, lane_benchmark: 0, week_plan: 0, block_move: 0, block_drop: 0, block_add: 0, week_replan: 0, own_post_numbers: 0, post_diagnosis: 0, growth_plan: 0, calendar_free: 0, mission_control_link: 0, ideas_list: 0, idea_get: 0, idea_update: 0, idea_status: 0, idea_plan: 0, web_search: 0, web_read: 0, platform_fact: 0, lane_brands: 0, media_kit: 0, media_kit_link: 0, finish_notes: 0 };
 
 const str = { type: "string" } as const;
 for (const tool of PARTNERSHIP_TOOLS) TOOL_CREDITS[tool.function.name] = 0;
@@ -66,6 +66,7 @@ export const TOOLS: OpenRouterTool[] = [
   { type: "function", function: { name: "lane_brands", description: "Brands seen paying creators in their lane in the last 30 days (paid or #ad posts from the accounts you watch for them), with how many creators and posts, plus the accounts they tag in their own posts. Free. Start here before any brand research: a brand already paying people like them is a real lead; which one fits them is your call.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
   { type: "function", function: { name: "media_kit", description: "Their media kit from their own rows: followers and normal views per platform, best posts of the last 90 days with multiples, their lane, and their deal preferences (paid-only, deal types, excluded brands, minimum rate). Free. Every number in a pitch or a rate conversation comes from here; nothing else.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
   { type: "function", function: { name: "media_kit_link", description: "Turn their public media-kit page on (returns the link to paste into a pitch or a brand's form) or off (the old link stops working at once). The page shows handles, followers, normal views, best recent posts and lane; never rates, preferences or email. Free. Only when they ask for it or agree to it; the app's Share button does the same.", parameters: { type: "object", properties: { on: { type: "boolean" }, why: str }, required: ["on", "why"] } } },
+  { type: "function", function: { name: "finish_notes", description: "Your reasons for the captions and sounds you suggested on their recent drafts (numbered as you sent them), and what they ended up posting. Free. When they ask why you picked a caption or a sound, answer from these reasons; never make up a reason after the fact.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
   // I1 — their ideas, equal to the app. These WRITE (except list/get). Which idea they mean is your judgment: list, read, decide, or ask.
   { type: "function", function: { name: "ideas_list", description: "Their ideas with ids, hooks, status, saved, the day you sent it and the day it was posted. filter: open | saved | passed | posted | all; query: words from how they described it (\"the humidity one\"). Free. Read this before acting on any idea that isn't the one you just sent; if two could be it, ask which.", parameters: { type: "object", properties: { filter: { type: "string", enum: ["open", "saved", "passed", "posted", "all"] }, query: str, why: str }, required: ["filter", "why"] } } },
   { type: "function", function: { name: "idea_get", description: "One idea in full: hook, on-screen text, length, sound, shot list, caption, status. Free.", parameters: { type: "object", properties: { ideaId: str, why: str }, required: ["ideaId", "why"] } } },
@@ -110,10 +111,16 @@ function cap(s: string): string {
 
 type Post = { postId?: string; url?: string | null; caption?: string | null; postedAt?: number | null; createTime?: number; durationSec?: number | null; authorHandle?: string | null; clipId?: string | null; metrics?: { viewCount?: number | null; likeCount?: number | null; commentCount?: number | null; shareCount?: number | null; saveCount?: number | null } };
 
+function soundName(p: Post): string | null {
+  const m = (p as { raw?: { music?: { title?: unknown; author?: unknown } } }).raw?.music;
+  const t = typeof m?.title === "string" ? m.title : null;
+  return t ? `${t}${typeof m?.author === "string" && m.author ? ` by ${m.author}` : ""}`.slice(0, 80) : null;
+}
+
 function postLine(p: Post): string {
   const m = p.metrics ?? {};
   const when = p.postedAt ?? p.createTime;
-  return `${p.url ?? p.postId ?? "?"} · ${p.authorHandle ? "@" + p.authorHandle + " · " : ""}${when ? new Date(when).toISOString().slice(0, 10) : "?"} · ${m.viewCount ?? "?"} views, ${m.likeCount ?? "?"} likes, ${m.commentCount ?? "?"} comments, ${m.shareCount ?? "?"} shares${p.durationSec ? ` · ${p.durationSec}s` : ""}${p.clipId ? ` · sound ${p.clipId}` : ""} · "${(p.caption ?? "").slice(0, 100)}"`;
+  return `${p.url ?? p.postId ?? "?"} · ${p.authorHandle ? "@" + p.authorHandle + " · " : ""}${when ? new Date(when).toISOString().slice(0, 10) : "?"} · ${m.viewCount ?? "?"} views, ${m.likeCount ?? "?"} likes, ${m.commentCount ?? "?"} comments, ${m.shareCount ?? "?"} shares${p.durationSec ? ` · ${p.durationSec}s` : ""}${p.clipId ? ` · sound ${soundName(p) ? `"${soundName(p)}" ` : ""}(${p.clipId})` : ""} · "${(p.caption ?? "").slice(0, 100)}"`;
 }
 
 /** Reads come back as an array, or as a research envelope `{ posts: [...] }`. */
@@ -161,6 +168,11 @@ function summarize(tool: string, value: unknown): string {
       const views = rows.map((p) => p.metrics?.viewCount ?? 0).filter((x) => x > 0).sort((a, b) => a - b);
       const median = views.length ? views[Math.floor(views.length / 2)] : null;
       return cap(`${rows.length} posts${median !== null ? `, median ${median} views` : ""}\n${rows.slice(0, 12).map(postLine).join("\n")}`);
+    }
+    case "sound_info": {
+      const f = (value as { sound?: { clipId: string | null; title: string | null; author: string | null; videosUsingIt: number | null; original: boolean | null; licensedForBusiness: boolean | null; durationSec: number | null } | null } | null)?.sound;
+      if (!f) return "no details came back for that sound";
+      return `"${f.title ?? "untitled"}"${f.author ? ` by ${f.author}` : ""} · ${f.videosUsingIt !== null ? `${f.videosUsingIt.toLocaleString()} videos use it` : "use count unknown"} · ${f.original ? "someone's original audio" : "a released track"} · ${f.licensedForBusiness === true ? "in the business-safe library" : f.licensedForBusiness === false ? "NOT cleared for business accounts or sponsored posts" : "business clearance unknown"}${f.durationSec ? ` · ${f.durationSec}s` : ""} · https://www.tiktok.com/music/x-${f.clipId ?? ""}`;
     }
     case "profile": {
       const p = value as { handle?: string; followerCount?: number | null; postCount?: number | null; bio?: string | null; displayName?: string | null; verified?: boolean };
@@ -304,6 +316,12 @@ async function runToolInner(ctx: ActionCtx, creatorId: Id<"creators">, call: { n
       record(Boolean(k), 0);
       if (!k) return "no media kit: their account isn't readable yet";
       return cap(`lane: ${k.lane ?? "not confirmed"}\n${k.platforms.map((p) => `${p.platform}${p.handle ? ` @${p.handle}` : ""}: ${p.followers !== null ? `${p.followers.toLocaleString()} followers` : "followers unknown"} · normal ${p.normalViews !== null ? `${Math.round(p.normalViews).toLocaleString()} views` : "not settled yet"} · ${p.posts} posts read\n${p.best.map((b) => `  - ${b.views.toLocaleString()} views${b.multiple ? ` (${b.multiple}x)` : ""} · "${b.caption}" · ${b.url}`).join("\n")}`).join("\n")}\nprefs: ${k.prefs.paidOnly ? "paid only" : "open to gifting/affiliate"}; deal types ${k.prefs.dealTypes.join(", ") || "any"}; excluded ${k.prefs.excludedBrands.join(", ") || "none"}; minimum rate ${k.prefs.minimumRate}; region ${k.prefs.region}${k.taggedByThem.length ? `\ntagged in their own posts (brands they use, or friends: judge which): ${k.taggedByThem.map((t) => `@${t.handle} (${t.posts} post${t.posts === 1 ? "" : "s"}, e.g. ${t.example})`).join(", ")}` : ""}`);
+    }
+    if (call.name === "finish_notes") {
+      const rows = await ctx.runQuery(internal.agent.finish.recent, { creatorId, limit: 3 });
+      record(true, 0);
+      if (!rows.length) return "no drafts finished recently";
+      return cap(rows.map((r) => `${new Date(r.at).toISOString().slice(0, 16).replace("T", " ")} · ${r.about}\n${r.captions.map((c) => `caption ${c.n} (${c.shape}): "${c.text}" · why: ${c.why}`).join("\n")}\n${r.sounds.map((s) => `sound ${s.name} (${s.source}) · why: ${s.why}`).join("\n")}${r.outcome ? `\nthey posted it: closest caption ${r.outcome.closestCaption || "none"}${r.outcome.lesson ? `; habit: ${r.outcome.lesson}` : ""}` : ""}`).join("\n\n"));
     }
     if (call.name === "media_kit_link") {
       const r = await ctx.runMutation(internal.partnerships.kitPage.kitLinkFor, { creatorId, on: call.args.on !== false });

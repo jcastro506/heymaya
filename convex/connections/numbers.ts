@@ -33,7 +33,14 @@ export interface PostNumbers {
 export function connectedFrom(p: Doc<"ownPosts">): Connected | null {
   const c = p.connected;
   if (!c) return null;
-  return { platform: p.platform as "tiktok" | "instagram", postId: p.postId, url: p.url, publishedAt: p.createTime, asOf: c.asOf, syncStatus: c.syncStatus as Connected["syncStatus"], views: c.views, likes: c.likes, comments: c.comments, shares: c.shares, saves: c.saves, impressions: c.impressions, reach: c.reach, clicks: c.clicks, follows: c.follows, avgWatchMs: c.avgWatchMs, totalWatchMs: c.totalWatchMs, skipRatePct: c.skipRatePct, durationSec: c.durationSec };
+  return { platform: p.platform as "tiktok" | "instagram", postId: p.postId, url: p.url, publishedAt: p.createTime, asOf: c.asOf, syncStatus: c.syncStatus as Connected["syncStatus"], views: c.views, likes: c.likes, comments: c.comments, shares: c.shares, saves: c.saves, impressions: c.impressions, reach: c.reach, clicks: c.clicks, follows: c.follows, avgWatchMs: c.avgWatchMs, totalWatchMs: c.totalWatchMs, skipRatePct: c.skipRatePct, durationSec: c.durationSec, completionRate: c.completionRate ?? null, profileViews: c.profileViews ?? null, viewSources: c.viewSources ?? null, viewerTypes: c.viewerTypes ?? null, viewerCountries: c.viewerCountries ?? null };
+}
+
+const SOURCE_WORDS: Record<string, string> = { forYou: "For You", follow: "Following", search: "Search", personalProfile: "your profile", sound: "the sound page", directMessage: "DMs", other: "elsewhere" };
+
+/** Pure: the top surfaces in words, e.g. "84% from For You, 6% from Search". */
+export function sourcesLine(s: Record<string, number>): string {
+  return Object.entries(s).filter(([, v]) => v >= 0.03).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${Math.round(v * 100)}% from ${SOURCE_WORDS[k] ?? k}`).join(", ");
 }
 
 /** Pure given the rows. */
@@ -63,13 +70,19 @@ export function numbersFor(p: Doc<"ownPosts">, siblings: Doc<"ownPosts">[], now:
     if (derived.retention !== null) lines.push(`watched ${Math.round(derived.retention * 100)}% of it on average (connected, Instagram Reels)`);
     if (c.skipRatePct !== null) lines.push(`${Math.round(c.skipRatePct)}% left in the first 3 seconds (connected; Meta calls this an estimate)`);
     if (c.follows !== null && c.follows > 0) lines.push(`${c.follows} people followed from it (connected)`);
+    // A1: TikTok's own reads (TikTok for Business connection, filled 24-48h after posting).
+    if (c.completionRate !== null) lines.push(`${Math.round(c.completionRate * 100)}% watched to the end (connected, TikTok)`);
+    if (c.viewSources) lines.push(`views came ${sourcesLine(c.viewSources)} (connected, TikTok)`);
+    if (c.viewerTypes?.nonFollower !== undefined) lines.push(`${Math.round(c.viewerTypes.nonFollower * 100)}% of viewers didn't follow them yet (connected, TikTok)`);
+    if (c.viewerTypes?.returnViewer !== undefined) lines.push(`${Math.round(c.viewerTypes.returnViewer * 100)}% were returning viewers (connected, TikTok)`);
+    if (c.profileViews !== null) lines.push(`${c.profileViews.toLocaleString()} profile visits from it (connected, TikTok)`);
   } else if (c && !fresh) {
     lines.push(`connected numbers are ${asOfHours !== null ? `${asOfHours}h old` : "not synced yet"}; judging on the public count`);
   }
   lines.push(`${p.metrics.views.toLocaleString()} views (public count, read ${Math.round((now - p.metricsAsOf) / 3_600_000)}h ago)`);
 
   if (!derived) derived = derivePublic(multiple?.value ?? null, now - p.createTime >= 48 * 3_600_000);
-  if (p.platform === "tiktok") cannotKnow.push("watch time, retention and the skip rate: TikTok does not expose them to anyone");
+  if (p.platform === "tiktok") cannotKnow.push(c?.completionRate != null ? "average watch time and the skip rate: TikTok gives the share who finished, not how long the rest stayed" : "watch time, retention and the skip rate: not for this post (TikTok only reports how many finished for accounts connected through TikTok's business app, 1-2 days after posting)");
   if (p.platform === "instagram" && (!c || c.durationSec === null)) cannotKnow.push("retention: it is only reported on Reels with a known duration");
   if (!c) cannotKnow.push("reach and impressions: no account connected, so only the public count");
 

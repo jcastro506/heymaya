@@ -9,6 +9,7 @@
  */
 
 import type * as account_deletion from "../account/deletion.js";
+import type * as account_setup from "../account/setup.js";
 import type * as agent_cadence from "../agent/cadence.js";
 import type * as agent_callbacks from "../agent/callbacks.js";
 import type * as agent_care from "../agent/care.js";
@@ -18,6 +19,7 @@ import type * as agent_consolidate from "../agent/consolidate.js";
 import type * as agent_context from "../agent/context.js";
 import type * as agent_converse from "../agent/converse.js";
 import type * as agent_critic from "../agent/critic.js";
+import type * as agent_finish from "../agent/finish.js";
 import type * as agent_frames from "../agent/frames.js";
 import type * as agent_growth from "../agent/growth.js";
 import type * as agent_guarded from "../agent/guarded.js";
@@ -201,6 +203,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "account/deletion": typeof account_deletion;
+  "account/setup": typeof account_setup;
   "agent/cadence": typeof agent_cadence;
   "agent/callbacks": typeof agent_callbacks;
   "agent/care": typeof agent_care;
@@ -210,6 +213,7 @@ declare const fullApi: ApiFromModules<{
   "agent/context": typeof agent_context;
   "agent/converse": typeof agent_converse;
   "agent/critic": typeof agent_critic;
+  "agent/finish": typeof agent_finish;
   "agent/frames": typeof agent_frames;
   "agent/growth": typeof agent_growth;
   "agent/guarded": typeof agent_guarded;

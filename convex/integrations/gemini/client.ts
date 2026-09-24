@@ -48,11 +48,45 @@ export function priceUsd(model: string, promptTokens: number, outputTokens: numb
   return (promptTokens * p.inPerM + outputTokens * p.outPerM) / 1_000_000;
 }
 
+export const FILE_MAX_BYTES = 200 * 1024 * 1024; // a minute of 4K is ~350 MB; drafts over this are asked for a smaller export
+
+/** Gemini Files API (resumable upload), then wait until the video is processed. Never throws. */
+export async function uploadFile(input: { apiKey: string; bytes: ArrayBuffer; mimeType: string; fetchImpl?: typeof fetch; pollMs?: number; maxWaitMs?: number }): Promise<{ ok: true; uri: string } | { ok: false; reason: string }> {
+  const f = input.fetchImpl ?? fetch;
+  try {
+    const start = await f(`https://generativelanguage.googleapis.com/upload/v1beta/files?key=${input.apiKey}`, {
+      method: "POST",
+      headers: { "X-Goog-Upload-Protocol": "resumable", "X-Goog-Upload-Command": "start", "X-Goog-Upload-Header-Content-Length": String(input.bytes.byteLength), "X-Goog-Upload-Header-Content-Type": input.mimeType, "content-type": "application/json" },
+      body: JSON.stringify({ file: { display_name: "draft" } }),
+    });
+    const uploadUrl = start.headers.get("x-goog-upload-url");
+    if (!start.ok || !uploadUrl) return { ok: false, reason: `upload start ${start.status}` };
+    const done = await f(uploadUrl, { method: "POST", headers: { "X-Goog-Upload-Offset": "0", "X-Goog-Upload-Command": "upload, finalize" }, body: input.bytes });
+    const body = (await done.json()) as { file?: { name?: string; uri?: string; state?: string } };
+    if (!done.ok || !body.file?.name || !body.file.uri) return { ok: false, reason: `upload ${done.status}` };
+    let state = body.file.state;
+    const deadline = Date.now() + (input.maxWaitMs ?? 90_000);
+    while (state === "PROCESSING" && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, input.pollMs ?? 2_000));
+      const g = await f(`https://generativelanguage.googleapis.com/v1beta/${body.file.name}?key=${input.apiKey}`);
+      state = ((await g.json()) as { state?: string }).state;
+    }
+    if (state !== "ACTIVE") return { ok: false, reason: `the video was still processing (${state ?? "unknown"})` };
+    return { ok: true, uri: body.file.uri };
+  } catch (error) {
+    return { ok: false, reason: `upload failed: ${error instanceof Error ? error.message : String(error)}` };
+  }
+}
+
 /** One generateContent call with a media part and a JSON-only answer. Never throws. */
 export async function watchMedia(input: WatchInput): Promise<WatchResult> {
   const f = input.fetchImpl ?? fetch;
+  // A phone video is often over the inline ceiling: upload it as a file first (up to FILE_MAX_BYTES).
   if ("bytes" in input.media && input.media.bytes.byteLength > INLINE_MAX_BYTES) {
-    return { ok: false, reason: `media is ${Math.round(input.media.bytes.byteLength / 1e6)}MB, over the inline ceiling` };
+    if (input.media.bytes.byteLength > FILE_MAX_BYTES) return { ok: false, reason: `media is ${Math.round(input.media.bytes.byteLength / 1e6)}MB, over the ${Math.round(FILE_MAX_BYTES / 1e6)}MB cap` };
+    const up = await uploadFile({ apiKey: input.apiKey, bytes: input.media.bytes, mimeType: input.media.mimeType, fetchImpl: f });
+    if (!up.ok) return { ok: false, reason: up.reason };
+    return await watchMedia({ ...input, media: { fileUri: up.uri, mimeType: input.media.mimeType } });
   }
   const mediaPart =
     "bytes" in input.media

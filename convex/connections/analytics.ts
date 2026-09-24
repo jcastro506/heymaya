@@ -48,15 +48,31 @@ export interface Connected {
   totalWatchMs: number | null;
   skipRatePct: number | null;
   durationSec: number | null;
+  /** A1, TikTok via the TikTok for Business connection, T+24-48h: share who watched to the end (0-1). */
+  completionRate: number | null;
+  profileViews: number | null;
+  /** Share of views by surface: forYou, follow, search, personalProfile, sound, directMessage, other. */
+  viewSources: Record<string, number> | null;
+  /** follower/nonFollower and newViewer/returnViewer, each pair summing to 1 when present. */
+  viewerTypes: Record<string, number> | null;
+  viewerCountries: Record<string, number> | null;
 }
 
 /** Which metrics each platform can actually report, per Zernio's spec and the recording. */
 export const EXPOSES: Record<Platform, ReadonlySet<keyof Connected>> = {
-  tiktok: new Set(["views", "likes", "comments", "shares", "saves", "impressions", "reach", "clicks"] as const),
+  tiktok: new Set(["views", "likes", "comments", "shares", "saves", "impressions", "reach", "clicks", "completionRate", "profileViews", "viewSources", "viewerTypes", "viewerCountries"] as const),
   instagram: new Set(["views", "likes", "comments", "shares", "saves", "impressions", "reach", "clicks", "follows", "avgWatchMs", "totalWatchMs", "skipRatePct", "durationSec"] as const),
 };
 
 const num = (x: unknown): number | null => (typeof x === "number" && Number.isFinite(x) ? x : x === null ? null : typeof x === "string" && x.trim() !== "" && Number.isFinite(Number(x)) ? Number(x) : null);
+
+/** Pure: a share map (fractions 0-1) or null when TikTok reported nothing (Zernio sends {} then). */
+export function shares01(x: unknown): Record<string, number> | null {
+  if (!x || typeof x !== "object" || Array.isArray(x)) return null;
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(x as Record<string, unknown>)) if (typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1 && /^[A-Za-z]{1,40}$/.test(k)) out[k] = Math.round(v * 1000) / 1000;
+  return Object.keys(out).length ? out : null;
+}
 
 /** The native post id from the platform URL. Zernio's own ids are not the platform's. */
 export function postIdFromUrl(url: string | null | undefined): string | null {
@@ -124,6 +140,13 @@ export function normalizeConnected(row: ZernioPostRow): Connected | null {
     totalWatchMs: isVideoWithDuration ? take("totalWatchMs", a?.igReelsVideoViewTotalTime) : null,
     skipRatePct: isVideoWithDuration ? take("skipRatePct", a?.reelsSkipRate) : null,
     durationSec,
+    // Zernio sends 0 and {} for "not reported" (other platforms, other connection lanes, not filled yet).
+    // Nobody finishes 0% of a watched video, so 0 is "unknown", never a finding.
+    completionRate: exposes.has("completionRate") && (num(a?.completionRate) ?? 0) > 0 ? Math.min(1, num(a?.completionRate)!) : null,
+    profileViews: exposes.has("profileViews") && (num(a?.profileViews) ?? 0) > 0 ? num(a?.profileViews) : null,
+    viewSources: exposes.has("viewSources") ? shares01(a?.impressionSources) : null,
+    viewerTypes: exposes.has("viewerTypes") ? shares01(a?.audienceTypes) : null,
+    viewerCountries: exposes.has("viewerCountries") ? shares01(a?.audienceCountries) : null,
   };
 }
 

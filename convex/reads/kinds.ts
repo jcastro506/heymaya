@@ -4,7 +4,7 @@
  * a wrapper; an import-boundary test asserts it.
  */
 
-import { tiktok, extractClipId } from "../integrations/scrapeCreators/platforms/tiktok";
+import { tiktok, extractClipId, soundFacts } from "../integrations/scrapeCreators/platforms/tiktok";
 import { instagramReelsPosts } from "./reels";
 import { instagramSearchProfiles, profilesResult, tiktokFollowingProfiles, tiktokPopularProfiles } from "./profiles";
 import { instagram } from "../integrations/scrapeCreators/platforms/instagram";
@@ -247,7 +247,11 @@ export const KINDS = {
     shared: true,
     path: "/v1/tiktok/song",
     normalize: (p) => ({ clipId: String(p.clipId) }),
-    call: (p, deps) => tiktok.song(p.clipId, deps),
+    // The facts ride outside `raw`: the cache drops `raw`, and every repeat lookup used to come back empty.
+    call: async (p, deps) => {
+      const r = await tiktok.song(p.clipId, deps);
+      return { ...r, sound: soundFacts(r.raw) };
+    },
   }),
   "sound.tiktokVideos": spec<{ clipId: string }>({
     ttlMs: 24 * H,

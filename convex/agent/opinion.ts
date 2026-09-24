@@ -118,15 +118,15 @@ export const writePrediction = internalMutation({
     await ctx.db.insert("predictions", { creatorId: a.creatorId, subject: a.subject, confidence: a.confidence, expectedMultiple: CONFIDENCE_MULTIPLE[a.confidence] ?? 1, opinion: a.opinion, produced: a.produced, createdAt: Date.now() }),
 });
 
-async function watchBytes(ctx: Parameters<typeof callModel>[0], creatorId: Id<"creators">, purpose: string, bytes: ArrayBuffer, mimeType: string, prompt: string): Promise<{ text: string | null; reason?: string }> {
+export async function watchBytes(ctx: Parameters<typeof callModel>[0], creatorId: Id<"creators">, purpose: string, bytes: ArrayBuffer, mimeType: string, prompt: string, maxOutputTokens = 900): Promise<{ text: string | null; reason?: string }> {
   const apiKey = process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY ?? "";
   const model = WATCH_MODEL_TOP; // one draft at a time deserves the top model (§3.3 escalation)
-  const r = await watchMedia({ model, apiKey, prompt, media: { bytes, mimeType }, resolution: "default", maxOutputTokens: 900 });
+  const r = await watchMedia({ model, apiKey, prompt, media: { bytes, mimeType }, resolution: "default", maxOutputTokens });
   if (r.usage) await ctx.runMutation(internal.core.costs.record, { creatorId, vendor: "gemini", resource: model, purpose, costUsd: r.usage.costUsd, promptTokens: r.usage.promptTokens, completionTokens: r.usage.outputTokens, costSource: "endpoint_table" });
   return r.ok ? { text: r.text } : { text: null, reason: r.reason };
 }
 
-function parseJson<T>(text: string): T | null {
+export function parseJson<T>(text: string): T | null {
   try {
     const m = text.match(/\{[\s\S]*\}/);
     return m ? (JSON.parse(m[0]) as T) : null;
