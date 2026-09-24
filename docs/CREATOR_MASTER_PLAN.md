@@ -42,7 +42,7 @@ _Status 2026-09-24. Code: `codex/creator-ios-app`, released to `staging` (#361, 
 | **N1** Ideas reach Messages | ✅ Done | One "unseen"; "+N more" on her idea text; offered once on a reply. |
 | **O1** Live COGS | ✅ Done | Every cost line on /ops, real creators only. |
 | **P1** Plans + billing | ✅ Built · phone exit waits on you | Plan screen, Switch via Stripe's plan-change confirmation (prorated), return to the app, gate matrix (5 tiers × 8 statuses). Test-mode prices for every tier × interval set on dev + staging. |
-| **S0** Fleet scale | ✅ Done, live | Slim schedule rows + triggers; fan-out; cap inside `send`; parallel turns in order per creator. **Load test on dev, 500 extra creators across 24 zones:** scout dispatched 312 due creators in 5.8 s; every hourly job under 6 s; nightly repair 4.1 s with zero drift. |
+| **S0** Fleet scale | ✅ Done, live | Slim schedule rows + triggers; fan-out; cap inside `send`; parallel turns in order per creator. **Load test on dev, 500 extra creators across 24 zones:** scout dispatched 312 due creators in 5.8 s; every hourly job under 6 s; nightly repair 4.1 s with zero drift. Over the next ~70 min, 488 staggered scout passes ran (two hourly rounds) with **0 failures**; passes left queued for deleted creators no-op cleanly. |
 | **R1** Release to staging | ✅ Done | The creator product runs on `staging.hey-maya.ai` + `precise-canary-781`. Founder product's history and data kept. **Production (`main`) not touched.** |
 | **C1** Copy | 🔄 Groundwork | Copy check on every app string; "why it's for you" written to them. **Needs the session with you.** |
 | **D9, X1, M3, W1, M7, B5** | ⏳ Waiting | See "Your blockers". |
