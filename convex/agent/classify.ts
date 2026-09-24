@@ -93,8 +93,11 @@ export async function classifyText(ctx: ActionCtx, input: { creatorId: Id<"creat
       const platform = j.platform === "instagram" ? "instagram" : "tiktok";
       if (j.action === "quiet_hours" && j.start && j.end) return { intent: "manage", action: "quiet_hours", start: String(j.start), end: String(j.end) };
       if (j.action === "tone" && (j.tone === "coach" || j.tone === "friend" || j.tone === "blunt")) return { intent: "manage", action: "tone", tone: j.tone };
-      if (j.action === "add_admired" && handle) return { intent: "manage", action: "add_admired", platform, handle };
-      if (j.action === "stop_watching" && handle) return { intent: "manage", action: "stop_watching", handle };
+      // "watch X" / "stop watching X" must name X in their message; a handle lifted from context is not a command
+      // (deals sim: "find their email from their instagram" became "watching @summitelectrolytes now").
+      const said = (h: string) => new RegExp(`(^|[^a-z0-9._])@?${h.replace(/[.]/g, "\\.")}($|[^a-z0-9._])`, "i").test(input.text);
+      if (j.action === "add_admired" && handle && said(handle)) return { intent: "manage", action: "add_admired", platform, handle };
+      if (j.action === "stop_watching" && handle && said(handle)) return { intent: "manage", action: "stop_watching", handle };
       if (j.action === "niche" && j.text?.trim()) return { intent: "manage", action: "niche", text: String(j.text) };
       return { intent: "text" };
     }

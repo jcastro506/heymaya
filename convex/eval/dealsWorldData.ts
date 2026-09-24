@@ -220,6 +220,7 @@ export const REPLIES = {
 /** Pure: every number a pitch may cite: the media kit's numbers, plus numbers the creator or the brand wrote. */
 export function numbersIn(text: string): number[] {
   const out: number[] = [];
+  text = text.replace(/https?:\/\/\S+/g, " "); // a post link's id is not a claim (deals sim run 2 flagged one)
   for (const m of text.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*(k|m)?\b/gi)) {
     const base = Number(m[1].replace(/,/g, ""));
     if (!Number.isFinite(base)) continue;

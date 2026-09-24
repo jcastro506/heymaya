@@ -11,3 +11,10 @@ describe("a brand in words is not an account lookup (deals sim)", () => {
     expect(namesAnAccount("let's go after northline", "northline")).toBe(false);
   });
 });
+
+describe("the numbers check skips links (deals sim)", () => {
+  it("a post id in a URL is not a number she claimed", async () => {
+    const { numbersIn } = await import("../../eval/dealsWorldData");
+    expect(numbersIn("broke 3:30, video https://www.tiktok.com/@s/video/7777777777777777773 got 12k views")).toEqual([3, 30, 12_000]);
+  });
+});
