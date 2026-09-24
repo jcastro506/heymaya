@@ -22,25 +22,30 @@ _Updated 2026-09-24._
 
 ## Where we are
 
+_Status 2026-09-24. Code: `codex/creator-ios-app`, released to `staging` (#361, #362). Docs live with the code now._
+
 | Sprint | Status | Notes |
 |---|---|---|
-| **M0** Foundation | ✅ Done | Native SwiftUI app, Clerk + Convex, contract tests on real query output, preview mode. Not on TestFlight yet (needs the Apple account). |
-| **M1** Design system and screens | ✅ Done (your sign-off pending) | Today, Ideas (swipe stack), idea brief with **moving video**, You, Settings, Deals, Your numbers + post. **Real covers and avatars for both platforms, stored server-side** (`convex/media.ts`). Largest text sizes adapted. |
-| **M2** Deep links | ✅ Done | `/o/idea/<id>` and `/o/post/<id>`; Maya's link tool links only her creator's own objects; "this changed" states; web fallback page + AASA (needs `APPLE_TEAM_ID`). |
-| **B1** Numbers foundation | ✅ Done | One normal, per platform, settled posts only; view history + shape; "broke out"; detection every 6 h and hourly on Zernio. Live: the 879K post that read "normal" reads "broke out (711×)". |
-| **O1** Live COGS | ✅ Done | /ops shows every cost line for real creators only, margin, under-30% list; OpenRouter reconcile daily. |
-| **B0** Expert Bench | ✅ Harness + baseline (labels draft) | **8/16 pass, 4 false claims.** Worst: distress read as content fatigue; "why did it pop" got no answer. See audit §7 "B0 baseline". **Needs your label sign-off.** |
-| **M4 core** Awareness | ✅ Done | `userActions` + awareness levels; app actions reach her context once; seen only when she speaks. (Block `rev` guards moved to I1.) |
-| **B4** Care | ✅ Done, live | Three paths, her judgment picks: content frustration → normal Maya; ambiguous ("i'm giving up") → a light question in her voice, no hotline; clearly about them → a check-in with a crisis line, 24 h pause, your alert. Live: distress passes; "giving up on tiktok" cases added. |
-| **B2** Diagnosis brain | 🔄 Built, live bench running | Evidence pack (the post against their own posts), causes that must cite evidence, the ask, after-a-hit; **rejected never means silent** (read → rewrite → cautious → a floor built from real numbers). Live: "why did it pop" went from silence to a grounded read; the flop case passes. |
-| **I1** Ideas in chat | ✅ Done (live exit pending) | 5 tools on one shared idea-act path with the app; parity matrix; app "Bring it back". |
-| Instagram in the bench | ✅ Added | 5 cases on a real both-platform creator. **First run found a real bug:** her own Instagram links were treated as strangers' ("couldn't open that link"). Fixed. |
-| **B2 bench, 2026-09-24** | 🔄 Re-running | Full 23 cases: **15/23**; on the original 16, **11/16** (baseline 8/16). Several remaining "false claims" were the judge's blind spots (it saw tool names, not results; captions cut at 80 chars), fixed; re-run in progress. Real remaining misses: stating a platform rule as fact (i2, B3), a generic "which platform" answer (i3), trend lifecycle (c1, B3). |
-| **N1** Ideas reach Messages | ✅ Built | One definition of "unseen"; "+N more" rides her idea text; offered once on a reply; the app marks seen. **Finding:** today every idea is texted; the app only holds untexted ones when the daily cap holds a text. |
-| **S0** Fleet scale | ✅ Built, backfilled on dev | #1 slim `schedule` rows kept true by a trigger on every creator write (all 79 mutation modules on the wrapped builders; nightly repair), 17 readers moved; #2 fan-out; #3 no more 500 cap; #4 cap inside `send`; #5 indexed idea expiry. **Queue:** turns run in parallel across creators, in order per creator; every inbound door kicks the queue; dead-end deliveries retire after 24 h (275 of them were starving real turns). On dev: 108 rows backfilled (≈570 B vs 12.7 KB a creator doc). **Open:** a cost-safe live 500-creator day (seeded creators must run dry, not call models); /ops per-job duration. |
-| **M5** Share + Ask Maya | ✅ Built | `/share` with a hashed, rotatable token; "Send to Maya" appears in the iOS share sheet and finds the post link (checked on the simulator from a real TikTok); Ask Maya on ideas and posts. **Open:** the signed-in send needs your one-time simulator sign-in; keychain group needs the Apple team id. |
-| **Block revisions** | ✅ Built | A move or drop decided on a stale read is refused ("that block just changed"), from her tools or the app. |
-| Cadence test failures | ✅ Fixed (other session) | Milestones read the morning's clock. Suite: 852 green. |
+| **M0** Foundation | ✅ Done | Native SwiftUI app, Clerk + Convex, contract tests on real query output, preview mode (`-MayaFixtures`). |
+| **M1** Design system and screens | ✅ Done (your sign-off pending) | Today, Ideas, idea brief with moving video, You, Settings, Deals, numbers; real covers for both platforms. |
+| **M2** Deep links | ✅ Done | `/o/idea/<id>`, `/o/post/<id>`, "this changed" states, fallback page, AASA (needs `APPLE_TEAM_ID`). |
+| **M4 core** Awareness | ✅ Done | App actions reach her context once; block revisions refuse a stale move ("that block just changed"). |
+| **M5** Share + Ask Maya | ✅ Done, live | "Send to Maya" in the iOS share sheet: a real TikTok shared from Safari reached dev with its note. Ask Maya on ideas and posts. |
+| **M6** Widgets + a11y | ✅ Widgets live · push waits | Next shoot + best idea widgets fetch their own data (no push needed); verified with real dev data on the simulator home screen. VoiceOver reads real values. System push waits on APNs (Apple account). |
+| **B0** Expert Bench | ✅ Harness, 23 cases, both platforms | Labels are drafts: **needs your sign-off.** The judge now sees tool results, what she watched, her memory and every post. |
+| **B1** Numbers foundation | ✅ Done | One normal per platform; view history + shape; "broke out". |
+| **B2** Diagnosis brain | ✅ Done | Evidence pack, causes that must cite evidence, the ask, after-a-hit, cross-posts, never-silent critic ladder. **Bench: 21/23 on merit** (baseline 8/16); the 2 left are judge errors or wait on B3. |
+| **B3** World knowledge + search | ✅ Built · live exit waits on `TAVILY_API_KEY` | `web_search` / `web_read` on every skill (scrubbed of their identity, 2 a turn), 10 dated platform facts with sources, critic grounding check, stale-fact alert. |
+| **B4** Care | ✅ Done, live | Content frustration → normal Maya; ambiguous → a light check-in in her voice (bench f6 passes); clearly about them → a crisis line, 24 h pause, your alert. |
+| **B6** Opportunity engine | 🔄 Partly built | Lifecycle (≤2 follow-ups at 5/7/7 days, then closed as no response; one brand = one relationship; no credit on a known brand or repeated search) + signal 1 (brands paying your lane, on Deals and her `lane_brands` tool). **Left:** media kit, weekly opportunity pass, signals 2–6, application screens, bench section. |
+| **I1** Ideas in chat | ✅ Done | Five tools on one shared idea-act path with the app. |
+| **N1** Ideas reach Messages | ✅ Done | One "unseen"; "+N more" on her idea text; offered once on a reply. |
+| **O1** Live COGS | ✅ Done | Every cost line on /ops, real creators only. |
+| **P1** Plans + billing | ✅ Built · phone exit waits on you | Plan screen, Switch via Stripe's plan-change confirmation (prorated), return to the app, gate matrix (5 tiers × 8 statuses). Test-mode prices for every tier × interval set on dev + staging. |
+| **S0** Fleet scale | ✅ Done, live | Slim schedule rows + triggers; fan-out; cap inside `send`; parallel turns in order per creator. **Load test on dev, 500 extra creators across 24 zones:** scout dispatched 312 due creators in 5.8 s; every hourly job under 6 s; nightly repair 4.1 s with zero drift. |
+| **R1** Release to staging | ✅ Done | The creator product runs on `staging.hey-maya.ai` + `precise-canary-781`. Founder product's history and data kept. **Production (`main`) not touched.** |
+| **C1** Copy | 🔄 Groundwork | Copy check on every app string; "why it's for you" written to them. **Needs the session with you.** |
+| **D9, X1, M3, W1, M7, B5** | ⏳ Waiting | See "Your blockers". |
 
 ## The order
 
@@ -207,12 +212,12 @@ N1 lives inside the hourly jobs, so first a look at all of them. **29 crons** in
 
 ## What "next" means right now
 
-Phase 2's buildable work is done except the B2 follow-ups from the running bench. **What's left is mostly waiting on you:**
-1. **`TAVILY_API_KEY`** → B3 (sourced platform facts and search; fixes the bench's i2 and c1).
-2. **Sign in once on the simulator** → the signed-in Send to Maya and Ask Maya checks, and M1 sign-off.
-3. **Apple Developer account** → TestFlight, the share extension's keychain group, `APPLE_TEAM_ID` for universal links.
-4. **D9 pricing + Stripe test prices** → P1.
-5. **R1 go/no-go** → the creator product onto staging.
-6. **B0 labels** → sign or edit the draft labels so the bench scores against your call, not mine.
+Everything buildable without you is built or in B6. **What's left needs you**, in this order:
+1. **Which Apple team publishes the app** (Zackat Labs Inc. `2AZM4M4JFR`, or your personal team `GFR22H29TJ`). Unblocks TestFlight, universal links (`APPLE_TEAM_ID`) and the share/widget keychain group.
+2. **`TAVILY_API_KEY`** on dev + staging → B3's live exit (and the bench's two remaining cases).
+3. **Sign the B0 labels** (23 draft cases) so the bench scores against your call.
+4. **D9 pricing** (the test prices use the current $19 / $24.99 / $29.99), then P1's phone exit (subscribe → upgrade → Deals unlocks).
+5. **X1 messaging** (Linq/Claw quotes) and **the C1 copy session** → M3 onboarding in the app → W1 landing.
+6. **R1 part 2:** staging → `main` when staging has held with pilot creators.
 
-**What I can build meanwhile:** the B2 follow-ups from the bench (a grounded "which platform" answer from both normals); /ops per-job duration and rows read (S0's live exit); a dry-run mode for seeded creators so a 500-creator live day costs nothing.
+**What I build next:** B6's rest (the media kit, the weekly opportunity pass, application screens with copy buttons, the opportunities bench section).
