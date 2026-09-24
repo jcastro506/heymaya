@@ -152,6 +152,8 @@ export const postsByPlatform = internalQuery({
       out[platform] = {
         normal: normalViews(mine, platform, now)?.value ?? null,
         latest: mine.slice(0, 6).map((p) => ({ url: p.url.replace(/\?.*$/, ""), views: p.metrics.views, multiple: p.multiple ?? null, daysOld: Math.round((now - p.createTime) / 86_400_000), caption: p.caption.slice(0, 400) })),
+        // every post she can know about (a callback to an older post of theirs is supported)
+        all: mine.slice(0, 40).map((p) => ({ views: p.metrics.views, caption: p.caption.slice(0, 120) })),
         best: [...mine].sort((x, y) => y.metrics.views - x.metrics.views).slice(0, 3).map((p) => ({ url: p.url.replace(/\?.*$/, ""), views: p.metrics.views, multiple: p.multiple ?? null, caption: p.caption.slice(0, 400) })),
       };
     }
