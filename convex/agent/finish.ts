@@ -232,6 +232,9 @@ export const run = internalAction({
 
 // ------------------------------------------------------------------ learning from what they posted
 
+/** How many caption habits stay in front of her at once; older ones are retired, newest win. */
+export const CAPTION_HABITS_KEPT = 5;
+
 export const LESSON_PROMPT = `A creator was offered three captions for a video. Then they posted. Compare what they posted with what was offered. Return ONLY JSON: {"closestCaption": 1|2|3|0, "lesson": "≤160: ONE habit of how THIS person writes captions that the offered ones missed (what they cut, kept, added, their case, emoji, length), or '' if they used one as offered or it teaches nothing"}. The lesson is about how they write, never about the topic. Never invent a habit the two texts don't show.`;
 
 export const unlearned = internalQuery({
@@ -263,6 +266,12 @@ export const saveOutcome = internalMutation({
     if (!f || f.outcome) return null;
     await ctx.db.patch(a.finishId, { outcome: { ownPostId: a.ownPostId, closestCaption: a.closestCaption, soundUsed: a.soundUsed, lesson: a.lesson, at: Date.now() } });
     // One caption habit becomes a preference she sees every turn, with the post it came from.
+    // Keep the few most recent habits active: she sees them every turn, and a creator's style moves
+    // (living sim: 14 lessons, some contradicting, all in front of her at once).
+    if (a.lesson.trim()) {
+      const habits = (await ctx.db.query("personalRecords").withIndex("by_creator_kind", (q) => q.eq("creatorId", f.creatorId).eq("kind", "preference")).order("desc").take(200)) as Doc<"personalRecords">[];
+      for (const old of habits.filter((r) => r.active && r.key.startsWith("caption-habit:")).slice(CAPTION_HABITS_KEPT - 1)) await ctx.db.patch(old._id, { active: false, invalidatedAt: Date.now() });
+    }
     if (a.lesson.trim()) await ctx.db.insert("personalRecords", { creatorId: f.creatorId, key: `caption-habit:${a.finishId}`, kind: "preference", text: `how they write captions: ${a.lesson.trim()}`, reason: "what they posted vs the captions offered", sourceMessageIds: [f.messageId], sourcePostIds: [a.ownPostId], sourceNoteIds: [], active: true, at: Date.now() });
     return null;
   },

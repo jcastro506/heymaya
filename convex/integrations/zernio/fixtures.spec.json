@@ -1,0 +1,345 @@
+{
+ "_about": "Zernio OpenAPI 1.69.0 (https://zernio.com/openapi.json), read 2026-09-24. Entries marked spec are the spec's own response examples, verbatim. Entries marked schema are built from the response schema (InstagramAccountInsightsResponse) because the spec gives no example for that endpoint. Nothing here is a recording of a real account; replace with recordings once a real Instagram and TikTok connect.",
+ "igInsightsTimeSeries": {
+  "_source": "spec: /v1/analytics/instagram/account-insights examples.timeSeries",
+  "success": true,
+  "accountId": "64e1a2b3c4d5e6f7a8b9c0d1",
+  "platform": "instagram",
+  "dateRange": {
+   "since": "2026-03-01",
+   "until": "2026-03-22"
+  },
+  "metricType": "time_series",
+  "metrics": {
+   "reach": {
+    "total": 12500,
+    "values": [
+     {
+      "date": "2026-03-01",
+      "value": 420
+     },
+     {
+      "date": "2026-03-02",
+      "value": 385
+     }
+    ]
+   },
+   "views": {
+    "total": 45000,
+    "values": [
+     {
+      "date": "2026-03-01",
+      "value": 1520
+     },
+     {
+      "date": "2026-03-02",
+      "value": 1380
+     }
+    ]
+   }
+  },
+  "dataDelay": "Data may be delayed up to 48 hours"
+ },
+ "igInsightsBreakdown": {
+  "_source": "spec: /v1/analytics/instagram/account-insights examples.totalValueWithBreakdown",
+  "success": true,
+  "accountId": "64e1a2b3c4d5e6f7a8b9c0d1",
+  "platform": "instagram",
+  "dateRange": {
+   "since": "2026-03-01",
+   "until": "2026-03-22"
+  },
+  "metricType": "total_value",
+  "breakdown": "media_product_type",
+  "metrics": {
+   "reach": {
+    "total": 12500,
+    "breakdowns": [
+     {
+      "dimension": "FEED",
+      "value": 5000
+     },
+     {
+      "dimension": "REELS",
+      "value": 7500
+     }
+    ]
+   }
+  },
+  "dataDelay": "Data may be delayed up to 48 hours"
+ },
+ "igInsightsInvalidMetric400": {
+  "_source": "spec: 400 examples.invalidMetric",
+  "error": "Invalid metrics: impressions",
+  "validMetrics": [
+   "accounts_engaged",
+   "comments",
+   "follows_and_unfollows",
+   "likes",
+   "profile_links_taps",
+   "reach",
+   "replies",
+   "reposts",
+   "saves",
+   "shares",
+   "total_interactions",
+   "views"
+  ]
+ },
+ "igDemographics": {
+  "_source": "spec: /v1/analytics/instagram/demographics examples.allBreakdowns",
+  "success": true,
+  "accountId": "64e1a2b3c4d5e6f7a8b9c0d1",
+  "platform": "instagram",
+  "metric": "follower_demographics",
+  "timeframe": "last_30_days",
+  "demographics": {
+   "age": [
+    {
+     "dimension": "25-34",
+     "value": 4500
+    },
+    {
+     "dimension": "18-24",
+     "value": 3200
+    }
+   ],
+   "gender": [
+    {
+     "dimension": "M",
+     "value": 3000
+    },
+    {
+     "dimension": "F",
+     "value": 4800
+    }
+   ],
+   "city": [
+    {
+     "dimension": "New York, New York",
+     "value": 800
+    },
+    {
+     "dimension": "Los Angeles, California",
+     "value": 650
+    }
+   ],
+   "country": [
+    {
+     "dimension": "US",
+     "value": 5000
+    },
+    {
+     "dimension": "GB",
+     "value": 1200
+    }
+   ]
+  },
+  "note": "Demographics show top 45 entries per dimension. Requires 100+ followers."
+ },
+ "igDemographicsInsufficient400": {
+  "_source": "spec: 400 examples.insufficientFollowers",
+  "success": false,
+  "error": "Demographic insights require at least 100 followers.",
+  "code": "instagram_insufficient_followers"
+ },
+ "igInsightsTotals": {
+  "_source": "schema: total_value, no breakdown, one metric unavailable (the spec's unavailableMetrics contract)",
+  "success": true,
+  "accountId": "64e1a2b3c4d5e6f7a8b9c0d1",
+  "platform": "instagram",
+  "dateRange": {
+   "since": "2026-08-25",
+   "until": "2026-09-24"
+  },
+  "metricType": "total_value",
+  "metrics": {
+   "reach": {
+    "total": 12500
+   },
+   "views": {
+    "total": 45000
+   },
+   "accounts_engaged": {
+    "total": 930
+   },
+   "total_interactions": {
+    "total": 2210
+   }
+  },
+  "unavailableMetrics": [
+   {
+    "metric": "profile_links_taps",
+    "reason": "no_data"
+   }
+  ],
+  "dataDelay": "Data may be delayed up to 48 hours"
+ },
+ "igFollowsBreakdown": {
+  "_source": "schema: follows_and_unfollows with breakdown=follow_type (dimension names per Meta's Graph docs: FOLLOWER, NON_FOLLOWER)",
+  "success": true,
+  "accountId": "64e1a2b3c4d5e6f7a8b9c0d1",
+  "platform": "instagram",
+  "dateRange": {
+   "since": "2026-08-25",
+   "until": "2026-09-24"
+  },
+  "metricType": "total_value",
+  "breakdown": "follow_type",
+  "metrics": {
+   "follows_and_unfollows": {
+    "total": 161,
+    "breakdowns": [
+     {
+      "dimension": "FOLLOWER",
+      "value": 142
+     },
+     {
+      "dimension": "NON_FOLLOWER",
+      "value": 19
+     }
+    ]
+   }
+  }
+ },
+ "igFollowerHistory": {
+  "_source": "schema: follower-history, metricType=time_series, default metrics",
+  "success": true,
+  "accountId": "64e1a2b3c4d5e6f7a8b9c0d1",
+  "platform": "instagram",
+  "dateRange": {
+   "since": "2026-09-20",
+   "until": "2026-09-23"
+  },
+  "metricType": "time_series",
+  "metrics": {
+   "follower_count": {
+    "total": 8120,
+    "values": [
+     {
+      "date": "2026-09-20",
+      "value": 8050
+     },
+     {
+      "date": "2026-09-21",
+      "value": 8071
+     },
+     {
+      "date": "2026-09-22",
+      "value": 8102
+     },
+     {
+      "date": "2026-09-23",
+      "value": 8120
+     }
+    ]
+   },
+   "followers_gained": {
+    "total": 80,
+    "values": [
+     {
+      "date": "2026-09-20",
+      "value": 0
+     },
+     {
+      "date": "2026-09-21",
+      "value": 24
+     },
+     {
+      "date": "2026-09-22",
+      "value": 35
+     },
+     {
+      "date": "2026-09-23",
+      "value": 21
+     }
+    ]
+   },
+   "followers_lost": {
+    "total": 10,
+    "values": [
+     {
+      "date": "2026-09-20",
+      "value": 0
+     },
+     {
+      "date": "2026-09-21",
+      "value": 3
+     },
+     {
+      "date": "2026-09-22",
+      "value": 4
+     },
+     {
+      "date": "2026-09-23",
+      "value": 3
+     }
+    ]
+   }
+  }
+ },
+ "ttAccountInsights": {
+  "_source": "schema: tiktok account-insights, metricType=time_series, follower_count + followers_gained + followers_lost",
+  "success": true,
+  "accountId": "64e1a2b3c4d5e6f7a8b9c0d2",
+  "platform": "tiktok",
+  "dateRange": {
+   "since": "2026-09-21",
+   "until": "2026-09-23"
+  },
+  "metricType": "time_series",
+  "metrics": {
+   "follower_count": {
+    "total": 2040,
+    "values": [
+     {
+      "date": "2026-09-21",
+      "value": 2000
+     },
+     {
+      "date": "2026-09-22",
+      "value": 2012
+     },
+     {
+      "date": "2026-09-23",
+      "value": 2040
+     }
+    ]
+   },
+   "followers_gained": {
+    "total": 45,
+    "values": [
+     {
+      "date": "2026-09-21",
+      "value": 0
+     },
+     {
+      "date": "2026-09-22",
+      "value": 15
+     },
+     {
+      "date": "2026-09-23",
+      "value": 30
+     }
+    ]
+   },
+   "followers_lost": {
+    "total": 5,
+    "values": [
+     {
+      "date": "2026-09-21",
+      "value": 0
+     },
+     {
+      "date": "2026-09-22",
+      "value": 3
+     },
+     {
+      "date": "2026-09-23",
+      "value": 2
+     }
+    ]
+   }
+  }
+ }
+}

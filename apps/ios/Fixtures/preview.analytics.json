@@ -1,37 +1,1226 @@
 {
  "accounts": [
   {
-   "connected": false,
-   "followers": null,
-   "followers30dAgo": null,
-   "followersAsOf": null,
+   "connected": true,
+   "followers": 2091,
+   "followers30dAgo": 2009,
+   "followersAsOf": 1790257225091,
    "handle": "vanessaalopezz",
    "needsReconnect": false,
    "platform": "tiktok",
    "posts": 18,
    "accountType": "personal",
-   "setup": null
+   "setup": null,
+   "growth": {
+    "days": [
+     {
+      "day": "2026-06-27",
+      "followers": 1850,
+      "gained": null,
+      "lost": null
+     },
+     {
+      "day": "2026-06-28",
+      "followers": 1855,
+      "gained": 5,
+      "lost": 0
+     },
+     {
+      "day": "2026-06-29",
+      "followers": 1857,
+      "gained": 2,
+      "lost": 0
+     },
+     {
+      "day": "2026-06-30",
+      "followers": 1861,
+      "gained": 4,
+      "lost": 0
+     },
+     {
+      "day": "2026-07-01",
+      "followers": 1866,
+      "gained": 6,
+      "lost": 1
+     },
+     {
+      "day": "2026-07-02",
+      "followers": 1868,
+      "gained": 2,
+      "lost": 0
+     },
+     {
+      "day": "2026-07-03",
+      "followers": 1870,
+      "gained": 5,
+      "lost": 3
+     },
+     {
+      "day": "2026-07-04",
+      "followers": 1871,
+      "gained": 2,
+      "lost": 1
+     },
+     {
+      "day": "2026-07-05",
+      "followers": 1870,
+      "gained": 2,
+      "lost": 3
+     },
+     {
+      "day": "2026-07-06",
+      "followers": 1872,
+      "gained": 2,
+      "lost": 0
+     },
+     {
+      "day": "2026-07-07",
+      "followers": 1875,
+      "gained": 3,
+      "lost": 0
+     },
+     {
+      "day": "2026-07-08",
+      "followers": 1878,
+      "gained": 6,
+      "lost": 3
+     },
+     {
+      "day": "2026-07-09",
+      "followers": 1879,
+      "gained": 2,
+      "lost": 1
+     },
+     {
+      "day": "2026-07-10",
+      "followers": 1880,
+      "gained": 2,
+      "lost": 1
+     },
+     {
+      "day": "2026-07-11",
+      "followers": 1881,
+      "gained": 4,
+      "lost": 3
+     },
+     {
+      "day": "2026-07-12",
+      "followers": 1884,
+      "gained": 3,
+      "lost": 0
+     },
+     {
+      "day": "2026-07-13",
+      "followers": 1888,
+      "gained": 6,
+      "lost": 2
+     },
+     {
+      "day": "2026-07-14",
+      "followers": 1893,
+      "gained": 6,
+      "lost": 1
+     },
+     {
+      "day": "2026-07-15",
+      "followers": 1894,
+      "gained": 2,
+      "lost": 1
+     },
+     {
+      "day": "2026-07-16",
+      "followers": 1898,
+      "gained": 4,
+      "lost": 0
+     },
+     {
+      "day": "2026-07-17",
+      "followers": 1904,
+      "gained": 6,
+      "lost": 0
+     },
+     {
+      "day": "2026-07-18",
+      "followers": 1910,
+      "gained": 6,
+      "lost": 0
+     },
+     {
+      "day": "2026-07-19",
+      "followers": 1915,
+      "gained": 6,
+      "lost": 1
+     },
+     {
+      "day": "2026-07-20",
+      "followers": 1917,
+      "gained": 5,
+      "lost": 3
+     },
+     {
+      "day": "2026-07-21",
+      "followers": 1918,
+      "gained": 4,
+      "lost": 3
+     },
+     {
+      "day": "2026-07-22",
+      "followers": 1921,
+      "gained": 6,
+      "lost": 3
+     },
+     {
+      "day": "2026-07-23",
+      "followers": 1923,
+      "gained": 4,
+      "lost": 2
+     },
+     {
+      "day": "2026-07-24",
+      "followers": 1925,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-07-25",
+      "followers": 1931,
+      "gained": 7,
+      "lost": 1
+     },
+     {
+      "day": "2026-07-26",
+      "followers": 1931,
+      "gained": 2,
+      "lost": 2
+     },
+     {
+      "day": "2026-07-27",
+      "followers": 1934,
+      "gained": 6,
+      "lost": 3
+     },
+     {
+      "day": "2026-07-28",
+      "followers": 1935,
+      "gained": 4,
+      "lost": 3
+     },
+     {
+      "day": "2026-07-29",
+      "followers": 1939,
+      "gained": 4,
+      "lost": 0
+     },
+     {
+      "day": "2026-07-30",
+      "followers": 1938,
+      "gained": 2,
+      "lost": 3
+     },
+     {
+      "day": "2026-07-31",
+      "followers": 1939,
+      "gained": 3,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-01",
+      "followers": 1939,
+      "gained": 3,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-02",
+      "followers": 1944,
+      "gained": 5,
+      "lost": 0
+     },
+     {
+      "day": "2026-08-03",
+      "followers": 1951,
+      "gained": 7,
+      "lost": 0
+     },
+     {
+      "day": "2026-08-04",
+      "followers": 1955,
+      "gained": 6,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-05",
+      "followers": 1957,
+      "gained": 4,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-06",
+      "followers": 1960,
+      "gained": 6,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-07",
+      "followers": 1963,
+      "gained": 6,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-08",
+      "followers": 1965,
+      "gained": 2,
+      "lost": 0
+     },
+     {
+      "day": "2026-08-09",
+      "followers": 1966,
+      "gained": 4,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-10",
+      "followers": 1973,
+      "gained": 7,
+      "lost": 0
+     },
+     {
+      "day": "2026-08-11",
+      "followers": 1973,
+      "gained": 2,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-12",
+      "followers": 1977,
+      "gained": 7,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-13",
+      "followers": 1978,
+      "gained": 4,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-14",
+      "followers": 1983,
+      "gained": 7,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-15",
+      "followers": 1982,
+      "gained": 2,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-16",
+      "followers": 1985,
+      "gained": 4,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-17",
+      "followers": 1991,
+      "gained": 6,
+      "lost": 0
+     },
+     {
+      "day": "2026-08-18",
+      "followers": 1996,
+      "gained": 5,
+      "lost": 0
+     },
+     {
+      "day": "2026-08-19",
+      "followers": 1997,
+      "gained": 3,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-20",
+      "followers": 1999,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-21",
+      "followers": 2001,
+      "gained": 5,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-22",
+      "followers": 2006,
+      "gained": 5,
+      "lost": 0
+     },
+     {
+      "day": "2026-08-23",
+      "followers": 2006,
+      "gained": 3,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-24",
+      "followers": 2009,
+      "gained": 5,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-25",
+      "followers": 2009,
+      "gained": 3,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-26",
+      "followers": 2013,
+      "gained": 6,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-27",
+      "followers": 2017,
+      "gained": 7,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-28",
+      "followers": 2018,
+      "gained": 4,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-29",
+      "followers": 2020,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-30",
+      "followers": 2021,
+      "gained": 2,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-31",
+      "followers": 2023,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-01",
+      "followers": 2029,
+      "gained": 7,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-02",
+      "followers": 2028,
+      "gained": 2,
+      "lost": 3
+     },
+     {
+      "day": "2026-09-03",
+      "followers": 2033,
+      "gained": 6,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-04",
+      "followers": 2035,
+      "gained": 4,
+      "lost": 2
+     },
+     {
+      "day": "2026-09-05",
+      "followers": 2036,
+      "gained": 2,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-06",
+      "followers": 2039,
+      "gained": 5,
+      "lost": 2
+     },
+     {
+      "day": "2026-09-07",
+      "followers": 2043,
+      "gained": 6,
+      "lost": 2
+     },
+     {
+      "day": "2026-09-08",
+      "followers": 2046,
+      "gained": 3,
+      "lost": 0
+     },
+     {
+      "day": "2026-09-09",
+      "followers": 2048,
+      "gained": 5,
+      "lost": 3
+     },
+     {
+      "day": "2026-09-10",
+      "followers": 2050,
+      "gained": 5,
+      "lost": 3
+     },
+     {
+      "day": "2026-09-11",
+      "followers": 2055,
+      "gained": 5,
+      "lost": 0
+     },
+     {
+      "day": "2026-09-12",
+      "followers": 2057,
+      "gained": 5,
+      "lost": 3
+     },
+     {
+      "day": "2026-09-13",
+      "followers": 2058,
+      "gained": 2,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-14",
+      "followers": 2059,
+      "gained": 2,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-15",
+      "followers": 2063,
+      "gained": 5,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-16",
+      "followers": 2063,
+      "gained": 2,
+      "lost": 2
+     },
+     {
+      "day": "2026-09-17",
+      "followers": 2069,
+      "gained": 6,
+      "lost": 0
+     },
+     {
+      "day": "2026-09-18",
+      "followers": 2071,
+      "gained": 2,
+      "lost": 0
+     },
+     {
+      "day": "2026-09-19",
+      "followers": 2076,
+      "gained": 6,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-20",
+      "followers": 2082,
+      "gained": 6,
+      "lost": 0
+     },
+     {
+      "day": "2026-09-21",
+      "followers": 2086,
+      "gained": 4,
+      "lost": 0
+     },
+     {
+      "day": "2026-09-22",
+      "followers": 2087,
+      "gained": 2,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-23",
+      "followers": 2090,
+      "gained": 6,
+      "lost": 3
+     },
+     {
+      "day": "2026-09-24",
+      "followers": 2091,
+      "gained": 3,
+      "lost": 2
+     }
+    ],
+    "flowReported": true,
+    "gained30d": 126,
+    "lost30d": 44
+   },
+   "profile": null,
+   "audience": null
   },
   {
-   "connected": false,
-   "followers": null,
-   "followers30dAgo": null,
-   "followersAsOf": null,
+   "connected": true,
+   "followers": 8404,
+   "followers30dAgo": 8025,
+   "followersAsOf": 1790257225091,
    "handle": "vanessaalopezz",
    "needsReconnect": false,
    "platform": "instagram",
    "posts": 3,
-   "accountType": "personal",
-   "setup": {
-    "needed": true,
-    "title": "Switch Instagram to a Creator account",
-    "why": "Instagram only lets a Creator or Business account connect, and without it Maya can't see your reach, saves or watch time. It's free and takes a minute. Creator keeps the full music library.",
-    "steps": [
-     "Open Instagram and go to your profile",
-     "Tap the menu (☰), then Settings and privacy",
-     "Tap Account type and tools",
-     "Tap Switch to professional account",
-     "Choose Creator, pick a category, and tap Done"
+   "accountType": "creator",
+   "setup": null,
+   "growth": {
+    "days": [
+     {
+      "day": "2026-06-27",
+      "followers": 7600,
+      "gained": null,
+      "lost": null
+     },
+     {
+      "day": "2026-06-28",
+      "followers": 7609,
+      "gained": 9,
+      "lost": 0
+     },
+     {
+      "day": "2026-06-29",
+      "followers": 7612,
+      "gained": 6,
+      "lost": 3
+     },
+     {
+      "day": "2026-06-30",
+      "followers": 7618,
+      "gained": 9,
+      "lost": 3
+     },
+     {
+      "day": "2026-07-01",
+      "followers": 7625,
+      "gained": 9,
+      "lost": 2
+     },
+     {
+      "day": "2026-07-02",
+      "followers": 7630,
+      "gained": 6,
+      "lost": 1
+     },
+     {
+      "day": "2026-07-03",
+      "followers": 7634,
+      "gained": 6,
+      "lost": 2
+     },
+     {
+      "day": "2026-07-04",
+      "followers": 7643,
+      "gained": 11,
+      "lost": 2
+     },
+     {
+      "day": "2026-07-05",
+      "followers": 7651,
+      "gained": 9,
+      "lost": 1
+     },
+     {
+      "day": "2026-07-06",
+      "followers": 7661,
+      "gained": 10,
+      "lost": 0
+     },
+     {
+      "day": "2026-07-07",
+      "followers": 7666,
+      "gained": 7,
+      "lost": 2
+     },
+     {
+      "day": "2026-07-08",
+      "followers": 7673,
+      "gained": 7,
+      "lost": 0
+     },
+     {
+      "day": "2026-07-09",
+      "followers": 7681,
+      "gained": 10,
+      "lost": 2
+     },
+     {
+      "day": "2026-07-10",
+      "followers": 7692,
+      "gained": 11,
+      "lost": 0
+     },
+     {
+      "day": "2026-07-11",
+      "followers": 7701,
+      "gained": 11,
+      "lost": 2
+     },
+     {
+      "day": "2026-07-12",
+      "followers": 7709,
+      "gained": 10,
+      "lost": 2
+     },
+     {
+      "day": "2026-07-13",
+      "followers": 7714,
+      "gained": 7,
+      "lost": 2
+     },
+     {
+      "day": "2026-07-14",
+      "followers": 7719,
+      "gained": 7,
+      "lost": 2
+     },
+     {
+      "day": "2026-07-15",
+      "followers": 7729,
+      "gained": 11,
+      "lost": 1
+     },
+     {
+      "day": "2026-07-16",
+      "followers": 7738,
+      "gained": 10,
+      "lost": 1
+     },
+     {
+      "day": "2026-07-17",
+      "followers": 7742,
+      "gained": 7,
+      "lost": 3
+     },
+     {
+      "day": "2026-07-18",
+      "followers": 7752,
+      "gained": 11,
+      "lost": 1
+     },
+     {
+      "day": "2026-07-19",
+      "followers": 7756,
+      "gained": 7,
+      "lost": 3
+     },
+     {
+      "day": "2026-07-20",
+      "followers": 7764,
+      "gained": 8,
+      "lost": 0
+     },
+     {
+      "day": "2026-07-21",
+      "followers": 7768,
+      "gained": 6,
+      "lost": 2
+     },
+     {
+      "day": "2026-07-22",
+      "followers": 7775,
+      "gained": 9,
+      "lost": 2
+     },
+     {
+      "day": "2026-07-23",
+      "followers": 7780,
+      "gained": 7,
+      "lost": 2
+     },
+     {
+      "day": "2026-07-24",
+      "followers": 7787,
+      "gained": 9,
+      "lost": 2
+     },
+     {
+      "day": "2026-07-25",
+      "followers": 7795,
+      "gained": 8,
+      "lost": 0
+     },
+     {
+      "day": "2026-07-26",
+      "followers": 7802,
+      "gained": 7,
+      "lost": 0
+     },
+     {
+      "day": "2026-07-27",
+      "followers": 7806,
+      "gained": 7,
+      "lost": 3
+     },
+     {
+      "day": "2026-07-28",
+      "followers": 7811,
+      "gained": 7,
+      "lost": 2
+     },
+     {
+      "day": "2026-07-29",
+      "followers": 7815,
+      "gained": 7,
+      "lost": 3
+     },
+     {
+      "day": "2026-07-30",
+      "followers": 7825,
+      "gained": 10,
+      "lost": 0
+     },
+     {
+      "day": "2026-07-31",
+      "followers": 7832,
+      "gained": 9,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-01",
+      "followers": 7843,
+      "gained": 11,
+      "lost": 0
+     },
+     {
+      "day": "2026-08-02",
+      "followers": 7854,
+      "gained": 11,
+      "lost": 0
+     },
+     {
+      "day": "2026-08-03",
+      "followers": 7862,
+      "gained": 9,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-04",
+      "followers": 7870,
+      "gained": 9,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-05",
+      "followers": 7877,
+      "gained": 9,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-06",
+      "followers": 7880,
+      "gained": 6,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-07",
+      "followers": 7886,
+      "gained": 9,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-08",
+      "followers": 7897,
+      "gained": 11,
+      "lost": 0
+     },
+     {
+      "day": "2026-08-09",
+      "followers": 7907,
+      "gained": 11,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-10",
+      "followers": 7913,
+      "gained": 7,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-11",
+      "followers": 7918,
+      "gained": 6,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-12",
+      "followers": 7925,
+      "gained": 10,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-13",
+      "followers": 7935,
+      "gained": 11,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-14",
+      "followers": 7942,
+      "gained": 10,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-15",
+      "followers": 7951,
+      "gained": 11,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-16",
+      "followers": 7957,
+      "gained": 7,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-17",
+      "followers": 7963,
+      "gained": 6,
+      "lost": 0
+     },
+     {
+      "day": "2026-08-18",
+      "followers": 7974,
+      "gained": 11,
+      "lost": 0
+     },
+     {
+      "day": "2026-08-19",
+      "followers": 7983,
+      "gained": 10,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-20",
+      "followers": 7991,
+      "gained": 9,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-21",
+      "followers": 7998,
+      "gained": 7,
+      "lost": 0
+     },
+     {
+      "day": "2026-08-22",
+      "followers": 8005,
+      "gained": 8,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-23",
+      "followers": 8012,
+      "gained": 8,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-24",
+      "followers": 8020,
+      "gained": 10,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-25",
+      "followers": 8025,
+      "gained": 8,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-26",
+      "followers": 8032,
+      "gained": 7,
+      "lost": 0
+     },
+     {
+      "day": "2026-08-27",
+      "followers": 8041,
+      "gained": 11,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-28",
+      "followers": 8047,
+      "gained": 9,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-29",
+      "followers": 8056,
+      "gained": 10,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-30",
+      "followers": 8065,
+      "gained": 10,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-31",
+      "followers": 8075,
+      "gained": 10,
+      "lost": 0
+     },
+     {
+      "day": "2026-09-01",
+      "followers": 8083,
+      "gained": 9,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-02",
+      "followers": 8093,
+      "gained": 10,
+      "lost": 0
+     },
+     {
+      "day": "2026-09-03",
+      "followers": 8099,
+      "gained": 7,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-04",
+      "followers": 8103,
+      "gained": 7,
+      "lost": 3
+     },
+     {
+      "day": "2026-09-05",
+      "followers": 8153,
+      "gained": 50,
+      "lost": 0
+     },
+     {
+      "day": "2026-09-06",
+      "followers": 8197,
+      "gained": 44,
+      "lost": 0
+     },
+     {
+      "day": "2026-09-07",
+      "followers": 8230,
+      "gained": 36,
+      "lost": 3
+     },
+     {
+      "day": "2026-09-08",
+      "followers": 8258,
+      "gained": 28,
+      "lost": 0
+     },
+     {
+      "day": "2026-09-09",
+      "followers": 8280,
+      "gained": 23,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-10",
+      "followers": 8298,
+      "gained": 18,
+      "lost": 0
+     },
+     {
+      "day": "2026-09-11",
+      "followers": 8301,
+      "gained": 6,
+      "lost": 3
+     },
+     {
+      "day": "2026-09-12",
+      "followers": 8311,
+      "gained": 10,
+      "lost": 0
+     },
+     {
+      "day": "2026-09-13",
+      "followers": 8314,
+      "gained": 6,
+      "lost": 3
+     },
+     {
+      "day": "2026-09-14",
+      "followers": 8321,
+      "gained": 8,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-15",
+      "followers": 8330,
+      "gained": 11,
+      "lost": 2
+     },
+     {
+      "day": "2026-09-16",
+      "followers": 8336,
+      "gained": 9,
+      "lost": 3
+     },
+     {
+      "day": "2026-09-17",
+      "followers": 8345,
+      "gained": 10,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-18",
+      "followers": 8354,
+      "gained": 11,
+      "lost": 2
+     },
+     {
+      "day": "2026-09-19",
+      "followers": 8363,
+      "gained": 10,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-20",
+      "followers": 8371,
+      "gained": 9,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-21",
+      "followers": 8380,
+      "gained": 9,
+      "lost": 0
+     },
+     {
+      "day": "2026-09-22",
+      "followers": 8386,
+      "gained": 9,
+      "lost": 3
+     },
+     {
+      "day": "2026-09-23",
+      "followers": 8394,
+      "gained": 8,
+      "lost": 0
+     },
+     {
+      "day": "2026-09-24",
+      "followers": 8404,
+      "gained": 11,
+      "lost": 1
+     }
+    ],
+    "flowReported": true,
+    "gained30d": 416,
+    "lost30d": 37
+   },
+   "profile": {
+    "status": "ok",
+    "fromDate": "2026-08-26",
+    "toDate": "2026-09-24",
+    "asOf": 1790242825091,
+    "profileLinkTaps": 214,
+    "follows": 416,
+    "unfollows": 37,
+    "reach": 48300,
+    "accountsEngaged": 2140
+   },
+   "audience": {
+    "status": "ok",
+    "asOf": 1790088025091,
+    "followersCounted": 8050,
+    "gender": [
+     {
+      "label": "Women",
+      "share": 0.71
+     },
+     {
+      "label": "Men",
+      "share": 0.27
+     },
+     {
+      "label": "Not specified",
+      "share": 0.02
+     }
+    ],
+    "age": [
+     {
+      "label": "13-17",
+      "share": 0.03
+     },
+     {
+      "label": "18-24",
+      "share": 0.34
+     },
+     {
+      "label": "25-34",
+      "share": 0.41
+     },
+     {
+      "label": "35-44",
+      "share": 0.14
+     },
+     {
+      "label": "45-54",
+      "share": 0.05
+     },
+     {
+      "label": "55-64",
+      "share": 0.02
+     },
+     {
+      "label": "65+",
+      "share": 0.01
+     }
+    ],
+    "countries": [
+     {
+      "label": "United States",
+      "share": 0.58
+     },
+     {
+      "label": "Mexico",
+      "share": 0.09
+     },
+     {
+      "label": "Canada",
+      "share": 0.06
+     },
+     {
+      "label": "United Kingdom",
+      "share": 0.05
+     },
+     {
+      "label": "Philippines",
+      "share": 0.03
+     }
+    ],
+    "cities": [
+     {
+      "label": "Los Angeles, California",
+      "share": 0.07
+     },
+     {
+      "label": "Houston, Texas",
+      "share": 0.04
+     },
+     {
+      "label": "New York, New York",
+      "share": 0.04
+     },
+     {
+      "label": "Chicago, Illinois",
+      "share": 0.03
+     },
+     {
+      "label": "San Antonio, Texas",
+      "share": 0.03
+     }
     ]
    }
   }

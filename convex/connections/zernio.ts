@@ -103,7 +103,11 @@ export const applyAccounts = internalMutation({
     // only carries what changes after that.
     const before = new Set((conn.zernioAccounts ?? []).filter((x) => x.canFetchAnalytics && !x.needsReconnect).map((x) => x.accountId));
     const backfill = status === "connected" && accounts.some((x) => x.canFetchAnalytics && !x.needsReconnect && !before.has(x.accountId));
-    if (backfill) await ctx.scheduler.runAfter(0, internal.connections.sync.bootstrap, { creatorId: a.creatorId });
+    if (backfill) {
+      await ctx.scheduler.runAfter(0, internal.connections.sync.bootstrap, { creatorId: a.creatorId });
+      // A1: the account-level reads too, so follower growth and "who follows you" fill the same day.
+      await ctx.scheduler.runAfter(0, internal.connections.insightsSync.syncCreator, { creatorId: a.creatorId });
+    }
     return { status, backfill };
   },
 });

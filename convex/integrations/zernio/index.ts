@@ -127,6 +127,42 @@ export async function followerStats(c: ZernioClient, accountIds: string[], profi
   return await c.request("/api/v1/accounts/follower-stats", { query: { accountIds: accountIds.join(","), profileId } });
 }
 
+// ------------------------------------------------ A1: account-level analytics
+// Per the OpenAPI spec 1.69.0 (read 2026-09-24): paths are /v1/analytics/{platform}/... under
+// the /api base, like every other call here. All four need Zernio's analytics add-on (402 if
+// not), return the shared envelope, and are parsed by connections/accountInsights.ts.
+
+export interface AccountInsightsQuery {
+  accountId: string;
+  fromDate?: string;          // YYYY-MM-DD; the vendor defaults to 30 days ago
+  toDate?: string;            // YYYY-MM-DD; defaults to today
+  metrics?: readonly string[];
+  metricType?: "time_series" | "total_value";
+  breakdown?: string;         // total_value only
+}
+
+const insightsQuery = (q: AccountInsightsQuery) => ({ accountId: q.accountId, fromDate: q.fromDate, toDate: q.toDate, metrics: q.metrics?.length ? q.metrics.join(",") : undefined, metricType: q.metricType, breakdown: q.breakdown });
+
+/** Instagram account insights: max 90 days; only `reach` supports time_series; breakdowns only with total_value. */
+export async function instagramAccountInsights(c: ZernioClient, q: AccountInsightsQuery): Promise<unknown> {
+  return await c.request("/api/v1/analytics/instagram/account-insights", { query: insightsQuery(q) });
+}
+
+/** Instagram daily running follower count with gained/lost (Zernio's own snapshotter). Max 89 days. */
+export async function instagramFollowerHistory(c: ZernioClient, q: Omit<AccountInsightsQuery, "breakdown">): Promise<unknown> {
+  return await c.request("/api/v1/analytics/instagram/follower-history", { query: insightsQuery(q) });
+}
+
+/** Instagram audience demographics. 400 `instagram_insufficient_followers` under 100 followers; top 45 per dimension. */
+export async function instagramDemographics(c: ZernioClient, q: { accountId: string; metric?: "follower_demographics" | "engaged_audience_demographics"; breakdown?: ReadonlyArray<"age" | "city" | "country" | "gender">; timeframe?: "this_week" | "this_month" }): Promise<unknown> {
+  return await c.request("/api/v1/analytics/instagram/demographics", { query: { accountId: q.accountId, metric: q.metric, breakdown: q.breakdown?.length ? q.breakdown.join(",") : undefined, timeframe: q.timeframe } });
+}
+
+/** TikTok account insights: follower/likes/video counters and gained/lost. Max 89 days; 412 without the user.info.stats scope. */
+export async function tiktokAccountInsights(c: ZernioClient, q: Omit<AccountInsightsQuery, "breakdown">): Promise<unknown> {
+  return await c.request("/api/v1/analytics/tiktok/account-insights", { query: insightsQuery(q) });
+}
+
 /** The events we care about for connections; publishing events are not subscribed. */
 export const CONNECTION_EVENTS = ["account.connected", "account.disconnected", "analytics.synced"] as const;
 

@@ -10,6 +10,7 @@ import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import { v } from "convex/values";
 import { providerBase } from "../partnerships/providerConfig";
+import { NORTHLINE_PAGE, worldPage, worldSearch } from "./dealsWorldData";
 
 /** A fictional brand with an official creator page and a published partnerships address. */
 export const FAKE_BRAND = {
@@ -17,7 +18,7 @@ export const FAKE_BRAND = {
   name: "Northline Running",
   programUrl: "https://northlinerunning.com/creators",
   email: "creators@northlinerunning.com",
-  page: "Northline Running creator program. We work with running creators on paid content partnerships and gifted gear. US and Canada creators of any size may apply; we care about engaged audiences, not follower counts. Send your handle and one idea to creators@northlinerunning.com. Applications are reviewed within two weeks.",
+  page: NORTHLINE_PAGE,
 } as const;
 
 const fakesOn = () => process.env.EVAL_FAKES === "1" && process.env.ENVIRONMENT_NAME === "local";
@@ -32,22 +33,17 @@ export const tavily = httpAction(async (_ctx, request) => {
   if (request.headers.get("authorization") !== "Bearer fake-research") return new Response("unauthorized", { status: 401 });
   const url = new URL(request.url);
   const body = (await request.json().catch(() => ({}))) as { query?: string; urls?: string[] };
-  if (url.pathname.endsWith("/search")) {
-    const q = (body.query ?? "").toLowerCase();
-    const hit = /run|northline|creator|partnership|sponsor/.test(q);
-    return json({ query: body.query, results: hit ? [
-      { url: FAKE_BRAND.programUrl, title: "Northline Running creator program", content: "Northline Running works with running creators on paid partnerships and gifted gear. Apply by email to creators@northlinerunning.com.", score: 0.9 },
-      { url: "https://runnersworld.example.org/best-running-brands", title: "Best running brands 2026", content: "A roundup of running brands, including Northline Running, known for creator collaborations.", score: 0.4 },
-    ] : [] });
-  }
+  // 2026-09-24: the deals world (eval/dealsWorldData.ts) answers both; Northline stays first for running searches.
+  if (url.pathname.endsWith("/search")) return json({ query: body.query, results: worldSearch(body.query ?? "") });
   if (url.pathname.endsWith("/extract")) {
-    const results = (body.urls ?? []).map((u) => u === FAKE_BRAND.programUrl ? { url: u, raw_content: FAKE_BRAND.page } : null).filter(Boolean);
-    return json({ results, failed_results: (body.urls ?? []).filter((u) => u !== FAKE_BRAND.programUrl).map((u) => ({ url: u, error: "not in the fake" })) });
+    const urls = body.urls ?? [];
+    const results = urls.flatMap((u) => { const p = worldPage(u); return p ? [{ url: u, raw_content: p.content }] : []; });
+    return json({ results, failed_results: urls.filter((u) => !worldPage(u)).map((u) => ({ url: u, error: "not in the fake" })) });
   }
   return json({ error: "unknown fake path" }, 404);
 });
 
-interface Box { sent: Array<{ id: string; threadId: string; raw: string; at: number }>; replies: Array<{ id: string; threadId: string; text: string; at: number }> }
+interface Box { sent: Array<{ id: string; threadId: string; raw: string; at: number }>; replies: Array<{ id: string; threadId: string; text: string; at: number; from?: string }> }
 const KEY = "eval:fake_gmail";
 export function mimeMessageId(raw: string): string | null {
   try {
@@ -77,13 +73,22 @@ export const setBox = internalMutation({ args: { value: v.string() }, handler: a
   return null;
 } });
 /** The gauntlet plants a brand's reply in the tracked thread; the real sync reads it. */
-export const reply = internalMutation({ args: { threadId: v.string(), text: v.string() }, handler: async (ctx, a): Promise<{ id: string }> => {
+export const reply = internalMutation({ args: { threadId: v.string(), text: v.string(), from: v.optional(v.string()) }, handler: async (ctx, a): Promise<{ id: string }> => {
   const row = await ctx.db.query("syncState").withIndex("by_key", (q) => q.eq("key", KEY)).unique();
   const b: Box = row ? JSON.parse(row.value) : { sent: [], replies: [] };
   const id = `fake_reply_${b.replies.length + 1}`;
-  b.replies.push({ id, threadId: a.threadId, text: a.text, at: Date.now() });
+  b.replies.push({ id, threadId: a.threadId, text: a.text, at: Date.now(), ...(a.from ? { from: a.from } : {}) });
   if (row) await ctx.db.patch(row._id, { value: JSON.stringify(b), updatedAt: Date.now() }); else await ctx.db.insert("syncState", { key: KEY, value: JSON.stringify(b), updatedAt: Date.now() });
   return { id };
+} });
+/** Compressed time (deals world): the mailbox's clock moves with the fixture's rows, so "later" stays later. */
+export const shiftBox = internalMutation({ args: { ms: v.number() }, handler: async (ctx, a): Promise<null> => {
+  const row = await ctx.db.query("syncState").withIndex("by_key", (q) => q.eq("key", KEY)).unique();
+  if (!row) return null;
+  const b = JSON.parse(row.value) as Box;
+  const value: Box = { sent: b.sent.map((m) => ({ ...m, at: m.at - a.ms })), replies: b.replies.map((m) => ({ ...m, at: m.at - a.ms })) };
+  await ctx.db.patch(row._id, { value: JSON.stringify(value), updatedAt: Date.now() });
+  return null;
 } });
 export const resetBox = internalMutation({ args: {}, handler: async (ctx): Promise<null> => {
   const row = await ctx.db.query("syncState").withIndex("by_key", (q) => q.eq("key", KEY)).unique();
@@ -109,7 +114,7 @@ export const gmail = httpAction(async (ctx, request) => {
   if (thread) {
     const threadId = decodeURIComponent(thread[1]);
     const sent = b.sent.filter((m) => m.threadId === threadId).map((m) => ({ id: m.id, threadId, internalDate: String(m.at), labelIds: ["SENT"], snippet: "sent by the creator", payload: { mimeType: "text/plain", body: { data: b64("(sent)") }, headers: [{ name: "Message-ID", value: mimeMessageId(m.raw) ?? `<${m.id}@example.com>` }] } }));
-    const replies = b.replies.filter((m) => m.threadId === threadId).map((m) => ({ id: m.id, threadId, internalDate: String(m.at), labelIds: ["INBOX"], snippet: m.text.slice(0, 80), payload: { mimeType: "text/plain", body: { data: b64(m.text) }, headers: [{ name: "Message-ID", value: `<${m.id}@northlinerunning.com>` }] } }));
+    const replies = b.replies.filter((m) => m.threadId === threadId).map((m) => ({ id: m.id, threadId, internalDate: String(m.at), labelIds: ["INBOX"], snippet: m.text.slice(0, 80), payload: { mimeType: "text/plain", body: { data: b64(m.text) }, headers: [{ name: "Message-ID", value: `<${m.id}@${m.from?.split("@")[1] ?? "northlinerunning.com"}>` }] } }));
     return json({ id: threadId, messages: [...sent, ...replies].sort((x, y) => Number(x.internalDate) - Number(y.internalDate)) });
   }
   if (path.startsWith("messages")) {

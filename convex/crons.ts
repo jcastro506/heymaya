@@ -77,6 +77,9 @@ crons.hourly("creator status", { minuteUTC: 25 }, internal.core.timedJobs.run, {
 // Sprint 4e: connected numbers. The delta feed hourly (only what changed, fleet-wide), followers daily.
 crons.hourly("zernio delta", { minuteUTC: 25 }, internal.connections.sync.delta, {});
 crons.daily("zernio followers", { hourUTC: 4, minuteUTC: 40 }, internal.connections.sync.followers, {});
+// A1: account-level reads (follower history with gained/lost, Instagram insights and audience). Hourly
+// pass over the stalest creators not read in 20 h, bounded, so each connected account is read ~daily.
+crons.hourly("account insights", { minuteUTC: 45 }, internal.core.timedJobs.run, { job: "account insights" });
 // §24 the human cadence: the morning line and the quiet line on their clock, the evening question in its window. Every hour.
 crons.hourly("human cadence", { minuteUTC: 55 }, internal.core.timedJobs.run, { job: "human cadence" });
 

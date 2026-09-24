@@ -105,3 +105,44 @@ describe("an Instagram post read finds its video", () => {
     expect(igShortcodeToItem({ shortcode: "x", is_video: false }).video_versions).toEqual([]);
   });
 });
+
+describe("sibling coherence: a tool trace fits where it's stored (living sim, day 13)", () => {
+  it("the scout's investigation accepts a trace entry carrying its result", async () => {
+    const t = convexTest(schema, modules);
+    const sid = await t.run(async (ctx) => {
+      const c = await seedCreator(ctx, "a");
+      return await ctx.db.insert("signals", { creatorId: c, kind: "breakout", sourcePostIds: ["p"], score: 2, corroboration: { accounts: 0, soundRising: false }, verdict: "pending", why: "x", thresholdsVersion: "t", createdAt: Date.now() } as never);
+    });
+    await expect(t.mutation(internal.scout.gate.setInvestigation, { signalIds: [sid], trace: [{ tool: "sound_info", params: {}, why: "w", ms: 3, ok: true, result: "\"Espresso\" · 2M videos" }] })).resolves.toBeNull();
+  });
+});
+
+describe("an overloaded watcher falls back (living sim)", () => {
+  it("capacity errors fall back; file errors don't", async () => {
+    const { isOverloaded } = await import("../opinion");
+    expect(isOverloaded("This model is currently experiencing high demand. Spikes in demand are usually temporary.")).toBe(true);
+    expect(isOverloaded("gemini returned 503")).toBe(true);
+    expect(isOverloaded("media is 250MB, over the 200MB cap")).toBe(false);
+    expect(isOverloaded(undefined)).toBe(false);
+  });
+});
+
+describe("caption habits stay few and fresh (living sim)", () => {
+  it("only the newest five stay active", async () => {
+    const { CAPTION_HABITS_KEPT } = await import("../finish");
+    const t = convexTest(schema, modules);
+    const { a, finishes, post } = await t.run(async (ctx) => {
+      const a = await seedCreator(ctx, "a");
+      const m = await ctx.db.insert("messages", { creatorId: a, direction: "in", surface: "telegram", body: "", ts: Date.now() } as never);
+      const post = await ctx.db.insert("ownPosts", { creatorId: a, platform: "tiktok", postId: "p", url: "https://www.tiktok.com/@a/video/1", createTime: Date.now(), contentType: "video", caption: "x", hashtags: [], metrics: { views: 1, likes: 1, comments: 1, shares: 1 }, metricsAsOf: Date.now(), source: "scrape" } as never);
+      const finishes = [];
+      for (let i = 0; i < 8; i++) finishes.push(await ctx.db.insert("finishes", { creatorId: a, messageId: m, card: {}, captions: [], sounds: [], lookups: [], createdAt: Date.now() - (10 - i) * 86_400_000 }));
+      return { a, finishes, post };
+    });
+    for (const [i, f] of finishes.entries()) await t.mutation(internal.agent.finish.saveOutcome, { finishId: f, ownPostId: post, closestCaption: 0, soundUsed: null, lesson: `habit ${i}` });
+    const active = await t.run((ctx) => ctx.db.query("personalRecords").collect()).then((rs) => rs.filter((r) => r.creatorId === a && r.active).map((r) => r.text));
+    expect(active).toHaveLength(CAPTION_HABITS_KEPT);
+    expect(active.join(" ")).toContain("habit 7");
+    expect(active.join(" ")).not.toContain("habit 0");
+  });
+});

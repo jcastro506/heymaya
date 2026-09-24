@@ -28,8 +28,20 @@ export type Intent =
   | { intent: "check_in" }
   | { intent: "text" };
 
+/**
+ * Pure: does their message actually name this account? An @handle, a profile link, or a handle-shaped
+ * token (with . or _) written as-is. A brand said in words ("research arcadia socks", "what about
+ * northline?") is a deals question, not an account lookup (deals sim, 2026-09-24).
+ */
+export function namesAnAccount(text: string, handle: string): boolean {
+  const t = text.toLowerCase();
+  const h = handle.toLowerCase().replace(/^@/, "");
+  if (t.includes(`@${h}`) || new RegExp(`(tiktok\\.com/@|instagram\\.com/)${h.replace(/[.]/g, "\\.")}`).test(t)) return true;
+  return /[._]/.test(h) && new RegExp(`(^|[^a-z0-9._])${h.replace(/[.]/g, "\\.")}($|[^a-z0-9._])`).test(t);
+}
+
 export const CLASSIFY_PROMPT = `You label one message a content creator sent to their assistant. Pick exactly one label:
-- "profile_ask": they are asking about a specific OTHER account by handle (why it's growing, what it's doing, whether to copy it). Give the handle without @ and the platform (instagram if they say ig/insta/reels or the handle style suggests it, else tiktok). Never their own handle.
+- "profile_ask": they are asking about a specific OTHER creator's account by its @handle (not a brand or company they want to research, pitch, work with or get paid by: that is "text") (why it's growing, what it's doing, whether to copy it). Give the handle without @ and the platform (instagram if they say ig/insta/reels or the handle style suggests it, else tiktok). Never their own handle.
 - "recall": they want something from earlier: an idea she sent, something they saved, a thing she said or they told her.
 - "opinion_ask": they are asking for her judgment on a plan or a hook in words (no link, no file), e.g. "should i post at 7", "is this hook good: …".
 - "calendar_answer": they are answering a question she asked about a filming block or a date.
@@ -38,7 +50,7 @@ export const CLASSIFY_PROMPT = `You label one message a content creator sent to 
   - "tone": "coach" | "friend" | "blunt" (be blunter → blunt; be nicer/softer → friend; push me → coach).
   - "add_admired": watch an account: "handle" without @, "platform".
   - "stop_watching": stop watching an account: "handle".
-  - "niche": they are redefining WHAT THEY MAKE ("i do gear reviews now", "going all in on travel"): "text" in their words. NOT a rule about how she should behave ("never suggest talking heads", "don't text me mornings", "i hate skits") and NOT a taste statement: those are "text"; she keeps them as rules herself.
+  - "niche": they are redefining WHAT THEY MAKE, as a decision ("i do gear reviews now", "going all in on travel"): "text" is the new lane in 3-8 words, keeping what they still make ("running, now leaning travel"), never their sentence. A feeling or a leaning ("i've been liking the travel stuff more lately") is NOT a niche change: that is "text", and she talks about it with them. NOT a rule about how she should behave ("never suggest talking heads", "don't text me mornings", "i hate skits") and NOT a taste statement: those are "text"; she keeps them as rules herself.
 - "moment": they are somewhere or something is happening NOW and they want to make content about it ("i'm at this ramen place, want to do something", "we're at the start line, ideas?", "just got the medal").
 - "edit_idea": they want to change the idea she JUST sent (her last message), not one they describe from earlier ("the humidity one", "the one from tuesday" → "text": she finds it herself): give "field" (hook | lengthSec | onScreenText | sound | shotList | caption) and "text" (the new value, or the instruction in their words if it is a rewrite like "make the hook meaner").
 - "drop_idea": scrap the idea she JUST sent ("scrap that", "nah not that one", "kill it"). Scrapping, saving, restoring or planning an EARLIER idea they describe is "text".
@@ -89,7 +101,7 @@ export async function classifyText(ctx: ActionCtx, input: { creatorId: Id<"creat
     if (j.intent === "profile_ask") {
       const handle = String(j.handle ?? "").replace(/^@/, "").trim().toLowerCase();
       const mine = [input.ownHandles.tiktok, input.ownHandles.instagram].filter(Boolean).map((h) => h!.toLowerCase().replace(/^@/, ""));
-      if (!handle || mine.includes(handle)) return { intent: "text" };
+      if (!handle || mine.includes(handle) || !namesAnAccount(input.text, handle)) return { intent: "text" };
       return { intent: "profile_ask", platform: j.platform === "instagram" ? "instagram" : "tiktok", handle };
     }
     if (j.intent === "recall" || j.intent === "opinion_ask" || j.intent === "calendar_answer") return { intent: j.intent };

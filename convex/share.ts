@@ -23,7 +23,8 @@ import { parseLink } from "./agent/inbound";
 import { inQuietHours } from "./scout/gate";
 import { THRESHOLDS } from "./config/thresholds";
 import { unseenIdeas } from "./core/unseen";
-import { coverForUrl } from "./media";
+import { coverForUrl, coverKey, mediaUrl } from "./media";
+import { settled } from "./core/normal";
 
 export const SHARES_PER_DAY = 25; // a person sharing, not a script
 export const SHARE_DEDUPE_MS = 10 * 60_000;
@@ -167,27 +168,63 @@ export const devMintShareToken = internalMutation({
 
 // ------------------------------------------------------------------ the widget (M6)
 
+export interface WidgetBlock { kind: string; start: number; end: number; title: string; hook: string | null; ideaId: string | null; booked: boolean }
+export interface WidgetPost { id: string; platform: string; createTime: number; views: number; multiple: number | null; settled: boolean; cover: string | null }
+
 export interface WidgetData {
-  nextBlock: { kind: string; start: number; title: string; hook: string | null; ideaId: string | null; booked: boolean } | null;
-  bestIdea: { id: string; hook: string; cover: string | null; isNew: boolean } | null;
+  nextBlock: WidgetBlock | null;
+  /** The next two filming blocks (confirmed or moved first, then proposed), soonest first. */
+  blocks: WidgetBlock[];
+  /** `fitWhy` is the idea row's own reason; `coverPlatform` is the platform of the evidence post the cover came from. */
+  bestIdea: { id: string; hook: string; cover: string | null; coverPlatform: string | null; fitWhy: string | null; isNew: boolean } | null;
+  /** Their last three posts, newest first. `multiple` is the stored views ÷ their normal (core/normal.ts), null until there is a normal; `settled` false means it is still a lower bound. */
+  lastPosts: WidgetPost[];
   newIdeas: number;
   asOf: number;
 }
 
-/** What the home-screen widget shows. Read-only, the creator's own rows only. */
+const WIDGET_BLOCKS = 2;
+const WIDGET_POSTS = 3;
+
+/** What the home-screen widget shows. Read-only, the creator's own rows only; nothing here that isn't a stored fact. */
 export const widgetData = internalQuery({
   args: { creatorId: v.id("creators") },
   handler: async (ctx, a): Promise<WidgetData> => {
     const now = Date.now();
-    const blocks = ((await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("start", now)).take(20)) as Doc<"calendarBlocks">[]).filter((b) => b.status !== "deleted");
-    const block = blocks.find((b) => b.kind === "film" && (b.status === "confirmed" || b.status === "moved")) ?? blocks.find((b) => b.kind === "film") ?? null;
-    const blockIdea = block?.ideaId ? ((await ctx.db.get(block.ideaId)) as Doc<"ideas"> | null) : null;
+    const upcoming = ((await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("start", now)).take(20)) as Doc<"calendarBlocks">[])
+      .filter((b) => b.status !== "deleted" && b.kind === "film");
+    const firm = (b: Doc<"calendarBlocks">) => b.status === "confirmed" || b.status === "moved";
+    const chosen = [...upcoming.filter(firm), ...upcoming.filter((b) => !firm(b))].slice(0, WIDGET_BLOCKS).sort((x, y) => x.start - y.start);
+    const hookOf = (i: Doc<"ideas">) => ((i.version as { hook?: string } | undefined)?.hook ?? i.messageText).slice(0, 90);
+    const blockView = async (b: Doc<"calendarBlocks">): Promise<WidgetBlock> => {
+      const idea = b.ideaId ? ((await ctx.db.get(b.ideaId)) as Doc<"ideas"> | null) : null;
+      const ours = idea && idea.creatorId === a.creatorId ? idea : null;
+      return { kind: b.kind, start: b.start, end: b.end, title: b.title.replace(/^(film|edit|post)( \(experiment\))?: /, ""), hook: ours ? hookOf(ours) : null, ideaId: ours ? String(ours._id) : null, booked: Boolean(b.consentAt) };
+    };
+    const blocks = await Promise.all(chosen.map(blockView));
+    // The headline block: the first firm one, else the soonest (unchanged from M6).
+    const headline = upcoming.find(firm) ?? upcoming[0] ?? null;
+    const nextBlock = headline ? await blockView(headline) : null;
+
     const unseen = await unseenIdeas(ctx, a.creatorId, now);
     const open = unseen[0] ?? ((await ctx.db.query("ideas").withIndex("by_creator_status", (q) => q.eq("creatorId", a.creatorId).eq("status", "sent")).order("desc").first()) as Doc<"ideas"> | null);
-    const hookOf = (i: Doc<"ideas">) => ((i.version as { hook?: string } | undefined)?.hook ?? i.messageText).slice(0, 90);
+    const link = open?.evidenceLinks[0] ?? null;
+    const coverPlatform = link ? (link.includes("instagram.com") ? "instagram" : link.includes("tiktok.com") ? "tiktok" : null) : null;
+    const fitWhy = open?.fitWhy.trim() ? open.fitWhy.trim().slice(0, 140) : null;
+
+    const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(WIDGET_POSTS)) as Doc<"ownPosts">[];
+    const lastPosts = await Promise.all(posts.map(async (p): Promise<WidgetPost> => ({
+      id: String(p._id), platform: p.platform, createTime: p.createTime, views: p.metrics.views,
+      multiple: typeof p.multiple === "number" && Number.isFinite(p.multiple) ? p.multiple : null,
+      settled: settled(p, now),
+      cover: await mediaUrl(ctx, p.platform, "cover", coverKey(p.platform, p.url, p.postId)),
+    })));
+
     return {
-      nextBlock: block ? { kind: block.kind, start: block.start, title: block.title.replace(/^(film|edit|post)( \(experiment\))?: /, ""), hook: blockIdea ? hookOf(blockIdea) : null, ideaId: block.ideaId ? String(block.ideaId) : null, booked: Boolean(block.consentAt) } : null,
-      bestIdea: open ? { id: String(open._id), hook: hookOf(open), cover: open.evidenceLinks[0] ? await coverForUrl(ctx, open.evidenceLinks[0]) : null, isNew: unseen.some((u) => u._id === open._id) } : null,
+      nextBlock,
+      blocks,
+      bestIdea: open ? { id: String(open._id), hook: hookOf(open), cover: link ? await coverForUrl(ctx, link) : null, coverPlatform, fitWhy, isNew: unseen.some((u) => u._id === open._id) } : null,
+      lastPosts,
       newIdeas: unseen.length,
       asOf: now,
     };
