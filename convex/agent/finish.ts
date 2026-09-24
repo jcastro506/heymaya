@@ -67,6 +67,9 @@ Sounds: one to three, each with why it fits THIS video (the mood, the pace, the 
 - Instagram: you can't always check Instagram audio. Name the track to search in Reels audio and say to check it's there.
 
 Their words on the draft may say the platform ("for insta"); write for that platform. Otherwise, for where they post.
+If it's a paid or gifted post (their words say sponsored, paid, #ad, a brand deal), the platformNote reminds them to turn on the label: TikTok's content disclosure toggle, Instagram's paid partnership label.
+platformNote is only for practical things: that disclosure label, where to find a sound, a licensing warning. Never a claim about what the algorithm rewards; you haven't checked that.
+One "keep your own audio" line at most; don't list the same advice twice under two names.
 Output ONLY JSON:
 {"reaction": "≤200: one line as a viewer, the moment that got you, named from the card", "read": "≤240 or ''", "captions": [{"text": "≤300, exactly as they'd paste it", "shape": "their-usual|question|search", "why": "≤160: why this one, for them (kept for when they ask)"}], "sounds": [{"name": "≤80: 'title by author', or 'your own audio'", "clipId": "the TikTok clip id you looked up, or ''", "platform": "tiktok|instagram|both", "source": "their-own-audio|already-in-the-clip|watched-accounts|their-past-post|trending", "why": "≤120", "howToUse": "≤100"}], "platformNote": "≤160 or ''"}`;
 
@@ -134,6 +137,13 @@ export function backedSounds(sounds: Out["sounds"], trace: Array<Pick<ToolCallRe
   return { kept, dropped };
 }
 
+/** Pure: "keep your own audio" and "keep the audio from your draft" are one piece of advice; keep the first. */
+export function oneOwnAudio<T extends { name: string; source: string }>(sounds: T[]): T[] {
+  const own = (x: T) => x.source === "their-own-audio" || x.source === "already-in-the-clip" || /own audio|original audio|audio (from|already)|already on it/i.test(x.name);
+  let seen = false;
+  return sounds.filter((x) => (own(x) ? (seen ? false : (seen = true)) : true));
+}
+
 /** Pure: the text she sends. Captions as they'd paste them; sounds with their few-word reason. */
 export function finishText(o: { reaction: string; read?: string; captions: Out["captions"]; sounds: Array<Out["sounds"][number] & { licensedForBusiness?: boolean }>; platformNote?: string }): string {
   const parts: string[] = [];
@@ -192,18 +202,22 @@ export const run = internalAction({
       await reply("i watched it but my caption ideas came out wrong. send it again in a minute?");
       return { ok: true, reason: `no usable finish: ${inv.ended}` };
     }
-    // The critic reads the captions against their own lines: generic or cheesy gets one rewrite.
-    const verdict = await critique(ctx, { creatorId: creator._id, kind: "captions", text: out.captions.map((c, i) => `${i + 1}. ${c.text}`).join("\n"), evidence: { card, theirVoice: g.voice.slice(0, 4000) }, voice: (creator.dossier as { voice?: unknown } | undefined)?.voice ?? {}, directives: directives.map((d) => d.verbatim) });
+    // The critic reads the captions against their own lines (generic or cheesy gets one rewrite),
+    // and the sound notes + platform note for claims nobody checked.
+    const verdict = await critique(ctx, { creatorId: creator._id, kind: "captions (numbered caption options and sound lines are the requested format, not a list to fault)", text: `${out.captions.map((c, i) => `${i + 1}. ${c.text}`).join("\n")}\n\nsounds: ${(out.sounds ?? []).map((s0) => `${s0.name}: ${s0.why}`).join(" / ")}\n${out.platformNote ?? ""}`, evidence: { card, theirVoice: g.voice.slice(0, 4000) }, voice: (creator.dossier as { voice?: unknown } | undefined)?.voice ?? {}, directives: directives.map((d) => d.verbatim) });
     let criticSkipped = verdict.skipped === true;
     if (!verdict.pass) {
       await ctx.runMutation(internal.eval.expertBench.saveTrace, { creatorId: creator._id, trace: [{ tool: "critic", ok: false, result: `captions: ${verdict.problems.join(", ")} (${verdict.note}) | ${out.captions.map((c) => c.text).join(" / ").slice(0, 600)}` }] }).catch(() => undefined);
       const rw = await callModel(ctx, { creatorId: creator._id, purpose: "finish_rewrite", model: REGISTRY.writer.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `${user}\n\nYour captions were rejected for: ${verdict.problems.join(", ")} (${verdict.note}). Rewrite only the captions, fixing exactly that, keeping three different kinds. Output ONLY JSON: {"captions": [{"text": "", "shape": "", "why": ""}]}\n\nPrevious:\n${JSON.stringify(out.captions)}` }], temperature: 0.6, maxTokens: 900, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
       const fixed = rw.ok ? parseJson<{ captions: Out["captions"] }>(rw.content) : null;
       if (fixed?.captions?.length && fixed.captions.length >= 2) out = { ...out, captions: fixed.captions };
+      // A platform note the critic flagged is dropped rather than rewritten: it was optional.
+      if (verdict.problems.some((p) => p === "unchecked_world_fact" || p === "unsupported_claim")) out = { ...out, platformNote: "" };
       else criticSkipped = true;
     }
     const captions = out.captions.slice(0, 3).map((c) => ({ text: String(c.text ?? "").slice(0, 400), shape: String(c.shape ?? ""), why: String(c.why ?? "").slice(0, 200) })).filter((c) => c.text.trim());
-    const { kept, dropped } = backedSounds(out.sounds, inv.trace);
+    const { kept: backed, dropped } = backedSounds(out.sounds, inv.trace);
+    const kept = oneOwnAudio(backed);
     const sounds = kept.length ? kept : [{ name: "your own audio", platform: "both", source: "their-own-audio", why: card.voiceCarriesIt ? "your words are the point here" : "nothing i checked fit this one better", howToUse: "" }];
     await ctx.runMutation(internal.agent.finish.record, {
       creatorId: creator._id, messageId: a.messageId, fileId: target.fileId ?? undefined, card,

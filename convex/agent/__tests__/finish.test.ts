@@ -11,7 +11,7 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { backedSounds, finishText } from "../finish";
+import { backedSounds, finishText, oneOwnAudio } from "../finish";
 import { soundFacts } from "../../integrations/scrapeCreators/platforms/tiktok";
 import { slimForCache } from "../../reads/read";
 
@@ -44,6 +44,13 @@ describe("a named sound needs a lookup this turn", () => {
     const r = backedSounds([s("keep the song that's already on it", "", "already-in-the-clip")], []);
     expect(r.kept).toHaveLength(1);
     expect(r.dropped).toEqual([]);
+  });
+});
+
+describe("one piece of advice once", () => {
+  it("two 'keep your audio' lines collapse to the first; real sounds stay", () => {
+    const out = oneOwnAudio([s("Keep audio from draft", "", "already-in-the-clip"), s("your own audio", "", "their-own-audio"), s("Espresso", "1")]);
+    expect(out.map((x) => x.name)).toEqual(["Keep audio from draft", "Espresso"]);
   });
 });
 
