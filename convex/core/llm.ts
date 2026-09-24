@@ -164,12 +164,16 @@ export async function callModel(
     // A timeout is NOT the budget bug. Saying so sent me looking at max_tokens for a
     // latency problem; the two need opposite fixes.
     console.error(`[llm] ${input.purpose}: ${input.model} timed out. This is latency, not the token budget — the fallback takes it from here.`);
-  } else if (!result.ok && isReasoningModel(input.model)) {
+  } else if (!result.ok && isReasoningModel(input.model) && /empty completion/i.test(result.reason)) {
+    // Only an EMPTY completion is the budget trap; a 5xx is the vendor, and blaming max_tokens for it
+    // sent the reader to the wrong fix (outage drill, 2026-09-24).
     console.error(
       `[llm] ${input.purpose}: ${result.reason} — ${input.model} reasons before ` +
         `answering and bills it to max_tokens. Requested ${input.maxTokens ?? "default"} ` +
         `+ ${reasoningAllowanceFor(input.maxTokens ?? 0)} allowance. If this repeats, the content budget is too small.`
     );
+  } else if (!result.ok) {
+    console.error(`[llm] ${input.purpose}: ${input.model} failed: ${result.reason.slice(0, 200)}`);
   }
 
   // ⚠️ Recorded on failure too. A call that timed out mid-stream, or returned

@@ -14,7 +14,7 @@ import { isOurSide, LINK_OUR_SIDE, LINK_UNOPENABLE, WATCH_OUR_SIDE } from "../..
 import { TURN_DEAD_TEXT } from "../../core/jobs";
 import { readHealth } from "../../scout/sampler";
 import { resetDefaultClient } from "../../integrations/scrapeCreators/client";
-import { resetFixtureClients } from "../../reads/read";
+import { isOutOfCredits, resetFixtureClients } from "../../reads/read";
 
 const ENV_KEYS = ["ENVIRONMENT_NAME", "SCRAPE_FIXTURES", "MODEL_FAKE", "SCRAPE_CREATORS_API_KEY"] as const;
 let saved: Record<string, string | undefined> = {};
@@ -33,7 +33,7 @@ async function drillWorld() {
   const creatorId = await t.run((ctx) => seedCreator(ctx, "drill", { clerkUserId: "eval-run:drill-test", handles: { tiktok: "drill.tt", instagram: "drill.ig" }, quietHours: { start: "00:00", end: "00:00" }, dossier: { keywords: ["marathon training"], persona: { summary: "runner" } }, plan: { status: "comped", tier: "partner", founding: false } }));
   return { t, creatorId };
 }
-const outbound = async (t: ReturnType<typeof convexTest>, creatorId: Id<"creators">) => (await t.run((ctx) => ctx.db.query("messages").withIndex("by_creator", (q) => q.eq("creatorId", creatorId)).collect())).filter((m) => m.direction === "out");
+const outbound = async (t: ReturnType<typeof convexTest>, creatorId: Id<"creators">) => (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.creatorId === creatorId && m.direction === "out");
 
 describe("a vendor outage is said as ours, in plain words, never blamed on their link", () => {
   it("classifies the failure", () => {
@@ -80,8 +80,8 @@ describe("the classifier's fallback asks the fallback model", () => {
     await t.mutation(internal.eval.faults.set, { faults: ["classifier_5xx"], creatorIds: [creatorId] });
     const { messageId } = await t.mutation(internal.core.messages.recordInbound, { creatorId, surface: "telegram", body: "what should i post this week?" });
     await t.action(internal.agent.converse.run, { creatorId, messageId });
-    const calls = (await t.run((ctx) => ctx.db.query("costEvents").collect())).filter((c) => c.purpose === "classify");
-    expect(calls.map((c) => c.resource)).toEqual([REGISTRY.screener.primary, REGISTRY.screener.fallback]);
+    const calls = (await t.run((ctx) => ctx.db.query("costEvents").collect())).filter((c) => c.kind.startsWith("classify:"));
+    expect(calls.map((c) => c.kind)).toEqual([`classify:${REGISTRY.screener.primary}`, `classify:${REGISTRY.screener.fallback}`]);
     expect(calls.every((c) => c.succeeded === false)).toBe(true);
     expect((await outbound(t, creatorId)).some((m) => m.dedupeKey === `reply:${messageId}`)).toBe(true);
   });
@@ -163,6 +163,23 @@ describe("fleet reads write the health row the creator status has always read", 
     expect(health.map((h) => [h.vendor, h.check, h.ok])).toEqual([["openrouter", "scout:drill", false]]);
     expect((await t.run((ctx) => ctx.db.query("signals").collect())).map((s) => s.verdict)).toEqual(["pending"]);
     expect(await t.run((ctx) => ctx.db.query("ideas").collect())).toHaveLength(0);
+  });
+});
+
+describe("out of credits reaches the operator on the first 402", () => {
+  it("recognises the vendor's 402 and nothing else", () => {
+    expect(isOutOfCredits("read(post.info) failed: ScrapeCreators HTTP 402 for https://api.scrapecreators.com/x: {}")).toBe(true);
+    expect(isOutOfCredits("ScrapeCreators HTTP 404 for https://api.scrapecreators.com/x")).toBe(false);
+    expect(isOutOfCredits("ScrapeCreators HTTP 4021 for x")).toBe(false);
+  });
+
+  it("a real (non-drill) 402 writes one credit-balance failure per ten minutes, however many reads fail", async () => {
+    const t = convexTest(schema, modules);
+    const first = await t.mutation(internal.core.smoke.recordFailureOnce, { vendor: "scrapecreators", check: "credit-balance", withinMs: 600_000 });
+    const second = await t.mutation(internal.core.smoke.recordFailureOnce, { vendor: "scrapecreators", check: "credit-balance", withinMs: 600_000 });
+    expect([first, second]).toEqual([true, false]);
+    const f = await t.query(internal.core.alerts.findings, { since: 0, now: Date.now() });
+    expect(f.smokeFailed).toEqual([{ vendor: "scrapecreators", check: "credit-balance" }]);
   });
 });
 

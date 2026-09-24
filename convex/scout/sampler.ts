@@ -202,6 +202,7 @@ export const run = internalAction({
     const all = await ctx.runQuery(internal.scout.sampler.distinctTracked, {});
     const accounts = args.creatorId ? all.filter((a) => a.rows.some((r) => r.creatorId === args.creatorId)) : all;
     let signals = 0, failed = 0, gone = 0;
+    let firstError = "";
     for (const acct of accounts) {
       try {
         const r = await ctx.runAction(internal.reads.read.read, { kind: "account.posts", params: { platform: acct.platform, handle: acct.handle, sort: "latest", slot }, creatorId: args.creatorId });
@@ -216,6 +217,7 @@ export const run = internalAction({
       } catch (error) {
         failed += 1;
         const detail = error instanceof Error ? error.message : String(error);
+        firstError ||= detail.slice(0, 200);
         console.error(`[sampler] ${acct.platform}/${acct.handle}: ${detail}`);
         /**
          * An account that no longer exists never will again. `status: "gone"` was in the
@@ -233,7 +235,7 @@ export const run = internalAction({
     if (health) {
       // A pass scoped to one creator is not the fleet's eyes: its row never makes every creator apologise.
       const fault = args.creatorId ? await faultFor(ctx, args.creatorId, "scrapecreators", { count: false }) : null;
-      await ctx.runMutation(internal.core.smoke.record, { vendor: "scrapecreators", check: drillCheck(args.creatorId ? "read:creator" : "read", fault), ok: health.ok, detail: { job: "sampler", ...(args.creatorId ? { creatorId: args.creatorId } : {}), summary: health.detail } });
+      await ctx.runMutation(internal.core.smoke.record, { vendor: "scrapecreators", check: drillCheck(args.creatorId ? "read:creator" : "read", fault), ok: health.ok, detail: { job: "sampler", ...(args.creatorId ? { creatorId: args.creatorId } : {}), summary: health.detail, ...(firstError ? { firstError } : {}) } });
     }
     return { accounts: accounts.length, signals, failed, gone };
   },

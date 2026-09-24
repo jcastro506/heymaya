@@ -124,6 +124,7 @@ export const run = internalAction({
     const now = Date.now();
     const keywords = args.creatorId ? await ctx.runQuery(internal.scout.sweep.keywordsFor, { creatorId: args.creatorId }) : await ctx.runQuery(internal.scout.sweep.distinctKeywords, {});
     let signals = 0, failed = 0;
+    let firstError = "";
     for (const { keyword, creatorIds } of keywords) {
       for (const platform of ["tiktok", "instagram"] as const) {
         try {
@@ -142,6 +143,7 @@ export const run = internalAction({
           }
         } catch (error) {
           failed += 1;
+          firstError ||= (error instanceof Error ? error.message : String(error)).slice(0, 200);
           console.error(`[sweep] ${platform}/${keyword}: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
@@ -149,7 +151,7 @@ export const run = internalAction({
     const health = readHealth(keywords.length * 2, failed);
     if (health) {
       const fault = args.creatorId ? await faultFor(ctx, args.creatorId, "scrapecreators", { count: false }) : null;
-      await ctx.runMutation(internal.core.smoke.record, { vendor: "scrapecreators", check: drillCheck(args.creatorId ? "read:creator" : "read", fault), ok: health.ok, detail: { job: "sweep", ...(args.creatorId ? { creatorId: args.creatorId } : {}), summary: health.detail } });
+      await ctx.runMutation(internal.core.smoke.record, { vendor: "scrapecreators", check: drillCheck(args.creatorId ? "read:creator" : "read", fault), ok: health.ok, detail: { job: "sweep", ...(args.creatorId ? { creatorId: args.creatorId } : {}), summary: health.detail, ...(firstError ? { firstError } : {}) } });
     }
     return { keywords: keywords.length, signals, failed };
   },

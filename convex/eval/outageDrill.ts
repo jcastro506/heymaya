@@ -100,6 +100,8 @@ export function judgeCell(c: Cell): Verdict {
   why.push(...c.badCache.map((b) => `cached wrongly: ${b}`));
   why.push(...c.wrongMarks.map((m) => `marked wrongly: ${m}`));
   const operatorSaw = c.operator.deadJobs.length > 0 || c.operator.health.length > 0;
+  // Out of credits stops every read at once and only the operator can fix it: every cell that hit it must reach them.
+  if (Object.keys(c.hits).some((k) => k.startsWith("scrape_402")) && !c.operator.health.some((h) => h.startsWith("scrapecreators/credit-balance"))) why.push("ScrapeCreators was out of credits and the operator was not told");
   if (FLEET.has(c.flow) && c.ended === "named_failure" && !operatorSaw && c.heard.length === 0) why.push("a fleet job failed and neither the creator nor the operator was told");
   return { pass: why.length === 0, why };
 }
@@ -315,7 +317,7 @@ export interface Observed {
   insights: Array<{ kind: string; status: string }>;
   drafts: Array<{ status: string }>;
   fakeSent: number;
-  cache: Array<{ ref: string; stored: boolean; freshEmpty: boolean; error: boolean }>;
+  cache: Array<{ ref: string; stored: boolean; freshEmpty: boolean; error: boolean; rememberedLong: boolean }>;
 }
 
 const HEALTH_VENDORS = ["scrapecreators", "openrouter", "gemini", "zernio", "tavily", "gmail"];
@@ -357,7 +359,9 @@ export const observe = internalQuery({
       const row = await ctx.db.query("readCache").withIndex("by_key", (q) => q.eq("kind", kind).eq("key", key)).unique();
       if (!row) continue;
       const fresh = row.value !== undefined && row.expiresAt > Date.now();
-      out.cache.push({ ref: `${kind}`, stored: (row.fetchedAt ?? 0) >= a.since, freshEmpty: fresh && isEmptyValue(row.value), error: Boolean(row.error) });
+      // A vendor outage (402/429/5xx/hang) must be retried soon; only "no such account" is worth a day (reads/cache.ts).
+      const rememberedLong = row.value === undefined && Boolean(row.error) && row.expiresAt - Date.now() > 10 * 60_000;
+      out.cache.push({ ref: `${kind}`, stored: (row.fetchedAt ?? 0) >= a.since, freshEmpty: fresh && isEmptyValue(row.value), error: Boolean(row.error), rememberedLong });
     }
     return out;
   },
@@ -401,7 +405,7 @@ export function assessCell(input: { scenario: string; flow: Flow; faults: Fault[
   for (const [k, n] of seenBodies) if (n > 1) duplicates.push(`${n}× ${k.slice(0, 80)}`);
   if (o.fakeSent > 1) duplicates.push(`${o.fakeSent} emails reached the (fake) mailbox`);
 
-  const badCache = o.cache.filter((c) => c.stored || c.freshEmpty).map((c) => `${c.ref}: ${c.stored ? "a value was stored during the failure" : "a fresh empty value"}`);
+  const badCache = o.cache.filter((c) => c.stored || c.freshEmpty || c.rememberedLong).map((c) => `${c.ref}: ${c.stored ? "a value was stored during the failure" : c.freshEmpty ? "a fresh empty value" : "an outage remembered like a missing account (skipped for a day)"}`);
 
   const wrongMarks: string[] = [];
   if (input.before && input.after) {
