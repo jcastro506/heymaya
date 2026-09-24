@@ -773,7 +773,7 @@ export default defineSchema({
   partnershipOpportunities: defineTable({ creatorId: v.id("creators"), brandDomain: v.string(), data: v.any(), updatedAt: v.number() }).index("by_creator", ["creatorId"]).index("by_brand", ["creatorId", "brandDomain"]),
   partnershipDrafts: defineTable({ creatorId: v.id("creators"), opportunityId: v.id("partnershipOpportunities"), data: v.any(), updatedAt: v.number() }).index("by_creator", ["creatorId"]).index("by_opportunity", ["opportunityId"]),
   partnershipEvents: defineTable({ creatorId: v.id("creators"), opportunityId: v.id("partnershipOpportunities"), key: v.string(), kind: v.string(), text: v.string(), at: v.number() }).index("by_creator", ["creatorId"]).index("by_opportunity", ["opportunityId"]).index("by_key", ["creatorId", "key"]),
-  partnershipResearch: defineTable({ creatorId: v.id("creators"), month: v.string(), calls: v.number(), data: v.any(), updatedAt: v.number() }).index("by_creator", ["creatorId"]).index("by_month", ["creatorId", "month"]),
+  partnershipResearch: defineTable({ creatorId: v.id("creators"), month: v.string(), calls: v.number(), data: v.any(), queries: v.optional(v.array(v.object({ q: v.string(), at: v.number() }))), updatedAt: v.number() }).index("by_creator", ["creatorId"]).index("by_month", ["creatorId", "month"]),
   partnershipMailboxes: defineTable({ creatorId: v.id("creators"), email: v.string(), tokenRef: v.string(), generation: v.string(), attention: v.optional(v.string()), updatedAt: v.number() }).index("by_creator", ["creatorId"]),
 
   // -------------------------------------------------------------- vendorHealth

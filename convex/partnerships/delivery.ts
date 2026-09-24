@@ -4,7 +4,7 @@ import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { active, event, ownedOpportunity, profile } from "./store";
-import { CLOSED, Draft, Opportunity, email, line, followUpEligible, type DraftData } from "./contracts";
+import { CLOSED, Draft, Opportunity, email, line, followUpEligible, nextFollowUpAt, spentWithoutReply, type DraftData } from "./contracts";
 import { access, gmail } from "./mailbox";
 import { deliverNow } from "../core/scheduler";
 
@@ -55,7 +55,9 @@ export const finish = internalMutation({ args: { creatorId: v.id("creators"), dr
   if (a.result === "sent") {
     const { data: o } = await ownedOpportunity(ctx, a.creatorId, row.opportunityId);
     const inboundAfterDraft = !!o.lastInboundAt && o.lastInboundAt >= d.createdAt;
-    await ctx.db.patch(row.opportunityId, { data: Opportunity.parse({ ...o, status: CLOSED.has(o.status) || inboundAfterDraft ? o.status : "contacted", threadId: a.threadId, mailboxGeneration: d.mailboxGeneration, lastMessageId: inboundAfterDraft ? o.lastMessageId : `<maya-${row._id}@${email.parse(d.sender).split("@")[1]}>`, lastOutboundAt: now, followUpBasis: "no_reply", followUpAt: inboundAfterDraft || CLOSED.has(o.status) ? undefined : now + 7 * 86400000 }), updatedAt: now });
+    // A send into a thread already contacted, with no reply since, is a follow-up (§8.3).
+    const isFollowUp = o.status === "contacted" && !!o.lastOutboundAt && (!o.lastInboundAt || o.lastInboundAt < o.lastOutboundAt);
+    await ctx.db.patch(row.opportunityId, { data: Opportunity.parse({ ...o, status: CLOSED.has(o.status) || inboundAfterDraft ? o.status : "contacted", threadId: a.threadId, mailboxGeneration: d.mailboxGeneration, lastMessageId: inboundAfterDraft ? o.lastMessageId : `<maya-${row._id}@${email.parse(d.sender).split("@")[1]}>`, lastOutboundAt: now, followUpBasis: "no_reply", followUpCount: isFollowUp ? (o.followUpCount ?? 0) + 1 : (o.followUpCount ?? 0), followUpAt: inboundAfterDraft || CLOSED.has(o.status) ? undefined : nextFollowUpAt(isFollowUp ? (o.followUpCount ?? 0) + 1 : (o.followUpCount ?? 0), now) }), updatedAt: now });
   }
 } });
 export const send = internalAction({ args: { creatorId: v.id("creators"), draftId: v.id("partnershipDrafts") }, handler: async (ctx, a) => {
@@ -153,6 +155,11 @@ export const checkOne = internalAction({ args: { creatorId: v.id("creators"), op
       if (!fresh.opportunity) return;
       const data = Opportunity.parse(fresh.opportunity.data);
       if (CLOSED.has(data.status)) return;
+      // §8.3: three touches and no reply closes it, once, and it's never contacted again unless they ask.
+      if (spentWithoutReply(data, Date.now())) {
+        await ctx.runMutation(internal.partnerships.delivery.closeNoResponse, { creatorId: a.creatorId, opportunityId: a.opportunityId });
+        return;
+      }
       const rails = await ctx.runQuery(internal.scout.gate.railsOnly, { creatorId: a.creatorId, now: Date.now() });
       if (!rails?.ok) return;
       const unansweredReply = !!data.lastInboundAt && data.lastInboundAt >= (data.lastOutboundAt ?? 0);
@@ -192,4 +199,13 @@ export const reconcile = internalAction({ args: { creatorId: v.id("creators"), o
     else if (d.status === "sending") await ctx.runMutation(internal.partnerships.delivery.finish, { creatorId: a.creatorId, draftId: row._id, result: "unknown" });
     // Search misses are not proof of failure. Keep unknown for manual review.
   }
+} });
+
+/** §8.3: after the last follow-up with no reply, the relationship closes as no response; they hear once. */
+export const closeNoResponse = internalMutation({ args: { creatorId: v.id("creators"), opportunityId: v.id("partnershipOpportunities") }, handler: async (ctx, a) => {
+  const { data: o } = await ownedOpportunity(ctx, a.creatorId, a.opportunityId);
+  if (!spentWithoutReply(o, Date.now())) return;
+  await ctx.db.patch(a.opportunityId, { data: Opportunity.parse({ ...o, status: "closed", closedReason: "no_response", followUpAt: undefined }), updatedAt: Date.now() });
+  await event(ctx, a.creatorId, a.opportunityId, `closed:no_response:${a.opportunityId}`, "closed", "No reply after three touches; closed as no response.");
+  await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: `no word from ${o.brand} after three tries, so i've closed that one. say the word if you ever want to try them again.`, dedupeKey: `partner-closed:${a.opportunityId}`, proactive: true, kind: "partnership" });
 } });

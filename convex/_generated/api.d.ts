@@ -135,6 +135,7 @@ import type * as integrations_scrapeCreators_platforms_tiktok from "../integrati
 import type * as integrations_scrapeCreators_schemas from "../integrations/scrapeCreators/schemas.js";
 import type * as integrations_telegram_client from "../integrations/telegram/client.js";
 import type * as integrations_zernio_index from "../integrations/zernio/index.js";
+import type * as knowledge_platforms from "../knowledge/platforms.js";
 import type * as lib_encryption from "../lib/encryption.js";
 import type * as lib_functions from "../lib/functions.js";
 import type * as lib_scheduleRow from "../lib/scheduleRow.js";
@@ -323,6 +324,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/scrapeCreators/schemas": typeof integrations_scrapeCreators_schemas;
   "integrations/telegram/client": typeof integrations_telegram_client;
   "integrations/zernio/index": typeof integrations_zernio_index;
+  "knowledge/platforms": typeof knowledge_platforms;
   "lib/encryption": typeof lib_encryption;
   "lib/functions": typeof lib_functions;
   "lib/scheduleRow": typeof lib_scheduleRow;

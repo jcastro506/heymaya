@@ -13,7 +13,11 @@ export const run = internalAction({
     if ((!a.query && !a.url) || (a.query && a.url)) throw new Error("Provide one public search query or URL");
     if (a.query && (a.query.length > 300 || /@|\b(?:token|password|secret)\s*[:=]/i.test(a.query))) throw new Error("Use public brand/category terms, without private information");
     const target = a.url ? publicUrl(a.url) : undefined;
-    const id = await ctx.runMutation(internal.partnerships.store.reserveResearch, { creatorId: a.creatorId });
+    // §8.3: checked BEFORE a credit is spent: a brand already on record, or the same search within 30 days.
+    const before = await ctx.runQuery(internal.partnerships.store.beforeResearch, { creatorId: a.creatorId, query: a.query });
+    if (before.known) return { existingRelationship: before.known, instruction: "They already have a relationship with this brand. Read it with partnership_read before researching again; refreshing its research means saving with its opportunityId." };
+    if (before.repeatedOn) return { repeated: before.repeatedOn, instruction: `You ran this exact search on ${before.repeatedOn}. Use what you found then (partnership_read), or search something new; no credit spent.` };
+    const id = await ctx.runMutation(internal.partnerships.store.reserveResearch, { creatorId: a.creatorId, query: a.query });
     // Reserve a conservative one-credit cost even on timeout. The basic endpoints below
     // cannot auto-upgrade; billing reconciliation may later lower this estimate.
     await ctx.runMutation(internal.core.costs.record, { creatorId: a.creatorId, vendor: "tavily", resource: target ? "extract_basic" : "search_basic", purpose: "partnership_research_reserved", costUsd: 0.008, promptTokens: 1, costSource: "endpoint_table" });

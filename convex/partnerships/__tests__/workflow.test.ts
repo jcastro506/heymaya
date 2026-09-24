@@ -1,3 +1,4 @@
+import { domainRoot, knownBrandIn, sameBrand } from "../store";
 import { convexTest } from "convex-test";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import schema from "../../schema";
@@ -5,7 +6,7 @@ import { api, internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { Draft, Opportunity, publicUrl, followUpEligible } from "../contracts";
+import { Draft, MAX_FOLLOW_UPS, Opportunity, followUpEligible, nextFollowUpAt, publicUrl, spentWithoutReply } from "../contracts";
 import { mime } from "../delivery";
 import { encrypt, _resetEncryptionKeyCache } from "../../lib/encryption";
 import { forgetPartnershipEvidence } from "../privacy";
@@ -183,6 +184,48 @@ describe("approval and delivery races", () => {
     const due = { ...o, status: "contacted" as const, threadId: "t", lastOutboundAt: Date.now() - 8 * 86400000, followUpAt: Date.now() - 1 };
     expect(followUpEligible(due, Date.now())).toBe(true);
     for (const patch of [{ lastInboundAt: Date.now() }, { status: "suppressed" as const }, { deadline: Date.now() - 1 }, { threadId: undefined }]) expect(followUpEligible({ ...due, ...patch }, Date.now())).toBe(false);
+  });
+  it("B6 §8.3: two follow-ups at most, spaced 5 / 7 / 7 days, then closed as no response, once", async () => {
+    const f = await fixture();
+    const o = Opportunity.parse(f.input.opportunity);
+    const now = Date.now();
+    const due = { ...o, status: "contacted" as const, threadId: "t", followUpBasis: "no_reply" as const, lastOutboundAt: now - 8 * 86400000, followUpAt: now - 1 };
+    expect(followUpEligible({ ...due, followUpCount: 1 }, now)).toBe(true);
+    expect(followUpEligible({ ...due, followUpCount: MAX_FOLLOW_UPS }, now)).toBe(false); // the third is refused
+    expect([0, 1, 2].map((n) => Math.round((nextFollowUpAt(n, 0)) / 86400000))).toEqual([5, 7, 7]);
+    expect(spentWithoutReply({ ...due, followUpCount: 2 }, now)).toBe(true);
+    expect(spentWithoutReply({ ...due, followUpCount: 1 }, now)).toBe(false);
+    expect(spentWithoutReply({ ...due, followUpCount: 2, lastInboundAt: now - 1000 }, now)).toBe(false); // they replied
+    // closing is one patch and one text, even if the poll runs twice
+    await f.t.run(async (ctx) => { const row = await ctx.db.get(f.opportunityId); await ctx.db.patch(f.opportunityId, { data: { ...row!.data, ...due, followUpCount: 2 } }); });
+    await f.t.mutation(internal.partnerships.delivery.closeNoResponse, { creatorId: f.a, opportunityId: f.opportunityId });
+    await f.t.mutation(internal.partnerships.delivery.closeNoResponse, { creatorId: f.a, opportunityId: f.opportunityId });
+    const row = await f.t.run((ctx) => ctx.db.get(f.opportunityId));
+    expect(row?.data).toMatchObject({ status: "closed", closedReason: "no_response" });
+    const texts = await f.t.run((ctx) => ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", f.a)).collect());
+    expect(texts.filter((m) => m.dedupeKey === `partner-closed:${f.opportunityId}`)).toHaveLength(1);
+  });
+  it("B6 §8.3: one brand, one relationship, and no credit spent on a brand or a search already on record", async () => {
+    expect(domainRoot("shop.gymshark.co.uk")).toBe("gymshark");
+    expect(domainRoot("www.gymshark.com")).toBe("gymshark");
+    expect(sameBrand({ brandDomain: "gymshark.com", brand: "Gymshark" }, "Gymshark UK", "gymshark.co.uk")).toBe(true);
+    expect(sameBrand({ brandDomain: "brand.com", brand: "Brand" }, "Other", "other.com")).toBe(false);
+    expect(knownBrandIn("gymshark creator program", [{ brandDomain: "gymshark.com", brand: "Gymshark" }])).not.toBeNull();
+    expect(knownBrandIn("the north face ambassador", [{ brandDomain: "thenorthface.com", brand: "The North Face" }])).not.toBeNull();
+    expect(knownBrandIn("running brands creator program", [{ brandDomain: "brand.com", brand: "Brand" }])).toBeNull(); // whole words only
+
+    const f = await fixture(); vi.stubEnv("TAVILY_API_KEY", "fake-key");
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ results: [] })));
+    vi.stubGlobal("fetch", fetcher);
+    // the fixture's relationship is "Brand" at brand.com: asking about it again costs nothing
+    const known = await f.t.action(internal.partnerships.research.run, { creatorId: f.a, query: "Brand creator program requirements" }) as { existingRelationship?: unknown };
+    expect(known.existingRelationship).toBeDefined();
+    // a new search runs once; the same search again within 30 days is answered from the record
+    await f.t.action(internal.partnerships.research.run, { creatorId: f.a, query: "trail shoe ugc programs" });
+    const again = await f.t.action(internal.partnerships.research.run, { creatorId: f.a, query: "Trail shoe UGC programs" }) as { repeated?: string };
+    expect(again.repeated).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect((await f.t.run(ctx => ctx.db.query("costEvents").collect())).length).toBe(1);
   });
   it("isolates OAuth providers, sessions and single-use states", async () => {
     const f = await fixture();
