@@ -6,6 +6,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { creatorForIdentity } from "../core/identity";
 import { APPLICATION_CHECK_IN_DAYS, CLOSED, Draft, Evidence, Opportunity, Profile, publicUrl, followUpEligible, linksProfile, type OpportunityData } from "./contracts";
 import { TIERS, entitlementsFor, type Entitlements } from "../billing/tiers";
+import { emailSendEnabled } from "./providerConfig";
 
 /** The operator's pilot list: a comp on top of the tier, never the gate (§26). */
 export function isPilot(creatorId: string, env: Record<string, string | undefined> = process.env): boolean {
@@ -57,7 +58,8 @@ export async function event(ctx: MutationCtx, creatorId: Id<"creators">, opportu
 /** Whether their mailbox is connected, so she reads it instead of guessing (§27). */
 async function mailboxState(ctx: QueryCtx | MutationCtx, creatorId: Id<"creators">) {
   const row = await ctx.db.query("partnershipMailboxes").withIndex("by_creator", q => q.eq("creatorId", creatorId)).unique();
-  return { connected: Boolean(row), email: row?.email ?? null, sendingEnabled: process.env.PARTNERSHIP_EMAIL_SEND_ENABLED === "true", needsAttention: row?.attention ?? null };
+  const c = (await ctx.db.get(creatorId)) as Doc<"creators"> | null;
+  return { connected: Boolean(row), email: row?.email ?? null, sendingEnabled: emailSendEnabled(c), needsAttention: row?.attention ?? null };
 }
 
 export const read = internalQuery({

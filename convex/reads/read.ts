@@ -17,6 +17,7 @@ import { getDefaultClient, type ScrapeCreatorsClient } from "../integrations/scr
 import { FixtureScrapeCreatorsClient, fixtureStoreFrom } from "../integrations/scrapeCreators/fixtureClient";
 import specFixtures from "../integrations/scrapeCreators/fixtures.spec.json";
 import recordedFixtures from "../integrations/scrapeCreators/fixtures.recorded.json";
+import { fakeRead } from "../eval/dealsWorldData";
 
 const USD_PER_CREDIT = Number(process.env.SCRAPE_CREATORS_USD_PER_CREDIT ?? "0.00188"); // $47 / 25,000
 const WAIT_MS = 400;
@@ -129,6 +130,11 @@ export const read = internalAction({
     const normalized = (specEntry.normalize as unknown as (p: Record<string, unknown>) => Record<string, unknown>)(params ?? {});
     const key = readKey(k, normalized);
     const now = Date.now();
+    // Eval fixtures (the partnership gauntlet, the deals world) never reach ScrapeCreators or the shared
+    // cache: a local deployment with EVAL_FAKES=1 answers them from the fake world. Real creators never get here.
+    if (creatorId && process.env.EVAL_FAKES === "1" && process.env.ENVIRONMENT_NAME === "local" && await ctx.runQuery(internal.eval.fakes.isFixture, { creatorId })) {
+      return { value: fakeRead(k, normalized), cached: true, key };
+    }
 
     if (!force) {
       const hit = await ctx.runQuery(internal.reads.cache.getFresh, { kind: k, key, now });

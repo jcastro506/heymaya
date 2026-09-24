@@ -109,6 +109,8 @@ import type * as core_unseen from "../core/unseen.js";
 import type * as crons from "../crons.js";
 import type * as eval_checks from "../eval/checks.js";
 import type * as eval_converse from "../eval/converse.js";
+import type * as eval_dealsWorld from "../eval/dealsWorld.js";
+import type * as eval_dealsWorldData from "../eval/dealsWorldData.js";
 import type * as eval_durableConverse from "../eval/durableConverse.js";
 import type * as eval_expertBench from "../eval/expertBench.js";
 import type * as eval_fakes from "../eval/fakes.js";
@@ -307,6 +309,8 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   "eval/checks": typeof eval_checks;
   "eval/converse": typeof eval_converse;
+  "eval/dealsWorld": typeof eval_dealsWorld;
+  "eval/dealsWorldData": typeof eval_dealsWorldData;
   "eval/durableConverse": typeof eval_durableConverse;
   "eval/expertBench": typeof eval_expertBench;
   "eval/fakes": typeof eval_fakes;
