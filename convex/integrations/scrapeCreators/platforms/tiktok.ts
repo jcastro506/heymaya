@@ -1056,6 +1056,19 @@ export interface TikTokPopularCreatorsOptions {
   page?: number;
 }
 
+/** A sound's facts, kept outside `raw` so they survive the read cache (which drops `raw`). */
+export interface SoundFacts { clipId: string | null; title: string | null; author: string | null; videosUsingIt: number | null; original: boolean | null; licensedForBusiness: boolean | null; durationSec: number | null }
+
+/** Pure: the facts off a `/v1/tiktok/song` payload (`music_info`). Unknown stays null, never a guess. */
+export function soundFacts(raw: unknown): SoundFacts | null {
+  const m = (raw as { music_info?: Record<string, unknown> } | null)?.music_info;
+  if (!m || typeof m !== "object") return null;
+  const str = (x: unknown) => (typeof x === "string" && x.trim() ? x.trim() : null);
+  const num = (x: unknown) => (typeof x === "number" && Number.isFinite(x) ? x : null);
+  const bool = (x: unknown) => (typeof x === "boolean" ? x : null);
+  return { clipId: str(m.id_str), title: str(m.title), author: str(m.author), videosUsingIt: num(m.user_count), original: bool(m.is_original_sound), licensedForBusiness: bool(m.is_commerce_music), durationSec: num(m.duration) };
+}
+
 /**
  * Read a sound's clip id off a raw post object as a STRING. Prefers `id_str`;
  * falls back to a string-typed `id`; refuses a numeric `id` above

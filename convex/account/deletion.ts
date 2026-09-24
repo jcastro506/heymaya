@@ -40,6 +40,7 @@ export const TABLES_BY_CREATOR = [
   "costEvents",
   "memories",
   "personalRecords",
+  "finishes", // its fileId is the draft message's file, deleted with the messages
   "laneReads",
   "followerSnapshots",
   "evalRuns",
@@ -84,6 +85,7 @@ export const exportMine = query({
       calendarBlocks: await pick("calendarBlocks"),
       tasteEvents: await pick("tasteEvents"),
       personalRecords: await pick("personalRecords"),
+      finishes: (await pick("finishes")).map(r => ({ createdAt: "createdAt" in r ? r.createdAt : null, captions: "captions" in r ? r.captions : [], sounds: "sounds" in r ? r.sounds : [] })),
       memories: await pick("memories"),
       userActions: await pick("userActions"),
       trackedAccounts: await pick("trackedAccounts"),

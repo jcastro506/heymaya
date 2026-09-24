@@ -499,6 +499,21 @@ export default defineSchema({
     receivedAt: v.number(),
   }).index("by_event_id", ["eventId"]),
 
+  // B7 "finish this one": a draft they filmed, and the captions + sounds she offered with her reasons,
+  // so "why that one?" is answered from what she thought then, and what they posted teaches her.
+  finishes: defineTable({
+    creatorId: v.id("creators"),
+    messageId: v.id("messages"), // the draft they sent
+    fileId: v.optional(v.id("_storage")),
+    card: v.any(), // what she saw and heard in the draft
+    captions: v.array(v.object({ text: v.string(), shape: v.string(), why: v.string() })),
+    sounds: v.array(v.object({ name: v.string(), clipId: v.optional(v.string()), platform: v.string(), source: v.string(), why: v.string(), howToUse: v.string(), licensedForBusiness: v.optional(v.boolean()) })),
+    dropped: v.optional(v.array(v.string())), // sounds she named that no lookup backed; removed by code
+    lookups: v.array(v.string()),
+    outcome: v.optional(v.object({ ownPostId: v.id("ownPosts"), closestCaption: v.number(), soundUsed: v.union(v.string(), v.null()), lesson: v.string(), at: v.number() })),
+    createdAt: v.number(),
+  }).index("by_creator", ["creatorId", "createdAt"]),
+
   // Evidence-linked decisions, experiences and style history. No inferred action completion.
   personalRecords: defineTable({
     creatorId: v.id("creators"),

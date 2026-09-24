@@ -74,11 +74,12 @@ export class ReadFailed extends Error {
 const CACHE_MAX_BYTES = 900_000; // under Convex's 1 MiB, with room for the wrapper
 
 function slimRaw(raw: unknown): unknown {
-  const r = raw as { is_ad?: unknown; music?: { id?: unknown; id_str?: unknown }; author?: { unique_id?: unknown } } | null;
+  const r = raw as { is_ad?: unknown; music?: { id?: unknown; id_str?: unknown; title?: unknown; author?: unknown }; author?: { unique_id?: unknown } } | null;
   if (!r || typeof r !== "object") return undefined;
   return {
     is_ad: r.is_ad,
-    music: r.music ? { id: r.music.id, id_str: r.music.id_str } : undefined,
+    // the sound's name travels with the post, so a post line can say which sound, not just an id
+    music: r.music ? { id: r.music.id, id_str: r.music.id_str, title: r.music.title, author: r.music.author } : undefined,
     author: r.author ? { unique_id: r.author.unique_id } : undefined,
   };
 }
