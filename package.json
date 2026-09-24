@@ -18,7 +18,7 @@
     "codegen": "npx convex codegen",
     "check": "npm run typecheck && npm run lint && npx vitest run && npm run guards",
     "convex:dev": "convex dev --once",
-    "convex:staging": "CONVEX_DEPLOYMENT=dev:precise-canary-781 convex dev --once",
+    "convex:staging": "bash scripts/convex-staging.sh",
     "convex:prod": "bash scripts/convex-deploy-prod.sh"
   },
   "dependencies": {
