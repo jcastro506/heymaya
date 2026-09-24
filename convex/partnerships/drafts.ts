@@ -5,7 +5,7 @@ import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { active, event, ownedOpportunity, profile, assertPersonalEvidence, partnershipAllowance } from "./store";
-import { CLOSED, Draft, email, line } from "./contracts";
+import { CLOSED, Draft, MAX_FOLLOW_UPS, email, line } from "./contracts";
 import { APPLICATION_CHECK_IN_DAYS, Opportunity as OpportunitySchema } from "./contracts";
 import { checkPlainLanguage } from "../core/plainLanguage";
 import { emailSendEnabled } from "./providerConfig";
@@ -21,6 +21,9 @@ export const prepare = internalMutation({
     const { row, data: o } = await ownedOpportunity(ctx, a.creatorId, input.opportunityId as Id<"partnershipOpportunities">);
     const now = Date.now();
     if (CLOSED.has(o.status) || (o.deadline && o.deadline <= now) || o.route === "unknown") throw new Error("No actionable outreach route");
+    // §8.3: two follow-ups at most, then the thread rests, even when asked (deals sim: a third was drafted
+    // and a no-response relationship reopened). A reply from them resets it; a fresh contact is new outreach.
+    if (o.threadId && (o.followUpCount ?? 0) >= MAX_FOLLOW_UPS && (!o.lastInboundAt || (o.lastOutboundAt && o.lastInboundAt < o.lastOutboundAt))) throw new Error("Two follow-ups already went unanswered; a third tends to cost the relationship. Tell them that, and offer a different contact or a later, fresh pitch instead");
     if (o.assessment.verdict === "pass") throw new Error("This brand was assessed as unsuitable; revisit the assessment first");
     await assertPersonalEvidence(ctx, a.creatorId, o);
     // Fresh research is for NEW outreach. A follow-up or reply in a tracked thread needs none: at day 12 the

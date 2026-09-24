@@ -28,8 +28,20 @@ export type Intent =
   | { intent: "check_in" }
   | { intent: "text" };
 
+/**
+ * Pure: does their message actually name this account? An @handle, a profile link, or a handle-shaped
+ * token (with . or _) written as-is. A brand said in words ("research arcadia socks", "what about
+ * northline?") is a deals question, not an account lookup (deals sim, 2026-09-24).
+ */
+export function namesAnAccount(text: string, handle: string): boolean {
+  const t = text.toLowerCase();
+  const h = handle.toLowerCase().replace(/^@/, "");
+  if (t.includes(`@${h}`) || new RegExp(`(tiktok\\.com/@|instagram\\.com/)${h.replace(/[.]/g, "\\.")}`).test(t)) return true;
+  return /[._]/.test(h) && new RegExp(`(^|[^a-z0-9._])${h.replace(/[.]/g, "\\.")}($|[^a-z0-9._])`).test(t);
+}
+
 export const CLASSIFY_PROMPT = `You label one message a content creator sent to their assistant. Pick exactly one label:
-- "profile_ask": they are asking about a specific OTHER account by handle (why it's growing, what it's doing, whether to copy it). Give the handle without @ and the platform (instagram if they say ig/insta/reels or the handle style suggests it, else tiktok). Never their own handle.
+- "profile_ask": they are asking about a specific OTHER creator's account by its @handle (not a brand or company they want to research, pitch, work with or get paid by: that is "text") (why it's growing, what it's doing, whether to copy it). Give the handle without @ and the platform (instagram if they say ig/insta/reels or the handle style suggests it, else tiktok). Never their own handle.
 - "recall": they want something from earlier: an idea she sent, something they saved, a thing she said or they told her.
 - "opinion_ask": they are asking for her judgment on a plan or a hook in words (no link, no file), e.g. "should i post at 7", "is this hook good: …".
 - "calendar_answer": they are answering a question she asked about a filming block or a date.
@@ -89,7 +101,7 @@ export async function classifyText(ctx: ActionCtx, input: { creatorId: Id<"creat
     if (j.intent === "profile_ask") {
       const handle = String(j.handle ?? "").replace(/^@/, "").trim().toLowerCase();
       const mine = [input.ownHandles.tiktok, input.ownHandles.instagram].filter(Boolean).map((h) => h!.toLowerCase().replace(/^@/, ""));
-      if (!handle || mine.includes(handle)) return { intent: "text" };
+      if (!handle || mine.includes(handle) || !namesAnAccount(input.text, handle)) return { intent: "text" };
       return { intent: "profile_ask", platform: j.platform === "instagram" ? "instagram" : "tiktok", handle };
     }
     if (j.intent === "recall" || j.intent === "opinion_ask" || j.intent === "calendar_answer") return { intent: j.intent };

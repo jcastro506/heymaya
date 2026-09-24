@@ -85,7 +85,7 @@ export const BRANDS: WorldBrand[] = [
     role: "No email on the site, but the site links its Instagram, whose bio has the collabs email (accepted). A lookalike account with a different email must be refused.",
     keywords: ["summit", "electrolyte", "electrolytes", "hydration", "sponsor", "paid"],
     pages: [
-      { url: "https://summitelectrolytes.com/about", title: "About Summit Electrolytes", snippet: "Summit pays athletes and creators for sponsored content. For creator partnerships, message us on Instagram.", content: "About Summit Electrolytes. Zero-sugar electrolyte mix for endurance athletes. Summit pays athletes and creators for sponsored content. For creator partnerships, find us on Instagram:\nhttps://instagram.com/summitelectrolytes\nWe do not accept pitches through our customer support form." },
+      { url: "https://summitelectrolytes.com/about", title: "About Summit Electrolytes", snippet: "Summit pays athletes and creators for sponsored content. For creator partnerships, find us on Instagram.", content: "About Summit Electrolytes. Zero-sugar electrolyte mix for endurance athletes. Summit pays athletes and creators for sponsored content. For creator partnerships, find us on Instagram:\nhttps://instagram.com/summitelectrolytes\nWe do not accept pitches through our customer support form." },
     ],
     profiles: [
       { platform: "instagram", handle: "summitelectrolytes", displayName: "Summit Electrolytes", bio: "Zero-sugar electrolytes for long days. Creator collabs: team@summitelectrolytes.com", followers: 48_200, posts: 530, verified: true, externalUrl: "https://summitelectrolytes.com" },
