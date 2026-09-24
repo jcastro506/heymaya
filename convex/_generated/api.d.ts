@@ -108,6 +108,7 @@ import type * as eval_expertBench from "../eval/expertBench.js";
 import type * as eval_fakes from "../eval/fakes.js";
 import type * as eval_gate from "../eval/gate.js";
 import type * as eval_judge from "../eval/judge.js";
+import type * as eval_loadTest from "../eval/loadTest.js";
 import type * as eval_longTenure from "../eval/longTenure.js";
 import type * as eval_memoryGauntlet from "../eval/memoryGauntlet.js";
 import type * as eval_partnershipGauntlet from "../eval/partnershipGauntlet.js";
@@ -294,6 +295,7 @@ declare const fullApi: ApiFromModules<{
   "eval/fakes": typeof eval_fakes;
   "eval/gate": typeof eval_gate;
   "eval/judge": typeof eval_judge;
+  "eval/loadTest": typeof eval_loadTest;
   "eval/longTenure": typeof eval_longTenure;
   "eval/memoryGauntlet": typeof eval_memoryGauntlet;
   "eval/partnershipGauntlet": typeof eval_partnershipGauntlet;
