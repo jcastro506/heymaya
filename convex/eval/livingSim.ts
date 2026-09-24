@@ -31,6 +31,7 @@ import { parseJson } from "../agent/opinion";
 import { TABLES_BY_CREATOR } from "../account/deletion";
 import { applyIdeaAct } from "../core/ideaActs";
 import { tiktok } from "../integrations/scrapeCreators/platforms/tiktok";
+import { THRESHOLDS } from "../config/thresholds";
 
 const D = 86_400_000;
 const STEP_GAP_MS = 5_000;
@@ -88,7 +89,9 @@ async function simCreator(ctx: MutationCtx, creatorId: Id<"creators">): Promise<
 }
 
 type Future = { offsetMs: number; doc: Record<string, unknown> };
-type State = { runId: string; creatorId: Id<"creators">; persona: string; days: number; startedAt: number; seed: number; future: Future[]; releasedDraftPostIds: string[] };
+type LanePost = { postId: string; url: string; createTime: number; views: number; clipId: string | null; paid: boolean };
+type LaneAccount = { handle: string; trackedAccountId: Id<"trackedAccounts">; posts: LanePost[] };
+type State = { runId: string; creatorId: Id<"creators">; persona: string; days: number; startedAt: number; seed: number; future: Future[]; releasedDraftPostIds: string[]; t0?: number; lane?: LaneAccount[] };
 const stateKey = (runId: string) => `sim:${runId}:state`;
 const dayKey = (runId: string, d: number) => `sim:${runId}:day:${String(d).padStart(3, "0")}`;
 
@@ -116,10 +119,13 @@ export const writeState = internalMutation({
 
 export const prepare = internalMutation({
   args: { creatorId: v.id("creators"), days: v.number(), runId: v.string(), persona: v.string(), seed: v.number() },
-  handler: async (ctx, a): Promise<{ held: number; kept: number }> => {
+  handler: async (ctx, a): Promise<{ held: number; kept: number; days: number }> => {
     const c = await simCreator(ctx, a.creatorId);
     const now = Date.now();
-    const t0 = now - a.days * D;
+    const all = ((await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"ownPosts">[]).map((p) => p.createTime).sort((x, y) => x - y);
+    // Start where her real posting begins: at least 10 posts of history before day 1, so Maya has something to know.
+    const t0 = Math.max(now - a.days * D, all.length > 10 ? all[9] + 1 : now - a.days * D);
+    const days = Math.max(3, Math.ceil((now - t0) / D));
     // Paired (so her rails allow texting) but with no chat or phone: an eval-run creator is never delivered to.
     await ctx.db.patch(a.creatorId, { plan: { ...c.plan, status: "comped", tier: "partner" }, channel: { ...c.channel, paired: true }, firstWeek: undefined });
     const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"ownPosts">[];
@@ -133,8 +139,8 @@ export const prepare = internalMutation({
       }
     }
     future.sort((x, y) => x.offsetMs - y.offsetMs);
-    await writeKey(ctx, stateKey(a.runId), { runId: a.runId, creatorId: a.creatorId, persona: a.persona, days: a.days, startedAt: now, seed: a.seed, future, releasedDraftPostIds: [] } satisfies State);
-    return { held: future.length, kept: posts.length - future.length };
+    await writeKey(ctx, stateKey(a.runId), { runId: a.runId, creatorId: a.creatorId, persona: a.persona, days, startedAt: now, seed: a.seed, future, releasedDraftPostIds: [], t0 } satisfies State);
+    return { held: future.length, kept: posts.length - future.length, days };
   },
 });
 
@@ -189,7 +195,7 @@ export const actOnIdea = internalMutation({
 
 export const start = internalAction({
   args: { persona: v.string(), days: v.number(), seed: v.optional(v.number()) },
-  handler: async (ctx, a): Promise<{ runId: string; held: number; kept: number }> => {
+  handler: async (ctx, a): Promise<{ runId: string; held: number; kept: number; days: number }> => {
     if (a.days < 3 || a.days > 180) throw new Error("days must be 3–180");
     const runId = `sim-${Date.now()}`;
     const source = await ctx.runQuery(internal.eval.expertBench.personaSource, { clerkUserId: a.persona });
@@ -199,8 +205,13 @@ export const start = internalAction({
     const handle = await ctx.runQuery(internal.account.setup.handlesFor, { creatorId });
     if (handle?.tiktok) await ctx.runAction(internal.eval.livingSim.deepen, { creatorId, handle: handle.tiktok, days: a.days });
     const r = await ctx.runMutation(internal.eval.livingSim.prepare, { creatorId, days: a.days, runId, persona: a.persona, seed: a.seed ?? 7 });
+    // The accounts she watches, replayed too: their real posts, released day by day (a live lane is silent
+    // when a simulated day is five real minutes).
+    const lane = await ctx.runAction(internal.eval.livingSim.fetchLane, { creatorId, since: Date.now() - (r.days + 45) * D });
+    const s0 = await ctx.runQuery(internal.eval.livingSim.readState, { runId });
+    await ctx.runMutation(internal.eval.livingSim.writeState, { runId, state: { ...s0, lane } });
     // Day 0: the world moves forward so the start date is "now"; each day then ages it one day back.
-    await ageWorld(ctx, creatorId, a.days * D);
+    await ageWorld(ctx, creatorId, r.days * D);
     await ctx.scheduler.runAfter(0, internal.eval.livingSim.dayWorld, { runId, d: 1 });
     return { runId, ...r };
   },
@@ -234,6 +245,22 @@ export const dayWorld = internalAction({
       // A drafted post goes out after the draft (as it would in life); the rest at their real time of day.
       await ctx.runMutation(internal.eval.livingSim.releasePost, { creatorId: s.creatorId, doc: f.doc, createTime: drafted ? Date.now() : now - (a.d * D - f.offsetMs) });
     }
+    // The lane's posts from this day: a post well above its account's normal becomes a breakout for her.
+    let laneReleased = 0, breakouts = 0;
+    const t0 = s.t0 ?? s.startedAt - s.days * D;
+    for (const acct of s.lane ?? []) {
+      const today = acct.posts.filter((p) => p.createTime > t0 + (a.d - 1) * D && p.createTime <= t0 + a.d * D);
+      laneReleased += today.length;
+      const candidates = today.flatMap((p) => {
+        const prior = acct.posts.filter((x) => x.createTime < p.createTime).sort((x, y) => y.createTime - x.createTime).slice(0, 20).map((x) => x.views).sort((x, y) => x - y);
+        if (prior.length < 8 || p.paid) return [];
+        const normal = prior[Math.floor(prior.length / 2)];
+        const ratio = normal > 0 ? Math.round((p.views / normal) * 100) / 100 : 0;
+        return ratio >= BREAKOUT_RATIO ? [{ postId: p.postId, url: p.url, ratio, views: p.views, ageHours: 20, clipId: p.clipId }] : [];
+      });
+      if (candidates.length) breakouts += (await ctx.runMutation(internal.scout.sampler.writeBreakouts, { trackedAccountId: acct.trackedAccountId, creatorId: s.creatorId, candidates, now: Date.now() })).written;
+    }
+    notes.push(`lane: ${laneReleased} posts, ${breakouts} breakouts`);
     await ctx.runMutation(internal.eval.livingSim.writeState, { runId: a.runId, state: { ...s, future: s.future.filter((f) => f.offsetMs > a.d * D) } });
     await ctx.runMutation(internal.eval.livingSim.note, { runId: a.runId, d: a.d, patch: { released: due.length, world: notes } });
     await ctx.scheduler.runAfter(STEP_GAP_MS, internal.eval.livingSim.dayMaya, { runId: a.runId, d: a.d, dayStart: now });
@@ -258,10 +285,8 @@ export const dayMaya = internalAction({
         jobs[name] = `failed: ${e instanceof Error ? e.message.slice(0, 100) : "error"}`;
       }
     };
-    // The accounts she watches are read for her roster (the fleet sampler does this every 6 h; cached reads).
-    await step("sample", async () => { const r = await ctx.runAction(internal.scout.sampler.run, { creatorId: id }); return { sent: r.signals > 0, reason: `${r.accounts} accounts, ${r.signals} breakouts, ${r.failed} failed` }; });
     await step("morning", () => ctx.runAction(internal.agent.cadence.morning, { creatorId: id, now }));
-    await step("scout", () => ctx.runAction(internal.scout.scout.runOne, { creatorId: id }));
+    await step("scout", () => ctx.runAction(internal.scout.scout.run, { creatorId: id }));
     if (a.d % 7 === 6) await step("weekPlan", () => ctx.runAction(internal.calendar.weekPlan.draft, { creatorId: id, now, horizon: "next_week" }));
     if (a.d % 7 === 0) await step("weeklyReview", () => ctx.runAction(internal.review.weekly.run, { creatorId: id }));
     if (a.d % 7 === 3) await step("dealsOffer", () => ctx.runAction(internal.partnerships.kit.offerOne, { creatorId: id }));
@@ -523,5 +548,45 @@ export const deepen = internalAction({
     const { added } = await ctx.runMutation(internal.eval.livingSim.insertHistory, { creatorId: a.creatorId, rows });
     const oldest = all.length ? Math.min(...all.map((r) => r.createTime as number)) : now;
     return { pages, fetched: all.length, added, oldestDaysAgo: Math.round((now - oldest) / D) };
+  },
+});
+
+
+const BREAKOUT_RATIO = THRESHOLDS.breakoutFloorRatio; // the sampler's own floor into the candidate list; the scout judges
+
+/** Her watched TikTok accounts' real posts since `since` (1 credit a page, ≤3 pages each). */
+export const fetchLane = internalAction({
+  args: { creatorId: v.id("creators"), since: v.number() },
+  handler: async (ctx, a): Promise<LaneAccount[]> => {
+    const tracked = await ctx.runQuery(internal.eval.livingSim.trackedOf, { creatorId: a.creatorId });
+    const out: LaneAccount[] = [];
+    for (const t of tracked) {
+      const posts: LanePost[] = [];
+      let cursor: string | null = null;
+      for (let page = 0; page < 3; page++) {
+        try {
+          const r = await tiktok.postsPage(t.handle, cursor);
+          await ctx.runMutation(internal.core.costs.record, { creatorId: a.creatorId, vendor: "scrapecreators", resource: "/v3/tiktok/profile/videos", purpose: "sim_lane", costUsd: 0.002, costSource: "tier_table" });
+          for (const p of r.posts) {
+            const row = historyRow(p as never, a.creatorId, Date.now());
+            if (row) posts.push({ postId: String(row.postId), url: String(row.url), createTime: row.createTime as number, views: (row.metrics as { views: number }).views, clipId: (row.soundClipId as string | undefined) ?? null, paid: Boolean((p as { raw?: { is_ad?: boolean } }).raw?.is_ad) });
+          }
+          cursor = r.hasMore ? r.nextCursor : null;
+          if (!cursor || Math.min(...posts.map((x) => x.createTime)) < a.since) break;
+        } catch {
+          break; // a handle the platform no longer has: that account is simply quiet in the replay
+        }
+      }
+      out.push({ handle: t.handle, trackedAccountId: t.id, posts: posts.filter((p) => p.createTime >= a.since).sort((x, y) => x.createTime - y.createTime) });
+    }
+    return out;
+  },
+});
+
+export const trackedOf = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<Array<{ id: Id<"trackedAccounts">; handle: string }>> => {
+    const rows = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(20)) as Doc<"trackedAccounts">[];
+    return rows.filter((r) => r.status === "active" && r.platform === "tiktok").map((r) => ({ id: r._id, handle: r.handle }));
   },
 });
