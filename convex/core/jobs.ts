@@ -168,7 +168,9 @@ export const enqueue = internalMutation({
       idempotencyKey: args.idempotencyKey,
       status: "queued",
       attempts: 0,
-      maxAttempts: args.maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
+      // A turn someone is waiting on gets one retry, not five: during a writer outage five attempts
+      // meant ~7.5 minutes of silence before the "something broke on my side" text (outage drill).
+      maxAttempts: args.maxAttempts ?? (SERIAL_KINDS.has(args.kind) ? 2 : DEFAULT_MAX_ATTEMPTS),
       payloadJson: args.payloadJson,
       runAfter: args.runAfter ?? now,
       deadlineAt: now + (args.leaseMs ?? DEFAULT_LEASE_MS),

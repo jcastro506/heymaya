@@ -137,7 +137,7 @@ export const READ_WRITER_DOWN = "couldn't put a read together just now. that's o
 
 /** Pure: a failure that another model would likely not have (capacity), not one about the file. */
 export function isOverloaded(reason: string | undefined): boolean {
-  return /high demand|overloaded|unavailable|try again later|resource.?exhausted|\b(429|503)\b/i.test(reason ?? "");
+  return /high demand|overloaded|unavailable|try again later|resource.?exhausted|timed? ?out|timeout|\b(429|503|504)\b/i.test(reason ?? "");
 }
 
 export async function watchBytes(ctx: Parameters<typeof callModel>[0], creatorId: Id<"creators">, purpose: string, bytes: ArrayBuffer, mimeType: string, prompt: string, maxOutputTokens = 900): Promise<{ text: string | null; reason?: string }> {
