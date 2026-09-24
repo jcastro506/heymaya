@@ -25,7 +25,7 @@ import { buildPrefix, producedStamp } from "./context";
 import { critique } from "./critic";
 import { deliverNow } from "../core/scheduler";
 import { investigate } from "./investigate";
-import { isOurSide, parseJson, watchBytes, WATCH_OUR_SIDE } from "./opinion";
+import { isOurSide, parseJson, storedMedia, watchBytes, WATCH_OUR_SIDE } from "./opinion";
 
 export const FINISH_WRITER_DOWN = "i watched it, but couldn't write the captions just now. that's on my side. send it again in a few minutes?";
 import type { ToolCallRecord } from "./tools";
@@ -183,11 +183,11 @@ export const run = internalAction({
       await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body, dedupeKey: `finish:${a.messageId}`, proactive: false, kind: "opinion", ...extra });
       await deliverNow(ctx as never);
     };
-    const file = target.fileId ? await ctx.storage.get(target.fileId) : null;
+    const file = target.fileId ? await storedMedia(ctx, target.fileId, target.fileMime ?? "video/mp4") : null;
     if (!file) return { ok: false, reason: "no file bytes" };
     await ctx.runAction(internal.core.telegram.react, { creatorId: creator._id, messageId: target._id, emoji: "👀" }).catch(() => undefined);
     // Talky videos write long notes: room for them, so the JSON isn't cut off mid-sentence.
-    const w = await watchBytes(ctx, creator._id, "watch_finish", await file.arrayBuffer(), target.fileMime ?? "video/mp4", FINISH_WATCH_PROMPT, 2500);
+    const w = await watchBytes(ctx, creator._id, "watch_finish", file, target.fileMime ?? "video/mp4", FINISH_WATCH_PROMPT, 2500);
     const card = w.text ? parseJson<Record<string, unknown>>(w.text) : null;
     if (!card) {
       const why = w.text ? "my notes on it came out garbled" : (w.reason ?? "the file didn't open");

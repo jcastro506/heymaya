@@ -56,12 +56,12 @@ export function priceUsd(model: string, promptTokens: number, outputTokens: numb
 export const FILE_MAX_BYTES = 200 * 1024 * 1024; // a minute of 4K is ~350 MB; drafts over this are asked for a smaller export
 
 /** Gemini Files API (resumable upload), then wait until the video is processed. Never throws. */
-export async function uploadFile(input: { apiKey: string; bytes: ArrayBuffer; mimeType: string; fetchImpl?: typeof fetch; pollMs?: number; maxWaitMs?: number }): Promise<{ ok: true; uri: string } | { ok: false; reason: string }> {
+export async function uploadFile(input: { apiKey: string; bytes: ArrayBuffer | Blob; mimeType: string; fetchImpl?: typeof fetch; pollMs?: number; maxWaitMs?: number }): Promise<{ ok: true; uri: string } | { ok: false; reason: string }> {
   const f = input.fetchImpl ?? fetch;
   try {
     const start = await f(`https://generativelanguage.googleapis.com/upload/v1beta/files?key=${input.apiKey}`, {
       method: "POST",
-      headers: { "X-Goog-Upload-Protocol": "resumable", "X-Goog-Upload-Command": "start", "X-Goog-Upload-Header-Content-Length": String(input.bytes.byteLength), "X-Goog-Upload-Header-Content-Type": input.mimeType, "content-type": "application/json" },
+      headers: { "X-Goog-Upload-Protocol": "resumable", "X-Goog-Upload-Command": "start", "X-Goog-Upload-Header-Content-Length": String(input.bytes instanceof Blob ? input.bytes.size : input.bytes.byteLength), "X-Goog-Upload-Header-Content-Type": input.mimeType, "content-type": "application/json" },
       body: JSON.stringify({ file: { display_name: "draft" } }),
     });
     const uploadUrl = start.headers.get("x-goog-upload-url");

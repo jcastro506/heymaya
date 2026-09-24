@@ -20,7 +20,7 @@ import { critique, tooLong } from "./critic";
 import { CAUTIOUS_ASK, judgeLadder, ownPostFloor } from "./guarded";
 import { buildEvidencePack, supportedHypotheses, type EvidencePack } from "../core/evidencePack";
 import { deliverNow } from "../core/scheduler";
-import { fetchMedia, watchMedia } from "../integrations/gemini/client";
+import { fetchMedia, INLINE_MAX_BYTES, watchMedia } from "../integrations/gemini/client";
 import { faultFetch, faultFor } from "../eval/faults";
 import { WATCH_PROMPT } from "../onboarding/watch";
 import type { ParsedLink } from "./inbound";
@@ -140,18 +140,33 @@ export function isOverloaded(reason: string | undefined): boolean {
   return /high demand|overloaded|unavailable|try again later|resource.?exhausted|timed? ?out|timeout|\b(429|503|504)\b/i.test(reason ?? "");
 }
 
-export async function watchBytes(ctx: Parameters<typeof callModel>[0], creatorId: Id<"creators">, purpose: string, bytes: ArrayBuffer, mimeType: string, prompt: string, maxOutputTokens = 900): Promise<{ text: string | null; reason?: string }> {
+/** A stored file, ready to watch: inline bytes when small, an uploaded file reference when big (a phone video). */
+export async function storedMedia(ctx: Parameters<typeof callModel>[0], storageId: Id<"_storage">, mimeType: string): Promise<ArrayBuffer | { fileUri: string } | null> {
+  const c = ctx as unknown as { runQuery: (f: unknown, a: unknown) => Promise<number | null>; runAction: (f: unknown, a: unknown) => Promise<{ ok: boolean; uri?: string }>; storage: { get: (id: Id<"_storage">) => Promise<Blob | null> } };
+  const size = await c.runQuery(internal.agent.opinion.storedSize, { storageId });
+  if (size === null) return null;
+  if (size <= INLINE_MAX_BYTES) { const blob = await c.storage.get(storageId); return blob ? await blob.arrayBuffer() : null; }
+  const up = await c.runAction(internal.core.bigMedia.uploadStoredForWatch, { storageId, mimeType });
+  return up.ok && up.uri ? { fileUri: up.uri } : null;
+}
+
+export const storedSize = internalQuery({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, a): Promise<number | null> => ((await ctx.db.system.get(a.storageId)) as { size?: number } | null)?.size ?? null,
+});
+
+export async function watchBytes(ctx: Parameters<typeof callModel>[0], creatorId: Id<"creators">, purpose: string, bytes: ArrayBuffer | { fileUri: string }, mimeType: string, prompt: string, maxOutputTokens = 900): Promise<{ text: string | null; reason?: string }> {
   const apiKey = process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY ?? "";
   // Outage drill (eval/faults.ts): Gemini failing for this eval creator, both models. Undefined in production.
   const fault = await faultFor(ctx, creatorId, "gemini", { purpose });
   const fetchImpl = fault ? faultFetch(fault) : undefined;
   // One draft at a time deserves the top model (§3.3 escalation); when it's overloaded, the everyday
   // watcher still sees and hears the video (living sim: ~1 in 5 drafts failed on "high demand").
-  let r = await watchMedia({ model: WATCH_MODEL_TOP, apiKey, prompt, media: { bytes, mimeType }, resolution: "default", maxOutputTokens, fetchImpl });
+  let r = await watchMedia({ model: WATCH_MODEL_TOP, apiKey, prompt, media: bytes instanceof ArrayBuffer ? { bytes, mimeType } : { fileUri: bytes.fileUri, mimeType }, resolution: "default", maxOutputTokens, fetchImpl });
   let model = WATCH_MODEL_TOP;
   if (!r.ok && isOverloaded(r.reason)) {
     model = WATCH_MODEL;
-    r = await watchMedia({ model, apiKey, prompt, media: { bytes, mimeType }, resolution: "default", maxOutputTokens, fetchImpl });
+    r = await watchMedia({ model, apiKey, prompt, media: bytes instanceof ArrayBuffer ? { bytes, mimeType } : { fileUri: bytes.fileUri, mimeType }, resolution: "default", maxOutputTokens, fetchImpl });
   }
   if (r.usage) await ctx.runMutation(internal.core.costs.record, { creatorId, vendor: "gemini", resource: model, purpose, costUsd: r.usage.costUsd, promptTokens: r.usage.promptTokens, completionTokens: r.usage.outputTokens, costSource: "endpoint_table" });
   return r.ok ? { text: r.text } : { text: null, reason: r.reason };
@@ -186,9 +201,9 @@ export const run = internalAction({
     let own: OwnPost | null = null;
 
     if (a.mode === "audio") {
-      const file = target.fileId ? await ctx.storage.get(target.fileId) : null;
+      const file = target.fileId ? await storedMedia(ctx, target.fileId, target.fileMime ?? "application/octet-stream") : null;
       if (!file) return { ok: false, reason: "no file bytes" };
-      const t = await watchBytes(ctx, creator._id, "voice_transcribe", await file.arrayBuffer(), target.fileMime ?? "audio/ogg", TRANSCRIBE_PROMPT);
+      const t = await watchBytes(ctx, creator._id, "voice_transcribe", file, target.fileMime ?? "audio/ogg", TRANSCRIBE_PROMPT);
       if (!t.text) {
         await reply("couldn't make out the voice note. type it?");
         return { ok: true, reason: `voice: ${t.reason}` };
@@ -198,9 +213,9 @@ export const run = internalAction({
     }
 
     if (a.mode === "image") {
-      const file = target.fileId ? await ctx.storage.get(target.fileId) : null;
+      const file = target.fileId ? await storedMedia(ctx, target.fileId, target.fileMime ?? "application/octet-stream") : null;
       if (!file) return { ok: false, reason: "no file bytes" };
-      const r = await watchBytes(ctx, creator._id, "read_screenshot", await file.arrayBuffer(), target.fileMime ?? "image/jpeg", SCREENSHOT_PROMPT);
+      const r = await watchBytes(ctx, creator._id, "read_screenshot", file, target.fileMime ?? "image/jpeg", SCREENSHOT_PROMPT);
       const read = r.text ? parseJson<{ kind: string; platform: string; numbers: Array<{ label: string; value: string }>; postTitleOrCaption: string; period: string }>(r.text) : null;
       if (!read || !read.numbers?.length) {
         await reply("i can see it's a screenshot but can't read numbers off it. what am i looking at?");
@@ -212,11 +227,11 @@ export const run = internalAction({
     }
 
     if (a.mode === "video") {
-      const file = target.fileId ? await ctx.storage.get(target.fileId) : null;
+      const file = target.fileId ? await storedMedia(ctx, target.fileId, target.fileMime ?? "application/octet-stream") : null;
       if (!file) return { ok: false, reason: "no file bytes" };
       await ctx.runAction(internal.core.telegram.react, { creatorId: creator._id, messageId: target._id, emoji: "👀" }).catch(() => undefined); // §21.5: she's looking
       subject = { draftFileId: target.fileId ?? undefined };
-      const w = await watchBytes(ctx, creator._id, "watch_draft", await file.arrayBuffer(), target.fileMime ?? "video/mp4", WATCH_PROMPT);
+      const w = await watchBytes(ctx, creator._id, "watch_draft", file, target.fileMime ?? "video/mp4", WATCH_PROMPT);
       card = w.text ? parseJson<Card>(w.text) : null;
       if (!card) cannotWatch = w.reason ?? "the watch failed";
     } else {

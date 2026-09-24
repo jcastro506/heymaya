@@ -109,3 +109,9 @@ export const seedWidgetDemo = internalMutation({
     return null;
   },
 });
+
+/** Eval: an upload URL for a test file (big-video intake tests). */
+export const uploadUrl = internalMutation({
+  args: {},
+  handler: async (ctx): Promise<string> => await ctx.storage.generateUploadUrl(),
+});

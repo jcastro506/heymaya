@@ -75,6 +75,7 @@ import type * as connections_zernio from "../connections/zernio.js";
 import type * as contracts_dossier from "../contracts/dossier.js";
 import type * as core_act from "../core/act.js";
 import type * as core_alerts from "../core/alerts.js";
+import type * as core_bigMedia from "../core/bigMedia.js";
 import type * as core_breaker from "../core/breaker.js";
 import type * as core_budgets from "../core/budgets.js";
 import type * as core_cadence from "../core/cadence.js";
@@ -279,6 +280,7 @@ declare const fullApi: ApiFromModules<{
   "contracts/dossier": typeof contracts_dossier;
   "core/act": typeof core_act;
   "core/alerts": typeof core_alerts;
+  "core/bigMedia": typeof core_bigMedia;
   "core/breaker": typeof core_breaker;
   "core/budgets": typeof core_budgets;
   "core/cadence": typeof core_cadence;

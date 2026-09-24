@@ -18,7 +18,7 @@ import { normalizePhone, type ClawReactionType, type ClawService } from "../inte
 /** A menu (the buttons of an outbound) is answerable for this long; after that a "1" is just text. */
 export const MENU_TTL_MS = 24 * 60 * 60_000;
 /** A photo, a voice note or a draft bigger than this is not fetched; she says so instead. */
-export const ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024;
+export const ATTACHMENT_MAX_BYTES = 150 * 1024 * 1024; // iMessage sends phone videos at full quality; downloaded in Node (core/bigMedia)
 
 /* -------------------------------------------------------------------------- */
 /* Pure                                                                         */
@@ -232,22 +232,14 @@ export const handleAttachment = internalAction({
     const known = await ctx.runQuery(internal.core.imessage.creatorByPhone, { phone });
     if (!known?.paired) return { ok: false, reason: "unknown or unpaired number" };
     if (await ctx.runQuery(internal.core.imessage.seenVendorMessage, { channelMessageId: a.channelMessageId })) return { ok: true, reason: "duplicate" };
-    let bytes: ArrayBuffer;
-    let mime = a.mimeType;
-    try {
-      const res = await fetch(a.url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const len = Number(res.headers.get("content-length") ?? "0");
-      if (len > ATTACHMENT_MAX_BYTES) throw new Error("too big");
-      bytes = await res.arrayBuffer();
-      if (bytes.byteLength > ATTACHMENT_MAX_BYTES) throw new Error("too big");
-      mime = res.headers.get("content-type")?.split(";")[0] || mime;
-    } catch (error) {
-      const why = error instanceof Error ? error.message : String(error);
-      await ctx.runMutation(internal.core.messages.send, { creatorId: known.creatorId, surface: "imessage", body: why === "too big" ? "that one's too big for me to pull in here. send me the link once it's posted, or a shorter cut." : "that file didn't come through. worth another try?", dedupeKey: `ingest-failed:${a.channelMessageId}`, proactive: false, kind: "reply" });
-      return { ok: false, reason: why };
+    // Downloaded in Node: a phone video is often far more than the default runtime can hold.
+    const got = await ctx.runAction(internal.core.bigMedia.fetchToStorage, { url: a.url, mimeType: a.mimeType });
+    if (!got.ok) {
+      await ctx.runMutation(internal.core.messages.send, { creatorId: known.creatorId, surface: "imessage", body: got.reason === "too big" ? "that one's over 150 MB, too big for me to pull in. send a shorter cut, or the link once it's posted." : "that file didn't come through. worth another try?", dedupeKey: `ingest-failed:${a.channelMessageId}`, proactive: false, kind: "reply" });
+      return { ok: false, reason: got.reason };
     }
-    const storageId = await ctx.storage.store(new Blob([bytes], { type: mime }));
+    const mime = got.mime;
+    const storageId = got.storageId as Id<"_storage">;
     const r = await ctx.runMutation(internal.core.imessage.receiveInbound, { creatorId: known.creatorId, body: a.caption ?? "", kind: "file", channelMessageId: a.channelMessageId, fileId: storageId, fileMime: mime, ts: a.ts });
     if (!r.recorded || !r.messageId) return { ok: false, reason: r.reason };
     await ctx.runMutation(internal.core.jobs.enqueue, { kind: "converse", idempotencyKey: `converse:${r.messageId}`, creatorId: known.creatorId, payloadJson: JSON.stringify({ messageId: r.messageId, kind: "file", mime }) });

@@ -19,6 +19,7 @@ import { critique, tooLong } from "./critic";
 import { judgeLadder } from "./guarded";
 import { deliverNow } from "../core/scheduler";
 import { watchMedia } from "../integrations/gemini/client";
+import { storedMedia } from "./opinion";
 import { faultFetch, faultFor } from "../eval/faults";
 
 export const MOMENT_SKILL = `If the plan in the prefix shows a film block HAPPENING NOW, you are the producer on set: read what they sent against that block's hook and shot list, say what is working and the one thing to get before they wrap, and skip the general idea-finding. Mark nothing as filmed yourself; their clip is the sign.
@@ -39,10 +40,10 @@ export const kindOfMedia = internalAction({
   handler: async (ctx, a): Promise<"screenshot" | "draft" | "scene" | "unknown"> => {
     const m = await ctx.runQuery(internal.agent.moment.messageFile, { messageId: a.messageId });
     if (!m?.fileId) return "unknown";
-    const file = await ctx.storage.get(m.fileId);
+    const file = await storedMedia(ctx as never, m.fileId, m.fileMime ?? "image/jpeg");
     if (!file) return "unknown";
     const fault = await faultFor(ctx, m.creatorId, "gemini", { purpose: "media_kind" }); // outage drill; null in production
-    const r = await watchMedia({ model: WATCH_MODEL_TOP, apiKey: process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY ?? "", prompt: sceneKindOf, media: { bytes: await file.arrayBuffer(), mimeType: m.fileMime ?? "image/jpeg" }, resolution: "low", maxOutputTokens: 5, ...(fault ? { fetchImpl: faultFetch(fault) } : {}) });
+    const r = await watchMedia({ model: WATCH_MODEL_TOP, apiKey: process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY ?? "", prompt: sceneKindOf, media: file instanceof ArrayBuffer ? { bytes: file, mimeType: m.fileMime ?? "image/jpeg" } : { fileUri: file.fileUri, mimeType: m.fileMime ?? "video/mp4" }, resolution: "low", maxOutputTokens: 5, ...(fault ? { fetchImpl: faultFetch(fault) } : {}) });
     if (r.usage) await ctx.runMutation(internal.core.costs.record, { creatorId: m.creatorId, vendor: "gemini", resource: WATCH_MODEL_TOP, purpose: "media_kind", costUsd: r.usage.costUsd, promptTokens: r.usage.promptTokens, completionTokens: r.usage.outputTokens, costSource: "endpoint_table" });
     const w = r.ok ? r.text.trim().toLowerCase() : "";
     return w.startsWith("screenshot") ? "screenshot" : w.startsWith("draft") ? "draft" : w.startsWith("scene") ? "scene" : "unknown";
@@ -95,9 +96,9 @@ export const run = internalAction({
     let scene: string | null = null;
     if (a.hasMedia && target.fileId) {
       await ctx.runAction(internal.core.telegram.react, { creatorId: creator._id, messageId: target._id, emoji: "👀" }).catch(() => undefined); // §21.5: she's looking
-      const file = await ctx.storage.get(target.fileId);
+      const file = await storedMedia(ctx as never, target.fileId, target.fileMime ?? "image/jpeg");
       if (file) {
-        const r = await watchMedia({ model: WATCH_MODEL_TOP, apiKey: process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY ?? "", prompt: SCENE_PROMPT, media: { bytes: await file.arrayBuffer(), mimeType: target.fileMime ?? "image/jpeg" }, resolution: "default", maxOutputTokens: 400 });
+        const r = await watchMedia({ model: WATCH_MODEL_TOP, apiKey: process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY ?? "", prompt: SCENE_PROMPT, media: file instanceof ArrayBuffer ? { bytes: file, mimeType: target.fileMime ?? "image/jpeg" } : { fileUri: file.fileUri, mimeType: target.fileMime ?? "video/mp4" }, resolution: "default", maxOutputTokens: 400 });
         if (r.usage) await ctx.runMutation(internal.core.costs.record, { creatorId: creator._id, vendor: "gemini", resource: WATCH_MODEL_TOP, purpose: "scene_read", costUsd: r.usage.costUsd, promptTokens: r.usage.promptTokens, completionTokens: r.usage.outputTokens, costSource: "endpoint_table" });
         scene = r.ok ? r.text.trim().slice(0, 900) : null;
       }
