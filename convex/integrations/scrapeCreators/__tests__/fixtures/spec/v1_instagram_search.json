@@ -1,0 +1,39 @@
+{
+  "success": true,
+  "credits_remaining": 100,
+  "credits_charged": 1,
+  "data": {
+    "query": "nike",
+    "users": [
+      {
+        "position": 0,
+        "id": "13460080",
+        "username": "nike",
+        "full_name": "Nike",
+        "is_verified": true,
+        "profile_pic_url": "https://instagram.example.com/nike.jpg"
+      }
+    ],
+    "hashtags": [
+      {
+        "position": 2,
+        "id": "17841562978125529",
+        "name": "nikewomen",
+        "media_count": 2036828,
+        "search_result_subtitle": null
+      }
+    ],
+    "places": [
+      {
+        "position": 51,
+        "id": "715603272",
+        "name": "Nike",
+        "title": "Nike",
+        "subtitle": "",
+        "facebook_places_id": "106068296090172"
+      }
+    ],
+    "keywords": [],
+    "rank_token": "a6e9cded-6c3e-41be-a6b1-9fa5295a30d5"
+  }
+}

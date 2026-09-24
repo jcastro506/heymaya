@@ -1,0 +1,44 @@
+{
+  "creatorId": "jn76kg3bqtxzef8rw72e4jwmvh8edd14",
+  "at": 1789389688845,
+  "steps": [
+    {
+      "step": "hard_dead_vendor",
+      "said": [
+        "[reply] i can't pull the comments or sound from here, tiktok keeps that data inside the app.\n\nthe aussie bush clip looks nice, but it's the fourth time scenic travel b-roll landed below your normal. you said it yourself back in february: pretty scenery with quotes looks like everyone else's feed. the posts that run laps around your average are the deadpan workout struggles and the awkward moments, not the postcard shots."
+      ],
+      "facts": {},
+      "ok": true,
+      "why": "said what she could not check"
+    },
+    {
+      "step": "hard_growth",
+      "said": [
+        "[reply] set it: 5 posts a week locked onto deadpan running exhaustion and candid travel struggles, dropping the scenic b-roll entirely, with a review on october 12.\n\nfollowers come from reach, and what actually gets reach on your page is the short running meme format (median 472x your normal) and the awkward travel moments. we lean into those back-to-back instead of the postcard quotes and track how follows move over the four weeks.\n\nthursday 8am work to film the first batch?"
+      ],
+      "facts": {
+        "growthPlan": {
+          "formats": [
+            "short running selfie with relatable text",
+            "candid travel struggle with text overlay"
+          ],
+          "hypothesis": "Deadpan running exhaustion memes and candid tourist struggles beat scenic travel b-roll.",
+          "keywords": [
+            "running",
+            "runtok",
+            "runner humor",
+            "solo travel"
+          ],
+          "lane": "Relatable running & workout humor",
+          "postsPerWeek": 5,
+          "reviewAt": 1791808947528,
+          "setBy": "chat",
+          "startedAt": 1789389747528,
+          "status": "running"
+        }
+      },
+      "ok": true,
+      "why": "a plan set, from what worked, no promises"
+    }
+  ]
+}

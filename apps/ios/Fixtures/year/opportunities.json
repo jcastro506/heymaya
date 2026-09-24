@@ -1,0 +1,12 @@
+{
+  "opportunities": [],
+  "teaser": {
+    "accountsPaid": 1,
+    "days": 30,
+    "paidPostsInLane": 1
+  },
+  "tier": "solo",
+  "unlockPriceUsd": 29.99,
+  "unlockTier": "partner",
+  "unlocked": false
+}

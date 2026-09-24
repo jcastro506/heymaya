@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Ours: legacy modules parked for adaptation, and generated code.
+    "pending/**",
+    "convex/_generated/**",
   ]),
 ]);
 

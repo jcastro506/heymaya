@@ -1,0 +1,30 @@
+{
+  "success": true,
+  "credits_remaining": 1000000,
+  "credits_charged": 1,
+  "followers": [
+    {
+      "create_time": 1585489718,
+      "follower_count": 319,
+      "following_count": 1375,
+      "language": "en",
+      "nickname": "Kelsey Levens Haskin",
+      "region": "US",
+      "sec_uid": "MS4wLjABAAAAG-DXjA9PmiU6daPQzr9ux9Xr8EQ_SU_STIlWxqs2huXTZR94IdbY2kpoGhiSzAxn",
+      "signature": "",
+      "uid": "6802639142851609605",
+      "unique_id": "klh723",
+      "avatar_medium": {
+        "height": 720,
+        "uri": "tos-maliva-avt-0068/7324817662562402310",
+        "url_list": [
+          "https://p16-sign-va.tiktokcdn.com/tos-maliva-avt-0068/7324817662562402310~tplv-tiktokx-cropcenter-q:720:720:q70.heic?dr=9607&idc=no1a&ps=87d6e48a&refresh_token=ae851b19&s=COMMON_RELATION_LIST&sc=avatar&shcp=65db1d19&shp=30310797&t=223449c4&x-expires=1750374000&x-signature=VOyI618znRkoyH0BRwF3FLvnKKY%3D"
+        ],
+        "url_prefix": null,
+        "width": 720
+      }
+    }
+  ],
+  "min_time": 1750289478,
+  "total": 4424847
+}

@@ -1,515 +1,285 @@
 "use client";
 
-/**
- * ⭐ The on-ramp — §18.9.25 screens ① ② ③.
- *
- * > *"**Six web screens total. Four before any value is asked for**, two after.
- * > No progress bar, no 'step 3 of 7,' no wizard chrome — a wizard signals a
- * > form, and the whole pitch is that this isn't one."*
- *
- * ## One screen, three states — never a navigation
- *
- * §18.9.25 ② is explicit: *"same screen, transformed — never a navigation."*
- * So this is a single route with a phase, not three pages. The URL collapses to
- * a chip and the read appears beneath it; the page never reloads, because a
- * reload is the moment a person remembers they were filling in a form.
- *
- *   ① url      one input, centered, large. Nothing else on the screen.
- *   ② read     three beats — what it is → who buys it → what's different
- *              then "Right?" — one tap for yes, one box for a correction
- *   ③ pair     one link, one line. "She'll take it from here."
- *
- * ## ⚠️ The read happens BEFORE signup, deliberately
- *
- * §6.0: *"That live read is the hook, and it delivers value **before** asking
- * for anything — which is what makes the pairing ask convert."* So ① and ② run
- * anonymously through `/api/demo/read`, which carries the IP limit, the URL
- * cache and the daily spend cap. Clerk is only reached once they've already
- * seen her be right about their company.
- *
- * ⚠️ Styling is plain Tailwind, deliberately. `mc-btn` and friends live in
- * `mission.css`, which is imported by the Mission Control layout — on this
- * route those class names resolve to nothing, and the first build rendered the
- * primary button as bare text. Caught by looking at the page at 390px, which
- * no typecheck or test would have done.
- *
- * ⚠️ This route is NOT linked from any public CTA. Those still point at
- * `/onboarding/gtm` — the product currently serving customers. Flipping them is
- * the cutover, and that is an operator decision, not a side effect of building
- * the thing it will need.
- */
-
-import { useState } from "react";
-import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
-import { SignInButton } from "@clerk/nextjs";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { price, TIERS, TIER_NAMES, type Tier } from "@/convex/billing/tiers";
+import { OnboardShell } from "../onboarding/Shell";
 
-interface Read {
-  name?: string;
-  whatItIs?: string;
-  whoItsFor?: string;
-  whatsDifferent?: string;
+type Platform = "tiktok" | "instagram";
+type Interval = "monthly" | "annual";
+type Suggestion = { platform: Platform; handle: string; followers: number | null; why: string; displayName?: string; avatarUrl?: string };
+
+const PLATFORM_LABEL: Record<Platform, string> = { instagram: "Instagram", tiktok: "TikTok" };
+
+function initialStep(): 1 | 2 | 3 | 4 | 5 {
+  if (typeof window === "undefined") return 1;
+  const value = Number(new URLSearchParams(window.location.search).get("step"));
+  return value >= 1 && value <= 5 ? (value as 1 | 2 | 3 | 4 | 5) : 1;
 }
 
-type Phase =
-  | { at: "url" }
-  | { at: "reading" }
-  | { at: "read"; read: Read }
-  | { at: "failed"; detail: string }
-  | { at: "assets" }
-  | { at: "pair"; link?: string };
+function followerLabel(value: number | null): string | null {
+  if (!value) return null;
+  return new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+}
 
 export default function StartPage() {
-  const { isAuthenticated } = useConvexAuth();
-  const start = useMutation(api.maya.onramp.startFromRead);
-  const createPairingLink = useMutation(api.maya.pairing.createPairingLink);
-  const deployMine = useAction(api.maya.setup.deployMine);
-  const uploadUrl = useMutation(api.maya.media.uploadUrl);
-  const recordUpload = useMutation(api.maya.media.recordUpload);
+  const ensureCreator = useMutation(api.onboarding.start.ensureCreator);
+  const describe = useMutation(api.onboarding.start.describe);
+  const progress = useQuery(api.onboarding.start.progress);
+  const settings = useQuery(api.ui.settings);
+  const createCheckout = useAction(api.billing.checkout.createCheckout);
+  const socialConnections = useQuery(api.connections.zernio.status);
+  const startSocialConnect = useAction(api.connections.zernio.startConnect);
+  const reconcileSocialConnections = useAction(api.connections.zernio.reconcile);
+  const suggestionsQuery = useAction(api.onboarding.admired.suggest);
+  const validate = useAction(api.onboarding.admired.validate);
+  const addAdmired = useMutation(api.onboarding.admired.add);
+  const removeAdmired = useMutation(api.onboarding.admired.remove);
+  const admired = useQuery(api.onboarding.admired.list) ?? [];
+  const calendar = useQuery(api.calendar.oauth.status);
+  const selectCalendars = useMutation(api.calendar.oauth.selectCalendars);
+  const updateSettings = useMutation(api.ui.updateSettings);
+  const setPhone = useMutation(api.onboarding.start.setPhone);
+  const createPairingLink = useMutation(api.core.pairing.createPairingLink);
 
-  const [url, setUrl] = useState("");
-  const [correction, setCorrection] = useState("");
-  const [phase, setPhase] = useState<Phase>({ at: "url" });
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(initialStep);
+  const [interval, setInterval] = useState<Interval>("monthly");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
+  const [candidate, setCandidate] = useState("");
+  const [candidatePlatform, setCandidatePlatform] = useState<Platform>("instagram");
+  const [niche, setNiche] = useState("");
+  const [phone, setPhoneValue] = useState("");
+  const [consent, setConsent] = useState(false);
+  const [messageLink, setMessageLink] = useState<string | null>(null);
+  const [timezone, setTimezone] = useState("");
+  const [quietStart, setQuietStart] = useState("22:00");
+  const [quietEnd, setQuietEnd] = useState("07:00");
 
-  /**
-   * ⭐ THE LAST SCREEN CAN NOW TELL IT WORKED.
-   *
-   * `pair` used to be terminal: the founder tapped Start in Telegram, Maya
-   * answered there, and this tab still said "She'll take it from here" with no
-   * way forward. The fact was in the database the whole time — `claimPairing`
-   * sets `telegramChatId` on the tap — and nothing here ever asked.
-   *
-   * ⚠️ NO POLLING, DELIBERATELY. Convex queries are live: this subscription
-   * re-fires when the row changes, so the screen advances on its own. A
-   * `setInterval` is the obvious thing to reach for here and is strictly worse.
-   */
-  const pairing = useQuery(api.maya.onramp.pairingState, {});
-  const paired = pairing?.paired === true;
-  /** Minted during commit, used when they leave the (optional) asset step. */
-  const [pairLink, setPairLink] = useState<string | undefined>(undefined);
-  const [uploaded, setUploaded] = useState(0);
-  const [uploading, setUploading] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const planIsReady = progress?.planStatus === "trialing" || progress?.planStatus === "active" || progress?.planStatus === "comped";
+  const connectedPlatforms = useMemo(
+    () => new Set((socialConnections?.accounts ?? []).filter((account) => !account.needsReconnect).map((account) => account.platform)),
+    [socialConnections?.accounts],
+  );
 
-  async function read(event: React.FormEvent) {
-    event.preventDefault();
-    if (!url.trim() || phase.at === "reading") return;
-    setPhase({ at: "reading" });
+  useEffect(() => {
+    const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    queueMicrotask(() => {
+      setTimezone((current) => current || progress?.timezone || browserTimezone);
+      setQuietStart(progress?.quietHours.start ?? "22:00");
+      setQuietEnd(progress?.quietHours.end ?? "07:00");
+      setPhoneValue((current) => current || progress?.phone || "");
+    });
+  }, [progress]);
 
-    try {
-      const res = await fetch("/api/demo/read", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url }),
-      });
-      const data = (await res.json()) as {
-        ok?: boolean;
-        read?: Read;
-        detail?: string;
-      };
-      if (data.ok && data.read?.whatItIs)
-        setPhase({ at: "read", read: data.read });
-      else
-        setPhase({
-          at: "failed",
-          // Her words, relayed. §12 — an honest "I couldn't read that" beats a
-          // generic error, and beats a confident guess by more.
-          detail: data.detail ?? "I couldn't get a read on that one.",
-        });
-    } catch {
-      setPhase({
-        at: "failed",
-        detail: "I couldn't reach that site — try again?",
-      });
-    }
+  useEffect(() => {
+    ensureCreator({ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }).catch(() => setError("We couldn’t start your setup. Refresh and try again."));
+  }, [ensureCreator]);
+
+  useEffect(() => {
+    if (!progress || new URLSearchParams(window.location.search).has("step")) return;
+    queueMicrotask(() => {
+      if (progress.paired) setStep(5);
+      else if (planIsReady) setStep(socialConnections && socialConnections.accounts.length > 0 ? 3 : 2);
+    });
+  }, [planIsReady, progress, socialConnections]);
+
+  useEffect(() => {
+    if (step !== 2 || new URLSearchParams(window.location.search).get("connect") !== "back") return;
+    reconcileSocialConnections({})
+      .then((result) => setNotice(result.accounts > 0 ? "Connected. I’m pulling in your account now." : "Nothing is attached yet. If you completed the connection, give it a moment and try again."))
+      .catch(() => setError("I couldn’t check that connection yet. Try again in a moment."))
+      .finally(() => setBusy(null));
+  }, [reconcileSocialConnections, step]);
+
+  // §27: suggestions are chosen from their own posts, so wait for the first ones (or 25 seconds, or a finished read).
+  const [waitedForPosts, setWaitedForPosts] = useState(false);
+  useEffect(() => {
+    if (step !== 3) return;
+    const timer = window.setTimeout(() => setWaitedForPosts(true), 25_000);
+    return () => window.clearTimeout(timer);
+  }, [step]);
+  const postsReady = (progress?.posts ?? 0) > 0 || progress?.ingest === "succeeded" || progress?.ingest === "failed" || progress?.ingest === "dead";
+  useEffect(() => {
+    if (step !== 3 || suggestions !== null || (!postsReady && !waitedForPosts)) return;
+    suggestionsQuery({}).then((rows) => setSuggestions(rows)).catch(() => setSuggestions([]));
+  }, [step, suggestions, suggestionsQuery, postsReady, waitedForPosts]);
+
+  function go(next: 1 | 2 | 3 | 4 | 5) {
+    setError(null);
+    setNotice(null);
+    setStep(next);
+    window.history.replaceState(null, "", `/start?step=${next}`);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  /**
-   * ⭐ Commit: the read becomes product truth, the correction becomes a rule.
-   *
-   * Only reachable once signed in — the button below is a Clerk sign-in until
-   * then, so this never runs unauthenticated.
-   */
-  async function commit(read: Read) {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const saved = await start({
-        url: url.trim(),
-        read,
-        correction: correction.trim() || undefined,
-        // Their clock, not the server's. Every "today" she counts is in it.
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-      });
-      if (!saved.ok) {
-        setPhase({
-          at: "failed",
-          detail: saved.error ?? "something went wrong",
-        });
-        return;
-      }
-
-      /**
-       * ⭐ The optional asset step. §18.9.25 ④a — asked for, NEVER demanded.
-       * The founder is on a desktop with their screenshots already on it, which
-       * is the highest-conversion moment there is for images. The screen
-       * recording is asked for later, in Telegram, where recording a phone
-       * screen and sending it is trivial.
-       *
-       * ⚠️ Skippable, deliberately. §6.0.2's rule is that onboarding asks for
-       * almost nothing, and a hard gate here breaks the one-week promise for a
-       * founder who has nothing to hand at 11pm.
-       */
-      setPhase({ at: "assets" });
-
-      const link = await createPairingLink({});
-      setPairLink(link.deepLink);
-
-      /**
-       * ⚠️ Deploy is fired but NOT awaited, and the screen does not depend on
-       * it. §18.9.24: Fly's "accepted" and "started" are ~90 seconds apart, and
-       * making a person watch a spinner for that is how the last screen before
-       * the product becomes a conversation turns into the one they abandon.
-       * Pairing is what matters here; the machine catches up.
-       */
-      void deployMine({}).catch(() => {
-        /* Surfaced by the setup screen and fleet health, not by blocking this. */
-      });
-    } finally {
-      setBusy(false);
-    }
+  async function beginCheckout(tier: Tier) {
+    setBusy(`checkout:${tier}`);
+    setError(null);
+    const result = await createCheckout({ tier, interval, returnTo: "onboarding" });
+    if (result.ok) window.location.assign(result.url);
+    else { setError(result.reason); setBusy(null); }
   }
+
+  async function connect(platform: Platform) {
+    setBusy(`connect:${platform}`);
+    setError(null);
+    const result = await startSocialConnect({ platform, returnTo: "onboarding" });
+    if (result.ok) window.location.assign(result.url);
+    else { setError(result.reason); setBusy(null); }
+  }
+
+  async function addSuggestion(suggestion: Suggestion) {
+    const result = await addAdmired({ platform: suggestion.platform, handle: suggestion.handle, addedBy: "suggested", why: suggestion.why });
+    if (!result.ok) setError(result.error ?? "I couldn’t add that creator.");
+  }
+
+  async function addCandidate() {
+    const handle = candidate.trim();
+    if (!handle) return;
+    setBusy("candidate");
+    setError(null);
+    const checked = await validate({ platform: candidatePlatform, handle });
+    if (!checked.ok) { setError(checked.reason ?? "I couldn’t find that account."); setBusy(null); return; }
+    const result = await addAdmired({ platform: candidatePlatform, handle: checked.handle, addedBy: "creator" });
+    if (!result.ok) setError(result.error ?? "I couldn’t add that creator.");
+    else setCandidate("");
+    setBusy(null);
+  }
+
+  async function finishInspiration() {
+    setBusy("inspiration");
+    setError(null);
+    const text = niche.trim();
+    if (text) {
+      const result = await describe({ niche: text });
+      if (!result.ok) { setError(result.error ?? "I couldn’t save that yet."); setBusy(null); return; }
+    }
+    setBusy(null);
+    go(4);
+  }
+
+  async function savePhone() {
+    if (!consent) { setError("Please confirm that Maya can text this number."); return; }
+    setBusy("phone");
+    setError(null);
+    await updateSettings({ timezone, quietHours: { start: quietStart, end: quietEnd } });
+    const saved = await setPhone({ phone: phone || progress?.phone || "", consent: true });
+    if (!saved.ok) { setError(saved.error ?? "I couldn’t save that number."); setBusy(null); return; }
+    const pairing = await createPairingLink({});
+    if (pairing.ok && pairing.deepLink) {
+      setMessageLink(pairing.deepLink);
+      setNotice("You’re ready. Send the prefilled text so I know I’ve reached the right conversation.");
+    } else {
+      setNotice("Your number is saved. Mission Control is ready while messaging finishes connecting.");
+      if (pairing.error) setError(pairing.error);
+    }
+    setBusy(null);
+  }
+
+  const connectedCount = socialConnections?.accounts.length ?? 0;
+  const knownSummary = settings?.knows?.summary;
 
   return (
-    /**
-     * ⚠️ THE CREAM GOES ON A FULL-BLEED WRAPPER, NOT ON THE COLUMN. `<body>` is
-     * `bg-[var(--ink)]` — dark — from the root layout, so painting the
-     * `max-w-xl` container cream turned only the middle strip light and left
-     * the dark body showing down both sides. It read as a half-built mobile
-     * layout, which is exactly what the operator saw.
-     *
-     * The lesson generalises: on any page that opts out of the app's dark
-     * default, the override belongs on something that spans the viewport.
-     */
-    <div className="min-h-screen w-full bg-[#fbfaf6] text-[#0a0a0a]">
-      <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center px-5 py-16">
-      {/* ① ─ near-empty, full-bleed. "The entire screen is a question and a
-          box. Anything else on it is a distraction from the only thing that
-          matters." No nav, no logo wall, no feature strip. */}
-      {/**
-        * ⭐ ALREADY SET UP — don't make them onboard twice.
-        *
-        * Ported from the gtm onboarding, which redirected a paired founder
-        * straight to the HQ on load (`deployed && paired`, guarded by a
-        * resume ref). Kept as a SCREEN rather than a `window.location` jump:
-        * a hard redirect on mount traps anyone who deliberately came back
-        * here, and the only cost of asking is one tap.
-        */}
-      {phase.at === "url" && paired && (
-        <>
-          <h1 className="font-display italic text-[clamp(1.9rem,5vw,2.6rem)] leading-[1.1] tracking-[-0.015em]">
-            You&rsquo;re already set up.
-          </h1>
-          <p className="mt-4 text-[15px] leading-relaxed text-[#0a0a0a]/70">
-            Maya is connected to your Telegram. That chat is where everything
-            happens.
-          </p>
-          <a
-            href={pairing?.hasChannels ? "/clawlaunch/mission" : "/connect"}
-            className="mt-6 block w-full rounded-full bg-[#0a0a0a] px-4 py-3.5 text-center text-[15px] text-[#fbfaf6] no-underline transition-opacity hover:opacity-85"
-          >
-            {pairing?.hasChannels
-              ? "Open Mission Control"
-              : "Connect a channel"}
-          </a>
-        </>
-      )}
+    <OnboardShell where={`step ${step} of 5`}>
+      <div className="onboard-progress" aria-label={`Onboarding step ${step} of 5`}>
+        {[1, 2, 3, 4, 5].map((item) => <span key={item} className={item <= step ? "is-active" : ""} />)}
+      </div>
 
-      {((phase.at === "url" && !paired) ||
-        phase.at === "reading" ||
-        phase.at === "failed") && (
-        <>
-          <h1 className="font-display italic text-[clamp(1.9rem,5vw,2.6rem)] leading-[1.1] tracking-[-0.015em]">
-            What did you build?
-          </h1>
-          <form onSubmit={read} className="mt-5">
-            <input
-              type="url"
-              inputMode="url"
-              autoFocus
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="yourproduct.com"
-              disabled={phase.at === "reading"}
-              /* Large and centered — this input IS the screen. */
-              className="w-full rounded-xl border border-[#0a0a0a]/15 bg-transparent px-4 py-4 text-lg text-[#0a0a0a] outline-none placeholder:text-[#0a0a0a]/35 focus:border-[#0a0a0a]/45 disabled:opacity-60"
-            />
-          </form>
-
-          {phase.at === "reading" && (
-            <p className="mt-4 text-sm text-[#0a0a0a]/60">Reading it now…</p>
-          )}
-          {phase.at === "failed" && (
-            <p className="mt-4 text-sm text-[#0a0a0a]/60">{phase.detail}</p>
-          )}
-        </>
-      )}
-
-      {/* ② ─ the same screen, transformed. The URL becomes a chip; the read
-          appears beneath it. */}
-      {phase.at === "read" && (
-        <>
-          <span className="self-start rounded-full border border-[#0a0a0a]/15 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.16em] text-[#0a0a0a]/60">
-            {url}
-          </span>
-
-          {/* The three beats, in the order §18.9.25 names them. */}
-          <div className="mt-5 space-y-4">
-            <p className="text-lg leading-relaxed text-[#0a0a0a]">
-              {phase.read.whatItIs}
-            </p>
-            {phase.read.whoItsFor && (
-              <p className="leading-relaxed text-[#0a0a0a]/70">
-                {phase.read.whoItsFor}
-              </p>
-            )}
-            {phase.read.whatsDifferent ? (
-              <p className="leading-relaxed text-[#0a0a0a]/70">
-                {phase.read.whatsDifferent}
-              </p>
-            ) : (
-              /**
-               * ⭐ She found no differentiator, and says so.
-               *
-               * Live on cursor.com: `whatsDifferent` came back empty with
-               * "detailed differentiation from other AI coding tools" in
-               * `gaps` — she refused to invent one, which is §3407's hard rule
-               * working exactly as written.
-               *
-               * ⚠️ But silently dropping the beat hides that. §12: honest
-               * silence beats fake activity — and stating the gap is also the
-               * stronger move, because it turns the missing beat into the one
-               * question worth answering, right above the box that answers it.
-               * What they type becomes their first rule.
-               */
-              <p className="leading-relaxed text-[#0a0a0a]/70">
-                What I couldn&apos;t work out is what actually makes you
-                different — and that&apos;s the thing worth posting about.
-              </p>
-            )}
+      {step === 1 && (
+        <section>
+          <div className="screen-heading"><span className="kicker">Choose how Maya helps</span><h1>Start with the setup that fits you.</h1><p className="muted">Seven days free. Connect your account next, then I’ll start getting to know your work.</p></div>
+          <div className="interval-toggle" aria-label="Billing interval">
+            <button className={interval === "monthly" ? "selected" : ""} onClick={() => setInterval("monthly")}>Monthly</button>
+            <button className={interval === "annual" ? "selected" : ""} onClick={() => setInterval("annual")}>Yearly <span>save 2 months</span></button>
           </div>
-
-          {/* ⭐ "Right?" — one tap for yes, one box for a correction. What they
-              type here becomes a rule she keeps forever, so it is worth more
-              than any onboarding form field. */}
-          <p className="mt-8 text-sm font-medium text-[#0a0a0a]">Right?</p>
-          <textarea
-            value={correction}
-            onChange={(e) => setCorrection(e.target.value)}
-            rows={2}
-            placeholder={
-              phase.read.whatsDifferent
-                ? "Anything I got wrong?"
-                : "So — what makes you different?"
-            }
-            className="mt-2 w-full resize-none rounded-xl border border-[#0a0a0a]/15 bg-transparent px-3 py-2 text-sm text-[#0a0a0a] outline-none placeholder:text-[#0a0a0a]/35 focus:border-[#0a0a0a]/45"
-          />
-
-          <div className="mt-4">
-            {isAuthenticated ? (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => commit(phase.read)}
-                className="w-full rounded-full bg-[#0a0a0a] px-4 py-3.5 text-center text-[15px] text-[#fbfaf6] transition-opacity hover:opacity-85 disabled:opacity-50"
-              >
-                {busy
-                  ? "One second…"
-                  : correction.trim()
-                    ? "Got it — keep going"
-                    : "Yep, that's it"}
-              </button>
-            ) : (
-              /* Signup asked for only AFTER she's been right about their
-                 company — §6.0, and the reason the pairing ask converts. */
-              <SignInButton mode="modal">
-                <button
-                  type="button"
-                  className="w-full rounded-full bg-[#0a0a0a] px-4 py-3.5 text-center text-[15px] text-[#fbfaf6] transition-opacity hover:opacity-85 disabled:opacity-50"
-                >
-                  {correction.trim() ? "Got it — keep going" : "Yep, that's it"}
-                </button>
-              </SignInButton>
-            )}
+          <div className="tier-list">
+            {TIER_NAMES.map((tier) => {
+              const item = TIERS[tier];
+              const amount = interval === "monthly" ? item.priceUsd : item.annualUsd;
+              return <article key={tier} className={`tier-card ${tier === "duo" ? "featured" : ""}`}>
+                <div><div className="tier-topline"><h2>{item.label}</h2>{tier === "duo" ? <span className="mini-badge">most popular</span> : null}</div><p className="muted small">{item.blurb}</p></div>
+                <div className="tier-price"><strong>{price(amount)}</strong><span>/{interval === "monthly" ? "mo" : "yr"}</span></div>
+                <button className="btn" disabled={busy !== null} onClick={() => beginCheckout(tier)}>{busy === `checkout:${tier}` ? "Opening checkout…" : "Choose this plan"}</button>
+              </article>;
+            })}
           </div>
-        </>
+          {planIsReady ? <button className="link" onClick={() => go(2)}>My plan is already active</button> : null}
+        </section>
       )}
 
-      {/* ③ ─ the last web screen before the product becomes a conversation.
-          "One QR, one button, one line." No explanation of what Telegram is,
-          no feature preview, no reassurance copy. */}
-      {/* ③a ─ the optional asset step. Asked for, never demanded. */}
-      {phase.at === "assets" && (
-        <>
-          <h1 className="font-display italic text-[clamp(1.9rem,5vw,2.6rem)] leading-[1.1] tracking-[-0.015em]">
-            Anything of yours I can use?
-          </h1>
-          <p className="mt-4 text-sm text-[#0a0a0a]/60">
-            Screenshots of the screens that matter — three or four is plenty.
-            I&rsquo;ll build your videos from these instead of stock images, and
-            that&rsquo;s most of the difference between something that looks
-            like your product and something that looks like everyone
-            else&rsquo;s.
-          </p>
-
-          <label className="mt-6 block cursor-pointer rounded-xl border border-dashed border-[#0a0a0a]/25 px-4 py-8 text-center text-sm text-[#0a0a0a]/60 transition-colors hover:border-[#0a0a0a]/45">
-            <input
-              type="file"
-              accept="image/*,video/*"
-              multiple
-              className="hidden"
-              disabled={uploading}
-              onChange={async (e) => {
-                const files = Array.from(e.target.files ?? []);
-                if (files.length === 0) return;
-                setUploading(true);
-                try {
-                  for (const file of files) {
-                    const slot = await uploadUrl({});
-                    if (!slot.ok || !slot.url) continue;
-                    const res = await fetch(slot.url, {
-                      method: "POST",
-                      headers: { "Content-Type": file.type },
-                      body: file,
-                    });
-                    if (!res.ok) continue;
-                    const { storageId } = (await res.json()) as {
-                      storageId: string;
-                    };
-                    await recordUpload({
-                      storageId: storageId as never,
-                      contentType: file.type,
-                      bytes: file.size,
-                      caption: file.name,
-                    });
-                    setUploaded((n) => n + 1);
-                  }
-                } finally {
-                  setUploading(false);
-                }
-              }}
-            />
-            {uploading
-              ? "Uploading…"
-              : uploaded > 0
-                ? `${uploaded} added — drop more, or carry on`
-                : "Drop screenshots here, or tap to choose"}
-          </label>
-
-          <button
-            type="button"
-            onClick={() => setPhase({ at: "pair", link: pairLink })}
-            className="mt-6 w-full rounded-full bg-[#0a0a0a] px-4 py-3.5 text-center text-[15px] text-[#fbfaf6] transition-opacity hover:opacity-85"
-          >
-            {uploaded > 0 ? "That's everything" : "I'll send them later"}
-          </button>
-          <p className="mt-3 text-center text-xs text-[#0a0a0a]/45">
-            Either way she starts now — she&rsquo;ll ask when she needs
-            something.
-          </p>
-        </>
+      {step === 2 && (
+        <section>
+          <div className="screen-heading"><span className="kicker">Your work</span><h1>Let me get to know what you make.</h1><p className="muted">Connect Instagram or TikTok. This gives me your real account history and the analytics the platform makes available.</p></div>
+          {!planIsReady ? <div className="notice-card">Your plan is still activating. This normally takes a few seconds.</div> : null}
+          <div className="connection-grid">
+            {(["instagram", "tiktok"] as const).map((platform) => {
+              const account = socialConnections?.accounts.find((item) => item.platform === platform);
+              const connected = connectedPlatforms.has(platform);
+              return <article className={`connection-card ${connected ? "connected" : ""}`} key={platform}>
+                <div className={`platform-mark ${platform}`}>{platform === "instagram" ? "◎" : "♪"}</div>
+                <div className="connection-copy"><h2>{PLATFORM_LABEL[platform]}</h2><p className="muted small">{connected ? `@${account?.username ?? "connected"}` : "Posts, performance, and account history"}</p></div>
+                {connected ? <span className="connected-label">Connected</span> : <button className="btn-secondary" disabled={!planIsReady || busy !== null} onClick={() => connect(platform)}>{busy === `connect:${platform}` ? "Opening…" : "Connect"}</button>}
+              </article>;
+            })}
+          </div>
+          {socialConnections?.status === "needs_reconnect" ? <div className="notice-card error">One account needs to be reconnected before I can rely on its numbers.</div> : null}
+          {socialConnections?.detail ? <p className="tiny muted">{socialConnections.detail}</p> : null}
+          <button className="btn" disabled={connectedCount < 1 || busy !== null} onClick={() => go(3)}>{connectedCount < 1 ? "Connect one account to continue" : "Continue"}</button>
+          <p className="privacy-note">You stay in control. Maya reads these accounts and never publishes from onboarding.</p>
+        </section>
       )}
 
-      {/**
-        * ⭐ SHE ANSWERED — the screen that only existed as a dead end before.
-        *
-        * Shown the instant `telegramChatId` lands, with no refresh and no
-        * polling. Where "next" points depends on whether they have a channel:
-        * a founder with nothing connected has nothing for her to post to, and
-        * Mission Control would open on an empty room.
-        */}
-      {phase.at === "pair" && paired && (
-        <>
-          <h1 className="font-display italic text-[clamp(1.9rem,5vw,2.6rem)] leading-[1.1] tracking-[-0.015em]">
-            That&apos;s her.
-          </h1>
-          <p className="mt-4 text-[15px] leading-relaxed text-[#0a0a0a]/70">
-            You&rsquo;re connected — keep that Telegram chat open, it&rsquo;s
-            where everything happens from now on.
-          </p>
-          <a
-            href={pairing?.hasChannels ? "/clawlaunch/mission" : "/connect"}
-            className="mt-6 block w-full rounded-full bg-[#0a0a0a] px-4 py-3.5 text-center text-[15px] text-[#fbfaf6] no-underline transition-opacity hover:opacity-85"
-          >
-            {pairing?.hasChannels
-              ? "Open Mission Control"
-              : "Now give her somewhere to post"}
-          </a>
-          {!pairing?.hasChannels && (
-            <p className="mt-3 text-center text-xs text-[#0a0a0a]/45">
-              TikTok, Instagram or YouTube — she needs at least one.
-            </p>
+      {step === 3 && (
+        <section>
+          <div className="screen-heading"><span className="kicker">Your taste</span><h1>A few creators worth keeping an eye on.</h1><p className="muted">I found people who may be useful for different reasons. Pick any that feel right, add your own, or leave this to me.</p></div>
+          <div className="read-card"><span className="read-orbit" aria-hidden="true" /><div><strong>{knownSummary ? "Here’s my first read" : "I’m reading your posts now"}</strong><p className="small muted">{knownSummary ?? (progress?.posts ? `${progress.posts} posts are in. I’ll keep learning in the background.` : "I’ll share what I notice in Messages as soon as I have enough evidence.")}</p></div></div>
+          <label>Anything you want me to understand from the start? <span className="muted">optional</span><textarea className="input" value={niche} onChange={(event) => setNiche(event.target.value)} placeholder="I make practical style videos for people who hate overthinking clothes." /></label>
+          {suggestions === null ? <div className="suggestion-grid" aria-label={postsReady ? "Choosing creators from your posts" : "Reading your posts first"}>{[0, 1, 2].map((item) => <div className="suggestion-card skeleton" key={item} />)}</div> : suggestions.length > 0 ? (
+            <div className="suggestion-grid">{suggestions.slice(0, 6).map((suggestion) => {
+              const selectedRow = admired.find((item) => item.platform === suggestion.platform && item.handle === suggestion.handle);
+              return <article className={`suggestion-card ${selectedRow ? "selected" : ""}`} key={`${suggestion.platform}:${suggestion.handle}`}>
+                <button className="suggestion-select" aria-label={`${selectedRow ? "Remove" : "Add"} @${suggestion.handle}`} onClick={() => selectedRow ? removeAdmired({ id: selectedRow.id }) : addSuggestion(suggestion)}>{selectedRow ? "✓" : "+"}</button>
+                <div className="creator-avatar" style={suggestion.avatarUrl ? { backgroundImage: `url(${suggestion.avatarUrl})` } : undefined}>{suggestion.avatarUrl ? null : suggestion.handle.slice(0, 1).toUpperCase()}</div>
+                <div><strong>{suggestion.displayName || `@${suggestion.handle}`}</strong><p className="tiny muted">@{suggestion.handle} · {PLATFORM_LABEL[suggestion.platform]}{followerLabel(suggestion.followers) ? ` · ${followerLabel(suggestion.followers)}` : ""}</p></div>
+                <p className="small">{suggestion.why}</p>
+              </article>;
+            })}</div>
+          ) : <div className="notice-card">I don’t have strong suggestions yet. Add someone you already like, or let me keep looking after setup.</div>}
+          <div className="manual-creator"><select className="input" value={candidatePlatform} onChange={(event) => setCandidatePlatform(event.target.value as Platform)} aria-label="Creator platform"><option value="instagram">Instagram</option><option value="tiktok">TikTok</option></select><input className="input" value={candidate} onChange={(event) => setCandidate(event.target.value)} placeholder="@someone you like" autoCapitalize="none" onKeyDown={(event) => { if (event.key === "Enter") void addCandidate(); }} /><button className="btn-secondary" disabled={!candidate.trim() || busy !== null} onClick={addCandidate}>{busy === "candidate" ? "Checking…" : "Add"}</button></div>
+          {admired.length > 0 ? <p className="tiny muted">Watching {admired.length} creator{admired.length === 1 ? "" : "s"}. You can change this anytime.</p> : null}
+          <button className="btn" disabled={busy !== null} onClick={finishInspiration}>{admired.length > 0 ? "Use these creators" : "Find some for me later"}</button>
+        </section>
+      )}
+
+      {step === 4 && (
+        <section>
+          <div className="screen-heading"><span className="kicker">Your real week</span><h1>Make the plan fit your life.</h1><p className="muted">With Google Calendar, I can see what’s coming up, find content in your actual week, and suggest realistic time to film or edit.</p></div>
+          {calendar?.status === "connected" ? <div className="calendar-panel"><div className="calendar-check">✓</div><div><h2>Google Calendar connected</h2><p className="small muted">Choose what I can use. I’ll never add or move anything without your approval.</p></div>{calendar.calendars.length > 0 ? <div className="calendar-list">{calendar.calendars.map((item) => <label key={item.id} className="calendar-choice"><input type="checkbox" checked={item.selected} onChange={(event) => selectCalendars({ ids: calendar.calendars.filter((calendarItem) => calendarItem.id === item.id ? event.target.checked : calendarItem.selected).map((calendarItem) => calendarItem.id) })} /><span>{item.name}</span></label>)}</div> : null}</div> : (
+            <div className="calendar-panel"><div className="calendar-illustration" aria-hidden="true"><span>MON</span><strong>12</strong><i /></div><div><h2>Connect Google Calendar</h2><p className="small muted">Optional. You can always connect it later from Mission Control.</p></div><a className="btn" href="/api/google-calendar/start?return=%2Fstart%3Fstep%3D4">Connect calendar</a></div>
           )}
-        </>
+          <button className={calendar?.status === "connected" ? "btn" : "btn-secondary"} onClick={() => go(5)}>{calendar?.status === "connected" ? "Continue" : "Skip for now"}</button>
+        </section>
       )}
 
-      {phase.at === "pair" && !paired && (
-        <>
-          <h1 className="font-display italic text-[clamp(1.9rem,5vw,2.6rem)] leading-[1.1] tracking-[-0.015em]">
-            She&apos;ll take it from here.
-          </h1>
-          {phase.link ? (
-            <>
-              <a
-                href={phase.link}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-6 block w-full rounded-full bg-[#0a0a0a] px-4 py-3.5 text-center text-[15px] text-[#fbfaf6] no-underline transition-opacity hover:opacity-85"
-              >
-                Open Telegram
-              </a>
-              {/**
-                * ⚠️ THE QR WAS SPEC'D, QUOTED IN THE COMMENT ABOVE, AND NEVER
-                * RENDERED. §18.9.25 says "One QR, one button, one line", the
-                * comment three lines up repeats it verbatim, and this screen
-                * shipped with only the button. The frozen v1 flow had a working
-                * QR the whole time.
-                *
-                * ⚠️ It is not decoration. On a DESKTOP browser the button opens
-                * Telegram Desktop, which most founders do not have installed —
-                * so without the QR, pairing simply fails for them and the
-                * onboarding dead-ends on its last screen with no way forward.
-                *
-                * Rendered from an external QR service exactly as v1 did, and
-                * `next/image` is deliberately not used: it would need a domain
-                * allowlist for one decorative image.
-                */}
-              <div className="mt-6 flex flex-col items-center gap-3">
-                {/* eslint-disable-next-line @next/next/no-img-element -- reason: remote QR from an external host; next/image would need a domain allowlist for one decorative image */}
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(phase.link)}`}
-                  alt="Scan to open Telegram on your phone"
-                  width={160}
-                  height={160}
-                  className="rounded-xl border border-[#0a0a0a]/10 bg-white p-2"
-                />
-                <p className="text-xs text-[#0a0a0a]/55">
-                  On your phone? Scan this instead.
-                </p>
-              </div>
-            </>
-          ) : (
-            <p className="mt-4 text-sm text-[#0a0a0a]/60">
-              I couldn&apos;t make your link — refresh and I&apos;ll try again.
-            </p>
-          )}
-          {/* Says the screen is alive. Without it, waiting looks like stuck. */}
-          <p className="mt-6 text-center text-xs text-[#0a0a0a]/45">
-            Waiting for you to say hello&hellip; this page will move on its own.
-          </p>
-        </>
+      {step === 5 && (
+        <section>
+          <div className="screen-heading"><span className="kicker">Where Maya lives</span><h1>Let’s keep this in Messages.</h1><p className="muted">I’ll text when I find something worth your attention. You can reply naturally, send a link, ask for ideas, or tell me to remember something.</p></div>
+          <label>Your mobile number<input className="input" type="tel" inputMode="tel" autoComplete="tel" placeholder="+1 555 123 4567" value={phone} onChange={(event) => { setPhoneValue(event.target.value); setMessageLink(null); }} /></label>
+          <div className="settings-pair"><label>Timezone<select className="input" value={timezone} onChange={(event) => setTimezone(event.target.value)}>{Array.from(new Set([timezone, Intl.DateTimeFormat().resolvedOptions().timeZone, ...(typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [])])).filter(Boolean).map((zone) => <option value={zone} key={zone}>{zone.replaceAll("_", " ")}</option>)}</select></label><div className="quiet-fields"><label>Quiet from<input className="input" type="time" value={quietStart} onChange={(event) => setQuietStart(event.target.value)} /></label><label>Until<input className="input" type="time" value={quietEnd} onChange={(event) => setQuietEnd(event.target.value)} /></label></div></div>
+          <label className="consent-row"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span>I agree to receive messages from Maya at this number. Message and data rates may apply. Reply STOP anytime.</span></label>
+          {!messageLink ? <button className="btn" disabled={!phone.trim() || busy !== null} onClick={savePhone}>{busy === "phone" ? "Saving…" : "Finish setup"}</button> : null}
+          {(messageLink || progress?.phone) ? <div className="finish-card"><div className="finish-flower" aria-hidden="true">✿</div><h2>You’re ready.</h2><p className="muted small">I’m getting to know your posts now. I’ll bring the useful part to you in Messages.</p>{messageLink ? <a className="btn" href={messageLink}>Open Messages</a> : null}<Link className="btn-secondary" href="/app/today">Open Mission Control</Link></div> : null}
+        </section>
       )}
-      </main>
-    </div>
+
+      {notice ? <p className="notice-card" role="status">{notice}</p> : null}
+      {error ? <p className="notice-card error" role="alert">{error}</p> : null}
+      {step > 1 && !messageLink ? <button className="back-link" onClick={() => go((step - 1) as 1 | 2 | 3 | 4)}>← Back</button> : null}
+    </OnboardShell>
   );
 }

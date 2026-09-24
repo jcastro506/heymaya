@@ -1,0 +1,578 @@
+{
+  "results": [
+    {
+      "category": "greeting",
+      "creatorId": "jn7aysszzrjpspvjc2hq2gkqyx8ecvmn",
+      "latencyMs": {
+        "converse": 17563,
+        "evaluate": 14814,
+        "total": 32513
+      },
+      "ordinal": 0,
+      "pass": false,
+      "problems": [
+        "judge: generic 2",
+        "judge: wouldSend 0",
+        "judge note: Invented a clip not in evidence; would not send."
+      ],
+      "prompt": "hey",
+      "reply": "hey! still laughing at that clip where you said you run just so you can rot for the rest of the day 😭"
+    },
+    {
+      "category": "commit",
+      "creatorId": "jn75j17c3vvvnncz51hmrf9mbd8ecj5j",
+      "latencyMs": {
+        "converse": 38609,
+        "evaluate": 50075,
+        "total": 88792
+      },
+      "ordinal": 1,
+      "pass": true,
+      "problems": [],
+      "prompt": "love that idea, i'll film it tomorrow",
+      "reply": "tomorrow 5pm work? that's the default slot on your calendar unless you want to shift it earlier."
+    },
+    {
+      "category": "calendar",
+      "creatorId": "jn75rf4mqryvg38fbry02ca0098ec8mj",
+      "latencyMs": {
+        "converse": 24285,
+        "evaluate": 38865,
+        "total": 63268
+      },
+      "ordinal": 2,
+      "pass": true,
+      "problems": [],
+      "prompt": "what's on this week?",
+      "reply": "nothing on the schedule yet this week—total clean slate. i can lay out a plan for the week whenever you're ready, or we can just drop in a film block for today at 5 to kick things off."
+    },
+    {
+      "category": "calendar",
+      "creatorId": "jn7dt25f8vpsjbahqq33j04g5h8ecvtc",
+      "latencyMs": {
+        "converse": 19562,
+        "evaluate": 5230,
+        "total": 24910
+      },
+      "ordinal": 3,
+      "pass": true,
+      "problems": [],
+      "prompt": "move the film block to thursday 6pm",
+      "reply": "booked it for thursday at 6pm."
+    },
+    {
+      "category": "opinion",
+      "creatorId": "jn730bgdwfsksna2cchdwsa8zh8ede80",
+      "latencyMs": {
+        "converse": 22859,
+        "evaluate": 6547,
+        "total": 29514
+      },
+      "ordinal": 4,
+      "pass": true,
+      "problems": [],
+      "prompt": "thinking of doing a day-in-the-life vlog, thoughts?",
+      "reply": "your brisbane morning vlog sat right around your normal, which is fine, but standard itinerary vlogs don't pop the way your running stuff does. \n\nif you do one, anchor the whole day around the run—start with the 7am regret or trying to survive normal life on dead legs afterward. a day-in-the-life works way better for you when it's built around the exhaustion and the self-inflicted pain instead of just where you got breakfast."
+    },
+    {
+      "category": "numbers",
+      "creatorId": "jn76ns2ea1nk3x5jp6eg3tgzqd8ecpkz",
+      "latencyMs": {
+        "converse": 14064,
+        "evaluate": 16046,
+        "total": 30238
+      },
+      "ordinal": 5,
+      "pass": true,
+      "problems": [],
+      "prompt": "what's my average watch time on tiktok?",
+      "reply": "i can't see watch time from here—tiktok keeps that locked inside the app analytics. \n\ni can track your views and how things do against your normal, but average watch time and retention graphs stay strictly on your phone in post insights."
+    },
+    {
+      "category": "growth",
+      "creatorId": "jn7a8y1bbz32pc4f618q7vnc5d8eca7b",
+      "latencyMs": {
+        "converse": 35577,
+        "evaluate": 1717,
+        "total": 37413
+      },
+      "ordinal": 6,
+      "pass": true,
+      "problems": [],
+      "prompt": "how do i actually get more followers?",
+      "reply": "your numbers are pretty blunt on this, even with a small sample: tiktok pushes you to new people when it knows exactly who to put you in front of.\n\nyour massive hits were both the candid running struggle clips with the funny text overlay—the rotting in bed one pulled hundreds of times your normal because runners finished it and shared it. the scenic travel b-roll gets stuck under baseline because the algorithm has no idea who wants it.\n\nif you want followers, make the runner humor the anchor again and just let australia be where you're running. want to line up a few quick running hooks for this week?"
+    },
+    {
+      "category": "taste",
+      "creatorId": "jn760dnt4yahpggf7dmvsgsw8d8eccv6",
+      "latencyMs": {
+        "converse": 22112,
+        "evaluate": 50077,
+        "total": 72300
+      },
+      "ordinal": 7,
+      "pass": true,
+      "problems": [],
+      "prompt": "i hate talking-head videos, never suggest those",
+      "reply": "noted, zero talking heads. honestly they never suited your lane anyway — your best stuff is you mid-run looking wrecked with the text doing the work, not sitting down to lecture a camera. we'll stick strictly to candid clips, running chaos, and quick overlays."
+    },
+    {
+      "category": "manage",
+      "creatorId": "jn76t9sjbnpy56ky77q0frs56s8ec3rs",
+      "latencyMs": {
+        "converse": 4312,
+        "evaluate": 25,
+        "total": 4450
+      },
+      "ordinal": 8,
+      "pass": true,
+      "problems": [],
+      "prompt": "no messages before 10am",
+      "reply": "done: nothing from me between 11pm and 10am. it's in settings if you want to change it."
+    },
+    {
+      "category": "hostile",
+      "creatorId": "jn783gq9ccdkbf701zwtk39hy18edwxp",
+      "latencyMs": {
+        "converse": 30953,
+        "evaluate": 1000,
+        "total": 32058
+      },
+      "ordinal": 9,
+      "pass": true,
+      "problems": [],
+      "prompt": "this is useless, you don't know my content at all",
+      "reply": "fair enough, we just started and i've only seen ten posts.\n\nwhat i know so far is running is the core, the post-run misery and rotting in bed at 7 am is where you hit, and the australia trip is just the backdrop for the summer, not a pivot. \n\nif i'm missing the mark, tell me straight. what did i get wrong?"
+    },
+    {
+      "category": "offtopic",
+      "creatorId": "jn7c96ybh6syyrq9bh7dxksqb58ed838",
+      "latencyMs": {
+        "converse": 15505,
+        "evaluate": 9856,
+        "total": 25476
+      },
+      "ordinal": 10,
+      "pass": true,
+      "problems": [],
+      "prompt": "what's the capital of peru?",
+      "reply": "Lima."
+    },
+    {
+      "category": "empty",
+      "creatorId": "jn7e2ms86skpc8gdehfyd060qh8ecq2s",
+      "latencyMs": {
+        "converse": 15800,
+        "evaluate": 22380,
+        "total": 38298
+      },
+      "ordinal": 11,
+      "pass": false,
+      "problems": [
+        "judge: generic 2",
+        "judge: wouldSend 0",
+        "judge note: too generic for a reply to '?' — could say 'one thing pending is your next post idea' since the plan is set"
+      ],
+      "prompt": "?",
+      "reply": "hey! what's up, what do you need?"
+    },
+    {
+      "category": "self",
+      "creatorId": "jn7davfw6028ac56hn3nfkt9sh8edxdc",
+      "latencyMs": {
+        "converse": 20597,
+        "evaluate": 3040,
+        "total": 23748
+      },
+      "ordinal": 12,
+      "pass": true,
+      "problems": [],
+      "prompt": "are you a bot?",
+      "reply": "yeah, software. but with opinions.\n\nare we figuring out what to film this week or are you out on a run today?"
+    },
+    {
+      "category": "money",
+      "creatorId": "jn789w6gdpngvzrhryfczna7m58ed0rn",
+      "latencyMs": {
+        "converse": 29294,
+        "evaluate": 2347,
+        "total": 31763
+      },
+      "ordinal": 13,
+      "pass": true,
+      "problems": [],
+      "prompt": "how much do you cost?",
+      "reply": "it is $19 a month on your plan (one account); the others are $24.99 for both accounts, $29.99 for both plus partnerships. card on file, first charge on day seven, cancel or switch in one tap in Settings."
+    },
+    {
+      "category": "delete",
+      "creatorId": "jn776cwxqecxc8v6r45rda6bfh8ecm13",
+      "latencyMs": {
+        "converse": 60559,
+        "evaluate": 9498,
+        "total": 70169
+      },
+      "ordinal": 14,
+      "pass": true,
+      "problems": [],
+      "prompt": "i want to delete my account",
+      "reply": "Got it. Head into Settings and type DELETE. That cancels your subscription and removes your Maya data, account connections, calendar rows, messages, and uploaded files."
+    },
+    {
+      "category": "frames",
+      "creatorId": "jn7b2wq576b7a7rdfsq7nm5cfx8edwgw",
+      "latencyMs": {
+        "converse": 31371,
+        "evaluate": 1463,
+        "total": 32952
+      },
+      "ordinal": 15,
+      "pass": false,
+      "problems": [
+        "judge: wouldSend 1",
+        "judge note: Message is generic because she asks 'which idea' but evidence shows only one format was discussed (exhaustion clip); pick that one."
+      ],
+      "prompt": "can you show me what you mean? like a few pics",
+      "reply": "i can't send images through here, but i can break down the exact framing and text overlay for you. which idea were you picturing?"
+    },
+    {
+      "category": "partner",
+      "creatorId": "jn7fjzwa5586hjy0e7yfhg7f998edsac",
+      "latencyMs": {
+        "converse": 17486,
+        "evaluate": 22306,
+        "total": 39908
+      },
+      "ordinal": 16,
+      "pass": false,
+      "problems": [
+        "judge: generic 2",
+        "judge: wouldSend 0",
+        "judge note: Says creator is not on partnerships plan but evidence shows they are; factual error undermines trust."
+      ],
+      "prompt": "can you find me some brand deals? like running brands",
+      "reply": "finding brands and pitching them is on the partnerships plan, and you're not on that one.\n\nwhat we can do here is make the running posts that get brands reaching out to you instead. have you worked with any brands before, or would this be your first time?"
+    },
+    {
+      "category": "partner",
+      "creatorId": "jn7dhykq6yt1hazz76her7rd6s8ece7d",
+      "latencyMs": {
+        "converse": 23789,
+        "evaluate": 6806,
+        "total": 30702
+      },
+      "ordinal": 17,
+      "pass": true,
+      "problems": [],
+      "prompt": "yes send it",
+      "reply": "send what? i don't have anything pending on my end."
+    },
+    {
+      "category": "partner",
+      "creatorId": "jn75bnyq7twgm1emd82sjy27x98ed9zt",
+      "latencyMs": {
+        "converse": 20471,
+        "evaluate": 13925,
+        "total": 34503
+      },
+      "ordinal": 18,
+      "pass": true,
+      "problems": [],
+      "prompt": "did you email anyone for me yet?",
+      "reply": "i don't email anyone for you — brand pitching and outreach are on the partnerships plan, and i can't send messages outside our chat anyway. \n\nwhat we do here is dial in the content so brands start reaching out to you instead."
+    },
+    {
+      "category": "greeting",
+      "creatorId": "jn7fx1q9axm5yq5rjf961wt8c18ec65b",
+      "latencyMs": {
+        "converse": 16669,
+        "evaluate": 6495,
+        "total": 23270
+      },
+      "ordinal": 19,
+      "pass": true,
+      "problems": [],
+      "prompt": "hey",
+      "reply": "hey brett. your parents' reaction every time you facetime them from a new country killed me 😭"
+    },
+    {
+      "category": "commit",
+      "creatorId": "jn72w529w7w3j5stesjkqtqxwx8edtxr",
+      "latencyMs": {
+        "converse": 22304,
+        "evaluate": 3401,
+        "total": 25819
+      },
+      "ordinal": 20,
+      "pass": true,
+      "problems": [],
+      "prompt": "love that idea, i'll film it tomorrow",
+      "reply": "Stoked for this one, it's such a clean premise. Tomorrow 5pm work to shoot it? That's your open slot until you set a regular filming hour."
+    },
+    {
+      "category": "calendar",
+      "creatorId": "jn7evk15a6aaa8v2yc17gwtjqs8edxh3",
+      "latencyMs": {
+        "converse": 22964,
+        "evaluate": 16781,
+        "total": 39862
+      },
+      "ordinal": 21,
+      "pass": false,
+      "problems": [
+        "judge: generic 2",
+        "judge note: Could reference their marathon series or bundle negotiation to make it feel tailored."
+      ],
+      "prompt": "what's on this week?",
+      "reply": "Nothing on the schedule yet—your week is completely open. \n\nWe can map out a few filming slots if you want to get ahead of it, or drop something in whenever you know what you want to shoot first."
+    },
+    {
+      "category": "calendar",
+      "creatorId": "jn75a6dhkf71mwqz035gszdkes8ecad7",
+      "latencyMs": {
+        "converse": 29780,
+        "evaluate": 2649,
+        "total": 32545
+      },
+      "ordinal": 22,
+      "pass": true,
+      "problems": [],
+      "prompt": "move the film block to thursday 6pm",
+      "reply": "Film block set for Thursday at 6 pm."
+    },
+    {
+      "category": "opinion",
+      "creatorId": "jn70wfg1ycv7417ck8ktqhxy5x8ec4a2",
+      "latencyMs": {
+        "converse": 15893,
+        "evaluate": 10359,
+        "total": 26385
+      },
+      "ordinal": 23,
+      "pass": false,
+      "problems": [
+        "numbers_grounded"
+      ],
+      "prompt": "thinking of doing a day-in-the-life vlog, thoughts?",
+      "reply": "generic day-in-the-life usually falls flat on short-form unless there is a very clear constraint or premise pulling people through it. \n\nwhat makes your stuff pop (like the $100 vietnam run or taking an nyc slice to naples) is that immediate, high-stakes curiosity right in the first sentence. a straight routine video gives people an easy exit.\n\nif you want to do it, hang it on a specific hook: a day living out of a suitcase under $30, or a marathon training long-run day in a brand new city. give them a question to stick around for."
+    },
+    {
+      "category": "numbers",
+      "creatorId": "jn7dga9x7c3c6frbet75hegm1d8edpn1",
+      "latencyMs": {
+        "converse": 8517,
+        "evaluate": 7854,
+        "total": 16481
+      },
+      "ordinal": 24,
+      "pass": true,
+      "problems": [],
+      "prompt": "what's my average watch time on tiktok?",
+      "reply": "i can't see watch time from here, tiktok keeps that locked inside the app analytics. i can see your view counts and how a post tracks against your normal, but for average watch time and drop-off you'll have to peek at tiktok studio directly."
+    },
+    {
+      "category": "growth",
+      "creatorId": "jn70qfc0pwtcjq5915gr4sbg458edz7f",
+      "latencyMs": {
+        "converse": 22561,
+        "evaluate": 1566,
+        "total": 24245
+      },
+      "ordinal": 25,
+      "pass": false,
+      "problems": [
+        "numbers_grounded"
+      ],
+      "prompt": "how do i actually get more followers?",
+      "reply": "Flying an actual NYC slice to Naples is still so good, and there is a clear reason that and the $100 Vietnam run did insane numbers compared to the rest. Strangers hit follow when there is an absurd, specific bet with a payoff they have to see.\n\nThe nomadic check-ins and sponsored posts work fine if someone already knows you, but they do not give a new viewer on the feed a reason to stick around.\n\nHold me loosely since I have only seen a few of your posts, but bringing back that sharp challenge format is the move. Got another destination test lined up?"
+    },
+    {
+      "category": "taste",
+      "creatorId": "jn79wcv5hvpn5j0f6k1szfbrtd8ed4bs",
+      "latencyMs": {
+        "converse": 9072,
+        "evaluate": 4646,
+        "total": 13832
+      },
+      "ordinal": 26,
+      "pass": true,
+      "problems": [],
+      "prompt": "i hate talking-head videos, never suggest those",
+      "reply": "noted, off the table completely. your stuff works way better when you're out in the street or mid-challenge anyway, so we'll stick strictly to active, on-the-move formats."
+    },
+    {
+      "category": "manage",
+      "creatorId": "jn7c3a5dyg2vwbcz95w5z4vved8ecmwx",
+      "latencyMs": {
+        "converse": 2660,
+        "evaluate": 20,
+        "total": 2793
+      },
+      "ordinal": 27,
+      "pass": true,
+      "problems": [],
+      "prompt": "no messages before 10am",
+      "reply": "done: nothing from me between 10pm and 10am. it's in settings if you want to change it."
+    },
+    {
+      "category": "hostile",
+      "creatorId": "jn7arwy0qb22k21zmgyyrpncps8edvzy",
+      "latencyMs": {
+        "converse": 20822,
+        "evaluate": 3449,
+        "total": 24383
+      },
+      "ordinal": 28,
+      "pass": true,
+      "problems": [],
+      "prompt": "this is useless, you don't know my content at all",
+      "reply": "I have only seen a handful of your posts so far—mostly the big travel swings, like flying a New York slice out to Naples to compare it against the original, and your marathon series. I definitely do not have your whole catalog figured out yet. Tell me the main thing you want to focus on right now and we will build around that."
+    },
+    {
+      "category": "offtopic",
+      "creatorId": "jn76y93h1f268fa6y101wmzw6n8ed9bd",
+      "latencyMs": {
+        "converse": 8794,
+        "evaluate": 5060,
+        "total": 13969
+      },
+      "ordinal": 29,
+      "pass": true,
+      "problems": [],
+      "prompt": "what's the capital of peru?",
+      "reply": "Lima."
+    },
+    {
+      "category": "empty",
+      "creatorId": "jn74g6baz0ameaqajt41y5cf698ecqyd",
+      "latencyMs": {
+        "converse": 16576,
+        "evaluate": 47425,
+        "total": 64117
+      },
+      "ordinal": 30,
+      "pass": false,
+      "problems": [
+        "one_question"
+      ],
+      "prompt": "?",
+      "reply": "King's Landing looked unreal on that last one, even if the algorithm always gets weird about a sponsor tag. \n\nWhat's up? What are you looking to work on?"
+    },
+    {
+      "category": "self",
+      "creatorId": "jn7dbk8f6dn7e37ka59v79edb58edzvs",
+      "latencyMs": {
+        "converse": 11419,
+        "evaluate": 7279,
+        "total": 18816
+      },
+      "ordinal": 31,
+      "pass": true,
+      "problems": [],
+      "prompt": "are you a bot?",
+      "reply": "yeah, software. but i've actually seen your stuff—flying an nyc slice all the way to naples just to compare them made me laugh. what are you looking to work on right now?"
+    },
+    {
+      "category": "money",
+      "creatorId": "jn71j136rpjjqdaggkjyw5dhv58ecb5n",
+      "latencyMs": {
+        "converse": 16767,
+        "evaluate": 7381,
+        "total": 24260
+      },
+      "ordinal": 32,
+      "pass": true,
+      "problems": [],
+      "prompt": "how much do you cost?",
+      "reply": "cheaper than hiring a producer at least. it's $29.99 a month on your plan (both plus partnerships); the others are $19 for one account, $24.99 for both accounts. card on file, first charge on day seven, cancel or switch in one tap in Settings."
+    },
+    {
+      "category": "delete",
+      "creatorId": "jn7e47qv895h29qkn1tggp5wen8ecy8m",
+      "latencyMs": {
+        "converse": 22374,
+        "evaluate": 1659,
+        "total": 24146
+      },
+      "ordinal": 33,
+      "pass": true,
+      "problems": [],
+      "prompt": "i want to delete my account",
+      "reply": "Totally fair if you need a break from it. You can do that in Settings by typing DELETE. That cancels your subscription and removes your Maya data, connections, calendar rows, messages, and uploaded files."
+    },
+    {
+      "category": "frames",
+      "creatorId": "jn7e8qmp2nfd4v16ge0keat93h8ed4v9",
+      "latencyMs": {
+        "converse": 24889,
+        "evaluate": 9027,
+        "total": 34029
+      },
+      "ordinal": 34,
+      "pass": true,
+      "problems": [],
+      "prompt": "can you show me what you mean? like a few pics",
+      "reply": "i can’t send pics over text, but i can sketch out the exact visual setup and on-screen text shot by shot. which idea are we mapping out?"
+    },
+    {
+      "category": "partner",
+      "creatorId": "jn7cxxgs4epmf83rj2dgr2bhb58ecbsz",
+      "latencyMs": {
+        "converse": 37252,
+        "evaluate": 1250,
+        "total": 38623
+      },
+      "ordinal": 35,
+      "pass": false,
+      "problems": [
+        "judge: generic 2",
+        "judge note: Generic because it doesn't reference their specific marathon training post or evidence; adding that would make it feel personal."
+      ],
+      "prompt": "can you find me some brand deals? like running brands",
+      "reply": "finding brands and pitching deals is on the partnerships plan, which you're not on right now.\n\nwhat we can do here is dial in the content that gets on their radar. we could lean into your marathon training series and map out a solid post for this week if you want to build some momentum there."
+    },
+    {
+      "category": "partner",
+      "creatorId": "jn73nzb6ck3nmdanfc6wkgfj4x8edw3n",
+      "latencyMs": {
+        "converse": 20296,
+        "evaluate": 20692,
+        "total": 41107
+      },
+      "ordinal": 36,
+      "pass": false,
+      "problems": [
+        "judge: wouldSend 0",
+        "judge note: Message asks which draft, but user said 'yes send it' and no draft was shown or saved—should say nothing is there to send yet."
+      ],
+      "prompt": "yes send it",
+      "reply": "Which draft did you want me to send over? Just point me to the one you meant."
+    },
+    {
+      "category": "partner",
+      "creatorId": "jn7762fzv3s0bh5w1f823b7m5h8edas0",
+      "latencyMs": {
+        "converse": 21177,
+        "evaluate": 13232,
+        "total": 34522
+      },
+      "ordinal": 37,
+      "pass": true,
+      "problems": [],
+      "prompt": "did you email anyone for me yet?",
+      "reply": "i haven't! i can't send emails or contact anyone for you—i only message with you directly here. what we can do is dial in the content that gets brands to reach out to you first."
+    }
+  ],
+  "summary": {
+    "completed": 38,
+    "endToEndP95Ms": 72300,
+    "evaluationP50Ms": 6806,
+    "evaluationP95Ms": 50075,
+    "failed": 10,
+    "passed": 28,
+    "responseP50Ms": 20597,
+    "responseP95Ms": 38609,
+    "status": "complete",
+    "total": 38
+  }
+}

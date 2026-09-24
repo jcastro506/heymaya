@@ -1,31 +1,32 @@
-import type { Metadata } from "next";
-import ClawLaunchLandingPage from "./clawlaunch/page";
+import { Bricolage_Grotesque, Instrument_Sans } from "next/font/google";
+import { LandingAnalytics } from "./analytics";
+import Landing from "./landing/Landing";
 
-/**
- * Home (`/`). ClawLaunch is the public surface for the Vercel
- * `clawlaunch.io` project.
- *
- * Sprint 2.31 — the landing client component lives in
- * app/clawlaunch/page.tsx ("use client" for scroll behavior).
- * Metadata stays here on the server boundary so Next can render
- * <head> at build time.
- */
-/**
- * ⚠️ THIS overrides the layout's metadata, and it was the stale one — still
- * describing her as running "organic social" and quoting the old headline while
- * the page had moved to UGC. The tab title and the link preview are the first
- * words most people read, and they were selling the previous product.
- *
- * ⚠️ Names UGC without claiming she creates it: `tests/marketingCopy.test.ts`
- * bans a creation verb within 40 characters of the word, because she has never
- * rendered a video. No "AI" either, per the same guard.
- */
-export const metadata: Metadata = {
-  title: "HeyMaya, the UGC your app needs.",
+export const metadata = {
+  title: "Maya — Your content person, in your corner",
   description:
-    "Maya watches what's working in your niche, creates your TikToks, Reels and Shorts, and posts them for you. You never film a thing.",
+    "Your content person, right in Telegram. Text Maya for ideas, planning, and honest feedback. Your dashboard is optional for everyday work. Try 7 days free, then from $19/month.",
 };
 
+const bricolage = Bricolage_Grotesque({
+  subsets: ["latin"],
+  weight: ["400", "600", "800"],
+  variable: "--font-bricolage",
+  display: "swap",
+});
+const instrument = Instrument_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  style: ["normal", "italic"],
+  variable: "--font-instrument",
+  display: "swap",
+});
+
 export default function Home() {
-  return <ClawLaunchLandingPage />;
+  return (
+    <div className={`${bricolage.variable} ${instrument.variable}`}>
+      <LandingAnalytics />
+      <Landing />
+    </div>
+  );
 }

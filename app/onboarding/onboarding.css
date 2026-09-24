@@ -1,0 +1,279 @@
+/*
+ * The onboarding shell (2026-09-08): the same room as the landing page. Its tokens, its two
+ * faces, its button, its eyebrow. Scoped to `.maya-onboard` so the dashboard (dark, Geist)
+ * is untouched. Light on purpose: the landing is cream and ink, and the first screens after
+ * it must not flip to a dark developer console.
+ */
+.maya-onboard {
+  --ink: #29233f;
+  --muted: #756e84;
+  --purple: #7661b4;
+  --coral: #ff795f;
+  --ground: #fcfbf8;
+  --panel: #f3eff9;
+  --line: #e4dfea;
+  --ok: #2f7d5b;
+  --err: #c2453d;
+  min-height: 100dvh;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-instrument), sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+  color-scheme: light;
+}
+.maya-onboard .onboard-frame {
+  width: min(720px, calc(100% - 40px));
+  margin-inline: auto;
+  padding-block: 28px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+.maya-onboard .onboard-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.maya-onboard .maya-brand {
+  font-family: var(--font-bricolage), sans-serif;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 1;
+  color: var(--ink);
+  text-decoration: none;
+}
+.maya-onboard .maya-brand svg {
+  width: 28px;
+  height: 28px;
+  color: var(--coral);
+}
+.maya-onboard .maya-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.maya-onboard .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #8873aa;
+  box-shadow: 0 0 0 4px #e8e2ef;
+}
+.maya-onboard h1,
+.maya-onboard h2 {
+  font-family: var(--font-bricolage), sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0;
+  text-wrap: balance;
+}
+.maya-onboard h1 { font-size: clamp(34px, 6vw, 44px); }
+.maya-onboard h2 { font-size: clamp(28px, 5vw, 36px); }
+.maya-onboard p { margin: 0; }
+.maya-onboard .muted { color: var(--muted); }
+.maya-onboard .small { font-size: 13px; }
+.maya-onboard .tiny { font-size: 12px; }
+.maya-onboard .ok { color: var(--ok); }
+.maya-onboard .err { color: var(--err); font-size: 14px; }
+.maya-onboard section { display: flex; flex-direction: column; gap: 16px; }
+.maya-onboard label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 500; }
+
+.maya-onboard .input {
+  width: 100%;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  padding: 13px 14px;
+  font: 500 16px/1.4 var(--font-instrument), sans-serif;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.maya-onboard .input::placeholder { color: #a9a2b5; font-weight: 400; }
+.maya-onboard .input:focus { border-color: var(--purple); box-shadow: 0 0 0 4px #7661b41f; }
+.maya-onboard textarea.input { min-height: 96px; resize: vertical; }
+.maya-onboard select.input { appearance: auto; }
+
+.maya-onboard .btn,
+.maya-onboard .btn-secondary {
+  display: inline-flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 20px;
+  border-radius: 9px;
+  font: 600 14px/1.4 var(--font-instrument), sans-serif;
+  text-decoration: none;
+  cursor: pointer;
+  border: 0;
+  transition: transform 0.2s, background 0.2s, opacity 0.2s;
+}
+.maya-onboard .btn {
+  background: var(--ink);
+  color: #fff;
+  box-shadow: 0 4px 0 #29233f12;
+}
+.maya-onboard .btn::after { content: "→"; font-size: 19px; line-height: 1; }
+.maya-onboard .btn:hover:not(:disabled) { transform: translateY(-2px); background: #4a3c66; }
+.maya-onboard .btn:disabled { opacity: 0.4; cursor: default; }
+.maya-onboard .btn.inline { display: inline-flex; padding: 10px 14px; gap: 10px; }
+.maya-onboard .btn.inline::after { content: none; }
+.maya-onboard .btn-secondary {
+  background: #fff;
+  color: var(--ink);
+  border: 1.5px solid var(--line);
+  justify-content: center;
+}
+.maya-onboard .btn-secondary:hover:not(:disabled) { border-color: var(--purple); color: var(--purple); }
+.maya-onboard .btn-secondary:disabled { opacity: 0.4; cursor: default; }
+.maya-onboard .link {
+  align-self: flex-start;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: 500 13px/1.4 var(--font-instrument), sans-serif;
+  color: var(--purple);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.maya-onboard .chip {
+  border: 1.5px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font: 500 12px/1.3 var(--font-instrument), sans-serif;
+  cursor: pointer;
+}
+.maya-onboard .chip:hover { border-color: var(--purple); color: var(--purple); }
+.maya-onboard .row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1.5px solid var(--line);
+  background: #fff;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 14px;
+}
+.maya-onboard .panel {
+  background: var(--panel);
+  border-radius: 16px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.maya-onboard .qr { width: 220px; height: 220px; border-radius: 12px; background: #fff; padding: 8px; border: 1.5px solid var(--line); }
+.maya-onboard .avatar { width: 24px; height: 24px; border-radius: 50%; }
+.maya-onboard details summary { cursor: pointer; }
+.maya-onboard a:focus-visible,
+.maya-onboard button:focus-visible,
+.maya-onboard .input:focus-visible { outline: 3px solid #7960b6; outline-offset: 4px; }
+
+/* Clerk's card sits inside the same room. */
+.maya-onboard .cl-rootBox { width: 100%; }
+.maya-onboard .cl-card, .maya-onboard .cl-cardBox { box-shadow: none; border: 1.5px solid var(--line); border-radius: 16px; }
+
+/* The page under the shell is cream too, so an overscroll never shows the dashboard's dark ground. */
+body:has(.maya-onboard) { background: #fcfbf8; }
+
+.maya-onboard .onboard-progress { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; }
+.maya-onboard .onboard-progress span { height: 4px; border-radius: 999px; background: #e6e0e9; transition: background .25s ease, transform .25s ease; }
+.maya-onboard .onboard-progress span.is-active { background: linear-gradient(90deg, var(--purple), #b36f9b); transform: scaleY(1.2); }
+.maya-onboard .screen-heading { display: flex; flex-direction: column; gap: 9px; }
+.maya-onboard .screen-heading > p { max-width: 610px; font-size: 16px; }
+.maya-onboard .kicker { color: var(--coral); font-size: 11px; font-weight: 700; letter-spacing: 1.45px; text-transform: uppercase; }
+.maya-onboard .interval-toggle { display: inline-grid; grid-template-columns: 1fr 1fr; gap: 4px; align-self: flex-start; padding: 4px; border-radius: 12px; background: #ebe6ef; }
+.maya-onboard .interval-toggle button { min-height: 42px; padding: 8px 14px; border: 0; border-radius: 9px; color: var(--muted); background: transparent; font: 600 13px/1.2 var(--font-instrument), sans-serif; cursor: pointer; }
+.maya-onboard .interval-toggle button.selected { color: var(--ink); background: #fff; box-shadow: 0 2px 8px #34294914; }
+.maya-onboard .interval-toggle span { color: var(--ok); font-size: 10px; margin-left: 3px; }
+.maya-onboard .tier-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.maya-onboard .tier-card { min-width: 0; border: 1.5px solid var(--line); border-radius: 18px; background: #fff; padding: 18px; display: flex; flex-direction: column; gap: 18px; justify-content: space-between; box-shadow: 0 12px 32px #3e315708; }
+.maya-onboard .tier-card.featured { border-color: #ab93c7; background: linear-gradient(160deg, #fff 30%, #f3edf9); }
+.maya-onboard .tier-topline { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.maya-onboard .tier-topline h2 { font-size: 20px; }
+.maya-onboard .mini-badge { border-radius: 999px; color: #66508f; background: #e9def3; padding: 4px 7px; font-size: 8px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase; white-space: nowrap; }
+.maya-onboard .tier-price { display: flex; align-items: baseline; gap: 3px; }
+.maya-onboard .tier-price strong { font: 700 28px/1 var(--font-bricolage), sans-serif; }
+.maya-onboard .tier-price span { color: var(--muted); font-size: 12px; }
+.maya-onboard .connection-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.maya-onboard .connection-card { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 12px; border: 1.5px solid var(--line); border-radius: 18px; background: #fff; padding: 18px; }
+.maya-onboard .connection-card.connected { border-color: #a8cfba; background: #f7fcf8; }
+.maya-onboard .connection-card .btn-secondary, .maya-onboard .connected-label { grid-column: 1 / -1; }
+.maya-onboard .connection-copy h2, .maya-onboard .calendar-panel h2 { font-size: 20px; }
+.maya-onboard .platform-mark { width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center; color: #fff; font-size: 25px; font-weight: 700; }
+.maya-onboard .platform-mark.instagram { background: linear-gradient(135deg, #7056c7, #dc547a 56%, #f2a34a); }
+.maya-onboard .platform-mark.tiktok { background: #272238; text-shadow: 2px 1px #ff5576, -2px -1px #55e5df; }
+.maya-onboard .connected-label { color: var(--ok); font-size: 11px; font-weight: 700; letter-spacing: .9px; text-transform: uppercase; }
+.maya-onboard .privacy-note { text-align: center; color: var(--muted); font-size: 11px; }
+.maya-onboard .notice-card { border: 1px solid #d9cce7; border-radius: 12px; background: #f5f0fa; padding: 12px 14px; color: #5d4b79; font-size: 13px; }
+.maya-onboard .notice-card.error { border-color: #efc1bc; background: #fff1ef; color: var(--err); }
+.maya-onboard .read-card { display: flex; align-items: flex-start; gap: 14px; border-radius: 16px; padding: 16px; background: linear-gradient(135deg, #f0e9f6, #f9edf0); }
+.maya-onboard .read-orbit { width: 32px; height: 32px; flex: 0 0 auto; border: 2px solid #8b74b7; border-radius: 50%; position: relative; }
+.maya-onboard .read-orbit::after { content: ""; position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--coral); top: -3px; right: 1px; box-shadow: 0 0 0 4px #f2e8f4; }
+.maya-onboard .suggestion-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.maya-onboard .suggestion-card { position: relative; min-height: 176px; display: flex; flex-direction: column; gap: 9px; border: 1.5px solid var(--line); border-radius: 16px; background: #fff; padding: 15px; transition: border-color .2s, transform .2s, box-shadow .2s; }
+.maya-onboard .suggestion-card.selected { border-color: var(--purple); box-shadow: 0 8px 24px #7661b419; transform: translateY(-2px); }
+.maya-onboard .suggestion-select { position: absolute; right: 11px; top: 11px; width: 32px; height: 32px; border: 1.5px solid var(--line); border-radius: 50%; background: #fff; color: var(--purple); font-size: 18px; cursor: pointer; }
+.maya-onboard .suggestion-card.selected .suggestion-select { color: #fff; border-color: var(--purple); background: var(--purple); }
+.maya-onboard .creator-avatar { width: 46px; height: 46px; display: grid; place-items: center; overflow: hidden; border-radius: 50%; color: #fff; background: linear-gradient(145deg, #7661b4, #d67f9b) center/cover; font-weight: 700; }
+.maya-onboard .skeleton { border: 0; background: linear-gradient(100deg, #eee9f1 20%, #f8f5f9 40%, #eee9f1 60%); background-size: 220% 100%; animation: maya-shimmer 1.4s infinite linear; }
+@keyframes maya-shimmer { to { background-position-x: -220%; } }
+.maya-onboard .manual-creator { display: grid; grid-template-columns: 140px 1fr auto; gap: 8px; }
+.maya-onboard .calendar-panel { border: 1.5px solid var(--line); border-radius: 20px; background: linear-gradient(145deg, #fff, #f5f0f8); padding: 22px; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 16px; }
+.maya-onboard .calendar-panel > .btn, .maya-onboard .calendar-list { grid-column: 1 / -1; }
+.maya-onboard .calendar-check { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--ok); font-size: 22px; }
+.maya-onboard .calendar-illustration { width: 62px; height: 68px; position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; border-radius: 11px; background: #fff; box-shadow: 0 8px 20px #45345518; }
+.maya-onboard .calendar-illustration span { width: 100%; padding: 5px 0; color: #fff; background: var(--coral); text-align: center; font-size: 9px; font-weight: 700; }
+.maya-onboard .calendar-illustration strong { padding-top: 6px; font: 700 25px/1 var(--font-bricolage), sans-serif; }
+.maya-onboard .calendar-illustration i { width: 28px; height: 3px; margin-top: 6px; border-radius: 2px; background: #ddd3e2; }
+.maya-onboard .calendar-list { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+.maya-onboard .calendar-choice { flex-direction: row; align-items: center; min-height: 32px; font-weight: 400; }
+.maya-onboard .calendar-choice input, .maya-onboard .consent-row input { width: 18px; height: 18px; accent-color: var(--purple); }
+.maya-onboard .settings-pair { display: grid; grid-template-columns: 1.5fr 1fr; gap: 12px; }
+.maya-onboard .quiet-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.maya-onboard .consent-row { flex-direction: row; align-items: flex-start; gap: 10px; padding: 13px; border: 1px solid var(--line); border-radius: 12px; background: #fff; font-size: 12px; font-weight: 400; }
+.maya-onboard .consent-row input { flex: 0 0 auto; margin-top: 2px; }
+.maya-onboard .finish-card { display: flex; flex-direction: column; align-items: stretch; gap: 12px; border-radius: 22px; padding: 25px; text-align: center; background: linear-gradient(145deg, #eee5f5, #fbece9); }
+.maya-onboard .finish-card h2 { font-size: 28px; }
+.maya-onboard .finish-flower { align-self: center; color: var(--coral); font-size: 42px; line-height: 1; }
+.maya-onboard .back-link { align-self: flex-start; border: 0; padding: 8px 0; background: transparent; color: var(--muted); font: 500 13px/1 var(--font-instrument), sans-serif; cursor: pointer; }
+.maya-onboard .preview-nav { display: flex; justify-content: center; gap: 7px; }
+.maya-onboard .preview-nav a { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; color: var(--muted); background: #eee9f1; text-decoration: none; font-size: 12px; font-weight: 700; }
+.maya-onboard .preview-nav a.active { color: #fff; background: var(--purple); }
+
+@media (max-width: 680px) {
+  .maya-onboard .onboard-frame { width: min(100% - 28px, 540px); padding-block: 20px 42px; gap: 22px; }
+  .maya-onboard .maya-brand { font-size: 27px; }
+  .maya-onboard .maya-eyebrow { font-size: 9px; letter-spacing: 1.1px; }
+  .maya-onboard h1 { font-size: clamp(31px, 9vw, 39px); }
+  .maya-onboard .tier-list, .maya-onboard .suggestion-grid { grid-template-columns: 1fr; }
+  .maya-onboard .tier-card { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; }
+  .maya-onboard .tier-card .btn { grid-column: 1 / -1; }
+  .maya-onboard .tier-price strong { font-size: 25px; }
+  .maya-onboard .connection-grid { grid-template-columns: 1fr; }
+  .maya-onboard .suggestion-card { min-height: 0; display: grid; grid-template-columns: auto 1fr; padding-right: 52px; }
+  .maya-onboard .suggestion-card > p { grid-column: 1 / -1; }
+  .maya-onboard .manual-creator { grid-template-columns: 1fr auto; }
+  .maya-onboard .manual-creator select { grid-column: 1 / -1; }
+  .maya-onboard .settings-pair { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .maya-onboard *, .maya-onboard *::before, .maya-onboard *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

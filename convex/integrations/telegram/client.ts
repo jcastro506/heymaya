@@ -39,6 +39,8 @@ export interface TelegramSendMessageArgs {
   disableNotification?: boolean;
   /** Reply scope. */
   replyParameters?: { messageId: number; chatId?: string | number };
+  /** One-tap options (plan §7 S3). Rendered as an inline keyboard, up to three per row. */
+  buttons?: Array<{ id: string; label: string }>;
 }
 
 export interface TelegramApiOk<T> {
@@ -61,9 +63,19 @@ export type TelegramApiResult<T> = TelegramApiOk<T> | TelegramApiErr;
 export interface TelegramInboundUpdate {
   update_id: number;
   message?: TelegramInboundMessage;
-  /** Present when the user taps an inline-keyboard button (e.g. the one-tap
-   *  confirm-to-post card). `data` carries our `gpost:<eventId>` callback_data. */
+  /** Present when the user taps an inline-keyboard button. `data` carries our button id. */
   callback_query?: TelegramCallbackQuery;
+  /** Present when a reaction changes on a message (needs `message_reaction` in allowed_updates). */
+  message_reaction?: TelegramMessageReaction;
+}
+
+export interface TelegramMessageReaction {
+  chat: { id: number; type: string };
+  message_id: number;
+  user?: { id: number; username?: string };
+  date: number;
+  old_reaction: Array<{ type: string; emoji?: string }>;
+  new_reaction: Array<{ type: string; emoji?: string }>;
 }
 
 export interface TelegramCallbackQuery {
@@ -203,6 +215,55 @@ function apiUrl(token: string, method: string): string {
 }
 
 /**
+ * Send a small file (a calendar .ics, say) as a document. Multipart, so it goes as bytes
+ * rather than a URL Telegram would have to fetch. Used for the no-OAuth booking path.
+ */
+export async function sendTelegramDocument(
+  identity: TelegramBotIdentity,
+  args: { chatId: string | number; filename: string; content: string; mimeType?: string; caption?: string },
+  fetchImpl: typeof fetch = fetch
+): Promise<boolean> {
+  try {
+    const form = new FormData();
+    form.set("chat_id", String(args.chatId));
+    if (args.caption) form.set("caption", args.caption.slice(0, 1000));
+    form.set("document", new Blob([args.content], { type: args.mimeType ?? "text/calendar" }), args.filename);
+    const res = await fetchImpl(apiUrl(identity.token, "sendDocument"), { method: "POST", body: form });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** The album body, pure (§22 frames). Telegram fetches each photo by URL; ten per group, captions to 1024. */
+export function mediaGroupBody(args: { chatId: string | number; media: Array<{ url: string; caption: string }> }): Record<string, unknown> {
+  return { chat_id: args.chatId, media: args.media.slice(0, 10).map((m) => ({ type: "photo", media: m.url, caption: m.caption.slice(0, 1024) })) };
+}
+
+/** Send an album of photos as one media group. No inline keyboard is possible on a group; buttons ride the text before it. */
+export async function sendTelegramMediaGroup(
+  identity: TelegramBotIdentity,
+  args: { chatId: string | number; media: Array<{ url: string; caption: string }> },
+  fetchImpl: typeof fetch = fetch
+): Promise<TelegramApiResult<Array<{ message_id: number }>>> {
+  try {
+    const res = await fetchImpl(apiUrl(identity.token, "sendMediaGroup"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(mediaGroupBody(args)),
+    });
+    if (!res.ok) {
+      let description = `HTTP ${res.status} ${res.statusText}`;
+      try { const j = (await res.json()) as { description?: string }; if (j.description) description = j.description; } catch { /* the status is the description */ }
+      return { ok: false, description, errorCode: res.status };
+    }
+    return (await res.json()) as TelegramApiResult<Array<{ message_id: number }>>;
+  } catch (error) {
+    return { ok: false, description: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/**
  * Send a text message. Returns the parsed Telegram envelope.
  */
 export async function sendTelegramMessage(
@@ -221,6 +282,14 @@ export async function sendTelegramMessage(
       message_id: args.replyParameters.messageId,
       chat_id: args.replyParameters.chatId,
     };
+  }
+  if (args.buttons?.length) {
+    const rows: Array<Array<{ text: string; callback_data: string }>> = [];
+    for (const b of args.buttons) {
+      if (!rows.length || rows[rows.length - 1].length >= 3) rows.push([]);
+      rows[rows.length - 1].push({ text: b.label, callback_data: b.id.slice(0, 64) });
+    }
+    body.reply_markup = { inline_keyboard: rows };
   }
   const res = await fetchImpl(apiUrl(identity.token, "sendMessage"), {
     method: "POST",
@@ -367,6 +436,72 @@ export async function fetchTelegramFile(
       ok: false,
       reason: error instanceof Error ? error.message : String(error),
     };
+  }
+}
+
+/**
+ * Acknowledge a button tap immediately so the client stops its spinner; the real
+ * work happens in a job. Best-effort, never throws.
+ */
+/**
+ * Take the buttons off a message after it has been answered.
+ *
+ * ⚠️ Without this a tap looks like nothing happened: Telegram leaves the keyboard in place,
+ * the work runs server-side, and the confirmation arrives seconds later as a separate
+ * message. The operator tapped twice and then typed "yes" because the UI never acknowledged
+ * the first tap (2026-09-03).
+ */
+export async function clearMessageButtons(
+  identity: TelegramBotIdentity,
+  chatId: string,
+  messageId: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<boolean> {
+  try {
+    const res = await fetchImpl(apiUrl(identity.token, "editMessageReplyMarkup"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, message_id: Number(messageId), reply_markup: { inline_keyboard: [] } }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function answerCallbackQuery(
+  identity: TelegramBotIdentity,
+  callbackQueryId: string,
+  text?: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<boolean> {
+  try {
+    const res = await fetchImpl(apiUrl(identity.token, "answerCallbackQuery"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ callback_query_id: callbackQueryId, text }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** A reaction from the bot's side (plan §21.5). Small allowed set; best-effort. */
+export async function setMessageReaction(
+  identity: TelegramBotIdentity,
+  args: { chatId: string | number; messageId: number; emoji: "❤" | "🔥" | "👍" | "😂" | "👀" },
+  fetchImpl: typeof fetch = fetch
+): Promise<boolean> {
+  try {
+    const res = await fetchImpl(apiUrl(identity.token, "setMessageReaction"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: args.chatId, message_id: args.messageId, reaction: [{ type: "emoji", emoji: args.emoji }] }),
+    });
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 

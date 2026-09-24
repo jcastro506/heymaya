@@ -1,0 +1,42 @@
+{
+  "evidenceCovers": [
+    null
+  ],
+  "evidenceLinks": [
+    "https://www.tiktok.com/@andi.renay/video/7682956096855739679?_r=1&u_code=f07i95ge4i51a1&preview_pb=0&sharer_language=en&_d=f08babdmf8d44c&share_item_id=7682956096855739679&source=h5_m"
+  ],
+  "features": {
+    "account": "@andi.renay",
+    "format": "pov",
+    "lengthBucket": "<15",
+    "sound": "original",
+    "source": "breakout",
+    "tone": "ironic",
+    "topics": [
+      "running humor",
+      "internal monologue",
+      "relatable fitness"
+    ]
+  },
+  "fitWhy": "The frantic mid-run internal monologue swings directly mirror her top runner-meme format (610x her normal) while fitting her active texture in Australia.",
+  "id": "jx7f9zetcj2wy2s6mpzpdwk2nn8e35ak",
+  "matchedPostId": null,
+  "messageText": "the switch between \"i can't do this\" and \"i love running\" mid-hill made me laugh. andi.renay posted this an hour ago and it's doing 8.55x her normal at 8,146 views.\n---\nit works because the manic monologue says what every runner actually thinks. you could shoot a quick 15-second version on your next river run in brisbane.\ntext overlay: running in queensland heat (it's 7 am)\nsound: your own audio\n---\ntomorrow 5 pm is your next open slot, want to try a quick take of this?\nhttps://www.tiktok.com/@andi.renay/video/7682956096855739679",
+  "newForYou": false,
+  "postedAt": null,
+  "reaction": null,
+  "saved": false,
+  "sentAt": 1788916288961,
+  "status": "expired",
+  "version": {
+    "block": {
+      "lengthMin": 30,
+      "startLocal": "2026-09-09T17:00",
+      "title": "film: running internal monologue"
+    },
+    "hook": "i love running vs running in 90% humidity",
+    "lengthSec": 15,
+    "onScreenText": "my internal monologue every 30 seconds on a run",
+    "sound": "original audio"
+  }
+}

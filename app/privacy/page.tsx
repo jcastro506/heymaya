@@ -1,152 +1,51 @@
 import Link from "next/link";
-import type { Metadata } from "next";
-import type { ReactNode } from "react";
 
-export const metadata: Metadata = {
-  title: "Privacy Policy | HeyMaya",
-  description:
-    "How HeyMaya handles creator profile, TikTok, calendar, phone, and messaging data.",
-};
-
-const updated = "May 2, 2026";
-
-export default function PrivacyPage() {
+/** Privacy (plan §7 S1 legal, §16.5). Names the vendors, states the posture, gives the deletion path. Reviewed by a person before launch. */
+export default function Privacy() {
   return (
-    <main className="min-h-screen bg-ink text-paper">
-      <LegalHeader />
-      <article className="mx-auto max-w-3xl px-5 pb-20 pt-10 sm:px-8">
-        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-paper-faint">
-          Last updated {updated}
-        </p>
-        <h1 className="mt-4 font-display text-5xl leading-tight text-paper">
-          Privacy Policy
-        </h1>
-        <p className="mt-5 text-base leading-relaxed text-paper-dim">
-          HeyMaya is built for content creators. Maya uses the context you
-          provide to plan content, suggest filming windows, and message you in
-          the channels you connect. We collect only the data needed to make
-          that workflow useful.
-        </p>
+    <main className="max-w-2xl mx-auto px-6 py-12 flex flex-col gap-6 text-sm leading-relaxed">
+      <h1 className="text-2xl font-semibold">Privacy</h1>
+      <p className="opacity-60">Last updated 2 September 2026. This page describes the pilot. It changes when the product does, and the date changes with it.</p>
 
-        <LegalSection title="Data We Collect">
-          <p>
-            We collect account information such as your name, email address,
-            phone number, and authentication identifiers. During onboarding we
-            collect creator context such as your niche, goals, blockers, tone
-            preference, TikTok handle, availability, and content boundaries.
-          </p>
-          <p>
-            If you connect TikTok context through supported data providers, we
-            may store profile metadata, post metadata, captions, public
-            engagement metrics, thumbnails, and selected media references used
-            to analyze your creator strategy.
-          </p>
-          <p>
-            If you connect Google Calendar, Maya reads upcoming calendar events
-            for planning and may create Maya-owned content holds only when the
-            product flow asks for scheduling. Calendar tokens are stored in an
-            encrypted form. Calendar events that look personal or private are
-            redacted before Maya uses them for creator planning.
-          </p>
-        </LegalSection>
+      <h2 className="font-semibold text-base">What Maya is</h2>
+      <p>Maya is a creator&apos;s assistant for TikTok and Instagram. She reads public posts, watches short videos, reads a calendar you connect, and texts you on Telegram. She is software. Where she uses language and video models, those are named below.</p>
 
-        <LegalSection title="How We Use Data">
-          <p>
-            We use your data to create your Creator Maya profile, generate daily
-            plans, schedule approved content work blocks, send iMessage-based
-            guidance, improve product reliability, prevent abuse, and comply
-            with legal obligations.
-          </p>
-          <p>
-            Maya does not sell your personal information. Maya does not email
-            brands, create calendar events, or send outbound messages on your
-            behalf unless the product tier and approval flow allow it.
-          </p>
-        </LegalSection>
+      <h2 className="font-semibold text-base">What we collect from you</h2>
+      <ul className="list-disc pl-5 flex flex-col gap-1">
+        <li>Your email and sign-in, held by Clerk.</li>
+        <li>Your TikTok and Instagram handles, and the handles of accounts you tell us you admire. We never ask for, hold, or use your platform passwords. Ownership of a handle is not verified during the pilot; you are telling us it is yours.</li>
+        <li>Your messages with Maya on Telegram, including files, screenshots and voice notes you send her, and her replies.</li>
+        <li>What you do with her ideas: reactions, taps, replies, and which ideas you posted. This is how she learns your taste.</li>
+        <li>If you connect Google Calendar: event titles, start and end times, the all-day flag and the calendar id, for the next fourteen days, kept for ninety days rolling. Never descriptions, attendees, locations or attachments. Events that look private (health, legal, money, work reviews, relationships) keep no title and are never referenced.</li>
+        <li>Billing: your card is held by Stripe. We keep the Stripe customer and subscription ids and your plan status.</li>
+      </ul>
 
-        <LegalSection title="Google Calendar Data">
-          <p>
-            HeyMaya uses Google Calendar data to understand your near-term
-            schedule, identify content windows, and create or update Maya-owned
-            calendar holds when you approve scheduling. We do not use Google
-            Calendar data for advertising.
-          </p>
-          <p>
-            We request Calendar access separately from Google sign-in. You can
-            disconnect Calendar inside HeyMaya, and you can also revoke access
-            from your Google Account permissions page.
-          </p>
-        </LegalSection>
+      <h2 className="font-semibold text-base">What we read that is public</h2>
+      <p>Your public posts and their public counts, and the public posts of the accounts you admire and of accounts in your lane, are read through ScrapeCreators, a vendor that reads what any signed-out visitor can see. We keep captions, transcripts, counts and short written descriptions of how a video is made. We never keep the video files of other people&apos;s posts.</p>
 
-        <LegalSection title="Sharing">
-          <p>
-            We share data with infrastructure and product vendors only as needed
-            to run HeyMaya, including authentication, database, hosting, calendar
-            connection, messaging, AI model, analytics, and social-data
-            providers. These providers process data on our behalf.
-          </p>
-        </LegalSection>
+      <h2 className="font-semibold text-base">Who processes it</h2>
+      <ul className="list-disc pl-5 flex flex-col gap-1">
+        <li><b>Convex</b> stores everything and runs Maya.</li>
+        <li><b>Clerk</b> handles sign-in. <b>Stripe</b> handles payment. <b>Telegram</b> carries the chat.</li>
+        <li><b>ScrapeCreators</b> reads public posts. <b>Google</b> (Calendar API, and the Gemini models that watch videos and read screenshots). <b>OpenRouter</b> routes text to language models (Google Gemini and Z.ai GLM during the pilot). Prompts sent to models contain your posts, your messages and what Maya knows about you; none of these vendors train on it under the terms we use.</li>
+        <li><b>Zernio</b>, when you choose to connect an account for your own analytics after the pilot. Not used during the trial.</li>
+        <li><b>PostHog</b> for product analytics on the website, if you accept it. We default to declining.</li>
+      </ul>
 
-        <LegalSection title="Retention And Deletion">
-          <p>
-            We keep account and creator data while your account is active or as
-            needed for product, security, and legal purposes. You can request
-            deletion by emailing support. We will delete or de-identify account
-            data unless retention is required by law, security, billing, or
-            dispute obligations.
-          </p>
-        </LegalSection>
+      <h2 className="font-semibold text-base">Retention</h2>
+      <p>Messages twelve months. What she learned from your posts for as long as you have an account. Calendar fields ninety days rolling. Notes until they expire or you confirm them. Public content about other accounts indefinitely, without video files.</p>
 
-        <LegalSection title="Contact">
-          <p>
-            For privacy, deletion, or security requests, contact{" "}
-            <a className="text-lime underline-offset-4 hover:underline" href="mailto:support@hey-maya.ai">
-              support@hey-maya.ai
-            </a>
-            .
-          </p>
-        </LegalSection>
-      </article>
+      <h2 className="font-semibold text-base">Your export and your deletion</h2>
+      <p>From Settings you can download everything we hold about you as one file, and you can delete your account. Deletion is one procedure: your subscription is canceled, your calendar token is revoked at Google and every calendar row deleted, Maya sends a final message and the Telegram pairing is removed, every row keyed to you is deleted, files you sent are deleted, and your sign-in is deleted. Two things remain: Stripe invoices, because tax law requires it, and application logs with ids and no content for thirty days. Public posts of yours that other creators&apos; lanes observed are public information about a public account; if you ask, we remove them by hand.</p>
+      <p>The data deletion URL for platform reviews is this page and the Settings procedure it describes: <span className="opacity-70">/app/settings</span>.</p>
+
+      <h2 className="font-semibold text-base">Age</h2>
+      <p>Maya is for people 18 and over.</p>
+
+      <h2 className="font-semibold text-base">Contact</h2>
+      <p>Write to the founder at the address on the signup email, or tell Maya &ldquo;talk to a person&rdquo; and a person replies in the same chat.</p>
+
+      <p className="opacity-50"><Link className="underline" href="/">Home</Link> · <Link className="underline" href="/terms">Terms</Link></p>
     </main>
-  );
-}
-
-function LegalHeader() {
-  return (
-    <header className="border-b border-[var(--hairline)]">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5 sm:px-8 lg:px-10">
-        <Link href="/" className="flex items-center gap-2" aria-label="HeyMaya home">
-          <span className="grid h-8 w-8 place-items-center rounded-md bg-lime font-display text-lg text-ink">
-            m
-          </span>
-          <span className="font-display text-xl text-paper">HeyMaya</span>
-        </Link>
-        <nav className="flex items-center gap-4 text-sm text-paper-dim">
-          <Link href="/terms" className="hover:text-paper">
-            Terms
-          </Link>
-          <Link href="/creator-maya-v0" className="hover:text-paper">
-            Start
-          </Link>
-        </nav>
-      </div>
-    </header>
-  );
-}
-
-function LegalSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="mt-10 border-t border-[var(--hairline)] pt-6">
-      <h2 className="font-display text-3xl text-paper">{title}</h2>
-      <div className="mt-4 space-y-4 text-sm leading-relaxed text-paper-dim">
-        {children}
-      </div>
-    </section>
   );
 }

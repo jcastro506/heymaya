@@ -1,0 +1,553 @@
+/**
+ * Operator-only seams for `npx convex run`, used to exercise the pipeline on a dev
+ * deployment without the web. Internal: not reachable from a client.
+ *
+ *   arch -arm64 npx convex run onboarding/dev:seed '{"tiktok":"leahruns","niche":"marathon training"}'
+ *   arch -arm64 npx convex run onboarding/dev:status '{"creatorId":"..."}'
+ */
+
+import { v } from "convex/values";
+import { internalAction, internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
+import { internal } from "../_generated/api";
+import type { Doc, Id } from "../_generated/dataModel";
+
+export const seed = internalMutation({
+  args: { tiktok: v.optional(v.string()), instagram: v.optional(v.string()), niche: v.optional(v.string()), timezone: v.optional(v.string()), email: v.optional(v.string()), admired: v.optional(v.array(v.string())) },
+  handler: async (ctx, a): Promise<{ creatorId: string }> => {
+    const now = Date.now();
+    const creatorId = await ctx.db.insert("creators", {
+      clerkUserId: `dev_${now}`,
+      email: a.email ?? "dev@example.com",
+      handles: { tiktok: a.tiktok, instagram: a.instagram },
+      ownership: "unverified",
+      niche: a.niche ?? "",
+      timezone: a.timezone ?? "UTC",
+      quietHours: { start: "22:00", end: "07:00" },
+      tone: "friend",
+      mode: "full",
+      dossierVersion: 0,
+      notes: [],
+      affinities: [],
+      experiments: [],
+      channel: { paired: false },
+      plan: { status: "comped", founding: true },
+      createdAt: now,
+    });
+    for (const h of a.admired ?? []) {
+      await ctx.db.insert("trackedAccounts", { creatorId, platform: "tiktok", handle: h.replace(/^@/, "").toLowerCase(), addedBy: "creator", baselineN: 0, status: "active", createdAt: now });
+    }
+    await ctx.runMutation(internal.core.jobs.enqueue, {
+      kind: "ingest_catalogue",
+      idempotencyKey: `ingest:${creatorId}:v0`,
+      creatorId,
+      payloadJson: JSON.stringify({ reason: "dev seed" }),
+    });
+    return { creatorId };
+  },
+});
+
+export const status = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a) => {
+    const creator = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!creator) return null;
+    const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"ownPosts">[];
+    const jobs = (await ctx.db.query("jobs").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"jobs">[];
+    const messages = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(10)) as Doc<"messages">[];
+    const costs = await ctx.db.query("costEvents").withIndex("by_creator_at", (q) => q.eq("creatorId", a.creatorId)).collect();
+    const signals = (await ctx.db.query("signals").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(10)) as Doc<"signals">[];
+    return {
+      mode: creator.mode,
+      dossierVersion: creator.dossierVersion,
+      dossierSummary: (creator.dossier as { persona?: { summary?: string } } | undefined)?.persona?.summary ?? null,
+      posts: posts.length,
+      transcripts: posts.filter((p) => p.transcript).length,
+      baselineSample: posts.slice(0, 3).map((p) => ({ id: p.postId, url: p.url, type: p.contentType, sec: p.durationSec, views: p.metrics.views, multiple: p.multiple, sample: p.sample, transcript: p.transcript ? p.transcript.slice(0, 80) : null })),
+      jobs: jobs.map((j) => ({ kind: j.kind, status: j.status, attempts: j.attempts, lastError: j.lastError })),
+      messages: messages.map((m) => ({ dir: m.direction, kind: m.kind, body: m.body.slice(0, 160), delivered: m.deliveredAt ? true : m.deliveryError ?? "pending" })),
+      spendUsd: costs.reduce((s, c) => s + c.costUsd, 0),
+      signals: signals.map((x) => ({ kind: x.kind, score: x.score, verdict: x.verdict, why: x.why.slice(0, 200), investigation: (x.investigation ?? []).map((t) => `${t.tool}(${JSON.stringify(t.params).slice(0, 60)}) ${t.ok ? "ok" : "refused"} ${t.credits ?? 0}cr ${t.ms}ms — ${t.why.slice(0, 80)}`) })),
+    };
+  },
+});
+
+/** Pull a creator's queued jobs forward so a drain claims them now. */
+export const retryNow = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ moved: number }> => {
+    const jobs = (await ctx.db.query("jobs").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"jobs">[];
+    let moved = 0;
+    for (const j of jobs) {
+      if (j.status === "queued" || j.status === "dead") {
+        await ctx.db.patch(j._id, { status: "queued", runAfter: Date.now(), updatedAt: Date.now() });
+        moved += 1;
+      }
+    }
+    return { moved };
+  },
+});
+
+/** Bind a Telegram chat to a dev creator without the web flow (the operator's own chat, for a live smoke). */
+export const pairChat = internalMutation({
+  args: { creatorId: v.id("creators"), chatId: v.string() },
+  handler: async (ctx, a): Promise<{ paired: boolean }> => {
+    // Same exclusivity rule as the real pairing path: one chat, one creator.
+    for (const other of await ctx.db.query("creators").withIndex("by_telegram_chat", (q) => q.eq("telegramChatId", a.chatId)).collect()) {
+      if (other._id !== a.creatorId) await ctx.db.patch(other._id, { telegramChatId: undefined, channel: { paired: false }, updatedAt: Date.now() });
+    }
+    await ctx.db.patch(a.creatorId, { telegramChatId: a.chatId, channel: { paired: true, pairedAt: Date.now() }, updatedAt: Date.now() });
+    const jobs = (await ctx.db.query("jobs").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"jobs">[];
+    for (const j of jobs) if (j.kind === "deliver_message" && j.status !== "succeeded") await ctx.db.patch(j._id, { status: "queued", runAfter: Date.now(), updatedAt: Date.now() });
+    return { paired: true };
+  },
+});
+
+/** Dev only: a bare creator row, paired to a chat, with NO catalogue read queued: for exercising one delivery path (an album, say) on a phone without spend. */
+export const seedBare = internalMutation({
+  args: { tiktok: v.string(), chatId: v.string(), timezone: v.optional(v.string()) },
+  handler: async (ctx, a): Promise<{ creatorId: string }> => {
+    const now = Date.now();
+    for (const other of await ctx.db.query("creators").withIndex("by_telegram_chat", (q) => q.eq("telegramChatId", a.chatId)).collect()) {
+      await ctx.db.patch(other._id, { telegramChatId: undefined, channel: { paired: false }, updatedAt: now });
+    }
+    const creatorId = await ctx.db.insert("creators", {
+      clerkUserId: `devbare_${now}`, email: "dev-bare@example.com", handles: { tiktok: a.tiktok }, ownership: "unverified", niche: "", timezone: a.timezone ?? "UTC",
+      quietHours: { start: "22:00", end: "07:00" }, tone: "friend", mode: "full", dossierVersion: 0, notes: [], affinities: [], experiments: [],
+      channel: { paired: true, pairedAt: now }, telegramChatId: a.chatId, plan: { status: "paused", founding: true }, createdAt: now,
+    });
+    return { creatorId };
+  },
+});
+
+/** Dev only: forget a creator's watched cards so `watch.run` watches the sample again (after a change to what a card carries). */
+export const forgetCards = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ forgotten: number }> => {
+    const rows = (await ctx.db.query("ownPostReads").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"ownPostReads">[];
+    for (const r of rows) await ctx.db.delete(r._id);
+    return { forgotten: rows.length };
+  },
+});
+
+/** Dev only: take a chat off a creator, so a test row stops being able to reach a phone. */
+export const unpairChat = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ ok: boolean }> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!c) return { ok: false };
+    await ctx.db.patch(a.creatorId, { telegramChatId: undefined, channel: { paired: false }, updatedAt: Date.now() });
+    return { ok: true };
+  },
+});
+
+/** Dev only: the most recent failed or dead jobs with their errors, fleet-wide. */
+export const failedJobs = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<Array<Record<string, unknown>>> => {
+    const rows = (await ctx.db.query("jobs").order("desc").take(40)) as Doc<"jobs">[];
+    return rows.filter((j) => j.status === "failed" || j.status === "dead").slice(0, 5).map((j) => ({ kind: j.kind, status: j.status, attempts: j.attempts, creatorId: j.creatorId, error: j.lastError ?? null, payload: (j.payloadJson ?? "").slice(0, 200) }));
+  },
+});
+
+/** Dev only: the last jobs and messages for whichever creator owns a Telegram chat. */
+export const chatTrace = internalQuery({
+  args: { chatId: v.string() },
+  handler: async (ctx, a): Promise<Record<string, unknown>> => {
+    const creator = (await ctx.db.query("creators").withIndex("by_telegram_chat", (q) => q.eq("telegramChatId", a.chatId)).first()) as Doc<"creators"> | null;
+    if (!creator) return { creator: null };
+    const jobs = (await ctx.db.query("jobs").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).order("desc").take(6)) as Doc<"jobs">[];
+    const messages = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", creator._id)).order("desc").take(4)) as Doc<"messages">[];
+    const predictions = (await ctx.db.query("predictions").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).order("desc").take(3)) as Doc<"predictions">[];
+    const costs = (await ctx.db.query("costEvents").withIndex("by_creator_at", (q) => q.eq("creatorId", creator._id)).order("desc").take(12)) as Doc<"costEvents">[];
+    return {
+      creator: creator._id,
+      recentCosts: costs.map((c) => `${new Date(c.at).toISOString().slice(11, 19)} ${c.vendor} ${c.kind} $${c.costUsd.toFixed(4)}`),
+      predictions: predictions.map((p) => ({ confidence: p.confidence, expectedMultiple: p.expectedMultiple, subject: p.subject, citations: (p.opinion as { citations?: unknown }).citations, investigation: ((p.opinion as { investigation?: Array<{ tool: string; params: unknown; ok: boolean; credits?: number; why: string }> }).investigation ?? []).map((t) => `${t.tool}(${JSON.stringify(t.params).slice(0, 70)}) ${t.ok ? "ok" : "refused"} ${t.credits ?? 0}cr — ${t.why.slice(0, 80)}`) })),
+      jobs: jobs.map((j) => ({ kind: j.kind, status: j.status, attempts: j.attempts, error: j.lastError ?? null })),
+      messages: messages.reverse().map((m) => ({ dir: m.direction, kind: m.kind, body: m.body.slice(0, 500), delivered: Boolean(m.deliveredAt), error: m.deliveryError ?? null })),
+    };
+  },
+});
+
+
+/** Dev only: put a creator's judged signals back to pending so the scout can be exercised again. */
+export const reopenSignals = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ reopened: number }> => {
+    const rows = (await ctx.db.query("signals").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"signals">[];
+    let n = 0;
+    for (const r of rows) {
+      await ctx.db.patch(r._id, { verdict: "pending", createdAt: Date.now(), investigation: undefined, ...(r.detected ? { why: r.detected } : {}) });
+      n++;
+    }
+    return { reopened: n };
+  },
+});
+
+/** Dev only: one call to a model id through OpenRouter, to see the raw reason when a role's primary keeps falling back. */
+export const probeModel = internalAction({
+  args: { model: v.string(), maxTokens: v.optional(v.number()) },
+  handler: async (_ctx, a): Promise<{ ok: boolean; reason?: string; content?: string; usage?: unknown }> => {
+    const { callOpenRouter } = await import("../integrations/openrouter/client");
+    const r = await callOpenRouter({ model: a.model, messages: [{ role: "system", content: "Answer with one word." }, { role: "user", content: "Say ok." }], temperature: 0, maxTokens: a.maxTokens ?? 200, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+    return r.ok ? { ok: true, content: r.content.slice(0, 80), usage: r.usage } : { ok: false, reason: r.reason };
+  },
+});
+
+/** Dev only: a plausible breakout candidate for an admired account, so the scout and its evals have something worth judging. */
+export const seedBreakout = internalMutation({
+  args: { creatorId: v.id("creators"), handle: v.string(), ratio: v.number(), url: v.string() },
+  handler: async (ctx, a): Promise<{ signalId: Id<"signals"> }> => {
+    const now = Date.now();
+    let tracked = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).filter((q) => q.eq(q.field("handle"), a.handle)).first()) as Doc<"trackedAccounts"> | null;
+    if (!tracked) {
+      const id = await ctx.db.insert("trackedAccounts", { creatorId: a.creatorId, platform: "tiktok", handle: a.handle, status: "active", addedBy: "creator", baselineN: 12, medianPace24h: 4000, createdAt: now } as never);
+      tracked = (await ctx.db.get(id)) as Doc<"trackedAccounts">;
+    }
+    const signalId = await ctx.db.insert("signals", { creatorId: a.creatorId, url: a.url, kind: "breakout", sourcePostIds: [a.url.split("/").pop() ?? "p"], trackedAccountId: tracked._id, score: a.ratio, corroboration: { accounts: 2, soundRising: false }, verdict: "pending", why: `${a.ratio}x their normal after 9h (${Math.round(a.ratio * 4000 * 9).toLocaleString()} views vs a normal of ${(4000 * 9).toLocaleString()} at this age); ${a.url}`, thresholdsVersion: "dev", createdAt: now });
+    return { signalId };
+  },
+});
+
+/** Dev only: the creator's settings rows and admired list, for checking a chat management turn landed. */
+export const settingsOf = internalQuery({
+  args: { chatId: v.string() },
+  handler: async (ctx, a): Promise<Record<string, unknown>> => {
+    const creator = (await ctx.db.query("creators").withIndex("by_telegram_chat", (q) => q.eq("telegramChatId", a.chatId)).first()) as Doc<"creators"> | null;
+    if (!creator) return {};
+    const tracked = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).collect()) as Doc<"trackedAccounts">[];
+    return { tone: creator.tone, quietHours: creator.quietHours, niche: creator.niche, tracked: tracked.map((t) => `${t.platform}/@${t.handle}/${t.status}`) };
+  },
+});
+
+/** Dev only: put a public image into a chat as if the creator sent it, so the moment path can be exercised from the CLI. */
+export const injectImage = internalAction({
+  args: { chatId: v.string(), url: v.string(), caption: v.optional(v.string()) },
+  handler: async (ctx, a): Promise<{ ok: boolean; reason?: string }> => {
+    const res = await fetch(a.url, { headers: { "user-agent": "Maya-dev/1.0 (image injector for the moment path)" }, redirect: "follow" });
+    if (!res.ok) return { ok: false, reason: `fetch ${res.status}` };
+    const mime = res.headers.get("content-type")?.split(";")[0] ?? "image/jpeg";
+    const bytes = await res.arrayBuffer();
+    const storageId = await ctx.storage.store(new Blob([bytes], { type: mime }));
+    const creatorId = await ctx.runQuery(internal.onboarding.dev.creatorIdByChat, { chatId: a.chatId });
+    if (!creatorId) return { ok: false, reason: "no creator for chat" };
+    const messageId = await ctx.runMutation(internal.core.telegramFiles.recordInboundFile, { creatorId, storageId, mime, fileUniqueId: `dev_${Date.now()}`, caption: a.caption ?? "", ts: Date.now() });
+    await ctx.runMutation(internal.core.jobs.enqueue, { kind: "converse", idempotencyKey: `converse:${messageId}`, creatorId, payloadJson: JSON.stringify({ messageId, chatId: a.chatId, kind: "file", kindHint: "image", mime }) });
+    return { ok: true, reason: String(messageId) };
+  },
+});
+
+export const creatorIdByChat = internalQuery({
+  args: { chatId: v.string() },
+  handler: async (ctx, a): Promise<Id<"creators"> | null> => ((await ctx.db.query("creators").withIndex("by_telegram_chat", (q) => q.eq("telegramChatId", a.chatId)).first()) as Doc<"creators"> | null)?._id ?? null,
+});
+
+/** Dev only: the real vendor, whatever SCRAPE_FIXTURES says: the credit balance and one cheap live read. */
+export const probeScrapeCreators = internalAction({
+  args: {},
+  handler: async (): Promise<Record<string, unknown>> => {
+    const key = process.env.SCRAPE_CREATORS_API_KEY ?? "";
+    const headers = { "x-api-key": key, accept: "application/json" };
+    const out: Record<string, unknown> = { keyPresent: Boolean(key), keyTail: key.slice(-4) };
+    const bal = await fetch("https://api.scrapecreators.com/v1/credit-balance", { headers });
+    out.balanceStatus = bal.status;
+    out.balance = (await bal.text()).slice(0, 300);
+    return out;
+  },
+});
+
+/** Fixture recording (§17.1): one real vendor call, whatever the fixture flag says, returning the raw body for fixtures.recorded.json. Costs credits. */
+export const recordFixture = internalAction({
+  args: { path: v.string(), query: v.any() },
+  handler: async (_ctx, a): Promise<{ ok: boolean; status?: number; body?: unknown; reason?: string }> => {
+    const key = process.env.SCRAPE_CREATORS_API_KEY ?? "";
+    if (!key) return { ok: false, reason: "no key" };
+    const url = new URL(`https://api.scrapecreators.com${a.path}`);
+    for (const [k, val] of Object.entries((a.query ?? {}) as Record<string, unknown>)) if (val !== undefined && val !== null) url.searchParams.set(k, String(val));
+    const res = await fetch(url.toString(), { headers: { "x-api-key": key, accept: "application/json" } });
+    const text = await res.text();
+    try {
+      return { ok: res.ok, status: res.status, body: JSON.parse(text) };
+    } catch {
+      return { ok: false, status: res.status, reason: text.slice(0, 200) };
+    }
+  },
+});
+
+/** Dev only: clear today's budget row so a rail can be re-tested without waiting for tomorrow. */
+export const resetBudget = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ cleared: number }> => {
+    const rows = await ctx.db.query("budgets").withIndex("by_creator_day", (q) => q.eq("creatorId", a.creatorId)).collect();
+    for (const r of rows) await ctx.db.delete(r._id);
+    return { cleared: rows.length };
+  },
+});
+
+/** Dev only: drop this creator's messages so a pilot starts from zero. Never in production. */
+export const clearMessages = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ deleted: number }> => {
+    const rows = await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId)).collect();
+    for (const r of rows) await ctx.db.delete(r._id);
+    return { deleted: rows.length };
+  },
+});
+
+/** Dev only: put a creator on the right clock. Quiet hours and send times are all local. */
+export const setTimezone = internalMutation({
+  args: { creatorId: v.id("creators"), timezone: v.string() },
+  handler: async (ctx, a): Promise<{ timezone: string }> => {
+    await ctx.db.patch(a.creatorId, { timezone: a.timezone, updatedAt: Date.now() });
+    return { timezone: a.timezone };
+  },
+});
+
+/** Dev only: the vendor's live price list for one family, because a price in a comment rots. */
+export const modelPrices = internalAction({
+  args: { match: v.string() },
+  handler: async (_ctx, a): Promise<Array<{ id: string; inPerM: number; outPerM: number }>> => {
+    const res = await fetch("https://openrouter.ai/api/v1/models", { headers: { Authorization: `Bearer ${process.env.OPENROUTER_API_KEY ?? ""}` } });
+    const body = (await res.json()) as { data?: Array<{ id: string; pricing?: { prompt?: string; completion?: string } }> };
+    return (body.data ?? [])
+      .filter((m) => m.id.includes(a.match) && !m.id.endsWith(":free"))
+      .map((m) => ({ id: m.id, inPerM: Math.round(Number(m.pricing?.prompt ?? 0) * 1e6 * 1000) / 1000, outPerM: Math.round(Number(m.pricing?.completion ?? 0) * 1e6 * 1000) / 1000 }))
+      .sort((x, y) => x.inPerM - y.inPerM);
+  },
+});
+
+/** Dev only: fetch a URL from inside the deployment, where outbound network works. */
+export const fetchText = internalAction({
+  args: { url: v.string(), max: v.optional(v.number()), from: v.optional(v.number()) },
+  handler: async (_ctx, a): Promise<{ status: number; body: string; total: number }> => {
+    const res = await fetch(a.url, { headers: { "User-Agent": "heymaya-dev/1.0" } });
+    const body = await res.text();
+    // `from` lets a caller page through a long spec without blowing the action's return size.
+    const from = a.from ?? 0;
+    return { status: res.status, body: body.slice(from, from + (a.max ?? 6000)), total: body.length };
+  },
+});
+
+/** Dev only: fetch a large doc and return only the lines around a match, so a 2.5 MB spec is readable. */
+export const fetchGrep = internalAction({
+  args: { url: v.string(), pattern: v.string(), before: v.optional(v.number()), after: v.optional(v.number()), max: v.optional(v.number()) },
+  handler: async (_ctx, a): Promise<{ total: number; hits: number; text: string }> => {
+    const res = await fetch(a.url, { headers: { "User-Agent": "heymaya-dev/1.0" } });
+    const lines = (await res.text()).split("\n");
+    const re = new RegExp(a.pattern, "i");
+    const before = a.before ?? 0, after = a.after ?? 40;
+    const out: string[] = [];
+    let hits = 0;
+    for (let i = 0; i < lines.length; i++) {
+      if (!re.test(lines[i])) continue;
+      hits++;
+      out.push(`--- line ${i}`, ...lines.slice(Math.max(0, i - before), i + after));
+      if (out.join("\n").length > (a.max ?? 5000)) break;
+    }
+    return { total: lines.length, hits, text: out.join("\n").slice(0, a.max ?? 5000) };
+  },
+});
+
+/** Dev only: what the Zernio key can see — profiles, accounts, and a first analytics page per account. Truncated bodies, no secrets. */
+export const zernioInventory = internalAction({
+  args: { analyticsLimit: v.optional(v.number()) },
+  handler: async (_ctx, a): Promise<{ profiles: unknown; accounts: unknown; analytics: Record<string, unknown>; followers: unknown }> => {
+    const key = process.env.ZERNIO_API_KEY ?? "";
+    const base = process.env.ZERNIO_BASE_URL ?? "https://zernio.com";
+    const get = async (path: string): Promise<unknown> => {
+      const res = await fetch(`${base}${path}`, { headers: { Authorization: `Bearer ${key}` } });
+      const text = await res.text();
+      try { return { status: res.status, body: JSON.parse(text) }; } catch { return { status: res.status, body: text.slice(0, 400) }; }
+    };
+    const profiles = await get("/api/v1/profiles");
+    const accounts = await get("/api/v1/accounts");
+    const analytics: Record<string, unknown> = {};
+    const rows = ((accounts as { body?: { data?: unknown[]; accounts?: unknown[] } }).body?.data ?? (accounts as { body?: { accounts?: unknown[] } }).body?.accounts ?? []) as Array<Record<string, unknown>>;
+    const ids: string[] = [];
+    for (const r of rows.slice(0, 4)) {
+      const id = String(r._id ?? r.id ?? r.accountId ?? "");
+      if (!id) continue;
+      ids.push(id);
+      analytics[`${String(r.platform ?? "?")}:${id}`] = await get(`/api/v1/analytics?accountId=${encodeURIComponent(id)}&limit=${a.analyticsLimit ?? 3}`);
+    }
+    const followers = ids.length ? await get(`/api/v1/accounts/follower-stats?accountIds=${encodeURIComponent(ids.join(","))}`) : null;
+    return { profiles, accounts, analytics, followers };
+  },
+});
+
+/** Dev only: one authenticated GET against Zernio, body truncated. */
+export const zernioGet = internalAction({
+  args: { path: v.string(), max: v.optional(v.number()) },
+  handler: async (_ctx, a): Promise<{ status: number; body: string }> => {
+    const res = await fetch(`${process.env.ZERNIO_BASE_URL ?? "https://zernio.com"}${a.path}`, { headers: { Authorization: `Bearer ${process.env.ZERNIO_API_KEY ?? ""}` } });
+    return { status: res.status, body: (await res.text()).slice(0, a.max ?? 600) };
+  },
+});
+
+/**
+ * Forget every cached read of one kind, so a corrected normaliser applies now rather than
+ * when the TTL runs out (up to seven days). The next read spends real credits. Dev only.
+ */
+export const forgetReads = internalMutation({
+  args: { kind: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, a): Promise<{ forgotten: number; more: boolean }> => {
+    // Cached payloads are large; a whole kind at once trips the 16 MB read limit. Batches.
+    const n = Math.min(Math.max(a.limit ?? 6, 1), 20);
+    const rows = await ctx.db.query("readCache").withIndex("by_key", (q) => q.eq("kind", a.kind)).take(n + 1);
+    for (const r of rows.slice(0, n)) await ctx.db.delete(r._id);
+    return { forgotten: Math.min(rows.length, n), more: rows.length > n };
+  },
+});
+
+/**
+ * One post, two rows: the connected feed created one keyed by the URL's id, the scrape
+ * created another keyed by the numeric pk, before the scrape learned to join by URL. Keep
+ * the scraped row (it has the caption and the hashtags), move the connected numbers onto
+ * it, drop the other. Idempotent.
+ */
+export const mergeDuplicateOwnPosts = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ merged: number }> => {
+    const rows = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"ownPosts">[];
+    const norm = (u: string) => u.replace(/\?.*$/, "").replace(/\/$/, "").toLowerCase();
+    const groups = new Map<string, Doc<"ownPosts">[]>();
+    for (const r of rows) { const k = `${r.platform}:${norm(r.url)}`; groups.set(k, [...(groups.get(k) ?? []), r]); }
+    let merged = 0;
+    for (const g of groups.values()) {
+      if (g.length < 2) continue;
+      const keep = g.find((r) => r.source === "scrape") ?? g[0];
+      for (const other of g) {
+        if (other._id === keep._id) continue;
+        await ctx.db.patch(keep._id, {
+          ...(other.connected && !keep.connected ? { connected: other.connected } : {}),
+          ...(other.reachMultiple !== undefined && keep.reachMultiple === undefined ? { reachMultiple: other.reachMultiple } : {}),
+        });
+        await ctx.db.delete(other._id);
+        merged += 1;
+      }
+    }
+    return { merged };
+  },
+});
+
+/** Audit of one creator's run, everything the pilot touched, as counts and short rows. Dev only. */
+export const audit = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<Record<string, unknown>> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!c) return { error: "no creator" };
+    const tz = c.timezone ?? "UTC";
+    const local = (t: number) => new Date(t).toLocaleString("en-US", { timeZone: tz, month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+    const count = <T,>(rows: T[], key: (r: T) => string) => { const m: Record<string, number> = {}; for (const r of rows) { const k = key(r); m[k] = (m[k] ?? 0) + 1; } return m; };
+    const msgs = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId)).order("asc").take(500)) as Doc<"messages">[];
+    const jobs = (await ctx.db.query("jobs").withIndex("by_creator_and_createdAt", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(400)) as Doc<"jobs">[];
+    const budgets = (await ctx.db.query("budgets").withIndex("by_creator_day", (q) => q.eq("creatorId", a.creatorId)).take(60)) as Doc<"budgets">[];
+    const costs = (await ctx.db.query("costEvents").withIndex("by_creator_at", (q) => q.eq("creatorId", a.creatorId)).take(3000)) as Doc<"costEvents">[];
+    const signals = (await ctx.db.query("signals").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(500)) as Doc<"signals">[];
+    const ideas = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(300)) as Doc<"ideas">[];
+    const blocks = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(200)) as Doc<"calendarBlocks">[];
+    const taste = (await ctx.db.query("tasteEvents").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(300)) as Doc<"tasteEvents">[];
+    const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(300)) as Doc<"ownPosts">[];
+    const reads = (await ctx.db.query("ownPostReads").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(300)) as Doc<"ownPostReads">[];
+    const directives = (await ctx.db.query("directives").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(100)) as Doc<"directives">[];
+    const tracked = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(100)) as Doc<"trackedAccounts">[];
+    const conn = (await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).first()) as Doc<"connections"> | null;
+    const costBy: Record<string, { usd: number; n: number }> = {};
+    for (const e of costs) { const k = `${e.vendor}:${e.kind}`; costBy[k] = { usd: Math.round(((costBy[k]?.usd ?? 0) + e.costUsd) * 10000) / 10000, n: (costBy[k]?.n ?? 0) + 1 }; }
+    const out = msgs.filter((m) => m.direction === "out");
+    return {
+      creator: { handles: c.handles, tz, created: local(c.createdAt), plan: c.plan, laneConfirmedAt: c.laneConfirmedAt ? local(c.laneConfirmedAt) : null, niche: c.niche, dossierVersion: (c as unknown as { dossierVersion?: number }).dossierVersion ?? null, roster: tracked.length },
+      messages: {
+        total: msgs.length, out: out.length, in: msgs.filter((m) => m.direction === "in").length,
+        outByKind: count(out, (m) => m.kind ?? "?"), proactive: out.filter((m) => m.proactive).length,
+        delivered: out.filter((m) => m.deliveredAt).length, deliveryErrors: out.filter((m) => m.deliveryError).map((m) => m.deliveryError).slice(0, 5),
+        openQuestions: out.filter((m) => m.awaitingAnswer).length, criticSkipped: out.filter((m) => m.criticSkipped).length,
+        withButtons: out.filter((m) => m.buttons?.length).length, reactions: count(out.filter((m) => m.reaction), (m) => m.reaction ?? "?"),
+        timeline: msgs.map((m) => `${local(m.ts)} ${m.direction === "out" ? "→" : "←"} ${m.kind ?? ""}${m.proactive ? "*" : ""}${m.buttons?.length ? ` [${m.buttons.map((b) => b.id.split(":")[0]).join(",")}]` : ""}${m.deliveryError ? " DELIVERY-ERROR" : ""} ${m.body.slice(0, 110).replace(/\n/g, " / ")}`),
+      },
+      jobs: { byKindStatus: count(jobs, (j) => `${j.kind}:${j.status}`), failed: jobs.filter((j) => j.status === "failed" || j.lastError).slice(0, 8).map((j) => `${local(j.createdAt)} ${j.kind} x${j.attempts}: ${(j.lastError ?? "").slice(0, 140)}`) },
+      spend: { totalUsd: Math.round(costs.reduce((s, e) => s + e.costUsd, 0) * 100) / 100, byVendorKind: costBy, budgetsByDay: budgets.sort((x, y) => x.day.localeCompare(y.day)).map((b) => `${b.day}: $${b.spentUsd.toFixed(2)} msgs ${b.messages} watches ${b.watches} onb ${b.onboardingWatches ?? 0} credits ${b.marginalCredits}`) },
+      signals: {
+        total: signals.length, byKindVerdict: count(signals, (s) => `${s.kind}:${(s as unknown as { verdict?: string }).verdict ?? "?"}`),
+        detectedByDay: count(signals, (s) => local(s.createdAt).slice(0, 6)),
+        investigatedByDay: count(signals.filter((s) => (s as unknown as { investigation?: unknown }).investigation), (s) => local(s.createdAt).slice(0, 6)),
+        topToday: signals.filter((s) => Date.now() - s.createdAt < 36 * 3_600_000).sort((x, y) => (y.score ?? 0) - (x.score ?? 0)).slice(0, 5).map((s) => `${local(s.createdAt)} ${s.kind} ${s.score ?? "?"}x ${(s.detected ?? s.why).slice(0, 90)}`),
+      },
+      ideas: { total: ideas.length, byStatus: count(ideas, (i) => i.status), withOutcome: ideas.filter((i) => i.outcomeMultiple !== undefined).length },
+      calendar: { blocks: blocks.length, byKindStatus: count(blocks, (b) => `${b.kind}:${b.status}`), next: blocks.filter((b) => b.start > Date.now()).sort((x, y) => x.start - y.start).slice(0, 4).map((b) => `${local(b.start)} ${b.kind} ${b.title} (${b.status})`) },
+      taste: { events: taste.length, byKind: count(taste, (t) => t.kind), affinities: ((c as unknown as { affinities?: unknown[] }).affinities ?? []).length, note: Boolean((c as unknown as { taste?: { text?: string } }).taste?.text) },
+      posts: { own: posts.length, connected: posts.filter((p) => p.connected).length, transcribed: posts.filter((p) => p.transcript).length, reads: reads.length, readsByDepth: count(reads, (r) => (r as unknown as { depth?: string }).depth ?? "?") },
+      directives: directives.filter((d) => d.active).map((d) => `${d.kind}: ${d.verbatim.slice(0, 80)}`),
+      connection: conn ? { status: conn.status, accounts: (conn.zernioAccounts ?? []).length, detail: conn.detail ?? null } : null,
+    };
+  },
+});
+
+/** Fleet spend by vendor and kind since a day, plus the latest vendor health. Dev only. */
+export const fleetSpend = internalQuery({
+  args: { sinceDay: v.string() },
+  handler: async (ctx, a): Promise<Record<string, unknown>> => {
+    const since = Date.parse(`${a.sinceDay}T00:00:00Z`);
+    const costs = (await ctx.db.query("costEvents").withIndex("by_at", (q) => q.gte("at", since)).take(8000)) as Doc<"costEvents">[];
+    const by: Record<string, { usd: number; n: number }> = {};
+    const byDay: Record<string, number> = {};
+    for (const e of costs) {
+      const k = `${e.vendor}:${e.kind}`; by[k] = { usd: Math.round(((by[k]?.usd ?? 0) + e.costUsd) * 10000) / 10000, n: (by[k]?.n ?? 0) + 1 };
+      const day = new Date(e.at).toISOString().slice(0, 10); byDay[day] = Math.round(((byDay[day] ?? 0) + e.costUsd) * 100) / 100;
+    }
+    const health = (await ctx.db.query("vendorHealth").order("desc").take(6)) as Doc<"vendorHealth">[];
+    return { events: costs.length, totalUsd: Math.round(costs.reduce((s, e) => s + e.costUsd, 0) * 100) / 100, byDay, byVendorKind: by, health: health.map((h) => `${new Date(h.at).toISOString().slice(0, 16)} ${h.vendor} ${h.check} ${h.ok ? "ok" : "FAIL"} ${JSON.stringify(h.detail ?? "").slice(0, 80)}`) };
+  },
+});
+
+/** Freeze a creator for deletion, the way requestDelete does from the web, so the real deletion path can run. Dev only. */
+export const freezeForDelete = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ ok: boolean }> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!c) return { ok: false };
+    await ctx.db.patch(a.creatorId, { plan: { ...c.plan, status: "deleting" }, updatedAt: Date.now() });
+    return { ok: true };
+  },
+});
+
+/** What is scheduled to fire for this creator (reminders, offers, plans). Dev only. */
+export const scheduledFor = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<Array<{ name: string; at: string; state: string; args: string }>> => {
+    const rows = await ctx.db.system.query("_scheduled_functions").order("desc").take(200);
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    const tz = c?.timezone ?? "UTC";
+    return rows
+      .filter((r) => JSON.stringify(r.args).includes(a.creatorId) || (r.state.kind === "pending" && /reminders|secure|weekPlan/.test(r.name)))
+      .map((r) => ({ name: r.name, at: new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(r.scheduledTime), state: r.state.kind, args: JSON.stringify(r.args).slice(0, 120) }));
+  },
+});
+
+/** The watched cards for one creator, to read what she actually saw. Dev only. */
+export const readsFor = internalQuery({
+  args: { creatorId: v.id("creators"), limit: v.optional(v.number()) },
+  handler: async (ctx, a): Promise<Array<{ depth: string; caption: string; card: unknown }>> => {
+    const reads = (await ctx.db.query("ownPostReads").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(a.limit ?? 5)) as Doc<"ownPostReads">[];
+    const out: Array<{ depth: string; caption: string; card: unknown }> = [];
+    for (const r of reads) {
+      const p = (await ctx.db.get(r.ownPostId)) as Doc<"ownPosts"> | null;
+      out.push({ depth: (r as unknown as { depth?: string }).depth ?? "?", caption: p?.caption.slice(0, 80) ?? "", card: r.card });
+    }
+    return out;
+  },
+});
+
+/** Forget the first read so it can run again on the same creator (a voice change to see on the phone). Dev only. */
+export const redoFirstRead = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ removed: number }> => {
+    let removed = 0;
+    const rows = (await ctx.db.query("messages").withIndex("by_creator_and_dedupe", (q) => q.eq("creatorId", a.creatorId).eq("dedupeKey", `first_read:${a.creatorId}`)).collect()) as Doc<"messages">[];
+    for (const r of rows) { await ctx.db.delete(r._id); removed++; }
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (c?.firstWeek) await ctx.db.patch(a.creatorId, { firstWeek: { ...c.firstWeek, stepsDone: c.firstWeek.stepsDone.filter((s) => s !== "first_read") } });
+    return { removed };
+  },
+});

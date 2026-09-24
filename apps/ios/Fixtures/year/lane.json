@@ -1,0 +1,58 @@
+{
+  "accounts": [
+    {
+      "baseline": 1055.262788824788,
+      "baselineN": 7,
+      "handle": "andi.renay",
+      "id": "m17e2zf367nnje6wbsbnv6p8tx8ece97",
+      "lastBreakout": {
+        "at": 1790127435026,
+        "score": 2.88,
+        "verdict": "pending",
+        "why": "2.88× this account's normal at 3.5h (11,695 views); https://www.tiktok.com/@andi.renay/video/7688484760796040478?_r=1&u_code=f01b6e02kdhfi0&preview_pb=0&sharer_language=en&_d=f01b39b3487b5a&share_item_id=7688484760796040478&source=h5_m"
+      },
+      "lastSampledAt": 1790170635028,
+      "platform": "tiktok",
+      "status": "active"
+    },
+    {
+      "baseline": 499.44297236749253,
+      "baselineN": 6,
+      "handle": "becca_foggia",
+      "id": "m17942n4nfjpdhgbs9vxbbp1k18ecj2f",
+      "lastBreakout": {
+        "at": 1790170635028,
+        "score": 5.32,
+        "verdict": "pending",
+        "why": "5.32× this account's normal at 2.9h (7,818 views); https://www.tiktok.com/@becca_foggia/video/7688678805304642847?_r=1&u_code=f0i6bj78f1dke5&preview_pb=0&sharer_language=en&_d=f0iigh6i01am25&share_item_id=7688678805304642847&source=h5_m"
+      },
+      "lastSampledAt": 1790170635028,
+      "platform": "tiktok",
+      "status": "active"
+    },
+    {
+      "baseline": 1214.2103192136397,
+      "baselineN": 7,
+      "handle": "nadyaokamoto",
+      "id": "m170g9yfeen8dvesqv7zhc04th8ed678",
+      "lastBreakout": {
+        "at": 1790127435026,
+        "score": 0.41,
+        "verdict": "pending",
+        "why": "0.41× this account's normal at 3.3h (2,157 views); https://www.tiktok.com/@nadyaokamoto/video/7688487138706476302?_r=1&u_code=f11861072c1iem&preview_pb=0&sharer_language=en&_d=f1185bmkjj1ah1&share_item_id=7688487138706476302&source=h5_m"
+      },
+      "lastSampledAt": 1790170635028,
+      "platform": "tiktok",
+      "status": "active"
+    }
+  ],
+  "keywords": [
+    "running",
+    "runtok",
+    "runner humor",
+    "solo travel",
+    "australia travel",
+    "working holiday"
+  ],
+  "rising": []
+}

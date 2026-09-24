@@ -1,25 +1,20 @@
 import { SignUp } from "@clerk/nextjs";
+import { OnboardShell } from "../../onboarding/Shell";
 
-type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
+/** The landing's room, with Clerk's card inside it (2026-09-08). */
+const appearance = {
+  variables: { colorPrimary: "#29233f", colorText: "#29233f", colorTextSecondary: "#756e84", colorBackground: "#ffffff", colorInputBackground: "#ffffff", colorInputText: "#29233f", borderRadius: "10px", fontFamily: "var(--font-instrument), sans-serif" },
+  elements: { formButtonPrimary: "bg-[#29233f] hover:bg-[#4a3c66]", card: "shadow-none" },
+};
 
-function firstParam(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
-}
-
-export default async function SignUpPage({
-  searchParams,
-}: {
-  searchParams: SearchParams;
-}) {
-  const redirectUrl = firstParam((await searchParams).redirect_url);
-
+export default function Page() {
   return (
-    <main className="relative z-10 flex min-h-screen items-center justify-center bg-[var(--ink)] px-6 py-16">
-      <SignUp
-        signInUrl="/sign-in"
-        fallbackRedirectUrl="/start"
-        forceRedirectUrl={redirectUrl}
-      />
-    </main>
+    <OnboardShell where="get started">
+      <section>
+        <h2>Meet your content person.</h2>
+        <p className="muted small">Two minutes to set up. Then she goes to work.</p>
+        <SignUp fallbackRedirectUrl="/start" appearance={appearance} />
+      </section>
+    </OnboardShell>
   );
 }

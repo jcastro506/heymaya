@@ -1,0 +1,213 @@
+{
+  "generatedAt": "2026-09-02T12:00:34.454Z",
+  "source": "spec-example",
+  "paths": {
+    "/v1/tiktok/profile": {
+      "file": "v1_tiktok_profile.json",
+      "credits": null,
+      "summary": "Profile"
+    },
+    "/v1/tiktok/profile/region": {
+      "file": "v1_tiktok_profile_region.json",
+      "credits": null,
+      "summary": "Profile Region"
+    },
+    "/v3/tiktok/profile/videos": {
+      "file": "v3_tiktok_profile_videos.json",
+      "credits": null,
+      "summary": "Profile Videos"
+    },
+    "/v2/tiktok/video": {
+      "file": "v2_tiktok_video.json",
+      "credits": null,
+      "summary": "Video Info"
+    },
+    "/v1/tiktok/video/transcript": {
+      "file": "v1_tiktok_video_transcript.json",
+      "credits": null,
+      "summary": "Transcript"
+    },
+    "/v1/tiktok/video/comments": {
+      "file": "v1_tiktok_video_comments.json",
+      "credits": null,
+      "summary": "Comments"
+    },
+    "/v1/tiktok/comment/replies": {
+      "file": null,
+      "credits": null
+    },
+    "/v1/tiktok/user/following": {
+      "file": "v1_tiktok_user_following.json",
+      "credits": null,
+      "summary": "Following"
+    },
+    "/v1/tiktok/user/followers": {
+      "file": "v1_tiktok_user_followers.json",
+      "credits": null,
+      "summary": "Followers"
+    },
+    "/v1/tiktok/user/audience": {
+      "file": "v1_tiktok_user_audience.json",
+      "credits": 26,
+      "summary": "User's Audience Demographics"
+    },
+    "/v1/tiktok/search/users": {
+      "file": "v1_tiktok_search_users.json",
+      "credits": null,
+      "summary": "Search Users"
+    },
+    "/v1/tiktok/search/hashtag": {
+      "file": "v1_tiktok_search_hashtag.json",
+      "credits": null,
+      "summary": "Search by Hashtag"
+    },
+    "/v1/tiktok/search/keyword": {
+      "file": "v1_tiktok_search_keyword.json",
+      "credits": null,
+      "summary": "Search by Keyword"
+    },
+    "/v1/tiktok/search/top": {
+      "file": "v1_tiktok_search_top.json",
+      "credits": null,
+      "summary": "Top Search"
+    },
+    "/v1/tiktok/search/suggestions": {
+      "file": "v1_tiktok_search_suggestions.json",
+      "credits": null,
+      "summary": "Search Suggestions"
+    },
+    "/v1/tiktok/get-trending-feed": {
+      "file": "v1_tiktok_get-trending-feed.json",
+      "credits": null,
+      "summary": "Trending Feed"
+    },
+    "/v1/tiktok/creators/popular": {
+      "file": "v1_tiktok_creators_popular.json",
+      "credits": null,
+      "summary": "Get popular creators"
+    },
+    "/v1/tiktok/song": {
+      "file": "v1_tiktok_song.json",
+      "credits": null,
+      "summary": "Get Song Details"
+    },
+    "/v1/tiktok/song/videos": {
+      "file": "v1_tiktok_song_videos.json",
+      "credits": null,
+      "summary": "TikToks using Song"
+    },
+    "/v1/tiktok/collection/videos": {
+      "file": "v1_tiktok_collection_videos.json",
+      "credits": null,
+      "summary": "Collection Videos"
+    },
+    "/v1/instagram/profile": {
+      "file": "v1_instagram_profile.json",
+      "credits": null,
+      "summary": "Profile"
+    },
+    "/v1/instagram/profile/post-count": {
+      "file": "v1_instagram_profile_post-count.json",
+      "credits": null,
+      "summary": "Profile Post Count"
+    },
+    "/v1/instagram/user/posts": {
+      "file": null,
+      "credits": null
+    },
+    "/v2/instagram/user/posts": {
+      "file": "v2_instagram_user_posts.json",
+      "credits": null,
+      "summary": "Posts"
+    },
+    "/v1/instagram/user/reels": {
+      "file": "v1_instagram_user_reels.json",
+      "credits": null,
+      "summary": "Reels"
+    },
+    "/v1/instagram/post": {
+      "file": "v1_instagram_post.json",
+      "credits": null,
+      "summary": "Post/Reel Info"
+    },
+    "/v2/instagram/post/comments": {
+      "file": "v2_instagram_post_comments.json",
+      "credits": 15,
+      "summary": "Comments"
+    },
+    "/v2/instagram/media/transcript": {
+      "file": "v2_instagram_media_transcript.json",
+      "credits": null,
+      "summary": "Transcript"
+    },
+    "/v2/instagram/reels/search": {
+      "file": "v2_instagram_reels_search.json",
+      "credits": null,
+      "summary": "Search Reels"
+    },
+    "/v1/instagram/search": {
+      "file": "v1_instagram_search.json",
+      "credits": null,
+      "summary": "Search Instagram"
+    },
+    "/v1/instagram/search/popular": {
+      "file": "v1_instagram_search_popular.json",
+      "credits": 1,
+      "summary": "Popular Search"
+    },
+    "/v1/instagram/search/profiles": {
+      "file": "v1_instagram_search_profiles.json",
+      "credits": null,
+      "summary": "Search Instagram Profiles"
+    },
+    "/v1/instagram/search/hashtag": {
+      "file": "v1_instagram_search_hashtag.json",
+      "credits": null,
+      "summary": "Search Hashtag Posts"
+    },
+    "/v1/instagram/reels/trending": {
+      "file": "v1_instagram_reels_trending.json",
+      "credits": null,
+      "summary": "Trending Reels"
+    },
+    "/v1/instagram/audio/reels": {
+      "file": "v1_instagram_audio_reels.json",
+      "credits": null,
+      "summary": "Get Reels By Audio Id"
+    },
+    "/v1/instagram/user/highlights": {
+      "file": "v1_instagram_user_highlights.json",
+      "credits": null,
+      "summary": "Story Highlights"
+    },
+    "/v1/instagram/user/highlight/detail": {
+      "file": "v1_instagram_user_highlight_detail.json",
+      "credits": null,
+      "summary": "Highlights Details"
+    },
+    "/v1/find-social-profiles": {
+      "file": "v1_find-social-profiles.json",
+      "credits": 10,
+      "summary": "Find Social Profiles"
+    },
+    "/v1/reddit/search": {
+      "file": "v1_reddit_search.json",
+      "credits": null,
+      "summary": "Search"
+    },
+    "/v1/credit-balance": {
+      "file": null,
+      "credits": null
+    },
+    "/v1/account/get-daily-usage-count": {
+      "file": "v1_account_get-daily-usage-count.json",
+      "credits": null,
+      "summary": "Get daily usage"
+    },
+    "/v1/account/get-most-used-routes": {
+      "file": "v1_account_get-most-used-routes.json",
+      "credits": null,
+      "summary": "Get most used routes"
+    }
+  }
+}

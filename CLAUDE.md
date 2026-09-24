@@ -1,112 +1,71 @@
-# HeyMaya
+@AGENTS.md
+
+# HeyMaya — Maya for TikTok and Instagram creators
 
 ## What this is
 
-**Maya is a social media manager you employ.** She runs one business's social accounts — watches the niche, makes the content, posts it, and answers everyone who replies — in the founder's voice. You manage her by text, in Telegram.
+**Maya is a social media expert who texts you.** She watches your lane on TikTok and Instagram, reads your own numbers, finds what's working, and texts you the idea worth making, in Messages. The **companion iPhone app** is the closet: every idea, your numbers, your plan, and deals. Messages is the only place she talks; the app has no chat box, and a push is never her voice.
 
-> **"An employee, not a tool."**
-
-Target customer: a solo founder who built something good and can't get customers.
-
-The pitch is **not** "she posts for you" — open-source schedulers do that for free. It's that **she does the homework**: she watches what's actually working in the niche, mines what buyers are complaining about, and *then* writes.
-
-**Channels: TikTok · Instagram · YouTube · X.** Three of the four take the same 9:16 vertical asset, so the media pipeline is a 3× multiplier rather than a cost centre. X carries text and conversation.
+> Grounded or silent. Trust her judgment; code gathers facts and enforces promises.
 
 ## Source of truth
 
-**`docs/CLEAN_SHEET_SPEC.md`** is the product and technical spec; the sprint plan is its §18. Read it before any substantive work. If a suggestion contradicts it, default to the spec unless the operator explicitly revises it.
+- **`docs/CREATOR_MASTER_PLAN.md`**: every sprint in one dependency-ordered list, with status and operator blockers. Start here.
+- `docs/CREATOR_COMPANION_APP_SPEC.md`: the app (decisions §0, sprints M/C/P/I).
+- `docs/CREATOR_MAYA_EXPERTISE_AUDIT.md`: her brain (sprints B0–B6, the Expert Bench).
+- `docs/CREATOR_COGS_MODEL.md` + `scripts/cogs/model.py`: costs and margin.
+- `docs/CREATOR_SPRINT_PLAN.md`: the original build plan (history for the earlier sprints).
 
-`docs/AGENT_REDESIGN_V2.md` is the *previous* design (intent-hunting on Reddit/X). Superseded — history, not decisions.
-
-## Deleted products — do not resurrect
-
-Two earlier products were removed in Sprint 0 (~380 files, ~126k lines):
-
-- **Creator Maya** — an AI manager for content creators. Suppressed, then deleted.
-- **Maya for service businesses** — plumbers/HVAC/roofers, GBP-driven. Abandoned, then deleted.
-
-Their code, tests, routes, skills, and docs are gone (recoverable from git history). **71 of the 142 Convex tables belong to them and remain in `schema.ts`** — orphaned and inert, pending Sprint 0b.
-
-Everything under `convex/gtmMaya/` is the **current** product. It is **frozen** — bug fixes only — and is replaced module-by-module by `convex/maya/` per the sprint plan.
+This branch replaced the **founder product** (Maya as a social media manager for founders, `convex/gtmMaya`, Mission Control) on `staging` on 2026-09-24. That product's history is kept in git, and its Convex tables are untouched on staging (Convex keeps tables a schema doesn't name). Don't resurrect its code from history without the operator.
 
 ## Architecture principles
 
-1. **The product is the agent in the messenger.** The dashboard is connect + receipts, never a workbench.
+1. **The product is the agent in Messages.** The app is inventory and receipts, never a second chat.
 2. **The database is the truth; the model is a participant.** No fact lives only in a context window.
-3. **Deterministic code watches; the model judges.** Collection, scheduling, rate-limiting, and enforcement are code.
-4. **Anything promised to the user is enforced by the server.** Prompts drift; rows don't.
-5. **Nothing fails silently.** Every job produces a result or a named failure that reaches the user.
-6. **The unit of work is a placement** — something live, with a URL. Drafts and found threads are inventory, not results.
-7. **Grounded or silent**, extended to images and video. Never a fabricated UI or an invented number.
-8. **Choreography rides in tool responses, never prompts.** `{ok, data, next, why}` reaches every model on every turn.
-9. **Exactly one function decides publish-or-hold.** Any other code path that can hold a post is a bug.
-10. **Budgets, never booleans.** `videosPerMonth: 0` degrades gracefully; `canVideo: false` ships a broken tier.
+3. **Deterministic code watches; the model judges.** Collection, scheduling, rate limits and enforcement are code; causes, taste and wording are hers.
+4. **Anything promised to the user is enforced by the server.** Prompts drift; rows don't. (The daily text cap is held inside `messages.send`; the crisis line is appended by code.)
+5. **Nothing fails silently.** Every job produces a result or a named failure; the critic ladder never ends in silence.
+6. **Grounded or silent**, extended to images, video and the real world. Never an invented number, cause, place or date.
+7. **Every app action has a chat equivalent**, through one shared function (`core/ideaActs`, `calendar/tools`).
+8. **One definition per fact:** "normal" (`core/normal`), "unseen" (`core/unseen`), "counts toward the cap" (`messages.countsTowardCap`).
+9. **Budgets, never booleans.**
 
 ## Tech stack
 
-- **Frontend:** Next.js 16 App Router, TypeScript, Tailwind, shadcn/ui, dark by default
-- **Backend:** Convex — functions, crons, reactive queries
-- **Auth:** Clerk · **Billing:** Stripe
-- **Agent runtime:** OpenClaw on Fly.io, one persistent session per customer
-- **Messenger:** Telegram
-- **Publish + own-account reads:** Zernio — ⚠️ **TikTok exposes no comment API at all**, so TikTok is publish-only
-- **Outside-world reads:** ScrapeCreators, plus twitterapi.io for X — the perception layer, and the moat
-- **Creative:** direct model calls for static/daily; Creatify for weekly assembled video
-- **Storage:** Cloudflare R2
+- **Backend:** Convex (functions, crons, reactive queries). Mutations use the wrapped builders in `convex/lib/functions` (a trigger keeps the slim `schedule` rows in sync); a test fails if a module skips them.
+- **iPhone app:** native SwiftUI, iOS 18+, in `apps/ios` (XcodeGen; `-MayaFixtures` launch argument for preview data). Targets: `Maya`, `MayaShare` (Send to Maya), `MayaWidget`.
+- **Web:** Next.js App Router: landing, legal pages, `/o/*` link fallbacks, the AASA file, `/ops`.
+- **Auth:** Clerk · **Billing:** Stripe (link-out from the app) · **Messages:** Claw/Linq (iMessage/RCS/SMS), Telegram for dev.
+- **Reads:** ScrapeCreators (public), Zernio (their connected accounts). **Models:** OpenRouter (writer, critic, judge), Gemini (watching video).
 
 ## Coding conventions
 
-- TypeScript strict mode everywhere
-- Convex `actions` for external calls, `mutations` for writes, `queries` for reads
-- External API clients live in `convex/integrations/` — vendor SDKs, never product logic
-- Platform expertise lives in `.md` files, **never** in `if (channel === …)` branches
-- Environment variables for all keys; never hardcoded
-- **Assert on structure and stable identifiers, never on generated prose.** Prompt text changes weekly; a test that substring-matches it is a false-alarm generator.
-- **Justify every `TODO`/`FIXME`/`eslint-disable`** — on the line, or on a comment line directly above it
+- TypeScript strict. Convex `actions` for external calls, `mutations` for writes, `queries` for reads.
+- A query must not call another query through `ctx.runQuery` (generated types collapse to `any`); share a helper function instead.
+- Assert on structure and stable identifiers, never on generated prose.
+- Justify every `TODO` / `FIXME` / `eslint-disable` on the line or the line above.
+- User-facing copy: plain words, no "AI", no vendor names, no "baseline". `convex/core/__tests__/iosCopy.test.ts` checks the app's strings.
 
 ## Testing — non-negotiable
 
-Five mandatory categories every sprint: cross-tenant isolation · budget × action fail-closed · adversarial input · sibling-file coherence · TODO grep.
+Five categories every sprint: cross-tenant isolation · budget/fail-closed · adversarial input · sibling-file coherence · TODO grep.
 
-Plus the gates in `docs/CLEAN_SHEET_SPEC.md` §18.0 — most importantly: **the exit criterion must be demonstrated on a live deploy, not in a test harness.** Every failure in this product's history passed its tests and broke in production.
-
-CI (`.github/workflows/ci.yml`) runs typecheck + tests on `staging` and `main`. Lint is non-blocking pending cleanup of ~1,178 pre-existing violations.
-
-**Gotcha:** a stale `.next` cache produces phantom `tsc` errors after deleting routes. `rm -rf .next`.
+**Her brain is measured, not assumed:** `eval/expertBench:start` runs the Expert Bench (TikTok, Instagram, safety, both-platform cases) on scenario personas with a correctness judge; `eval/expertBench:scorecard` reads a run. Run it before and after any prompt or model change. A green unit suite has never been proof a behaviour works: run it live.
 
 ## Environments
 
-| | Branch | Convex | Vercel |
+| | Git branch | Convex | Web |
 |---|---|---|---|
-| Local | `codex/*` | `dev:vibrant-platypus-264` | no build |
-| Staging | `staging` | `dev:precise-canary-781` | Preview |
-| Production | `main` | prod | `hey-maya.ai` |
+| Creator dev | `codex/*`, `claude/*` | `dev:impressive-roadrunner-997` | local |
+| Staging | `staging` | `dev:precise-canary-781` | Vercel preview |
+| Production | `main` | prod (`resilient-mandrill-621`) | `hey-maya.ai` |
 
-Repo `jcastro506/heymaya` · Vercel project `hey-ava-web`. Pushes to `staging` and `main` deploy; `codex/*` does not. Detail in `docs/DEPLOYMENT_ENVIRONMENTS.md`.
+Work reaches `staging` and `main` **only by PR and merge**; Vercel deploys on the merge.
 
 > ### ⚠️ `npx convex deploy` deploys to **PRODUCTION**
->
-> It ignores `CONVEX_DEPLOYMENT` entirely. Running it after merging a PR — from
-> `staging`, where you already are — ships every unreleased commit to prod.
-> This happened on 2026-08-11: 27 commits reached prod's backend while prod's
-> Vercel was still serving `main`.
->
-> - **Staging:** `npm run convex:staging`
-> - **Production:** `npm run convex:prod` — refuses unless you are on `main` with a clean tree
+> It ignores `CONVEX_DEPLOYMENT` entirely (2026-08-11: 27 unreleased commits reached prod).
+> - Creator dev: `CONVEX_DEPLOYMENT=dev:impressive-roadrunner-997 npx convex dev --once --typecheck disable`
+> - Staging: `npm run convex:staging`
+> - Production: `npm run convex:prod`, which refuses unless you're on `main` with a clean tree.
 
-
-
-## Status
-
-**Sprint 0a complete** (branch `codex/sprint0-test-baseline`): test baseline greened, dead products deleted, CI added, orphan scripts and the legacy second dashboard removed. 0 typecheck errors, all tests passing.
-
-**Next — Sprint 0b:** prune the 71 orphaned tables. Requires careful surgery on the shared `stripe` / `zernio` / `billing` / `accountDeletion` modules the live product depends on, which is why it wasn't bundled with the module deletion.
-
-**Then Sprints 1–12** per §18. **Sprint 3 is the gamble** — one channel, a placement a day, seven days straight, verified. Nothing past it is worth building until it holds.
-
-## Operator-required (not Claude-doable)
-
-1. Creatify API access **and written commercial resale rights** — blocks generated video
-2. ScrapeCreators Enterprise conversation — ~330k requests/month at 200 customers
-3. Decide the Fly runtime shape — **auto-stop vs always-on is a 10× cost difference** (§17.36)
-4. Run the scrape-reliability spike (§6.4.6) — 20 URLs, one afternoon, decides whether a headless browser is needed at all
+After a deploy that adds the `schedule` table to a deployment, run `npx convex run core/schedule:reconcile` once (it's also the nightly repair).

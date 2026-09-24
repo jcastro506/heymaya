@@ -1,0 +1,103 @@
+{
+  "accountCap": 1,
+  "avatars": {
+    "instagram": null,
+    "tiktok": "https://impressive-roadrunner-997.convex.cloud/api/storage/7a83b5a0-e878-4f8b-b26d-abd345a4eee7"
+  },
+  "currentPeriodEnd": null,
+  "founding": true,
+  "handles": {
+    "tiktok": "vanessaalopezz"
+  },
+  "knows": {
+    "doesNot": [
+      "Generic scenic travel b-roll paired with earnest motivational text consistently underperforms baseline."
+    ],
+    "keywords": [
+      "running",
+      "runtok",
+      "runner humor",
+      "solo travel",
+      "australia travel",
+      "working holiday"
+    ],
+    "mode": "thin",
+    "register": "casual",
+    "summary": "Runner documenting workout fatigue and fitness struggles with self-deprecating humor, sharing summer travel and a working holiday in Australia on the side.",
+    "works": [
+      "Short candid running clips with self-deprecating text overlays about workout exhaustion drive massive viral performance.",
+      "Situational humor about unglamorous tourist struggles performs far above baseline."
+    ]
+  },
+  "niche": "running stays the main thing. the travel stuff is just for the summer, not a pivot.",
+  "notes": [
+    {
+      "at": 1788744546085,
+      "id": "n_1788744546085_936669",
+      "kind": "life",
+      "text": "move the film block to thursday 6pm"
+    },
+    {
+      "at": 1788803118485,
+      "id": "n_1788803118485_687773",
+      "kind": "bit",
+      "text": "remember that clip where i was rotting in bed after the run? want to do another one like it"
+    },
+    {
+      "at": 1789388797065,
+      "id": "n_1789388797065_929367",
+      "kind": "fact",
+      "text": "running stays the main thing. the travel stuff is just for the summer, not a pivot."
+    },
+    {
+      "at": 1789388964127,
+      "id": "n_1789388964127_592999",
+      "kind": "life",
+      "text": "i'll be wrecked for two days after the sydney marathon"
+    }
+  ],
+  "paired": false,
+  "plan": "paused",
+  "quietHours": {
+    "end": "09:00",
+    "start": "23:00"
+  },
+  "rules": [
+    {
+      "at": 1788970526307,
+      "id": "js75brjm4pcqq9sexp3jrqx7fd8e3kz4",
+      "text": "keep the running as texture at most, not the main thing"
+    },
+    {
+      "at": 1788970571288,
+      "id": "js70k5j6269fjyy50x7xbemvfn8e3mvg",
+      "text": "running stays the main thing. the travel stuff is just for the summer, not a pivot."
+    },
+    {
+      "at": 1788979208164,
+      "id": "js7c1wzfzxzza9v6ez3beqcwq18e2q79",
+      "text": "i hate talking-head videos, never suggest those"
+    },
+    {
+      "at": 1789389155935,
+      "id": "js7bc64hht1w66gctzx8ysr5as8ed592",
+      "text": "set my quiet hours to 11pm to 9am"
+    },
+    {
+      "at": 1789389256251,
+      "id": "js757zc8cevn6j2d4r23md4b8d8ecpg5",
+      "text": "from now on my normal is 500k views. use that as my baseline for everything."
+    }
+  ],
+  "taste": {
+    "dislikes": [],
+    "events": true,
+    "likes": [],
+    "note": "Not enough history yet to see what they'll take.",
+    "updatedAt": 1789203636143
+  },
+  "tier": "solo",
+  "timezone": "America/New_York",
+  "tone": "friend",
+  "trialEndsAt": null
+}

@@ -1,0 +1,164 @@
+# XcodeGen spec for the Maya iOS app (docs/CREATOR_COMPANION_APP_SPEC.md §0 D1).
+# Generate the project with `xcodegen` from this folder; Maya.xcodeproj is not committed.
+name: Maya
+options:
+  bundleIdPrefix: ai.heymaya
+  deploymentTarget:
+    iOS: "18.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+configFiles:
+  Debug: Config/Debug.xcconfig
+  Release: Config/Release.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: targeted
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: $(MAYA_DEVELOPMENT_TEAM)
+    CODE_SIGN_STYLE: Automatic
+packages:
+  ConvexMobile:
+    url: https://github.com/get-convex/convex-swift
+    from: "0.8.1"
+  Clerk:
+    url: https://github.com/clerk/clerk-ios
+    from: "1.5.6"
+  ClerkConvex:
+    url: https://github.com/clerk/clerk-convex-swift
+    from: "0.1.0"
+  Nuke:
+    url: https://github.com/kean/Nuke
+    from: "13.2.0"
+targets:
+  Maya:
+    type: application
+    platform: iOS
+    sources:
+      - path: Maya
+      - path: Shared
+      # Debug-only preview data (launch argument -MayaFixtures); stripped from Release below.
+      - path: Fixtures
+        buildPhase: resources
+        excludes: ["year/**", "*.py"]
+    settings:
+      configs:
+        Release:
+          EXCLUDED_SOURCE_FILE_NAMES: "*.json"
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.heymaya.maya
+        PRODUCT_NAME: Maya
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Maya
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+    info:
+      path: Maya/Info.plist
+      properties:
+        MayaConvexURL: $(MAYA_CONVEX_URL)
+        MayaClerkPublishableKey: $(MAYA_CLERK_PUBLISHABLE_KEY)
+        LSApplicationQueriesSchemes: [sms, tiktok, instagram]
+        CFBundleURLTypes:
+          - CFBundleURLName: ai.heymaya.maya
+            CFBundleURLSchemes: [maya]
+        UILaunchScreen: {}
+        ITSAppUsesNonExemptEncryption: false
+    entitlements:
+      path: Maya/Maya.entitlements
+      properties:
+        com.apple.developer.associated-domains: ["applinks:hey-maya.ai"]
+        com.apple.security.application-groups: ["group.ai.heymaya.maya"]
+    dependencies:
+      - target: MayaShare
+      - target: MayaWidget
+      - package: ConvexMobile
+        product: ConvexMobile
+      - package: Clerk
+        product: ClerkKit
+      - package: Clerk
+        product: ClerkKitUI
+      - package: ClerkConvex
+        product: ClerkConvex
+      - package: Nuke
+        product: NukeUI
+  # M5: "Send to Maya" from the TikTok / Instagram share sheet (app spec §10.1).
+  MayaShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: MayaShare
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.heymaya.maya.share
+        PRODUCT_NAME: MayaShare
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Maya
+    info:
+      path: MayaShare/Info.plist
+      properties:
+        MayaConvexURL: $(MAYA_CONVEX_URL)
+        CFBundleDisplayName: Maya
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsText: true
+    entitlements:
+      path: MayaShare/MayaShare.entitlements
+      properties:
+        com.apple.security.application-groups: ["group.ai.heymaya.maya"]
+  # M6: home-screen widgets (next shoot, best idea), fetching their own data with the share token.
+  MayaWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: MayaWidget
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.heymaya.maya.widget
+        PRODUCT_NAME: MayaWidget
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Maya
+    info:
+      path: MayaWidget/Info.plist
+      properties:
+        MayaConvexURL: $(MAYA_CONVEX_URL)
+        CFBundleDisplayName: Maya
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: MayaWidget/MayaWidget.entitlements
+      properties:
+        com.apple.security.application-groups: ["group.ai.heymaya.maya"]
+  MayaTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: MayaTests
+      - path: Fixtures
+        buildPhase: resources
+        excludes: ["year/**", "*.py"]
+    dependencies:
+      - target: Maya
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Maya:
+    build:
+      targets:
+        Maya: all
+        MayaTests: [test]
+    test:
+      targets:
+        - MayaTests

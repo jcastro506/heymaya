@@ -1,0 +1,181 @@
+/**
+ * Deterministic checks (plan Sprint 3c). Pure functions over a message and the
+ * evidence she was given. An invented number is the worst failure: every number in
+ * the message must appear somewhere in the evidence. The rest are the rules from
+ * §21.2 that can be code: no tells, no leak, one question, no bullets, her name once.
+ */
+
+import { INTERNAL_ID, checkPlainLanguage } from "../core/plainLanguage";
+
+/**
+ * The RULER's version. Bump it whenever a check is added, removed, or its meaning changes.
+ *
+ * ⚠️ A baseline is only comparable to a run measured the same way. I tightened `has_link`
+ * and the gate immediately reported a 25-point "regression" that was purely the ruler
+ * changing — exactly the false alarm that teaches people to ignore a gate. The gate now
+ * refuses to compare across versions and asks for a fresh baseline instead.
+ *
+ * `rubric.test.ts` fails if the checks change without this being bumped.
+ */
+export const RUBRIC_VERSION = "9";
+
+
+export interface Check { name: string; pass: boolean; detail: string; /** Measured and reported, never a fail: a habit we are moving, not a promise we enforce. */ advisory?: boolean }
+
+/** The exact tells (§21.4): deliberately short, because over-blocking is the worse failure. */
+export const TELLS: RegExp[] = [/\bgreat question\b/i, /\bi'?d be happy to\b/i, /\bas an ai\b/i, /\bi hope this helps\b/i, /\bcontent strategy\b/i, /\bleverage\b/i, /\boptimi[sz]e\b/i, /\bengagement\b/i, /\bsynerg/i, /\bunlock\b/i, /\bgame[- ]changer\b/i, /🚀/];
+
+/**
+ * The numbers that are claims: counts ≥ 100, and anything with k / m / × / %. Advice
+ * numbers ("keep it under 30s", "after 9h", "three fixes") and years are not citations.
+ */
+export function numbersIn(text: string): string[] {
+  const out = new Set<string>();
+  for (const m of text.matchAll(/(?<![\w.])(\d[\d,]*(?:\.\d+)?)\s*(k|m|×|x|%)?(?![\w])/gi)) {
+    const raw = m[1].replace(/,/g, "");
+    const n = Number(raw);
+    if (!Number.isFinite(n)) continue;
+    if (/^(19|20)\d{2}$/.test(raw)) continue; // a year
+    const unit = m[2]?.toLowerCase();
+    if (!unit && n < 100) continue; // advice and counting words
+    out.add(raw + (unit ?? ""));
+  }
+  return Array.from(out);
+}
+
+/** Is a number present in the evidence, in any of its spellings (559925, 559,925, 559.9k, 560k)? */
+export function numberGrounded(token: string, evidence: string): boolean {
+  const unit = token.match(/[a-z×%]+$/)?.[0] ?? "";
+  const raw = token.replace(/[a-z×%]+$/, "");
+  const n = Number(raw);
+  const flat = evidence.replace(/,/g, "");
+  if (flat.includes(raw)) return true;
+  if (unit === "k" || unit === "m") {
+    const full = unit === "k" ? n * 1000 : n * 1_000_000;
+    const nums = Array.from(flat.matchAll(/\d+(?:\.\d+)?/g)).map((x) => Number(x[0]));
+    return nums.some((v) => v > 0 && Math.abs(v - full) / full <= 0.05); // 560k for 559,925 is honest rounding
+  }
+  if (unit === "×" || unit === "x") {
+    const nums = Array.from(flat.matchAll(/\d+(?:\.\d+)?/g)).map((x) => Number(x[0]));
+    return nums.some((v) => Math.abs(v - n) < 0.06);
+  }
+  return false;
+}
+
+/** Words that assert she did something to their setup. Only a routed management turn may say them. */
+const ACTION_CLAIMS = /\b(added|i've added|now watching|tracking (her|him|them) now|i'?ve set|i set (your|the)|updated your|i'?ve updated|blocked (it|that|thu|fri|mon|tue|wed|sat|sun)|removed|dropped (her|him|them)|paused|i'?ve turned)\b/i;
+
+export function runChecks(input: { text: string; evidence: unknown; kind: string; creatorUsesEmoji?: boolean; maxChars?: number; actionTaken?: boolean }): Check[] {
+  const text = input.text;
+  const evidence = typeof input.evidence === "string" ? input.evidence : JSON.stringify(input.evidence ?? "");
+  const checks: Check[] = [];
+
+  const nums = numbersIn(text);
+  const ungrounded = nums.filter((t) => !numberGrounded(t, evidence));
+  checks.push({ name: "numbers_grounded", pass: ungrounded.length === 0, detail: ungrounded.length ? `not in the evidence: ${ungrounded.join(", ")}` : `${nums.length} number${nums.length === 1 ? "" : "s"}, all in the evidence` });
+
+  const tells = TELLS.filter((re) => re.test(text)).map((re) => re.source);
+  checks.push({ name: "no_tells", pass: tells.length === 0, detail: tells.length ? tells.join(", ") : "clean" });
+
+  const leak = checkPlainLanguage(text);
+  checks.push({ name: "no_leak", pass: leak.ok, detail: leak.ok ? "clean" : (leak as { reason?: string }).reason ?? "leak" });
+  // 2026-09-12: the prompt now carries row ids for the partnership evidence; none may reach a person.
+  const ids = text.match(INTERNAL_ID) ?? [];
+  checks.push({ name: "no_internal_ids", pass: ids.length === 0, detail: ids.length ? `row id in the message: ${ids[0]}` : "clean" });
+
+  const max = input.maxChars ?? 900;
+  checks.push({ name: "length", pass: text.length <= max, detail: `${text.length} / ${max}` });
+
+  const questions = (text.match(/\?/g) ?? []).length;
+  checks.push({ name: "one_question", pass: questions <= 1, detail: `${questions} question mark${questions === 1 ? "" : "s"}` });
+
+  // Live 2026-09-08: "Thursday at 5 pm: … / Saturday (Sep 12): … / Monday (Sep 14): …" is a list with the bullets removed.
+  const labelledLines = (text.match(/^[A-Z][\w ()]{1,30}:\s+\S/gm) ?? []).length;
+  const bullets = /^\s*([-*•]|\d+\.)\s/m.test(text) || /^#{1,6}\s/m.test(text) || labelledLines >= 3;
+  checks.push({ name: "no_bullets", pass: !bullets, detail: bullets ? "bullets or headers in chat" : "prose" });
+
+  const names = (text.match(/\bmaya\b/gi) ?? []).length;
+  checks.push({ name: "name_once", pass: names <= 1, detail: `${names}` });
+
+  const emoji = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(text);
+  checks.push({ name: "emoji_default", pass: !emoji || Boolean(input.creatorUsesEmoji), detail: emoji ? (input.creatorUsesEmoji ? "emoji, and they use them" : "emoji, and they don't") : "none" });
+
+  // A message that stops mid-thought, or carries markdown or a draft label, is a budget or a leak problem, never a style.
+  const trimmed = text.trim();
+  const complete = trimmed.length < 40 || /[.!?…“”)\]]$/.test(trimmed) || /\p{Extended_Pictographic}(?:\uFE0F)?$/u.test(trimmed) || /https?:\/\/\S+$/.test(trimmed);
+  checks.push({ name: "complete", pass: complete, detail: complete ? "ends on a sentence" : `ends with "…${trimmed.slice(-30)}"` });
+  const markdown = /\*\*|^#{1,6}\s|```/m.test(text) || /\b(refining|draft|revised|final answer)\b.*[:*]/i.test(text.split("\n")[0] ?? "");
+  const fitWhy = (input.evidence as { idea?: { fitWhy?: unknown } } | null)?.idea?.fitWhy;
+  if (typeof fitWhy === "string" && fitWhy) checks.push({ name: "fit_why_to_them", pass: !writtenAboutThem(fitWhy), detail: writtenAboutThem(fitWhy) ? `written about them, not to them: "${fitWhy.slice(0, 80)}"` : "to them" });
+  checks.push({ name: "no_markdown", pass: !markdown, detail: markdown ? "markdown or a draft label in chat" : "clean" });
+
+  // A reply that says "added" or "done" when no management row was written is a lie about their setup.
+  if (input.kind === "reply" && input.actionTaken === false) {
+    const claim = ACTION_CLAIMS.test(text);
+    checks.push({ name: "no_claimed_action", pass: !claim, detail: claim ? "claims an action no tool took" : "no action claimed" });
+  }
+
+  /**
+   * A scout message is about SOMEONE ELSE'S post, so the creator has to be able to go and
+   * look at it. Two bugs lived here:
+   *  - a link present only in the evidence PASSED, and nobody can click the evidence;
+   *  - the failure detail said "link only in evidence" even when there was no link
+   *    anywhere, which sent me looking in the wrong place for half an hour.
+   * The rule now: if there is a post to link, the message must carry the link.
+   */
+  /**
+   * Sprint 4e: a TikTok counter and a Reels retention number in one claim is a category
+   * error — TikTok exposes no retention to anyone — unless the message says the retention is
+   * from the Reel of the same video. Measured, not enforced; the critic carries the tell.
+   */
+  const retentionClaim = /watched \d+%|left in the first 3 seconds|skip rate|retention/i.test(text);
+  const tiktokClaim = /tiktok/i.test(text);
+  const transferred = /same video|the reel of|on the reel|cross-?post/i.test(text);
+  // An honest refusal is not a claim: "i can't see watch time on tiktok" names the metric to say
+  // it is unavailable (gauntlet 2026-09-06, a correct answer failed this check).
+  const refusal = /(can'?t|cannot|don'?t|doesn'?t|not able to|no way to)\s+(see|share|show|get|expose|track|give)/i.test(text);
+  if (retentionClaim && tiktokClaim && !transferred && !refusal) checks.push({ name: "mixed_basis", pass: false, detail: "a TikTok number and a retention figure in one claim with no cross-post link named" });
+  else if (retentionClaim && refusal && !transferred) checks.push({ name: "mixed_basis", pass: true, detail: "retention named only to say it cannot be seen" });
+  else if (retentionClaim) checks.push({ name: "mixed_basis", pass: true, detail: transferred ? "retention transferred with the link named" : "retention cited on its own platform" });
+
+  // A post is reacted to as a viewer before it is read as a strategist (2026-09-06): the first
+  // sentence of a message about one of their posts carries no number and no metric word.
+  // Measured, not enforced; the critic carries the tell and the rewrite fixes it.
+  if (input.kind === "scout" || input.kind === "opinion" || input.kind === "first_read") {
+    const first = text.split(/(?<=[.!?])\s+|\n/)[0] ?? "";
+    const analytical = /\d/.test(first) || /\b(normal|reach|views|baseline|multiple|engagement|retention|impressions)\b/i.test(first);
+    checks.push({ name: "reaction_first", advisory: true, pass: !analytical, detail: analytical ? `opens on a number or a metric: "${first.slice(0, 80)}"` : "opens as a viewer" });
+  }
+
+  if (input.kind === "scout") {
+    const inText = /https?:\/\//.test(text);
+    const inEvidence = /https?:\/\//.test(evidence);
+    // A scout message is useless without the link, whatever the reason. The two details
+    // below separate "the writer dropped it" from "nothing upstream had one", because those
+    // need different fixes, but both are failures for the creator holding the phone.
+    const pass = inText;
+    checks.push({
+      name: "has_link",
+      pass,
+      detail: inText
+        ? "link in message"
+        : inEvidence
+          ? "the post's link is in the evidence but NOT in the message — they cannot open it"
+          : "no link anywhere: nothing for them to look at",
+    });
+  }
+
+  return checks;
+}
+
+/**
+ * C1: "why it's for you" is read by the creator in their app, so it's written TO them. A line
+ * about them in the third person ("her top format… her normal") is an internal note leaking. Pure.
+ */
+export function writtenAboutThem(text: string): boolean {
+  return /\b(she|her|hers|he|his|him|they|their|them|the creator|this creator)\b/i.test(text) && !/\b(you|your)\b/i.test(text);
+}
+
+export function passed(checks: Check[]): boolean {
+  return checks.filter((c) => !c.advisory).every((c) => c.pass);
+}

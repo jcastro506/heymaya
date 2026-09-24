@@ -1,134 +1,34 @@
 import Link from "next/link";
-import type { Metadata } from "next";
-import type { ReactNode } from "react";
 
-export const metadata: Metadata = {
-  title: "Terms of Service | HeyMaya",
-  description:
-    "Terms for using HeyMaya, Creator Maya, calendar planning, and iMessage workflows.",
-};
-
-const updated = "May 2, 2026";
-
-export default function TermsPage() {
+/** Terms (plan §7 S1 legal). Short on purpose; reviewed by a person before launch. */
+export default function Terms() {
   return (
-    <main className="min-h-screen bg-ink text-paper">
-      <LegalHeader />
-      <article className="mx-auto max-w-3xl px-5 pb-20 pt-10 sm:px-8">
-        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-paper-faint">
-          Last updated {updated}
-        </p>
-        <h1 className="mt-4 font-display text-5xl leading-tight text-paper">
-          Terms of Service
-        </h1>
-        <p className="mt-5 text-base leading-relaxed text-paper-dim">
-          These terms govern your use of HeyMaya and Creator Maya. By creating
-          an account or connecting a service, you agree to use Maya responsibly
-          and to keep final control over what gets posted, scheduled, or sent.
-        </p>
+    <main className="max-w-2xl mx-auto px-6 py-12 flex flex-col gap-6 text-sm leading-relaxed">
+      <h1 className="text-2xl font-semibold">Terms</h1>
+      <p className="opacity-60">Last updated 2 September 2026. Pilot terms.</p>
 
-        <LegalSection title="Product Scope">
-          <p>
-            Creator Maya helps creators plan content, understand public social
-            context, review calendar availability, schedule approved content
-            holds, and receive guidance through connected messaging channels.
-            Maya is an assistant, not a talent agent, attorney, accountant, or
-            financial advisor.
-          </p>
-        </LegalSection>
+      <h2 className="font-semibold text-base">The service</h2>
+      <p>Maya is an assistant that reads public posts, watches videos, reads a calendar you connect, and texts you ideas and opinions. She does not post on your behalf and never holds your platform credentials. Her opinions are opinions; she keeps score on them, and no result is promised.</p>
 
-        <LegalSection title="Your Responsibilities">
-          <p>
-            You are responsible for the accuracy of the information you provide,
-            for your social-media accounts, for complying with platform rules,
-            and for reviewing any content, calendar action, email, or brand
-            outreach before it is sent or published.
-          </p>
-          <p>
-            You may not use HeyMaya to spam, harass, impersonate others, scrape
-            private data, violate third-party rights, or bypass platform access
-            controls.
-          </p>
-        </LegalSection>
+      <h2 className="font-semibold text-base">Your account</h2>
+      <p>You must be 18 or older. You are responsible for the handles you give us being yours and for what you do with the ideas. One person, one account, one Telegram chat.</p>
 
-        <LegalSection title="Connected Services">
-          <p>
-            If you connect Google Calendar, TikTok data providers, messaging,
-            or other services, you authorize HeyMaya to access those services
-            only for the product features you enable. You can disconnect
-            services in the product where supported or by revoking access from
-            the connected provider.
-          </p>
-        </LegalSection>
+      <h2 className="font-semibold text-base">Payment</h2>
+      <p>Seven days free with a card on file, then $19 a month or $190 a year for one connected account, $24.99 a month or $249.90 a year for both, or $29.99 a month or $299.90 a year for both plus partnerships. You are charged on day seven unless you cancel first. Cancel any time from Settings; the current period runs out and there are no pro-rata refunds. Exceptions are at the founder&apos;s discretion.</p>
 
-        <LegalSection title="AI Output">
-          <p>
-            Maya may generate plans, drafts, summaries, rankings, and outreach
-            suggestions. AI output can be wrong, incomplete, or out of date.
-            You are responsible for reviewing important decisions and anything
-            that will be posted, sent, scheduled, or relied on externally.
-          </p>
-        </LegalSection>
+      <h2 className="font-semibold text-base">Fair use</h2>
+      <p>The trial and the paid plan have the same budgets for how much she watches and reads each day. Using Maya to harass, impersonate or scrape people, or to feed her content you have no right to share, ends the account.</p>
 
-        <LegalSection title="Beta Availability">
-          <p>
-            Creator Maya is currently a beta product. Features may change, fail,
-            or be unavailable. We may limit access, pause integrations, or
-            disable workflows that are unreliable, unsafe, or not approved for
-            broader release.
-          </p>
-        </LegalSection>
+      <h2 className="font-semibold text-base">Content</h2>
+      <p>Ideas, hooks and shot lists she writes for you are yours. Public content she reads belongs to whoever posted it; she cites it with links and never republishes it.</p>
 
-        <LegalSection title="Contact">
-          <p>
-            Questions about these terms can be sent to{" "}
-            <a className="text-lime underline-offset-4 hover:underline" href="mailto:support@hey-maya.ai">
-              support@hey-maya.ai
-            </a>
-            .
-          </p>
-        </LegalSection>
-      </article>
+      <h2 className="font-semibold text-base">Availability and liability</h2>
+      <p>This is a pilot. She may be down, late or wrong. We are not liable for what you post, for a platform&apos;s decisions about your account, or for lost views. Our liability is limited to what you paid in the last month.</p>
+
+      <h2 className="font-semibold text-base">Changes and ending</h2>
+      <p>We can change these terms with notice on this page and in the chat. You can leave any time from Settings, with an export first if you want it. See <Link className="underline" href="/privacy">Privacy</Link> for what is kept and what is deleted.</p>
+
+      <p className="opacity-50"><Link className="underline" href="/">Home</Link></p>
     </main>
-  );
-}
-
-function LegalHeader() {
-  return (
-    <header className="border-b border-[var(--hairline)]">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5 sm:px-8 lg:px-10">
-        <Link href="/" className="flex items-center gap-2" aria-label="HeyMaya home">
-          <span className="grid h-8 w-8 place-items-center rounded-md bg-lime font-display text-lg text-ink">
-            m
-          </span>
-          <span className="font-display text-xl text-paper">HeyMaya</span>
-        </Link>
-        <nav className="flex items-center gap-4 text-sm text-paper-dim">
-          <Link href="/privacy" className="hover:text-paper">
-            Privacy
-          </Link>
-          <Link href="/creator-maya-v0" className="hover:text-paper">
-            Start
-          </Link>
-        </nav>
-      </div>
-    </header>
-  );
-}
-
-function LegalSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="mt-10 border-t border-[var(--hairline)] pt-6">
-      <h2 className="font-display text-3xl text-paper">{title}</h2>
-      <div className="mt-4 space-y-4 text-sm leading-relaxed text-paper-dim">
-        {children}
-      </div>
-    </section>
   );
 }

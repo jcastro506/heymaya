@@ -1,0 +1,45 @@
+{
+  "success": true,
+  "credits_remaining": 100,
+  "credits_charged": 1,
+  "collection_id": "7665668414573546258",
+  "has_more": false,
+  "max_cursor": "5",
+  "status_code": 0,
+  "status_msg": "",
+  "videos": [
+    {
+      "AIGCDescription": "",
+      "CategoryType": 116,
+      "IsHDBitrate": false,
+      "ShowAIGC": true,
+      "anchors": [
+        {
+          "description": "CapCut · Video Editor",
+          "type": 54
+        }
+      ],
+      "author": {
+        "id": "7506421330087576593",
+        "uniqueId": "miotravelapp",
+        "nickname": "miotravelapp"
+      },
+      "createTime": 1784185607,
+      "desc": "How often do you reckon they think about the Roman Empire? 🐈‍⬛",
+      "id": "7663018809392909588",
+      "stats": {
+        "collectCount": 18900,
+        "commentCount": 359,
+        "diggCount": 113000,
+        "playCount": 865200,
+        "shareCount": 15700
+      },
+      "video": {
+        "duration": 68,
+        "height": 1024,
+        "width": 576,
+        "cover": "https://p19-common-sign.tiktokcdn-us.com/tos-alisg-p-0037/oUYM7iBIKB1BL5CGgwAtAiwJEfLCFXAiX9IAEA~tplv-tiktokx-origin.image"
+      }
+    }
+  ]
+}

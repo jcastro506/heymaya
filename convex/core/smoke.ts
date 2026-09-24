@@ -1,0 +1,137 @@
+/**
+ * Live smoke (plan §17.1): one cheap real call per vendor, daily, writing vendorHealth,
+ * so a retired endpoint, an expired key or a dead bot shows on the console before a
+ * creator hits it. Nothing here spends a model token; the credit check is free and
+ * Telegram's getMe is free.
+ */
+
+import { v } from "convex/values";
+import { THRESHOLDS } from "../config/thresholds";
+import { internalAction, internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
+import { internal } from "../_generated/api";
+import type { Doc } from "../_generated/dataModel";
+import { resolveTelegramBotIdentity } from "../integrations/telegram/client";
+
+type Readiness = { vendor: string; check: string; ok: boolean; detail: Record<string, boolean | string> };
+
+/** Configuration checks are useful even when a safe, free provider call does not exist. */
+export function integrationReadiness(env: Record<string, string | undefined>): Readiness[] {
+  const present = (key: string) => Boolean(env[key]?.trim());
+  return [
+    { vendor: "claw", check: "configuration", ok: ["CLAW_API_KEY", "CLAW_LINE_NUMBER", "CLAW_RELAY_URL", "CLAW_WEBHOOK_SECRET"].every(present), detail: { apiKey: present("CLAW_API_KEY"), lineNumber: present("CLAW_LINE_NUMBER"), relayUrl: present("CLAW_RELAY_URL"), webhookSecret: present("CLAW_WEBHOOK_SECRET") } },
+    { vendor: "zernio", check: "configuration", ok: ["ZERNIO_API_KEY", "ZERNIO_WEBHOOK_SECRET"].every(present), detail: { apiKey: present("ZERNIO_API_KEY"), webhookSecret: present("ZERNIO_WEBHOOK_SECRET") } },
+    { vendor: "tavily", check: "configuration", ok: present("TAVILY_API_KEY"), detail: { apiKey: present("TAVILY_API_KEY") } },
+    { vendor: "google", check: "calendar-configuration", ok: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "APP_URL"].every(present), detail: { clientId: present("GOOGLE_CLIENT_ID"), clientSecret: present("GOOGLE_CLIENT_SECRET"), appUrl: present("APP_URL") } },
+    { vendor: "gmail", check: "configuration", ok: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GMAIL_REDIRECT_URI"].every(present), detail: { clientId: present("GOOGLE_CLIENT_ID"), clientSecret: present("GOOGLE_CLIENT_SECRET"), redirectUri: present("GMAIL_REDIRECT_URI"), sendingEnabled: env.PARTNERSHIP_EMAIL_SEND_ENABLED === "true" } },
+  ];
+}
+
+export const record = internalMutation({
+  args: { vendor: v.string(), check: v.string(), ok: v.boolean(), detail: v.optional(v.any()) },
+  handler: async (ctx, a): Promise<null> => {
+    await ctx.db.insert("vendorHealth", { vendor: a.vendor, check: a.check, ok: a.ok, detail: a.detail, at: Date.now() });
+    return null;
+  },
+});
+
+/** The latest reading per vendor and check, for the console. */
+export const latest = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<Array<{ vendor: string; check: string; ok: boolean; detail: unknown; at: number }>> => {
+    const rows = (await ctx.db.query("vendorHealth").order("desc").take(200)) as Doc<"vendorHealth">[];
+    const seen = new Map<string, Doc<"vendorHealth">>();
+    for (const r of rows) {
+      const k = `${r.vendor}:${r.check}`;
+      if (!seen.has(k)) seen.set(k, r);
+    }
+    return Array.from(seen.values()).map((r) => ({ vendor: r.vendor, check: r.check, ok: r.ok, detail: r.detail, at: r.at }));
+  },
+});
+
+export const run = internalAction({
+  args: {},
+  handler: async (ctx): Promise<Record<string, boolean>> => {
+    const out: Record<string, boolean> = {};
+
+    for (const check of integrationReadiness(process.env)) {
+      await ctx.runMutation(internal.core.smoke.record, check);
+      out[`${check.vendor}Config`] = check.ok;
+    }
+
+    // §23 the phone channel: the vendor's relay answers, and our own relay is connected (when configured).
+    const claw = process.env.CLAW_API_KEY ? (process.env.CLAW_BASE_URL ?? "https://claw-messenger.onrender.com") : null;
+    if (claw) {
+      try {
+        const res = await fetch(`${claw.replace(/\/+$/, "")}/health`);
+        await ctx.runMutation(internal.core.smoke.record, { vendor: "claw", check: "health", ok: res.ok, detail: { status: res.status } });
+        out.claw = res.ok;
+      } catch (e) {
+        await ctx.runMutation(internal.core.smoke.record, { vendor: "claw", check: "health", ok: false, detail: String(e).slice(0, 200) });
+        out.claw = false;
+      }
+      const relay = process.env.CLAW_RELAY_URL;
+      if (relay) {
+        try {
+          const res = await fetch(`${relay.replace(/\/+$/, "")}/health`);
+          const body = (await res.json().catch(() => ({}))) as { ok?: boolean; forwarded?: number; failed?: number; lastEventAt?: number | null };
+          await ctx.runMutation(internal.core.smoke.record, { vendor: "claw", check: "relay", ok: res.ok && body.ok === true, detail: { status: res.status, forwarded: body.forwarded ?? null, failed: body.failed ?? null, lastEventAt: body.lastEventAt ?? null } });
+          out.clawRelay = res.ok && body.ok === true;
+        } catch (e) {
+          await ctx.runMutation(internal.core.smoke.record, { vendor: "claw", check: "relay", ok: false, detail: String(e).slice(0, 200) });
+          out.clawRelay = false;
+        }
+      }
+    }
+
+    // ScrapeCreators: the credit balance, always live (the fixture flag does not apply to the vendor's own account).
+    try {
+      const key = process.env.SCRAPE_CREATORS_API_KEY ?? "";
+      const res = await fetch("https://api.scrapecreators.com/v1/credit-balance", { headers: { "x-api-key": key } });
+      const body = (await res.json().catch(() => ({}))) as { creditCount?: number; success?: boolean };
+      const credits = typeof body.creditCount === "number" ? body.creditCount : null;
+      const ok = res.ok && Boolean(body.success) && credits !== null && credits >= THRESHOLDS.creditFloor;
+      await ctx.runMutation(internal.core.smoke.record, { vendor: "scrapecreators", check: "credit-balance", ok, detail: { status: res.status, credits, floor: THRESHOLDS.creditFloor, fixtures: process.env.SCRAPE_FIXTURES ?? "off", ...(credits !== null && credits < THRESHOLDS.creditFloor ? { why: `balance ${credits} is under the floor ${THRESHOLDS.creditFloor}; every read fails at zero` } : {}) } });
+      out.scrapecreators = ok;
+    } catch (e) {
+      await ctx.runMutation(internal.core.smoke.record, { vendor: "scrapecreators", check: "credit-balance", ok: false, detail: String(e).slice(0, 200) });
+      out.scrapecreators = false;
+    }
+
+    // Telegram: getMe on the bot this deployment uses.
+    try {
+      const identity = resolveTelegramBotIdentity();
+      if (!identity) throw new Error("no bot identity");
+      const res = await fetch(`https://api.telegram.org/bot${identity.token}/getMe`);
+      const body = (await res.json().catch(() => ({}))) as { ok?: boolean; result?: { username?: string } };
+      const ok = res.ok && Boolean(body.ok);
+      await ctx.runMutation(internal.core.smoke.record, { vendor: "telegram", check: "getMe", ok, detail: { username: body.result?.username ?? null } });
+      out.telegram = ok;
+    } catch (e) {
+      await ctx.runMutation(internal.core.smoke.record, { vendor: "telegram", check: "getMe", ok: false, detail: String(e).slice(0, 200) });
+      out.telegram = false;
+    }
+
+    // OpenRouter: the models list is free and proves the key.
+    try {
+      const res = await fetch("https://openrouter.ai/api/v1/models", { headers: { authorization: `Bearer ${process.env.OPENROUTER_API_KEY ?? ""}` } });
+      await ctx.runMutation(internal.core.smoke.record, { vendor: "openrouter", check: "models", ok: res.ok, detail: { status: res.status } });
+      out.openrouter = res.ok;
+    } catch (e) {
+      await ctx.runMutation(internal.core.smoke.record, { vendor: "openrouter", check: "models", ok: false, detail: String(e).slice(0, 200) });
+      out.openrouter = false;
+    }
+
+    // Gemini: the models list is free and proves the key.
+    try {
+      const key = process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY ?? "";
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}&pageSize=1`);
+      await ctx.runMutation(internal.core.smoke.record, { vendor: "gemini", check: "models", ok: res.ok, detail: { status: res.status } });
+      out.gemini = res.ok;
+    } catch (e) {
+      await ctx.runMutation(internal.core.smoke.record, { vendor: "gemini", check: "models", ok: false, detail: String(e).slice(0, 200) });
+      out.gemini = false;
+    }
+    return out;
+  },
+});

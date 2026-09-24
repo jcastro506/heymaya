@@ -1,0 +1,254 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { TIERS, TIER_NAMES, price } from "@/convex/billing/tiers";
+import { useAction, useMutation, useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import Link from "next/link";
+
+function minutesAgo(ts: number): number {
+  return Math.max(1, Math.round((Date.now() - ts) / 60_000));
+}
+
+export default function SettingsPage() {
+  const s = useQuery(api.ui.settings);
+  const update = useMutation(api.ui.updateSettings);
+  const correct = useMutation(api.ui.correct);
+  const revoke = useMutation(api.ui.revokeRule);
+  const [correction, setCorrection] = useState("");
+  const [confirmText, setConfirmText] = useState("");
+  const z = useQuery(api.connections.zernio.status);
+  const zStart = useAction(api.connections.zernio.startConnect);
+  const zDisconnect = useAction(api.connections.zernio.disconnect);
+  const zReconcile = useAction(api.connections.zernio.reconcile);
+  const [zNote, setZNote] = useState<string | null>(null);
+  const [zBack] = useState<boolean>(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("connect") === "back");
+  useEffect(() => {
+    if (!zBack) return;
+    // Back from the OAuth screen: the webhook is the authority, the reconcile covers a missed delivery.
+    zReconcile({}).then((r) => setZNote(r.accounts > 0 ? `Connected: ${r.accounts} account${r.accounts === 1 ? "" : "s"}.` : "Nothing attached yet. If you finished the login, give it a minute and refresh.")).catch(() => setZNote("Couldn't check the connection. Refresh in a minute."));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once, on the return from OAuth
+  }, [zBack]);
+  const createCheckout = useAction(api.billing.checkout.createCheckout);
+  const openPortal = useAction(api.billing.checkout.openPortal);
+  const [billingNote, setBillingNote] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const b = new URLSearchParams(window.location.search).get("billing");
+    return b === "started" ? "Trial started. Card on file, charged on day seven." : b === "canceled" ? "Checkout closed. Nothing charged." : null;
+  });
+  const [deleting, setDeleting] = useState(false);
+  const [deleteNote, setDeleteNote] = useState<string | null>(null);
+  const cal = useQuery(api.calendar.oauth.status);
+  const mailbox = useQuery(api.partnerships.mailbox.status);
+  const disconnectMailbox = useAction(api.partnerships.mailbox.disconnect);
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailNote, setEmailNote] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const q = new URLSearchParams(window.location.search);
+    return q.has("email_error") ? "Couldn’t connect your email. Please try again." : q.get("email") === "connected" ? "Email connected." : null;
+  });
+  const selectCalendars = useMutation(api.calendar.oauth.selectCalendars);
+  const disconnect = useAction(api.calendar.oauth.disconnect);
+  // The connect round trip lands here with a query string; read it once, at mount, without an effect.
+  const [calNote, setCalNote] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const q = new URLSearchParams(window.location.search);
+    const err = q.get("calendar_error");
+    if (q.get("calendar") === "connected") return "Calendar connected. She reads it every half hour.";
+    if (err === "denied") return "You said no to Google. Fine; connect later from here.";
+    return err ? `Couldn't connect the calendar (${err}). Try again.` : null;
+  });
+  if (s === undefined) return <p className="opacity-60 text-sm">loading…</p>;
+  if (s === null) return <p className="text-sm">No account yet. <Link className="underline" href="/start">Start here.</Link></p>;
+
+  return (
+    <div className="flex flex-col gap-6">
+      <h1 className="text-lg font-semibold">Settings</h1>
+      {(mailbox?.available || mailbox?.connected) && <section className="flex flex-col gap-2 text-sm">
+        <h2 className="text-sm uppercase tracking-wide opacity-50">Partnership email</h2>
+        <p>Maya prepares brand pitches for your approval and checks replies in your partnership conversations.</p>
+        {emailNote && <p role="status">{emailNote}</p>}
+        {mailbox?.attention && <p role="status">{mailbox.attention} <a className="underline" href="/api/gmail/start">Reconnect email</a></p>}
+        {mailbox?.connected ? <>
+          <p>{mailbox.email}</p>
+          <button className="underline self-start" disabled={emailBusy} onClick={async () => {
+            setEmailBusy(true);
+            try { await disconnectMailbox({}); setEmailNote("Email disconnected."); } catch { setEmailNote("Couldn’t disconnect. Please try again."); } finally { setEmailBusy(false); }
+          }}>{emailBusy ? "Disconnecting…" : "Disconnect email"}</button>
+        </> : <a className="underline" href="/api/gmail/start">Connect Gmail</a>}
+        {mailbox && !mailbox.sendingEnabled && <p className="opacity-60">Pitches can be drafted now. Email sending is not enabled yet.</p>}
+      </section>}
+
+      <section className="flex flex-col gap-2 text-sm">
+        <h2 className="text-sm uppercase tracking-wide opacity-50">Accounts</h2>
+        <div>TikTok: {s.handles.tiktok ? `@${s.handles.tiktok}` : "—"} · Instagram: {s.handles.instagram ? `@${s.handles.instagram}` : "—"}</div>
+        <div>Telegram: {s.paired ? "connected" : <Link className="underline" href="/telegram">connect</Link>} · plan: {s.plan} · {TIERS[s.tier].label.toLowerCase()} ({s.accountCap} connected account{s.accountCap === 1 ? "" : "s"})</div>
+      </section>
+
+      <section className="flex flex-col gap-2 text-sm">
+        <h2 className="text-sm uppercase tracking-wide opacity-50">Billing</h2>
+        {billingNote && <p className="text-xs opacity-80">{billingNote}</p>}
+        {s.plan === "trialing" || s.plan === "active" || s.plan === "past_due" || s.plan === "paused" ? (
+          <div className="flex flex-col gap-1">
+            <div>{s.plan === "trialing" ? `Trial${s.trialEndsAt ? `, ends ${new Date(s.trialEndsAt).toLocaleDateString()}` : ""}` : s.plan === "active" ? `Subscribed${s.founding ? " at the founding price" : ""}${s.currentPeriodEnd ? `, renews ${new Date(s.currentPeriodEnd).toLocaleDateString()}` : ""}` : s.plan === "past_due" ? "Payment didn't go through. Update your card; she keeps going for a few days." : "Paused. No charge."}</div>
+            <button className="underline self-start" onClick={async () => { const r = await openPortal({}); if (r.ok) window.location.href = r.url; else setBillingNote(r.reason); }}>manage card, plan, or cancel</button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <p className="opacity-70">{s.plan === "canceled" ? "Canceled. Come back any time; you're billed right away the second time." : "Seven days free, card required, charged on day seven. Pick a plan; switch any time in one tap."}</p>
+            <div className="flex flex-col gap-2">
+              {TIER_NAMES.map((tier) => (
+                <div key={tier} className="flex flex-wrap items-center gap-2">
+                  <span className="min-w-[14rem]">{TIERS[tier].label} · {price(TIERS[tier].priceUsd)}/month or {price(TIERS[tier].annualUsd)}/year</span>
+                  <button className="btn" onClick={async () => { const r = await createCheckout({ interval: "monthly", tier }); if (r.ok) window.location.href = r.url; else setBillingNote(r.reason); }}>monthly</button>
+                  <button className="btn-secondary" onClick={async () => { const r = await createCheckout({ interval: "annual", tier }); if (r.ok) window.location.href = r.url; else setBillingNote(r.reason); }}>annual</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-2 text-sm">
+        <h2 className="text-sm uppercase tracking-wide opacity-50">Calendar</h2>
+        {calNote && <p className="text-xs opacity-80">{calNote}</p>}
+        {!cal || cal.status === "disconnected" ? (
+          <div>
+            <p className="opacity-70">Not connected. With it she plans filming around your life and finds ideas in it. She keeps only titles and times, never details, and skips anything private.</p>
+            <a className="btn mt-2 inline-flex" href="/api/google-calendar/start">Connect Google Calendar</a>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <div>
+              {cal.status === "connected" ? "Connected" : cal.status === "attention" ? "Connected, with a hiccup" : "Needs reconnecting"}
+              {cal.lastSyncedAt ? <span className="opacity-50"> · read {minutesAgo(cal.lastSyncedAt)} min ago</span> : null}
+              {cal.detail && <div className="text-xs opacity-70">{cal.detail}</div>}
+              {cal.status === "needs_reconnect" && <a className="underline text-xs" href="/api/google-calendar/start">reconnect</a>}
+            </div>
+            {cal.calendars.length > 1 && (
+              <div className="flex flex-col gap-1">
+                <div className="opacity-50 text-xs">which calendars she may read</div>
+                {cal.calendars.map((k) => (
+                  <label key={k.id} className="flex items-center gap-2">
+                    <input type="checkbox" checked={k.selected} onChange={(e) => selectCalendars({ ids: cal.calendars.filter((x) => (x.id === k.id ? e.target.checked : x.selected)).map((x) => x.id) })} />
+                    {k.name}
+                  </label>
+                ))}
+              </div>
+            )}
+            <button className="text-xs underline opacity-60 self-start" onClick={async () => { await disconnect({}); setCalNote("Disconnected. Everything she stored from it is gone."); }}>disconnect and forget my calendar</button>
+          </div>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-2 text-sm">
+        <h2 className="text-sm uppercase tracking-wide opacity-50">Connected accounts</h2>
+        {zNote && <p className="text-xs opacity-80">{zNote}</p>}
+        <p className="opacity-70">Connect your own TikTok or Instagram and she reads your real numbers, labeled as such. Opens when the trial ends. She never posts for you.</p>
+        {z && z.accounts.length > 0 && (
+          <ul className="flex flex-col gap-1">
+            {z.accounts.map((a) => (
+              <li key={a.accountId} className="flex items-center justify-between">
+                <span>{a.platform}{a.username ? ` · @${a.username}` : ""}{!a.canFetchAnalytics ? " · numbers not available on this plan" : ""}</span>
+                {a.needsReconnect ? <button className="underline text-xs" onClick={async () => { const r = await zStart({ platform: a.platform as "tiktok" | "instagram" }); if (r.ok) window.location.href = r.url; else setZNote(r.reason); }}>reconnect</button> : <span className="text-[11px] uppercase tracking-wide text-emerald-300">connected</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+        {z?.detail && <p className="text-xs opacity-60">{z.detail}</p>}
+        <div className="flex gap-2">
+          <button className="btn-secondary" onClick={async () => { const r = await zStart({ platform: "tiktok" }); if (r.ok) window.location.href = r.url; else setZNote(r.reason); }}>connect TikTok</button>
+          <button className="btn-secondary" onClick={async () => { const r = await zStart({ platform: "instagram" }); if (r.ok) window.location.href = r.url; else setZNote(r.reason); }}>connect Instagram</button>
+        </div>
+        {z && z.status !== "disconnected" && <button className="text-xs underline opacity-60 self-start" onClick={async () => { const r = await zDisconnect({}); setZNote(r.detail); }}>disconnect all</button>}
+      </section>
+
+      <section className="flex flex-col gap-2 text-sm">
+        <h2 className="text-sm uppercase tracking-wide opacity-50">How she texts you</h2>
+        <label className="flex items-center justify-between">tone
+          <select className="input w-32" value={s.tone} onChange={(e) => update({ tone: e.target.value as "coach" | "friend" | "blunt" })}>
+            <option value="friend">friend</option>
+            <option value="coach">coach</option>
+            <option value="blunt">blunt</option>
+          </select>
+        </label>
+        <label className="flex items-center justify-between">quiet from
+          <input className="input w-24" type="time" value={s.quietHours.start} onChange={(e) => update({ quietHours: { ...s.quietHours, start: e.target.value } })} />
+        </label>
+        <label className="flex items-center justify-between">until
+          <input className="input w-24" type="time" value={s.quietHours.end} onChange={(e) => update({ quietHours: { ...s.quietHours, end: e.target.value } })} />
+        </label>
+        <div className="opacity-60 text-xs">timezone {s.timezone}</div>
+      </section>
+
+      <section className="flex flex-col gap-2 text-sm">
+        <h2 className="text-sm uppercase tracking-wide opacity-50">What Maya knows about you</h2>
+        {!s.knows ? (
+          <p className="opacity-60">She hasn&apos;t finished reading your posts yet.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <p>{s.knows.summary ?? "—"} <span className="opacity-50">({s.knows.mode})</span></p>
+            {s.knows.works.length > 0 && <div><div className="opacity-50 text-xs">what works for you</div><ul className="list-disc pl-5">{s.knows.works.map((w, i) => <li key={i}>{w}</li>)}</ul></div>}
+            {s.knows.doesNot.length > 0 && <div><div className="opacity-50 text-xs">what hasn&apos;t</div><ul className="list-disc pl-5">{s.knows.doesNot.map((w, i) => <li key={i}>{w}</li>)}</ul></div>}
+            {s.knows.keywords.length > 0 && <div className="opacity-70 text-xs">your lane: {s.knows.keywords.join(", ")}</div>}
+          </div>
+        )}
+        <div className="flex gap-2 mt-2">
+          <input className="input flex-1" placeholder="correct her: e.g. I don't do gear reviews anymore" value={correction} onChange={(e) => setCorrection(e.target.value)} />
+          <button className="btn" onClick={async () => { if (correction.trim()) { await correct({ text: correction }); setCorrection(""); } }}>tell her</button>
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-2 text-sm">
+        <h2 className="text-sm uppercase tracking-wide opacity-50">What she&apos;s learned about your taste</h2>
+        {!s.taste.events ? (
+          <p className="opacity-60">Nothing yet. Every heart, &ldquo;not me&rdquo;, shot list and post teaches her; she writes it up here weekly.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <p>{s.taste.note ?? "She has the reactions; the write-up lands after the first few."}</p>
+            {s.taste.likes.length > 0 && <div className="text-xs opacity-70">you take: {s.taste.likes.join(" · ")}</div>}
+            {s.taste.dislikes.length > 0 && <div className="text-xs opacity-70">you pass on: {s.taste.dislikes.join(" · ")}</div>}
+            <p className="text-xs opacity-40">Scores fade over about six weeks, so changing direction is allowed. Correct her above if she has it wrong.</p>
+          </div>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-2 text-sm">
+        <h2 className="text-sm uppercase tracking-wide opacity-50">House rules</h2>
+        {s.rules.length === 0 ? <p className="opacity-60">None yet. Anything you tell her to always or never do lands here, in your words.</p> : (
+          <ul className="flex flex-col gap-2">
+            {s.rules.map((r) => (
+              <li key={r.id} className="flex items-start justify-between gap-3 border border-white/10 rounded px-3 py-2">
+                <span>&ldquo;{r.text}&rdquo; <span className="opacity-40 text-xs">{new Date(r.at).toLocaleDateString()}</span></span>
+                <button className="text-xs underline opacity-60" onClick={() => revoke({ id: r.id })}>revoke</button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {s.notes.length > 0 && <div className="mt-2"><div className="opacity-50 text-xs">things you told her</div><ul className="list-disc pl-5">{s.notes.map((n) => <li key={n.id}>{n.text}</li>)}</ul></div>}
+      </section>
+
+      <section className="flex flex-col gap-2 text-sm">
+        <h2 className="text-sm uppercase tracking-wide opacity-50">Your data</h2>
+        <p className="opacity-70">Everything she keeps about you, as one file. Take it any time.</p>
+        <a className="underline self-start" href="/api/account/export">download my export</a>
+        <details className="mt-2">
+          <summary className="cursor-pointer opacity-70">Delete my account</summary>
+          <div className="mt-2 flex flex-col gap-2">
+            <p className="opacity-70">This deletes everything: your posts as she read them, every idea, every message, calendar fields, notes, and the Telegram pairing. Not undoable. Download the export first if you want it.</p>
+            <div className="flex gap-2">
+              <input className="input flex-1" placeholder="type DELETE" value={confirmText} onChange={(e) => setConfirmText(e.target.value)} />
+              <button className="btn" disabled={confirmText.trim().toUpperCase() !== "DELETE" || deleting} onClick={async () => {
+                setDeleting(true);
+                const r = await fetch("/api/account/delete", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ confirm: confirmText }) }).then((x) => x.json()).catch(() => ({ ok: false, reason: "network" }));
+                if (r.ok) window.location.href = "/?deleted=1";
+                else { setDeleteNote(r.reason ?? "couldn't delete"); setDeleting(false); }
+              }}>{deleting ? "deleting…" : "delete everything"}</button>
+            </div>
+            {deleteNote && <p className="text-xs text-red-400">{deleteNote}</p>}
+          </div>
+        </details>
+      </section>
+    </div>
+  );
+}

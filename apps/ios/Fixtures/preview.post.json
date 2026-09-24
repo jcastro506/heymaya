@@ -1,0 +1,35 @@
+{
+  "cannotKnow": [
+    "watch time, retention and the skip rate: TikTok does not expose them to anyone",
+    "reach and impressions: no account connected, so only the public count"
+  ],
+  "caption": "a girl on the move to be AS FAR AWAY AS POSSIBLE and i’ve started a new life this past month! #moving #travel #abroad #movingabroad #solotravel ",
+  "connected": null,
+  "connectedAsOf": null,
+  "contentType": "video",
+  "cover": "https://impressive-roadrunner-997.convex.cloud/api/storage/10e4db46-2a66-45dc-919d-ee63329cc514",
+  "createTime": 1790131596000,
+  "derived": null,
+  "headline": {
+    "asOfHours": null,
+    "basis": "public",
+    "value": 1378,
+    "what": "views"
+  },
+  "id": "kh7bbezvsdc9z6txts9qqem7k18ezjx8",
+  "multiple": {
+    "basis": "views",
+    "value": 1.11
+  },
+  "platform": "tiktok",
+  "publicAsOf": 1790196761663,
+  "publicCounts": {
+    "comments": 6,
+    "likes": 143,
+    "saves": 2,
+    "shares": 1,
+    "views": 1378
+  },
+  "read": null,
+  "url": "https://www.tiktok.com/@vanessaalopezz/video/7688556615997394190?_r=1&u_code=f013k0bg9i6c9k&preview_pb=0&sharer_language=en&_d=f013h8g044iehh&share_item_id=7688556615997394190&source=h5_m"
+}

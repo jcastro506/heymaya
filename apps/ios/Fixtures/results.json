@@ -1,0 +1,144 @@
+{
+  "experiments": [
+    {
+      "id": "exp_1789389612977",
+      "proposedAt": 1789389612977,
+      "result": null,
+      "text": "one 5s post-run selfie clip with a relatable exhaustion text overlay to clear 1.5x normal views"
+    },
+    {
+      "id": "exp_1788916712077",
+      "proposedAt": 1788916712077,
+      "result": "unknown",
+      "text": "one 6s candid hostel clip with a specific dorm life joke text overlay to beat 1.5x normal"
+    },
+    {
+      "id": "exp_1788916497458",
+      "proposedAt": 1788916497458,
+      "result": "unknown",
+      "text": "post one 7s candid hostel clip with a punchy on-screen joke about dorm life to beat 1.5x normal"
+    },
+    {
+      "id": "exp_1788915656123",
+      "proposedAt": 1788915656123,
+      "result": "unknown",
+      "text": "Post one 7s running selfie in Australia with a relatable complaint text overlay to beat 2.0x normal."
+    },
+    {
+      "id": "exp_1788915282118",
+      "proposedAt": 1788915282118,
+      "result": "unknown",
+      "text": "Post one 30-45s earbud-mic walking vlog on a specific hostel culture shock to beat 1.0x normal."
+    }
+  ],
+  "lane": {
+    "computedAt": 1790196792188,
+    "medianViews": 31072,
+    "p75Views": 59748,
+    "usable": true,
+    "why": "86 posts from 3 accounts this week"
+  },
+  "lastReview": {
+    "body": "quiet week on the feed with 0 posts out of 7 planned, so there are no fresh numbers to break down yet. the lane’s median views sat around 30k this week.\n---\nlast week’s hostel clip experiment is still untested since nothing went live. for this week, let's test a 5s post-run clip with a specific exhaustion text overlay to see if it clears 1.5x your normal.\n---\nwe have the hostel tour down for thursday at 5, or want to bank a quick running clip before the sydney marathon trip?",
+    "links": [],
+    "ts": 1789389613017
+  },
+  "openPredictions": 0,
+  "override": null,
+  "rung": {
+    "baselineEngagement": 0.014044336399414555,
+    "engagementRatio": 0.010517799352750809,
+    "medianMultiple": 1,
+    "planned": 7,
+    "posted": 7,
+    "rung": "unknown",
+    "why": "only 2 posts with a 48 h sample this week"
+  },
+  "trackRecord": [],
+  "week": [
+    {
+      "createTime": 1790131596000,
+      "engagementPerView": 0.006531204644412192,
+      "id": "kh7bbezvsdc9z6txts9qqem7k18ezjx8",
+      "metricsAsOf": 1790196761663,
+      "multiple": 1.11,
+      "platform": "tiktok",
+      "sampled": false,
+      "source": "scrape",
+      "url": "https://www.tiktok.com/@vanessaalopezz/video/7688556615997394190?_r=1&u_code=f013k0bg9i6c9k&preview_pb=0&sharer_language=en&_d=f013h8g044iehh&share_item_id=7688556615997394190&source=h5_m",
+      "views": 1378
+    },
+    {
+      "createTime": 1790109690000,
+      "engagementPerView": 0.022392834293026232,
+      "id": "kh76t21g3mh14efqtbf5tmmke98ezcv9",
+      "metricsAsOf": 1790196761663,
+      "multiple": 1.26,
+      "platform": "tiktok",
+      "sampled": false,
+      "source": "scrape",
+      "url": "https://www.tiktok.com/@vanessaalopezz/video/7688462518481669390?_r=1&u_code=f013k0bg9i6c9k&preview_pb=0&sharer_language=en&_d=f013h8g044iehh&share_item_id=7688462518481669390&source=h5_m",
+      "views": 1563
+    },
+    {
+      "createTime": 1790060010000,
+      "engagementPerView": 0.00902061855670103,
+      "id": "kh798k46w2f3s6d9fq9qhp7vph8ezpp1",
+      "metricsAsOf": 1790196761663,
+      "multiple": 0.63,
+      "platform": "tiktok",
+      "sampled": false,
+      "source": "scrape",
+      "url": "https://www.tiktok.com/@vanessaalopezz/video/7688248929435028750?_r=1&u_code=f013k0bg9i6c9k&preview_pb=0&sharer_language=en&_d=f013h8g044iehh&share_item_id=7688248929435028750&source=h5_m",
+      "views": 776
+    },
+    {
+      "createTime": 1790058936000,
+      "engagementPerView": 0.011603375527426161,
+      "id": "kh7872d5311y3vc903net7j25h8ezvs2",
+      "metricsAsOf": 1790196761663,
+      "multiple": 0.77,
+      "platform": "tiktok",
+      "sampled": false,
+      "source": "scrape",
+      "url": "https://www.tiktok.com/@vanessaalopezz/video/7688244327297944846?_r=1&u_code=f013k0bg9i6c9k&preview_pb=0&sharer_language=en&_d=f013h8g044iehh&share_item_id=7688244327297944846&source=h5_m",
+      "views": 948
+    },
+    {
+      "createTime": 1790029855000,
+      "engagementPerView": 0.015069967707212056,
+      "id": "kh7d1wmepd53y8szgvb8qmn2ah8ezhka",
+      "metricsAsOf": 1790196761663,
+      "multiple": 0.75,
+      "platform": "tiktok",
+      "sampled": false,
+      "source": "scrape",
+      "url": "https://www.tiktok.com/@vanessaalopezz/video/7688119586150993165?_r=1&u_code=f013k0bg9i6c9k&preview_pb=0&sharer_language=en&_d=f013h8g044iehh&share_item_id=7688119586150993165&source=h5_m",
+      "views": 929
+    },
+    {
+      "createTime": 1789987506000,
+      "engagementPerView": 0.010517799352750809,
+      "id": "kh7fc84kehjz6v3xrx08m32d498ez4xq",
+      "metricsAsOf": 1790196761663,
+      "multiple": 1,
+      "platform": "tiktok",
+      "sampled": true,
+      "source": "scrape",
+      "url": "https://www.tiktok.com/@vanessaalopezz/video/7687937730952678670?_r=1&u_code=f013k0bg9i6c9k&preview_pb=0&sharer_language=en&_d=f013h8g044iehh&share_item_id=7687937730952678670&source=h5_m",
+      "views": 1236
+    },
+    {
+      "createTime": 1789963383000,
+      "engagementPerView": 0.008253094910591471,
+      "id": "kh7319aqbf108q04vjffg8sy2d8ezf53",
+      "metricsAsOf": 1790196761663,
+      "multiple": 0.59,
+      "platform": "tiktok",
+      "sampled": true,
+      "source": "scrape",
+      "url": "https://www.tiktok.com/@vanessaalopezz/video/7687834087251315982?_r=1&u_code=f013k0bg9i6c9k&preview_pb=0&sharer_language=en&_d=f013h8g044iehh&share_item_id=7687834087251315982&source=h5_m",
+      "views": 727
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "success": true,
+  "credits_remaining": 1000000,
+  "credits_charged": 1,
+  "users": [
+    {
+      "follower_count": 163953,
+      "following_count": 63,
+      "nickname": "ADRIAN",
+      "sec_uid": "MS4wLjABAAAAcT5kdL_w3D2p3a3DkULhrVE6Ir17Ua1M9GZK4cnvnKxbJg3qy0xDdbaFeY260Qzz",
+      "uid": "6757029651601835013",
+      "unique_id": "adrianzyno",
+      "avatar_medium": {
+        "height": 720,
+        "uri": "tos-maliva-avt-0068/60a12c00b42288dd3503cf3025165093",
+        "url_list": [
+          "https://p16-amd-va.tiktokcdn.com/tos-maliva-avt-0068/60a12c00b42288dd3503cf3025165093~tplv-tiktokx-cropcenter-q:720:720:q70.heic?dr=9607&idc=no1a&ps=87d6e48a&s=SEARCH&sc=avatar&shcp=c1333099&shp=30310797&t=223449c4"
+        ],
+        "url_prefix": null,
+        "width": 720
+      }
+    }
+  ],
+  "cursor": 30
+}

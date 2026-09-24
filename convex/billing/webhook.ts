@@ -1,641 +1,81 @@
 /**
- * Stripe webhook handlers — Sprint 6B.
- *
- * Internal mutations called by `app/api/billing/stripe-webhook/route.ts`
- * after the route verifies the Stripe signature. The split between the route
- * (signature verification + Stripe SDK calls) and these handlers (Convex DB
- * patches) keeps the webhook idempotent + testable without HTTP traffic.
- *
- * Plan-tier source of truth: these handlers are the ONLY writers to
- * `creators.plan`. The frontend never patches `plan` directly. If you find
- * yourself writing a `ctx.db.patch(creator, { plan })` outside this file, you
- * are likely violating the architecture rule (see CLAUDE.md § Architecture).
- *
- * Cross-tenant safety: we always resolve creator by `stripeCustomerId` (or
- * by the `creatorId` carried in `metadata` AND require it to match the row
- * we look up by customer). A webhook for Customer A can never patch Creator
- * B because the customer→creator lookup is single-row + indexed.
- *
- * Idempotency: every event is recorded in `stripeWebhookEvents`. Replays
- * (same `eventId`) produce a `replay_dropped` audit row and exit without
- * patching the creator.
+ * The Stripe webhook, on Convex's public HTTP router (plan §19.3; scar tissue:
+ * the old receiver sat behind auth for months). Signature over the raw bytes,
+ * then one idempotent mutation, then at most one message from Maya per state
+ * change. `customer.subscription.trial_will_end` (three days out) is her day-5
+ * text: what she has done so far, and when the card is charged.
  */
 
-import { v } from "convex/values";
-import { internalMutation, mutation } from "../_generated/server";
+import type Stripe from "stripe";
+import { httpAction } from "../_generated/server";
 import { internal } from "../_generated/api";
-import type { Doc, Id } from "../_generated/dataModel";
-import type { MutationCtx } from "../_generated/server";
-import { assertWebhookSecret } from "../lib/webhookSecret";
+import { constructEvent } from "./stripe";
+import { messageFor } from "./plan";
 
-const TIER_VALIDATOR = v.union(
-  v.literal("coach"),
-  v.literal("manager")
-);
-const INTERVAL_VALIDATOR = v.union(
-  v.literal("monthly"),
-  v.literal("annual")
-);
-
-/* -------------------------------------------------------------------------- */
-/* Audit log writer                                                            */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Write to `stripeWebhookEvents` with replay defense. Returns
- * `{ alreadySeen: true }` if the event id was previously processed — caller
- * should short-circuit and skip any further state changes.
- *
- * The replay row is preserved (one extra row per redelivery) so the operator
- * can audit Stripe's redelivery cadence. Only the FIRST row drives any DB
- * patch — second/third/Nth land as `replay_dropped`.
- */
-export const recordWebhookEvent = internalMutation({
-  args: {
-    eventId: v.string(),
-    type: v.string(),
-    livemode: v.boolean(),
-    status: v.union(
-      v.literal("processed"),
-      v.literal("replay_dropped"),
-      v.literal("errored"),
-      v.literal("skipped")
-    ),
-    detail: v.optional(v.string()),
-    customerId: v.optional(v.string()),
-    rawPayload: v.any(),
-  },
-  handler: async (
-    ctx,
-    args
-  ): Promise<{ alreadySeen: boolean; rowId: Id<"stripeWebhookEvents"> }> => {
-    const existing = await ctx.db
-      .query("stripeWebhookEvents")
-      .withIndex("by_event_id", (q) => q.eq("eventId", args.eventId))
-      .first();
-    if (existing) {
-      const replayRow = await ctx.db.insert("stripeWebhookEvents", {
-        eventId: args.eventId,
-        type: args.type,
-        livemode: args.livemode,
-        status: "replay_dropped",
-        detail: `replay of ${existing._id}`,
-        customerId: args.customerId,
-        receivedAt: Date.now(),
-        rawPayload: args.rawPayload,
-      });
-      return { alreadySeen: true, rowId: replayRow };
-    }
-    const rowId = await ctx.db.insert("stripeWebhookEvents", {
-      eventId: args.eventId,
-      type: args.type,
-      livemode: args.livemode,
-      status: args.status,
-      detail: args.detail,
-      customerId: args.customerId,
-      receivedAt: Date.now(),
-      rawPayload: args.rawPayload,
-    });
-    return { alreadySeen: false, rowId };
-  },
-});
-
-/* -------------------------------------------------------------------------- */
-/* Creator resolver                                                            */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Resolve a creators row by stripeCustomerId. Linear scan via filter on a
- * tiny table (1 row per creator); webhook arrival is bounded by Stripe's
- * per-account caps. If this ever becomes hot, add a
- * `.index("by_stripe_customer", ["stripeCustomerId"])` and rebuild here.
- */
-async function findCreatorByStripeCustomerId(
-  ctx: MutationCtx,
-  stripeCustomerId: string
-): Promise<Doc<"creators"> | null> {
-  return await ctx.db
-    .query("creators")
-    .filter((q) => q.eq(q.field("stripeCustomerId"), stripeCustomerId))
-    .first();
+function customerIdOf(obj: { customer?: string | { id: string } | null } | null | undefined): string | undefined {
+  const c = obj?.customer;
+  return typeof c === "string" ? c : c?.id;
 }
 
-/* -------------------------------------------------------------------------- */
-/* checkout.session.completed handler                                          */
-/* -------------------------------------------------------------------------- */
+function subscriptionPayload(sub: Stripe.Subscription): { id: string; status: string; cancel_at_period_end?: boolean; trial_end: number | null; current_period_end: number | null; founding?: boolean; priceId?: string; metadataTier?: string } {
+  const item = sub.items?.data?.[0] as unknown as { current_period_end?: number; price?: { id?: string } } | undefined;
+  const legacyEnd = (sub as unknown as { current_period_end?: number }).current_period_end;
+  return { id: sub.id, status: sub.status, cancel_at_period_end: sub.cancel_at_period_end ?? undefined, trial_end: sub.trial_end ?? null, current_period_end: legacyEnd ?? item?.current_period_end ?? null, founding: sub.metadata?.founding === "1", priceId: item?.price?.id, metadataTier: sub.metadata?.tier };
+}
 
-/**
- * Patch the creator with the new subscription details after Checkout
- * completes. Source of truth for first-time conversion.
- *
- * Cross-tenant: we look up the creator BY stripeCustomerId, then assert that
- * the metadata's creatorId matches the row we resolved. If they disagree we
- * refuse to patch (anti-tenant-bleed) and return `errored`.
- */
-export const handleCheckoutCompleted = internalMutation({
-  args: {
-    stripeCustomerId: v.string(),
-    subscriptionId: v.string(),
-    creatorId: v.optional(v.id("creators")),
-    tier: TIER_VALIDATOR,
-    interval: INTERVAL_VALIDATOR,
-    currentPeriodEnd: v.optional(v.number()),
-    trialEnd: v.optional(v.number()),
-  },
-  handler: async (
-    ctx,
-    args
-  ): Promise<{
-    patched: boolean;
-    reason?: "no_creator" | "creator_mismatch";
-  }> => {
-    const creator = await findCreatorByStripeCustomerId(
-      ctx,
-      args.stripeCustomerId
-    );
-    if (!creator) {
-      return { patched: false, reason: "no_creator" };
+export const stripeWebhook = httpAction(async (ctx, request) => {
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!secret || !process.env.STRIPE_SECRET_KEY) return new Response("billing not configured", { status: 503 });
+  const sig = request.headers.get("stripe-signature");
+  if (!sig) return new Response("missing signature", { status: 400 });
+  const raw = await request.text();
+  let event: Stripe.Event;
+  try {
+    event = await constructEvent(raw, sig, secret);
+  } catch (e) {
+    return new Response(`bad signature: ${e instanceof Error ? e.message.slice(0, 80) : "error"}`, { status: 400 });
+  }
+
+  const obj = event.data.object as unknown as Record<string, unknown>;
+  let subscription: ReturnType<typeof subscriptionPayload> | undefined;
+  let customerId: string | undefined;
+  let creatorIdFromMetadata: string | undefined;
+  switch (event.type) {
+    case "customer.subscription.created":
+    case "customer.subscription.updated":
+    case "customer.subscription.deleted":
+    case "customer.subscription.trial_will_end":
+    case "customer.subscription.paused":
+    case "customer.subscription.resumed": {
+      const sub = event.data.object as Stripe.Subscription;
+      subscription = subscriptionPayload(sub);
+      customerId = customerIdOf(sub);
+      creatorIdFromMetadata = sub.metadata?.creatorId;
+      break;
     }
-    // Defense in depth: if metadata carried a creatorId, it must match.
-    // Disagreement here implies a forged webhook (signature would have
-    // already been verified upstream) OR a Stripe-side data corruption
-    // — either way, refuse the patch.
-    if (args.creatorId && args.creatorId !== creator._id) {
-      return { patched: false, reason: "creator_mismatch" };
+    case "checkout.session.completed":
+    case "invoice.paid":
+    case "invoice.payment_failed":
+      customerId = customerIdOf(obj as { customer?: string | { id: string } | null });
+      creatorIdFromMetadata = (obj.metadata as Record<string, string> | undefined)?.creatorId;
+      break;
+    default:
+      return new Response("ignored", { status: 200 });
+  }
+
+  const r = await ctx.runMutation(internal.billing.plan.applyEvent, { eventId: event.id, type: event.type, livemode: event.livemode, createdAt: event.created, customerId, creatorIdFromMetadata, subscription });
+
+  // Maya's one line per state change, and the day-5 text.
+  const appUrl = process.env.APP_URL ?? "";
+  if (r.change) {
+    const body = messageFor(r.change.prev, r.change.next, appUrl);
+    if (body) await ctx.runMutation(internal.core.messages.send, { creatorId: r.change.creatorId, surface: "telegram", body, dedupeKey: `billing:${r.change.next}:${event.id}`, proactive: false, kind: "status" });
+  } else if (event.type === "customer.subscription.trial_will_end" && customerId) {
+    const creator = await ctx.runQuery(internal.billing.plan.byStripeCustomer, { stripeCustomerId: customerId });
+    if (creator && creator.plan.status === "trialing") {
+      const ends = creator.plan.trialEndsAt ? new Date(creator.plan.trialEndsAt).toLocaleDateString("en-US", { weekday: "long", timeZone: creator.timezone }) : "in three days";
+      await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: `your trial ends ${ends}; the card gets charged then, nothing changes on my side. if you want out before that, it's one tap in settings: ${appUrl}/app/settings`, dedupeKey: `billing:trial_will_end:${creator.plan.stripeSubscriptionId ?? event.id}`, proactive: false, kind: "status" });
     }
-
-    await ctx.db.patch(creator._id, {
-      plan: args.tier,
-      stripeCustomerId: args.stripeCustomerId,
-      stripeSubscriptionId: args.subscriptionId,
-      currentPlanPeriodEnd: args.currentPeriodEnd,
-      trialEndsAt: args.trialEnd,
-      billingInterval: args.interval,
-    });
-    return { patched: true };
-  },
-});
-
-/* -------------------------------------------------------------------------- */
-/* customer.subscription.updated handler                                       */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Patch the creator on every Stripe subscription update — handles plan
- * changes, trial → active transitions, and renewal-cycle period rollovers.
- *
- * Same cross-tenant guard as `handleCheckoutCompleted`.
- *
- * If the incoming `tier` differs from the creator's current `plan`, that's a
- * legitimate plan change (upgrade or downgrade via portal). We patch and
- * trust the upstream caller — the route resolves `tier` from
- * `metadata.tier` first and falls back to `priceIdToPlanTuple()` only if
- * metadata is missing.
- */
-export const handleSubscriptionUpdated = internalMutation({
-  args: {
-    stripeCustomerId: v.string(),
-    subscriptionId: v.string(),
-    creatorId: v.optional(v.id("creators")),
-    tier: TIER_VALIDATOR,
-    interval: INTERVAL_VALIDATOR,
-    currentPeriodEnd: v.optional(v.number()),
-    trialEnd: v.optional(v.number()),
-  },
-  handler: async (
-    ctx,
-    args
-  ): Promise<{
-    patched: boolean;
-    reason?: "no_creator" | "creator_mismatch";
-  }> => {
-    const creator = await findCreatorByStripeCustomerId(
-      ctx,
-      args.stripeCustomerId
-    );
-    if (!creator) {
-      return { patched: false, reason: "no_creator" };
-    }
-    if (args.creatorId && args.creatorId !== creator._id) {
-      return { patched: false, reason: "creator_mismatch" };
-    }
-    await ctx.db.patch(creator._id, {
-      plan: args.tier,
-      stripeSubscriptionId: args.subscriptionId,
-      currentPlanPeriodEnd: args.currentPeriodEnd,
-      trialEndsAt: args.trialEnd,
-      billingInterval: args.interval,
-    });
-    return { patched: true };
-  },
-});
-
-/* -------------------------------------------------------------------------- */
-/* customer.subscription.deleted handler                                       */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Subscription cancelled (creator-initiated via portal OR Stripe-initiated
- * after dunning failure). Coach + Manager 2-tier model has NO free tier —
- * Coach is the $19.99 floor. On cancel:
- *   - Set `plan` to `"coach"` (downgrade-by-default). Cleaner UX than
- *     fail-closed undefined: creator keeps a usable Maya at the lowest
- *     paid floor and Profile surfaces the "reactivate Manager" CTA.
- *     Plan-tier gates upstream still keep Manager-only features locked.
- *   - Clear billing-related fields so Profile doesn't show stale
- *     "renews on YYYY-MM-DD" text after cancellation.
- *   - We do NOT touch `connectedAccounts` — the creator can resubscribe
- *     and keep their Gmail / Calendar / Stripe / Apollo / Hunter
- *     connections intact. Plan-tier gates upstream silently no-op the
- *     Manager-only rows while plan is `"coach"`.
- *   - `stripeCustomerId` stays — same customer, just unsubscribed. A
- *     resubscribe via Checkout reuses the existing customer (and skips
- *     the 7-day trial; trial is first-sub-only).
- */
-export const handleSubscriptionDeleted = internalMutation({
-  args: {
-    stripeCustomerId: v.string(),
-  },
-  handler: async (
-    ctx,
-    args
-  ): Promise<{ patched: boolean; reason?: "no_creator" }> => {
-    const creator = await findCreatorByStripeCustomerId(
-      ctx,
-      args.stripeCustomerId
-    );
-    if (!creator) {
-      return { patched: false, reason: "no_creator" };
-    }
-    await ctx.db.patch(creator._id, {
-      // Cancellation downgrades to Coach (the post-trial / post-cancel floor).
-      plan: "coach",
-      stripeSubscriptionId: undefined,
-      currentPlanPeriodEnd: undefined,
-      trialEndsAt: undefined,
-      billingInterval: undefined,
-    });
-    return { patched: true };
-  },
-});
-
-/* -------------------------------------------------------------------------- */
-/* customer.subscription.trial_will_end handler                                */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Stripe fires this 3 days before the trial ends. We log to `gtmAuditEvents`
- * with eventType="billing.trial-ending" so the nudge wiring can surface a
- * Maya-side message ("trial ends Friday — keep your card to stay on Pro,
- * otherwise I downgrade to Starter").
- *
- * This is the second write for the event: the webhook route has already put a
- * durable row in `stripeWebhookEvents`. That one is the delivery receipt; this
- * one is the account-scoped timeline Maya reads.
- *
- * No DB patch on the creator here — Stripe is going to fire
- * `customer.subscription.updated` (and eventually `.deleted`) when the trial
- * actually ends, and those handlers do the real work.
- */
-export const handleTrialWillEnd = internalMutation({
-  args: {
-    stripeCustomerId: v.string(),
-  },
-  handler: async (
-    ctx,
-    args
-  ): Promise<{ logged: boolean }> => {
-    const creator = await findCreatorByStripeCustomerId(
-      ctx,
-      args.stripeCustomerId
-    );
-    if (!creator) {
-      return { logged: false };
-    }
-    await ctx.db.insert("gtmAuditEvents", {
-      accountId: creator._id,
-      actor: "system",
-      eventType: "billing.trial-ending",
-      severity: "info",
-      message: "Stripe says the trial ends in 3 days.",
-      metadata: { stripeCustomerId: args.stripeCustomerId },
-      createdAt: Date.now(),
-    });
-    return { logged: true };
-  },
-});
-
-/* -------------------------------------------------------------------------- */
-/* Public webhook bridge wrappers                                              */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Public-callable bridges that the Stripe webhook route in Next.js calls.
- * `ConvexHttpClient` cannot reach `internal.*` references (TS2345). Each
- * webhook-facing handler exposes a thin public wrapper that:
- *   1. Validates a shared `WEBHOOK_INTERNAL_SECRET` (constant-time, fail-
- *      closed). Operator must set the secret in BOTH Next.js env and
- *      Convex env.
- *   2. Inlines the underlying handler body. Convex doesn't allow
- *      mutation→mutation invocation, so duplicating the small body here is
- *      the safest path. KEEP IN SYNC with the internal handlers above.
- *
- * Cross-tenant safety is unchanged — these wrappers preserve the
- * `findCreatorByStripeCustomerId` + metadata.creatorId mismatch checks.
- */
-
-const TIER_VALIDATOR_PUB = TIER_VALIDATOR;
-const INTERVAL_VALIDATOR_PUB = INTERVAL_VALIDATOR;
-
-const WEBHOOK_STATUS_VALIDATOR = v.union(
-  v.literal("processed"),
-  v.literal("replay_dropped"),
-  v.literal("errored"),
-  v.literal("skipped")
-);
-
-export const recordWebhookEventPublic = mutation({
-  args: {
-    secret: v.string(),
-    eventId: v.string(),
-    type: v.string(),
-    livemode: v.boolean(),
-    status: WEBHOOK_STATUS_VALIDATOR,
-    detail: v.optional(v.string()),
-    customerId: v.optional(v.string()),
-    rawPayload: v.any(),
-  },
-  handler: async (
-    ctx,
-    args
-  ): Promise<{ alreadySeen: boolean; rowId: Id<"stripeWebhookEvents"> }> => {
-    assertWebhookSecret(args.secret);
-    const existing = await ctx.db
-      .query("stripeWebhookEvents")
-      .withIndex("by_event_id", (q) => q.eq("eventId", args.eventId))
-      .first();
-    if (existing) {
-      const replayRow = await ctx.db.insert("stripeWebhookEvents", {
-        eventId: args.eventId,
-        type: args.type,
-        livemode: args.livemode,
-        status: "replay_dropped",
-        detail: `replay of ${existing._id}`,
-        customerId: args.customerId,
-        receivedAt: Date.now(),
-        rawPayload: args.rawPayload,
-      });
-      return { alreadySeen: true, rowId: replayRow };
-    }
-    const rowId = await ctx.db.insert("stripeWebhookEvents", {
-      eventId: args.eventId,
-      type: args.type,
-      livemode: args.livemode,
-      status: args.status,
-      detail: args.detail,
-      customerId: args.customerId,
-      receivedAt: Date.now(),
-      rawPayload: args.rawPayload,
-    });
-    return { alreadySeen: false, rowId };
-  },
-});
-
-export const handleCheckoutCompletedPublic = mutation({
-  args: {
-    secret: v.string(),
-    stripeCustomerId: v.string(),
-    subscriptionId: v.string(),
-    creatorId: v.optional(v.id("creators")),
-    tier: TIER_VALIDATOR_PUB,
-    interval: INTERVAL_VALIDATOR_PUB,
-    currentPeriodEnd: v.optional(v.number()),
-    trialEnd: v.optional(v.number()),
-  },
-  handler: async (
-    ctx,
-    args
-  ): Promise<{
-    patched: boolean;
-    reason?: "no_creator" | "creator_mismatch";
-  }> => {
-    assertWebhookSecret(args.secret);
-    const creator = await findCreatorByStripeCustomerId(
-      ctx,
-      args.stripeCustomerId
-    );
-    if (!creator) return { patched: false, reason: "no_creator" };
-    if (args.creatorId && args.creatorId !== creator._id) {
-      return { patched: false, reason: "creator_mismatch" };
-    }
-    await ctx.db.patch(creator._id, {
-      plan: args.tier,
-      stripeCustomerId: args.stripeCustomerId,
-      stripeSubscriptionId: args.subscriptionId,
-      currentPlanPeriodEnd: args.currentPeriodEnd,
-      trialEndsAt: args.trialEnd,
-      billingInterval: args.interval,
-    });
-    return { patched: true };
-  },
-});
-
-export const handleSubscriptionUpdatedPublic = mutation({
-  args: {
-    secret: v.string(),
-    stripeCustomerId: v.string(),
-    subscriptionId: v.string(),
-    creatorId: v.optional(v.id("creators")),
-    tier: TIER_VALIDATOR_PUB,
-    interval: INTERVAL_VALIDATOR_PUB,
-    currentPeriodEnd: v.optional(v.number()),
-    trialEnd: v.optional(v.number()),
-  },
-  handler: async (
-    ctx,
-    args
-  ): Promise<{
-    patched: boolean;
-    reason?: "no_creator" | "creator_mismatch";
-  }> => {
-    assertWebhookSecret(args.secret);
-    const creator = await findCreatorByStripeCustomerId(
-      ctx,
-      args.stripeCustomerId
-    );
-    if (!creator) return { patched: false, reason: "no_creator" };
-    if (args.creatorId && args.creatorId !== creator._id) {
-      return { patched: false, reason: "creator_mismatch" };
-    }
-    await ctx.db.patch(creator._id, {
-      plan: args.tier,
-      stripeSubscriptionId: args.subscriptionId,
-      currentPlanPeriodEnd: args.currentPeriodEnd,
-      trialEndsAt: args.trialEnd,
-      billingInterval: args.interval,
-    });
-    return { patched: true };
-  },
-});
-
-export const handleSubscriptionDeletedPublic = mutation({
-  args: {
-    secret: v.string(),
-    stripeCustomerId: v.string(),
-  },
-  handler: async (
-    ctx,
-    args
-  ): Promise<{ patched: boolean; reason?: "no_creator" }> => {
-    assertWebhookSecret(args.secret);
-    const creator = await findCreatorByStripeCustomerId(
-      ctx,
-      args.stripeCustomerId
-    );
-    if (!creator) return { patched: false, reason: "no_creator" };
-    await ctx.db.patch(creator._id, {
-      // Cancellation downgrades to Coach (the post-trial / post-cancel floor).
-      plan: "coach",
-      stripeSubscriptionId: undefined,
-      currentPlanPeriodEnd: undefined,
-      trialEndsAt: undefined,
-      billingInterval: undefined,
-    });
-    return { patched: true };
-  },
-});
-
-export const handleTrialWillEndPublic = mutation({
-  args: {
-    secret: v.string(),
-    stripeCustomerId: v.string(),
-  },
-  handler: async (
-    ctx,
-    args
-  ): Promise<{ logged: boolean }> => {
-    assertWebhookSecret(args.secret);
-    const creator = await findCreatorByStripeCustomerId(
-      ctx,
-      args.stripeCustomerId
-    );
-    if (!creator) return { logged: false };
-    await ctx.db.insert("gtmAuditEvents", {
-      accountId: creator._id,
-      actor: "system",
-      eventType: "billing.trial-ending",
-      severity: "info",
-      message: "Stripe says the trial ends in 3 days.",
-      metadata: { stripeCustomerId: args.stripeCustomerId },
-      createdAt: Date.now(),
-    });
-    return { logged: true };
-  },
-});
-
-/* -------------------------------------------------------------------------- */
-/* invoice.payment_failed handler                                              */
-/* -------------------------------------------------------------------------- */
-
-/**
- * ⭐ Tell the founder their card failed — BEFORE the agent goes quiet.
- *
- * ⚠️ This event was not handled at all. Stripe retries a failed payment for
- * days and then deletes the subscription; `subscription.deleted` downgrades the
- * plan, and **nothing anywhere told the customer**. Their agent simply stopped,
- * with no explanation, for a reason they could have fixed in thirty seconds.
- *
- * That is the silent-failure class this product exists to eliminate, sitting in
- * the billing path — and it is what §18 Sprint 10 means by *"without these it is
- * not handable"*.
- *
- * ## ⚠️ It does NOT pause anything
- *
- * A first decline is usually a temporary hold, an expired card, or a bank's
- * fraud check. Pausing a working agent on attempt one would punish the founder
- * for something Stripe is about to retry successfully — so this only informs.
- * `subscription.deleted` remains the thing that changes state, and by then the
- * founder has already been told twice.
- *
- * ## Why Telegram works here
- *
- * §18 Sprint 10 lists an *"email fallback for billing failure (a paused agent
- * can't message you)"*. In this architecture the machine is not the sender —
- * **Convex** delivers through the shared bot, so a paused or cancelled customer
- * is still reachable. Email remains the true fallback for a founder who has
- * unpaired Telegram entirely, and needs an email provider that isn't configured
- * yet. Stated rather than implied.
- */
-export const handlePaymentFailed = internalMutation({
-  args: {
-    stripeCustomerId: v.string(),
-    /** Stripe's attempt counter, so a fourth retry doesn't read like a first. */
-    attemptCount: v.optional(v.number()),
-    now: v.optional(v.number()),
-  },
-  handler: async (
-    ctx,
-    args
-  ): Promise<{ notified: boolean; reason?: "no_creator" | "no_customer" }> => {
-    const creator = await findCreatorByStripeCustomerId(
-      ctx,
-      args.stripeCustomerId
-    );
-    if (!creator) return { notified: false, reason: "no_creator" };
-
-    const customer = (await ctx.db
-      .query("customers")
-      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
-      .first()) as Doc<"customers"> | null;
-    if (!customer) return { notified: false, reason: "no_customer" };
-
-    const attempt = args.attemptCount ?? 1;
-
-    /**
-     * ⚠️ Plain language, and it never says "Stripe". §11 — the founder bought a
-     * social media manager, not an integration. It also does not apologise for
-     * something that is theirs to fix.
-     */
-    const body =
-      attempt <= 1
-        ? "Your card didn't go through for this month. Nothing's changed yet and I'm still working — worth updating it when you get a minute, or things stop in a few days."
-        : "Your card still isn't going through. I'll keep going for now, but this is the one thing that will stop me — worth sorting today.";
-
-    await ctx.runMutation(internal.maya.messages.send, {
-      customerId: customer._id,
-      surface: "telegram",
-      body,
-      /**
-       * One message per attempt, not per webhook. Stripe can deliver the same
-       * event more than once, and four identical warnings would read as
-       * nagging about something they already know.
-       */
-      dedupeKey: `billing:failed:${attempt}`,
-      proactive: true,
-      ts: args.now,
-    });
-
-    return { notified: true };
-  },
-});
-
-export const handlePaymentFailedPublic = mutation({
-  args: {
-    secret: v.string(),
-    stripeCustomerId: v.string(),
-    attemptCount: v.optional(v.number()),
-  },
-  handler: async (
-    ctx,
-    args
-  ): Promise<{ notified: boolean; reason?: string }> => {
-    // Same bridge secret as every other public webhook mutation — the route is
-    // the only caller, and it holds it. `assertWebhookSecret` throws, which is
-    // right: an unauthenticated call here is not a case to handle gracefully.
-    assertWebhookSecret(args.secret);
-    return await ctx.runMutation(internal.billing.webhook.handlePaymentFailed, {
-      stripeCustomerId: args.stripeCustomerId,
-      attemptCount: args.attemptCount,
-    });
-  },
+  }
+  return new Response(JSON.stringify({ ok: true, detail: r.detail }), { status: 200, headers: { "content-type": "application/json" } });
 });

@@ -2,52 +2,37 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@/convex/_generated/api";
-import { destroyMayaFlyApps } from "@/lib/destroyMayaFlyApps";
 
-const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
-
-function bridgeSecret(): string {
-  const secret = process.env.WEBHOOK_INTERNAL_SECRET;
-  if (!secret) throw new Error("WEBHOOK_INTERNAL_SECRET is not configured.");
-  return secret;
-}
-
+/**
+ * Deletion, step 8 (plan §16.5): the typed confirmation reaches Convex, which
+ * freezes the account and runs steps 2–7; this route waits for the rows to be gone,
+ * then deletes the Clerk user, so a login can never resurrect a purged creator.
+ * PostHog person deletion needs a personal API key and is an operator step for now.
+ */
 export async function POST(req: NextRequest) {
-  const { userId } = await auth();
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { userId, getToken } = await auth();
+  if (!userId) return NextResponse.json({ ok: false, reason: "not signed in" }, { status: 401 });
+  const { confirm } = (await req.json().catch(() => ({}))) as { confirm?: string };
+  const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+  const clerkToken = await getToken({ template: "convex" });
+  if (!convexUrl || !clerkToken) return NextResponse.json({ ok: false, reason: "not configured" }, { status: 500 });
+  const client = new ConvexHttpClient(convexUrl);
+  client.setAuth(clerkToken);
 
-  let body: { confirmation?: unknown };
+  const r = await client.mutation(api.account.deletion.requestDelete, { confirm: confirm ?? "" });
+  if (!r.ok || !r.creatorId) return NextResponse.json({ ok: false, reason: r.reason ?? "refused" }, { status: 400 });
+
+  // Wait for the purge (bounded), then drop the identity.
+  let gone = false;
+  for (let i = 0; i < 20 && !gone; i++) {
+    await new Promise((res) => setTimeout(res, 1500));
+    gone = (await client.action(api.account.deletion.gone, { creatorId: r.creatorId }).catch(() => ({ gone: false }))).gone;
+  }
   try {
-    body = (await req.json()) as { confirmation?: unknown };
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    const clerk = await clerkClient();
+    await clerk.users.deleteUser(userId);
+  } catch (e) {
+    return NextResponse.json({ ok: true, rowsGone: gone, identity: `clerk delete failed: ${e instanceof Error ? e.message.slice(0, 80) : "error"}` });
   }
-
-  if (body.confirmation !== "DELETE MAYA") {
-    return NextResponse.json(
-      { error: "Type DELETE MAYA to confirm account deletion." },
-      { status: 400 }
-    );
-  }
-
-  const purge = await convex.mutation(api.accountDeletion.purgeByClerkUserIdPublic, {
-    secret: bridgeSecret(),
-    clerkUserId: userId,
-    source: "web",
-  });
-
-  const flyCleanup = await destroyMayaFlyApps(purge.flyAppIds ?? []);
-
-  const clerk = await clerkClient();
-  await clerk.users.deleteUser(userId);
-
-  return NextResponse.json({
-    ok: true,
-    deleted: true,
-    convexDeleted: purge.deleted,
-    flyCleanup,
-  });
+  return NextResponse.json({ ok: true, rowsGone: gone, identity: "deleted" });
 }
-

@@ -50,7 +50,7 @@ export async function minimalRow(
     if (field.kind === "id") {
       const target = field.tableName as string;
       const inherited =
-        "customerId" in overrides ? { customerId: overrides.customerId } : {};
+        "creatorId" in overrides ? { creatorId: overrides.creatorId } : {};
       row[name] = await ctx.db.insert(
         target,
         await minimalRow(ctx as unknown as InsertCtx, target, inherited),

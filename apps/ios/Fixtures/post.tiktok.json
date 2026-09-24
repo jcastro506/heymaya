@@ -1,0 +1,50 @@
+{
+ "cannotKnow": [
+  "watch time, retention and the skip rate: TikTok does not expose them to anyone"
+ ],
+ "caption": "Building solo means every extra step counts. Paste a CSV, get a dashboard.",
+ "connected": {
+  "avgWatchMs": null,
+  "comments": 0,
+  "durationSec": null,
+  "follows": null,
+  "impressions": null,
+  "likes": 1,
+  "reach": null,
+  "saves": 0,
+  "shares": 1,
+  "skipRatePct": null,
+  "views": 107
+ },
+ "connectedAsOf": 1790193199664,
+ "contentType": "video",
+ "cover": null,
+ "createTime": 1789678399664,
+ "derived": {
+  "basis": "views",
+  "diagnosis": "unknown",
+  "distribution": null,
+  "engagementPerReach": null,
+  "reachMultiple": null,
+  "retention": null
+ },
+ "headline": {
+  "asOfHours": null,
+  "basis": "public",
+  "value": 107,
+  "what": "views"
+ },
+ "id": "000000000000000000010006ownPosts",
+ "multiple": null,
+ "platform": "tiktok",
+ "publicAsOf": 1790193199664,
+ "publicCounts": {
+  "comments": 0,
+  "likes": 1,
+  "saves": 0,
+  "shares": 1,
+  "views": 107
+ },
+ "read": "not enough connected data to say why; only the public count.",
+ "url": "https://www.tiktok.com/@kevin.castro9996/video/7670709537535544590?utm_campaign=tt4d_open_api&utm_source=aw4smjxfftapkprm"
+}

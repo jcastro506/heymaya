@@ -1,31 +1,20 @@
 import { SignIn } from "@clerk/nextjs";
+import { OnboardShell } from "../../onboarding/Shell";
 
-type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
+/** The landing's room, with Clerk's card inside it (2026-09-08). */
+const appearance = {
+  variables: { colorPrimary: "#29233f", colorText: "#29233f", colorTextSecondary: "#756e84", colorBackground: "#ffffff", colorInputBackground: "#ffffff", colorInputText: "#29233f", borderRadius: "10px", fontFamily: "var(--font-instrument), sans-serif" },
+  elements: { formButtonPrimary: "bg-[#29233f] hover:bg-[#4a3c66]", card: "shadow-none" },
+};
 
-function firstParam(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
-}
-
-export default async function SignInPage({
-  searchParams,
-}: {
-  searchParams: SearchParams;
-}) {
-  const redirectUrl = firstParam((await searchParams).redirect_url);
-
+export default function Page() {
   return (
-    <main className="relative z-10 flex min-h-screen items-center justify-center bg-[var(--ink)] px-6 py-16">
-      <SignIn
-        signUpUrl="/sign-up"
-        fallbackRedirectUrl="/clawlaunch/mission"
-        forceRedirectUrl={redirectUrl}
-        // A new user who clicks "Sign in with Google" has no account; Clerk's
-        // OAuth transfer routes them through the sign-UP flow. Without these,
-        // that new user falls back to /clawlaunch/mission (→ "No agent yet") or
-        // /. Land them in Maya's onboarding so they actually reach the product.
-        signUpFallbackRedirectUrl="/onboarding/gtm"
-        signUpForceRedirectUrl={redirectUrl}
-      />
-    </main>
+    <OnboardShell where="sign in">
+      <section>
+        <h2>Welcome back.</h2>
+        <p className="muted small">Pick up where you left off.</p>
+        <SignIn fallbackRedirectUrl="/start" appearance={appearance} />
+      </section>
+    </OnboardShell>
   );
 }

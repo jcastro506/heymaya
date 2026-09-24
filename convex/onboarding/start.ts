@@ -1,0 +1,244 @@
+/**
+ * Web onboarding entry points (plan §7 S2). The web collects; the rows drive
+ * everything. The catalogue read starts the moment handles are known (screen 2),
+ * so nothing waits on the Telegram step.
+ */
+
+import { v } from "convex/values";
+import { normalizePhone } from "../integrations/claw/client";
+import { query, type MutationCtx } from "../_generated/server";
+import { internalMutation, mutation } from "../lib/functions";
+import { internal } from "../_generated/api";
+import type { Doc, Id } from "../_generated/dataModel";
+import { addTracked } from "../agent/manage";
+import { mintPairing } from "../core/pairing";
+
+const handleShape = v.object({ tiktok: v.optional(v.string()), instagram: v.optional(v.string()) });
+
+function cleanHandle(h: string | undefined): string | undefined {
+  const c = h?.trim().replace(/^@/, "").toLowerCase();
+  return c && /^[a-z0-9._]{1,40}$/.test(c) ? c : undefined;
+}
+
+/**
+ * Create the minimal creator row as soon as Clerk has authenticated. Checkout and
+ * Zernio both need a tenant-bound row before either external redirect begins.
+ * Handles arrive only from the authenticated Zernio connection later.
+ */
+export const ensureCreator = mutation({
+  args: { timezone: v.optional(v.string()) },
+  handler: async (ctx, args): Promise<{ ok: boolean; creatorId?: string; error?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { ok: false, error: "sign in first" };
+    const existing = (await ctx.db
+      .query("creators")
+      .withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject))
+      .first()) as Doc<"creators"> | null;
+    if (existing) return { ok: true, creatorId: existing._id };
+    const now = Date.now();
+    const creatorId = await ctx.db.insert("creators", {
+      clerkUserId: identity.subject,
+      email: identity.email ?? "",
+      handles: {},
+      ownership: "unverified",
+      niche: "",
+      timezone: args.timezone ?? "UTC",
+      quietHours: { start: "22:00", end: "07:00" },
+      tone: "friend",
+      mode: "full",
+      dossierVersion: 0,
+      notes: [],
+      affinities: [],
+      experiments: [],
+      channel: { paired: false, kind: "imessage" },
+      plan: { status: "onboarding", founding: true },
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { ok: true, creatorId };
+  },
+});
+
+/** Screen 2: create (or update) the creator row from their handles. Idempotent per Clerk user. */
+export const start = mutation({
+  args: { handles: handleShape, timezone: v.optional(v.string()) },
+  handler: async (ctx, args): Promise<{ ok: boolean; creatorId?: string; error?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { ok: false, error: "sign in first" };
+    return await startCreator(ctx, { subject: identity.subject, email: identity.email ?? "", handles: args.handles, timezone: args.timezone });
+  },
+});
+
+/**
+ * Screen 1, as one function the web form and the simulated run both call, so a rehearsal
+ * drives the same rows and the same job the browser would.
+ */
+export async function startCreator(ctx: MutationCtx, args: { subject: string; email: string; handles: { tiktok?: string; instagram?: string }; timezone?: string }): Promise<{ ok: boolean; creatorId?: string; error?: string }> {
+  {
+    const identity = { subject: args.subject, email: args.email };
+    const handles = { tiktok: cleanHandle(args.handles.tiktok), instagram: cleanHandle(args.handles.instagram) };
+    if (!handles.tiktok && !handles.instagram) return { ok: false, error: "one handle is required" };
+
+    // One creator per handle: a second signup with the same handle is a merge prompt, never a second row.
+    for (const platform of ["tiktok", "instagram"] as const) {
+      const h = handles[platform];
+      if (!h) continue;
+      const taken = (await ctx.db
+        .query("creators")
+        .withIndex(platform === "tiktok" ? "by_tiktok" : "by_instagram", (q) => q.eq(platform === "tiktok" ? "handles.tiktok" : "handles.instagram", h))
+        .first()) as Doc<"creators"> | null;
+      if (taken && taken.clerkUserId !== identity.subject) return { ok: false, error: `@${h} is already set up with another account` };
+    }
+
+    const existing = (await ctx.db
+      .query("creators")
+      .withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject))
+      .first()) as Doc<"creators"> | null;
+    const now = Date.now();
+    if (existing) {
+      await ctx.db.patch(existing._id, { handles, timezone: args.timezone ?? existing.timezone, updatedAt: now });
+      return { ok: true, creatorId: existing._id };
+    }
+    const creatorId = await ctx.db.insert("creators", {
+      clerkUserId: identity.subject,
+      email: identity.email ?? "",
+      handles,
+      ownership: "unverified",
+      niche: "",
+      /**
+       * ⚠️ UTC, not a plausible-looking guess. This defaulted to America/Los_Angeles, which
+       * is the worst kind of default: it looks right, so nobody checks it, and every quiet
+       * hour and send time is then wrong by up to three hours for a creator who is not in
+       * California. Caught live when the operator in New York had a creator record on
+       * Pacific and the scout refused all morning for "quiet hours". UTC is obviously a
+       * default, so it gets noticed and corrected.
+       */
+      timezone: args.timezone ?? "UTC",
+      quietHours: { start: "22:00", end: "07:00" },
+      tone: "friend",
+      mode: "full",
+      dossierVersion: 0,
+      notes: [],
+      affinities: [],
+      experiments: [],
+      channel: { paired: false },
+      plan: { status: "onboarding", founding: true },
+      createdAt: now,
+      conversationalOnboardingAt: now,
+    });
+    // The read starts now; the first message waits on pairing, not on this.
+    await ctx.runMutation(internal.core.jobs.enqueue, {
+      kind: "ingest_catalogue",
+      idempotencyKey: `ingest:${creatorId}:v0`,
+      creatorId,
+      payloadJson: JSON.stringify({ reason: "onboarding" }),
+    });
+    return { ok: true, creatorId };
+  }
+}
+
+type DescribeArgs = { niche?: string; timezone?: string; quietHours?: { start: string; end: string }; tone?: "coach" | "friend" | "blunt" };
+
+export async function describeCreator(ctx: MutationCtx, creator: Doc<"creators">, args: DescribeArgs): Promise<{ ok: boolean; error?: string }> {
+  const patch: Partial<Doc<"creators">> = { updatedAt: Date.now() };
+  if (args.niche !== undefined) patch.niche = args.niche.trim().slice(0, 300);
+  if (args.timezone) patch.timezone = args.timezone;
+  if (args.quietHours) patch.quietHours = args.quietHours;
+  if (args.tone) patch.tone = args.tone;
+  await ctx.db.patch(creator._id, patch);
+  return { ok: true };
+}
+
+/** Screen 4: their sentence. Screen 7: timezone and quiet hours. */
+export const describe = mutation({
+  args: { niche: v.optional(v.string()), timezone: v.optional(v.string()), quietHours: v.optional(v.object({ start: v.string(), end: v.string() })), tone: v.optional(v.union(v.literal("coach"), v.literal("friend"), v.literal("blunt"))) },
+  handler: async (ctx, args): Promise<{ ok: boolean; error?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { ok: false, error: "sign in first" };
+    const creator = (await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject)).first()) as Doc<"creators"> | null;
+    if (!creator) return { ok: false, error: "start with your handles first" };
+    return await describeCreator(ctx, creator, args);
+  },
+});
+
+/**
+ * The whole web onboarding as one call, for a rehearsal without a browser: screen 1
+ * (handles → the catalogue job), screen 2 (admired), screen 3 (the sentence), screen 5
+ * (timezone), and the pairing token the done screen would mint. Same functions, same rows,
+ * same jobs as the form. Dev only; the operator taps the pairing link, or claims it by chat id.
+ */
+export const onboardAsUser = internalMutation({
+  args: { subject: v.string(), email: v.string(), handles: handleShape, timezone: v.string(), niche: v.string(), admired: v.array(v.object({ platform: v.union(v.literal("tiktok"), v.literal("instagram")), handle: v.string() })) },
+  handler: async (ctx, a): Promise<{ ok: boolean; creatorId?: string; token?: string; admired?: number; error?: string }> => {
+    const started = await startCreator(ctx, { subject: a.subject, email: a.email, handles: a.handles, timezone: a.timezone });
+    if (!started.ok || !started.creatorId) return { ok: false, error: started.error };
+    const creatorId = started.creatorId as Id<"creators">;
+    const creator = (await ctx.db.get(creatorId)) as Doc<"creators">;
+    let admired = 0;
+    for (const x of a.admired) {
+      const existing = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", creatorId)).collect()) as Doc<"trackedAccounts">[];
+      const r = await addTracked(ctx as never, creatorId, x.platform, x.handle, existing);
+      if (r.ok) admired += 1;
+    }
+    await describeCreator(ctx, creator, { niche: a.niche, timezone: a.timezone });
+    const link = await mintPairing(ctx, (await ctx.db.get(creatorId)) as Doc<"creators">);
+    return { ok: true, creatorId, token: link.ok ? link.token : undefined, admired };
+  },
+});
+
+/** Screen 7 and the Today tab: what has she read so far. Reactive. */
+/**
+ * §23: their number. E.164 only, one creator per number, the channel becomes the phone from
+ * this moment (unpaired until they text), and the number is registered on the line at once so
+ * their first text is not refused. Consent is the one line on the screen; STOP always works.
+ */
+export const setPhone = mutation({
+  args: { phone: v.string(), consent: v.literal(true) },
+  handler: async (ctx, args): Promise<{ ok: boolean; error?: string; phone?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { ok: false, error: "sign in first" };
+    const creator = (await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject)).first()) as Doc<"creators"> | null;
+    if (!creator) return { ok: false, error: "tell me about your posts first" };
+    const phone = normalizePhone(args.phone);
+    if (!phone) return { ok: false, error: "that doesn't look like a phone number (try +1 555 123 4567)" };
+    const taken = (await ctx.db.query("creators").withIndex("by_phone", (q) => q.eq("phone", phone)).first()) as Doc<"creators"> | null;
+    if (taken && taken._id !== creator._id) return { ok: false, error: "that number is already on another account" };
+    const now = Date.now();
+    const rePaired = creator.phone === phone && creator.channel.paired && creator.channel.kind === "imessage";
+    await ctx.db.patch(creator._id, { phone, messageConsentAt: now, channel: rePaired ? creator.channel : { paired: false, kind: "imessage" }, updatedAt: now });
+    await ctx.scheduler.runAfter(0, internal.core.imessage.registerPhone, { phone });
+    return { ok: true, phone };
+  },
+});
+
+/** §23: the developer door stays open. Telegram instead of a number, chosen on the same screen. */
+export const chooseTelegram = mutation({
+  args: {},
+  handler: async (ctx): Promise<{ ok: boolean; error?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { ok: false, error: "sign in first" };
+    const creator = (await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject)).first()) as Doc<"creators"> | null;
+    if (!creator) return { ok: false, error: "tell me about your posts first" };
+    if (creator.channel.paired && creator.channel.kind === "imessage") return { ok: false, error: "you're already paired by text; say 'talk to a person' in the chat to switch" };
+    await ctx.db.patch(creator._id, { channel: { paired: false, kind: "telegram" }, updatedAt: Date.now() });
+    return { ok: true };
+  },
+});
+
+export const progress = query({
+  args: {},
+  handler: async (ctx): Promise<{ state: "none" | "reading" | "read" | "paired"; posts: number; transcripts: number; dossier: boolean; paired: boolean; ingest: string | null; firstRead: string | null; timezone: string; quietHours: { start: string; end: string }; channelKind: "telegram" | "imessage"; phone: string | null; planStatus: string; tier: "solo" | "duo" | "partner" | null } | null> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+    const creator = (await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject)).first()) as Doc<"creators"> | null;
+    if (!creator) return null;
+    const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).collect()) as Doc<"ownPosts">[];
+    const transcripts = posts.filter((p) => p.transcript).length;
+    const dossier = Boolean(creator.dossier);
+    const paired = creator.channel.paired;
+    const jobs = (await ctx.db.query("jobs").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).collect()) as Doc<"jobs">[];
+    const ingest = jobs.filter((j) => j.kind === "ingest_catalogue").sort((x, y) => y.createdAt - x.createdAt)[0];
+    const firstRead = jobs.filter((j) => j.kind === "first_read").sort((x, y) => y.createdAt - x.createdAt)[0];
+    return { state: paired ? "paired" : dossier ? "read" : posts.length ? "reading" : "none", posts: posts.length, transcripts, dossier, paired, ingest: ingest?.status ?? null, firstRead: firstRead?.status ?? null, timezone: creator.timezone, quietHours: creator.quietHours, channelKind: creator.channel.kind ?? "imessage", phone: creator.phone ?? null, planStatus: creator.plan.status, tier: creator.plan.tier ?? null };
+  },
+});

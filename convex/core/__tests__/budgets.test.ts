@@ -1,0 +1,95 @@
+/** §3 budgets, never booleans: every priced event lands on the creator's day; the gate refuses proactive at the cap; replies are never throttled here. */
+import { convexTest } from "convex-test";
+import { describe, expect, it } from "vitest";
+import { summarizeLatency } from "../costs";
+import schema from "../../schema";
+import { internal } from "../../_generated/api";
+import { modules } from "../../../tests/_modules";
+import { seedCreator } from "../../../tests/lib/creatorRow";
+import { applyBump, budgetExhausted, emptyDay, kindForCost } from "../budgets";
+import { THRESHOLDS } from "../../config/thresholds";
+import type { Id } from "../../_generated/dataModel";
+
+describe("budgets", () => {
+  it("reports model latency and failures by purpose", () => {
+    expect(summarizeLatency([
+      { kind: "critic:model-a", latencyMs: 100, succeeded: true },
+      { kind: "critic:model-b", latencyMs: 900, succeeded: false, failureKind: "timeout" },
+      { kind: "writer:model-a", latencyMs: 300, succeeded: true },
+    ])).toEqual([
+      { purpose: "critic", calls: 2, p50Ms: 100, p95Ms: 900, failures: 1, failureKinds: { timeout: 1 } },
+      { purpose: "writer", calls: 1, p50Ms: 300, p95Ms: 300, failures: 0, failureKinds: {} },
+    ]);
+  });
+  it("classifies cost events into budget kinds", () => {
+    expect(kindForCost("scrapecreators", "read", "/v1/x")).toBe("credits");
+    // The one-time catalogue watch is counted apart from the daily operating cap: onboarding
+    // watches up to 40 own posts against a daily cap of 8, so counting them together made
+    // every new creator's first day hit the rail and get nothing.
+    expect(kindForCost("gemini", "watch_own", "gemini-3.7-flash")).toBe("onboarding_watch");
+    expect(kindForCost("gemini", "format_watch", "gemini-3.7-flash")).toBe("watch");
+    expect(kindForCost("openrouter", "scout", "google/gemini-3.7-flash")).toBe("writer");
+    expect(kindForCost("openrouter", "critic", "z-ai/glm-5.3-flash")).toBe("screener");
+    expect(kindForCost("telegram", "send", "x")).toBeNull();
+  });
+
+  it("the rail trips at the caps and not before", () => {
+    const id = "x" as Id<"creators">;
+    let row = emptyDay(id, "2026-09-02");
+    expect(budgetExhausted(row)).toBeNull();
+    row = applyBump(row, "writer", 1000, THRESHOLDS.dailyUsdCap - 0.01);
+    expect(budgetExhausted(row)).toBeNull();
+    row = applyBump(row, "writer", 10, 0.02);
+    expect(budgetExhausted(row)).toMatch(/spend/);
+    let w = emptyDay(id, "d");
+    for (let i = 0; i < THRESHOLDS.dailyWatchCap; i++) w = applyBump(w, "watch", 0, 0.001);
+    expect(budgetExhausted(w)).toMatch(/watches/);
+  });
+
+  it("cost events land on the creator's day in their timezone, and the gate refuses proactive when spent", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { timezone: "America/Los_Angeles", channel: { paired: true } }));
+    const now = Date.UTC(2026, 8, 3, 5, 0); // 22:00 PDT on Sep 2
+    await t.mutation(internal.core.costs.record, { creatorId, vendor: "openrouter", resource: "google/gemini-3.7-flash", purpose: "scout", costUsd: 0.5, promptTokens: 100, completionTokens: 50, latencyMs: 4321, succeeded: false, failureKind: "timeout", now });
+    await t.mutation(internal.core.costs.record, { creatorId, vendor: "openrouter", resource: "google/gemini-3.7-flash", purpose: "scout", costUsd: 0.3, promptTokens: 100, completionTokens: 50, now });
+    const rows = await t.run((ctx) => ctx.db.query("budgets").collect());
+    expect(rows).toHaveLength(1);
+    expect(rows[0].day).toBe("2026-09-02");
+    expect(rows[0].spentUsd).toBeCloseTo(0.8, 6);
+    expect(rows[0].writerTokens).toBe(300);
+    const costs = await t.run((ctx) => ctx.db.query("costEvents").withIndex("by_at").collect());
+    expect(costs[0]).toMatchObject({ latencyMs: 4321, succeeded: false, failureKind: "timeout" });
+    const g = await t.query(internal.scout.gate.railsFor, { creatorId, now: Date.UTC(2026, 8, 2, 20, 0) }); // 13:00 PDT same day
+    expect(g?.rails.ok).toBe(false);
+    expect(g?.rails.reason).toMatch(/budget exhausted/);
+  });
+
+  it("a proactive send counts a message on the day", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { timezone: "UTC" }));
+    await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: "hi", dedupeKey: "k1", proactive: true });
+    await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: "reply", dedupeKey: "k2", proactive: false });
+    const rows = await t.run((ctx) => ctx.db.query("budgets").collect());
+    expect(rows).toHaveLength(1);
+    expect(rows[0].messages).toBe(1);
+  });
+});
+
+describe("onboarding never starves day one", () => {
+  it("a full catalogue watch does not trip the daily rail, but real spend still does", () => {
+    let row = emptyDay("c1" as never, "2026-09-02");
+    for (let i = 0; i < 40; i++) row = applyBump(row, "onboarding_watch", 1, 0.002);
+    expect(row.onboardingWatches).toBe(40);
+    expect(row.watches).toBe(0);
+    expect(budgetExhausted(row), "40 catalogue watches must not silence day one").toBeNull();
+    // The dollar cap still governs: an expensive onboarding does stop the day.
+    const pricey = applyBump(row, "onboarding_watch", 1, 1.0);
+    expect(budgetExhausted(pricey)).toMatch(/spend/);
+  });
+
+  it("lane watching still hits the daily cap", () => {
+    let row = emptyDay("c1" as never, "2026-09-02");
+    for (let i = 0; i < THRESHOLDS.dailyWatchCap; i++) row = applyBump(row, "watch", 1, 0);
+    expect(budgetExhausted(row)).toMatch(/watches today/);
+  });
+});
