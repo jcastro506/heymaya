@@ -9,6 +9,7 @@ import { active, event, ownedOpportunity, profile } from "./store";
 import { CLOSED, Draft, Opportunity, email, line, followUpEligible, nextFollowUpAt, spentWithoutReply, applicationCheckIn, APPLICATION_CHECK_IN_DAYS, type DraftData } from "./contracts";
 import { access, gmail } from "./mailbox";
 import { deliverNow } from "../core/scheduler";
+import { emailSendEnabled } from "./providerConfig";
 
 export function base64url(value: string): string {
   const bytes = new TextEncoder().encode(value);
@@ -31,8 +32,8 @@ export function mime(d: DraftData, id: string): string {
 }
 
 export const claim = internalMutation({ args: { creatorId: v.id("creators"), draftId: v.id("partnershipDrafts"), generation: v.string() }, handler: async (ctx, a) => {
-  await active(ctx, a.creatorId);
-  if (process.env.PARTNERSHIP_EMAIL_SEND_ENABLED !== "true" || (await profile(ctx, a.creatorId)).data.paused) return false;
+  const creator = await active(ctx, a.creatorId);
+  if (!emailSendEnabled(creator) || (await profile(ctx, a.creatorId)).data.paused) return false;
   const row = await ctx.db.get(a.draftId) as Doc<"partnershipDrafts"> | null;
   if (!row || row.creatorId !== a.creatorId) return false;
   const d = Draft.parse(row.data), now = Date.now();

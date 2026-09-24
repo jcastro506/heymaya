@@ -8,6 +8,7 @@ import { active, event, ownedOpportunity, profile, assertPersonalEvidence, partn
 import { CLOSED, Draft, email, line } from "./contracts";
 import { APPLICATION_CHECK_IN_DAYS, Opportunity as OpportunitySchema } from "./contracts";
 import { checkPlainLanguage } from "../core/plainLanguage";
+import { emailSendEnabled } from "./providerConfig";
 
 export const prepare = internalMutation({
   args: { creatorId: v.id("creators"), sourceMessageId: v.id("messages"), input: v.any() },
@@ -22,7 +23,9 @@ export const prepare = internalMutation({
     if (CLOSED.has(o.status) || (o.deadline && o.deadline <= now) || o.route === "unknown") throw new Error("No actionable outreach route");
     if (o.assessment.verdict === "pass") throw new Error("This brand was assessed as unsuitable; revisit the assessment first");
     await assertPersonalEvidence(ctx, a.creatorId, o);
-    if (o.evidence.every(e => e.checkedAt < now - 7 * 86400000)) throw new Error("Research is stale; refresh the opportunity before drafting");
+    // Fresh research is for NEW outreach. A follow-up or reply in a tracked thread needs none: at day 12 the
+    // §8.3 cadence's second follow-up was refused as "stale" (found by the deals world's compressed time).
+    if (!o.threadId && o.evidence.every(e => e.checkedAt < now - 7 * 86400000)) throw new Error("Research is stale; refresh the opportunity before drafting");
     const drafts = await ctx.db.query("partnershipDrafts").withIndex("by_opportunity", q => q.eq("opportunityId", row._id)).collect();
     const previous = drafts.map(d => Draft.parse(d.data)).filter(d => d.status === "sent").sort((a, b) => b.createdAt - a.createdAt)[0];
     if (o.threadId && previous && input.subject !== previous.subject) throw new Error(`Keep the existing thread subject: ${previous.subject}`);
@@ -67,7 +70,7 @@ export const approve = internalMutation({ args: { creatorId: v.id("creators"), s
   if (!source || source.creatorId !== a.creatorId || source.direction !== "in" || source.memoryExcludedAt || source.fileId || source.fileMime || (source.kind && source.kind !== "inbound")) return { handled: false };
   const match = /^SEND ([a-f0-9]{24})$/i.exec(source.body.trim());
   if (!match) return { handled: false };
-  await active(ctx, a.creatorId);
+  const creator = await active(ctx, a.creatorId);
   if ((await profile(ctx, a.creatorId)).data.paused) return { handled: true, text: "partnerships are paused. nothing was sent." };
   const rows = await ctx.db.query("partnershipDrafts").withIndex("by_creator", q => q.eq("creatorId", a.creatorId)).order("desc").take(100);
   const row = rows.find(d => Draft.parse(d.data).approvalCode === match[1].toLowerCase());
@@ -80,7 +83,7 @@ export const approve = internalMutation({ args: { creatorId: v.id("creators"), s
   if (CLOSED.has(o.status) || (o.deadline && o.deadline <= Date.now())) return { handled: true, text: "that opportunity is closed or expired. nothing was sent." };
   const mailbox = await ctx.db.query("partnershipMailboxes").withIndex("by_creator", q => q.eq("creatorId", a.creatorId)).unique();
   if (!mailbox || mailbox.generation !== d.mailboxGeneration || mailbox.email !== d.sender) return { handled: true, text: "your email connection changed. please review a fresh draft." };
-  if (process.env.PARTNERSHIP_EMAIL_SEND_ENABLED !== "true") return { handled: true, text: "email sending isn’t enabled yet. your draft is saved; nothing was sent." };
+  if (!emailSendEnabled(creator)) return { handled: true, text: "email sending isn’t enabled yet. your draft is saved; nothing was sent." };
   await ctx.db.patch(row._id, { data: { ...d, status: "approved", approvedBy: source._id }, updatedAt: Date.now() });
   await event(ctx, a.creatorId, row.opportunityId, `approved:${row._id}`, "approved", `Exact revision ${d.revision} approved by ${source._id}`);
   await ctx.scheduler.runAfter(0, internal.partnerships.delivery.send, { creatorId: a.creatorId, draftId: row._id });
