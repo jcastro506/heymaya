@@ -87,7 +87,9 @@ export async function classifyText(ctx: ActionCtx, input: { creatorId: Id<"creat
   const ask = (model: string) => callModel(ctx, {
     creatorId: input.creatorId,
     purpose: "classify",
-    model: REGISTRY.screener.primary,
+    // The model asked for. This said `REGISTRY.screener.primary`, so the "fallback" below re-asked the
+    // model that had just failed, and a GLM outage sent every text down the plain-chat path (outage drill, 2026-09-24).
+    model,
     messages: [
       { role: "system", content: CLASSIFY_PROMPT },
       { role: "user", content: `Their own handles (never a profile_ask): ${JSON.stringify(input.ownHandles)}\nCurrent quiet hours: ${JSON.stringify(input.quietHours ?? { start: "22:00", end: "07:00" })}\nHer last message to them: ${JSON.stringify((input.lastOutbound ?? "").slice(0, 300))}\n\nTheir message: ${input.text.slice(0, 600)}` },

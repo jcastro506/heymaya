@@ -13,11 +13,12 @@ import { v } from "convex/values";
 import { KINDS, pathFor, type ReadKind } from "./kinds";
 import { readKey } from "./key";
 import { CREDITS_BY_PATH } from "../integrations/scrapeCreators/platforms/cross";
-import { getDefaultClient, type ScrapeCreatorsClient } from "../integrations/scrapeCreators/client";
+import { getDefaultClient, ScrapeCreatorsClient } from "../integrations/scrapeCreators/client";
 import { FixtureScrapeCreatorsClient, fixtureStoreFrom } from "../integrations/scrapeCreators/fixtureClient";
 import specFixtures from "../integrations/scrapeCreators/fixtures.spec.json";
 import recordedFixtures from "../integrations/scrapeCreators/fixtures.recorded.json";
 import { fakeRead } from "../eval/dealsWorldData";
+import { faultFetch, faultFor, type Fault } from "../eval/faults";
 
 const USD_PER_CREDIT = Number(process.env.SCRAPE_CREATORS_USD_PER_CREDIT ?? "0.00188"); // $47 / 25,000
 const WAIT_MS = 400;
@@ -42,6 +43,15 @@ export function clientForEnv(): { client: ScrapeCreatorsClient; fixture?: "spec-
     return { client: fixtureClients[mode]!, fixture: mode === "recorded" ? "recorded" : "spec-example" };
   }
   return { client: getDefaultClient() };
+}
+
+/**
+ * The outage drill (eval/faults.ts): the real client, retries and typed errors included, against a
+ * fetch that fails the way ScrapeCreators does. No waiting between retries: the drill measures what
+ * happens after the failure, not the backoff.
+ */
+export function faultClient(fault: Fault): ScrapeCreatorsClient {
+  return new ScrapeCreatorsClient({ apiKey: "fault-injected", fetchImpl: faultFetch(fault), sleep: async () => undefined });
 }
 
 /** Test hook: drop the cached fixture clients so a test can switch modes. */
@@ -130,22 +140,27 @@ export const read = internalAction({
     const normalized = (specEntry.normalize as unknown as (p: Record<string, unknown>) => Record<string, unknown>)(params ?? {});
     const key = readKey(k, normalized);
     const now = Date.now();
+    // Outage drill: an injected fault skips the cache (the vendor must be reached for it to fail) and
+    // takes the real failure path below. Null in production and for every real creator.
+    const fault = await faultFor(ctx, creatorId, "scrapecreators", { purpose: `read:${k}`, ref: `${k}|${key}` });
     // Eval fixtures (the partnership gauntlet, the deals world) never reach ScrapeCreators or the shared
     // cache: a local deployment with EVAL_FAKES=1 answers them from the fake world. Real creators never get here.
-    if (creatorId && process.env.EVAL_FAKES === "1" && process.env.ENVIRONMENT_NAME === "local" && await ctx.runQuery(internal.eval.fakes.isFixture, { creatorId })) {
+    if (!fault && creatorId && process.env.EVAL_FAKES === "1" && process.env.ENVIRONMENT_NAME === "local" && await ctx.runQuery(internal.eval.fakes.isFixture, { creatorId })) {
       return { value: fakeRead(k, normalized), cached: true, key };
     }
 
-    if (!force) {
+    if (!force && !fault) {
       const hit = await ctx.runQuery(internal.reads.cache.getFresh, { kind: k, key, now });
       if (hit.state === "fresh") return { value: hit.value, cached: true, key };
     }
 
     for (let attempt = 0; attempt <= MAX_WAITS; attempt++) {
-      const claim = await ctx.runMutation(internal.reads.cache.claim, { kind: k, key, params: normalized, now: Date.now(), force: attempt === 0 ? Boolean(force) : undefined });
+      const claim = await ctx.runMutation(internal.reads.cache.claim, { kind: k, key, params: normalized, now: Date.now(), force: attempt === 0 ? Boolean(force || fault) : undefined });
       if (claim.claimed) {
-        const { client, fixture } = clientForEnv();
         try {
+          // Inside the try: a missing key used to throw before it, leaving the claim in flight so
+          // every reader of this key waited out the 24 s wait loop and then failed without a name.
+          const { client, fixture } = fault ? { client: faultClient(fault), fixture: undefined } : clientForEnv();
           const value = await (specEntry.call as unknown as (p: Record<string, unknown>, deps: { client: ScrapeCreatorsClient }) => Promise<unknown>)(
             normalized,
             { client },

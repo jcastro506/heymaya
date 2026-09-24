@@ -23,6 +23,7 @@ import type { ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { fakeAnswer, fakeModelEnabled } from "./fakeModel";
+import { faultFor, modelFaultResult } from "../eval/faults";
 import type {
   OpenRouterMessage,
   OpenRouterResult, OpenRouterTool } from "../integrations/openrouter/client";
@@ -134,12 +135,15 @@ export async function callModel(
   ctx: ActionCtx,
   input: CallModelInput
 ): Promise<OpenRouterResult> {
+  // Outage drill (eval/faults.ts): OpenRouter failing for this eval creator's writer or classifier.
+  // It answers what the client returns for a 5xx or a hang, and is ledgered like one. Null in production.
+  const fault = await faultFor(ctx, input.creatorId, "openrouter", { purpose: input.purpose, model: input.model });
   // Tests only (MODEL_FAKE=1): deterministic answers by purpose, no network, no spend. The deploy guard refuses this flag.
-  if (fakeModelEnabled()) return fakeAnswer(input.purpose, input.messages);
+  if (!fault && fakeModelEnabled()) return fakeAnswer(input.purpose, input.messages);
   const { callOpenRouter } = await import("../integrations/openrouter/client");
 
   const callStartedAt = Date.now();
-  const result = await callOpenRouter({
+  const result = fault ? modelFaultResult(fault) : await callOpenRouter({
     model: input.model,
     messages: input.messages,
     tools: input.tools,

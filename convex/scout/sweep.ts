@@ -17,6 +17,8 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { THRESHOLDS } from "../config/thresholds";
 import { pairedRows } from "../core/schedule";
+import { drillCheck, faultFor } from "../eval/faults";
+import { readHealth } from "./sampler";
 
 const PER_KEYWORD = 3;
 
@@ -128,6 +130,7 @@ export const run = internalAction({
           const r = await ctx.runAction(internal.reads.read.read, {
             kind: platform === "tiktok" ? "search.keyword" : "search.reels",
             params: platform === "tiktok" ? { keyword, window: "this-week", sort: "most-liked" } : { keyword, window: "last-week" },
+            creatorId: args.creatorId,
           });
           const value = r.value as { posts?: Post[]; raw?: unknown } | Post[] | null;
           const posts = Array.isArray(value) ? value : (value?.posts ?? []);
@@ -142,6 +145,11 @@ export const run = internalAction({
           console.error(`[sweep] ${platform}/${keyword}: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
+    }
+    const health = readHealth(keywords.length * 2, failed);
+    if (health) {
+      const fault = args.creatorId ? await faultFor(ctx, args.creatorId, "scrapecreators", { count: false }) : null;
+      await ctx.runMutation(internal.core.smoke.record, { vendor: "scrapecreators", check: drillCheck(args.creatorId ? "read:creator" : "read", fault), ok: health.ok, detail: { job: "sweep", ...(args.creatorId ? { creatorId: args.creatorId } : {}), summary: health.detail } });
     }
     return { keywords: keywords.length, signals, failed };
   },

@@ -29,7 +29,12 @@ export interface WatchInput {
   resolution?: "low" | "default";
   maxOutputTokens?: number;
   fetchImpl?: typeof fetch;
+  /** Give up after this long. Without it a hung call held the action to Convex's 10-minute limit and the creator heard nothing. */
+  timeoutMs?: number;
 }
+
+/** A watch that has not answered in this long is not going to: the caller says so and moves on. */
+export const WATCH_TIMEOUT_MS = 150_000;
 
 export type WatchResult =
   | { ok: true; text: string; usage: { promptTokens: number; outputTokens: number; costUsd: number } }
@@ -105,8 +110,11 @@ export async function watchMedia(input: WatchInput): Promise<WatchResult> {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ contents: [{ role: "user", parts: [mediaPart, { text: input.prompt }] }], generationConfig }),
+      signal: AbortSignal.timeout(input.timeoutMs ?? WATCH_TIMEOUT_MS),
     });
   } catch (error) {
+    const name = error instanceof Error ? error.name : "";
+    if (name === "TimeoutError" || name === "AbortError") return { ok: false, reason: `gemini timed out after ${Math.round((input.timeoutMs ?? WATCH_TIMEOUT_MS) / 1000)}s` };
     return { ok: false, reason: `gemini unreachable: ${error instanceof Error ? error.message : String(error)}` };
   }
   let payload: {

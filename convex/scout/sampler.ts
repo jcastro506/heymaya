@@ -17,6 +17,19 @@ import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { THRESHOLDS } from "../config/thresholds";
+import { drillCheck, faultFor } from "../eval/faults";
+
+/**
+ * Pure: the health of one pass of reads, or null when nothing was read. Down when at least half
+ * the reads failed (accounts the platform retired are not an outage). `core/status` has always
+ * told creators "couldn't see tiktok today" off a `scrapecreators/read` row, and nothing wrote one
+ * until the outage drill looked (2026-09-24): an out-of-credits day was silent on both sides.
+ */
+export function readHealth(attempts: number, failed: number, gone = 0): { ok: boolean; detail: string } | null {
+  if (attempts <= 0) return null;
+  const real = Math.max(0, failed - gone);
+  return { ok: real * 2 < attempts, detail: `${real} of ${attempts} reads failed${gone ? ` (${gone} retired)` : ""}` };
+}
 
 /** Pure: a caption that discloses a paid post (#ad, #sponsored, "paid partnership"…). */
 export function isAdCaption(caption: string | null | undefined): boolean {
@@ -191,7 +204,7 @@ export const run = internalAction({
     let signals = 0, failed = 0, gone = 0;
     for (const acct of accounts) {
       try {
-        const r = await ctx.runAction(internal.reads.read.read, { kind: "account.posts", params: { platform: acct.platform, handle: acct.handle, sort: "latest", slot } });
+        const r = await ctx.runAction(internal.reads.read.read, { kind: "account.posts", params: { platform: acct.platform, handle: acct.handle, sort: "latest", slot }, creatorId: args.creatorId });
         const posts = (Array.isArray(r.value) ? r.value : []) as PostIn[];
         const { baseline, n, candidates } = await ctx.runMutation(internal.scout.sampler.recordAccountPage, { platform: acct.platform, handle: acct.handle, posts, now });
         const lastPostedAt = posts.map((p) => (p.postedAt ? (p.postedAt < 1e12 ? p.postedAt * 1000 : p.postedAt) : 0)).reduce((m, t) => Math.max(m, t), 0) || undefined;
@@ -215,6 +228,12 @@ export const run = internalAction({
           if (retired) gone += retired;
         }
       }
+    }
+    const health = readHealth(accounts.length, failed, gone);
+    if (health) {
+      // A pass scoped to one creator is not the fleet's eyes: its row never makes every creator apologise.
+      const fault = args.creatorId ? await faultFor(ctx, args.creatorId, "scrapecreators", { count: false }) : null;
+      await ctx.runMutation(internal.core.smoke.record, { vendor: "scrapecreators", check: drillCheck(args.creatorId ? "read:creator" : "read", fault), ok: health.ok, detail: { job: "sampler", ...(args.creatorId ? { creatorId: args.creatorId } : {}), summary: health.detail } });
     }
     return { accounts: accounts.length, signals, failed, gone };
   },

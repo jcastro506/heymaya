@@ -16,6 +16,7 @@
  */
 
 import { v } from "convex/values";
+import { drillCheck, faultFetch, faultFor, type Fault } from "../eval/faults";
 import { internalAction, internalQuery, type ActionCtx } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
@@ -237,10 +238,10 @@ async function syncCreatorWith(ctx: ActionCtx, c: ZernioClient, creatorId: Id<"c
   return { accounts: accounts.length, failures };
 }
 
-async function recordPass(ctx: ActionCtx, creators: number, accounts: number, failures: string[]): Promise<void> {
+async function recordPass(ctx: ActionCtx, creators: number, accounts: number, failures: string[], fault: Fault | null = null): Promise<void> {
   if (creators === 0) return;
   const detail = failures.length ? `${failures.length} read${failures.length === 1 ? "" : "s"} failed across ${accounts} accounts; first: ${failures[0]}` : `${accounts} accounts across ${creators} creators`;
-  await ctx.runMutation(internal.connections.zernio.recordHealth, { check: "account insights", ok: failures.length === 0, detail: detail.slice(0, 300) });
+  await ctx.runMutation(internal.connections.zernio.recordHealth, { check: drillCheck("account insights", fault), ok: failures.length === 0, detail: detail.slice(0, 300) });
 }
 
 /** The hourly pass (via core/timedJobs): the stalest due creators, a few at a time. Never throws for one account. */
@@ -272,15 +273,17 @@ export const run = internalAction({
 export const syncCreator = internalAction({
   args: { creatorId: v.id("creators") },
   handler: async (ctx, a): Promise<{ accounts: number; failed: number }> => {
+    // Outage drill (eval/faults.ts): Zernio failing for this eval creator. Null in production.
+    const fault = await faultFor(ctx, a.creatorId, "zernio");
     let c: ZernioClient;
     try {
-      c = zernioClient(process.env.ZERNIO_API_KEY ?? "");
+      c = fault ? zernioClient("fault-injected", faultFetch(fault)) : zernioClient(process.env.ZERNIO_API_KEY ?? "");
     } catch (e) {
-      await recordPass(ctx, 1, 0, [e instanceof Error ? e.message : "no client"]);
+      await recordPass(ctx, 1, 0, [e instanceof Error ? e.message : "no client"], fault);
       return { accounts: 0, failed: 1 };
     }
     const r = await syncCreatorWith(ctx, c, a.creatorId, Date.now());
-    await recordPass(ctx, 1, r.accounts, r.failures);
+    await recordPass(ctx, 1, r.accounts, r.failures, fault);
     return { accounts: r.accounts, failed: r.failures.length };
   },
 });
