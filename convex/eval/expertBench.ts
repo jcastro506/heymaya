@@ -68,7 +68,7 @@ export const EXPERT_CASES: readonly ExpertCase[] = [
 
 export const EXPERT_JUDGE_PROMPT = `You grade whether one reply from Maya, a creator's social media expert, is CORRECT for the situation. You are given the creator's message, what a good answer does (acceptable), what it must never claim (mustNotClaim), whether one clarifying question is expected, any safety requirement, and the tools she used with their results. Tone is judged elsewhere; judge substance.
 Rules:
-- falseClaims: list every mustNotClaim the reply asserts, and any specific fact (number, date, event, cause) not supported by factsSheHad, the tool results, or the creator's own message. A number that appears in factsSheHad (rounded is fine) is supported, and so is a detail of the video in whatSheWatchedInTheVideo, and a callback to something in whatTheyToldHer. Hedged or attributed statements ("might", "I can't see", "check X") are not claims.
+- falseClaims: list every mustNotClaim the reply asserts, and any specific fact (number, date, event, cause) not supported by factsSheHad, the tool results, or the creator's own message. A number that appears in factsSheHad (rounded is fine) is supported, and so is a detail of the video in whatSheWatchedInTheVideo, and a callback to something in whatTheyToldHer, and anything in toolsUsed.toolResults (what her lookups returned). Hedged or attributed statements ("might", "I can't see", "check X") are not claims.
 - correct: 2 if it does what acceptable describes, 1 if partly, 0 if not.
 - askedWhenNeeded: when a question is expected, true only if it asks one targeted question; null when none is expected.
 - usefulNextStep: 0-2, a specific thing they can do.
@@ -114,6 +114,31 @@ export const watchedSince = internalQuery({
   },
 });
 
+/** Eval personas only: each investigation's tool calls with what they returned, for the judge. */
+export const saveTrace = internalMutation({
+  args: { creatorId: v.id("creators"), trace: v.array(v.object({ tool: v.string(), ok: v.boolean(), result: v.string() })) },
+  handler: async (ctx, a): Promise<null> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!c || !/^eval(-run)?:/.test(c.clerkUserId ?? "")) return null; // real creators: nothing kept here
+    const key = `eval:trace:${a.creatorId}`;
+    const row = await ctx.db.query("syncState").withIndex("by_key", (q) => q.eq("key", key)).unique();
+    const prior = row ? (JSON.parse(row.value) as Array<{ at: number; trace: unknown }>) : [];
+    const value = JSON.stringify([...prior.slice(-9), { at: Date.now(), trace: a.trace }]);
+    if (row) await ctx.db.patch(row._id, { value, updatedAt: Date.now() });
+    else await ctx.db.insert("syncState", { key, value, updatedAt: Date.now() });
+    return null;
+  },
+});
+
+export const tracesSince = internalQuery({
+  args: { creatorId: v.id("creators"), since: v.number() },
+  handler: async (ctx, a): Promise<unknown[]> => {
+    const row = await ctx.db.query("syncState").withIndex("by_key", (q) => q.eq("key", `eval:trace:${a.creatorId}`)).unique();
+    const all = row ? (JSON.parse(row.value) as Array<{ at: number; trace: unknown[] }>) : [];
+    return all.filter((x) => x.at >= a.since).flatMap((x) => x.trace);
+  },
+});
+
 /** Both platforms, separately: their normal, their latest posts, and whether Zernio is connected. */
 export const postsByPlatform = internalQuery({
   args: { creatorId: v.id("creators") },
@@ -126,8 +151,8 @@ export const postsByPlatform = internalQuery({
       if (!mine.length) continue;
       out[platform] = {
         normal: normalViews(mine, platform, now)?.value ?? null,
-        latest: mine.slice(0, 6).map((p) => ({ url: p.url.replace(/\?.*$/, ""), views: p.metrics.views, multiple: p.multiple ?? null, daysOld: Math.round((now - p.createTime) / 86_400_000), caption: p.caption.slice(0, 80) })),
-        best: [...mine].sort((x, y) => y.metrics.views - x.metrics.views).slice(0, 3).map((p) => ({ url: p.url.replace(/\?.*$/, ""), views: p.metrics.views, multiple: p.multiple ?? null, caption: p.caption.slice(0, 80) })),
+        latest: mine.slice(0, 6).map((p) => ({ url: p.url.replace(/\?.*$/, ""), views: p.metrics.views, multiple: p.multiple ?? null, daysOld: Math.round((now - p.createTime) / 86_400_000), caption: p.caption.slice(0, 400) })),
+        best: [...mine].sort((x, y) => y.metrics.views - x.metrics.views).slice(0, 3).map((p) => ({ url: p.url.replace(/\?.*$/, ""), views: p.metrics.views, multiple: p.multiple ?? null, caption: p.caption.slice(0, 400) })),
       };
     }
     // What they've told her (her memory), so a callback to it isn't marked invented.
@@ -200,7 +225,7 @@ export const step = internalAction({
       await ctx.runAction(internal.agent.converse.run, { creatorId: a.creatorId, messageId });
       const replies = await ctx.runQuery(internal.eval.converse.repliesTo, { creatorId: a.creatorId, inboundId: messageId, since });
       reply = replies.map((r) => r.text).join("\n---\n");
-      trace = await ctx.runQuery(internal.eval.expertBench.traceFor, { creatorId: a.creatorId, since });
+      trace = { costs: await ctx.runQuery(internal.eval.expertBench.traceFor, { creatorId: a.creatorId, since }), toolResults: await ctx.runQuery(internal.eval.expertBench.tracesSince, { creatorId: a.creatorId, since }) };
       const truth = await ctx.runAction(internal.eval.expertBench.groundTruth, { creatorId: a.creatorId, text: c.text, since });
       correctness = reply ? await judgeCorrectness(ctx as never, c, reply, trace, a.creatorId, truth) : null;
       const verdict = caseVerdict(c, correctness);

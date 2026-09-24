@@ -82,7 +82,18 @@ export function priceFor(name: string, args: Record<string, unknown>): number | 
   return base;
 }
 
-export interface ToolCallRecord { tool: string; params: Record<string, unknown>; why: string; credits?: number; ms: number; ok: boolean; detail?: string }
+export interface ToolCallRecord { tool: string; params: Record<string, unknown>; why: string; credits?: number; ms: number; ok: boolean; detail?: string; /** what the tool told her, short: the critic and the bench judge check her claims against it */ result?: string }
+
+export const TRACE_RESULT_CAP = 800;
+
+/** Every call through the belt, with a short copy of what it returned kept on its trace entry. */
+export async function runTool(ctx: ActionCtx, creatorId: Id<"creators">, call: { name: string; args: Record<string, unknown> }, budget: ToolBudget, trace: ToolCallRecord[], sourceMessageId?: Id<"messages">): Promise<string> {
+  const before = trace.length;
+  const out = await runToolInner(ctx, creatorId, call, budget, trace, sourceMessageId);
+  const entry = trace[trace.length - 1];
+  if (trace.length > before && entry && entry.result === undefined) entry.result = out.slice(0, TRACE_RESULT_CAP);
+  return out;
+}
 
 function cap(s: string): string {
   return s.length > SUMMARY_CAP ? `${s.slice(0, SUMMARY_CAP)}… (cut)` : s;
@@ -155,7 +166,7 @@ function summarize(tool: string, value: unknown): string {
  * Run one tool. Refuses over budget, refuses unknown tools, and never reads outside `read()`.
  * The creator's own posts and calendar come from rows scoped by creatorId.
  */
-export async function runTool(ctx: ActionCtx, creatorId: Id<"creators">, call: { name: string; args: Record<string, unknown> }, budget: ToolBudget, trace: ToolCallRecord[], sourceMessageId?: Id<"messages">): Promise<string> {
+async function runToolInner(ctx: ActionCtx, creatorId: Id<"creators">, call: { name: string; args: Record<string, unknown> }, budget: ToolBudget, trace: ToolCallRecord[], sourceMessageId?: Id<"messages">): Promise<string> {
   const why = String(call.args.why ?? "").slice(0, 160);
   const started = Date.now();
   const record = (ok: boolean, credits?: number, detail?: string) => trace.push({ tool: call.name, params: Object.fromEntries(Object.entries(call.args).filter(([k]) => k !== "why")), why, credits, ms: Date.now() - started, ok, ...(detail ? { detail } : {}) });

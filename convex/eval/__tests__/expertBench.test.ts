@@ -29,3 +29,13 @@ describe("expert bench", () => {
     expect(caseVerdict(EXPERT_CASES[0], null).pass).toBe(false);
   });
 });
+
+describe("the judge sees what her tools returned", () => {
+  it("each trace entry keeps a short copy of the tool's answer", async () => {
+    const { runTool, DEFAULT_BUDGET, TRACE_RESULT_CAP } = await import("../../agent/tools");
+    const trace: Parameters<typeof runTool>[4] = [];
+    const ctx = { runQuery: async () => [], runMutation: async () => null, runAction: async () => null } as never;
+    const out = await runTool(ctx, "c" as never, { name: "week_plan", args: { why: "w" } }, DEFAULT_BUDGET(), trace);
+    expect(trace[0].result).toBe(out.slice(0, TRACE_RESULT_CAP));
+  });
+});
