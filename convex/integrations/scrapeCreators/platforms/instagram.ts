@@ -106,6 +106,30 @@ function normalizeIgProfile(handle: string, raw: unknown): NormalizedProfile {
   });
 }
 
+/** Pure: a single-post GraphQL node, in the list-item shape `normalizeIgPosts` reads. */
+export function igShortcodeToItem(node: unknown): Record<string, unknown> {
+  const n = (node ?? {}) as Record<string, unknown> & {
+    edge_media_to_caption?: { edges?: Array<{ node?: { text?: string } }> };
+    edge_media_preview_like?: { count?: number }; edge_liked_by?: { count?: number };
+    edge_media_to_parent_comment?: { count?: number }; edge_media_to_comment?: { count?: number };
+    edge_sidecar_to_children?: unknown; owner?: { username?: string };
+  };
+  const caption = n.edge_media_to_caption?.edges?.[0]?.node?.text;
+  return {
+    id: n.id, code: n.shortcode,
+    caption: typeof caption === "string" ? { text: caption } : null,
+    media_type: n.is_video ? 2 : n.edge_sidecar_to_children ? 8 : 1,
+    video_versions: typeof n.video_url === "string" ? [{ url: n.video_url }] : [],
+    taken_at: n.taken_at_timestamp,
+    like_count: n.edge_media_preview_like?.count ?? n.edge_liked_by?.count,
+    comment_count: n.edge_media_to_parent_comment?.count ?? n.edge_media_to_comment?.count,
+    play_count: n.video_play_count ?? n.video_view_count,
+    video_duration: n.video_duration,
+    thumbnail_url: n.display_url,
+    user: n.owner?.username ? { username: n.owner.username } : undefined,
+  };
+}
+
 function normalizeIgPosts(raw: unknown): NormalizedPost[] {
   const parsed = IgPostsResponseSchema.parse(raw);
   const list = parsed.items ?? parsed.posts ?? parsed.data?.items ?? [];
@@ -183,7 +207,10 @@ export const instagram = {
     const raw = await clientOf(deps).request<unknown>("/v1/instagram/post", {
       query: { url: postUrl },
     });
-    const list = normalizeIgPosts({ items: [raw] });
+    // One post comes back as a GraphQL envelope ({ data: { xdt_shortcode_media } }), not the list
+    // item shape. Reading it as an item found no video, so no Instagram link was ever watched (2026-09-24).
+    const node = (raw as { data?: { xdt_shortcode_media?: unknown } } | null)?.data?.xdt_shortcode_media;
+    const list = normalizeIgPosts({ items: [node ? igShortcodeToItem(node) : raw] });
     return list[0] ?? null;
   },
   /* ---- Sprint 1 P0 wrappers. Params VERIFIED LIVE 2026-07-31. -------------

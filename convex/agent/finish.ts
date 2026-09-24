@@ -56,18 +56,19 @@ Captions: write three, and make them three DIFFERENT kinds, never three rewordin
 - "their-usual": the shape of their own best captions (same length, case, emoji and hashtag habits), about THIS video;
 - "question": a line that gets the comments talking, in their voice, about something in this video people will have an opinion on;
 - "search": for TikTok, one or two words people actually search for this (use suggestions or search_keyword if you're not sure), worked in the way they'd write it; for Instagram, the line that makes someone save or send it, only if that fits how they write.
-Every caption uses a concrete thing from THIS video (the card's about, spokenWords, onScreenText, payoff). It must read like they wrote it: if they write lowercase with no emoji, so do you. Never: explaining the joke, an abstract noun (journey, mindset, era, discipline, vibes), a borrowed format (pov:, nobody:, tell me why, it's giving, the way I), hashtag stuffing, anything cheesy you'd see on a stock video. A caption can be short. Short and theirs beats clever and generic.
+Every caption uses a concrete thing from THIS video (the card's about, spokenWords, onScreenText, payoff). It must read like they wrote it: if they write lowercase with no emoji, so do you. Never: explaining the joke, an abstract noun (journey, mindset, era, discipline, vibes), a borrowed format (pov:, nobody:, tell me why, it's giving, the way I), a stock phrase (hits different, main character, core memory, living my best life, that girl, obsessed, a whole mood, no thoughts just), hashtag stuffing, anything cheesy you'd see on a stock video. If a phrase could be on a thousand other videos, it isn't theirs. A caption can be short. Short and theirs beats clever and generic.
 
 Sounds: one to three, each with why it fits THIS video (the mood, the pace, the words) in a few words, and how to use it ("low under your voice", "start it on the first cut").
 - Look the sound up before you name it: sound_info gives its name, how many videos use it, and whether it's cleared for business accounts; sound_videos shows whether people are using it now. A sound you did not look up this turn is not named; code removes it.
 - Prefer a sound the accounts they watch are using this week, or one on their own posts that did well, when it fits the video. A sound that doesn't fit the mood is wrong even if it's big.
 - When voiceCarriesIt, their own audio is usually right, or a quiet music bed under it; say so plainly.
+- If the draft already has a song on it (audioNow music), "keep the song that's already on it" is an option (source "already-in-the-clip"); never call a song "your own audio". "your own audio" means their voice or the real sound of the moment.
 - If a sound is NOT cleared for business accounts, say: fine on a personal account, but not on a business account or a paid post.
 - Instagram: you can't always check Instagram audio. Name the track to search in Reels audio and say to check it's there.
 
 Their words on the draft may say the platform ("for insta"); write for that platform. Otherwise, for where they post.
 Output ONLY JSON:
-{"reaction": "≤200: one line as a viewer, the moment that got you, named from the card", "read": "≤240 or ''", "captions": [{"text": "≤300, exactly as they'd paste it", "shape": "their-usual|question|search", "why": "≤160: why this one, for them (kept for when they ask)"}], "sounds": [{"name": "≤80: 'title by author', or 'your own audio'", "clipId": "the TikTok clip id you looked up, or ''", "platform": "tiktok|instagram|both", "source": "their-own-audio|watched-accounts|their-past-post|trending", "why": "≤120", "howToUse": "≤100"}], "platformNote": "≤160 or ''"}`;
+{"reaction": "≤200: one line as a viewer, the moment that got you, named from the card", "read": "≤240 or ''", "captions": [{"text": "≤300, exactly as they'd paste it", "shape": "their-usual|question|search", "why": "≤160: why this one, for them (kept for when they ask)"}], "sounds": [{"name": "≤80: 'title by author', or 'your own audio'", "clipId": "the TikTok clip id you looked up, or ''", "platform": "tiktok|instagram|both", "source": "their-own-audio|already-in-the-clip|watched-accounts|their-past-post|trending", "why": "≤120", "howToUse": "≤100"}], "platformNote": "≤160 or ''"}`;
 
 export interface SoundCandidates {
   watchedThisWeek: Array<{ clipId: string; accounts: string[]; posts: number; topUrl: string; topViews: number }>;
@@ -121,7 +122,7 @@ export function backedSounds(sounds: Out["sounds"], trace: Array<Pick<ToolCallRe
   for (const s of sounds.slice(0, 3)) {
     const name = (s.name ?? "").trim();
     if (!name) continue;
-    if (/^(your|their) own (audio|voice)/i.test(name) || s.source === "their-own-audio") { kept.push({ ...s, clipId: undefined }); continue; }
+    if (/^(your|their) own (audio|voice)/i.test(name) || s.source === "their-own-audio" || s.source === "already-in-the-clip" || /already on it|already in (it|the clip)/i.test(name)) { kept.push({ ...s, clipId: undefined }); continue; }
     const id = (s.clipId ?? "").trim();
     const title = name.split(/ by /i)[0].replace(/^["“]|["”]$/g, "").trim().toLowerCase();
     const info = looked.find((t) => t.tool === "sound_info" && (String(t.params?.clipId ?? "") === id || (t.result ?? "").toLowerCase().includes(`"${title}"`)));
@@ -138,7 +139,10 @@ export function finishText(o: { reaction: string; read?: string; captions: Out["
   const parts: string[] = [];
   parts.push([o.reaction.trim(), (o.read ?? "").trim()].filter(Boolean).join(" "));
   parts.push(`captions:\n${o.captions.map((c, i) => `${i + 1}. ${c.text.trim()}`).join("\n")}`);
-  const soundLines = o.sounds.map((s) => `${s.name.trim()}: ${s.why.trim()}${s.howToUse?.trim() ? `, ${s.howToUse.trim()}` : ""}${s.licensedForBusiness === false ? " (fine on a personal account, not on a business account or a paid post)" : ""}`);
+  // A looked-up TikTok sound carries its page, so they can tap straight into "use this sound".
+  const bare = (t: string) => t.trim().replace(/[.,;:!]+$/, "");
+  const lower = (t: string) => (t ? t[0].toLowerCase() + t.slice(1) : t);
+  const soundLines = o.sounds.map((s) => `${bare(s.name)}: ${lower(bare(s.why))}${s.howToUse?.trim() ? `. ${lower(bare(s.howToUse))}` : ""}${s.licensedForBusiness === false ? " (fine on a personal account, not on a business account or a paid post)" : ""}${s.clipId ? `\nhttps://www.tiktok.com/music/sound-${s.clipId}` : ""}`);
   parts.push(`${soundLines.length > 1 ? "sounds" : "sound"}:\n${soundLines.join("\n")}${o.platformNote?.trim() ? `\n${o.platformNote.trim()}` : ""}\n\nask me why on any of them.`);
   return parts.join("\n---\n");
 }
