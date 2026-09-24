@@ -82,3 +82,17 @@ export const count = internalQuery({
     return n;
   },
 });
+
+/** Eval personas only: one open idea and a booked film block tomorrow, so the widget can be seen with data. */
+export const seedWidgetDemo = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<null> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!c || !/^eval(-run)?[:-]/.test(c.clerkUserId)) throw new Error("demo data is for eval personas only");
+    const now = Date.now();
+    const ideaId = await ctx.db.insert("ideas", { creatorId: a.creatorId, evidenceLinks: ["https://www.instagram.com/p/DcRIKq6xDpQ/"], fit: "yes", fitWhy: "your sub preps are your best format, and this is the next one", version: { hook: "pesto chicken subs, but for the whole week" }, messageText: "pesto chicken subs, but for the whole week", status: "sent", produced: { skillVersion: "demo", model: "demo", thresholdsVersion: "demo" }, createdAt: now } as never);
+    const start = now + 22 * 3_600_000;
+    await ctx.db.insert("calendarBlocks", { creatorId: a.creatorId, kind: "film", start, end: start + 3_600_000, title: "film: pesto chicken subs, but for the whole week", ideaId, status: "confirmed", consentAt: now, createdAt: now } as never);
+    return null;
+  },
+});
