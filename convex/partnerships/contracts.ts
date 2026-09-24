@@ -17,7 +17,25 @@ export const Profile = z.object({
   paidOnly: z.boolean().default(false), region: z.string().max(100).default("unknown"),
   availability: z.string().max(500).default("unknown"), minimumRate: z.string().max(100).default("unknown"),
 });
-export const Evidence = z.object({ url, excerpt: z.string().min(1).max(5000), checkedAt: z.number().finite(), kind: z.enum(["search", "extract"]) });
+/** Pure: the canonical public URL of a social profile, from "instagram:handle" / "tiktok:@handle". */
+export function profileTarget(spec: string): { platform: "tiktok" | "instagram"; handle: string; url: string } | null {
+  const m = /^(tiktok|instagram):@?([a-z0-9._]{2,30})$/i.exec(spec.trim());
+  if (!m) return null;
+  const platform = m[1].toLowerCase() as "tiktok" | "instagram";
+  const handle = m[2].toLowerCase();
+  return { platform, handle, url: platform === "tiktok" ? `https://www.tiktok.com/@${handle}` : `https://www.instagram.com/${handle}/` };
+}
+
+/** Pure: does an official page link this social profile (any URL form: with or without www/https/trailing slash)? */
+export function linksProfile(officialText: string, profileUrl: string): boolean {
+  const t = officialText.toLowerCase();
+  const m = /(tiktok\.com\/@[a-z0-9._]+|instagram\.com\/[a-z0-9._]+)/.exec(profileUrl.toLowerCase());
+  if (!m) return false;
+  const i = t.indexOf(m[1]);
+  return i >= 0 && !/[a-z0-9._]/.test(t[i + m[1].length] ?? "");
+}
+
+export const Evidence = z.object({ url, excerpt: z.string().min(1).max(5000), checkedAt: z.number().finite(), kind: z.enum(["search", "extract", "profile"]) });
 export const Opportunity = z.object({
   brand: line, campaign: line, type: z.enum(["sponsorship", "ugc", "affiliate", "gifting", "ambassador", "event"]),
   fit: z.string().min(1).max(1500), unknowns: z.array(z.string().max(300)).max(20),

@@ -4,7 +4,7 @@ import { internalQuery, query, type MutationCtx, type QueryCtx } from "../_gener
 import { internalMutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
 import { creatorForIdentity } from "../core/identity";
-import { APPLICATION_CHECK_IN_DAYS, CLOSED, Draft, Evidence, Opportunity, Profile, publicUrl, followUpEligible, type OpportunityData } from "./contracts";
+import { APPLICATION_CHECK_IN_DAYS, CLOSED, Draft, Evidence, Opportunity, Profile, publicUrl, followUpEligible, linksProfile, type OpportunityData } from "./contracts";
 import { TIERS, entitlementsFor, type Entitlements } from "../billing/tiers";
 
 /** The operator's pilot list: a comp on top of the tier, never the gate (§26). */
@@ -172,7 +172,8 @@ export const change = internalMutation({
       if (!official.some(e => e.kind === "extract")) throw new Error("Extract the official page; a search snippet is not sufficient");
       if (data.officialApplicationUrl && (data.route !== "application" || data.routeUrl !== data.officialApplicationUrl)) throw new Error("Use the brand's requested application route");
       for (const field of data.applicationFields) if (!data.evidence.some(e => e.kind === "extract" && e.url === field.sourceUrl && e.excerpt.includes(field.label))) throw new Error("Application fields must be visible in extracted evidence");
-      if (data.contactEmail && !data.evidence.some(e => Array.from(e.excerpt.toLowerCase().match(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+\.[a-z]{2,}/g) ?? []).includes(data.contactEmail!) && (official.includes(e) || official.some(f => f.excerpt.includes(e.url))))) throw new Error("Email is not present in cited evidence from the brand or its linked representative");
+      // A bio email counts only from a profile the official site links (§8.3), never a lookalike account.
+      if (data.contactEmail && !data.evidence.some(e => Array.from(e.excerpt.toLowerCase().match(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+\.[a-z]{2,}/g) ?? []).includes(data.contactEmail!) && (official.includes(e) || official.some(f => f.excerpt.includes(e.url)) || (e.kind === "profile" && official.some(f => f.kind === "extract" && linksProfile(f.excerpt, e.url)))))) throw new Error("Email is not present in cited evidence from the brand or its linked representative");
       if (data.routeUrl && !official.some(e => e.url === data.routeUrl || e.excerpt.includes(data.routeUrl!))) throw new Error("Route must be linked by the brand's official evidence");
       if (data.route === "email" && !data.contactEmail) throw new Error("Email route requires a sourced address");
       if (["dm", "application"].includes(data.route) && !data.routeUrl) throw new Error("Route link required");
