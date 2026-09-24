@@ -239,7 +239,11 @@ struct Opportunities: Decodable, Equatable {
   let unlockTier: String
   let unlockPriceUsd: Double
   let teaser: Teaser
+  /// B6 signal 1: real brands seen paying creators in their lane (absent in older captures).
+  var brandsInLane: [LaneBrand]? = nil
   let opportunities: [Opportunity]
+
+  struct LaneBrand: Decodable, Equatable { let handle: String; let platform: String; let posts: Double; let creators: [String] }
 
   struct Teaser: Decodable, Equatable {
     let paidPostsInLane: Double

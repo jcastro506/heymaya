@@ -164,6 +164,8 @@ export default defineSchema({
     keywords: v.array(v.string()), // which lane keywords surfaced it
     source: v.string(), // read kind that produced it
     paidPromotion: v.optional(v.boolean()),
+    /** B6 signal 1: accounts a paid/#ad post tags (the brand is almost always one of them). */
+    mentions: v.optional(v.array(v.string())),
   })
     .index("by_post", ["platform", "postId", "sampledAt"])
     .index("by_author", ["platform", "authorHandle", "sampledAt"])

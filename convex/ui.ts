@@ -9,6 +9,7 @@ import { applyIdeaAct } from "./core/ideaActs";
 import { isUnseen } from "./core/unseen";
 import { TIERS, TIER_NAMES, entitlementsFor, price } from "./billing/tiers";
 import { partnershipsOpen } from "./partnerships/store";
+import { brandsPaying } from "./partnerships/signals";
 import { connectedFrom, DIAGNOSIS_WORDS, numbersFor } from "./connections/numbers";
 import { avatarKey, coverForUrl, coverKey, mediaUrl } from "./media";
 import { recordAction } from "./core/act";
@@ -348,12 +349,14 @@ export const opportunities = query({
     const tracked = ((await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).collect()) as Doc<"trackedAccounts">[]).filter((t) => t.status === "active");
     const paidPosts = new Set<string>();
     const paidAccounts = new Set<string>();
+    const paid: Array<{ platform: string; postId: string; authorHandle: string; mentions: string[]; sampledAt: number }> = [];
     for (const t of tracked) {
       const rows = (await ctx.db.query("observations").withIndex("by_author", (q) => q.eq("platform", t.platform).eq("authorHandle", t.handle).gte("sampledAt", since)).take(200)) as Doc<"observations">[];
       for (const r of rows) {
         if (!r.paidPromotion) continue;
         paidPosts.add(`${r.platform}:${r.postId}`);
         paidAccounts.add(`${r.platform}:${r.authorHandle}`);
+        paid.push({ platform: r.platform, postId: r.postId, authorHandle: r.authorHandle, mentions: r.mentions ?? [], sampledAt: r.sampledAt });
       }
     }
     const rows = unlocked ? ((await ctx.db.query("partnershipOpportunities").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").take(100)) as Doc<"partnershipOpportunities">[]) : [];
@@ -363,6 +366,8 @@ export const opportunities = query({
       unlockTier: "partner" as const,
       unlockPriceUsd: TIERS.partner.priceUsd,
       teaser: { paidPostsInLane: paidPosts.size, accountsPaid: paidAccounts.size, days: 30 },
+      // B6 signal 1: real brands seen paying creators she watches for them (named, never invented).
+      brandsInLane: brandsPaying(paid).slice(0, 5),
       opportunities: rows.map((r) => {
         const o = r.data as { brand?: string; campaign?: string; type?: string; fit?: string; status?: string; route?: string; compensation?: string; deadline?: number; assessment?: { verdict?: string } };
         return {

@@ -47,6 +47,11 @@ struct LockedDealsView: View {
           }
           Text("Brands are paying creators like the ones she watches for you. She can find the ones that fit you.")
             .font(MayaFont.callout).foregroundStyle(Palette.muted)
+          if let brands = o.brandsInLane, !brands.isEmpty {
+            Text("Paying your lane: " + brands.prefix(4).map { "@\($0.handle)" }.joined(separator: " · "))
+              .font(MayaFont.callout.weight(.semibold)).foregroundStyle(Palette.purple)
+              .accessibilityLabel("Brands paying creators in your lane: " + brands.prefix(4).map(\.handle).joined(separator: ", "))
+          }
         }
       }
 

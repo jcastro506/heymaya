@@ -158,6 +158,7 @@ import type * as partnerships_mailbox from "../partnerships/mailbox.js";
 import type * as partnerships_privacy from "../partnerships/privacy.js";
 import type * as partnerships_providerConfig from "../partnerships/providerConfig.js";
 import type * as partnerships_research from "../partnerships/research.js";
+import type * as partnerships_signals from "../partnerships/signals.js";
 import type * as partnerships_store from "../partnerships/store.js";
 import type * as partnerships_tools from "../partnerships/tools.js";
 import type * as reads_cache from "../reads/cache.js";
@@ -347,6 +348,7 @@ declare const fullApi: ApiFromModules<{
   "partnerships/privacy": typeof partnerships_privacy;
   "partnerships/providerConfig": typeof partnerships_providerConfig;
   "partnerships/research": typeof partnerships_research;
+  "partnerships/signals": typeof partnerships_signals;
   "partnerships/store": typeof partnerships_store;
   "partnerships/tools": typeof partnerships_tools;
   "reads/cache": typeof reads_cache;

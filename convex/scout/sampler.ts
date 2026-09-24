@@ -18,6 +18,17 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { THRESHOLDS } from "../config/thresholds";
 
+/** Pure: a caption that discloses a paid post (#ad, #sponsored, "paid partnership"…). */
+export function isAdCaption(caption: string | null | undefined): boolean {
+  return /(^|\s)#(ad|ads|sponsored|partner|paidpartnership|brandpartner|gifted|collab)\b|paid partnership|\bsponsored by\b/i.test(caption ?? "");
+}
+/** Pure: the @handles a caption tags, minus the author, lowercased, at most 5. */
+export function mentionsIn(caption: string | null | undefined, author: string): string[] {
+  const out = new Set<string>();
+  for (const m of (caption ?? "").matchAll(/@([a-z0-9._]{2,30})/gi)) { const h = m[1].toLowerCase().replace(/\.$/, ""); if (h !== author.toLowerCase()) out.add(h); }
+  return [...out].slice(0, 5);
+}
+
 interface PostIn {
   postId: string;
   url: string | null;
@@ -104,7 +115,8 @@ export const recordAccountPage = internalMutation({
         clipId: (p as { clipId?: string | null }).clipId ?? undefined,
         keywords: [],
         source: "account.posts",
-        paidPromotion: Boolean(p.raw?.is_ad),
+        paidPromotion: Boolean(p.raw?.is_ad) || isAdCaption(p.caption),
+        ...(Boolean(p.raw?.is_ad) || isAdCaption(p.caption) ? { mentions: mentionsIn(p.caption, a.handle) } : {}),
       });
     }
     // Baseline: median velocity over the last 20 posts older than 24 h. Fewer than 8 → unknown.
