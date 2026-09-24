@@ -215,7 +215,8 @@ async function writeOutbound(
   }
 
   // An eval clone is unpaired by construction; queueing its delivery only clogs the queue.
-  const isEvalPersona = /^eval(-run)?:/.test(creator?.clerkUserId ?? "");
+  // Load-test creators (`eval-load:`) run the fleet jobs like real users but are never delivered to either.
+  const isEvalPersona = /^eval(-run|-load)?:/.test(creator?.clerkUserId ?? "");
   if ((row.surface === "telegram" || row.surface === "imessage") && !isEvalPersona) {
     await ctx.runMutation(internal.core.jobs.enqueue, {
       kind: "deliver_message",

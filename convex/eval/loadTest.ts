@@ -13,6 +13,7 @@ import { v } from "convex/values";
 import { internalMutation } from "../lib/functions";
 import { internalQuery } from "../_generated/server";
 import type { Doc } from "../_generated/dataModel";
+import { TABLES_BY_CREATOR } from "../account/deletion";
 
 export const LOAD_PREFIX = "eval-load:";
 const ZONES = [
@@ -52,7 +53,7 @@ export const seed = internalMutation({
   },
 });
 
-/** Removes up to `limit` load-test creators and their messages per call (call until 0). */
+/** Removes up to `limit` load-test creators and every row they own per call (call until 0). */
 export const clear = internalMutation({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, a): Promise<number> => {
@@ -62,7 +63,11 @@ export const clear = internalMutation({
       if (removed >= (a.limit ?? 100)) break;
       const c = (await ctx.db.get(r.creatorId)) as Doc<"creators"> | null;
       if (!c || !c.clerkUserId.startsWith(LOAD_PREFIX)) continue;
-      for (const m of await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", c._id)).collect()) await ctx.db.delete(m._id);
+      // Every row it owns, or the fleet sampler keeps reading its watched accounts after it's gone.
+      for (const table of TABLES_BY_CREATOR) {
+        if (table === "schedule") continue; // the creator's delete trigger removes it
+        for (const row of await ctx.db.query(table).filter((q) => q.eq(q.field("creatorId"), c._id)).take(500)) await ctx.db.delete(row._id);
+      }
       await ctx.db.delete(c._id); // the trigger removes its schedule row
       removed++;
     }
