@@ -64,9 +64,17 @@ export const clear = internalMutation({
       const c = (await ctx.db.get(r.creatorId)) as Doc<"creators"> | null;
       if (!c || !c.clerkUserId.startsWith(LOAD_PREFIX)) continue;
       // Every row it owns, or the fleet sampler keeps reading its watched accounts after it's gone.
+      // Through each table's creator index (a filter scan read whole tables and hit the read limit).
       for (const table of TABLES_BY_CREATOR) {
         if (table === "schedule") continue; // the creator's delete trigger removes it
-        for (const row of await ctx.db.query(table).filter((q) => q.eq(q.field("creatorId"), c._id)).take(500)) await ctx.db.delete(row._id);
+        let rows: Array<{ _id: never }> = [];
+        for (const index of ["by_creator", "by_creator_and_ts", "by_creator_kind", "by_creator_and_createdAt", "by_creator_day"]) {
+          try {
+            rows = (await (ctx.db.query(table) as unknown as { withIndex: (i: string, f: (q: { eq: (k: string, v: unknown) => unknown }) => unknown) => { take: (n: number) => Promise<Array<{ _id: never }>> } }).withIndex(index, (q) => q.eq("creatorId", c._id)).take(500));
+            break;
+          } catch { /* this table has no index by that name; try the next */ }
+        }
+        for (const row of rows) await ctx.db.delete(row._id);
       }
       await ctx.db.delete(c._id); // the trigger removes its schedule row
       removed++;
