@@ -57,6 +57,24 @@ export default function OpsPage() {
           <div className="border border-white/10 rounded p-3"><div className="text-[11px] uppercase tracking-wide opacity-50">Activation · weekly active</div><div className="text-lg tabular-nums">{mx.activation ?? "—"}% · {mx.weeklyActive ?? "—"}%</div><div className="text-[11px] opacity-50">first reply within 48h of the first read · replied this week, of paying</div></div>
           <div className="border border-white/10 rounded p-3"><div className="text-[11px] uppercase tracking-wide opacity-50">North star</div><div className="text-lg tabular-nums">{mx.ideasPostedPerCreatorMonth}</div><div className="text-[11px] opacity-50">ideas posted per creator per month (target ≥ 2)</div></div>
           <div className="border border-white/10 rounded p-3"><div className="text-[11px] uppercase tracking-wide opacity-50">Silence · funnel</div><div className="text-lg tabular-nums">{mx.silence.proactivePerCreatorWeek}/wk · {mx.silence.mutePct}% paused</div><div className="text-[11px] opacity-50">first message p50 {mx.funnel.timeToFirstMessageMinP50 ?? "—"} min · p95 {mx.funnel.p95 ?? "—"} min</div></div>
+          {mx.fleetJobs && (
+            <div className="rounded-lg border p-3">
+              <div className="text-sm font-medium">Fleet jobs (last run · slowest of last 48 · failures)</div>
+              <table className="mt-2 w-full text-[12px] tabular-nums">
+                <tbody>
+                  {mx.fleetJobs.map((j) => (
+                    <tr key={j.job} className={j.failed ? "text-red-500" : ""}>
+                      <td className="pr-3">{j.job}</td>
+                      <td className="pr-3">{j.last ? `${(j.last.ms / 1000).toFixed(1)}s ${j.last.ok ? "" : "FAILED"}` : "—"}</td>
+                      <td className="pr-3">{j.p100ms !== null ? `${(j.p100ms / 1000).toFixed(1)}s` : "—"}</td>
+                      <td className="pr-3">{j.failed}/{j.runs}</td>
+                      <td className="opacity-60">{j.last?.summary ?? ""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           {mx.cogsLive && (
             <div className="border border-white/10 rounded p-3 col-span-full">
               <div className="text-[11px] uppercase tracking-wide opacity-50">COGS, live (real creators, last 30 days; COGS model §7)</div>

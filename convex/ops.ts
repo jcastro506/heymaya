@@ -5,6 +5,7 @@
  */
 
 import { v } from "convex/values";
+import { readRecent } from "./core/timedJobs";
 import { creatorCogs, isRealCreator, tierPriceUsd } from "./config/costs";
 import { query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
@@ -134,6 +135,7 @@ export const metrics = query({
       trackRecord: record,
       silence: { proactivePerCreatorWeek: creators.length ? Math.round((proactiveWeek / creators.length) * 10) / 10 : 0, mutePct: creators.length ? Math.round((mutes / creators.length) * 100) : 0 },
       funnel: { timeToFirstMessageMinP50: q(0.5), p95: q(0.95), withFirstMessage: withFirstRead },
+      fleetJobs: await readRecent(ctx),
       cogsLive: {
         realCreators: perCreator.length,
         evalSpend30dUsd: Math.round(evalSpend * 100) / 100,

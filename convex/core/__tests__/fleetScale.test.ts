@@ -96,3 +96,22 @@ describe("the creators-table scan is never a silent cliff", () => {
     expect(composeAlert({ scale: null, deadJobs: [], undelivered: [], smokeFailed: [], attention: [] }, "dev")).toBeNull();
   });
 });
+
+describe("fleet jobs are timed for /ops (S0 live exit)", () => {
+  it("every timed job's kind matches its function, and a run is recorded with its duration and result", async () => {
+    const { TIMED_JOBS, summarise } = await import("../timedJobs");
+    const crons = readFileSync(join(__dirname, "../../crons.ts"), "utf8");
+    for (const job of TIMED_JOBS) expect(crons, job).toContain(`internal.core.timedJobs.run, { job: "${job}" }`);
+    const src = readFileSync(join(__dirname, "../timedJobs.ts"), "utf8");
+    // the kind each job is declared with must match how its function is defined (a mismatch fails every hour)
+    for (const [, name, kind, file, fn] of src.matchAll(/"([^"]+)": \{ kind: "(action|mutation)", ref: internal\.([\w.]+)\.(\w+) \}/g)) {
+      const def = readFileSync(join(__dirname, "../..", `${file.replace(/\./g, "/")}.ts`), "utf8");
+      expect(def, name).toMatch(new RegExp(`export const ${fn} = internal${kind === "action" ? "Action" : "Mutation"}`));
+    }
+    expect(summarise({ creators: 3, scheduled: 3, note: "x" })).toBe("creators 3 · scheduled 3");
+    const t = convexTest(schema, modules);
+    await t.action(internal.core.timedJobs.run, { job: "expire stale questions" });
+    const stats = await t.query(internal.core.timedJobs.recent, {});
+    expect(stats.find((s) => s.job === "expire stale questions")).toMatchObject({ runs: 1, failed: 0 });
+  });
+});

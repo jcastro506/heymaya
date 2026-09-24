@@ -23,7 +23,7 @@ crons.daily("sweep lane keywords", { hourUTC: 11, minuteUTC: 30 }, internal.scou
 crons.interval("readback own posts", { hours: 6 }, internal.scout.readback.run, {});
 
 // The scout: rails then judgment, per creator, in their daytime; the gate holds the cap and quiet hours (§13.8).
-crons.hourly("scout", { minuteUTC: 5 }, internal.scout.scout.runAll, {});
+crons.hourly("scout", { minuteUTC: 5 }, internal.core.timedJobs.run, { job: "scout" });
 
 // The calendar sync: every connected calendar, every 30 minutes; push channels are post-pilot (§12.5).
 crons.interval("sync calendars", { minutes: 30 }, internal.calendar.sync.runAll, {});
@@ -40,20 +40,20 @@ crons.daily("learn from outcomes", { hourUTC: 3, minuteUTC: 20 }, internal.taste
  * Eastern creator: a question asked on Monday evening blocked the scout for the whole of
  * Tuesday. Hourly makes it land just after each creator's own midnight, wherever they are.
  */
-crons.hourly("expire stale questions", { minuteUTC: 10 }, internal.core.messages.expireStaleQuestionsAll, {});
+crons.hourly("expire stale questions", { minuteUTC: 10 }, internal.core.timedJobs.run, { job: "expire stale questions" });
 crons.daily("taste profiles", { hourUTC: 9, minuteUTC: 0 }, internal.taste.profile.runAll, {});
 
 // The weekly review: Sunday morning on each creator's clock; the hourly check finds who is due (§11.2 #14).
-crons.hourly("weekly review", { minuteUTC: 35 }, internal.review.weekly.runAll, {});
+crons.hourly("weekly review", { minuteUTC: 35 }, internal.core.timedJobs.run, { job: "weekly review" });
 // Sprint 4b: the week plan, Sunday evening on each creator's clock, after the review.
-crons.hourly("week plan", { minuteUTC: 40 }, internal.calendar.weekPlan.runAll, {});
+crons.hourly("week plan", { minuteUTC: 40 }, internal.core.timedJobs.run, { job: "week plan" });
 
 // Nightly consolidation (§15.7 layer 3, code half): expired notes tombstoned, the reply hour learned.
 crons.daily("consolidate", { hourUTC: 3, minuteUTC: 0 }, internal.agent.consolidate.nightly, {});
-crons.daily("reconcile schedule rows", { hourUTC: 2, minuteUTC: 40 }, internal.core.schedule.reconcile, {});
+crons.daily("reconcile schedule rows", { hourUTC: 2, minuteUTC: 40 }, internal.core.timedJobs.run, { job: "reconcile schedule rows" });
 
 // The first week's day-4 invitation (§1): hers to initiate, enforced as a schedule row.
-crons.hourly("first week", { minuteUTC: 50 }, internal.scout.firstWeek.runAll, {});
+crons.hourly("first week", { minuteUTC: 50 }, internal.core.timedJobs.run, { job: "first week" });
 
 // Sprint 3c: last night's real outbound through the checks and the judge, every night.
 crons.daily("eval recent outbound", { hourUTC: 4, minuteUTC: 0 }, internal.eval.run.recent, {});
@@ -65,20 +65,20 @@ crons.daily("format watch", { hourUTC: 12, minuteUTC: 0 }, internal.scout.format
 crons.daily("sound signals", { hourUTC: 12, minuteUTC: 30 }, internal.scout.sounds.run, {});
 
 // Nothing fails silently (§16): one operator message an hour when something new went wrong.
-crons.hourly("operator alerts", { minuteUTC: 20 }, internal.core.alerts.run, {});
+crons.hourly("operator alerts", { minuteUTC: 20 }, internal.core.timedJobs.run, { job: "operator alerts" });
 
 // Retention (§16.5): messages 12 months, calendar fields 90 days rolling, expired oauth states; nightly, bounded.
 crons.daily("retention", { hourUTC: 3, minuteUTC: 30 }, internal.core.retention.nightly, {});
 
 // Creator-facing status (§7 S3): "behind today" / "couldn't see TikTok today", once a day each, only when true.
-crons.hourly("creator status", { minuteUTC: 25 }, internal.core.status.run, {});
+crons.hourly("creator status", { minuteUTC: 25 }, internal.core.timedJobs.run, { job: "creator status" });
 
 // Cost reconciliation (§16.4): the vendor's count of credits used today against our ledger, within ten percent.
 // Sprint 4e: connected numbers. The delta feed hourly (only what changed, fleet-wide), followers daily.
 crons.hourly("zernio delta", { minuteUTC: 25 }, internal.connections.sync.delta, {});
 crons.daily("zernio followers", { hourUTC: 4, minuteUTC: 40 }, internal.connections.sync.followers, {});
 // §24 the human cadence: the morning line and the quiet line on their clock, the evening question in its window. Every hour.
-crons.hourly("human cadence", { minuteUTC: 55 }, internal.agent.cadence.runAll, {});
+crons.hourly("human cadence", { minuteUTC: 55 }, internal.core.timedJobs.run, { job: "human cadence" });
 
 crons.daily("cost reconcile", { hourUTC: 23, minuteUTC: 30 }, internal.core.reconcile.run, {});
 crons.daily("openrouter reconcile", { hourUTC: 23, minuteUTC: 40 }, internal.core.reconcile.openRouter, {});
