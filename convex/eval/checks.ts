@@ -17,7 +17,7 @@ import { INTERNAL_ID, checkPlainLanguage } from "../core/plainLanguage";
  *
  * `rubric.test.ts` fails if the checks change without this being bumped.
  */
-export const RUBRIC_VERSION = "8";
+export const RUBRIC_VERSION = "9";
 
 
 export interface Check { name: string; pass: boolean; detail: string; /** Measured and reported, never a fail: a habit we are moving, not a promise we enforce. */ advisory?: boolean }
@@ -105,6 +105,8 @@ export function runChecks(input: { text: string; evidence: unknown; kind: string
   const complete = trimmed.length < 40 || /[.!?…“”)\]]$/.test(trimmed) || /\p{Extended_Pictographic}(?:\uFE0F)?$/u.test(trimmed) || /https?:\/\/\S+$/.test(trimmed);
   checks.push({ name: "complete", pass: complete, detail: complete ? "ends on a sentence" : `ends with "…${trimmed.slice(-30)}"` });
   const markdown = /\*\*|^#{1,6}\s|```/m.test(text) || /\b(refining|draft|revised|final answer)\b.*[:*]/i.test(text.split("\n")[0] ?? "");
+  const fitWhy = (input.evidence as { idea?: { fitWhy?: unknown } } | null)?.idea?.fitWhy;
+  if (typeof fitWhy === "string" && fitWhy) checks.push({ name: "fit_why_to_them", pass: !writtenAboutThem(fitWhy), detail: writtenAboutThem(fitWhy) ? `written about them, not to them: "${fitWhy.slice(0, 80)}"` : "to them" });
   checks.push({ name: "no_markdown", pass: !markdown, detail: markdown ? "markdown or a draft label in chat" : "clean" });
 
   // A reply that says "added" or "done" when no management row was written is a lie about their setup.
@@ -164,6 +166,14 @@ export function runChecks(input: { text: string; evidence: unknown; kind: string
   }
 
   return checks;
+}
+
+/**
+ * C1: "why it's for you" is read by the creator in their app, so it's written TO them. A line
+ * about them in the third person ("her top format… her normal") is an internal note leaking. Pure.
+ */
+export function writtenAboutThem(text: string): boolean {
+  return /\b(she|her|hers|he|his|him|they|their|them|the creator|this creator)\b/i.test(text) && !/\b(you|your)\b/i.test(text);
 }
 
 export function passed(checks: Check[]): boolean {

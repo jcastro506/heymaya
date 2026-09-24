@@ -39,3 +39,13 @@ describe("the judge sees what her tools returned", () => {
     expect(trace[0].result).toBe(out.slice(0, TRACE_RESULT_CAP));
   });
 });
+
+describe("C1: 'why it's for you' is written to them", () => {
+  it("flags a third-person fitWhy, passes a second-person one", async () => {
+    const { writtenAboutThem, runChecks } = await import("../checks");
+    expect(writtenAboutThem("the frantic monologue mirrors her top runner-meme format (610% of her normal)")).toBe(true);
+    expect(writtenAboutThem("your deadpan post-run clips are your best format, and this is one")).toBe(false);
+    const checks = runChecks({ text: "the cut got me. yours to take.", evidence: { idea: { fitWhy: "matches her top format" } }, kind: "scout" });
+    expect(checks.find((c) => c.name === "fit_why_to_them")?.pass).toBe(false);
+  });
+});

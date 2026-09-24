@@ -50,7 +50,7 @@ export const write = internalMutation({
         creatorId: a.creatorId,
         evidenceLinks: [],
         fit: "yes",
-        fitWhy: "seeded from their own posts for the first plan",
+        fitWhy: "from your own posts, for your first week",
         version: { hook: i.hook, why: i.why, evidencePostIds: i.evidencePostIds },
         messageText: `${i.hook} — ${i.why}`,
         produced: { skillVersion: "first-plan-ideas/1", model: a.model, thresholdsVersion: "n/a" },

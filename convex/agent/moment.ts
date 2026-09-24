@@ -64,7 +64,7 @@ export const writeMomentIdea = internalMutation({
       creatorId: a.creatorId,
       evidenceLinks: [],
       fit: "yes",
-      fitWhy: "made in the moment, with them",
+      fitWhy: "made in the moment, with you",
       version: { hook: a.idea.hook, shotList: a.idea.shots, lengthSec: a.idea.lengthSec, onScreenText: a.idea.onScreenText },
       messageText: a.messageText,
       status: "sent",

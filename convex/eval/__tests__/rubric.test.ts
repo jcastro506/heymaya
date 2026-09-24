@@ -23,7 +23,7 @@ function rubricHash(): string {
   return createHash("sha256").update(checks).update(prompt).digest("hex").slice(0, 16);
 }
 
-const RECORDED = "3f65576b8a88a9b0"; // rubric 8: task-aware judge + emoji sentence ending (2026-09-14)
+const RECORDED = "6622986a45658b44"; // rubric 9: fit_why_to_them (C1: 'why it's for you' written to them) (2026-09-24)
 
 describe("the rubric", () => {
   it("has not changed without its version being bumped", () => {

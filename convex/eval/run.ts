@@ -54,7 +54,7 @@ export const recentOutbound = internalQuery({
         if (m.ideaId) {
           const idea = (await ctx.db.get(m.ideaId)) as Doc<"ideas"> | null;
           const signal = idea?.signalId ? ((await ctx.db.get(idea.signalId)) as Doc<"signals"> | null) : null;
-          evidence = { idea: idea ? { evidenceLinks: idea.evidenceLinks, version: idea.version, features: idea.features } : null, signal: signal ? { why: signal.why, score: signal.score, investigation: signal.investigation } : null };
+          evidence = { idea: idea ? { evidenceLinks: idea.evidenceLinks, version: idea.version, features: idea.features, fitWhy: idea.fitWhy } : null, signal: signal ? { why: signal.why, score: signal.score, investigation: signal.investigation } : null };
         } else if (m.kind === "opinion" || m.kind === "explain") {
           const pred = (await ctx.db.query("predictions").withIndex("by_creator", (q) => q.eq("creatorId", c._id).lte("createdAt", m.ts + 60_000)).order("desc").first()) as Doc<"predictions"> | null;
           evidence = pred ? { opinion: pred.opinion, confidence: pred.confidence } : null;
