@@ -6,6 +6,7 @@
  */
 
 import { v } from "convex/values";
+import { PLATFORM_FACTS, staleDays } from "../knowledge/platforms";
 import { internalAction, internalQuery } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
@@ -13,7 +14,7 @@ import type { Doc } from "../_generated/dataModel";
 import { resolveTelegramBotIdentity, sendTelegramMessage } from "../integrations/telegram/client";
 import { allRows } from "./schedule";
 
-export interface Findings { scale?: { creators: number; pctOfReadLimit: number } | null; deadJobs: Array<{ id: string; kind: string; error: string }>; undelivered: Array<{ id: string; creatorId: string; ageMin: number; error: string }>; smokeFailed: Array<{ vendor: string; check: string }>; attention: Array<{ creatorId: string; provider: string; detail: string }> }
+export interface Findings { staleFacts?: string[]; scale?: { creators: number; pctOfReadLimit: number } | null; deadJobs: Array<{ id: string; kind: string; error: string }>; undelivered: Array<{ id: string; creatorId: string; ageMin: number; error: string }>; smokeFailed: Array<{ vendor: string; check: string }>; attention: Array<{ creatorId: string; provider: string; detail: string }> }
 
 export const READ_LIMIT_BYTES = 16 * 1024 * 1024; // Convex: data read per query or mutation
 export const SCALE_WARN_PCT = 40;
@@ -31,6 +32,7 @@ export function composeAlert(f: Findings, env: string): string | null {
   if (f.undelivered.length) lines.push(`📭 ${f.undelivered.length} undelivered for over an hour: ${f.undelivered.slice(0, 5).map((u) => `creator ${u.creatorId.slice(-6)} ${u.ageMin}m (${u.error.slice(0, 50)})`).join("; ")}`);
   if (f.smokeFailed.length) lines.push(`🩺 smoke failed: ${f.smokeFailed.map((s) => `${s.vendor}/${s.check}`).join(", ")}`);
   if (f.attention.length) lines.push(`🔌 ${f.attention.length} connection${f.attention.length === 1 ? "" : "s"} need attention: ${f.attention.slice(0, 5).map((a) => `${a.provider} for creator ${a.creatorId.slice(-6)}: ${a.detail.slice(0, 60)}`).join("; ")}`);
+  if (f.staleFacts?.length) lines.push(`📚 ${f.staleFacts.length} platform fact${f.staleFacts.length === 1 ? "" : "s"} older than 60 days (she hedges them; re-check and bump verifiedOn in convex/knowledge/platforms.ts): ${f.staleFacts.slice(0, 5).join(", ")}`);
   if (f.scale) lines.push(`📈 the creators table is ${f.scale.pctOfReadLimit}% of the per-query read limit (${f.scale.creators} creators). Every hourly job that scans it fails at 100%: do S0 #1 (schedule rows) now.`);
   if (!lines.length) return null;
   return `maya · ${env}\n${lines.join("\n")}`;
@@ -68,7 +70,8 @@ export const findings = internalQuery({
     }
     const conns = (await ctx.db.query("connections").collect()) as Doc<"connections">[];
     const attention = conns.filter((x) => (x.status === "attention" || x.status === "needs_reconnect") && x.updatedAt >= a.since).map((x) => ({ creatorId: x.creatorId, provider: x.provider, detail: x.detail ?? x.status }));
-    return { scale, deadJobs, undelivered, smokeFailed, attention };
+    const staleFacts = new Date(a.now).getUTCHours() === 12 ? PLATFORM_FACTS.filter((x) => staleDays(x.verifiedOn, a.now) > 60).map((x) => x.id) : [];
+    return { staleFacts, scale, deadJobs, undelivered, smokeFailed, attention };
   },
 });
 

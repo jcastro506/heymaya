@@ -6,6 +6,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { active, event, ownedOpportunity, profile, assertPersonalEvidence, partnershipAllowance } from "./store";
 import { CLOSED, Draft, email, line } from "./contracts";
+import { APPLICATION_CHECK_IN_DAYS, Opportunity as OpportunitySchema } from "./contracts";
 import { checkPlainLanguage } from "../core/plainLanguage";
 
 export const prepare = internalMutation({
@@ -15,7 +16,7 @@ export const prepare = internalMutation({
     const source = await ctx.db.get(a.sourceMessageId) as Doc<"messages"> | null;
     if (!source || source.creatorId !== a.creatorId || source.direction !== "in") throw new Error("User message required");
     if ((await profile(ctx, a.creatorId)).data.paused) throw new Error("Partnerships are paused");
-    const input = z.object({ opportunityId: z.string(), subject: line, body: z.string().trim().min(1).max(12000) }).strict().parse(a.input);
+    const input = z.object({ opportunityId: z.string(), subject: line, body: z.string().trim().min(1).max(12000), answers: z.array(z.object({ label: line, answer: z.string().trim().min(1).max(3000) })).max(50).optional() }).strict().parse(a.input);
     const { row, data: o } = await ownedOpportunity(ctx, a.creatorId, input.opportunityId as Id<"partnershipOpportunities">);
     const now = Date.now();
     if (CLOSED.has(o.status) || (o.deadline && o.deadline <= now) || o.route === "unknown") throw new Error("No actionable outreach route");
@@ -37,9 +38,18 @@ export const prepare = internalMutation({
       const old = Draft.parse(d.data);
       if (["draft", "approved"].includes(old.status)) await ctx.db.patch(d._id, { data: { ...old, status: "canceled" }, updatedAt: now });
     }
+    // Applications: an answer only for a question the extracted form actually shows (never an invented field).
+    if (input.answers?.length) {
+      if (o.route !== "application") throw new Error("Answers are for application routes");
+      const asked = new Set(o.applicationFields.map((f) => f.label));
+      const unknown = input.answers.filter((x) => !asked.has(x.label)).map((x) => x.label);
+      if (unknown.length) throw new Error(`Not questions on the form: ${unknown.slice(0, 3).join(", ")}`);
+    }
     const code = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, "0")).join("");
-    const data = Draft.parse({ sourceMessageId: a.sourceMessageId, revision: drafts.length + 1, channel: o.route, subject: input.subject, body: input.body, recipient, sender: mailbox?.email, mailboxGeneration: mailbox?.generation, threadId: o.threadId, inReplyTo: o.lastMessageId, status: "draft", approvalCode: code, approvalExpiresAt: now + 86400000, createdAt: now });
+    const data = Draft.parse({ sourceMessageId: a.sourceMessageId, revision: drafts.length + 1, channel: o.route, subject: input.subject, body: input.body, ...(input.answers?.length ? { answers: input.answers } : {}), recipient, sender: mailbox?.email, mailboxGeneration: mailbox?.generation, threadId: o.threadId, inReplyTo: o.lastMessageId, status: "draft", approvalCode: code, approvalExpiresAt: now + 86400000, createdAt: now });
     const id = await ctx.db.insert("partnershipDrafts", { creatorId: a.creatorId, opportunityId: row._id, data, updatedAt: now });
+    // §8.3: an application handed off gets one "did you get to submit it?" two days later.
+    if (o.route === "application" && !o.appliedAt) await ctx.db.patch(row._id, { data: OpportunitySchema.parse({ ...o, applicationCheckInAt: now + APPLICATION_CHECK_IN_DAYS.beforeSubmit * 86_400_000 }), updatedAt: now });
     await event(ctx, a.creatorId, row._id, `draft:${id}`, "draft_created", `Revision ${data.revision}; ${data.channel}; ${recipient}`);
     const command = `SEND ${code}`;
     const body = o.route === "email"

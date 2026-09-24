@@ -7,8 +7,10 @@
 import { v } from "convex/values";
 import { applyIdeaAct } from "./core/ideaActs";
 import { isUnseen } from "./core/unseen";
-import { entitlementsFor, TIERS } from "./billing/tiers";
+import { TIERS, TIER_NAMES, entitlementsFor, price } from "./billing/tiers";
 import { partnershipsOpen } from "./partnerships/store";
+import { brandsPaying } from "./partnerships/signals";
+import { markApplied as markAppliedFor } from "./partnerships/delivery";
 import { connectedFrom, DIAGNOSIS_WORDS, numbersFor } from "./connections/numbers";
 import { avatarKey, coverForUrl, coverKey, mediaUrl } from "./media";
 import { recordAction } from "./core/act";
@@ -294,6 +296,62 @@ export const plan = query({
   },
 });
 
+/**
+ * P1: their plan and every plan, for the app. Prices and allowances come from billing/tiers.ts
+ * only (the app has no price literals; a test checks). Doors read `entitlementsFor`, the same
+ * function this reports from, so what the app shows is what the server enforces.
+ */
+export const plans = query({
+  args: {},
+  handler: async (ctx) => {
+    const c = await me(ctx);
+    if (!c) return null;
+    const mine = entitlementsFor(c.plan);
+    return {
+      current: { tier: mine.tier, status: c.plan.status, trialEndsAt: c.plan.trialEndsAt ?? null, renewsAt: c.plan.currentPeriodEnd ?? null, subscribed: Boolean(c.plan.stripeSubscriptionId), partnershipsOpen: partnershipsOpen(c) }, // the same door Deals and her tools read
+      tiers: TIER_NAMES.map((t) => ({ tier: t, label: TIERS[t].label, blurb: TIERS[t].blurb, monthly: price(TIERS[t].priceUsd), annual: price(TIERS[t].annualUsd), accounts: TIERS[t].accounts, partnerships: TIERS[t].partnerships.researchPerMonth > 0 })),
+    };
+  },
+});
+
+/** B6: one application, question by question, for the app's copy-each-answer screen. */
+export const application = query({
+  args: { id: v.string() },
+  handler: async (ctx, a) => {
+    const c = await me(ctx);
+    if (!c) return null;
+    const id = ctx.db.normalizeId("partnershipOpportunities", a.id);
+    const row = id ? ((await ctx.db.get(id)) as Doc<"partnershipOpportunities"> | null) : null;
+    if (!row || row.creatorId !== c._id) return null;
+    const o = row.data as { brand?: string; route?: string; routeUrl?: string; officialApplicationUrl?: string; applicationFields?: Array<{ label: string; required: boolean; type: string }>; appliedAt?: number; status?: string };
+    if (o.route !== "application") return null;
+    const drafts = (await ctx.db.query("partnershipDrafts").withIndex("by_opportunity", (q) => q.eq("opportunityId", row._id)).collect()) as Doc<"partnershipDrafts">[];
+    const latest = drafts.map((d) => d.data as { answers?: Array<{ label: string; answer: string }>; createdAt: number; status: string }).filter((d) => d.status !== "canceled").sort((x, y) => y.createdAt - x.createdAt)[0];
+    const answers = new Map((latest?.answers ?? []).map((x) => [x.label, x.answer]));
+    return {
+      id: row._id,
+      brand: o.brand ?? row.brandDomain,
+      formUrl: o.officialApplicationUrl ?? o.routeUrl ?? null,
+      applied: Boolean(o.appliedAt),
+      status: o.status ?? "discovered",
+      questions: (o.applicationFields ?? []).map((f) => ({ label: f.label, required: f.required, type: f.type, answer: answers.get(f.label) ?? null })),
+    };
+  },
+});
+
+/** "I submitted it" from the app; the same record she writes when they tell her in Messages. */
+export const markApplied = mutation({
+  args: { id: v.id("partnershipOpportunities") },
+  handler: async (ctx, a): Promise<{ ok: boolean }> => {
+    const c = await me(ctx);
+    const row = (await ctx.db.get(a.id)) as Doc<"partnershipOpportunities"> | null;
+    if (!c || !row || row.creatorId !== c._id) return { ok: false };
+    await markAppliedFor(ctx, c._id, a.id);
+    await recordAction(ctx, { creatorId: c._id, kind: "application.submitted", objectId: a.id, summary: `submitted their application to ${(row.data as { brand?: string }).brand ?? row.brandDomain}` });
+    return { ok: true };
+  },
+});
+
 /** A block control from the web has the same effect as the words in chat (§1). Writes go through the same actions. */
 export const blockControl = mutation({
   args: { expectedRev: v.optional(v.number()), id: v.id("calendarBlocks"), op: v.union(v.literal("confirm"), v.literal("delete"), v.literal("move")), start: v.optional(v.number()), end: v.optional(v.number()) },
@@ -330,12 +388,14 @@ export const opportunities = query({
     const tracked = ((await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).collect()) as Doc<"trackedAccounts">[]).filter((t) => t.status === "active");
     const paidPosts = new Set<string>();
     const paidAccounts = new Set<string>();
+    const paid: Array<{ platform: string; postId: string; authorHandle: string; mentions: string[]; sampledAt: number }> = [];
     for (const t of tracked) {
       const rows = (await ctx.db.query("observations").withIndex("by_author", (q) => q.eq("platform", t.platform).eq("authorHandle", t.handle).gte("sampledAt", since)).take(200)) as Doc<"observations">[];
       for (const r of rows) {
         if (!r.paidPromotion) continue;
         paidPosts.add(`${r.platform}:${r.postId}`);
         paidAccounts.add(`${r.platform}:${r.authorHandle}`);
+        paid.push({ platform: r.platform, postId: r.postId, authorHandle: r.authorHandle, mentions: r.mentions ?? [], sampledAt: r.sampledAt });
       }
     }
     const rows = unlocked ? ((await ctx.db.query("partnershipOpportunities").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").take(100)) as Doc<"partnershipOpportunities">[]) : [];
@@ -345,6 +405,8 @@ export const opportunities = query({
       unlockTier: "partner" as const,
       unlockPriceUsd: TIERS.partner.priceUsd,
       teaser: { paidPostsInLane: paidPosts.size, accountsPaid: paidAccounts.size, days: 30 },
+      // B6 signal 1: real brands seen paying creators she watches for them (named, never invented).
+      brandsInLane: brandsPaying(paid).slice(0, 5),
       opportunities: rows.map((r) => {
         const o = r.data as { brand?: string; campaign?: string; type?: string; fit?: string; status?: string; route?: string; compensation?: string; deadline?: number; assessment?: { verdict?: string } };
         return {

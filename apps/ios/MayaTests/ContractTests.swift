@@ -33,6 +33,14 @@ final class ContractTests: XCTestCase {
 
   func testPlan() throws { _ = try load("plan", as: Plan.self) }
 
+  /// P1: the plans screen decodes the real query output; prices are strings from the server.
+  func testPlans() throws {
+    let p = try load("plans", as: Plans.self)
+    XCTAssertEqual(p.tiers.map(\.tier), ["solo", "duo", "partner"])
+    XCTAssertTrue(p.tiers.allSatisfy { $0.monthly.hasPrefix("$") })
+    XCTAssertEqual(p.current.tier, "duo")
+  }
+
   func testResults() throws {
     let r = try load("results", as: Results.self)
     XCTAssertFalse(r.rung.rung.isEmpty)

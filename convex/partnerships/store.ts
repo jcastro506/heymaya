@@ -4,7 +4,7 @@ import { internalQuery, query, type MutationCtx, type QueryCtx } from "../_gener
 import { internalMutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
 import { creatorForIdentity } from "../core/identity";
-import { CLOSED, Draft, Evidence, Opportunity, Profile, publicUrl, followUpEligible, type OpportunityData } from "./contracts";
+import { APPLICATION_CHECK_IN_DAYS, CLOSED, Draft, Evidence, Opportunity, Profile, publicUrl, followUpEligible, type OpportunityData } from "./contracts";
 import { TIERS, entitlementsFor, type Entitlements } from "../billing/tiers";
 
 /** The operator's pilot list: a comp on top of the tier, never the gate (§26). */
@@ -75,6 +75,48 @@ export const read = internalQuery({
     return { profile: (await profile(ctx, a.creatorId)).data, opportunities: opportunities.page, nextCursor: opportunities.isDone ? null : opportunities.continueCursor, mailbox: await mailboxState(ctx, a.creatorId) };
   },
 });
+// ------------------------------------------------------------ B6 §8.3: one brand, one relationship
+
+const SUFFIXES = ["co.uk", "com.au", "co.nz", "co.jp", "com.br", "com.mx", "co", "com", "net", "org", "io", "shop", "store", "us", "uk", "ca", "de", "fr", "au"];
+/** Pure: the brand's name as a key: lowercase letters and digits, legal suffixes dropped. */
+export function brandKey(name: string): string {
+  return name.toLowerCase().replace(/\b(inc|llc|ltd|co|corp|official|the|brand|shop|store)\b\.?/g, "").replace(/[^a-z0-9]/g, "");
+}
+/** Pure: gymshark.com, shop.gymshark.co.uk → "gymshark". */
+export function domainRoot(host: string): string {
+  let h = host.toLowerCase().replace(/^www\./, "");
+  for (const s of SUFFIXES) if (h.endsWith(`.${s}`)) { h = h.slice(0, -(s.length + 1)); break; }
+  const parts = h.split(".");
+  return parts[parts.length - 1] ?? h;
+}
+/** Pure: is this relationship the same brand as (name, domain)? */
+export function sameBrand(existing: { brandDomain: string; brand?: string }, name: string, domain: string): boolean {
+  if (existing.brandDomain === domain) return true;
+  if (domainRoot(existing.brandDomain) === domainRoot(domain) && domainRoot(domain).length >= 3) return true;
+  const a = existing.brand ? brandKey(existing.brand) : "", b = brandKey(name);
+  return a.length >= 3 && a === b;
+}
+/** Pure: does a research query name a brand they already have a relationship with? */
+export function knownBrandIn(query: string, rows: Array<{ brandDomain: string; brand?: string }>): { brandDomain: string; brand?: string } | null {
+  // Whole words only ("north face" → northface): a brand called "brand" must not match "brands".
+  const words = query.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const grams = new Set([...words, ...words.slice(1).map((w, i) => words[i] + w)]);
+  return rows.find((r) => { const k = r.brand ? brandKey(r.brand) : ""; const root = domainRoot(r.brandDomain); return (k.length >= 3 && grams.has(k)) || (root.length >= 3 && grams.has(root)); }) ?? null;
+}
+export const REPEAT_QUERY_DAYS = 30;
+
+/** Before research spends a credit: a known brand, or the same query within 30 days, is answered from the record. */
+export const beforeResearch = internalQuery({ args: { creatorId: v.id("creators"), query: v.optional(v.string()) }, handler: async (ctx, a): Promise<{ known: { id: string; brand: string; status: string } | null; repeatedOn: string | null }> => {
+  if (!a.query) return { known: null, repeatedOn: null };
+  const rows = (await ctx.db.query("partnershipOpportunities").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(200)) as Doc<"partnershipOpportunities">[];
+  const hit = knownBrandIn(a.query, rows.map((r) => ({ brandDomain: r.brandDomain, brand: (r.data as { brand?: string }).brand })));
+  const row = hit ? rows.find((r) => r.brandDomain === hit.brandDomain)! : null;
+  const norm = a.query.toLowerCase().replace(/\s+/g, " ").trim();
+  const months = (await ctx.db.query("partnershipResearch").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(2)) as Doc<"partnershipResearch">[];
+  const prior = months.flatMap((m) => m.queries ?? []).find((x) => x.q === norm && x.at > Date.now() - REPEAT_QUERY_DAYS * 86_400_000);
+  return { known: row ? { id: row._id, brand: (row.data as { brand?: string }).brand ?? row.brandDomain, status: (row.data as { status?: string }).status ?? "discovered" } : null, repeatedOn: prior ? new Date(prior.at).toISOString().slice(0, 10) : null };
+} });
+
 export const mine = query({ args: {}, handler: async (ctx) => {
   const c = await creatorForIdentity(ctx);
   if (!c) return null;
@@ -135,7 +177,9 @@ export const change = internalMutation({
       if (data.route === "email" && !data.contactEmail) throw new Error("Email route requires a sourced address");
       if (["dm", "application"].includes(data.route) && !data.routeUrl) throw new Error("Route link required");
       if (data.route === "dm" && !["instagram.com", "www.instagram.com", "tiktok.com", "www.tiktok.com"].includes(new URL(data.routeUrl!).hostname)) throw new Error("DM handoff requires an Instagram or TikTok link");
-      const old = await ctx.db.query("partnershipOpportunities").withIndex("by_brand", q => q.eq("creatorId", a.creatorId).eq("brandDomain", domain)).collect();
+      const exact = await ctx.db.query("partnershipOpportunities").withIndex("by_brand", q => q.eq("creatorId", a.creatorId).eq("brandDomain", domain)).collect();
+      // §8.3: one brand, one relationship: gymshark.com and gymshark.co.uk, or the same name, are the same brand.
+      const old = exact.length ? exact : (await ctx.db.query("partnershipOpportunities").withIndex("by_creator", q => q.eq("creatorId", a.creatorId)).order("desc").take(200)).filter(r => sameBrand({ brandDomain: r.brandDomain, brand: (r.data as { brand?: string }).brand }, data.brand, domain));
       // A second campaign belongs to the existing relationship; never silently create another cold lead.
       if (old.length) {
         if (!input.opportunityId) return { existingRelationship: old[0], instruction: "Read this relationship first. To refresh research, save with its opportunityId; relationship history is retained." };
@@ -165,6 +209,8 @@ export const change = internalMutation({
     const key = `user:${source._id}:${row._id}`;
     if (!await event(ctx, a.creatorId, row._id, key, "user_report", `User message ${source._id}: ${source.body}\nMaya summary: ${input.note}`)) return { unchanged: true };
     const next: OpportunityData = { ...data, ...(input.status ? { status: input.status } : {}), ...(input.deliverables ? { deliverables: input.deliverables } : {}), followUpAt: input.followUpAt, followUpBasis: input.followUpAt ? "user_requested" : undefined };
+    // Chat equals the app (§1): "i submitted it" on an application records the submission and one check-in in 14 days.
+    if (next.route === "application" && next.status === "contacted" && !next.appliedAt) Object.assign(next, { appliedAt: Date.now(), applicationCheckIns: 1, applicationCheckInAt: Date.now() + APPLICATION_CHECK_IN_DAYS.afterSubmit * 86_400_000 });
     await ctx.db.patch(row._id, { data: Opportunity.parse(next), updatedAt: now });
     // Any new report changes the facts an approval was based on.
     for (const d of await ctx.db.query("partnershipDrafts").withIndex("by_opportunity", q => q.eq("opportunityId", row._id)).collect()) {
@@ -175,14 +221,15 @@ export const change = internalMutation({
   },
 });
 
-export const reserveResearch = internalMutation({ args: { creatorId: v.id("creators") }, handler: async (ctx, a) => {
+export const reserveResearch = internalMutation({ args: { creatorId: v.id("creators"), query: v.optional(v.string()) }, handler: async (ctx, a) => {
   const c = await active(ctx, a.creatorId);
   if ((await profile(ctx, a.creatorId)).data.paused) throw new Error("Partnerships are paused");
   const month = new Date().toISOString().slice(0, 7);
   const row = await ctx.db.query("partnershipResearch").withIndex("by_month", q => q.eq("creatorId", a.creatorId).eq("month", month)).unique();
   if ((row?.calls ?? 0) >= partnershipAllowance(c).researchPerMonth) throw new Error("Monthly research allowance reached");
-  if (row) { await ctx.db.patch(row._id, { calls: row.calls + 1, updatedAt: Date.now() }); return row._id; }
-  return await ctx.db.insert("partnershipResearch", { creatorId: a.creatorId, month, calls: 1, data: [], updatedAt: Date.now() });
+  const q = a.query ? [{ q: a.query.toLowerCase().replace(/\s+/g, " ").trim(), at: Date.now() }] : [];
+  if (row) { await ctx.db.patch(row._id, { calls: row.calls + 1, queries: [...(row.queries ?? []), ...q].slice(-200), updatedAt: Date.now() }); return row._id; }
+  return await ctx.db.insert("partnershipResearch", { creatorId: a.creatorId, month, calls: 1, data: [], queries: q, updatedAt: Date.now() });
 } });
 export const saveResearch = internalMutation({ args: { creatorId: v.id("creators"), id: v.id("partnershipResearch"), results: v.any() }, handler: async (ctx, a) => {
   await active(ctx, a.creatorId);

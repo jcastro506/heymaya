@@ -28,7 +28,7 @@ enum Route: Equatable {
     case "app":
       switch parts.count > 1 ? parts[1] : "today" {
       case "ideas": return .tab(.ideas)
-      case "lane", "settings": return .tab(.you)
+      case "lane", "settings", "you", "plan", "billing": return .tab(.you)
       default: return .tab(.today) // today, results, plan: all live on Today now
       }
     default:

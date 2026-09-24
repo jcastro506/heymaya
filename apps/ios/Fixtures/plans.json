@@ -1,0 +1,39 @@
+{
+ "current": {
+  "partnershipsOpen": false,
+  "renewsAt": null,
+  "status": "trialing",
+  "subscribed": true,
+  "tier": "duo",
+  "trialEndsAt": 1790812800000
+ },
+ "tiers": [
+  {
+   "accounts": 1,
+   "annual": "$190",
+   "blurb": "Everything, for one TikTok or Instagram account.",
+   "label": "One account",
+   "monthly": "$19",
+   "partnerships": false,
+   "tier": "solo"
+  },
+  {
+   "accounts": 2,
+   "annual": "$249.90",
+   "blurb": "Everything, for your TikTok and your Instagram.",
+   "label": "Both accounts",
+   "monthly": "$24.99",
+   "partnerships": false,
+   "tier": "duo"
+  },
+  {
+   "accounts": 2,
+   "annual": "$299.90",
+   "blurb": "Both accounts, and she finds brand opportunities, drafts the pitch for your approval, and tracks the replies.",
+   "label": "Both plus partnerships",
+   "monthly": "$29.99",
+   "partnerships": true,
+   "tier": "partner"
+  }
+ ]
+}

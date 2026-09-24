@@ -11,7 +11,7 @@ import type { Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "./registry";
 
-export type Problem = "no_reaction" | "slop" | "invented_number" | "unsupported_claim" | "wrong_request" | "false_action" | "leak" | "off_voice" | "unsafe" | "no_link" | "no_action" | "directive_violation" | "too_long" | "generic_line" | "vague_sound" | "invented_sound" | "mixed_basis";
+export type Problem = "no_reaction" | "slop" | "invented_number" | "unsupported_claim" | "wrong_request" | "false_action" | "leak" | "off_voice" | "unsafe" | "no_link" | "no_action" | "directive_violation" | "too_long" | "generic_line" | "vague_sound" | "invented_sound" | "mixed_basis" | "unchecked_world_fact";
 
 export interface CritiqueResult {
   pass: boolean;
@@ -42,7 +42,7 @@ export function claimsUnsupportedAction(text: string, trace: Array<{ tool?: stri
   return claims && !trace.some((turn) => turn.ok && turn.tool && MUTATING_TOOLS.has(turn.tool));
 }
 
-const CRITIC_PROMPT = `You are the critic for a creator's assistant named Maya. Read one outbound message and judge it against the standard below. Return ONLY JSON: {"pass": true|false, "problems": ["no_reaction"|"slop"|"invented_number"|"unsupported_claim"|"wrong_request"|"false_action"|"leak"|"off_voice"|"unsafe"|"no_link"|"no_action"|"directive_violation"|"too_long"|"generic_line"|"vague_sound"|"invented_sound"|"mixed_basis"], "note": "≤160 chars, what to fix"}.
+const CRITIC_PROMPT = `You are the critic for a creator's assistant named Maya. Read one outbound message and judge it against the standard below. Return ONLY JSON: {"pass": true|false, "problems": ["no_reaction"|"slop"|"invented_number"|"unsupported_claim"|"wrong_request"|"false_action"|"leak"|"off_voice"|"unsafe"|"no_link"|"no_action"|"directive_violation"|"too_long"|"generic_line"|"vague_sound"|"invented_sound"|"mixed_basis"|"unchecked_world_fact"], "note": "≤160 chars, what to fix"}.
 
 Fail it if ANY of these is true:
 - no_reaction: a message about one of THEIR posts (a read, an opinion, a scout idea) that opens on a number, a multiple or a metric word instead of what got her as a viewer. The first line is the moment, named from the evidence; the numbers come after.
@@ -51,6 +51,7 @@ Fail it if ANY of these is true:
 - mixed_basis: a TikTok number and a watch-time, retention or skip-rate figure in the same claim. TikTok exposes no retention to anyone; a Reels figure may explain a TikTok ONLY when the message says it is the same video cross-posted.
 - vague_sound: a suggested sound that names nothing — "a trending sound", "whatever is on your fyp", "an upbeat track". Saying "your own audio" passes.
 - invented_sound: a NAMED track or artist when the evidence's toolsUsedThisTurn contains no sound lookup and the candidate post's own sound is not in the evidence. A real song title she remembered is still a fact nobody checked. "your own audio" is always available and always honest.
+- unchecked_world_fact: names something specific in the real world as fact (a venue or event and when it is, a date, a price, a product, a platform's rule, threshold or program) that is not in the evidence, not in their own message, and not in a web_search, web_read or platform_fact result in toolTrace. Saying it generally, or "last i checked… it changes", passes.
 - invented_number: a metric, view count, multiple, date or trend that is not in the evidence given.
 - unsupported_claim: (when the evidence has causesWithEvidence, a cause listed there is supported; judge only causes NOT in that list) says a format "gets followers", "pulls people in", caused growth, or will perform when the evidence has no follower conversion or causal result. A strong view is fine; invented certainty about why people followed is not.
 - wrong_request: mainly answers an earlier conversation turn instead of the current theirMessage in the evidence. A useful callback may support the current answer; it may never replace it.
