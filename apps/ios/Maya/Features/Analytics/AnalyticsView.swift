@@ -41,6 +41,16 @@ struct AnalyticsView: View {
       .pickerStyle(.segmented)
     }
 
+    // A1: account-level cards for the chosen platform(s): growth everywhere; profile and audience on Instagram.
+    let shown = a.accounts.filter { platform == "all" || $0.platform == platform }
+    VStack(spacing: 12) {
+      ForEach(shown) { FollowerGrowthCard(account: $0) }
+      if let ig = shown.first(where: { $0.platform == "instagram" }) {
+        if let p = ig.profile { ProfileNumbersCardView(profile: p) }
+        if let au = ig.audience { WhoFollowsCardView(audience: au) }
+      }
+    }
+
     let posts = a.posts.filter { platform == "all" || $0.platform == platform }
     if posts.isEmpty {
       EmptyNote(text: "No posts read yet. They show up here after her next read of your account.")

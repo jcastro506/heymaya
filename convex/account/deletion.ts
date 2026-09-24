@@ -43,6 +43,7 @@ export const TABLES_BY_CREATOR = [
   "finishes", // its fileId is the draft message's file, deleted with the messages
   "laneReads",
   "followerSnapshots",
+  "accountInsights",
   "evalRuns",
   "evalLabels",
   "userActions",
@@ -89,6 +90,8 @@ export const exportMine = query({
       memories: await pick("memories"),
       userActions: await pick("userActions"),
       trackedAccounts: await pick("trackedAccounts"),
+      followerSnapshots: await pick("followerSnapshots"),
+      accountInsights: await pick("accountInsights"),
       partnershipProfiles: await pick("partnershipProfiles"),
       partnershipOpportunities: await pick("partnershipOpportunities"),
       partnershipDrafts: await pick("partnershipDrafts"),

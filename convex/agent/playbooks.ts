@@ -37,6 +37,7 @@ Before explaining their own post:
 2. search_keyword for the post's plainest keyword this week: if the lane's top post on it is theirs, say so; if someone else's did five times better, that is the thing to name.
 3. post_comments on their own post if the comments carry the reason (a question, a correction, a bit that landed).
 4. recall (free): was this one of your ideas, or something they told you they wanted to try? Say so when it was.
+audience (free) when who follows them or their follower trend is part of the answer.
 No more than three lookups; under 48 hours old the numbers are too fresh, say when you will know, and look nothing up.`,
 
   profile: `

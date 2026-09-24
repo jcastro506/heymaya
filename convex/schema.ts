@@ -482,7 +482,34 @@ export default defineSchema({
     day: v.string(),          // YYYY-MM-DD UTC
     followers: v.number(),
     at: v.number(),
+    // A1: that day's follows and unfollows where the platform gives them (Instagram
+    // follower-history, TikTok account-insights). Absent = not reported, never zero.
+    gained: v.optional(v.number()),
+    lost: v.optional(v.number()),
   }).index("by_creator_day", ["creatorId", "day"]),
+
+  // ---------------------------------------------------------- accountInsights
+  // A1: account-level reads per connected account, latest only (one row per account and kind).
+  // "insights": Instagram's last 30 days (reach, views, accounts engaged, interactions, profile
+  // link taps, follows/unfollows, reach per day) or TikTok's gained/lost totals. "audience":
+  // Instagram demographics (100+ followers), weekly. A number absent from `metrics` was not
+  // reported; `status` says why a row is empty, in a word the app and Maya both say plainly.
+  accountInsights: defineTable({
+    creatorId: v.id("creators"),
+    platform: v.string(),
+    accountId: v.string(),
+    kind: v.union(v.literal("insights"), v.literal("audience")),
+    status: v.union(v.literal("ok"), v.literal("not_reported"), v.literal("too_few_followers"), v.literal("not_available")),
+    fromDate: v.optional(v.string()),
+    toDate: v.optional(v.string()),
+    metrics: v.optional(v.record(v.string(), v.number())),
+    reachDaily: v.optional(v.array(v.object({ date: v.string(), value: v.number() }))),
+    audience: v.optional(v.record(v.string(), v.array(v.object({ label: v.string(), value: v.number(), share: v.union(v.number(), v.null()) })))),
+    audienceBase: v.optional(v.number()),
+    unavailable: v.optional(v.array(v.string())),
+    fetchedAt: v.number(),        // 0 = never read successfully
+    attemptedAt: v.optional(v.number()),
+  }).index("by_creator_kind", ["creatorId", "kind"]),
 
   // ---------------------------------------------------------------- laneReads
   // Sprint 4d: the lane she proposed, kept so the tap confirms what she actually said.

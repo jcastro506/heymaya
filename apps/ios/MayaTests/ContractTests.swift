@@ -66,6 +66,40 @@ final class ContractTests: XCTestCase {
     XCTAssertTrue(a.posts.allSatisfy { ["connected", "public"].contains($0.headline.basis) })
   }
 
+  func testAnalyticsAccountCards() throws {
+    for name in ["analytics", "preview.analytics"] {
+      let a = try load(name, as: Analytics.self)
+      for acct in a.accounts {
+        if acct.platform == "tiktok" {
+          XCTAssertNil(acct.profile, "\(name): TikTok has no account-level profile numbers")
+          XCTAssertNil(acct.audience, "\(name): TikTok has no account-level audience")
+        }
+        if let g = acct.growth {
+          XCTAssertFalse(g.days.isEmpty)
+          XCTAssertEqual(g.days.map(\.day), g.days.map(\.day).sorted(), "\(name): days oldest first")
+        }
+        if let au = acct.audience {
+          XCTAssertTrue(InsightsWords.statuses.contains(au.status))
+          for s in au.gender + au.age + au.countries + au.cities { XCTAssertTrue((0...1).contains(s.share)) }
+          XCTAssertLessThanOrEqual(au.gender.map(\.share).reduce(0, +), 1.001)
+        }
+        if let p = acct.profile { XCTAssertTrue(InsightsWords.statuses.contains(p.status)) }
+      }
+      let ig = try XCTUnwrap(a.accounts.first { $0.platform == "instagram" })
+      XCTAssertEqual(ig.audience?.status, "ok", "\(name) shows the Who follows you card")
+      XCTAssertEqual(ig.profile?.status, "ok", "\(name) shows the From your profile card")
+    }
+  }
+
+  func testEveryEmptyCardSaysWhy() {
+    for s in InsightsWords.statuses where s != "ok" {
+      XCTAssertFalse(InsightsWords.profileEmpty(s).isEmpty)
+      XCTAssertFalse(InsightsWords.audienceEmpty(s).isEmpty)
+    }
+    XCTAssertNotEqual(InsightsWords.audienceEmpty("too_few_followers"), InsightsWords.audienceEmpty("not_connected"))
+    XCTAssertNotEqual(InsightsWords.growthEmpty(connected: true, platform: "tiktok"), InsightsWords.growthEmpty(connected: false, platform: "tiktok"))
+  }
+
   func testTikTokPostNeverShowsWatchTime() throws {
     let n = try load("post.tiktok", as: PostNumbers.self)
     let labels = MetricTile.tiles(for: n).map(\.label)

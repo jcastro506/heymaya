@@ -20,6 +20,7 @@ const JOBS: Record<string, { kind: Kind; ref: unknown }> = {
   "operator alerts": { kind: "action", ref: internal.core.alerts.run },
   "expire stale questions": { kind: "mutation", ref: internal.core.messages.expireStaleQuestionsAll },
   "reconcile schedule rows": { kind: "action", ref: internal.core.schedule.reconcile },
+  "account insights": { kind: "action", ref: internal.connections.insightsSync.run },
 };
 export const TIMED_JOBS = Object.keys(JOBS);
 const KEEP = 48;
