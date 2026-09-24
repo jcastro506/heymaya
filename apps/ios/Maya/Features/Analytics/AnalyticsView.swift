@@ -113,6 +113,9 @@ struct PostsChart: View {
           BarMark(x: .value("Post", String(i)), y: .value("× your normal", min(m, cap)), width: .ratio(0.6))
             .foregroundStyle(m >= 1 ? Palette.purple : Palette.purple.opacity(0.25))
             .clipShape(RoundedRectangle(cornerRadius: 3))
+            // VoiceOver reads the date and the REAL multiple, never the bar index or the 5× cap.
+            .accessibilityLabel(Format.day(p.createTime))
+            .accessibilityValue("\(Format.count(m)) times your normal")
             .annotation(position: .top, spacing: 2) {
               if m >= cap {
                 Text(Format.count(m) + "×").font(.system(size: 9, weight: .bold)).foregroundStyle(Palette.purple)
