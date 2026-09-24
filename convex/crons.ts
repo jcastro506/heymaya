@@ -84,4 +84,6 @@ crons.daily("cost reconcile", { hourUTC: 23, minuteUTC: 30 }, internal.core.reco
 crons.daily("openrouter reconcile", { hourUTC: 23, minuteUTC: 40 }, internal.core.reconcile.openRouter, {});
 
 crons.interval("partnership reply sync", { minutes: 30 }, internal.partnerships.delivery.poll, {});
+// B6: the weekly opportunities offer (partner tier): brands paying their lane that aren't in their record yet. Once a week each, within the rails.
+crons.daily("partnership weekly offer", { hourUTC: 17, minuteUTC: 15 }, internal.partnerships.kit.offerAll, {});
 export default crons;
