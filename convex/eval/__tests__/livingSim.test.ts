@@ -13,6 +13,10 @@ describe("ageing the world", () => {
     const x = { ts: NOW - 5_000, n: 42, dur: 91_000, id: "7679774266925124384", _creationTime: NOW, nested: { at: NOW, list: [NOW - 1, 3] } };
     expect(shiftTimes(x, -86_400_000, NOW)).toEqual({ ts: NOW - 5_000 - 86_400_000, n: 42, dur: 91_000, id: "7679774266925124384", _creationTime: NOW, nested: { at: NOW - 86_400_000, list: [NOW - 1 - 86_400_000, 3] } });
   });
+  it("day keys move with the day; links and odd strings don't", () => {
+    const x = { day: "2026-09-24", key: "morning:2026-09-24", url: "https://x.com/2026-09-24", note: "ran 2026-13-45 fine" };
+    expect(shiftTimes(x, -86_400_000, NOW)).toEqual({ day: "2026-09-23", key: "morning:2026-09-23", url: "https://x.com/2026-09-24", note: "ran 2026-13-45 fine" });
+  });
   it("the script scales with the run and ends with the probes; a run is repeatable", () => {
     const s = lifeScript(42);
     expect(s.filter((e) => e.kind === "probe").map((e) => e.day)).toEqual([40, 41, 42]);

@@ -14,7 +14,7 @@ import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
-import { REGISTRY, WATCH_MODEL_TOP } from "./registry";
+import { REGISTRY, WATCH_MODEL, WATCH_MODEL_TOP } from "./registry";
 import { buildPrefix, producedStamp } from "./context";
 import { critique, tooLong } from "./critic";
 import { CAUTIOUS_ASK, judgeLadder, ownPostFloor } from "./guarded";
@@ -118,10 +118,21 @@ export const writePrediction = internalMutation({
     await ctx.db.insert("predictions", { creatorId: a.creatorId, subject: a.subject, confidence: a.confidence, expectedMultiple: CONFIDENCE_MULTIPLE[a.confidence] ?? 1, opinion: a.opinion, produced: a.produced, createdAt: Date.now() }),
 });
 
+/** Pure: a failure that another model would likely not have (capacity), not one about the file. */
+export function isOverloaded(reason: string | undefined): boolean {
+  return /high demand|overloaded|unavailable|try again later|resource.?exhausted|\b(429|503)\b/i.test(reason ?? "");
+}
+
 export async function watchBytes(ctx: Parameters<typeof callModel>[0], creatorId: Id<"creators">, purpose: string, bytes: ArrayBuffer, mimeType: string, prompt: string, maxOutputTokens = 900): Promise<{ text: string | null; reason?: string }> {
   const apiKey = process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY ?? "";
-  const model = WATCH_MODEL_TOP; // one draft at a time deserves the top model (§3.3 escalation)
-  const r = await watchMedia({ model, apiKey, prompt, media: { bytes, mimeType }, resolution: "default", maxOutputTokens });
+  // One draft at a time deserves the top model (§3.3 escalation); when it's overloaded, the everyday
+  // watcher still sees and hears the video (living sim: ~1 in 5 drafts failed on "high demand").
+  let r = await watchMedia({ model: WATCH_MODEL_TOP, apiKey, prompt, media: { bytes, mimeType }, resolution: "default", maxOutputTokens });
+  let model = WATCH_MODEL_TOP;
+  if (!r.ok && isOverloaded(r.reason)) {
+    model = WATCH_MODEL;
+    r = await watchMedia({ model, apiKey, prompt, media: { bytes, mimeType }, resolution: "default", maxOutputTokens });
+  }
   if (r.usage) await ctx.runMutation(internal.core.costs.record, { creatorId, vendor: "gemini", resource: model, purpose, costUsd: r.usage.costUsd, promptTokens: r.usage.promptTokens, completionTokens: r.usage.outputTokens, costSource: "endpoint_table" });
   return r.ok ? { text: r.text } : { text: null, reason: r.reason };
 }

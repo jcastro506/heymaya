@@ -43,6 +43,14 @@ export const distinctKeywords = internalQuery({
   },
 });
 
+export const keywordsFor = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<Array<{ keyword: string; creatorIds: Id<"creators">[] }>> => {
+    const row = await ctx.db.query("schedule").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).first();
+    return (row?.keywords ?? []).slice(0, 8).map((keyword) => ({ keyword, creatorIds: [a.creatorId] }));
+  },
+});
+
 export const recordSearch = internalMutation({
   args: { platform: v.union(v.literal("tiktok"), v.literal("instagram")), keyword: v.string(), posts: v.any(), now: v.number() },
   handler: async (ctx, a): Promise<Array<{ postId: string; url: string; author: string; velocity: number; views: number; ageHours: number }>> => {
@@ -108,10 +116,11 @@ export const writeShapes = internalMutation({
 });
 
 export const run = internalAction({
-  args: {},
-  handler: async (ctx): Promise<{ keywords: number; signals: number; failed: number }> => {
+  // `creatorId`: only that creator's keywords (the living simulation; eval creators aren't in the fleet sweep).
+  args: { creatorId: v.optional(v.id("creators")) },
+  handler: async (ctx, args): Promise<{ keywords: number; signals: number; failed: number }> => {
     const now = Date.now();
-    const keywords = await ctx.runQuery(internal.scout.sweep.distinctKeywords, {});
+    const keywords = args.creatorId ? await ctx.runQuery(internal.scout.sweep.keywordsFor, { creatorId: args.creatorId }) : await ctx.runQuery(internal.scout.sweep.distinctKeywords, {});
     let signals = 0, failed = 0;
     for (const { keyword, creatorIds } of keywords) {
       for (const platform of ["tiktok", "instagram"] as const) {

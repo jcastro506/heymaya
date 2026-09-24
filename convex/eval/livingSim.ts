@@ -43,6 +43,8 @@ export function shiftTimes<T>(value: T, delta: number, now: number): T {
   const lo = Date.UTC(2015, 0, 1), hi = now + 400 * D;
   const walk = (x: unknown): unknown => {
     if (typeof x === "number") return Number.isFinite(x) && x >= lo && x <= hi ? x + delta : x;
+    // Day keys ("2026-09-24", "morning:2026-09-24"): the daily budget row and dedupe keys move with the day.
+    if (typeof x === "string" && delta % D === 0 && x.length <= 200 && !x.includes("http")) return x.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (m) => { const t = Date.parse(`${m}T00:00:00Z`); return Number.isFinite(t) ? new Date(t + delta).toISOString().slice(0, 10) : m; });
     if (Array.isArray(x)) return x.map(walk);
     if (x && typeof x === "object") {
       if (x instanceof ArrayBuffer) return x;
@@ -285,6 +287,8 @@ export const dayMaya = internalAction({
         jobs[name] = `failed: ${e instanceof Error ? e.message.slice(0, 100) : "error"}`;
       }
     };
+    // Her lane's keyword tops (the fleet sweep skips eval creators; cached by keyword and week).
+    await step("sweep", async () => { const r = await ctx.runAction(internal.scout.sweep.run, { creatorId: id }); return { sent: r.signals > 0, reason: `${r.keywords} keywords, ${r.signals} shapes, ${r.failed} failed` }; });
     await step("morning", () => ctx.runAction(internal.agent.cadence.morning, { creatorId: id, now }));
     await step("scout", () => ctx.runAction(internal.scout.scout.run, { creatorId: id }));
     if (a.d % 7 === 6) await step("weekPlan", () => ctx.runAction(internal.calendar.weekPlan.draft, { creatorId: id, now, horizon: "next_week" }));
@@ -429,7 +433,7 @@ export const note = internalMutation({
   },
 });
 
-export const PROBE_JUDGE = `You judge whether an assistant named Maya, after weeks of texting one creator, answers from a real memory of THIS person. You get the creator's hidden life script (what really happened, with days), the question, and Maya's answer. Return ONLY JSON: {"remembers": 0|1|2, "invented": ["anything stated that the script and her records don't support"], "note": "≤160"}. 2 = specific and right, 1 = partly, 0 = generic or wrong.`;
+export const PROBE_JUDGE = `You judge whether an assistant named Maya, after weeks of texting one creator, answers from a real memory of THIS person. You get the creator's hidden life script (what really happened, with days), her records (what she learned from their profile, posts and messages), the question, and Maya's answer. A fact in her records is not invented. Return ONLY JSON: {"remembers": 0|1|2, "invented": ["anything stated that the script and her records don't support"], "note": "≤160"}. 2 = specific and right, 1 = partly, 0 = generic or wrong.`;
 
 export const judgeProbes = internalAction({
   args: { runId: v.string() },
@@ -438,11 +442,14 @@ export const judgeProbes = internalAction({
     if (!s) return null;
     const days = await ctx.runQuery(internal.eval.livingSim.days, { runId: a.runId });
     const script = lifeScript(s.days);
+    // Her real records too: a true fact from their profile or posts is not an invention (sim 1's judge flagged one).
+    const known = await ctx.runQuery(internal.eval.expertBench.postsByPlatform, { creatorId: s.creatorId });
+    const records = { whatSheKnowsAboutThem: (known as { whatSheKnowsAboutThem?: unknown }).whatSheKnowsAboutThem, whatTheyToldHer: (known as { whatTheyToldHer?: unknown }).whatTheyToldHer };
     for (const day of days) {
       const probes = (day.probes as Array<{ q: string; a: string }> | undefined) ?? [];
       const judged = [];
       for (const p of probes) {
-        const r = await callModel(ctx, { creatorId: s.creatorId, purpose: "sim_probe_judge", model: REGISTRY.writer.primary, messages: [{ role: "system", content: PROBE_JUDGE }, { role: "user", content: JSON.stringify({ script, question: p.q, answer: p.a }) }], temperature: 0, maxTokens: 400, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+        const r = await callModel(ctx, { creatorId: s.creatorId, purpose: "sim_probe_judge", model: REGISTRY.writer.primary, messages: [{ role: "system", content: PROBE_JUDGE }, { role: "user", content: JSON.stringify({ script, herRecords: records, question: p.q, answer: p.a }) }], temperature: 0, maxTokens: 400, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
         judged.push({ ...p, verdict: r.ok ? parseJson(r.content) : null });
       }
       if (judged.length) await ctx.runMutation(internal.eval.livingSim.note, { runId: a.runId, d: day.d as number, patch: { probes: judged } });
