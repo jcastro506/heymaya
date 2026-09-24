@@ -5,8 +5,6 @@ import SwiftUI
 struct SettingsView: View {
   let settings: CreatorSettings
   @State private var confirmSignOut = false
-  @State private var portal: URL?
-  @State private var busy = false
 
   var body: some View {
     List {
@@ -20,17 +18,7 @@ struct SettingsView: View {
         if let ig = settings.handles.instagram { row("Instagram", "@\(ig)") }
       }
       Section("Plan") {
-        row("Plan", settings.tier.capitalized)
-        Button {
-          Task { await openPortal() }
-        } label: {
-          HStack {
-            Text("Manage plan and billing")
-            Spacer()
-            if busy { ProgressView() }
-          }
-        }
-        .disabled(Fixtures.enabled || busy)
+        NavigationLink { PlanView() } label: { LabeledContent("Your plan", value: settings.tier.capitalized) }
       }
       Section {
         if Fixtures.enabled {
@@ -50,13 +38,6 @@ struct SettingsView: View {
     .confirmationDialog("Sign out of Maya on this phone?", isPresented: $confirmSignOut, titleVisibility: .visible) {
       Button("Sign out", role: .destructive) { Task { await SessionActions.signOut() } }
     }
-    .sheet(item: $portal) { SafariSheet(url: $0).ignoresSafeArea() }
-  }
-
-  private func openPortal() async {
-    busy = true
-    portal = await Billing.portalURL()
-    busy = false
   }
 
   private func row(_ label: String, _ value: String) -> some View {

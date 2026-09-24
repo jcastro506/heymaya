@@ -7,7 +7,7 @@
 import { v } from "convex/values";
 import { applyIdeaAct } from "./core/ideaActs";
 import { isUnseen } from "./core/unseen";
-import { entitlementsFor, TIERS } from "./billing/tiers";
+import { TIERS, TIER_NAMES, entitlementsFor, price } from "./billing/tiers";
 import { partnershipsOpen } from "./partnerships/store";
 import { connectedFrom, DIAGNOSIS_WORDS, numbersFor } from "./connections/numbers";
 import { avatarKey, coverForUrl, coverKey, mediaUrl } from "./media";
@@ -290,6 +290,24 @@ export const plan = query({
       blocks: blocks.filter((b) => b.status !== "deleted").map((b) => ({ id: b._id, rev: b.rev ?? 0, kind: b.kind, title: b.title, start: b.start, end: b.end, status: b.status, onCalendar: Boolean(b.externalEventId), ideaId: b.ideaId ?? null })),
       events: events.filter((e) => e.status === "active" && e.class !== "private").map((e) => ({ id: e.externalId, title: e.title, start: e.start, end: e.end, allDay: e.allDay, class: e.class, link: e.htmlLink ?? null })),
       bestHours,
+    };
+  },
+});
+
+/**
+ * P1: their plan and every plan, for the app. Prices and allowances come from billing/tiers.ts
+ * only (the app has no price literals; a test checks). Doors read `entitlementsFor`, the same
+ * function this reports from, so what the app shows is what the server enforces.
+ */
+export const plans = query({
+  args: {},
+  handler: async (ctx) => {
+    const c = await me(ctx);
+    if (!c) return null;
+    const mine = entitlementsFor(c.plan);
+    return {
+      current: { tier: mine.tier, status: c.plan.status, trialEndsAt: c.plan.trialEndsAt ?? null, renewsAt: c.plan.currentPeriodEnd ?? null, subscribed: Boolean(c.plan.stripeSubscriptionId), partnershipsOpen: partnershipsOpen(c) }, // the same door Deals and her tools read
+      tiers: TIER_NAMES.map((t) => ({ tier: t, label: TIERS[t].label, blurb: TIERS[t].blurb, monthly: price(TIERS[t].priceUsd), annual: price(TIERS[t].annualUsd), accounts: TIERS[t].accounts, partnerships: TIERS[t].partnerships.researchPerMonth > 0 })),
     };
   },
 });
