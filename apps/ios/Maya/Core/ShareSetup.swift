@@ -1,5 +1,6 @@
 import ConvexMobile
 import Foundation
+import WidgetKit
 
 /// Mints the share extension's token once the creator is signed in, and forgets it on sign-out.
 @MainActor
@@ -10,11 +11,11 @@ enum ShareSetup {
     guard !Fixtures.enabled, ShareLink.token == nil else { return }
     do {
       let r: Minted = try await convex.mutation("share:mintShareToken", with: [:])
-      if r.ok, let t = r.token { ShareLink.token = t }
+      if r.ok, let t = r.token { ShareLink.token = t; WidgetCenter.shared.reloadAllTimelines() }
     } catch {
       print("[ShareSetup] mint: \(error)")
     }
   }
 
-  static func forget() { ShareLink.token = nil }
+  static func forget() { ShareLink.token = nil; WidgetCenter.shared.reloadAllTimelines() }
 }

@@ -74,6 +74,7 @@ targets:
         com.apple.security.application-groups: ["group.ai.heymaya.maya"]
     dependencies:
       - target: MayaShare
+      - target: MayaWidget
       - package: ConvexMobile
         product: ConvexMobile
       - package: Clerk
@@ -112,6 +113,31 @@ targets:
               NSExtensionActivationSupportsText: true
     entitlements:
       path: MayaShare/MayaShare.entitlements
+      properties:
+        com.apple.security.application-groups: ["group.ai.heymaya.maya"]
+  # M6: home-screen widgets (next shoot, best idea), fetching their own data with the share token.
+  MayaWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: MayaWidget
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.heymaya.maya.widget
+        PRODUCT_NAME: MayaWidget
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Maya
+    info:
+      path: MayaWidget/Info.plist
+      properties:
+        MayaConvexURL: $(MAYA_CONVEX_URL)
+        CFBundleDisplayName: Maya
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: MayaWidget/MayaWidget.entitlements
       properties:
         com.apple.security.application-groups: ["group.ai.heymaya.maya"]
   MayaTests:

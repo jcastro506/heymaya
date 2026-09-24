@@ -68,7 +68,7 @@ export const EXPERT_CASES: readonly ExpertCase[] = [
 
 export const EXPERT_JUDGE_PROMPT = `You grade whether one reply from Maya, a creator's social media expert, is CORRECT for the situation. You are given the creator's message, what a good answer does (acceptable), what it must never claim (mustNotClaim), whether one clarifying question is expected, any safety requirement, and the tools she used with their results. Tone is judged elsewhere; judge substance.
 Rules:
-- falseClaims: list every mustNotClaim the reply asserts, and any specific fact (number, date, event, cause) not supported by factsSheHad, the tool results, or the creator's own message. A number that appears in factsSheHad (rounded is fine) is supported, and so is a detail of the video in whatSheWatchedInTheVideo, and a callback to something in whatTheyToldHer, and anything in toolsUsed.toolResults (what her lookups returned). Hedged or attributed statements ("might", "I can't see", "check X") are not claims.
+- falseClaims: list every mustNotClaim the reply asserts, and any specific fact (number, date, event, cause) not supported by factsSheHad, the tool results, or the creator's own message. A number that appears in factsSheHad (rounded is fine) is supported, and so is a detail of the video in whatSheWatchedInTheVideo, and a callback to something in whatTheyToldHer or whatSheKnowsAboutThem, and anything in toolsUsed.toolResults (what her lookups returned). Hedged or attributed statements ("might", "I can't see", "check X") are not claims.
 - correct: 2 if it does what acceptable describes, 1 if partly, 0 if not.
 - askedWhenNeeded: when a question is expected, true only if it asks one targeted question; null when none is expected.
 - usefulNextStep: 0-2, a specific thing they can do.
@@ -158,6 +158,8 @@ export const postsByPlatform = internalQuery({
     // What they've told her (her memory), so a callback to it isn't marked invented.
     const creator = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     const records = (await ctx.db.query("personalRecords").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(30)) as Doc<"personalRecords">[];
+    // Her dossier: what she has already read of their posts (a callback to their own video is from here).
+    out.whatSheKnowsAboutThem = JSON.stringify(creator?.dossier ?? {}).slice(0, 3000);
     out.whatTheyToldHer = [...(creator?.notes ?? []).slice(-20).map((n) => n.text), ...records.map((r) => r.text)].map((t) => t.slice(0, 160));
     const zernio = await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect();
     out.accountConnected = zernio.some((c) => c.provider === "zernio" && c.status === "connected");

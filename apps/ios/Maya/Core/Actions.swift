@@ -1,6 +1,7 @@
 import ConvexMobile
 import Foundation
 import UIKit
+import WidgetKit
 
 /// The app's writes. Each is a server mutation the chat path can also reach (spec §1 rule 1).
 @MainActor
@@ -52,6 +53,7 @@ enum Actions {
     do {
       let r: OkResult = try await convex.mutation(name, with: args)
       Haptics.success()
+      WidgetCenter.shared.reloadAllTimelines() // the home-screen widgets show ideas and blocks
       return r.ok
     } catch {
       print("[Actions] \(name): \(error)")

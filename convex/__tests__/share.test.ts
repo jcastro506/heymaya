@@ -121,3 +121,24 @@ describe("Ask Maya", () => {
     expect(later).toEqual([]);
   });
 });
+
+describe("the widget (M6)", () => {
+  it("returns only the token's creator's next film block and best idea; bad tokens are refused", async () => {
+    const s = await setup();
+    const start = Date.now() + 86_400_000;
+    await s.t.run(async (c) => {
+      const idea = await c.db.insert("ideas", { creatorId: s.a, evidenceLinks: [], fit: "yes", fitWhy: "f", version: { hook: "humidity won today" }, messageText: "m", status: "sent", produced: { skillVersion: "t", model: "t", thresholdsVersion: "t" }, createdAt: Date.now() - 3_600_000 } as never);
+      await c.db.insert("calendarBlocks", { creatorId: s.a, kind: "film", start, end: start + 3_600_000, title: "film: humidity won today", ideaId: idea, status: "confirmed", consentAt: Date.now(), createdAt: Date.now() } as never);
+      await c.db.insert("ideas", { creatorId: s.b, evidenceLinks: [], fit: "yes", fitWhy: "f", version: { hook: "b's secret idea" }, messageText: "m", status: "sent", produced: { skillVersion: "t", model: "t", thresholdsVersion: "t" }, createdAt: Date.now() } as never);
+    });
+    const r = await s.t.fetch("/widget", { method: "GET", headers: { authorization: `Bearer ${s.tokenA}` } });
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    expect(body.nextBlock).toMatchObject({ kind: "film", start, hook: "humidity won today", booked: true });
+    expect(body.bestIdea).toMatchObject({ hook: "humidity won today", isNew: true });
+    expect(body.newIdeas).toBe(1);
+    expect(JSON.stringify(body)).not.toContain("b's secret idea");
+    expect((await s.t.fetch("/widget", { method: "GET" })).status).toBe(401);
+    expect((await s.t.fetch("/widget", { method: "GET", headers: { authorization: `Bearer ${"a".repeat(64)}` } })).status).toBe(401);
+  });
+});

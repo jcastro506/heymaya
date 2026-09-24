@@ -1,5 +1,5 @@
 import { httpRouter } from "convex/server";
-import { shareHttp } from "./share";
+import { shareHttp, widgetHttp } from "./share";
 import { tavily as tavilyFake, gmail as gmailFake } from "./eval/fakes";
 import { stripeWebhook } from "./billing/webhook";
 import { zernioWebhook } from "./connections/zernio";
@@ -25,6 +25,8 @@ http.route({ path: "/stripe/webhook", method: "POST", handler: stripeWebhook });
 
 // M5: the share extension ("Send to Maya"), authenticated by the creator-scoped share token.
 http.route({ path: "/share", method: "POST", handler: shareHttp });
+// M6: the home-screen widget reads its own data with the same token.
+http.route({ path: "/widget", method: "GET", handler: widgetHttp });
 
 // Connections: Zernio's account events are the authoritative path for attach/detach (§6 Sprint 4).
 http.route({ path: "/zernio/webhook", method: "POST", handler: zernioWebhook });

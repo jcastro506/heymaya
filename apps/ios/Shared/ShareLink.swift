@@ -16,10 +16,15 @@ enum ShareLink {
   }
 
   /// Convex serves HTTP actions from the `.convex.site` twin of the deployment URL.
-  static func shareEndpoint(convexURL: String) -> URL? {
+  static func shareEndpoint(convexURL: String) -> URL? { endpoint(convexURL: convexURL, path: "/share") }
+
+  /// M6: the widget reads its own data with the same token.
+  static func widgetEndpoint(convexURL: String) -> URL? { endpoint(convexURL: convexURL, path: "/widget") }
+
+  private static func endpoint(convexURL: String, path: String) -> URL? {
     guard var c = URLComponents(string: convexURL), let host = c.host else { return nil }
     c.host = host.replacingOccurrences(of: ".convex.cloud", with: ".convex.site")
-    c.path = "/share"
+    c.path = path
     return c.url
   }
 

@@ -22,6 +22,8 @@ import { writeInbound } from "./core/messages";
 import { parseLink } from "./agent/inbound";
 import { inQuietHours } from "./scout/gate";
 import { THRESHOLDS } from "./config/thresholds";
+import { unseenIdeas } from "./core/unseen";
+import { coverForUrl } from "./media";
 
 export const SHARES_PER_DAY = 25; // a person sharing, not a script
 export const SHARE_DEDUPE_MS = 10 * 60_000;
@@ -161,4 +163,43 @@ export const devMintShareToken = internalMutation({
     await ctx.db.patch(a.creatorId, { shareToken: { hash: await sha256(token), issuedAt: Date.now() } });
     return token;
   },
+});
+
+// ------------------------------------------------------------------ the widget (M6)
+
+export interface WidgetData {
+  nextBlock: { kind: string; start: number; title: string; hook: string | null; ideaId: string | null; booked: boolean } | null;
+  bestIdea: { id: string; hook: string; cover: string | null; isNew: boolean } | null;
+  newIdeas: number;
+  asOf: number;
+}
+
+/** What the home-screen widget shows. Read-only, the creator's own rows only. */
+export const widgetData = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<WidgetData> => {
+    const now = Date.now();
+    const blocks = ((await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("start", now)).take(20)) as Doc<"calendarBlocks">[]).filter((b) => b.status !== "deleted");
+    const block = blocks.find((b) => b.kind === "film" && (b.status === "confirmed" || b.status === "moved")) ?? blocks.find((b) => b.kind === "film") ?? null;
+    const blockIdea = block?.ideaId ? ((await ctx.db.get(block.ideaId)) as Doc<"ideas"> | null) : null;
+    const unseen = await unseenIdeas(ctx, a.creatorId, now);
+    const open = unseen[0] ?? ((await ctx.db.query("ideas").withIndex("by_creator_status", (q) => q.eq("creatorId", a.creatorId).eq("status", "sent")).order("desc").first()) as Doc<"ideas"> | null);
+    const hookOf = (i: Doc<"ideas">) => ((i.version as { hook?: string } | undefined)?.hook ?? i.messageText).slice(0, 90);
+    return {
+      nextBlock: block ? { kind: block.kind, start: block.start, title: block.title.replace(/^(film|edit|post)( \(experiment\))?: /, ""), hook: blockIdea ? hookOf(blockIdea) : null, ideaId: block.ideaId ? String(block.ideaId) : null, booked: Boolean(block.consentAt) } : null,
+      bestIdea: open ? { id: String(open._id), hook: hookOf(open), cover: open.evidenceLinks[0] ? await coverForUrl(ctx, open.evidenceLinks[0]) : null, isNew: unseen.some((u) => u._id === open._id) } : null,
+      newIdeas: unseen.length,
+      asOf: now,
+    };
+  },
+});
+
+/** GET /widget  Authorization: Bearer <share token>. The widget refreshes itself; no push needed. */
+export const widgetHttp = httpAction(async (ctx, req) => {
+  const auth = req.headers.get("authorization") ?? "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  if (!/^[0-9a-f]{64}$/.test(token)) return json(401, { ok: false, reason: "open Maya once" });
+  const creatorId = await ctx.runQuery(internal.share.creatorForShareToken, { hash: await sha256(token) });
+  if (!creatorId) return json(401, { ok: false, reason: "open Maya once" });
+  return json(200, { ok: true, ...(await ctx.runQuery(internal.share.widgetData, { creatorId })) });
 });
