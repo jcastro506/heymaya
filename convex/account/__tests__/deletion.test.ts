@@ -46,6 +46,7 @@ async function oneRowEverywhere(t: ReturnType<typeof convexTest>, creatorId: Id<
     await ctx.db.insert("personalRecords", { creatorId, key: "decision", kind: "decision", text: "a decision", sourceMessageIds: [], sourcePostIds: [], sourceNoteIds: [], active: true, at: now });
     await ctx.db.insert("laneReads", { creatorId, token: "t1", keywords: ["running"], at: now });
     await ctx.db.insert("followerSnapshots", { creatorId, platform: "tiktok", accountId: "acc", day: "2026-09-05", followers: 2, at: now });
+    await ctx.db.insert("accountInsights", { creatorId, platform: "instagram", accountId: "acc", kind: "audience", status: "ok", audience: { gender: [{ label: "F", value: 2, share: 1 }] }, fetchedAt: now });
     const run = await ctx.db.insert("evalRuns", { suite: "recent", skill: "reply", creatorId, text: "x", checks: [], pass: true, at: now });
     await ctx.db.insert("evalLabels", { evalRunId: run, creatorId, skill: "reply", label: "good", reason: "", by: "operator", at: now });
     await ctx.db.insert("userActions", { creatorId, kind: "idea.pass", source: "app", summary: "passed on an idea", at: now });

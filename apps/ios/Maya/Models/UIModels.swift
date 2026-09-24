@@ -284,6 +284,48 @@ struct AnalyticsAccount: Decodable, Equatable, Identifiable {
   /// A1: personal | creator | business, from their public profile; nil until checked.
   let accountType: String?
   let setup: AccountSetup?
+  /// A1: daily followers with follows/unfollows where the platform gives them; nil until read.
+  let growth: FollowerGrowth?
+  /// A1, Instagram only: profile link taps and follows over the last 30 days.
+  let profile: ProfileNumbers?
+  /// A1, Instagram only: who follows them (100+ followers).
+  let audience: AudienceCard?
+}
+
+/// A1: why a card is empty, from the server: ok | not_connected | too_few_followers | not_reported | not_available.
+struct FollowerGrowth: Decodable, Equatable {
+  struct Day: Decodable, Equatable, Hashable {
+    let day: String
+    let followers: Double
+    let gained: Double?
+    let lost: Double?
+  }
+  let days: [Day]
+  let flowReported: Bool
+  let gained30d: Double?
+  let lost30d: Double?
+}
+
+struct ProfileNumbers: Decodable, Equatable {
+  let status: String
+  let fromDate: String?
+  let toDate: String?
+  let asOf: Double?
+  let profileLinkTaps: Double?
+  let follows: Double?
+  let unfollows: Double?
+  let reach: Double?
+  let accountsEngaged: Double?
+}
+
+struct AudienceCard: Decodable, Equatable {
+  let status: String
+  let asOf: Double?
+  let followersCounted: Double?
+  let gender: [PostNumbers.Share]
+  let age: [PostNumbers.Share]
+  let countries: [PostNumbers.Share]
+  let cities: [PostNumbers.Share]
 }
 
 /// A1: the one change that would help Maya on this platform (Instagram must be Creator to connect).

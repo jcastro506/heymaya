@@ -1,46 +1,827 @@
 {
  "accounts": [
   {
+   "accountType": null,
+   "audience": null,
    "connected": true,
-   "followers": 2000,
-   "followers30dAgo": 1800,
-   "followersAsOf": 1790110399518,
+   "followers": 1913,
+   "followers30dAgo": 1832,
+   "followersAsOf": 1790260793991,
+   "growth": {
+    "days": [
+     {
+      "day": "2026-07-27",
+      "followers": 1760,
+      "gained": null,
+      "lost": null
+     },
+     {
+      "day": "2026-07-28",
+      "followers": 1762,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-07-29",
+      "followers": 1764,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-07-30",
+      "followers": 1766,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-07-31",
+      "followers": 1768,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-01",
+      "followers": 1774,
+      "gained": 7,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-02",
+      "followers": 1775,
+      "gained": 3,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-03",
+      "followers": 1777,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-04",
+      "followers": 1779,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-05",
+      "followers": 1781,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-06",
+      "followers": 1787,
+      "gained": 7,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-07",
+      "followers": 1789,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-08",
+      "followers": 1790,
+      "gained": 3,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-09",
+      "followers": 1792,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-10",
+      "followers": 1794,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-11",
+      "followers": 1800,
+      "gained": 7,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-12",
+      "followers": 1802,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-13",
+      "followers": 1804,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-14",
+      "followers": 1805,
+      "gained": 3,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-15",
+      "followers": 1807,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-16",
+      "followers": 1813,
+      "gained": 7,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-17",
+      "followers": 1815,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-18",
+      "followers": 1817,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-19",
+      "followers": 1819,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-20",
+      "followers": 1820,
+      "gained": 3,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-21",
+      "followers": 1826,
+      "gained": 7,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-22",
+      "followers": 1828,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-23",
+      "followers": 1830,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-24",
+      "followers": 1832,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-25",
+      "followers": 1834,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-26",
+      "followers": 1839,
+      "gained": 7,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-27",
+      "followers": 1841,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-28",
+      "followers": 1843,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-29",
+      "followers": 1845,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-30",
+      "followers": 1847,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-08-31",
+      "followers": 1853,
+      "gained": 7,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-01",
+      "followers": 1854,
+      "gained": 3,
+      "lost": 2
+     },
+     {
+      "day": "2026-09-02",
+      "followers": 1856,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-03",
+      "followers": 1858,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-04",
+      "followers": 1860,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-05",
+      "followers": 1866,
+      "gained": 7,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-06",
+      "followers": 1868,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-07",
+      "followers": 1869,
+      "gained": 3,
+      "lost": 2
+     },
+     {
+      "day": "2026-09-08",
+      "followers": 1871,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-09",
+      "followers": 1873,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-10",
+      "followers": 1879,
+      "gained": 7,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-11",
+      "followers": 1881,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-12",
+      "followers": 1883,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-13",
+      "followers": 1884,
+      "gained": 3,
+      "lost": 2
+     },
+     {
+      "day": "2026-09-14",
+      "followers": 1886,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-15",
+      "followers": 1892,
+      "gained": 7,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-16",
+      "followers": 1894,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-17",
+      "followers": 1896,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-18",
+      "followers": 1898,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-19",
+      "followers": 1899,
+      "gained": 3,
+      "lost": 2
+     },
+     {
+      "day": "2026-09-20",
+      "followers": 1905,
+      "gained": 7,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-21",
+      "followers": 1907,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-22",
+      "followers": 1909,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-23",
+      "followers": 1911,
+      "gained": 3,
+      "lost": 1
+     },
+     {
+      "day": "2026-09-24",
+      "followers": 1913,
+      "gained": 3,
+      "lost": 1
+     }
+    ],
+    "flowReported": true,
+    "gained30d": 114,
+    "lost30d": 35
+   },
    "handle": "kevin.castro9996",
    "needsReconnect": false,
    "platform": "tiktok",
    "posts": 2,
-   "accountType": "personal",
+   "profile": null,
    "setup": null
   },
   {
-   "connected": false,
-   "followers": null,
-   "followers30dAgo": null,
-   "followersAsOf": null,
+   "accountType": null,
+   "audience": {
+    "age": [
+     {
+      "label": "18-24",
+      "share": 0.4103
+     },
+     {
+      "label": "25-34",
+      "share": 0.5769
+     }
+    ],
+    "asOf": 1790260793991,
+    "cities": [
+     {
+      "label": "New York, New York",
+      "share": 0.1026
+     },
+     {
+      "label": "Los Angeles, California",
+      "share": 0.0833
+     }
+    ],
+    "countries": [
+     {
+      "label": "United States",
+      "share": 0.641
+     },
+     {
+      "label": "United Kingdom",
+      "share": 0.1538
+     }
+    ],
+    "followersCounted": 7800,
+    "gender": [
+     {
+      "label": "Women",
+      "share": 0.6154
+     },
+     {
+      "label": "Men",
+      "share": 0.3846
+     }
+    ],
+    "status": "ok"
+   },
+   "connected": true,
+   "followers": 8034,
+   "followers30dAgo": 7629,
+   "followersAsOf": 1790260793991,
+   "growth": {
+    "days": [
+     {
+      "day": "2026-07-27",
+      "followers": 7400,
+      "gained": null,
+      "lost": null
+     },
+     {
+      "day": "2026-07-28",
+      "followers": 7408,
+      "gained": 10,
+      "lost": 2
+     },
+     {
+      "day": "2026-07-29",
+      "followers": 7417,
+      "gained": 11,
+      "lost": 2
+     },
+     {
+      "day": "2026-07-30",
+      "followers": 7426,
+      "gained": 12,
+      "lost": 3
+     },
+     {
+      "day": "2026-07-31",
+      "followers": 7433,
+      "gained": 9,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-01",
+      "followers": 7441,
+      "gained": 10,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-02",
+      "followers": 7449,
+      "gained": 11,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-03",
+      "followers": 7459,
+      "gained": 12,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-04",
+      "followers": 7466,
+      "gained": 9,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-05",
+      "followers": 7473,
+      "gained": 10,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-06",
+      "followers": 7482,
+      "gained": 11,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-07",
+      "followers": 7492,
+      "gained": 12,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-08",
+      "followers": 7498,
+      "gained": 9,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-09",
+      "followers": 7506,
+      "gained": 10,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-10",
+      "followers": 7515,
+      "gained": 11,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-11",
+      "followers": 7524,
+      "gained": 12,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-12",
+      "followers": 7531,
+      "gained": 9,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-13",
+      "followers": 7539,
+      "gained": 10,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-14",
+      "followers": 7547,
+      "gained": 11,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-15",
+      "followers": 7557,
+      "gained": 12,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-16",
+      "followers": 7564,
+      "gained": 9,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-17",
+      "followers": 7571,
+      "gained": 10,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-18",
+      "followers": 7580,
+      "gained": 11,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-19",
+      "followers": 7590,
+      "gained": 12,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-20",
+      "followers": 7596,
+      "gained": 9,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-21",
+      "followers": 7604,
+      "gained": 10,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-22",
+      "followers": 7613,
+      "gained": 11,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-23",
+      "followers": 7622,
+      "gained": 12,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-24",
+      "followers": 7629,
+      "gained": 9,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-25",
+      "followers": 7637,
+      "gained": 10,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-26",
+      "followers": 7645,
+      "gained": 11,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-27",
+      "followers": 7655,
+      "gained": 12,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-28",
+      "followers": 7662,
+      "gained": 9,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-29",
+      "followers": 7669,
+      "gained": 10,
+      "lost": 3
+     },
+     {
+      "day": "2026-08-30",
+      "followers": 7678,
+      "gained": 11,
+      "lost": 2
+     },
+     {
+      "day": "2026-08-31",
+      "followers": 7688,
+      "gained": 12,
+      "lost": 2
+     },
+     {
+      "day": "2026-09-01",
+      "followers": 7694,
+      "gained": 9,
+      "lost": 3
+     },
+     {
+      "day": "2026-09-02",
+      "followers": 7702,
+      "gained": 10,
+      "lost": 2
+     },
+     {
+      "day": "2026-09-03",
+      "followers": 7711,
+      "gained": 11,
+      "lost": 2
+     },
+     {
+      "day": "2026-09-04",
+      "followers": 7720,
+      "gained": 12,
+      "lost": 3
+     },
+     {
+      "day": "2026-09-05",
+      "followers": 7727,
+      "gained": 9,
+      "lost": 2
+     },
+     {
+      "day": "2026-09-06",
+      "followers": 7735,
+      "gained": 10,
+      "lost": 2
+     },
+     {
+      "day": "2026-09-07",
+      "followers": 7743,
+      "gained": 11,
+      "lost": 3
+     },
+     {
+      "day": "2026-09-08",
+      "followers": 7753,
+      "gained": 12,
+      "lost": 2
+     },
+     {
+      "day": "2026-09-09",
+      "followers": 7760,
+      "gained": 9,
+      "lost": 2
+     },
+     {
+      "day": "2026-09-10",
+      "followers": 7814,
+      "gained": 60,
+      "lost": 6
+     },
+     {
+      "day": "2026-09-11",
+      "followers": 7860,
+      "gained": 52,
+      "lost": 6
+     },
+     {
+      "day": "2026-09-12",
+      "followers": 7898,
+      "gained": 44,
+      "lost": 6
+     },
+     {
+      "day": "2026-09-13",
+      "followers": 7928,
+      "gained": 36,
+      "lost": 6
+     },
+     {
+      "day": "2026-09-14",
+      "followers": 7950,
+      "gained": 28,
+      "lost": 6
+     },
+     {
+      "day": "2026-09-15",
+      "followers": 7959,
+      "gained": 11,
+      "lost": 2
+     },
+     {
+      "day": "2026-09-16",
+      "followers": 7968,
+      "gained": 12,
+      "lost": 3
+     },
+     {
+      "day": "2026-09-17",
+      "followers": 7975,
+      "gained": 9,
+      "lost": 2
+     },
+     {
+      "day": "2026-09-18",
+      "followers": 7983,
+      "gained": 10,
+      "lost": 2
+     },
+     {
+      "day": "2026-09-19",
+      "followers": 7991,
+      "gained": 11,
+      "lost": 3
+     },
+     {
+      "day": "2026-09-20",
+      "followers": 8001,
+      "gained": 12,
+      "lost": 2
+     },
+     {
+      "day": "2026-09-21",
+      "followers": 8008,
+      "gained": 9,
+      "lost": 2
+     },
+     {
+      "day": "2026-09-22",
+      "followers": 8015,
+      "gained": 10,
+      "lost": 3
+     },
+     {
+      "day": "2026-09-23",
+      "followers": 8024,
+      "gained": 11,
+      "lost": 2
+     },
+     {
+      "day": "2026-09-24",
+      "followers": 8034,
+      "gained": 12,
+      "lost": 2
+     }
+    ],
+    "flowReported": true,
+    "gained30d": 485,
+    "lost30d": 88
+   },
    "handle": "heymaya",
    "needsReconnect": false,
    "platform": "instagram",
    "posts": 3,
-   "accountType": "personal",
-   "setup": {
-    "needed": true,
-    "title": "Switch Instagram to a Creator account",
-    "why": "Instagram only lets a Creator or Business account connect, and without it Maya can't see your reach, saves or watch time. It's free and takes a minute. Creator keeps the full music library.",
-    "steps": [
-     "Open Instagram and go to your profile",
-     "Tap the menu (☰), then Settings and privacy",
-     "Tap Account type and tools",
-     "Tap Switch to professional account",
-     "Choose Creator, pick a category, and tap Done"
-    ]
-   }
+   "profile": {
+    "accountsEngaged": 930,
+    "asOf": 1790260793991,
+    "follows": 142,
+    "fromDate": "2026-08-25",
+    "profileLinkTaps": 37,
+    "reach": 12500,
+    "status": "ok",
+    "toDate": "2026-09-24",
+    "unfollows": 19
+   },
+   "setup": null
   }
  ],
  "posts": [
   {
    "contentType": "video",
    "cover": null,
-   "createTime": 1790110399518,
+   "createTime": 1790174393985,
    "diagnosis": null,
    "headline": {
     "asOfHours": null,
@@ -48,7 +829,7 @@
     "value": 5000,
     "what": "views"
    },
-   "id": "000000000000000000010007ownPosts",
+   "id": "000000000000000000010009ownPosts",
    "multiple": null,
    "platform": "tiktok",
    "url": "https://www.tiktok.com/@kevin.castro9996/video/999"
@@ -56,39 +837,7 @@
   {
    "contentType": "photo",
    "cover": null,
-   "createTime": 1789937599518,
-   "diagnosis": "unknown",
-   "headline": {
-    "asOfHours": 1,
-    "basis": "connected",
-    "value": 3,
-    "what": "reach"
-   },
-   "id": "000000000000000000010003ownPosts",
-   "multiple": null,
-   "platform": "instagram",
-   "url": "https://www.instagram.com/p/DbrZ8lIlxma/"
-  },
-  {
-   "contentType": "photo",
-   "cover": null,
-   "createTime": 1789851199518,
-   "diagnosis": "unknown",
-   "headline": {
-    "asOfHours": 1,
-    "basis": "connected",
-    "value": 3,
-    "what": "reach"
-   },
-   "id": "000000000000000000010004ownPosts",
-   "multiple": null,
-   "platform": "instagram",
-   "url": "https://www.instagram.com/p/DbrZs7kjIvF/"
-  },
-  {
-   "contentType": "photo",
-   "cover": null,
-   "createTime": 1789764799518,
+   "createTime": 1790001593985,
    "diagnosis": "unknown",
    "headline": {
     "asOfHours": 1,
@@ -99,12 +848,44 @@
    "id": "000000000000000000010005ownPosts",
    "multiple": null,
    "platform": "instagram",
+   "url": "https://www.instagram.com/p/DbrZ8lIlxma/"
+  },
+  {
+   "contentType": "photo",
+   "cover": null,
+   "createTime": 1789915193985,
+   "diagnosis": "unknown",
+   "headline": {
+    "asOfHours": 1,
+    "basis": "connected",
+    "value": 3,
+    "what": "reach"
+   },
+   "id": "000000000000000000010006ownPosts",
+   "multiple": null,
+   "platform": "instagram",
+   "url": "https://www.instagram.com/p/DbrZs7kjIvF/"
+  },
+  {
+   "contentType": "photo",
+   "cover": null,
+   "createTime": 1789828793985,
+   "diagnosis": "unknown",
+   "headline": {
+    "asOfHours": 1,
+    "basis": "connected",
+    "value": 3,
+    "what": "reach"
+   },
+   "id": "000000000000000000010007ownPosts",
+   "multiple": null,
+   "platform": "instagram",
    "url": "https://www.instagram.com/p/DbrZX_HDLhk/"
   },
   {
    "contentType": "video",
    "cover": null,
-   "createTime": 1789678399518,
+   "createTime": 1789742393985,
    "diagnosis": "unknown",
    "headline": {
     "asOfHours": null,
@@ -112,7 +893,7 @@
     "value": 107,
     "what": "views"
    },
-   "id": "000000000000000000010006ownPosts",
+   "id": "000000000000000000010008ownPosts",
    "multiple": null,
    "platform": "tiktok",
    "url": "https://www.tiktok.com/@kevin.castro9996/video/7670709537535544590?utm_campaign=tt4d_open_api&utm_source=aw4smjxfftapkprm"

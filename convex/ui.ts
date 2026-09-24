@@ -13,6 +13,7 @@ import { partnershipsOpen } from "./partnerships/store";
 import { brandsPaying } from "./partnerships/signals";
 import { markApplied as markAppliedFor } from "./partnerships/delivery";
 import { connectedFrom, DIAGNOSIS_WORDS, numbersFor } from "./connections/numbers";
+import { appCards } from "./connections/audience";
 import { avatarKey, coverForUrl, coverKey, mediaUrl } from "./media";
 import { recordAction } from "./core/act";
 import { internalQuery, query, type MutationCtx, type QueryCtx } from "./_generated/server";
@@ -480,6 +481,7 @@ export const analytics = query({
     const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").take(40)) as Doc<"ownPosts">[];
     const conn = (await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", c._id).eq("provider", "zernio")).first()) as Doc<"connections"> | null;
     const snaps = (await ctx.db.query("followerSnapshots").withIndex("by_creator_day", (q) => q.eq("creatorId", c._id)).order("desc").take(400)) as Doc<"followerSnapshots">[];
+    const insightRows = (await ctx.db.query("accountInsights").withIndex("by_creator_kind", (q) => q.eq("creatorId", c._id)).take(40)) as Doc<"accountInsights">[];
     const platforms = (["tiktok", "instagram"] as const).filter((pl) => c.handles[pl] || posts.some((p) => p.platform === pl));
     const monthAgo = now - 30 * 86_400_000;
     return {
@@ -488,10 +490,14 @@ export const analytics = query({
         const mine = snaps.filter((s) => s.platform === pl).sort((x, y) => y.at - x.at);
         const latest = mine[0] ?? null;
         const past = mine.find((s) => s.at <= monthAgo) ?? null;
+        const connected = Boolean(acct && !acct.needsReconnect && acct.canFetchAnalytics);
+        // A1: follower growth, "From your profile" and "Who follows you", from this account's rows only.
+        const own = <T extends { accountId: string; platform: string }>(xs: T[]) => xs.filter((x) => x.platform === pl && (!acct || x.accountId === acct.accountId));
+        const cards = appCards(pl, connected, { insights: own(insightRows.filter((r) => r.kind === "insights"))[0] ?? null, audience: own(insightRows.filter((r) => r.kind === "audience"))[0] ?? null, snaps: own(mine) }, now);
         return {
           platform: pl,
           handle: c.handles[pl] ?? acct?.username ?? null,
-          connected: Boolean(acct && !acct.needsReconnect && acct.canFetchAnalytics),
+          connected,
           needsReconnect: Boolean(acct?.needsReconnect),
           followers: latest?.followers ?? null,
           followersAsOf: latest?.at ?? null,
@@ -499,6 +505,9 @@ export const analytics = query({
           posts: posts.filter((p) => p.platform === pl).length,
           accountType: c.accountTypes?.[pl] ?? null,
           setup: setupAdvice(pl, c.accountTypes?.[pl] ?? null),
+          growth: cards.growth,
+          profile: cards.profile,
+          audience: cards.audience,
         };
       }),
       posts: await Promise.all(posts.slice(0, 30).map(async (p) => {

@@ -16,6 +16,10 @@ import { modules } from "../../tests/_modules";
 import { seedCreator } from "../../tests/lib/creatorRow";
 import { normalizeConnected, type ZernioPostRow } from "../connections/analytics";
 import recorded from "../integrations/zernio/fixtures.recorded.json";
+import spec from "../integrations/zernio/fixtures.spec.json";
+import { normalizeDemographics, normalizeFollowerHistory, normalizeIgInsights } from "../connections/accountInsights";
+import { internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
 
 const capture = process.env.CAPTURE_APP_FIXTURES === "1";
 const save = (name: string, value: unknown) => { if (capture) writeFileSync(`apps/ios/Fixtures/${name}.json`, JSON.stringify(value, null, 1)); };
@@ -69,7 +73,6 @@ describe("analytics for the app", () => {
     expect([tt.followers, tt.followers30dAgo]).toEqual([2000, 1800]);
     expect(r?.posts.length).toBeGreaterThan(0);
     for (const p of r!.posts) expect(["connected", "public"]).toContain(p.headline.basis);
-    save("analytics", r);
   });
 
   it("a TikTok post never carries watch time or skip rate, and says so", async () => {
@@ -104,4 +107,96 @@ describe("analytics for the app", () => {
     expect(await t.withIdentity({ subject: "user_zzz" }).query(api.ui.analytics, {})).toBeNull();
     expect(await t.query(api.ui.post, { id: bPost as never })).toBeNull();
   });
+
+  it("A1: follower growth per platform, 'From your profile' and 'Who follows you' on Instagram, from stored rows only", async () => {
+    const { t } = await setupWithInsights();
+    const r = await t.withIdentity({ subject: "user_a" }).query(api.ui.analytics, {});
+    const ig = r!.accounts.find((x) => x.platform === "instagram")!;
+    const tt = r!.accounts.find((x) => x.platform === "tiktok")!;
+    expect(ig.growth!.days.length).toBeGreaterThan(30);
+    expect(ig.growth!.days.length).toBeLessThanOrEqual(90);
+    expect(ig.growth!.flowReported).toBe(true);
+    expect(ig.growth!.gained30d).toBeGreaterThan(0);
+    for (const d of ig.growth!.days) expect(Object.keys(d).sort()).toEqual(["day", "followers", "gained", "lost"]);
+    expect(ig.profile).toMatchObject({ status: "ok", profileLinkTaps: 37, follows: 142, unfollows: 19 });
+    expect(ig.audience!.status).toBe("ok");
+    for (const k of ["gender", "age", "countries", "cities"] as const) {
+      expect(ig.audience![k].length).toBeGreaterThan(0);
+      for (const x of ig.audience![k]) { expect(x.share).toBeGreaterThan(0); expect(x.share).toBeLessThanOrEqual(1); }
+    }
+    expect(ig.audience!.gender.reduce((s, x) => s + x.share, 0)).toBeLessThanOrEqual(1.001);
+    expect(tt.growth!.days.length).toBeGreaterThan(0);
+    expect([tt.profile, tt.audience], "TikTok gives neither at account level").toEqual([null, null]);
+    save("analytics", r);
+  });
+
+  it("A1: empty states carry a reason: not connected, under 100 followers, not reported yet", async () => {
+    const { t, a } = await setupWithInsights();
+    await t.run(async (ctx) => {
+      const rows = await ctx.db.query("accountInsights").collect();
+      for (const row of rows) if (row.kind === "audience") await ctx.db.patch(row._id, { status: "too_few_followers", audience: undefined, audienceBase: undefined });
+      for (const row of rows) if (row.kind === "insights" && row.platform === "instagram") await ctx.db.delete(row._id);
+    });
+    let r = await t.withIdentity({ subject: "user_a" }).query(api.ui.analytics, {});
+    let ig = r!.accounts.find((x) => x.platform === "instagram")!;
+    expect(ig.audience).toMatchObject({ status: "too_few_followers", gender: [], age: [], countries: [], cities: [] });
+    expect(ig.profile).toMatchObject({ status: "not_reported", profileLinkTaps: null, follows: null });
+    await t.run(async (ctx) => {
+      const conn = await ctx.db.query("connections").filter((q) => q.eq(q.field("creatorId"), a)).first();
+      await ctx.db.patch(conn!._id, { zernioAccounts: [] });
+    });
+    r = await t.withIdentity({ subject: "user_a" }).query(api.ui.analytics, {});
+    ig = r!.accounts.find((x) => x.platform === "instagram")!;
+    expect([ig.connected, ig.growth, ig.profile?.status, ig.audience?.status]).toEqual([false, null, "not_connected", "not_connected"]);
+  });
+
+  it("A1 cross-tenant: B sees none of A's audience or growth", async () => {
+    const { t } = await setupWithInsights();
+    await t.run(async (ctx) => {
+      const b = (await ctx.db.query("creators").collect()).find((c) => c.clerkUserId === "user_b")!;
+      await ctx.db.patch(b._id, { handles: { tiktok: "tt_b", instagram: "ig_b" } });
+      await ctx.db.insert("connections", { creatorId: b._id, provider: "zernio", status: "connected", zernioAccounts: [{ accountId: "ig", platform: "instagram", username: "ig_b", needsReconnect: false, canFetchAnalytics: true }], updatedAt: Date.now() } as never);
+    });
+    const r = await t.withIdentity({ subject: "user_b" }).query(api.ui.analytics, {});
+    const ig = r!.accounts.find((x) => x.platform === "instagram")!;
+    expect(ig.growth, "same Zernio account id, other creator: nothing").toBeNull();
+    expect(ig.audience).toMatchObject({ status: "not_reported", gender: [] });
+    expect(ig.profile).toMatchObject({ status: "not_reported", profileLinkTaps: null });
+  });
 });
+
+const S = spec as unknown as Record<string, Record<string, unknown>>;
+
+/** A realistic 60-day follower series ending today (Zernio's envelope), for the growth chart. */
+function series(start: number, perDay: (i: number) => [number, number]) {
+  const now = Date.now();
+  const days = 60;
+  const dates = Array.from({ length: days }, (_, i) => new Date(now - (days - 1 - i) * 86_400_000).toISOString().slice(0, 10));
+  let f = start;
+  const count: Array<{ date: string; value: number }> = [], gained: typeof count = [], lost: typeof count = [];
+  dates.forEach((date, i) => {
+    const [g, l] = i === 0 ? [0, 0] : perDay(i);
+    f += g - l;
+    count.push({ date, value: f }); gained.push({ date, value: g }); lost.push({ date, value: l });
+  });
+  return { metrics: { follower_count: { values: count }, followers_gained: { values: gained }, followers_lost: { values: lost } } };
+}
+
+async function setupWithInsights() {
+  const base = await setup();
+  const { t } = base;
+  const a = await t.run(async (ctx) => (await ctx.db.query("creators").collect()).find((c) => c.clerkUserId === "user_a")!._id as Id<"creators">);
+  const now = Date.now();
+  // Instagram: a steady week, then a post that took off around day 45 (more follows, a few more unfollows).
+  const igDays = normalizeFollowerHistory(series(7400, (i) => (i > 44 && i < 50 ? [60 - (i - 45) * 8, 6] : [9 + (i % 4), 2 + (i % 3 === 0 ? 1 : 0)])))!.days;
+  const ttDays = normalizeFollowerHistory(series(1760, (i) => [3 + (i % 5 === 0 ? 4 : 0), i % 6 === 0 ? 2 : 1]))!.days;
+  await t.mutation(internal.connections.insightsSync.writeHistory, { creatorId: a, platform: "instagram", accountId: "ig", days: igDays, now });
+  await t.mutation(internal.connections.insightsSync.writeHistory, { creatorId: a, platform: "tiktok", accountId: "tt", days: ttDays, now });
+  const totals = { ...S.igInsightsTotals, metrics: { ...(S.igInsightsTotals.metrics as object), profile_links_taps: { total: 37 } }, unavailableMetrics: undefined };
+  const ig = normalizeIgInsights({ totals, follows: S.igFollowsBreakdown, reachSeries: S.igInsightsTimeSeries })!;
+  const metrics = Object.fromEntries(Object.entries({ reach: ig.reach, views: ig.views, accountsEngaged: ig.accountsEngaged, totalInteractions: ig.totalInteractions, profileLinkTaps: ig.profileLinkTaps, follows: ig.follows, unfollows: ig.unfollows }).filter((e): e is [string, number] => e[1] !== null));
+  await t.mutation(internal.connections.insightsSync.writeInsights, { creatorId: a, platform: "instagram", accountId: "ig", kind: "insights", status: "ok", now, fromDate: ig.fromDate!, toDate: ig.toDate!, metrics, reachDaily: ig.reachDaily! });
+  const aud = normalizeDemographics(S.igDemographics)!;
+  await t.mutation(internal.connections.insightsSync.writeInsights, { creatorId: a, platform: "instagram", accountId: "ig", kind: "audience", status: "ok", now, audience: { age: aud.age!, gender: aud.gender!, country: aud.country!, city: aud.city! }, audienceBase: aud.base! });
+  return { ...base, a };
+}
