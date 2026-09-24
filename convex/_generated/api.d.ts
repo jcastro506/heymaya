@@ -114,6 +114,7 @@ import type * as eval_dealsWorldData from "../eval/dealsWorldData.js";
 import type * as eval_durableConverse from "../eval/durableConverse.js";
 import type * as eval_expertBench from "../eval/expertBench.js";
 import type * as eval_fakes from "../eval/fakes.js";
+import type * as eval_firstWeek from "../eval/firstWeek.js";
 import type * as eval_gate from "../eval/gate.js";
 import type * as eval_judge from "../eval/judge.js";
 import type * as eval_livingSim from "../eval/livingSim.js";
@@ -315,6 +316,7 @@ declare const fullApi: ApiFromModules<{
   "eval/durableConverse": typeof eval_durableConverse;
   "eval/expertBench": typeof eval_expertBench;
   "eval/fakes": typeof eval_fakes;
+  "eval/firstWeek": typeof eval_firstWeek;
   "eval/gate": typeof eval_gate;
   "eval/judge": typeof eval_judge;
   "eval/livingSim": typeof eval_livingSim;

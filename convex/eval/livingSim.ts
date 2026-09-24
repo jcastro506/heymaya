@@ -146,27 +146,54 @@ export const prepare = internalMutation({
   },
 });
 
+/**
+ * Each per-creator table's index that starts with `creatorId`. Ageing reads through these: a
+ * `.filter` on creatorId scans the whole table (costEvents, messages) and hits Convex's read limit
+ * on a busy deployment, the same failure the load test's cleanup had (2026-09-24). Tables with no
+ * creator index (oauth states, the eval ledgers) are not aged: nothing in a day's jobs reads them.
+ */
+export const CREATOR_INDEX: Record<(typeof TABLES_BY_CREATOR)[number], string | null> = {
+  partnershipProfiles: "by_creator", partnershipOpportunities: "by_creator", partnershipDrafts: "by_creator", partnershipEvents: "by_creator", partnershipResearch: "by_creator", partnershipMailboxes: "by_creator",
+  trackedAccounts: "by_creator", ownPosts: "by_creator", ownPostReads: "by_creator", signals: "by_creator", ideas: "by_creator", predictions: "by_creator",
+  calendarBlocks: "by_creator", calendarEvents: "by_creator_start", tasteEvents: "by_creator", oauthStates: null, connections: "by_creator", directives: "by_creator",
+  messages: "by_creator", jobs: "by_creator", budgets: "by_creator_day", costEvents: "by_creator_at", memories: "by_creator_ref", personalRecords: "by_creator",
+  finishes: "by_creator", laneReads: "by_token", followerSnapshots: "by_creator_day", accountInsights: "by_creator_kind", evalRuns: null, evalLabels: null,
+  userActions: "by_creator_at", schedule: "by_creator",
+};
+
+/**
+ * Shift one table's rows for a sim creator by `delta` (the creator row itself with table "creators").
+ * The caller has already checked the creator is a simulation's. A running job keeps its lease: moving
+ * its deadline a day into the past would hand it to the reaper and run it twice.
+ */
+export async function ageCreatorTable(ctx: MutationCtx, c: Doc<"creators">, tableName: string, delta: number): Promise<number> {
+  const now = Date.now();
+  if (tableName === "creators") {
+    const { _id, _creationTime, ...rest } = c;
+    void _creationTime;
+    await ctx.db.replace(_id, shiftTimes(rest, delta, now) as never);
+    return 1;
+  }
+  const table = tableName as (typeof TABLES_BY_CREATOR)[number];
+  const index = CREATOR_INDEX[table];
+  if (!index) return 0;
+  const q = ctx.db.query(table) as unknown as { withIndex: (i: string, f: (q: { eq: (k: string, v: unknown) => unknown }) => unknown) => { take: (n: number) => Promise<Array<Record<string, unknown>>> } };
+  const rows = await q.withIndex(index, (x) => x.eq("creatorId", c._id)).take(4000);
+  let n = 0;
+  for (const r of rows) {
+    if (table === "jobs" && r.status === "running") continue;
+    const { _id, _creationTime, ...rest } = r as Record<string, unknown> & { _id: string; _creationTime: number };
+    void _creationTime;
+    await ctx.db.replace(_id as never, shiftTimes(rest, delta, now) as never);
+    n++;
+  }
+  return n;
+}
+
 /** Shift one table's rows for the clone by `delta` (and the creator row with table "creators"). */
 export const ageTable = internalMutation({
   args: { creatorId: v.id("creators"), table: v.string(), delta: v.number() },
-  handler: async (ctx, a): Promise<number> => {
-    const c = await simCreator(ctx, a.creatorId);
-    const now = Date.now();
-    if (a.table === "creators") {
-      const { _id, _creationTime, ...rest } = c;
-      void _id; void _creationTime;
-      await ctx.db.replace(a.creatorId, shiftTimes(rest, a.delta, now) as never);
-      return 1;
-    }
-    const table = a.table as (typeof TABLES_BY_CREATOR)[number];
-    const rows = await ctx.db.query(table).filter((q) => q.eq(q.field("creatorId"), a.creatorId)).take(4000);
-    for (const r of rows) {
-      const { _id, _creationTime, ...rest } = r as unknown as Record<string, unknown> & { _id: Id<"creators">; _creationTime: number };
-      void _creationTime;
-      await ctx.db.replace(_id as never, shiftTimes(rest, a.delta, now) as never);
-    }
-    return rows.length;
-  },
+  handler: async (ctx, a): Promise<number> => await ageCreatorTable(ctx, await simCreator(ctx, a.creatorId), a.table, a.delta),
 });
 
 async function ageWorld(ctx: ActionCtx, creatorId: Id<"creators">, delta: number): Promise<void> {
@@ -312,10 +339,14 @@ export const unlearnedFor = internalQuery({
   },
 });
 
-export const ACTOR_PROMPT = `You are role-playing a real TikTok creator texting her social media expert, Maya. Stay in character: write exactly like the creator's own captions below (their case, emoji, slang, length). You are a busy person: you often ignore messages, reply briefly, sometimes enthusiastically. You never know you are in a simulation.
+/** The creator actor's instructions, for a creator on the platform(s) named ("TikTok", "Instagram", "TikTok and Instagram"). */
+export function actorPromptFor(platforms: string): string {
+  return `You are role-playing a real ${platforms} creator texting her social media expert, Maya. Stay in character: write exactly like the creator's own captions below (their case, emoji, slang, length). You are a busy person: you often ignore messages, reply briefly, sometimes enthusiastically. You never know you are in a simulation.
 Given Maya's messages today and the ideas she sent, return ONLY JSON:
 {"replies": [{"to": "the message id you're answering, or ''", "text": "your text, in your voice"}], "ideas": [{"ideaId": "", "act": "save|pass"}]}
 Reply to at most 2 messages. It's fine and realistic to reply to none. Save an idea only if it genuinely fits what you'd film; pass on ones that don't.`;
+}
+export const ACTOR_PROMPT = actorPromptFor("TikTok");
 
 /** Phase C: the creator lives her day (replies, taps, her life script), then the day is measured. */
 export const dayCreator = internalAction({
@@ -399,7 +430,8 @@ export const snapshot = internalQuery({
     const ideas = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(500)) as Doc<"ideas">[];
     const records = (await ctx.db.query("personalRecords").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(500)) as Doc<"personalRecords">[];
     const directives = (await ctx.db.query("directives").withIndex("by_creator_and_active", (q) => q.eq("creatorId", a.creatorId).eq("active", true)).take(100)) as Doc<"directives">[];
-    const costs = (await ctx.db.query("costEvents").filter((q) => q.and(q.eq(q.field("creatorId"), a.creatorId), q.gte(q.field("_creationTime"), Date.now() - 30 * 60_000))).take(500)) as Array<{ costUsd?: number }>;
+    // Through the creator index (a filter scan over costEvents reads the whole ledger and hits the read limit).
+    const costs = (await ctx.db.query("costEvents").withIndex("by_creator_at", (q) => q.eq("creatorId", a.creatorId).gte("at", Date.now() - 30 * 60_000)).take(500)) as Array<{ costUsd?: number }>;
     const finishes = (await ctx.db.query("finishes").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(200)) as Doc<"finishes">[];
     const d = c.dossier as { lane?: string; persona?: { summary?: string } } | undefined;
     return {

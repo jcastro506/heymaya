@@ -132,11 +132,12 @@ async function watchOne(ctx: ActionCtx, args: { creatorId: Id<"creators">; post:
 }
 
 export const run = internalAction({
-  args: { creatorId: v.id("creators") },
+  // `max`: the first-week simulation's cap on watched posts (10 vendor credits each); absent, WATCH_CAP.
+  args: { creatorId: v.id("creators"), max: v.optional(v.number()) },
   handler: async (ctx, args): Promise<{ watched: number; degraded: number; costUsd: number }> => {
     const apiKey = process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY ?? "";
     if (!apiKey) return { watched: 0, degraded: 0, costUsd: 0 };
-    const posts = await ctx.runQuery(internal.onboarding.watch.sampledPosts, { creatorId: args.creatorId });
+    const posts = (await ctx.runQuery(internal.onboarding.watch.sampledPosts, { creatorId: args.creatorId })).slice(0, Math.max(0, Math.min(WATCH_CAP, args.max ?? WATCH_CAP)));
     let watched = 0, degraded = 0, costUsd = 0;
     for (const post of posts) {
       const isTop = Boolean(post.sample?.includes("top") || post.sample?.includes("recent"));

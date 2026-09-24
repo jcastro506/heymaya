@@ -73,7 +73,7 @@ export const start = mutation({
  * Screen 1, as one function the web form and the simulated run both call, so a rehearsal
  * drives the same rows and the same job the browser would.
  */
-export async function startCreator(ctx: MutationCtx, args: { subject: string; email: string; handles: { tiktok?: string; instagram?: string }; timezone?: string }): Promise<{ ok: boolean; creatorId?: string; error?: string }> {
+export async function startCreator(ctx: MutationCtx, args: { subject: string; email: string; handles: { tiktok?: string; instagram?: string }; timezone?: string; /** First-week simulation only: a smaller catalogue read (see onboarding/ingest.ts run). */ ingestCaps?: { watchCap?: number; transcriptCap?: number } }): Promise<{ ok: boolean; creatorId?: string; error?: string }> {
   {
     const identity = { subject: args.subject, email: args.email };
     const handles = { tiktok: cleanHandle(args.handles.tiktok), instagram: cleanHandle(args.handles.instagram) };
@@ -131,7 +131,7 @@ export async function startCreator(ctx: MutationCtx, args: { subject: string; em
       kind: "ingest_catalogue",
       idempotencyKey: `ingest:${creatorId}:v0`,
       creatorId,
-      payloadJson: JSON.stringify({ reason: "onboarding" }),
+      payloadJson: JSON.stringify({ reason: "onboarding", ...(args.ingestCaps ?? {}) }),
     });
     // A1: know each account's type before they try to connect (Instagram must be Creator or Business).
     await ctx.scheduler.runAfter(0, internal.account.setup.check, { creatorId });
