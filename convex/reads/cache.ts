@@ -12,6 +12,11 @@ import { v } from "convex/values";
 
 export const STALE_CLAIM_MS = 90_000;
 
+/** Pure: a vendor answer meaning "there is no such account or post", worth remembering for a day. */
+export function isNotFound(error: string): boolean {
+  return /\b404\b|not[_ ]found|account_deactivated|user (?:does not exist|not found)|no such user|couldn't find/i.test(error);
+}
+
 export const getFresh = internalQuery({
   args: { kind: v.string(), key: v.string(), now: v.number() },
   handler: async (ctx, { kind, key, now }) => {
@@ -23,6 +28,8 @@ export const getFresh = internalQuery({
     const fresh = row.value !== undefined && row.expiresAt > now;
     const inFlight = row.inFlightSince !== undefined && now - row.inFlightSince < STALE_CLAIM_MS;
     if (fresh) return { state: "fresh" as const, value: row.value, fetchedAt: row.fetchedAt, fixture: row.fixture };
+    // A recent failure is remembered too: asking again would spend a credit on the same answer.
+    if (row.value === undefined && row.error && row.expiresAt > now) return { state: "failed" as const, error: row.error };
     if (inFlight) return { state: "inFlight" as const };
     return { state: "stale" as const, value: row.value };
   },
@@ -102,6 +109,8 @@ export const fail = internalMutation({
       .query("readCache")
       .withIndex("by_key", (q) => q.eq("kind", kind).eq("key", key))
       .unique();
-    if (row) await ctx.db.patch(row._id, { inFlightSince: undefined, error, expiresAt: now + 5 * 60 * 1000 });
+    // An account that doesn't exist won't tomorrow either (the 1,000-creator test spent 754 credits
+    // re-reading missing handles); anything else is retried soon, so an outage isn't hammered.
+    if (row) await ctx.db.patch(row._id, { inFlightSince: undefined, error, expiresAt: now + (isNotFound(error) ? 24 * 3_600_000 : 2 * 60_000) });
   },
 });

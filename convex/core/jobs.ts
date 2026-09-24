@@ -35,6 +35,29 @@ export const DEFAULT_MAX_ATTEMPTS = 5;
 export const DEFAULT_LEASE_MS = 5 * 60 * 1000;
 
 /**
+ * One pending drain per kind, not one per job. 2,000 texts in a burst scheduled 800+ drain actions,
+ * which filled the deployment's scheduled-job slots and left the turns themselves waiting (1,000-creator
+ * test, 2026-09-24). If a drain for this kind is already waiting to run, it will pick this job up.
+ */
+export async function kickDrain(ctx: MutationCtx, kind: string): Promise<boolean> {
+  const key = `drain:kick:${kind}`;
+  const row = await ctx.db.query("syncState").withIndex("by_key", (q) => q.eq("key", key)).unique();
+  if (row) {
+    const pending = await ctx.db.system.get(row.value as Id<"_scheduled_functions">).catch(() => null);
+    if (pending && pending.state.kind === "pending") return false;
+  }
+  const id = await ctx.scheduler.runAfter(0, internal.core.scheduler.drainJobs, { kinds: [kind] });
+  if (row) await ctx.db.patch(row._id, { value: id, updatedAt: Date.now() });
+  else await ctx.db.insert("syncState", { key, value: id, updatedAt: Date.now() });
+  return true;
+}
+
+export const kick = internalMutation({
+  args: { kind: v.string() },
+  handler: async (ctx, a): Promise<boolean> => await kickDrain(ctx, a.kind),
+});
+
+/**
  * How many turns may be claimed at once. Convex runs 8 scheduled jobs at a time on the Free/Starter
  * deployment class (S16) and 256 on Professional (S256); claiming more only turns queue time into
  * lease time, and an expired lease re-queues a turn that is still about to run. Set MAX_TURNS_IN_FLIGHT
@@ -134,7 +157,9 @@ export const enqueue = internalMutation({
      * the next minute tick of the cron. The cron stays as the backstop.
      */
     if (SERIAL_KINDS.has(args.kind)) {
-      await ctx.scheduler.runAfter(Math.max(0, (args.runAfter ?? now) - now), internal.core.scheduler.drainJobs, { kinds: [args.kind] });
+      const delay = Math.max(0, (args.runAfter ?? now) - now);
+      if (delay === 0) await kickDrain(ctx, args.kind);
+      else await ctx.scheduler.runAfter(delay, internal.core.scheduler.drainJobs, { kinds: [args.kind] });
     }
     return { jobId, created: true };
   },
