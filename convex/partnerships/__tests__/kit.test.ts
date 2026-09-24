@@ -6,7 +6,7 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import schema from "../../schema";
-import { internal } from "../../_generated/api";
+import { api, internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
 import { offerable, offerText, weekKey } from "../kit";
@@ -83,5 +83,30 @@ describe("signal 2 and one nudge a day", () => {
     await s.t.action(internal.partnerships.kit.offerOne, { creatorId: s.a });
     expect(await s.t.query(internal.partnerships.delivery.nudgedToday, { creatorId: s.a })).toBe(true);
     expect(await s.t.query(internal.partnerships.delivery.nudgedToday, { creatorId: s.b })).toBe(false);
+  });
+});
+
+describe("the public media-kit page", () => {
+  it("public numbers only; never rates, preferences, email or who they tag", async () => {
+    const s = await setup("partner");
+    await s.t.run(async (ctx) => { await ctx.db.insert("partnershipProfiles", { creatorId: s.a, data: { minimumRate: "$400", excludedBrands: ["secretbrand"] }, updatedAt: Date.now() } as never); });
+    const { url } = await s.t.mutation(internal.partnerships.kitPage.kitLinkFor, { creatorId: s.a, on: true });
+    const slug = url!.split("/k/")[1];
+    const kit = await s.t.query(api.partnerships.kitPage.publicKit, { slug });
+    expect(kit?.platforms[0]).toMatchObject({ platform: "tiktok", followers: 12345 });
+    const text = JSON.stringify(kit);
+    for (const secret of ["$400", "secretbrand", "@eval", "hoka", "prefs", "minimumRate"]) expect(text).not.toContain(secret);
+    // turning it on again keeps the same link
+    expect((await s.t.mutation(internal.partnerships.kitPage.kitLinkFor, { creatorId: s.a, on: true })).url).toBe(url);
+  });
+  it("off kills the old link at once; a guessed or malformed slug gets nothing; B's link is B's", async () => {
+    const s = await setup("partner");
+    const a = (await s.t.mutation(internal.partnerships.kitPage.kitLinkFor, { creatorId: s.a, on: true })).url!.split("/k/")[1];
+    const b = (await s.t.mutation(internal.partnerships.kitPage.kitLinkFor, { creatorId: s.b, on: true })).url!.split("/k/")[1];
+    expect(a).not.toBe(b);
+    expect((await s.t.query(api.partnerships.kitPage.publicKit, { slug: b }))?.name).toBe("tt_b");
+    await s.t.mutation(internal.partnerships.kitPage.kitLinkFor, { creatorId: s.a, on: false });
+    expect(await s.t.query(api.partnerships.kitPage.publicKit, { slug: a })).toBeNull();
+    for (const bad of ["", "x", "../../etc", "A".repeat(500), "' OR 1=1"]) expect(await s.t.query(api.partnerships.kitPage.publicKit, { slug: bad })).toBeNull();
   });
 });

@@ -21,6 +21,8 @@ export default defineSchema({
     careUntil: v.optional(v.number()),
     /** M5: the share extension's token, stored hashed; the app mints it, a new one replaces the old. */
     shareToken: v.optional(v.object({ hash: v.string(), issuedAt: v.number() })),
+    /** B6: the public media-kit page's unguessable slug; public numbers only, revocable. */
+    kitLink: v.optional(v.object({ slug: v.string(), createdAt: v.number() })),
     email: v.string(),
     phone: v.optional(v.string()),
     phoneVerifiedAt: v.optional(v.number()),
@@ -120,6 +122,7 @@ export default defineSchema({
     .index("by_stripe_customer", ["plan.stripeCustomerId"])
     .index("by_clerkUserId", ["clerkUserId"])
     .index("by_share_token", ["shareToken.hash"])
+    .index("by_kit_slug", ["kitLink.slug"])
     .index("by_telegram_chat", ["telegramChatId"])
     .index("by_phone", ["phone"])
     .index("by_pairing_token", ["pairingToken"])

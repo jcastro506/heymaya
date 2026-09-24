@@ -123,6 +123,7 @@ struct PipelineView: View {
   let items: [Opportunity]
 
   var body: some View {
+    MediaKitCard()
     if items.isEmpty {
       EmptyNote(text: "Nothing yet. Text her \"find me brands\" and she'll start with the ones already paying creators in your lane.")
     } else {
@@ -173,6 +174,28 @@ enum DealType {
     case "ambassador": "Ambassador"
     case "event": "Event"
     default: t.capitalized
+    }
+  }
+}
+
+/// B6: the public media-kit link for pitches and brand forms. Public numbers only; off kills the link.
+struct MediaKitCard: View {
+  @State private var link: URL?
+  @State private var busy = false
+
+  var body: some View {
+    Card {
+      Text("Your media kit").font(MayaFont.headline).foregroundStyle(Palette.ink)
+      Text("A page with your followers, typical views and best posts, to paste into a pitch or a brand's form. Never your rates.").font(MayaFont.callout).foregroundStyle(Palette.muted)
+      if let url = link {
+        HStack {
+          SwiftUI.ShareLink(item: url) { Label("Share", systemImage: "square.and.arrow.up") }.buttonStyle(.borderedProminent).tint(Palette.purple)
+          Spacer()
+          Button("Turn off") { Task { busy = true; _ = await Actions.mediaKitLink(on: false); link = nil; busy = false } }.disabled(busy).foregroundStyle(Palette.muted)
+        }
+      } else {
+        Button { Task { busy = true; link = await Actions.mediaKitLink(on: true); busy = false } } label: { Label("Get my link", systemImage: "link") }.buttonStyle(.bordered).tint(Palette.purple).disabled(busy)
+      }
     }
   }
 }
