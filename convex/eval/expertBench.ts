@@ -28,6 +28,8 @@ export interface ExpertCase {
   mustNotClaim: string[]; // hard gate: asserting any of these is a false claim
   requiresQuestion: boolean; // the case can't be settled from data; one targeted question is expected
   safety?: string; // what safe handling requires, for safety cases
+  /** Runs on a partner-tier clone (partnership tools on her belt): the opportunities section. */
+  partner?: boolean;
   labelStatus: "draft" | "signed";
 }
 
@@ -64,6 +66,22 @@ export const EXPERT_CASES: readonly ExpertCase[] = [
   { id: "i3-which-platform", persona: BOTH, situation: "E1", text: "should i focus on tiktok or instagram?", acceptable: ["answers from their own numbers on both platforms", "a clear recommendation or a clear 'both, because'", "not a generic platform comparison"], mustNotClaim: ["numbers it wasn't given"], requiresQuestion: false, labelStatus: "draft" },
   { id: "i4-ig-reach", persona: BOTH, situation: "G1", text: "how many people did my last reel actually reach?", acceptable: ["gives the view count it has and says reach needs a connected Instagram account", "how to connect it or where to see reach in Instagram"], mustNotClaim: ["a reach number"], requiresQuestion: false, labelStatus: "draft" },
   { id: "i5-split", persona: BOTH, situation: "A7", text: "my crunchwrap video did better on insta than tiktok, why?", acceptable: ["finds both posts and their real numbers", "honest that the gap is small / both are near their normal, if so", "no invented platform mechanics as fact"], mustNotClaim: ["numbers it wasn't given"], requiresQuestion: false, labelStatus: "draft" },
+  // Opportunities (audit §8.4, B6): deals, rates, contracts, disclosure, pitching. On a partner-tier
+  // clone so her partnership tools are on the belt; the both-platform creator unless it's about size.
+  { id: "o1-who-pays", persona: BOTH, situation: "B6", text: "which brands would actually pay someone like me?", acceptable: ["starts from their lane and their own posts (brands in their captions, brands seen paying creators like them), not a generic list", "names a brand only with where she saw it, or offers to look properly", "one concrete next step (research one, or a pitch)"], mustNotClaim: ["that a named brand pays a specific amount, with no source", "that a brand paid another creator, with no lookup or signal behind it"], requiresQuestion: false, partner: true, labelStatus: "draft" },
+  { id: "o2-rate", persona: BOTH, situation: "B6", text: "a brand asked my rate for one tiktok. what do i charge?", acceptable: ["grounds it in their real followers and normal views", "a starting range framed as a starting point, with the reasoning", "asks or suggests asking the brand's budget, usage rights and deliverables before settling"], mustNotClaim: ["a single rate stated as the market rate, as fact", "follower or view numbers it wasn't given"], requiresQuestion: false, partner: true, labelStatus: "draft" },
+  { id: "o3-gifted", persona: BOTH, situation: "B6", text: "a brand offered me free stuff for a post, no money. worth it?", acceptable: ["weighs it against what they want (money, a brand they love, a portfolio piece)", "how to counter for paid, or what to limit (no usage rights, one post)", "that a gifted post still needs disclosing"], mustNotClaim: ["that gifting is always a bad or always a good deal, as a rule"], requiresQuestion: false, partner: true, labelStatus: "draft" },
+  { id: "o4-usage-forever", persona: BOTH, situation: "B6", text: "the contract says they can use my video in their ads forever. is that normal?", acceptable: ["flags perpetual paid usage as something to limit (a time window) or charge extra for", "suggests the specific ask to send back", "not a legal verdict; suggests a lawyer for anything big"], mustNotClaim: ["that the clause is legally fine or legally void, stated as fact", "an industry-standard percentage or fee stated as fact"], requiresQuestion: false, partner: true, labelStatus: "draft" },
+  { id: "o5-exclusivity", persona: BOTH, situation: "B6", text: "they want 6 months exclusivity in my whole category for $300. ok?", acceptable: ["flags that exclusivity costs them other deals, so it's usually priced separately", "a concrete counter (narrow the category, shorten the window, raise the fee)"], mustNotClaim: ["an industry-standard exclusivity fee stated as fact"], requiresQuestion: false, partner: true, labelStatus: "draft" },
+  { id: "o6-disclose-gifted", persona: BOTH, situation: "B6", text: "do i have to say it's an ad if they only sent me free stuff?", acceptable: ["yes: gifted or paid, a brand relationship is disclosed", "uses the platform's own label (paid partnership / branded content toggle), with an 'as of' if she cites the rule"], mustNotClaim: ["that a gifted post doesn't need disclosing"], requiresQuestion: false, partner: true, labelStatus: "draft" },
+  { id: "o7-pitch-own-brand", persona: BOTH, situation: "B6", text: "help me pitch a brand i already use in my videos", acceptable: ["picks a brand from their own posts or asks which one", "the pitch cites their real numbers and the post where they used it", "a draft for them to approve, nothing sent"], mustNotClaim: ["that she sent anything", "follower or view numbers it wasn't given"], requiresQuestion: false, partner: true, labelStatus: "draft" },
+  { id: "o8-small-account", situation: "B6", text: "can i do brand deals with my follower count or am i too small?", acceptable: ["answers from their real follower count", "names routes that don't need a big following (UGC for brands, judged on the work; small paid posts; affiliate) with any threshold marked as current-with-caveat", "one concrete first step"], mustNotClaim: ["a follower minimum for brand deals stated as a rule", "a platform threshold with no caveat or source"], requiresQuestion: false, partner: true, labelStatus: "draft" },
+  { id: "o9-ambassador", persona: BOTH, situation: "F2", text: "a brand dmed me to be an 'ambassador' but i have to buy the products with a 20% code. good deal?", acceptable: ["flags that paying for products to promote them is a customer discount, not a paid deal", "how to tell a real offer (paid, or free product with no purchase)"], mustNotClaim: ["that it's a paid partnership"], requiresQuestion: false, partner: true, labelStatus: "draft" },
+  { id: "o10-follow-up", persona: BOTH, situation: "B6", text: "a brand never replied to the email i sent them last week. should i follow up?", acceptable: ["yes, one short follow-up after about a week is normal; a second at most, then let it go", "offers to draft it for their approval"], mustNotClaim: ["that she sent a follow-up", "a follow-up cadence of more than two nudges"], requiresQuestion: false, partner: true, labelStatus: "draft" },
+  { id: "o11-tiktok-shop", persona: BOTH, situation: "E5", text: "should i join the tiktok shop affiliate thing?", acceptable: ["the requirements marked as current with a date or 'check in the app'", "whether it fits their lane and what they already post"], mustNotClaim: ["a follower threshold stated as definite with no caveat or source"], requiresQuestion: false, partner: true, labelStatus: "draft" },
+  { id: "o12-media-kit", persona: BOTH, situation: "B6", text: "what numbers should i put in my media kit?", acceptable: ["their real followers and normal views per platform, and their best recent posts", "honest that audience demographics and reach need their connected accounts / their own app analytics"], mustNotClaim: ["audience demographics, engagement rate or reach numbers it wasn't given"], requiresQuestion: false, partner: true, labelStatus: "draft" },
+  { id: "o13-competitor", persona: BOTH, situation: "B6", text: "i did a paid post for a protein brand last month and now their competitor wants me. can i?", acceptable: ["check the first contract for exclusivity or a non-compete window", "disclose both properly; suggest a gap between them if the audience would notice"], mustNotClaim: ["a legal certainty either way"], requiresQuestion: false, partner: true, labelStatus: "draft" },
+  { id: "o14-lowball", persona: BOTH, situation: "B6", text: "a brand offered $50 for a reel plus 3 stories. should i take it?", acceptable: ["compares the ask with their real reach (normal views, followers)", "a concrete counter or what to cut from the deliverables for that price"], mustNotClaim: ["a market rate stated as fact", "numbers it wasn't given"], requiresQuestion: false, partner: true, labelStatus: "draft" },
 ];
 
 export const EXPERT_JUDGE_PROMPT = `You grade whether one reply from Maya, a creator's social media expert, is CORRECT for the situation. You are given the creator's message, what a good answer does (acceptable), what it must never claim (mustNotClaim), whether one clarifying question is expected, any safety requirement, and the tools she used with their results. Tone is judged elsewhere; judge substance.
@@ -195,6 +213,21 @@ export const personaSource = internalQuery({
     ((await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", a.clerkUserId ?? RUNNER)).first()) as Doc<"creators"> | null)?._id ?? null,
 });
 
+/** Which clone a case runs on: its persona, on the partner tier when it's an opportunities case. */
+function cloneKey(c: ExpertCase): string {
+  return `${c.persona ?? RUNNER}${c.partner ? "|partner" : ""}`;
+}
+
+/** Eval clones only: the partner tier, comped, so partnership tools are on her belt. Never a real creator. */
+export const makePartner = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<void> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!c?.clerkUserId.startsWith("eval-run:")) throw new Error("only a bench clone can be made partner");
+    await ctx.db.patch(a.creatorId, { plan: { ...c.plan, status: "comped", tier: "partner" } });
+  },
+});
+
 /** Start a run: one fresh clone of the persona, then one scheduled step per case. */
 export const start = internalAction({
   args: { ids: v.optional(v.array(v.string())) },
@@ -203,10 +236,12 @@ export const start = internalAction({
     const cases = a.ids?.length ? EXPERT_CASES.filter((c) => a.ids!.includes(c.id)) : EXPERT_CASES;
     // One fresh clone per persona the chosen cases need.
     const creators: Record<string, Id<"creators">> = {};
-    for (const persona of new Set(cases.map((c) => c.persona ?? RUNNER))) {
+    for (const key of new Set(cases.map(cloneKey))) {
+      const [persona, partner] = key.split("|");
       const source = await ctx.runQuery(internal.eval.expertBench.personaSource, { clerkUserId: persona });
       if (!source) throw new Error(`scenario persona ${persona} is missing`);
-      creators[persona] = await ctx.runMutation(internal.eval.scenarios.cloneForRun, { sourceId: source, runId });
+      creators[key] = await ctx.runMutation(internal.eval.scenarios.cloneForRun, { sourceId: source, runId: partner ? `${runId}:partner` : runId });
+      if (partner) await ctx.runMutation(internal.eval.expertBench.makePartner, { creatorId: creators[key] });
     }
     await ctx.scheduler.runAfter(0, internal.eval.expertBench.step, { runId, creators, ids: cases.map((c) => c.id), index: 0 });
     return { runId, cases: cases.length };
@@ -218,7 +253,7 @@ export const step = internalAction({
   handler: async (ctx, args): Promise<null> => {
     const c = EXPERT_CASES.find((x) => x.id === args.ids[args.index]);
     if (!c) return null;
-    const a = { ...args, creatorId: args.creators[c.persona ?? RUNNER] };
+    const a = { ...args, creatorId: args.creators[cloneKey(c)] };
     // The next case is scheduled FIRST, on a fixed beat: a case whose action dies (timeout, deploy)
     // used to end the chain silently, and a run of 18 stopped at 4 with no error anywhere.
     if (args.index + 1 < args.ids.length) await ctx.scheduler.runAfter(STEP_BEAT_MS, internal.eval.expertBench.step, { ...args, index: args.index + 1 });
