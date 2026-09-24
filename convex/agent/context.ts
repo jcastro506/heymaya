@@ -8,6 +8,7 @@ import { internalQuery, type QueryCtx } from "../_generated/server";
 import { v } from "convex/values";
 import { appActionsSection, unseenActions } from "../core/act";
 import { unseenIdeas, unseenSection } from "../core/unseen";
+import { normalsByPlatform } from "../core/normal";
 import type { Doc, Id } from "../_generated/dataModel";
 import { SOUL, SOUL_VERSION, REGISTER_ADDENDA } from "./soul";
 import { entitlementsFor, planLineFor } from "../billing/tiers";
@@ -100,7 +101,11 @@ export async function personalFor(ctx: QueryCtx, creator: Doc<"creators">): Prom
   const nowLocal = new Intl.DateTimeFormat("en-US", { timeZone: creator.timezone, weekday: "short", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(now);
   // Her calendar sense (2026-09-07): what is free from now, and why those hours, on every turn.
   const avail = await availabilityFor(ctx, creator, now);
-  return `# Their recent posts (newest first; the numbers you may cite about them)\n${week.join("\n") || "- none read yet"}\n\n# Their week's plan (film / edit / post blocks; the ids are for the block tools)\nNow on their clock: ${nowLocal} (${creator.timezone}).\n${plan.join("\n") || "- no plan yet this week; you can lay one out with week_replan, or they can ask for one"}\n\n# Their next few days (titles only; never private events)\n${life.join("\n") || "- nothing on the calendar, or no calendar connected"}\n\n${availabilitySection(avail.windows, avail.bestHours)}`;
+  // Their normal on each platform, side by side (the one definition, core/normal): "tiktok or instagram?" gets answered from these, not from generalities.
+  const recent = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).order("desc").take(80)) as Doc<"ownPosts">[];
+  const normals = [...normalsByPlatform(recent, now).entries()].filter(([, n]) => n).map(([pl, n]) => `${pl === "instagram" ? "Instagram" : "TikTok"} ${n!.value.toLocaleString()} views (median of their last ${n!.n} settled posts)`);
+  const normalsLine = normals.length ? `\n\n# Their normal on each platform\n${normals.join(" · ")}` : "";
+  return `# Their recent posts (newest first; the numbers you may cite about them)\n${week.join("\n") || "- none read yet"}${normalsLine}\n\n# Their week's plan (film / edit / post blocks; the ids are for the block tools)\nNow on their clock: ${nowLocal} (${creator.timezone}).\n${plan.join("\n") || "- no plan yet this week; you can lay one out with week_replan, or they can ask for one"}\n\n# Their next few days (titles only; never private events)\n${life.join("\n") || "- nothing on the calendar, or no calendar connected"}\n\n${availabilitySection(avail.windows, avail.bestHours)}`;
 }
 
 /** Build the stable prefix: soul → register → skill → dossier → directives → live notes. */

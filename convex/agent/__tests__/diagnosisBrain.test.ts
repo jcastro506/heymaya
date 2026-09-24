@@ -193,3 +193,21 @@ describe("cross-posts (both platforms)", () => {
     expect(crossPostOf(post(4, 1, { caption: "crunchwraps for the week" }), [post(4, 1, { platform: "instagram", caption: "frozen pizza for the week" })])).toBeNull();
   });
 });
+
+describe("both platforms in her context (bench i3)", () => {
+  it("her context states their normal on each platform, side by side, from the one definition", async () => {
+    const t = convexTest(schema, modules);
+    const a = await t.run(async (ctx) => {
+      const a = await seedCreator(ctx, "a", { clerkUserId: "user_a", timezone: "UTC" });
+      for (let i = 0; i < 6; i++) {
+        await ctx.db.insert("ownPosts", { creatorId: a, platform: "tiktok", postId: `t${i}`, url: `https://www.tiktok.com/@a/video/${i}`, createTime: Date.now() - (3 + i) * 24 * H, contentType: "video", caption: "c", hashtags: [], metrics: { views: 360_000, likes: 1, comments: 1, shares: 1 }, metricsAsOf: Date.now(), source: "scrape" });
+        await ctx.db.insert("ownPosts", { creatorId: a, platform: "instagram", postId: `i${i}`, url: `https://www.instagram.com/p/X${i}/`, createTime: Date.now() - (3 + i) * 24 * H, contentType: "video", caption: "c", hashtags: [], metrics: { views: 385_000, likes: 1, comments: 1, shares: 1 }, metricsAsOf: Date.now(), source: "scrape" });
+      }
+      return a;
+    });
+    const g = await t.query(internal.agent.context.gather, { creatorId: a });
+    expect(g?.personal).toMatch(/Their normal on each platform/);
+    expect(g?.personal).toMatch(/TikTok 360,000 views/);
+    expect(g?.personal).toMatch(/Instagram 385,000 views/);
+  });
+});
