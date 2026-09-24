@@ -188,7 +188,6 @@ export const measure = internalQuery({
   handler: async (ctx, a): Promise<Record<string, unknown>> => {
     let asks = 0, replies = 0, tracked = 0, trackedIg = 0, watchingReplies = 0, refusals = 0;
     const lat: number[] = [];
-    let usd = 0;
     for (let i = a.from; i < a.from + a.count; i++) {
       const c = (await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", `${LOAD_PREFIX}${i}`)).first()) as Doc<"creators"> | null;
       if (!c) continue;
@@ -201,12 +200,10 @@ export const measure = internalQuery({
       }
       const t = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).take(20)) as Doc<"trackedAccounts">[];
       tracked += t.length; trackedIg += t.filter((x) => x.platform === "instagram").length;
-      const costs = (await ctx.db.query("costEvents").filter((q) => q.eq(q.field("creatorId"), c._id)).take(200)) as Array<{ costUsd?: number }>;
-      usd += costs.reduce((s, x) => s + (x.costUsd ?? 0), 0);
     }
     lat.sort((x, y) => x - y);
     const q = (p: number) => (lat.length ? Math.round(lat[Math.min(lat.length - 1, Math.floor(lat.length * p))] / 1000) : null);
-    return { asks, replies, watchingReplies, otherReplies: refusals, tracked, trackedInstagram: trackedIg, latencySec: { p50: q(0.5), p90: q(0.9), p99: q(0.99), max: q(1) }, modelAndVendorUsd: Math.round(usd * 100) / 100 };
+    return { asks, replies, watchingReplies, otherReplies: refusals, tracked, trackedInstagram: trackedIg, latencySec: { p50: q(0.5), p90: q(0.9), p99: q(0.99), max: q(1) } };
   },
 });
 

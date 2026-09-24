@@ -61,8 +61,30 @@ export const CLASSIFY_PROMPT = `You label one message a content creator sent to 
 Examples: "i'm at a rooftop bar with the whole run club, what do i shoot" → moment · "make it 15 seconds" → edit_idea lengthSec "15" · "change the hook to 'nobody trains for this part'" → edit_idea hook · "scrap that" → drop_idea · "add @runwithcarly to the list" → manage/add_admired handle runwithcarly · "watch @gymgirl on insta" → manage/add_admired instagram · "be blunter with me" → manage/tone blunt · "go easier on me" → manage/tone friend · "don't text me before 9am" → manage/quiet_hours end 09:00 (start from current) · "stop watching @x" → manage/stop_watching · "i only do gear reviews now" → manage/niche · "why is @x blowing up" → profile_ask · "what was that shoe rack idea" → recall · "should i post at 7 or 9" → opinion_ask.
 Output ONLY JSON: {"intent": "profile_ask|recall|opinion_ask|calendar_answer|manage|moment|edit_idea|drop_idea|distress|check_in|text", "handle": "", "platform": "tiktok|instagram", "action": "", "start": "", "end": "", "tone": "", "field": "", "text": ""}`;
 
+/**
+ * Pure: an unmistakable "watch this account" request, read by code with no model call. The scale test
+ * (2026-09-24) sent "add @x to my list" / "keep an eye on @x on insta" through the classifier under load;
+ * a third came back as plain chat and Maya told people to retype it. Anything less clear goes to the model.
+ */
+export function obviousWatch(text: string, own: { tiktok?: string; instagram?: string }): Intent | null {
+  const t = text.trim();
+  if (t.length > 160) return null;
+  const m = /^(?:(?:can|could|would) you\s+(?:please\s+)?)?(?:pls\s+|please\s+)?(watch|add|track|follow|keep an eye on|start watching|stop watching|unwatch|remove|drop)\s+@([a-z0-9._]{2,30})\b([^@]*)$/i.exec(t);
+  if (!m) return null;
+  const verb = m[1].toLowerCase();
+  const handle = m[2].toLowerCase().replace(/\.$/, "");
+  const rest = m[3].toLowerCase();
+  if ([own.tiktok, own.instagram].filter(Boolean).map((h) => h!.toLowerCase()).includes(handle)) return null;
+  if (/\b(post|video|reel|caption|idea|hook)\b/.test(rest)) return null; // "add @x to the caption" is not a watch
+  const platform = /\b(insta|instagram|ig|reels?)\b/.test(rest) ? "instagram" : "tiktok";
+  if (/^(stop watching|unwatch|remove|drop)$/.test(verb)) return { intent: "manage", action: "stop_watching", handle };
+  return { intent: "manage", action: "add_admired", platform, handle };
+}
+
 export async function classifyText(ctx: ActionCtx, input: { creatorId: Id<"creators">; text: string; ownHandles: { tiktok?: string; instagram?: string }; lastOutbound?: string; quietHours?: { start: string; end: string } }): Promise<Intent> {
-  const r = await callModel(ctx, {
+  const fast = obviousWatch(input.text, input.ownHandles);
+  if (fast) return fast;
+  const ask = (model: string) => callModel(ctx, {
     creatorId: input.creatorId,
     purpose: "classify",
     model: REGISTRY.screener.primary,
@@ -71,9 +93,12 @@ export async function classifyText(ctx: ActionCtx, input: { creatorId: Id<"creat
       { role: "user", content: `Their own handles (never a profile_ask): ${JSON.stringify(input.ownHandles)}\nCurrent quiet hours: ${JSON.stringify(input.quietHours ?? { start: "22:00", end: "07:00" })}\nHer last message to them: ${JSON.stringify((input.lastOutbound ?? "").slice(0, 300))}\n\nTheir message: ${input.text.slice(0, 600)}` },
     ],
     temperature: 0,
-    maxTokens: 120,
+    // Room for a reasoning model's thinking: 120 tokens came back empty, and empty meant "plain chat".
+    maxTokens: 500,
     apiKey: process.env.OPENROUTER_API_KEY ?? "",
   });
+  let r = await ask(REGISTRY.screener.primary);
+  if (!r.ok || !/\{[\s\S]*\}/.test(r.content)) r = await ask(REGISTRY.screener.fallback);
   if (!r.ok) return { intent: "text" };
   try {
     const m = r.content.match(/\{[\s\S]*\}/);
