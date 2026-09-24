@@ -33,7 +33,7 @@ const WEEK_MS = 7 * 86_400_000;
 export const FINISH_WATCH_PROMPT = `You are watching AND listening to one short video a creator filmed and hasn't posted yet. They need a caption and a sound for it. Observations only. Return STRICT JSON, no prose:
 {
  "about": "≤220: what happens in it and what it's about, concretely (the dish, the place, the bit)",
- "spokenWords": "≤500: what is said, close to verbatim, or ''",
+ "spokenWords": "≤350: what is said, close to verbatim (the key lines if it's long), or ''",
  "onScreenText": "≤200: every piece of text shown, or ''",
  "audioNow": "original-voice|voice-over|music|voice-over-music|ambient|silent",
  "audioDescription": "≤200: what you hear: their voice (pace, tone), any music (genre, energy, tempo), sound moments that matter (a sizzle, a laugh, a door)",
@@ -174,11 +174,13 @@ export const run = internalAction({
     const file = target.fileId ? await ctx.storage.get(target.fileId) : null;
     if (!file) return { ok: false, reason: "no file bytes" };
     await ctx.runAction(internal.core.telegram.react, { creatorId: creator._id, messageId: target._id, emoji: "👀" }).catch(() => undefined);
-    const w = await watchBytes(ctx, creator._id, "watch_finish", await file.arrayBuffer(), target.fileMime ?? "video/mp4", FINISH_WATCH_PROMPT);
+    // Talky videos write long notes: room for them, so the JSON isn't cut off mid-sentence.
+    const w = await watchBytes(ctx, creator._id, "watch_finish", await file.arrayBuffer(), target.fileMime ?? "video/mp4", FINISH_WATCH_PROMPT, 2500);
     const card = w.text ? parseJson<Record<string, unknown>>(w.text) : null;
     if (!card) {
-      await reply(`couldn't watch that one (${w.reason ?? "the file didn't open"}). try a smaller export, under 20 MB?`);
-      return { ok: true, reason: `watch failed: ${w.reason}` };
+      const why = w.text ? "my notes on it came out garbled" : (w.reason ?? "the file didn't open");
+      await reply(`couldn't watch that one properly (${why}). send it again?`);
+      return { ok: true, reason: `watch failed: ${w.text ? `unparsed: ${w.text.slice(0, 160)}` : w.reason}` };
     }
     const candidates = await ctx.runQuery(internal.agent.finish.soundCandidates, { creatorId: creator._id, now: Date.now() });
     const prefix = buildPrefix({ creator, directives, skill: FINISH_SKILL, personal: g.personal, voice: g.voice, history: g.history });

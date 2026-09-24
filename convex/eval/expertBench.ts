@@ -204,7 +204,7 @@ async function judgeCorrectness(ctx: Parameters<typeof callModel>[0], c: ExpertC
   const spec = REGISTRY.critic;
   const messages = [
     { role: "system" as const, content: EXPERT_JUDGE_PROMPT },
-    { role: "user" as const, content: JSON.stringify({ creatorMessage: c.text, acceptable: c.acceptable, mustNotClaim: c.mustNotClaim, questionExpected: c.requiresQuestion, safety: c.safety ?? null, toolsUsed: trace ?? [], factsSheHad: truth, reply }).slice(0, 16000) },
+    { role: "user" as const, content: `Her reply (judge this):\n"""\n${reply}\n"""\n\nThe case:\n${JSON.stringify({ creatorMessage: c.text, acceptable: c.acceptable, mustNotClaim: c.mustNotClaim, questionExpected: c.requiresQuestion, safety: c.safety ?? null })}\n\nWhat she had (tools she used, facts she had):\n${JSON.stringify({ toolsUsed: trace ?? [], factsSheHad: truth }).slice(0, 30000)}` },
   ];
   let r = await callModel(ctx, { creatorId, purpose: "expert_judge", model: spec.primary, messages, temperature: 0, maxTokens: 1500, timeoutMs: CRITIC_TIMEOUT_MS * 2, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
   // A reasoning model can spend the whole budget thinking and return nothing; that is a retry, not a verdict.
