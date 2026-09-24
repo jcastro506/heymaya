@@ -34,7 +34,7 @@ async function setup(tier: "solo" | "partner") {
     const b = await seedCreator(ctx, "b", { clerkUserId: "user_b", channel: { paired: true }, plan: { status: "active", founding: false, tier: "partner" } });
     await ctx.db.insert("trackedAccounts", { creatorId: a, platform: "tiktok", handle: "runnerjane", status: "active", addedBy: "creator", baselineN: 12, createdAt: Date.now() } as never);
     await ctx.db.insert("observations", { platform: "tiktok", postId: "p1", authorHandle: "runnerjane", url: "https://www.tiktok.com/x", createTime: Date.now(), sampledAt: Date.now(), ageHours: 5, views: 1000, likes: 1, comments: 1, shares: 1, keywords: [], source: "account.posts", paidPromotion: true, mentions: ["hoka"] });
-    for (let i = 0; i < 6; i++) await ctx.db.insert("ownPosts", { creatorId: a, platform: "tiktok", postId: `o${i}`, url: `https://www.tiktok.com/@a/video/${i}`, createTime: Date.now() - (3 + i) * 86_400_000, contentType: "video", caption: `run ${i}`, hashtags: [], metrics: { views: 1000 * (i + 1), likes: 1, comments: 1, shares: 1 }, metricsAsOf: Date.now(), source: "scrape" });
+    for (let i = 0; i < 6; i++) await ctx.db.insert("ownPosts", { creatorId: a, platform: "tiktok", postId: `o${i}`, url: `https://www.tiktok.com/@a/video/${i}`, createTime: Date.now() - (3 + i) * 86_400_000, contentType: "video", caption: i < 2 ? `run ${i} in my @Hoka clifton @TT_a` : `run ${i}`, hashtags: [], metrics: { views: 1000 * (i + 1), likes: 1, comments: 1, shares: 1 }, metricsAsOf: Date.now(), source: "scrape" });
     await ctx.db.insert("followerSnapshots", { creatorId: a, platform: "tiktok", accountId: "x", day: "2026-09-24", followers: 12345, at: Date.now() });
     return { a, b };
   });
@@ -68,5 +68,20 @@ describe("the media kit", () => {
     expect(tt.best[0].views).toBe(6000);
     const kb = (await s.t.query(internal.partnerships.kit.mediaKit, { creatorId: s.b }))!;
     expect(kb.platforms.every((p) => p.followers === null && p.normalViews === null)).toBe(true);
+  });
+});
+
+describe("signal 2 and one nudge a day", () => {
+  it("the kit lists accounts they tagged themselves, never their own handle", async () => {
+    const s = await setup("partner");
+    const k = (await s.t.query(internal.partnerships.kit.mediaKit, { creatorId: s.a }))!;
+    expect(k.taggedByThem).toEqual([{ handle: "hoka", posts: 2, example: expect.stringContaining("tiktok.com") }]);
+  });
+  it("after a partnerships text today, the follow-up pass waits for tomorrow", async () => {
+    const s = await setup("partner");
+    expect(await s.t.query(internal.partnerships.delivery.nudgedToday, { creatorId: s.a })).toBe(false);
+    await s.t.action(internal.partnerships.kit.offerOne, { creatorId: s.a });
+    expect(await s.t.query(internal.partnerships.delivery.nudgedToday, { creatorId: s.a })).toBe(true);
+    expect(await s.t.query(internal.partnerships.delivery.nudgedToday, { creatorId: s.b })).toBe(false);
   });
 });

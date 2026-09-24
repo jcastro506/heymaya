@@ -21,6 +21,8 @@ export interface MediaKit {
   lane: string | null;
   platforms: Array<{ platform: string; handle: string | null; followers: number | null; normalViews: number | null; posts: number; best: Array<{ url: string; views: number; multiple: number | null; caption: string }> }>;
   prefs: { paidOnly: boolean; dealTypes: string[]; excludedBrands: string[]; minimumRate: string; region: string };
+  /** Signal 2: accounts they tagged in their own posts (brands they already use, or friends: her call), with a post to point at. */
+  taggedByThem: Array<{ handle: string; posts: number; example: string }>;
 }
 
 export const mediaKit = internalQuery({
@@ -47,7 +49,15 @@ export const mediaKit = internalQuery({
       }];
     });
     const lane = typeof (c.dossier as { lane?: unknown } | undefined)?.lane === "string" ? String((c.dossier as { lane: string }).lane) : c.niche ?? null;
-    return { lane, platforms, prefs: { paidOnly: p.paidOnly, dealTypes: p.dealTypes, excludedBrands: p.excludedBrands, minimumRate: p.minimumRate, region: p.region } };
+    const tags = new Map<string, { posts: number; example: string }>();
+    for (const x of posts) for (const m of (x.caption.match(/@([a-z0-9._]{2,30})/gi) ?? []).map((t) => t.slice(1).toLowerCase().replace(/\.$/, ""))) {
+      if (m === c.handles.tiktok?.toLowerCase() || m === c.handles.instagram?.toLowerCase()) continue;
+      const t = tags.get(m) ?? { posts: 0, example: x.url };
+      t.posts++;
+      tags.set(m, t);
+    }
+    const taggedByThem = [...tags.entries()].sort((a2, b2) => b2[1].posts - a2[1].posts).slice(0, 8).map(([handle, t]) => ({ handle, ...t }));
+    return { taggedByThem, lane, platforms, prefs: { paidOnly: p.paidOnly, dealTypes: p.dealTypes, excludedBrands: p.excludedBrands, minimumRate: p.minimumRate, region: p.region } };
   },
 });
 

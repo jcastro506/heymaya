@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalAction, internalQuery } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
+import { dayKeyInZone } from "../core/cadence";
 import type { MutationCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
@@ -173,6 +174,8 @@ export const checkOne = internalAction({ args: { creatorId: v.id("creators"), op
       if (check === "submit") candidates.push({ key: `partner-app-submit:${a.opportunityId}`, body: `did you get to submit the ${data.brand} application? tell me when you have, and i'll check back in a couple of weeks.` });
       if (check === "heard_back") candidates.push({ key: `partner-app-heard:${a.opportunityId}`, body: `heard anything back from ${data.brand} about your application?` });
       if (followUpEligible(data, Date.now())) candidates.push({ key: `partner-followup:${a.opportunityId}:${data.followUpAt}`, body: data.followUpBasis === "user_requested" ? `you asked me to revisit ${data.brand} around now. want to work out the next step?` : `we haven’t received a reply from ${data.brand} in the tracked email conversation. want me to prepare a follow-up for you to review?` });
+      // §8.3: one partnerships nudge a day across all their brands; the rest wait for tomorrow.
+      if (candidates.length && await ctx.runQuery(internal.partnerships.delivery.nudgedToday, { creatorId: a.creatorId })) return;
       for (const candidate of candidates) {
         if (await ctx.runQuery(internal.core.messages.exists, { creatorId: a.creatorId, dedupeKey: candidate.key })) continue;
         await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: candidate.body, dedupeKey: candidate.key, proactive: true, kind: "partnership", awaitingAnswer: true });
@@ -230,3 +233,12 @@ export async function markApplied(ctx: MutationCtx, creatorId: Doc<"creators">["
   await ctx.db.patch(opportunityId, { data: Opportunity.parse({ ...o, status: "contacted", appliedAt: now, applicationCheckIns: 1, applicationCheckInAt: now + APPLICATION_CHECK_IN_DAYS.afterSubmit * 86_400_000 }), updatedAt: now });
   await event(ctx, creatorId, opportunityId, `applied:${opportunityId}`, "applied", "They submitted the application (their report).");
 }
+
+/** Has a partnerships nudge already gone out today, on their clock? */
+export const nudgedToday = internalQuery({ args: { creatorId: v.id("creators") }, handler: async (ctx, a): Promise<boolean> => {
+  const c = await ctx.db.get(a.creatorId) as Doc<"creators"> | null;
+  if (!c) return true;
+  const today = dayKeyInZone(Date.now(), c.timezone);
+  const rows = await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId).gte("ts", Date.now() - 36 * 3_600_000)).collect() as Doc<"messages">[];
+  return rows.some((m) => m.direction === "out" && m.kind === "partnership" && m.proactive && dayKeyInZone(m.ts, c.timezone) === today);
+} });
