@@ -30,6 +30,7 @@ import { REGISTRY } from "../agent/registry";
 import { parseJson } from "../agent/opinion";
 import { TABLES_BY_CREATOR } from "../account/deletion";
 import { applyIdeaAct } from "../core/ideaActs";
+import { tiktok } from "../integrations/scrapeCreators/platforms/tiktok";
 
 const D = 86_400_000;
 const STEP_GAP_MS = 5_000;
@@ -194,6 +195,9 @@ export const start = internalAction({
     const source = await ctx.runQuery(internal.eval.expertBench.personaSource, { clerkUserId: a.persona });
     if (!source) throw new Error(`persona ${a.persona} is missing`);
     const creatorId = await ctx.runMutation(internal.eval.scenarios.cloneForRun, { sourceId: source, runId });
+    // Enough real history to replay: page back through her TikTok until it covers the run.
+    const handle = await ctx.runQuery(internal.account.setup.handlesFor, { creatorId });
+    if (handle?.tiktok) await ctx.runAction(internal.eval.livingSim.deepen, { creatorId, handle: handle.tiktok, days: a.days });
     const r = await ctx.runMutation(internal.eval.livingSim.prepare, { creatorId, days: a.days, runId, persona: a.persona, seed: a.seed ?? 7 });
     // Day 0: the world moves forward so the start date is "now"; each day then ages it one day back.
     await ageWorld(ctx, creatorId, a.days * D);
@@ -215,17 +219,20 @@ export const dayWorld = internalAction({
     const notes: string[] = [];
     for (const f of due) {
       const doc = f.doc as { url?: string; caption?: string; postId?: string };
+      let drafted = false;
       // Some real posts arrive first as a camera-roll draft: Maya finishes it, then the real caption goes out.
       if (doc.url && rand() < 0.35) {
         try {
           const { messageId } = await ctx.runAction(internal.eval.expertBench.sendDraft, { creatorId: s.creatorId, url: doc.url, body: rand() < 0.5 ? "caption + sound for this one? posting later" : "" });
           const r = await ctx.runAction(internal.agent.finish.run, { creatorId: s.creatorId, messageId });
           notes.push(`draft ${doc.postId}: ${r.reason ?? (r.ok ? "finished" : "failed")}`);
+          drafted = true;
         } catch (e) {
           notes.push(`draft ${doc.postId} skipped: ${e instanceof Error ? e.message.slice(0, 80) : "error"}`);
         }
       }
-      await ctx.runMutation(internal.eval.livingSim.releasePost, { creatorId: s.creatorId, doc: f.doc, createTime: now - (a.d * D - f.offsetMs) });
+      // A drafted post goes out after the draft (as it would in life); the rest at their real time of day.
+      await ctx.runMutation(internal.eval.livingSim.releasePost, { creatorId: s.creatorId, doc: f.doc, createTime: drafted ? Date.now() : now - (a.d * D - f.offsetMs) });
     }
     await ctx.runMutation(internal.eval.livingSim.writeState, { runId: a.runId, state: { ...s, future: s.future.filter((f) => f.offsetMs > a.d * D) } });
     await ctx.runMutation(internal.eval.livingSim.note, { runId: a.runId, d: a.d, patch: { released: due.length, world: notes } });
@@ -251,6 +258,8 @@ export const dayMaya = internalAction({
         jobs[name] = `failed: ${e instanceof Error ? e.message.slice(0, 100) : "error"}`;
       }
     };
+    // The accounts she watches are read for her roster (the fleet sampler does this every 6 h; cached reads).
+    await step("sample", async () => { const r = await ctx.runAction(internal.scout.sampler.run, { creatorId: id }); return { sent: r.signals > 0, reason: `${r.accounts} accounts, ${r.signals} breakouts, ${r.failed} failed` }; });
     await step("morning", () => ctx.runAction(internal.agent.cadence.morning, { creatorId: id, now }));
     await step("scout", () => ctx.runAction(internal.scout.scout.runOne, { creatorId: id }));
     if (a.d % 7 === 6) await step("weekPlan", () => ctx.runAction(internal.calendar.weekPlan.draft, { creatorId: id, now, horizon: "next_week" }));
@@ -435,5 +444,84 @@ export const report = internalQuery({
     const rows = await ctx.db.query("syncState").withIndex("by_key", (q) => q.gte("key", `sim:${a.runId}:day:`).lt("key", `sim:${a.runId}:day:~`)).collect();
     const { future, ...rest } = s ?? ({ future: [] } as unknown as State);
     return { state: s ? { ...rest, heldBack: future.length } : null, days: rows.map((r) => JSON.parse(r.value) as Record<string, unknown>).sort((x, y) => Number(x.d) - Number(y.d)) };
+  },
+});
+
+/** How much real history a persona has to replay: post count and how far back it goes, per platform. */
+export const span = internalQuery({
+  args: { persona: v.string() },
+  handler: async (ctx, a): Promise<Record<string, { posts: number; oldestDaysAgo: number; newestDaysAgo: number }>> => {
+    const c = await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", a.persona)).first();
+    if (!c) return {};
+    const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).collect()) as Doc<"ownPosts">[];
+    const out: Record<string, { posts: number; oldestDaysAgo: number; newestDaysAgo: number }> = {};
+    for (const p of posts) {
+      const ago = Math.round((Date.now() - p.createTime) / D);
+      const e = out[p.platform] ?? { posts: 0, oldestDaysAgo: 0, newestDaysAgo: 9999 };
+      out[p.platform] = { posts: e.posts + 1, oldestDaysAgo: Math.max(e.oldestDaysAgo, ago), newestDaysAgo: Math.min(e.newestDaysAgo, ago) };
+    }
+    return out;
+  },
+});
+
+/** Pure: a normalized TikTok post as an ownPosts row for the clone (null when it has no id or url). */
+export function historyRow(p: { postId?: string; url?: string | null; caption?: string | null; postedAt?: number | null; metrics?: { viewCount?: number | null; likeCount?: number | null; commentCount?: number | null; shareCount?: number | null; saveCount?: number | null }; mediaType?: string; videoDurationSec?: number | null; clipId?: string | null }, creatorId: Id<"creators">, now: number): Record<string, unknown> | null {
+  if (!p.postId || !p.url || !p.postedAt) return null;
+  const caption = p.caption ?? "";
+  const m = p.metrics ?? {};
+  return {
+    creatorId, platform: "tiktok", postId: p.postId, url: p.url.split("?")[0],
+    createTime: p.postedAt < 1e12 ? p.postedAt * 1000 : p.postedAt,
+    contentType: p.mediaType === "carousel" ? "carousel" : p.mediaType === "image" ? "photo" : "video",
+    ...(p.videoDurationSec ? { durationSec: p.videoDurationSec } : {}),
+    caption, hashtags: (caption.match(/#[\p{L}\p{N}_]+/gu) ?? []).map((h) => h.slice(1).toLowerCase()),
+    ...(p.clipId ? { soundClipId: p.clipId } : {}),
+    metrics: { views: m.viewCount ?? 0, likes: m.likeCount ?? 0, comments: m.commentCount ?? 0, shares: m.shareCount ?? 0, ...(m.saveCount != null ? { saves: m.saveCount } : {}) },
+    metricsAsOf: now, source: "scrape",
+  };
+}
+
+/** Pure: each post's multiple against the median of the 15 posts before it (chronological), as her own reads do. */
+export function withMultiples<T extends { createTime: number; metrics: { views: number } }>(rows: T[]): Array<T & { multiple?: number }> {
+  const sorted = [...rows].sort((a, b) => a.createTime - b.createTime);
+  return sorted.map((r, i) => {
+    const prior = sorted.slice(Math.max(0, i - 15), i).map((x) => x.metrics.views).sort((a, b) => a - b);
+    if (prior.length < 5) return r;
+    const med = prior[Math.floor(prior.length / 2)];
+    return med > 0 ? { ...r, multiple: Math.round((r.metrics.views / med) * 100) / 100 } : r;
+  });
+}
+
+export const insertHistory = internalMutation({
+  args: { creatorId: v.id("creators"), rows: v.array(v.any()) },
+  handler: async (ctx, a): Promise<{ added: number }> => {
+    await simCreator(ctx, a.creatorId);
+    const have = new Set(((await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"ownPosts">[]).map((p) => p.postId));
+    let added = 0;
+    for (const r of a.rows as Array<{ postId: string }>) if (!have.has(r.postId)) { await ctx.db.insert("ownPosts", r as never); added++; }
+    return { added };
+  },
+});
+
+/** Page back through her real TikTok history (1 credit a page) so a months-long run has months of real posts. */
+export const deepen = internalAction({
+  args: { creatorId: v.id("creators"), handle: v.string(), days: v.number(), maxPages: v.optional(v.number()) },
+  handler: async (ctx, a): Promise<{ pages: number; fetched: number; added: number; oldestDaysAgo: number }> => {
+    const now = Date.now();
+    const all: Record<string, unknown>[] = [];
+    let cursor: string | null = null, pages = 0;
+    do {
+      const page = await tiktok.postsPage(a.handle, cursor);
+      pages++;
+      await ctx.runMutation(internal.core.costs.record, { creatorId: a.creatorId, vendor: "scrapecreators", resource: "/v3/tiktok/profile/videos", purpose: "sim_history", costUsd: 0.002, costSource: "tier_table" });
+      for (const p of page.posts) { const row = historyRow(p as never, a.creatorId, now); if (row) all.push(row); }
+      cursor = page.hasMore ? page.nextCursor : null;
+      const oldest = Math.min(...all.map((r) => r.createTime as number));
+      if (oldest < now - (a.days + 21) * D) break;
+    } while (cursor && pages < (a.maxPages ?? 10));
+    const rows = withMultiples(all as Array<Record<string, unknown> & { createTime: number; metrics: { views: number } }>);
+    const { added } = await ctx.runMutation(internal.eval.livingSim.insertHistory, { creatorId: a.creatorId, rows });
+    const oldest = all.length ? Math.min(...all.map((r) => r.createTime as number)) : now;
+    return { pages, fetched: all.length, added, oldestDaysAgo: Math.round((now - oldest) / D) };
   },
 });

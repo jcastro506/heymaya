@@ -724,6 +724,23 @@ export const tiktok = {
     );
     return normalizeTikTokPosts(raw);
   },
+  /** One page of a profile's videos, older pages by `maxCursor` (the living simulation replays real history). */
+  async postsPage(
+    handle: string,
+    maxCursor: string | null,
+    deps?: EndpointDeps
+  ): Promise<{ posts: NormalizedPost[]; nextCursor: string | null; hasMore: boolean }> {
+    const raw = await clientOf(deps).request<unknown>("/v3/tiktok/profile/videos", {
+      query: { handle, ...(maxCursor ? { max_cursor: maxCursor } : {}) },
+    });
+    const r = (raw ?? {}) as { max_cursor?: unknown; cursor?: unknown; has_more?: unknown; hasMore?: unknown };
+    const next = r.max_cursor ?? r.cursor;
+    return {
+      posts: normalizeTikTokPosts(raw).map((p) => ({ ...p, clipId: extractClipId(p.raw) } as NormalizedPost)),
+      nextCursor: next !== undefined && next !== null && String(next) !== "0" ? String(next) : null,
+      hasMore: r.has_more === true || r.has_more === 1 || r.hasMore === true,
+    };
+  },
   async post(
     handle: string,
     awemeId: string,

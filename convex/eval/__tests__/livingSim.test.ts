@@ -5,7 +5,7 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { lifeScript, rng, shiftTimes } from "../livingSim";
+import { historyRow, lifeScript, rng, shiftTimes, withMultiples } from "../livingSim";
 
 const NOW = Date.UTC(2026, 8, 24);
 describe("ageing the world", () => {
@@ -25,5 +25,19 @@ describe("ageing the world", () => {
     const real = await t.run((ctx) => seedCreator(ctx, "real"));
     await expect(t.mutation(internal.eval.livingSim.ageTable, { creatorId: real, table: "messages", delta: -1 })).rejects.toThrow("living-sim");
     await expect(t.mutation(internal.eval.livingSim.releasePost, { creatorId: real, doc: { createTime: NOW }, createTime: NOW })).rejects.toThrow("living-sim");
+  });
+});
+
+describe("real history for the replay", () => {
+  it("a vendor post becomes an ownPosts row; no id or date, no row", () => {
+    const r = historyRow({ postId: "1", url: "https://www.tiktok.com/@v/video/1?x=1", caption: "run club #Run #running", postedAt: 1_780_000_000, metrics: { viewCount: 900, likeCount: 9 }, mediaType: "video", clipId: "55" }, "c" as never, NOW)!;
+    expect(r).toMatchObject({ url: "https://www.tiktok.com/@v/video/1", createTime: 1_780_000_000_000, hashtags: ["run", "running"], soundClipId: "55", metrics: { views: 900, likes: 9, comments: 0, shares: 0 } });
+    expect(historyRow({ postId: "2" }, "c" as never, NOW)).toBeNull();
+  });
+  it("multiples come from the 15 posts before, never the future", () => {
+    const rows = Array.from({ length: 8 }, (_, i) => ({ createTime: i, metrics: { views: i === 7 ? 3000 : 1000 } }));
+    const m = withMultiples(rows);
+    expect(m[3].multiple).toBeUndefined(); // fewer than 5 before it
+    expect(m[7].multiple).toBe(3);
   });
 });
