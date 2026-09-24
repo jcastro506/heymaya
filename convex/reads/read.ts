@@ -152,6 +152,7 @@ export const read = internalAction({
     if (!force && !fault) {
       const hit = await ctx.runQuery(internal.reads.cache.getFresh, { kind: k, key, now });
       if (hit.state === "fresh") return { value: hit.value, cached: true, key };
+      if (hit.state === "failed") throw new ReadFailed(k, key, `remembered: ${hit.error}`);
     }
 
     for (let attempt = 0; attempt <= MAX_WAITS; attempt++) {

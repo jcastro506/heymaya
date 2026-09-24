@@ -131,7 +131,7 @@ export const runJob = internalAction({
       return { ok: false };
     } finally {
       // Their next text was held behind this turn; it goes now, not on the next cron tick.
-      if (TURN_KINDS.has(job.kind)) await ctx.scheduler.runAfter(0, internal.core.scheduler.drainJobs, { kinds: [job.kind] });
+      if (TURN_KINDS.has(job.kind)) await ctx.runMutation(internal.core.jobs.kick, { kind: job.kind });
     }
   },
 });
