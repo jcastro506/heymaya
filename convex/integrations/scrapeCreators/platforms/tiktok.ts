@@ -372,6 +372,12 @@ const TikTokFollowListResponseSchema = z
   .passthrough();
 
 
+/** Pure: TikTok marks a business account as a commerce user; everyone else is personal (creator tools included). */
+export function tiktokAccountType(user: unknown): "personal" | "business" | null {
+  const c = (user as { commerceUserInfo?: { commerceUser?: unknown } } | null)?.commerceUserInfo?.commerceUser;
+  return typeof c === "boolean" ? (c ? "business" : "personal") : null;
+}
+
 function normalizeTikTokProfile(handle: string, raw: unknown): NormalizedProfile {
   const parsed = TikTokProfileResponseSchema.parse(raw);
   const user = parsed.userInfo?.user ?? parsed.user;
@@ -387,6 +393,7 @@ function normalizeTikTokProfile(handle: string, raw: unknown): NormalizedProfile
     verified: user?.verified ?? false,
     externalUrl: str(user?.bioLink?.link),
     avatarUrl: str(user?.avatarLarger ?? user?.avatarMedium),
+    accountType: tiktokAccountType(user),
     raw,
   });
 }

@@ -88,4 +88,6 @@ crons.interval("partnership reply sync", { minutes: 30 }, internal.partnerships.
 crons.daily("partnership weekly offer", { hourUTC: 17, minuteUTC: 15 }, internal.partnerships.kit.offerAll, {});
 // B7: what they posted after a "finish this one" teaches her one caption habit.
 crons.daily("finish lessons", { hourUTC: 15, minuteUTC: 20 }, internal.agent.finish.learnAll, {});
+// A1: each creator's account type from their public profiles, weekly (reads are cached a week).
+crons.daily("account setup check", { hourUTC: 14, minuteUTC: 5 }, internal.account.setup.checkAll, {});
 export default crons;

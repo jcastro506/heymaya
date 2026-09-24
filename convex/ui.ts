@@ -5,6 +5,7 @@
  */
 
 import { v } from "convex/values";
+import { setupAdvice } from "./account/setup";
 import { applyIdeaAct } from "./core/ideaActs";
 import { isUnseen } from "./core/unseen";
 import { TIERS, TIER_NAMES, entitlementsFor, price } from "./billing/tiers";
@@ -492,6 +493,8 @@ export const analytics = query({
           followersAsOf: latest?.at ?? null,
           followers30dAgo: past?.followers ?? null,
           posts: posts.filter((p) => p.platform === pl).length,
+          accountType: c.accountTypes?.[pl] ?? null,
+          setup: setupAdvice(pl, c.accountTypes?.[pl] ?? null),
         };
       }),
       posts: await Promise.all(posts.slice(0, 30).map(async (p) => {

@@ -41,6 +41,8 @@ export const NormalizedProfileSchema = z.object({
   verified: z.boolean(),
   externalUrl: z.string().nullable(),
   avatarUrl: z.string().nullable(),
+  /** A1: personal | creator | business, outside `raw` so it survives the read cache; null when unknown. */
+  accountType: z.enum(["personal", "creator", "business"]).nullable().optional(),
   // Raw upstream payload retained for downstream multimodal synth.
   raw: z.unknown(),
 });

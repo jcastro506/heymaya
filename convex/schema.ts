@@ -21,6 +21,8 @@ export default defineSchema({
     careUntil: v.optional(v.number()),
     /** M5: the share extension's token, stored hashed; the app mints it, a new one replaces the old. */
     shareToken: v.optional(v.object({ hash: v.string(), issuedAt: v.number() })),
+    /** A1: each platform's account type from their public profile (weekly), for the setup advice. */
+    accountTypes: v.optional(v.object({ tiktok: v.optional(v.union(v.literal("personal"), v.literal("creator"), v.literal("business"))), instagram: v.optional(v.union(v.literal("personal"), v.literal("creator"), v.literal("business"))), checkedAt: v.number() })),
     /** B6: the public media-kit page's unguessable slug; public numbers only, revocable. */
     kitLink: v.optional(v.object({ slug: v.string(), createdAt: v.number() })),
     email: v.string(),

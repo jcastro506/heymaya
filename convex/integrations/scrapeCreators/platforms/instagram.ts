@@ -88,6 +88,14 @@ const IgPostsResponseSchema = z
   .passthrough();
 
 
+/** Pure: Instagram's account type from the profile flags. Creator = professional and not business. */
+export function igAccountType(u: unknown): "personal" | "creator" | "business" | null {
+  const x = (u ?? {}) as { is_professional_account?: unknown; is_business_account?: unknown };
+  if (typeof x.is_professional_account !== "boolean") return null;
+  if (!x.is_professional_account) return "personal";
+  return x.is_business_account === true ? "business" : "creator";
+}
+
 function normalizeIgProfile(handle: string, raw: unknown): NormalizedProfile {
   const parsed = IgProfileResponseSchema.parse(raw);
   const u = parsed.user ?? parsed.data?.user;
@@ -102,6 +110,7 @@ function normalizeIgProfile(handle: string, raw: unknown): NormalizedProfile {
     verified: u?.is_verified ?? false,
     externalUrl: str(u?.external_url),
     avatarUrl: str(u?.profile_pic_url_hd ?? u?.profile_pic_url),
+    accountType: igAccountType(u),
     raw,
   });
 }
