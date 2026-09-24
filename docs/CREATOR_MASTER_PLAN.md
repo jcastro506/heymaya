@@ -16,7 +16,7 @@
 - Every exit is shown live, not in a harness.
 - The five mandatory test categories run in every sprint.
 
-_Updated 2026-09-23 (evening)._
+_Updated 2026-09-24._
 
 ---
 
@@ -35,7 +35,12 @@ _Updated 2026-09-23 (evening)._
 | **B2** Diagnosis brain | 🔄 Built, live bench running | Evidence pack (the post against their own posts), causes that must cite evidence, the ask, after-a-hit; **rejected never means silent** (read → rewrite → cautious → a floor built from real numbers). Live: "why did it pop" went from silence to a grounded read; the flop case passes. |
 | **I1** Ideas in chat | ✅ Done (live exit pending) | 5 tools on one shared idea-act path with the app; parity matrix; app "Bring it back". |
 | Instagram in the bench | ✅ Added | 5 cases on a real both-platform creator. **First run found a real bug:** her own Instagram links were treated as strangers' ("couldn't open that link"). Fixed. |
-| Cadence test failures (pre-existing) | 🔄 In a separate session | Not blocking. |
+| **B2 bench, 2026-09-24** | 🔄 Re-running | Full 23 cases: **15/23**; on the original 16, **11/16** (baseline 8/16). Several remaining "false claims" were the judge's blind spots (it saw tool names, not results; captions cut at 80 chars), fixed; re-run in progress. Real remaining misses: stating a platform rule as fact (i2, B3), a generic "which platform" answer (i3), trend lifecycle (c1, B3). |
+| **N1** Ideas reach Messages | ✅ Built | One definition of "unseen"; "+N more" rides her idea text; offered once on a reply; the app marks seen. **Finding:** today every idea is texted; the app only holds untexted ones when the daily cap holds a text. |
+| **S0** Fleet scale | ✅ Built, backfilled on dev | #1 slim `schedule` rows kept true by a trigger on every creator write (all 79 mutation modules on the wrapped builders; nightly repair), 17 readers moved; #2 fan-out; #3 no more 500 cap; #4 cap inside `send`; #5 indexed idea expiry. **Queue:** turns run in parallel across creators, in order per creator; every inbound door kicks the queue; dead-end deliveries retire after 24 h (275 of them were starving real turns). On dev: 108 rows backfilled (≈570 B vs 12.7 KB a creator doc). **Open:** a cost-safe live 500-creator day (seeded creators must run dry, not call models); /ops per-job duration. |
+| **M5** Share + Ask Maya | ✅ Built | `/share` with a hashed, rotatable token; "Send to Maya" appears in the iOS share sheet and finds the post link (checked on the simulator from a real TikTok); Ask Maya on ideas and posts. **Open:** the signed-in send needs your one-time simulator sign-in; keychain group needs the Apple team id. |
+| **Block revisions** | ✅ Built | A move or drop decided on a stale read is refused ("that block just changed"), from her tools or the app. |
+| Cadence test failures | ✅ Fixed (other session) | Milestones read the morning's clock. Suite: 852 green. |
 
 ## The order
 
@@ -202,8 +207,12 @@ N1 lives inside the hourly jobs, so first a look at all of them. **29 crons** in
 
 ## What "next" means right now
 
-Phase 1 is complete (pending your M1 sign-off and B0 labels). Phase 2 so far: **B4 done, I1 done, B2 built** (live bench results being recorded). **Next, in this order:**
-1. **S0**: scale the fleet jobs (findings above; #2 and #4 are real risks at a few dozen creators, not thousands).
-2. **N1**: new ideas reach them in Messages.
-3. B2 follow-ups from the bench; block `rev` guards (moved from M4).
-4. **B3** once `TAVILY_API_KEY` is real (dev currently holds a placeholder).
+Phase 2's buildable work is done except the B2 follow-ups from the running bench. **What's left is mostly waiting on you:**
+1. **`TAVILY_API_KEY`** → B3 (sourced platform facts and search; fixes the bench's i2 and c1).
+2. **Sign in once on the simulator** → the signed-in Send to Maya and Ask Maya checks, and M1 sign-off.
+3. **Apple Developer account** → TestFlight, the share extension's keychain group, `APPLE_TEAM_ID` for universal links.
+4. **D9 pricing + Stripe test prices** → P1.
+5. **R1 go/no-go** → the creator product onto staging.
+6. **B0 labels** → sign or edit the draft labels so the bench scores against your call, not mine.
+
+**What I can build meanwhile:** the B2 follow-ups from the bench (a grounded "which platform" answer from both normals); /ops per-job duration and rows read (S0's live exit); a dry-run mode for seeded creators so a 500-creator live day costs nothing.
