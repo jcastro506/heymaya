@@ -281,6 +281,17 @@ struct AnalyticsAccount: Decodable, Equatable, Identifiable {
   let followersAsOf: Double?
   let followers30dAgo: Double?
   let posts: Double
+  /// A1: personal | creator | business, from their public profile; nil until checked.
+  let accountType: String?
+  let setup: AccountSetup?
+}
+
+/// A1: the one change that would help Maya on this platform (Instagram must be Creator to connect).
+struct AccountSetup: Decodable, Equatable {
+  let needed: Bool
+  let title: String
+  let why: String
+  let steps: [String]
 }
 
 struct Headline: Decodable, Equatable {

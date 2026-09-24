@@ -67,7 +67,28 @@ struct AnalyticsView: View {
 
 struct AccountCard: View {
   let account: AnalyticsAccount
+  @State private var showSetup = false
   var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      header
+      if let setup = account.setup {
+        Button { showSetup = true } label: {
+          HStack(spacing: 8) {
+            Image(systemName: setup.needed ? "exclamationmark.circle.fill" : "lightbulb").foregroundStyle(setup.needed ? Palette.warn : Palette.purple)
+            Text(setup.title).font(MayaFont.callout.weight(.semibold)).foregroundStyle(Palette.ink).multilineTextAlignment(.leading)
+            Spacer()
+            Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted)
+          }
+        }.buttonStyle(.plain)
+      }
+    }
+    .padding(16)
+    .background(Palette.panel, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Palette.line))
+    .sheet(isPresented: $showSetup) { if let setup = account.setup { AccountSetupSheet(platform: account.platform, setup: setup) } }
+  }
+
+  private var header: some View {
     HStack(alignment: .center, spacing: 14) {
       VStack(alignment: .leading, spacing: 6) {
         PlatformBadge(platform: account.platform)
@@ -92,9 +113,39 @@ struct AccountCard: View {
         }
       }
     }
-    .padding(16)
-    .background(Palette.panel, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Palette.line))
+  }
+}
+
+/// A1: how to switch, step by step, with a button straight into the app.
+struct AccountSetupSheet: View {
+  let platform: String
+  let setup: AccountSetup
+  @Environment(\.dismiss) private var dismiss
+  var body: some View {
+    NavigationStack {
+      ScrollView {
+        VStack(alignment: .leading, spacing: 18) {
+          PlatformBadge(platform: platform)
+          Text(setup.title).font(.title2.weight(.bold)).foregroundStyle(Palette.ink)
+          Text(setup.why).font(MayaFont.callout).foregroundStyle(Palette.muted)
+          VStack(alignment: .leading, spacing: 12) {
+            ForEach(Array(setup.steps.enumerated()), id: \.offset) { i, step in
+              HStack(alignment: .top, spacing: 12) {
+                Text("\(i + 1)").font(.callout.weight(.bold).monospacedDigit()).foregroundStyle(.white)
+                  .frame(width: 26, height: 26).background(Palette.purple, in: Circle())
+                Text(step).font(MayaFont.callout).foregroundStyle(Palette.ink)
+              }
+            }
+          }
+          if let url = URL(string: platform == "instagram" ? "instagram://user?username=" : "snssdk1233://") {
+            Link(destination: url) { Label(platform == "instagram" ? "Open Instagram" : "Open TikTok", systemImage: "arrow.up.forward.app").frame(maxWidth: .infinity) }
+              .buttonStyle(.borderedProminent).tint(Palette.purple).padding(.top, 6)
+          }
+        }.padding(20)
+      }
+      .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+    }
+    .presentationDetents([.medium, .large])
   }
 }
 

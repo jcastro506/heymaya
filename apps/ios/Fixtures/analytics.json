@@ -8,17 +8,32 @@
    "handle": "kevin.castro9996",
    "needsReconnect": false,
    "platform": "tiktok",
-   "posts": 2
+   "posts": 2,
+   "accountType": "personal",
+   "setup": null
   },
   {
-   "connected": true,
+   "connected": false,
    "followers": null,
    "followers30dAgo": null,
    "followersAsOf": null,
    "handle": "heymaya",
    "needsReconnect": false,
    "platform": "instagram",
-   "posts": 3
+   "posts": 3,
+   "accountType": "personal",
+   "setup": {
+    "needed": true,
+    "title": "Switch Instagram to a Creator account",
+    "why": "Instagram only lets a Creator or Business account connect, and without it Maya can't see your reach, saves or watch time. It's free and takes a minute. Creator keeps the full music library.",
+    "steps": [
+     "Open Instagram and go to your profile",
+     "Tap the menu (☰), then Settings and privacy",
+     "Tap Account type and tools",
+     "Tap Switch to professional account",
+     "Choose Creator, pick a category, and tap Done"
+    ]
+   }
   }
  ],
  "posts": [
