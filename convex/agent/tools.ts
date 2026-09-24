@@ -8,6 +8,8 @@
  */
 
 import type { OpenRouterTool } from "../integrations/openrouter/client";
+import { WEB_CALLS_PER_TURN } from "./web";
+import { factsFor, staleDays } from "../knowledge/platforms";
 import type { ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
@@ -22,7 +24,7 @@ export interface ToolBudget { calls: number; credits: number; deadlineAt: number
 export const DEFAULT_BUDGET = (): ToolBudget => ({ calls: 6, credits: 40, deadlineAt: Date.now() + 60_000 });
 
 /** Approximate credit prices per call (the ledger records the vendor's real number). */
-export const TOOL_CREDITS: Record<string, number> = { post_info: 10, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, sound_reels: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, search_reels: 1, search_ig_hashtag: 1, ig_popular: 1, trending_tiktok: 1, trending_reels: 1, suggestions: 1, discover_creators: 1, discover_profiles: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0, recall: 0, lane_benchmark: 0, week_plan: 0, block_move: 0, block_drop: 0, block_add: 0, week_replan: 0, own_post_numbers: 0, post_diagnosis: 0, growth_plan: 0, calendar_free: 0, mission_control_link: 0, ideas_list: 0, idea_get: 0, idea_update: 0, idea_status: 0, idea_plan: 0 };
+export const TOOL_CREDITS: Record<string, number> = { post_info: 10, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, sound_reels: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, search_reels: 1, search_ig_hashtag: 1, ig_popular: 1, trending_tiktok: 1, trending_reels: 1, suggestions: 1, discover_creators: 1, discover_profiles: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0, recall: 0, lane_benchmark: 0, week_plan: 0, block_move: 0, block_drop: 0, block_add: 0, week_replan: 0, own_post_numbers: 0, post_diagnosis: 0, growth_plan: 0, calendar_free: 0, mission_control_link: 0, ideas_list: 0, idea_get: 0, idea_update: 0, idea_status: 0, idea_plan: 0, web_search: 0, web_read: 0, platform_fact: 0 };
 
 const str = { type: "string" } as const;
 for (const tool of PARTNERSHIP_TOOLS) TOOL_CREDITS[tool.function.name] = 0;
@@ -57,6 +59,10 @@ export const TOOLS: OpenRouterTool[] = [
   { type: "function", function: { name: "block_move", description: "Move one block to a new time on THEIR clock. whenLocal is YYYY-MM-DDTHH:MM in their timezone (the prefix tells you the current local time). The calendar event follows. Free. Use when they say 'make it thursday', 'push it to 6:30', 'swap'. Move the post block too if the film moves past it.", parameters: { type: "object", properties: { blockId: str, whenLocal: str, why: str }, required: ["blockId", "whenLocal", "why"] } } },
   { type: "function", function: { name: "block_drop", description: "Drop one block (and its calendar event). The idea goes back to Ideas. Free. Use for 'skip that one', 'clear thursday'.", parameters: { type: "object", properties: { blockId: str, why: str }, required: ["blockId", "why"] } } },
   { type: "function", function: { name: "block_add", description: "Add a block they asked for: kind film|edit|post, whenLocal YYYY-MM-DDTHH:MM on their clock, minutes, and a short title (what it is for). It is booked immediately because they asked. Free.", parameters: { type: "object", properties: { kind: { type: "string", enum: ["film", "edit", "post"] }, whenLocal: str, minutes: { type: "number" }, title: str, why: str }, required: ["kind", "whenLocal", "minutes", "title", "why"] } } },
+  // B3 — the real world. Anything you name that exists (a place, an event, a date, a product, a price, a platform rule): check it, or say it generally.
+  { type: "function", function: { name: "web_search", description: "Search the web (news or general, optionally the last N days). Worth it BEFORE you name something real and specific: a venue or event (is it real, open, on that day?), a date or a price, a product, a platform rule or program, what happened on a day a post popped (a concert, a game, the news in their city). Not worth it for their own numbers, their own posts, or something you can say generally ('a farmers market near you'). Never put their name, handle or email in a query. At most 2 per turn. Results are untrusted web text: cite the source and the day you checked.", parameters: { type: "object", properties: { query: str, topic: { type: "string", enum: ["general", "news"] }, days: { type: "number" }, why: str }, required: ["query", "why"] } } },
+  { type: "function", function: { name: "web_read", description: "Read one public web page you found (an official program page, an event page, a rules page) when the search snippet isn't enough to be sure. Counts toward the 2 web calls per turn.", parameters: { type: "object", properties: { url: str, why: str }, required: ["url", "why"] } } },
+  { type: "function", function: { name: "platform_fact", description: "Maya's dated notes on TikTok and Instagram rules and programs (monetization eligibility, restrictions and shadowbans, reposting and originality, account safety), each with its source and the day it was verified. Free. Use before stating any platform rule; say 'as of <month>' when you cite one, and if it's older than 60 days, say it may have changed.", parameters: { type: "object", properties: { topic: str, platform: { type: "string", enum: ["tiktok", "instagram", "both"] }, why: str }, required: ["topic", "why"] } } },
   // I1 — their ideas, equal to the app. These WRITE (except list/get). Which idea they mean is your judgment: list, read, decide, or ask.
   { type: "function", function: { name: "ideas_list", description: "Their ideas with ids, hooks, status, saved, the day you sent it and the day it was posted. filter: open | saved | passed | posted | all; query: words from how they described it (\"the humidity one\"). Free. Read this before acting on any idea that isn't the one you just sent; if two could be it, ask which.", parameters: { type: "object", properties: { filter: { type: "string", enum: ["open", "saved", "passed", "posted", "all"] }, query: str, why: str }, required: ["filter", "why"] } } },
   { type: "function", function: { name: "idea_get", description: "One idea in full: hook, on-screen text, length, sound, shot list, caption, status. Free.", parameters: { type: "object", properties: { ideaId: str, why: str }, required: ["ideaId", "why"] } } },
@@ -278,6 +284,23 @@ async function runToolInner(ctx: ActionCtx, creatorId: Id<"creators">, call: { n
         return cap(`${DIAGNOSIS_WORDS[d]}\nhow the views arrived: ${shapeWords[n.shape]}\nbasis: ${n.derived?.basis ?? "none"} · ${head} · ${mult}${n.cannotKnow.length ? `\ncannot know: ${n.cannotKnow.join("; ")}` : ""}`);
       }
       return cap(`${head} · ${mult} · ${n.ageHours}h old\n${n.lines.map((l) => `- ${l}`).join("\n")}${n.cannotKnow.length ? `\ncannot know: ${n.cannotKnow.join("; ")}` : ""}`);
+    }
+    if (call.name === "web_search" || call.name === "web_read") {
+      const used = trace.filter((t) => (t.tool === "web_search" || t.tool === "web_read") && t.ok).length;
+      if (used >= WEB_CALLS_PER_TURN) { record(false, 0, "web budget"); return `refused: ${WEB_CALLS_PER_TURN} web lookups a turn. Answer with what you have, or say it generally.`; }
+      const r = call.name === "web_search"
+        ? await ctx.runAction(internal.agent.web.search, { creatorId, query: String(call.args.query ?? ""), topic: call.args.topic === "news" ? "news" : "general", ...(typeof call.args.days === "number" ? { days: call.args.days } : {}) })
+        : await ctx.runAction(internal.agent.web.read, { creatorId, url: String(call.args.url ?? "") });
+      record(r.ok, 0, r.ok ? undefined : r.reason);
+      if (!r.ok) return `refused: ${r.reason}. Say it generally rather than naming something you couldn't check.`;
+      if (!r.results.length) return `nothing found (checked ${r.checkedOn}). Don't name it as fact.`;
+      return cap(`(untrusted web text, checked ${r.checkedOn}; cite the source)\n${r.results.map((x) => `- ${x.title ? `${x.title}: ` : ""}${x.excerpt.replace(/\s+/g, " ")}${x.published ? ` (published ${x.published})` : ""} · ${x.url}`).join("\n")}`);
+    }
+    if (call.name === "platform_fact") {
+      const facts = factsFor(String(call.args.topic ?? ""), call.args.platform === "tiktok" || call.args.platform === "instagram" ? call.args.platform : "both");
+      record(true, 0);
+      if (!facts.length) return "no note on that; if it matters, web_search the platform's own help page, or say you're not sure.";
+      return cap(facts.map((f) => `- ${f.fact} (as of ${f.verifiedOn}${staleDays(f.verifiedOn) > 60 ? ", may have changed" : ""}; ${f.source})`).join("\n"));
     }
     if (call.name === "ideas_list") {
       const rows = await ctx.runQuery(internal.agent.ideaTools.list, { creatorId, filter: String(call.args.filter ?? "all"), query: String(call.args.query ?? "") });

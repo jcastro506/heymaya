@@ -40,6 +40,7 @@ import type * as agent_soul from "../agent/soul.js";
 import type * as agent_tools from "../agent/tools.js";
 import type * as agent_toolsData from "../agent/toolsData.js";
 import type * as agent_voice from "../agent/voice.js";
+import type * as agent_web from "../agent/web.js";
 import type * as billing_checkout from "../billing/checkout.js";
 import type * as billing_plan from "../billing/plan.js";
 import type * as billing_stripe from "../billing/stripe.js";
@@ -227,6 +228,7 @@ declare const fullApi: ApiFromModules<{
   "agent/tools": typeof agent_tools;
   "agent/toolsData": typeof agent_toolsData;
   "agent/voice": typeof agent_voice;
+  "agent/web": typeof agent_web;
   "billing/checkout": typeof billing_checkout;
   "billing/plan": typeof billing_plan;
   "billing/stripe": typeof billing_stripe;
