@@ -4,8 +4,7 @@
  */
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { ConvexHttpClient } from "convex/browser";
-import { api } from "@/convex/_generated/api";
+import { readPublicKit } from "@/lib/publicKit";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Media kit", robots: { index: false, follow: false } };
@@ -15,9 +14,7 @@ const PLATFORM: Record<string, string> = { tiktok: "TikTok", instagram: "Instagr
 
 export default async function MediaKit({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const url = process.env.NEXT_PUBLIC_CONVEX_URL;
-  if (!url) notFound();
-  const kit = await new ConvexHttpClient(url).query(api.partnerships.kitPage.publicKit, { slug }).catch(() => null);
+  const kit = await readPublicKit(slug);
   if (!kit) notFound();
   return (
     <main style={{ minHeight: "100dvh", background: "#fcfbf8", color: "#29233f", padding: "40px 16px", fontFamily: "system-ui, sans-serif" }}>
