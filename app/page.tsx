@@ -1,32 +1,27 @@
-import { Bricolage_Grotesque, Instrument_Sans } from "next/font/google";
+import type { Metadata } from "next";
 import { LandingAnalytics } from "./analytics";
 import Landing from "./landing/Landing";
+import { appLink } from "@/lib/appLink";
 
-export const metadata = {
-  title: "Maya — Your content person, in your corner",
-  description:
-    "Your content person, right in Telegram. Text Maya for ideas, planning, and honest feedback. Your dashboard is optional for everyday work. Try 7 days free, then from $19/month.",
-};
+const description =
+  "Maya watches your lane on TikTok and Instagram, reads your own numbers, and texts you the idea worth making. Everything she finds lives in the iPhone app.";
 
-const bricolage = Bricolage_Grotesque({
-  subsets: ["latin"],
-  weight: ["400", "600", "800"],
-  variable: "--font-bricolage",
-  display: "swap",
-});
-const instrument = Instrument_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  style: ["normal", "italic"],
-  variable: "--font-instrument",
-  display: "swap",
-});
+export function generateMetadata(): Metadata {
+  const link = appLink();
+  return {
+    title: "Maya: she texts you the idea worth making",
+    description,
+    openGraph: { title: "Maya: she texts you the idea worth making", description, type: "website" },
+    // The smart app banner on iPhone Safari, once the App Store listing exists.
+    ...(link.kind === "store" && link.appId ? { itunes: { appId: link.appId } } : {}),
+  };
+}
 
 export default function Home() {
   return (
-    <div className={`${bricolage.variable} ${instrument.variable}`}>
+    <>
       <LandingAnalytics />
       <Landing />
-    </div>
+    </>
   );
 }

@@ -93,7 +93,7 @@ Three tracks run side by side where they don't depend on each other: **Brain** (
 | 16 | **M3**: onboarding and login in the app (Welcome → plan → connect → "here's what I see" → watch picks → calendar → text START → opening texts §5.5) | App | 12, 14, 15 | Clerk dashboard: register the iOS app, enable Sign in with Apple |
 | 17 | **B5**: re-bench, model decision for diagnosis, sign-off on the scorecard | Brain | 6–10, 13 | Sign the scorecard |
 | 17a | **R1**: the creator product's release path (below) | Platform | 10a | **Go/no-go on replacing the product on staging, then prod** |
-| 17b | **W1**: the landing page for an app (below) | App/web | 11, 14, R1 | The C1 copy session; App Store link once live |
+| 17b | **W1**: the landing page for an app (below). **Built 2026-09-25**: the page, `/join` → App Store/TestFlight, QR, smart app banner, tests. Open: real Simulator captures, Lighthouse | App/web | 11, 14, R1 | The C1 copy pass; set `NEXT_PUBLIC_TESTFLIGHT_URL` now, `NEXT_PUBLIC_APP_STORE_URL` once live |
 
 ### Phase 5 — Native surfaces (≈ 1.5 weeks)
 
@@ -188,6 +188,9 @@ N1 lives inside the hourly jobs, so first a look at all of them. **29 crons** in
 - Pricing from `billing/tiers.ts` (one source; the page never hardcodes a number).
 - Removed: Telegram, the dashboard, and any "AI" wording (standing rule). The web keeps only the landing, legal pages, `/o/*` fallbacks and the AASA.
 - A smart app banner on mobile Safari; the desktop page explains the QR.
+
+**Built (2026-09-25):** `app/landing/Landing.tsx` + `Screens.tsx`. The app's screens (Today, Ideas, Your numbers, the Sunday review) and a Messages thread are drawn in HTML from the SwiftUI source (same palette, cards, chips, tab bar), for a sample runner who posts on both platforms. They scale with the phone and use no stock images or real creator's posts. `lib/appLink.ts` is the one answer to "where does Get the app go": the App Store with `ct`/`pt` when `NEXT_PUBLIC_APP_STORE_URL` is set, the TestFlight link from `NEXT_PUBLIC_TESTFLIGHT_URL` before that, and the web sign-up while neither exists (so the Telegram pilot path still works). `/join` redirects there and keeps the attribution cookie. A QR code for desktop; the smart app banner turns on with the store link (`NEXT_PUBLIC_APP_STORE_ID` optional). Tests: `lib/__tests__/appLink.test.ts` and `app/landing/__tests__/landing.test.ts` (copy inventory, prices only from tiers, every CTA through `/join`). Checked at 1440 and 390 px, with no horizontal scroll.
+**Open:** `scripts/app-screens.sh` (Mac) captures the real screens from the Simulator with `-MayaFixtures` into `public/app-screens/`, for the App Store listing, or to replace the drawn screens once the operator picks. Lighthouse run on the Vercel preview. First-open attribution (M3).
 
 **Tests:** a content-inventory test (no "Telegram", "dashboard", vendor names or "AI" in the rendered page); prices on the page equal `billing/tiers.ts`; every CTA carries attribution; Lighthouse ≥ 90 on mobile; the page renders at phone width with no horizontal scroll.
 **Exit, live:** on staging, a phone visitor taps Get the app, installs from TestFlight/App Store, and the first open is attributed to the campaign.
