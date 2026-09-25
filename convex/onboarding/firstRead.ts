@@ -1,3 +1,4 @@
+import { clip } from "../lib/clip";
 /**
  * `first-read` (plan §11.2 #2): the first message, once the dossier exists. Two
  * real posts named, one true thing about how they make things, what she does
@@ -190,7 +191,7 @@ export const run = internalAction({
       awaitingAnswer: Boolean(laneAsk) || /\?\s*$/.test(text),
       ...(laneAsk
         ? laneAsk.candidates.length
-          ? { buttons: laneAsk.candidates.slice(0, 3).map((c, i) => ({ id: `lanepick:${laneAsk!.token}:${i}`, label: c.label.slice(0, 30) })) }
+          ? { buttons: laneAsk.candidates.slice(0, 3).map((c, i) => ({ id: `lanepick:${laneAsk!.token}:${i}`, label: clip(c.label, 30) })) }
           : { buttons: [{ id: `lane:${laneAsk.token}:yes`, label: "that's it" }, { id: `lane:${laneAsk.token}:no`, label: "not quite" }] }
         : {}),
       produced: producedStamp(spec.primary),

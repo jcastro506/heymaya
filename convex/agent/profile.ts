@@ -58,7 +58,7 @@ export const run = internalAction({
       const r = await ctx.runAction(internal.reads.read.read, { kind: "account.posts", params: { platform: a.platform, handle, sort: "latest", slot: "profile" }, creatorId: creator._id });
       posts = (Array.isArray(r.value) ? r.value : []) as PostIn[];
     } catch (e) {
-      console.error(`[profile] read of @${handle} failed: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`);
+      console.error(`[profile] read of @${handle} failed: ${e instanceof Error ? clip(e.message, 200) : String(e)}`);
       await reply(`couldn't read @${handle} just now. private account, a typo, or the platform being slow on my side; try again in a bit.`);
       return { ok: true, reason: "read failed" };
     }

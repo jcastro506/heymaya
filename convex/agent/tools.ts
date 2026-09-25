@@ -104,12 +104,12 @@ export async function runTool(ctx: ActionCtx, creatorId: Id<"creators">, call: {
   const before = trace.length;
   const out = await runToolInner(ctx, creatorId, call, budget, trace, sourceMessageId);
   const entry = trace[trace.length - 1];
-  if (trace.length > before && entry && entry.result === undefined) entry.result = out.slice(0, TRACE_RESULT_CAP);
+  if (trace.length > before && entry && entry.result === undefined) entry.result = clip(out, TRACE_RESULT_CAP);
   return out;
 }
 
 function cap(s: string): string {
-  return s.length > SUMMARY_CAP ? `${s.slice(0, SUMMARY_CAP)}… (cut)` : s;
+  return s.length > SUMMARY_CAP ? `${clip(s, SUMMARY_CAP)}… (cut)` : s;
 }
 
 type Post = { postId?: string; url?: string | null; caption?: string | null; postedAt?: number | null; createTime?: number; durationSec?: number | null; authorHandle?: string | null; clipId?: string | null; metrics?: { viewCount?: number | null; likeCount?: number | null; commentCount?: number | null; shareCount?: number | null; saveCount?: number | null } };
@@ -179,7 +179,7 @@ function summarize(tool: string, value: unknown): string {
     }
     case "profile": {
       const p = value as { handle?: string; followerCount?: number | null; postCount?: number | null; bio?: string | null; displayName?: string | null; verified?: boolean };
-      return cap(`@${p.handle ?? "?"} · ${p.followerCount ?? "?"} followers · ${p.postCount ?? "?"} posts${p.verified ? " · verified" : ""} · ${p.displayName ?? ""} · "${(p.bio ?? "").slice(0, 160)}"`);
+      return cap(`@${p.handle ?? "?"} · ${p.followerCount ?? "?"} followers · ${p.postCount ?? "?"} posts${p.verified ? " · verified" : ""} · ${p.displayName ?? ""} · "${clip(p.bio ?? "", 160)}"`);
     }
     default:
       return cap(JSON.stringify(value));
@@ -191,7 +191,7 @@ function summarize(tool: string, value: unknown): string {
  * The creator's own posts and calendar come from rows scoped by creatorId.
  */
 async function runToolInner(ctx: ActionCtx, creatorId: Id<"creators">, call: { name: string; args: Record<string, unknown> }, budget: ToolBudget, trace: ToolCallRecord[], sourceMessageId?: Id<"messages">): Promise<string> {
-  const why = String(call.args.why ?? "").slice(0, 160);
+  const why = clip(String(call.args.why ?? ""), 160);
   const started = Date.now();
   const record = (ok: boolean, credits?: number, detail?: string) => trace.push({ tool: call.name, params: Object.fromEntries(Object.entries(call.args).filter(([k]) => k !== "why")), why, credits, ms: Date.now() - started, ok, ...(detail ? { detail } : {}) });
   if (trace.length >= budget.calls) {
@@ -508,8 +508,8 @@ async function runToolInner(ctx: ActionCtx, creatorId: Id<"creators">, call: { n
     record(true, r.cached ? 0 : price);
     return summarize(call.name, r.value);
   } catch (e) {
-    const detail = e instanceof Error ? e.message.slice(0, 160) : "error";
+    const detail = e instanceof Error ? clip(e.message, 160) : "error";
     record(false, 0, detail);
-    return `failed: ${detail.slice(0, 120)}`;
+    return `failed: ${clip(detail, 120)}`;
   }
 }

@@ -27,7 +27,7 @@ export const fetchToStorage = internalAction({
       const storageId = await ctx.storage.store(blob.type === mime ? blob : new Blob([blob], { type: mime }));
       return { ok: true, storageId, mime, bytes: blob.size };
     } catch (e) {
-      return { ok: false, reason: e instanceof Error ? e.message.slice(0, 120) : "fetch failed" };
+      return { ok: false, reason: e instanceof Error ? clip(e.message, 120) : "fetch failed" };
     }
   },
 });

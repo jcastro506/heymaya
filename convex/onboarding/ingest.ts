@@ -321,7 +321,7 @@ export const synthesize = internalAction({
       views: r.metrics.views,
       multiple: r.multiple ?? null,
       caption: clip(r.caption, 200),
-      transcript: r.transcript ? r.transcript.slice(0, 600) : null,
+      transcript: r.transcript ? clip(r.transcript, 600) : null,
       sample: r.sample ?? null,
     }));
     const system = `${SOUL}\n\n# Skill: learn-creator\nYou are writing the creator's dossier from their own posts. Every claim must cite post ids from the data. Say "unknown" where the data is silent. Do not invent visuals: you may describe how a post looks ONLY from the watched cards; everything else is captions, transcripts and numbers. The person (persona.look, voice, humor, presence, world, cares) comes ONLY from the cards' "them" and "aFriendWouldNotice" blocks, summarised across posts the way a friend who watched everything would say it, never from a single post and never a guess about age, ethnicity, body or health; leave a field out when the cards are silent.${args.reason === "onboarding" ? "" : " This is a rewrite: the previous dossier, their house rules, their notes and their taste are below. A house rule or a note from them beats anything you inferred. Keep what still holds, change what the new posts contradict, and never keep a claim they corrected."}\nOutput ONLY JSON matching this shape:\n${DOSSIER_JSON_SHAPE}`;

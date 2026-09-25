@@ -517,7 +517,7 @@ function slotOf(s: RunState, i: number): CreatorSlot & { creatorId: Id<"creators
 
 async function event(ctx: ActionCtx, runId: string, i: number, log: CreatorLog, createdAt: number, name: string, detail?: string): Promise<void> {
   if (log.events.some((e) => e.name === name)) return;
-  const ev = { name, simMs: Date.now() - createdAt, ...(detail ? { detail: detail.slice(0, 300) } : {}) };
+  const ev = { name, simMs: Date.now() - createdAt, ...(detail ? { detail: clip(detail, 300) } : {}) };
   log.events.push(ev);
   await ctx.runMutation(internal.eval.firstWeek.patchLog, { runId, i, append: { events: [ev] } });
 }
@@ -547,7 +547,7 @@ export const signupTick = internalAction({
             detail = `${r.suggestions.length} suggested; added ${added.added.join(", ") || "none"}${added.refused.length ? `; refused ${added.refused.join(", ")}` : ""}`;
             if (!r.suggestions.length) await ctx.runMutation(internal.eval.firstWeek.patchLog, { runId: a.runId, i: a.i, append: { failures: [{ d: 0, step: "admired", error: `no suggestions (${JSON.stringify(r.trace).slice(0, 160)})` }] } });
           } catch (e) {
-            detail = `suggestions failed: ${e instanceof Error ? e.message.slice(0, 160) : "error"}`;
+            detail = `suggestions failed: ${e instanceof Error ? clip(e.message, 160) : "error"}`;
             await ctx.runMutation(internal.eval.firstWeek.patchLog, { runId: a.runId, i: a.i, append: { failures: [{ d: 0, step: "admired", error: detail }] } });
           }
         }
@@ -595,7 +595,7 @@ export const signupTick = internalAction({
         return null;
       }
     } catch (e) {
-      await ctx.runMutation(internal.eval.firstWeek.patchLog, { runId: a.runId, i: a.i, append: { failures: [{ d: 0, step: "signup_tick", error: e instanceof Error ? e.message.slice(0, 200) : "error" }] } });
+      await ctx.runMutation(internal.eval.firstWeek.patchLog, { runId: a.runId, i: a.i, append: { failures: [{ d: 0, step: "signup_tick", error: e instanceof Error ? clip(e.message, 200) : "error" }] } });
     }
     await ctx.scheduler.runAfter(TICK_MS, internal.eval.firstWeek.signupTick, a);
     return null;
@@ -618,7 +618,7 @@ async function textAsCreator(ctx: ActionCtx, runId: string, i: number, n: number
   try {
     await ctx.runAction(internal.agent.converse.run, { creatorId, messageId: r.messageId });
   } catch (e) {
-    return `(no reply: ${e instanceof Error ? e.message.slice(0, 80) : "the turn failed"})`;
+    return `(no reply: ${e instanceof Error ? clip(e.message, 80) : "the turn failed"})`;
   }
   const replies = await ctx.runQuery(internal.eval.converse.repliesTo, { creatorId, inboundId: r.messageId, since });
   return replies.map((x) => x.text).join("\n---\n").slice(0, 600) || "(no reply row)";
@@ -750,7 +750,7 @@ export const runStep = internalAction({
         }
       }
     } catch (e) {
-      failure = e instanceof Error ? e.message.slice(0, 200) : String(e).slice(0, 200);
+      failure = e instanceof Error ? clip(e.message, 200) : String(e).slice(0, 200);
       result = `failed: ${failure}`;
     }
     await advance(failure, result, Date.now() - t0);
@@ -826,7 +826,7 @@ export const judge = internalAction({
         judged = items.map((x, i) => ({ what: x.what, text: clip(x.text, 400), verdict: verdicts[i] }));
       } else judged = [];
     } catch (e) {
-      judged = { error: e instanceof Error ? e.message.slice(0, 200) : "judge failed" };
+      judged = { error: e instanceof Error ? clip(e.message, 200) : "judge failed" };
     }
     await ctx.runMutation(internal.eval.firstWeek.patchLog, { runId: a.runId, i: a.i, set: { judged, cursor: { phase: "done", d: log.cursor.d, k: 0, attempt: 0, since: Date.now() } satisfies Cursor } });
     return null;

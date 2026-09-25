@@ -320,7 +320,7 @@ export const step = internalAction({
       const verdict = caseVerdict(c, correctness);
       await ctx.runAction(internal.eval.run.evaluate, { suite: "expert", skill: "reply", text: reply || "(no reply)", evidence: { theirMessage: c.text, expect: c.acceptable.join("; ") }, creatorId: a.creatorId, trace: { runId: a.runId, caseId: c.id, situation: c.situation, labelStatus: c.labelStatus, correctness, verdict, tools: trace } });
     } catch (e) {
-      error = e instanceof Error ? e.message.slice(0, 200) : "failed";
+      error = e instanceof Error ? clip(e.message, 200) : "failed";
       await ctx.runMutation(internal.eval.run.record, { suite: "expert", skill: "reply", creatorId: a.creatorId, text: `(error) ${error}`, checks: [], pass: false, trace: { runId: a.runId, caseId: c.id, situation: c.situation, error } });
     }
     return null;

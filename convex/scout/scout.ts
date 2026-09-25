@@ -1,3 +1,4 @@
+import { clip } from "../lib/clip";
 /**
  * `scout` (plan §11.2 #6): after the rails pass, the ranked candidates go to the
  * writer with the dossier, the catalogue and the posts' transcripts. It decides
@@ -185,8 +186,8 @@ export const run = internalAction({
       parsed = JSON.parse(m ? m[0] : "{}") as typeof parsed;
     } catch {
       // The raw head goes to the log and, on a dry run, to the caller: a parse failure must be diagnosable, not a shrug.
-      console.error(`[scout] no JSON from the writer after ${inv.trace.length} lookups (ended: ${inv.ended}): ${result.content.slice(0, 300).replace(/\s+/g, " ")}`);
-      return { sent: false, reason: `scout returned no JSON (${inv.ended}, ${inv.turns} turns): ${result.content.slice(0, 160).replace(/\s+/g, " ")}` };
+      console.error(`[scout] no JSON from the writer after ${inv.trace.length} lookups (ended: ${inv.ended}): ${clip(result.content, 300).replace(/\s+/g, " ")}`);
+      return { sent: false, reason: `scout returned no JSON (${inv.ended}, ${inv.turns} turns): ${clip(result.content, 160).replace(/\s+/g, " ")}` };
     }
 
     const verdicts: Array<{ signalId: Id<"signals">; verdict: "sent" | "held" | "dropped"; why: string }> = [];

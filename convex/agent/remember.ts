@@ -57,7 +57,7 @@ export const afterTurn = internalAction({
     let note = false, rule = false;
     let epoch = g.creator.memoryEpoch ?? 0;
     if (out.experience && typeof out.experience.quote === "string" && ["goal", "preference", "effort", "decision", "commitment"].includes(out.experience.kind ?? "")) {
-      await ctx.runMutation(internal.agent.remember.recordExperience, { creatorId: a.creatorId, sourceMessageId: a.messageId, kind: out.experience.kind as "goal" | "preference" | "effort" | "decision" | "commitment", quote: out.experience.quote.slice(0, 400), reason: typeof out.experience.reason === "string" ? out.experience.reason.slice(0, 300) : undefined, blockId: out.experience.kind === "commitment" && typeof out.experience.blockId === "string" ? out.experience.blockId : undefined, epoch });
+      await ctx.runMutation(internal.agent.remember.recordExperience, { creatorId: a.creatorId, sourceMessageId: a.messageId, kind: out.experience.kind as "goal" | "preference" | "effort" | "decision" | "commitment", quote: clip(out.experience.quote, 400), reason: typeof out.experience.reason === "string" ? clip(out.experience.reason, 300) : undefined, blockId: out.experience.kind === "commitment" && typeof out.experience.blockId === "string" ? out.experience.blockId : undefined, epoch });
     }
     if (typeof out.note?.text === "string" && out.note.text.trim()) {
       const kind = out.note.kind === "fact" || out.note.kind === "bit" ? out.note.kind : "life";

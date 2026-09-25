@@ -73,7 +73,7 @@ export const refreshForIdea = internalAction({
         await patchEvent(token, { calendarId: b.calendarId ?? conn.calendarIds?.[0] ?? "primary", eventId: b.externalEventId!, timeZone: c.timezone, summary: eventSummary(b.kind, b.title), description: eventDescription({ kind: b.kind, idea: ideaForEvent(c.idea) }) });
         refreshed += 1;
       } catch (e) {
-        console.error(`[calendar] refresh of ${b._id} failed: ${e instanceof Error ? e.message.slice(0, 120) : String(e)}`);
+        console.error(`[calendar] refresh of ${b._id} failed: ${e instanceof Error ? clip(e.message, 120) : String(e)}`);
       }
     }
     return { refreshed };
@@ -142,7 +142,7 @@ export const confirm = internalAction({
       await ctx.runMutation(internal.calendar.blocks.recordExternal, { blockId: a.blockId, externalEventId: ev.id, calendarId });
       return { ok: true, htmlLink: ev.htmlLink, when };
     } catch (e) {
-      return { ok: false, reason: e instanceof Error ? e.message.slice(0, 100) : "write failed", when };
+      return { ok: false, reason: e instanceof Error ? clip(e.message, 100) : "write failed", when };
     }
   },
 });
@@ -170,7 +170,7 @@ export const move = internalAction({
         const token = await ensureAccessToken(ctx, conn);
         await patchEvent(token, { calendarId: b.calendarId ?? conn.calendarIds?.[0] ?? "primary", eventId: b.externalEventId, start: new Date(a.start).toISOString(), end: new Date(a.end).toISOString(), timeZone: creator?.timezone ?? "UTC" });
       } catch (e) {
-        return { ok: false, reason: e instanceof Error ? e.message.slice(0, 100) : "move failed" };
+        return { ok: false, reason: e instanceof Error ? clip(e.message, 100) : "move failed" };
       }
     }
     await ctx.runMutation(internal.calendar.blocks.setStatus, { blockId: a.blockId, status: "moved", start: a.start, end: a.end });
@@ -192,7 +192,7 @@ export const remove = internalAction({
           const token = await ensureAccessToken(ctx, conn);
           await deleteEvent(token, { calendarId: b.calendarId ?? conn.calendarIds?.[0] ?? "primary", eventId: b.externalEventId });
         } catch (e) {
-          return { ok: false, reason: e instanceof Error ? e.message.slice(0, 100) : "delete failed" };
+          return { ok: false, reason: e instanceof Error ? clip(e.message, 100) : "delete failed" };
         }
       }
     }

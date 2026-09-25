@@ -174,7 +174,7 @@ export const run = internalAction({
       try {
         await ctx.runAction(internal.agent.converse.run, { creatorId, messageId });
       } catch (e) {
-        return [`[error] the turn threw: ${e instanceof Error ? `${e.name}: ${e.message.slice(0, 300)}` : String(e).slice(0, 300)}`];
+        return [`[error] the turn threw: ${e instanceof Error ? `${e.name}: ${clip(e.message, 300)}` : String(e).slice(0, 300)}`];
       }
       lastTrace = await ctx.runQuery(internal.eval.partnershipGauntlet.report, { key: `eval:partnership_trace:${messageId}` });
       await sleep(4_000);

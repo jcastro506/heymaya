@@ -175,7 +175,7 @@ export const revokeRule = mutation({
     const row = (await ctx.db.get(a.id)) as Doc<"directives"> | null;
     if (!c || !row || row.creatorId !== c._id) return { ok: false };
     await ctx.db.patch(a.id, { active: false, supersededAt: Date.now() }); // history kept
-    await recordAction(ctx, { creatorId: c._id, kind: "rule.revoke", objectId: a.id, summary: `removed their rule "${row.verbatim.slice(0, 120)}"` });
+    await recordAction(ctx, { creatorId: c._id, kind: "rule.revoke", objectId: a.id, summary: `removed their rule "${clip(row.verbatim, 120)}"` });
     return { ok: true };
   },
 });

@@ -1,3 +1,4 @@
+import { clip } from "../lib/clip";
 /**
  * The tracked-account sampler (plan §13.2). Every few hours, for every distinct
  * admired handle across the fleet, read the account's recent posts once (the cache
@@ -217,7 +218,7 @@ export const run = internalAction({
       } catch (error) {
         failed += 1;
         const detail = error instanceof Error ? error.message : String(error);
-        firstError ||= detail.slice(0, 200);
+        firstError ||= clip(detail, 200);
         console.error(`[sampler] ${acct.platform}/${acct.handle}: ${detail}`);
         /**
          * An account that no longer exists never will again. `status: "gone"` was in the

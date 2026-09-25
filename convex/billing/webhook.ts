@@ -1,3 +1,4 @@
+import { clip } from "../lib/clip";
 /**
  * The Stripe webhook, on Convex's public HTTP router (plan §19.3; scar tissue:
  * the old receiver sat behind auth for months). Signature over the raw bytes,
@@ -33,7 +34,7 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
   try {
     event = await constructEvent(raw, sig, secret);
   } catch (e) {
-    return new Response(`bad signature: ${e instanceof Error ? e.message.slice(0, 80) : "error"}`, { status: 400 });
+    return new Response(`bad signature: ${e instanceof Error ? clip(e.message, 80) : "error"}`, { status: 400 });
   }
 
   const obj = event.data.object as unknown as Record<string, unknown>;

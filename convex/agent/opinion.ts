@@ -257,7 +257,7 @@ export const run = internalAction({
           } else cannotWatch = media.reason;
         } else cannotWatch = "no playable url";
       } catch (e) {
-        cannotWatch = e instanceof Error ? e.message.slice(0, 80) : "read failed";
+        cannotWatch = e instanceof Error ? clip(e.message, 80) : "read failed";
       }
       try {
         const t = await ctx.runAction(internal.reads.read.read, { kind: "post.transcript", params: { platform: link.platform, url: link.url }, creatorId: creator._id });
@@ -313,7 +313,7 @@ export const run = internalAction({
     }
     if (!out || !out.citations?.length || !out.message?.trim()) {
       await reply(!r.ok ? READ_WRITER_DOWN : `${card ? "i watched it" : "i looked at it"} but i can't give you a read i'd stand behind right now. give me an hour and send it again?`);
-      return { ok: true, reason: `no grounded opinion: ${r.ok ? `raw=${r.content.slice(0, 300).replace(/\s+/g, " ")}` : r.reason}` };
+      return { ok: true, reason: `no grounded opinion: ${r.ok ? `raw=${clip(r.content, 300).replace(/\s+/g, " ")}` : r.reason}` };
     }
     const confidence = (["strong", "solid", "fine", "weak", "broken"] as const).includes(out.confidence as never) ? (out.confidence as "strong" | "solid" | "fine" | "weak" | "broken") : "fine";
     const produced = producedStamp(spec.primary);

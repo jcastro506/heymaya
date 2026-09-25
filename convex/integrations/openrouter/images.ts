@@ -1,3 +1,4 @@
+import { clip } from "../../lib/clip";
 /**
  * Image generation through OpenRouter's unified image API (Sprint 4g, 2026-09-08).
  *
@@ -80,7 +81,7 @@ export function imageRequestBody(input: Pick<GenerateImageInput, "model" | "prom
 export function parseImageResponse(json: unknown): { ok: true; dataUrl: string; costUsd?: number } | { ok: false; reason: string } {
   const root = json as { error?: { message?: string }; choices?: Array<{ message?: { images?: Array<{ image_url?: { url?: string }; imageUrl?: { url?: string } }>; content?: unknown } }>; usage?: { cost?: number } } | null;
   if (!root || typeof root !== "object") return { ok: false, reason: "image response was not JSON" };
-  if (root.error?.message) return { ok: false, reason: `image model refused: ${root.error.message.slice(0, 200)}` };
+  if (root.error?.message) return { ok: false, reason: `image model refused: ${clip(root.error.message, 200)}` };
   const message = root.choices?.[0]?.message;
   const fromImages = message?.images?.map((i) => i.image_url?.url ?? i.imageUrl?.url).find((u): u is string => typeof u === "string" && u.startsWith("data:"));
   const parts = Array.isArray(message?.content) ? (message!.content as Array<{ type?: string; image_url?: { url?: string } }>) : [];

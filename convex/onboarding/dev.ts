@@ -64,7 +64,7 @@ export const status = internalQuery({
       dossierSummary: (creator.dossier as { persona?: { summary?: string } } | undefined)?.persona?.summary ?? null,
       posts: posts.length,
       transcripts: posts.filter((p) => p.transcript).length,
-      baselineSample: posts.slice(0, 3).map((p) => ({ id: p.postId, url: p.url, type: p.contentType, sec: p.durationSec, views: p.metrics.views, multiple: p.multiple, sample: p.sample, transcript: p.transcript ? p.transcript.slice(0, 80) : null })),
+      baselineSample: posts.slice(0, 3).map((p) => ({ id: p.postId, url: p.url, type: p.contentType, sec: p.durationSec, views: p.metrics.views, multiple: p.multiple, sample: p.sample, transcript: p.transcript ? clip(p.transcript, 80) : null })),
       jobs: jobs.map((j) => ({ kind: j.kind, status: j.status, attempts: j.attempts, lastError: j.lastError })),
       messages: messages.map((m) => ({ dir: m.direction, kind: m.kind, body: clip(m.body, 160), delivered: m.deliveredAt ? true : m.deliveryError ?? "pending" })),
       spendUsd: costs.reduce((s, c) => s + c.costUsd, 0),
@@ -192,7 +192,7 @@ export const probeModel = internalAction({
   handler: async (_ctx, a): Promise<{ ok: boolean; reason?: string; content?: string; usage?: unknown }> => {
     const { callOpenRouter } = await import("../integrations/openrouter/client");
     const r = await callOpenRouter({ model: a.model, messages: [{ role: "system", content: "Answer with one word." }, { role: "user", content: "Say ok." }], temperature: 0, maxTokens: a.maxTokens ?? 200, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
-    return r.ok ? { ok: true, content: r.content.slice(0, 80), usage: r.usage } : { ok: false, reason: r.reason };
+    return r.ok ? { ok: true, content: clip(r.content, 80), usage: r.usage } : { ok: false, reason: r.reason };
   },
 });
 
@@ -479,7 +479,7 @@ export const audit = internalQuery({
       calendar: { blocks: blocks.length, byKindStatus: count(blocks, (b) => `${b.kind}:${b.status}`), next: blocks.filter((b) => b.start > Date.now()).sort((x, y) => x.start - y.start).slice(0, 4).map((b) => `${local(b.start)} ${b.kind} ${b.title} (${b.status})`) },
       taste: { events: taste.length, byKind: count(taste, (t) => t.kind), affinities: ((c as unknown as { affinities?: unknown[] }).affinities ?? []).length, note: Boolean((c as unknown as { taste?: { text?: string } }).taste?.text) },
       posts: { own: posts.length, connected: posts.filter((p) => p.connected).length, transcribed: posts.filter((p) => p.transcript).length, reads: reads.length, readsByDepth: count(reads, (r) => (r as unknown as { depth?: string }).depth ?? "?") },
-      directives: directives.filter((d) => d.active).map((d) => `${d.kind}: ${d.verbatim.slice(0, 80)}`),
+      directives: directives.filter((d) => d.active).map((d) => `${d.kind}: ${clip(d.verbatim, 80)}`),
       connection: conn ? { status: conn.status, accounts: (conn.zernioAccounts ?? []).length, detail: conn.detail ?? null } : null,
     };
   },

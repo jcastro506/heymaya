@@ -1,3 +1,4 @@
+import { clip } from "../lib/clip";
 /**
  * Checkpointed live conversation bank. One scheduled action owns one probe, so a dropped
  * CLI connection or an action timeout cannot restart the whole bank or overlap cleanup.
@@ -184,7 +185,7 @@ export const step = internalAction({
       const problems = scored.pass ? [] : await ctx.runQuery(internal.eval.converse.failedChecks, { id: scored.id });
       result = { ordinal, creatorId, category: probe.category, prompt: probe.text, reply: reply.text, pass: scored.pass, problems, latencyMs: { total: Date.now() - t0, converse: converseMs, evaluate: evaluateMs } };
     } catch (error) {
-      result = { ordinal, creatorId, category: probe.category, prompt: probe.text, pass: false, problems: ["execution"], latencyMs: { total: Date.now() - t0, converse: 0, evaluate: 0 }, error: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300) };
+      result = { ordinal, creatorId, category: probe.category, prompt: probe.text, pass: false, problems: ["execution"], latencyMs: { total: Date.now() - t0, converse: 0, evaluate: 0 }, error: error instanceof Error ? clip(error.message, 300) : String(error).slice(0, 300) };
     }
     const finished = await ctx.runMutation(internal.eval.durableConverse.finish, { runId: a.runId, ordinal, result });
     if (finished.accepted && !finished.done) await ctx.scheduler.runAfter(0, internal.eval.durableConverse.step, { runId: a.runId });
