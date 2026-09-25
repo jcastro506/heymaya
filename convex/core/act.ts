@@ -11,6 +11,7 @@ import { v } from "convex/values";
 import { type MutationCtx, type QueryCtx } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
+import { clip } from "../lib/clip";
 
 export type Awareness = "state" | "noticed" | "reacted";
 export const ASK_WINDOW_MS = 10 * 60_000;
@@ -36,7 +37,7 @@ export const AWARENESS: Record<string, Awareness> = {
 };
 
 export async function recordAction(ctx: MutationCtx, a: { creatorId: Id<"creators">; kind: string; source?: Doc<"userActions">["source"]; objectId?: string; summary: string }): Promise<void> {
-  await ctx.db.insert("userActions", { creatorId: a.creatorId, kind: a.kind, source: a.source ?? "app", objectId: a.objectId, summary: a.summary.slice(0, 200), at: Date.now() });
+  await ctx.db.insert("userActions", { creatorId: a.creatorId, kind: a.kind, source: a.source ?? "app", objectId: a.objectId, summary: clip(a.summary, 200), at: Date.now() });
 }
 
 const WINDOW_MS = 14 * 86_400_000;

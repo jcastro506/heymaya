@@ -29,7 +29,12 @@ export interface WatchInput {
   resolution?: "low" | "default";
   maxOutputTokens?: number;
   fetchImpl?: typeof fetch;
+  /** Give up after this long. Without it a hung call held the action to Convex's 10-minute limit and the creator heard nothing. */
+  timeoutMs?: number;
 }
+
+/** A watch that has not answered in this long is not going to: the caller says so and moves on. */
+export const WATCH_TIMEOUT_MS = 150_000;
 
 export type WatchResult =
   | { ok: true; text: string; usage: { promptTokens: number; outputTokens: number; costUsd: number } }
@@ -51,12 +56,12 @@ export function priceUsd(model: string, promptTokens: number, outputTokens: numb
 export const FILE_MAX_BYTES = 200 * 1024 * 1024; // a minute of 4K is ~350 MB; drafts over this are asked for a smaller export
 
 /** Gemini Files API (resumable upload), then wait until the video is processed. Never throws. */
-export async function uploadFile(input: { apiKey: string; bytes: ArrayBuffer; mimeType: string; fetchImpl?: typeof fetch; pollMs?: number; maxWaitMs?: number }): Promise<{ ok: true; uri: string } | { ok: false; reason: string }> {
+export async function uploadFile(input: { apiKey: string; bytes: ArrayBuffer | Blob; mimeType: string; fetchImpl?: typeof fetch; pollMs?: number; maxWaitMs?: number }): Promise<{ ok: true; uri: string } | { ok: false; reason: string }> {
   const f = input.fetchImpl ?? fetch;
   try {
     const start = await f(`https://generativelanguage.googleapis.com/upload/v1beta/files?key=${input.apiKey}`, {
       method: "POST",
-      headers: { "X-Goog-Upload-Protocol": "resumable", "X-Goog-Upload-Command": "start", "X-Goog-Upload-Header-Content-Length": String(input.bytes.byteLength), "X-Goog-Upload-Header-Content-Type": input.mimeType, "content-type": "application/json" },
+      headers: { "X-Goog-Upload-Protocol": "resumable", "X-Goog-Upload-Command": "start", "X-Goog-Upload-Header-Content-Length": String(input.bytes instanceof Blob ? input.bytes.size : input.bytes.byteLength), "X-Goog-Upload-Header-Content-Type": input.mimeType, "content-type": "application/json" },
       body: JSON.stringify({ file: { display_name: "draft" } }),
     });
     const uploadUrl = start.headers.get("x-goog-upload-url");
@@ -105,8 +110,11 @@ export async function watchMedia(input: WatchInput): Promise<WatchResult> {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ contents: [{ role: "user", parts: [mediaPart, { text: input.prompt }] }], generationConfig }),
+      signal: AbortSignal.timeout(input.timeoutMs ?? WATCH_TIMEOUT_MS),
     });
   } catch (error) {
+    const name = error instanceof Error ? error.name : "";
+    if (name === "TimeoutError" || name === "AbortError") return { ok: false, reason: `gemini timed out after ${Math.round((input.timeoutMs ?? WATCH_TIMEOUT_MS) / 1000)}s` };
     return { ok: false, reason: `gemini unreachable: ${error instanceof Error ? error.message : String(error)}` };
   }
   let payload: {

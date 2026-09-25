@@ -1,3 +1,4 @@
+import { clip } from "../lib/clip";
 /**
  * Own-account connections through Zernio (plan §6 Sprint 4, §12, §16.5 step 3).
  * One Zernio profile per creator, persisted on the connections row the moment it is
@@ -161,7 +162,7 @@ export async function reconcileFor(ctx: ActionCtx, creatorId: Id<"creators">): P
     }
   } catch (e) {
     // `accountsQueried: 0` must surface as unreadable, never as "0 new" (named test, §6 Sprint 4).
-    await ctx.runMutation(internal.connections.zernio.applyAccounts, { creatorId, accounts: (conn.zernioAccounts ?? []).map((x) => ({ accountId: x.accountId, platform: x.platform, username: x.username ?? null, needsReconnect: x.needsReconnect, canFetchAnalytics: x.canFetchAnalytics })), detail: `couldn't read accounts: ${e instanceof Error ? e.message.slice(0, 80) : "error"}` });
+    await ctx.runMutation(internal.connections.zernio.applyAccounts, { creatorId, accounts: (conn.zernioAccounts ?? []).map((x) => ({ accountId: x.accountId, platform: x.platform, username: x.username ?? null, needsReconnect: x.needsReconnect, canFetchAnalytics: x.canFetchAnalytics })), detail: `couldn't read accounts: ${e instanceof Error ? clip(e.message, 80) : "error"}` });
     return { status: "unreadable", accounts: conn.zernioAccounts?.length ?? 0 };
   }
   const r = await ctx.runMutation(internal.connections.zernio.applyAccounts, { creatorId, accounts: accounts.map((x) => ({ accountId: x.accountId, platform: x.platform, username: x.username, needsReconnect: x.needsReconnect, canFetchAnalytics: x.canFetchAnalytics })) });
@@ -221,9 +222,9 @@ export async function disconnectFor(ctx: ActionCtx, creatorId: Id<"creators">): 
       try {
         await deleteProfile(c, conn.zernioProfileId);
       } catch (e2) {
-        profile = `profile delete failed: ${e2 instanceof Error ? e2.message.slice(0, 60) : "error"}`;
+        profile = `profile delete failed: ${e2 instanceof Error ? clip(e2.message, 60) : "error"}`;
       }
-    } else if (!(e instanceof ZernioError && e.status === 404)) profile = `profile delete failed: ${e instanceof Error ? e.message.slice(0, 60) : "error"}`;
+    } else if (!(e instanceof ZernioError && e.status === 404)) profile = `profile delete failed: ${e instanceof Error ? clip(e.message, 60) : "error"}`;
   }
   await ctx.runMutation(internal.connections.zernio.forget, { creatorId });
   return `${removed} account${removed === 1 ? "" : "s"} removed; ${profile}`;
@@ -290,7 +291,7 @@ export const probeAnalytics = internalAction({
       await ctx.runMutation(internal.connections.zernio.recordHealth, { check: "analytics", ok: true, detail });
       return { ok: true, detail };
     } catch (e) {
-      const detail = e instanceof Error ? e.message.slice(0, 300) : "error";
+      const detail = e instanceof Error ? clip(e.message, 300) : "error";
       await ctx.runMutation(internal.connections.zernio.recordHealth, { check: "analytics", ok: false, detail });
       return { ok: false, detail };
     }

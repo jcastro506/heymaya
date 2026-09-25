@@ -1,3 +1,4 @@
+import { clip } from "../lib/clip";
 /**
  * The calendar read (plan §12.5, §13.8 calendar rail). Every 30 minutes, for every
  * connected calendar: the next fourteen days, classified, stored as the five fields
@@ -85,7 +86,7 @@ export const syncOne = internalAction({
           pageToken = page.nextPageToken;
         } while (pageToken);
       } catch (e) {
-        await ctx.runMutation(internal.calendar.oauth.patchConnection, { id: conn._id, status: "attention", detail: `Couldn't read "${calendarId}": ${e instanceof Error ? e.message.slice(0, 80) : "error"}` });
+        await ctx.runMutation(internal.calendar.oauth.patchConnection, { id: conn._id, status: "attention", detail: `Couldn't read "${calendarId}": ${e instanceof Error ? clip(e.message, 80) : "error"}` });
         return { ok: false, reason: "list failed" };
       }
     }

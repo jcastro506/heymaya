@@ -10,6 +10,7 @@ import { CLOSED, Draft, Opportunity, email, line, followUpEligible, nextFollowUp
 import { access, gmail } from "./mailbox";
 import { deliverNow } from "../core/scheduler";
 import { emailSendEnabled } from "./providerConfig";
+import { faultFetch, faultFor } from "../eval/faults";
 
 export function base64url(value: string): string {
   const bytes = new TextEncoder().encode(value);
@@ -83,7 +84,8 @@ export const send = internalAction({ args: { creatorId: v.id("creators"), draftI
   if (!await ctx.runMutation(internal.partnerships.delivery.claim, { ...a, generation: mailbox.generation })) return;
   let accepted = false;
   try {
-    const response = await gmail(token, "messages/send", { raw, ...(d.threadId ? { threadId: d.threadId } : {}) });
+    const fault = await faultFor(ctx, a.creatorId, "gmail"); // outage drill; null in production
+    const response = await gmail(token, "messages/send", { raw, ...(d.threadId ? { threadId: d.threadId } : {}) }, fault ? faultFetch(fault) : undefined);
     if (typeof response.id !== "string" || typeof response.threadId !== "string") throw new Error("Missing provider receipt");
     await ctx.runMutation(internal.partnerships.delivery.finish, { ...a, result: "sent", providerMessageId: response.id, threadId: response.threadId });
     accepted = true;

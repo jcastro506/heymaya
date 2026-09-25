@@ -16,6 +16,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { cosineSimilarity, COSINE_CLUSTER_THRESHOLD } from "../core/embeddings";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
+import { clip } from "../lib/clip";
 
 export const CLUSTERS = {
   /** A cluster is real from this many posts; a single post is a post, not a direction. */
@@ -160,7 +161,7 @@ export const read = internalAction({
       const spec = REGISTRY.classifier;
       const messages = [
         { role: "system" as const, content: "You name groups of a creator's own posts. For each group, a label of one to three plain words that fits in the sentence \"the ___ stuff\" the way a person would say it to a friend (\"travel\", \"running clips\", \"dev builds\", \"food reviews\"; never \"awe reactions\" or anything that sounds like a category on a dashboard) and up to four lowercase keywords. Output ONLY JSON: {\"groups\":[{\"label\":\"\",\"keywords\":[\"\"]}]} in the same order." },
-        { role: "user" as const, content: toName.map(({ g }, k) => `group ${k + 1} (${g.members.length} posts):\n${g.members.slice(0, 6).map((m) => `- ${m.text.slice(0, 140)}`).join("\n")}`).join("\n\n") },
+        { role: "user" as const, content: toName.map(({ g }, k) => `group ${k + 1} (${g.members.length} posts):\n${g.members.slice(0, 6).map((m) => `- ${clip(m.text, 140)}`).join("\n")}`).join("\n\n") },
       ];
       let r = await callModel(ctx, { creatorId: a.creatorId, purpose: "name_clusters", model: spec.primary, temperature: 0.2, maxTokens: 600, timeoutMs: 20_000, messages, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
       if (!r.ok) r = await callModel(ctx, { creatorId: a.creatorId, purpose: "name_clusters_fallback", model: spec.fallback, temperature: 0.2, maxTokens: 600, timeoutMs: 20_000, messages, apiKey: process.env.OPENROUTER_API_KEY ?? "" });

@@ -19,6 +19,7 @@ import { driftShare, LANE } from "./lane";
 import { SOUL } from "../agent/soul";
 import { summarize, type Affinity } from "../taste/affinities";
 import { separatedCreator } from "../taste/separation";
+import { clip } from "../lib/clip";
 
 const TRANSCRIPT_CAP = 40; // tonight: transcripts for the sample only; the full-catalogue pass follows with batch
 
@@ -193,9 +194,15 @@ export function pickSample(rows: Doc<"ownPosts">[]): Map<Id<"ownPosts">, string[
 }
 
 export const run = internalAction({
-  args: { creatorId: v.id("creators") },
+  /**
+   * `watchCap` / `transcriptCap`: fewer watched and transcribed posts than a real signup gets. Only
+   * the first-week simulation passes them (a watched post is 10 vendor credits); absent, the read is
+   * the product's own (TRANSCRIPT_CAP, WATCH_CAP).
+   */
+  args: { creatorId: v.id("creators"), watchCap: v.optional(v.number()), transcriptCap: v.optional(v.number()) },
   handler: async (ctx, args): Promise<{ ok: boolean; reason?: string }> => {
     const creator = await ctx.runQuery(internal.onboarding.ingest.creatorHandles, { creatorId: args.creatorId });
+    const transcriptCap = Math.max(0, Math.min(TRANSCRIPT_CAP, args.transcriptCap ?? TRANSCRIPT_CAP));
     if (!creator) return { ok: false, reason: "creator not found" };
     const now = Date.now();
     const platforms = (["tiktok", "instagram"] as const).filter((p) => creator.handles[p]);
@@ -231,7 +238,7 @@ export const run = internalAction({
     let transcribed = 0;
     for (const row of rows) {
       const tags = sample.get(row._id);
-      if (!tags || transcribed >= TRANSCRIPT_CAP || row.contentType !== "video" || !row.url) continue;
+      if (!tags || transcribed >= transcriptCap || row.contentType !== "video" || !row.url) continue;
       try {
         const r = await ctx.runAction(internal.reads.read.read, {
           kind: "post.transcript",
@@ -250,7 +257,7 @@ export const run = internalAction({
     // Pass three: watch the sample (Gemini, one post per call). Degrades per post, never blocks.
     let cards: Array<{ postId: string; depth: string; card: unknown }> = [];
     try {
-      const w = await ctx.runAction(internal.onboarding.watch.run, { creatorId: creator._id });
+      const w = await ctx.runAction(internal.onboarding.watch.run, { creatorId: creator._id, ...(args.watchCap !== undefined ? { max: args.watchCap } : {}) });
       readFrom.watched = w.watched;
       const reads = await ctx.runQuery(internal.onboarding.watch.readsFor, { creatorId: creator._id });
       cards = reads.map((r) => ({ postId: (r.card as { postId?: string })?.postId ?? "", depth: r.depth, card: r.card }));
@@ -313,8 +320,8 @@ export const synthesize = internalAction({
       sec: r.durationSec ?? null,
       views: r.metrics.views,
       multiple: r.multiple ?? null,
-      caption: r.caption.slice(0, 200),
-      transcript: r.transcript ? r.transcript.slice(0, 600) : null,
+      caption: clip(r.caption, 200),
+      transcript: r.transcript ? clip(r.transcript, 600) : null,
       sample: r.sample ?? null,
     }));
     const system = `${SOUL}\n\n# Skill: learn-creator\nYou are writing the creator's dossier from their own posts. Every claim must cite post ids from the data. Say "unknown" where the data is silent. Do not invent visuals: you may describe how a post looks ONLY from the watched cards; everything else is captions, transcripts and numbers. The person (persona.look, voice, humor, presence, world, cares) comes ONLY from the cards' "them" and "aFriendWouldNotice" blocks, summarised across posts the way a friend who watched everything would say it, never from a single post and never a guess about age, ethnicity, body or health; leave a field out when the cards are silent.${args.reason === "onboarding" ? "" : " This is a rewrite: the previous dossier, their house rules, their notes and their taste are below. A house rule or a note from them beats anything you inferred. Keep what still holds, change what the new posts contradict, and never keep a claim they corrected."}\nOutput ONLY JSON matching this shape:\n${DOSSIER_JSON_SHAPE}`;
@@ -374,7 +381,7 @@ export const learnInputs = internalQuery({
       rules: directives.map((d) => d.verbatim),
       notes: (c.notes ?? []).filter((n) => !n.tombstonedAt).map((n) => n.text),
       taste: summarize((c.affinities ?? []) as Affinity[], Date.now(), 6),
-      postedIdeas: ideas.map((i) => (i.version as { hook?: string } | undefined)?.hook ?? i.messageText.slice(0, 80)),
+      postedIdeas: ideas.map((i) => (i.version as { hook?: string } | undefined)?.hook ?? clip(i.messageText, 80)),
     };
   },
 });

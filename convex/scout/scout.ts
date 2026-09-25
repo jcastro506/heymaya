@@ -1,3 +1,4 @@
+import { clip } from "../lib/clip";
 /**
  * `scout` (plan §11.2 #6): after the rails pass, the ranked candidates go to the
  * writer with the dossier, the catalogue and the posts' transcripts. It decides
@@ -28,6 +29,7 @@ import { internalQuery } from "../_generated/server";
 import { LOOKUPS } from "../agent/playbooks";
 import { respectEmojiHabit } from "../agent/voice";
 import { pairedRows } from "../core/schedule";
+import { drillCheck, faultFor } from "../eval/faults";
 
 /** The share URL without its tracking query: what a person would paste. */
 export function cleanLink(url: string): string {
@@ -163,7 +165,18 @@ export const run = internalAction({
     const user = `Candidates (kind: breakout / shape / win / calendar), ranked; for posts, ratio is how far above that account's own normal:\n${JSON.stringify(evidence)}\n\nToday on their clock: ${localDateKey(now, g.creator.timezone)}, ${g.rails.localHour}:00 (${g.creator.timezone}). Messages already sent today: ${g.rails.sentToday}.${g.exploreOpen ? " The explore slot is open: one idea in five may be outside their usual, flagged newForYou." : ""}`;
     // §13.11: the writer may look things up (the sound, the comments, the author's normal, their own rhymes) before judging.
     const inv = await investigate(ctx, { creatorId: args.creatorId, purpose: "scout", prefix, user, temperature: 0.5, maxTokens: 1400 });
-    if (!inv.content) return { sent: false, reason: `scout ${inv.ended === "model_error" ? "model failed" : "gave no answer"} after ${inv.trace.length} lookups` };
+    if (!inv.content) {
+      /**
+       * A writer outage used to be invisible: runOne logged it and returned, the hourly pass is not a
+       * `jobs` row, so no dead letter, no alert, and a day of no ideas looked like a quiet lane
+       * (outage drill, 2026-09-24). Now the operator sees it; the signals stay pending for the next pass.
+       */
+      if (inv.ended === "model_error" && !args.dryRun) {
+        const fault = await faultFor(ctx, args.creatorId, "openrouter", { model: REGISTRY.writer.primary, count: false });
+        await ctx.runMutation(internal.core.smoke.record, { vendor: "openrouter", check: drillCheck("scout", fault), ok: false, detail: { creatorId: args.creatorId, lookups: inv.trace.length } });
+      }
+      return { sent: false, reason: `scout ${inv.ended === "model_error" ? "model failed" : "gave no answer"} after ${inv.trace.length} lookups` };
+    }
     const result = { ok: true as const, content: inv.content };
     if (inv.trace.length && !args.dryRun) await ctx.runMutation(internal.scout.gate.setInvestigation, { signalIds: g.candidates.map((s) => s._id), trace: inv.trace });
 
@@ -173,8 +186,8 @@ export const run = internalAction({
       parsed = JSON.parse(m ? m[0] : "{}") as typeof parsed;
     } catch {
       // The raw head goes to the log and, on a dry run, to the caller: a parse failure must be diagnosable, not a shrug.
-      console.error(`[scout] no JSON from the writer after ${inv.trace.length} lookups (ended: ${inv.ended}): ${result.content.slice(0, 300).replace(/\s+/g, " ")}`);
-      return { sent: false, reason: `scout returned no JSON (${inv.ended}, ${inv.turns} turns): ${result.content.slice(0, 160).replace(/\s+/g, " ")}` };
+      console.error(`[scout] no JSON from the writer after ${inv.trace.length} lookups (ended: ${inv.ended}): ${clip(result.content, 300).replace(/\s+/g, " ")}`);
+      return { sent: false, reason: `scout returned no JSON (${inv.ended}, ${inv.turns} turns): ${clip(result.content, 160).replace(/\s+/g, " ")}` };
     }
 
     const verdicts: Array<{ signalId: Id<"signals">; verdict: "sent" | "held" | "dropped"; why: string }> = [];

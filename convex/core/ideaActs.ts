@@ -13,12 +13,13 @@ import { internal } from "../_generated/api";
 import { recordAction } from "./act";
 import { applyEvent, featureKeys, WEIGHTS, type Affinity } from "../taste/affinities";
 import { ensureSeparated } from "../taste/separation";
+import { clip } from "../lib/clip";
 
 export const IDEA_ACTS = ["save", "unsave", "pass", "restore", "posted"] as const;
 export type IdeaAct = (typeof IDEA_ACTS)[number];
 export type Origin = "app" | "chat";
 
-export const hookOf = (idea: Doc<"ideas">): string => (idea.version as { hook?: string } | undefined)?.hook ?? idea.messageText.slice(0, 60);
+export const hookOf = (idea: Doc<"ideas">): string => (idea.version as { hook?: string } | undefined)?.hook ?? clip(idea.messageText, 60);
 
 export async function applyIdeaAct(
   ctx: MutationCtx,

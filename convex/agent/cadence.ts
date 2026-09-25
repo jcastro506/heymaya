@@ -21,6 +21,7 @@ import { pickMilestone } from "./history";
 import { localHourMinute } from "../scout/gate";
 import { THRESHOLDS } from "../config/thresholds";
 import { pairedRows } from "../core/schedule";
+import { clip } from "../lib/clip";
 
 export const CADENCE = {
   morningHour: 8,
@@ -286,7 +287,7 @@ export const sawIt = internalAction({
     if (!gathered) return { sent: false, reason: "creator not found" };
     const prefix = buildPrefix({ creator: gathered.creator, directives: gathered.directives, skill: SAW_IT_SKILL, personal: gathered.personal, voice: gathered.voice, history: gathered.history });
     const spec = REGISTRY.writer;
-    const r = await callModel(ctx, { creatorId: a.creatorId, purpose: "saw_it", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `They just posted. Caption: ${JSON.stringify(post.caption.slice(0, 300))}\nWhat you saw (the card): ${JSON.stringify(post.card ?? "no card; react to the caption only")}\n\nOne line, as a viewer.` }], temperature: 0.7, maxTokens: 120, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+    const r = await callModel(ctx, { creatorId: a.creatorId, purpose: "saw_it", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `They just posted. Caption: ${JSON.stringify(clip(post.caption, 300))}\nWhat you saw (the card): ${JSON.stringify(post.card ?? "no card; react to the caption only")}\n\nOne line, as a viewer.` }], temperature: 0.7, maxTokens: 120, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
     let text = r.ok ? r.content.trim() : "";
     if (!text) return { sent: false, reason: "no line" };
     // No numbers of any kind: a viewer does not open with a count.

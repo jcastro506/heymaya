@@ -1,3 +1,4 @@
+import { clip } from "../lib/clip";
 /**
  * Deletion is everything, in one procedure, in this order (plan §16.5). Triggered
  * from Settings after a typed confirmation and the offer of an export; never from a
@@ -133,7 +134,7 @@ export const run = internalAction({
         const sub = await getStripe().subscriptions.cancel(creator.plan.stripeSubscriptionId);
         steps.stripe = `subscription ${sub.status}`;
       } catch (e) {
-        steps.stripe = `cancel failed: ${e instanceof Error ? e.message.slice(0, 80) : "error"}`;
+        steps.stripe = `cancel failed: ${e instanceof Error ? clip(e.message, 80) : "error"}`;
       }
     } else steps.stripe = "no subscription";
 
@@ -141,7 +142,7 @@ export const run = internalAction({
     try {
       steps.zernio = await zernioDisconnectFor(ctx, a.creatorId);
     } catch (e) {
-      steps.zernio = `disconnect failed: ${e instanceof Error ? e.message.slice(0, 80) : "error"}; rows purged below`;
+      steps.zernio = `disconnect failed: ${e instanceof Error ? clip(e.message, 80) : "error"}; rows purged below`;
     }
 
     await disconnectMailbox(ctx, a.creatorId);
@@ -150,7 +151,7 @@ export const run = internalAction({
       await disconnectFor(ctx, a.creatorId);
       steps.calendar = "revoked and purged";
     } catch (e) {
-      steps.calendar = `revoke failed: ${e instanceof Error ? e.message.slice(0, 80) : "error"}; rows purged below`;
+      steps.calendar = `revoke failed: ${e instanceof Error ? clip(e.message, 80) : "error"}; rows purged below`;
     }
 
     // 5. Telegram: the final message BEFORE the pairing goes.

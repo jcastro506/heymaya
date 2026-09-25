@@ -35,6 +35,21 @@ export const record = internalMutation({
   },
 });
 
+/**
+ * A failure row at most once per `withinMs` per (vendor, check): for failures seen on live calls,
+ * where a vendor outage would otherwise write one row per call.
+ */
+export const recordFailureOnce = internalMutation({
+  args: { vendor: v.string(), check: v.string(), detail: v.optional(v.any()), withinMs: v.number() },
+  handler: async (ctx, a): Promise<boolean> => {
+    const now = Date.now();
+    const recent = (await ctx.db.query("vendorHealth").withIndex("by_vendor_at", (q) => q.eq("vendor", a.vendor).gte("at", now - a.withinMs)).order("desc").take(50)) as Doc<"vendorHealth">[];
+    if (recent.some((r) => r.check === a.check && !r.ok)) return false;
+    await ctx.db.insert("vendorHealth", { vendor: a.vendor, check: a.check, ok: false, detail: a.detail, at: now });
+    return true;
+  },
+});
+
 /** The latest reading per vendor and check, for the console. */
 export const latest = internalQuery({
   args: {},

@@ -18,6 +18,7 @@ import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { morningHourFor } from "../agent/cadence";
+import { clip } from "../lib/clip";
 
 const D = 86_400_000, H = 3_600_000;
 
@@ -85,7 +86,7 @@ export const signalsOf = internalQuery({
   args: { creatorId: v.id("creators") },
   handler: async (ctx, a): Promise<Array<{ kind: string; verdict: string; why: string }>> => {
     const rows = (await ctx.db.query("signals").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(30)) as Doc<"signals">[];
-    return rows.map((s) => ({ kind: s.kind, verdict: s.verdict, why: s.why.slice(0, 120) }));
+    return rows.map((s) => ({ kind: s.kind, verdict: s.verdict, why: clip(s.why, 120) }));
   },
 });
 

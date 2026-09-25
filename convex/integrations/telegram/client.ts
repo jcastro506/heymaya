@@ -1,3 +1,4 @@
+import { clip } from "../../lib/clip";
 /**
  * Telegram Bot API client.
  *
@@ -226,7 +227,7 @@ export async function sendTelegramDocument(
   try {
     const form = new FormData();
     form.set("chat_id", String(args.chatId));
-    if (args.caption) form.set("caption", args.caption.slice(0, 1000));
+    if (args.caption) form.set("caption", clip(args.caption, 1000));
     form.set("document", new Blob([args.content], { type: args.mimeType ?? "text/calendar" }), args.filename);
     const res = await fetchImpl(apiUrl(identity.token, "sendDocument"), { method: "POST", body: form });
     return res.ok;
@@ -237,7 +238,7 @@ export async function sendTelegramDocument(
 
 /** The album body, pure (§22 frames). Telegram fetches each photo by URL; ten per group, captions to 1024. */
 export function mediaGroupBody(args: { chatId: string | number; media: Array<{ url: string; caption: string }> }): Record<string, unknown> {
-  return { chat_id: args.chatId, media: args.media.slice(0, 10).map((m) => ({ type: "photo", media: m.url, caption: m.caption.slice(0, 1024) })) };
+  return { chat_id: args.chatId, media: args.media.slice(0, 10).map((m) => ({ type: "photo", media: m.url, caption: clip(m.caption, 1024) })) };
 }
 
 /** Send an album of photos as one media group. No inline keyboard is possible on a group; buttons ride the text before it. */

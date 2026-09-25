@@ -74,8 +74,10 @@ const handlers: Record<string, Handler> = {
   },
   async ingest_catalogue(ctx, job) {
     if (!job.creatorId) return { ok: false, error: "ingest job has no creator" };
-    const r = (await (ctx as unknown as { runAction: (ref: typeof internal.onboarding.ingest.run, a: { creatorId: Id<"creators"> }) => Promise<{ ok: boolean; reason?: string }> })
-      .runAction(internal.onboarding.ingest.run, { creatorId: job.creatorId }));
+    // Caps ride in the payload only for the first-week simulation (eval/firstWeek.ts); a real signup carries none.
+    const caps = payloadOf<{ watchCap?: number; transcriptCap?: number }>(job) ?? {};
+    const r = (await (ctx as unknown as { runAction: (ref: typeof internal.onboarding.ingest.run, a: { creatorId: Id<"creators">; watchCap?: number; transcriptCap?: number }) => Promise<{ ok: boolean; reason?: string }> })
+      .runAction(internal.onboarding.ingest.run, { creatorId: job.creatorId, ...(typeof caps.watchCap === "number" ? { watchCap: caps.watchCap } : {}), ...(typeof caps.transcriptCap === "number" ? { transcriptCap: caps.transcriptCap } : {}) }));
     return r.ok ? { ok: true } : { ok: false, error: r.reason ?? "ingest failed" };
   },
 };

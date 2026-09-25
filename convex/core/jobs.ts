@@ -86,6 +86,30 @@ export const DEFER_GIVE_UP_MS = 24 * 60 * 60 * 1000;
 export const SERIAL_KINDS: ReadonlySet<string> = new Set(["converse"]);
 
 /**
+ * What a creator hears when their turn is dead-lettered. A person texted and is waiting; the operator
+ * alert (a dead job) is not an answer to them. Outage drill, 2026-09-24: with the writer down, a text
+ * was retried five times and died, and the creator heard nothing at all.
+ */
+export const TURN_DEAD_TEXT = "i couldn't get an answer together for your last message. that's on my side, not you. send it again when you're ready?";
+
+/** A job just died: if it was someone's turn and nothing answered it, say so, once. */
+async function onDead(ctx: MutationCtx, job: Doc<"jobs">): Promise<void> {
+  if (!SERIAL_KINDS.has(job.kind) || !job.creatorId) return;
+  let messageId: string | undefined;
+  try {
+    messageId = (JSON.parse(job.payloadJson ?? "{}") as { messageId?: string }).messageId;
+  } catch {
+    messageId = undefined; // unreadable payload: still apologise, keyed by the job
+  }
+  const key = String(messageId ?? job._id);
+  const since = job.createdAt - 60_000;
+  const answered = ((await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", job.creatorId!).gte("ts", since)).take(100)) as Doc<"messages">[])
+    .some((m) => m.direction === "out" && (m.dedupeKey ?? "").includes(key));
+  if (answered) return;
+  await ctx.runMutation(internal.core.messages.send, { creatorId: job.creatorId, surface: "telegram", body: TURN_DEAD_TEXT, dedupeKey: `turn-dead:${key}`, proactive: false, kind: "status" });
+}
+
+/**
  * Exponential backoff with a ceiling. Deliberately not jittered: Convex
  * schedules these, so there's no thundering-herd of independent pollers to
  * spread out, and a predictable delay is easier to reason about in tests.
@@ -144,7 +168,9 @@ export const enqueue = internalMutation({
       idempotencyKey: args.idempotencyKey,
       status: "queued",
       attempts: 0,
-      maxAttempts: args.maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
+      // A turn someone is waiting on gets one retry, not five: during a writer outage five attempts
+      // meant ~7.5 minutes of silence before the "something broke on my side" text (outage drill).
+      maxAttempts: args.maxAttempts ?? (SERIAL_KINDS.has(args.kind) ? 2 : DEFAULT_MAX_ATTEMPTS),
       payloadJson: args.payloadJson,
       runAfter: args.runAfter ?? now,
       deadlineAt: now + (args.leaseMs ?? DEFAULT_LEASE_MS),
@@ -347,6 +373,7 @@ export const fail = internalMutation({
       console.error(
         `[maya.jobs] job ${job.kind} (${job.idempotencyKey}) is DEAD after ${job.attempts} attempts: ${args.error}`
       );
+      await onDead(ctx, job);
       return { status: "dead", attempts: job.attempts };
     }
 
@@ -394,6 +421,7 @@ export const reapExpired = internalMutation({
         console.error(
           `[maya.jobs] job ${job.kind} (${job.idempotencyKey}) DEAD — lease expired, attempts exhausted`
         );
+        await onDead(ctx, job);
       } else {
         await ctx.db.patch(job._id, {
           status: "queued",
@@ -449,6 +477,7 @@ export const defer = internalMutation({
     if (now - job.createdAt >= DEFER_GIVE_UP_MS) {
       await ctx.db.patch(args.jobId, { status: "dead", lastError: `gave up after 24h waiting: ${args.reason}`, updatedAt: now });
       console.error(`[maya.jobs] job ${job.kind} (${job.idempotencyKey}) DEAD — deferred for 24h: ${args.reason}`);
+      await onDead(ctx, job);
       return null;
     }
     await ctx.db.patch(args.jobId, { status: "queued", attempts: Math.max(0, job.attempts - 1), lastError: `deferred: ${args.reason}`, runAfter: now + args.delayMs, updatedAt: now });
