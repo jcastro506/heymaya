@@ -34,13 +34,13 @@ export function productBeats(d: number): string[] {
     case 3: return ["prep", "checkin", "shootDone", "after"];
     case 4: return ["missedFollowUp", "share", "askMaya"];
     case 5: return ["care", "pause"];
-    case 6: return ["memory"];
+    case 6: return ["memory", "tone"];
     case 7: return ["audit"];
     default: return [];
   }
 }
 
-export const BEATS = ["settings", "remember", "book", "ideaActs", "prep", "checkin", "shootDone", "after", "missedFollowUp", "share", "askMaya", "care", "pause", "memory", "audit"] as const;
+export const BEATS = ["settings", "tone", "remember", "book", "ideaActs", "prep", "checkin", "shootDone", "after", "missedFollowUp", "share", "askMaya", "care", "pause", "memory", "audit"] as const;
 
 /** One checked promise. `ok: null` is "not applicable for this role". */
 export type Check = { d: number; beat: string; check: string; ok: boolean | null; detail: string };
@@ -187,10 +187,15 @@ export async function runBeat(env: BeatEnv, beat: string): Promise<Check[]> {
   switch (beat) {
     case "settings": {
       const r1 = await say("can you not text me before 9am? mornings are chaos");
-      const r2 = await say("also be more blunt with me. no sugarcoating");
       const p = await probeOf(env);
       check("quiet hours changed by chat", p.creator.quietHours.end === "09:00", `quiet ${p.creator.quietHours.start}–${p.creator.quietHours.end}; she said: ${r1}`);
-      check("tone changed by chat", p.creator.tone === "blunt", `tone ${p.creator.tone}; she said: ${r2}`);
+      break;
+    }
+    case "tone": {
+      // Day 6, not day 1: a week in her default voice first, so the voice sample hears HER (run 1 was blunt from day 1).
+      const r = await say("also be more blunt with me. no sugarcoating");
+      const p = await probeOf(env);
+      check("tone changed by chat", p.creator.tone === "blunt", `tone ${p.creator.tone}; she said: ${r}`);
       break;
     }
     case "remember": {

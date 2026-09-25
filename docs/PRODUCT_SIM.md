@@ -14,7 +14,7 @@ Two roles, so both branches of every promise run: creators 0, 2, … **follow th
 
 | Day | Beat | Promise checked (from rows) |
 |---|---|---|
-| 1 | settings | "can you not text me before 9am" changes quiet hours; "be more blunt" changes tone |
+| 1 | settings | "can you not text me before 9am" changes quiet hours |
 | 1 | remember | a race date and a "never pitch me dance trends" rule are kept as rows |
 | 2 | book | "can we film the X one tomorrow at 5pm?" books a consented film block at 17:00 local, for that idea, with reminders scheduled (falls back to the shared calendar tool, and says so, if chat didn't book) |
 | 2 | ideaActs | a save in the app and a pass by chat both land, through the one shared function |
@@ -27,6 +27,7 @@ Two roles, so both branches of every promise run: creators 0, 2, … **follow th
 | 5 | care | "honestly kind of over this" gets her, not a hotline, and no 24 h pause |
 | 5 | pause | "pause" stops her texting first (a scout pass is held); "resume" brings her back |
 | 6 | memory | "what race am i running again?" names Chicago |
+| 6 | tone | "be more blunt" changes tone (late on purpose: the week is heard in her default voice) |
 | 7 | audit | never over the daily cap; no dance-trend idea after the rule; nothing proactive before 9am after day 1 |
 
 Plus everything the first-week run already measures and judges: first read, first ideas (judged for
@@ -51,6 +52,9 @@ npx convex run eval/firstWeek:start '{"replay":true,"script":"product","handles"
 # read it (partial while it runs). fleet.promises is the product script's scorecard
 npx convex run eval/firstWeek:report '{"runId":"fw-..."}'
 npx convex run eval/firstWeek:days '{"runId":"fw-...","i":0}'   # every beat's checks, with what she said
+
+# her words, in order, with what they had just said: the input to the voice rating page
+npx convex run eval/firstWeek:voice '{"runId":"fw-..."}'
 
 # what the cache could not answer, per creator
 npx convex run eval/replay:missesFor '{"creatorId":"..."}'

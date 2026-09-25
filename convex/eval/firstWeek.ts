@@ -41,7 +41,7 @@ import { applyIdeaAct } from "../core/ideaActs";
 import { startCreator } from "../onboarding/start";
 import { addTracked } from "../agent/manage";
 import { PAIRING_TTL_MS } from "../core/pairing";
-import { menuPick } from "../core/imessage";
+import { menuLine, menuPick } from "../core/imessage";
 import { normalizePhone } from "../integrations/claw/client";
 import { READ_SETTLE_MS, localHourMinute } from "../scout/gate";
 import { MIN_DAYS_BEFORE_REVIEW } from "../review/weekly";
@@ -1058,6 +1058,34 @@ export const report = internalAction({
 export const days = internalQuery({
   args: { runId: v.string(), i: v.number() },
   handler: async (ctx, a): Promise<CreatorLog | null> => await readKey<CreatorLog>(ctx, logKey(a.runId, a.i)),
+});
+
+/**
+ * Her words from a run, for people to rate (is she fun, warm, encouraging, cheesy?). Every line she
+ * sent each creator, with what they had just said, in order; the iMessage menu line is shown as it is
+ * delivered, since that is what a person reads. Sim creators of this run only.
+ */
+export const voice = internalQuery({
+  args: { runId: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, a): Promise<Array<{ i: number; handle: string; day: number; kind: string; theySaid: string | null; mayaSaid: string }>> => {
+    const s = await readKey<RunState>(ctx, stateKey(a.runId));
+    if (!s) return [];
+    const out: Array<{ i: number; handle: string; day: number; kind: string; theySaid: string | null; mayaSaid: string }> = [];
+    for (const slot of s.creators) {
+      if (!slot.creatorId) continue;
+      const c = (await ctx.db.get(slot.creatorId)) as Doc<"creators"> | null;
+      if (!c || !isFirstWeekSubject(c.clerkUserId)) continue;
+      const rows = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", slot.creatorId!)).take(600)) as Doc<"messages">[];
+      let last: string | null = null;
+      for (const m of rows) {
+        if (m.direction === "in") { last = m.kind === "pairing" ? null : clip(m.body, 280); continue; }
+        const menu = m.buttons?.length ? ` ${menuLine(m.buttons)}` : "";
+        out.push({ i: slot.i, handle: slot.handles.tiktok ?? slot.handles.instagram ?? "?", day: Math.max(0, Math.floor((m.ts - c.createdAt) / D)), kind: m.kind ?? "reply", theySaid: last, mayaSaid: clip(`${m.body}${menu}`, 900) });
+        last = null;
+      }
+    }
+    return out.slice(0, a.limit ?? 200);
+  },
 });
 
 // ------------------------------------------------------------------ cleanup
