@@ -39,13 +39,43 @@ const STEP_GAP_MS = 5_000;
 
 // ------------------------------------------------------------------ pure helpers
 
+const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+
+/**
+ * Pure: shift dates written in words ("oct 12", "October 11", "Nov. 3, 2026") by `delta`, keeping the
+ * way they were written. When the world ages, a race "on oct 12" must move with it, or it stays the
+ * same distance away forever (horizon sim, 2026-09-25). A date without a year is read as the nearest
+ * one to `now`. "may" counts only capitalised ("May 5"), since "may 2 posts" is a verb.
+ */
+export function shiftWrittenDates(text: string, delta: number, now: number): string {
+  return text.replace(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|May|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(\.?)\s+(\d{1,2})(st|nd|rd|th)?(,?\s+(\d{4}))?\b/gi, (m, mon: string, dot: string, day: string, suf: string | undefined, yPart: string | undefined, year: string | undefined) => {
+    if (mon === "may" || mon === "MAY") return m;
+    const mi = MONTHS.findIndex((x) => x.startsWith(mon.toLowerCase().slice(0, 3)));
+    const d = Number(day);
+    if (mi < 0 || d < 1 || d > 31) return m;
+    const nowY = new Date(now).getUTCFullYear();
+    let y = year ? Number(year) : nowY;
+    let t = Date.UTC(y, mi, d);
+    if (!year) for (const cand of [nowY - 1, nowY + 1]) { const c = Date.UTC(cand, mi, d); if (Math.abs(c - now) < Math.abs(t - now)) { t = c; y = cand; } }
+    const shifted = new Date(t + delta);
+    const full = shifted.toLocaleString("en-US", { month: "long", timeZone: "UTC" }).toLowerCase();
+    let name = mon.length > 3 && mon.toLowerCase() !== "sept" ? full : full.slice(0, 3);
+    if (mon[0] === mon[0].toUpperCase()) name = name[0].toUpperCase() + name.slice(1);
+    if (mon === mon.toUpperCase() && mon.length > 1) name = name.toUpperCase();
+    const dd = shifted.getUTCDate();
+    const ord = suf ? (dd % 10 === 1 && dd !== 11 ? "st" : dd % 10 === 2 && dd !== 12 ? "nd" : dd % 10 === 3 && dd !== 13 ? "rd" : "th") : "";
+    const yy = year ? `${yPart!.replace(/\d{4}/, "")}${shifted.getUTCFullYear()}` : "";
+    return `${name}${dot} ${dd}${ord}${yy}`;
+  });
+}
+
 /** Pure: shift every epoch-ms number (a plausible timestamp) inside a value by `delta`. Ids are strings; durations are small. */
 export function shiftTimes<T>(value: T, delta: number, now: number): T {
   const lo = Date.UTC(2015, 0, 1), hi = now + 400 * D;
   const walk = (x: unknown): unknown => {
     if (typeof x === "number") return Number.isFinite(x) && x >= lo && x <= hi ? x + delta : x;
     // Day keys ("2026-09-24", "morning:2026-09-24"): the daily budget row and dedupe keys move with the day.
-    if (typeof x === "string" && delta % D === 0 && x.length <= 200 && !x.includes("http")) return x.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (m) => { const t = Date.parse(`${m}T00:00:00Z`); return Number.isFinite(t) ? new Date(t + delta).toISOString().slice(0, 10) : m; });
+    if (typeof x === "string" && delta % D === 0 && x.length <= 200 && !x.includes("http")) return shiftWrittenDates(x.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (m) => { const t = Date.parse(`${m}T00:00:00Z`); return Number.isFinite(t) ? new Date(t + delta).toISOString().slice(0, 10) : m; }), delta, now);
     if (Array.isArray(x)) return x.map(walk);
     if (x && typeof x === "object") {
       if (x instanceof ArrayBuffer) return x;
@@ -310,7 +340,7 @@ export const dayMaya = internalAction({
     const step = async (name: string, f: () => Promise<{ sent?: boolean; reason?: string } | unknown>) => {
       try {
         const r = (await f()) as { sent?: boolean; reason?: string } | null;
-        jobs[name] = r && typeof r === "object" && "reason" in r ? `${r.sent ? "sent" : "held"}: ${String(r.reason ?? "")}`.slice(0, 120) : "ran";
+        jobs[name] = r && typeof r === "object" && "reason" in r ? clip(`${r.sent ? "sent" : "held"}: ${String(r.reason ?? "")}`, 120) : "ran";
       } catch (e) {
         jobs[name] = `failed: ${e instanceof Error ? clip(e.message, 100) : "error"}`;
       }
@@ -372,7 +402,7 @@ export const dayCreator = internalAction({
       const voice = await ctx.runQuery(internal.eval.livingSim.voiceOf, { creatorId: id });
       const r = await callModel(ctx, { creatorId: id, purpose: "sim_actor", model: REGISTRY.writer.primary, messages: [{ role: "system", content: `${ACTOR_PROMPT}\n\nYour own captions:\n${voice}` }, { role: "user", content: JSON.stringify({ day: a.d, mayaToday: today.messages, ideasToday: today.ideas }) }], temperature: 0.8, maxTokens: 700, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
       const out = r.ok ? parseJson<{ replies?: Array<{ text?: string }>; ideas?: Array<{ ideaId?: string; act?: string }> }>(r.content) : null;
-      for (const rep of (out?.replies ?? []).slice(0, 2)) if (rep.text?.trim()) { await sayAndHear(ctx, id, rep.text.trim().slice(0, 400)); said.push(rep.text.trim()); }
+      for (const rep of (out?.replies ?? []).slice(0, 2)) if (rep.text?.trim()) { await sayAndHear(ctx, id, clip(rep.text.trim(), 400)); said.push(rep.text.trim()); }
       for (const t of (out?.ideas ?? []).slice(0, 3)) {
         const idea = today.ideas.find((x) => x.id === t.ideaId);
         if (idea && (t.act === "save" || t.act === "pass")) await ctx.runMutation(internal.eval.livingSim.actOnIdea, { creatorId: id, ideaId: idea.id, act: t.act });
@@ -407,7 +437,7 @@ export const todayFromMaya = internalQuery({
     const ideas = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(10)) as Doc<"ideas">[];
     return {
       messages: msgs.filter((m) => m.direction === "out" && m.proactive).map((m) => ({ id: m._id, kind: m.kind ?? "", text: clip(m.body, 600) })),
-      ideas: ideas.filter((i) => i.createdAt >= a.since).map((i) => ({ id: i._id, hook: ((i.version as { hook?: string } | undefined)?.hook ?? i.messageText).slice(0, 140) })),
+      ideas: ideas.filter((i) => i.createdAt >= a.since).map((i) => ({ id: i._id, hook: clip((i.version as { hook?: string } | undefined)?.hook ?? i.messageText, 140) })),
     };
   },
 });
@@ -416,7 +446,7 @@ export const voiceOf = internalQuery({
   args: { creatorId: v.id("creators") },
   handler: async (ctx, a): Promise<string> => {
     const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(15)) as Doc<"ownPosts">[];
-    return posts.map((p) => `- ${p.caption.split("\n")[0].slice(0, 160)}`).join("\n");
+    return posts.map((p) => `- ${clip(p.caption.split("\n")[0], 160)}`).join("\n");
   },
 });
 
@@ -441,15 +471,15 @@ export const snapshot = internalQuery({
       outKinds: out.map((m) => m.kind ?? "?"),
       in: msgs.filter((m) => m.direction === "in").length,
       ideasTotal: ideas.length,
-      ideasSent: ideas.filter((i) => i.createdAt >= a.since).map((i) => ((i.version as { hook?: string } | undefined)?.hook ?? "").slice(0, 90)),
+      ideasSent: ideas.filter((i) => i.createdAt >= a.since).map((i) => clip((i.version as { hook?: string } | undefined)?.hook ?? "", 90)),
       ideasSaved: ideas.filter((i) => i.savedAt).length,
       ideasPassed: ideas.filter((i) => i.status === "passed").length,
       ideasPosted: ideas.filter((i) => i.status === "posted").length,
       memory: { records: records.filter((r) => r.active).length, byKind: records.filter((r) => r.active).reduce<Record<string, number>>((acc, r) => ((acc[r.kind] = (acc[r.kind] ?? 0) + 1), acc), {}), notes: (c.notes ?? []).filter((n) => !n.tombstonedAt).length, rules: directives.map((r) => clip(r.verbatim, 80)) },
-      lane: (d?.lane ?? c.niche ?? "").slice(0, 160),
-      taste: (c.taste?.text ?? "").slice(0, 220),
+      lane: clip(d?.lane ?? c.niche ?? "", 160),
+      taste: clip(c.taste?.text ?? "", 220),
       finishes: finishes.length,
-      captionLessons: finishes.filter((f) => f.outcome?.lesson).map((f) => f.outcome!.lesson.slice(0, 120)),
+      captionLessons: finishes.filter((f) => f.outcome?.lesson).map((f) => clip(f.outcome!.lesson, 120)),
       costUsdLast30m: Math.round(costs.reduce((s, x) => s + (x.costUsd ?? 0), 0) * 1000) / 1000,
     };
   },

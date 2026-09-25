@@ -21,7 +21,7 @@ import { habitsFor } from "./habits";
 import { buildIcs } from "./ics";
 import { localHourMinute } from "../scout/gate";
 import { pairedRows } from "../core/schedule";
-import { clip } from "../lib/clip";
+import { bare, clip, clipWords } from "../lib/clip";
 
 const WEEKDAY: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 /** Sunday, on their clock, after the review has had its hour. */
@@ -59,7 +59,7 @@ export const inputsFor = internalQuery({
       model,
       ideas: [...hearted, ...ideas].map((i) => ({
         ideaId: String(i._id),
-        hook: ((i.version as { hook?: string } | undefined)?.hook ?? clip(i.messageText, 80)).slice(0, 90),
+        hook: clip((i.version as { hook?: string } | undefined)?.hook ?? clip(i.messageText, 80), 90),
         // The why: a seeded idea carries it in its version; a scout idea carries it as fitWhy (live 2026-09-07: the plan line had none).
         why: ((i.version as { why?: string } | undefined)?.why || i.fitWhy || null),
         // "saved" is a tap on an idea; it lives as `savedAt`, not as a status.
@@ -84,10 +84,10 @@ export const write = internalMutation({
     const ids: Id<"calendarBlocks">[] = [];
     for (const s of a.slots as Slot[]) {
       const ideaId = s.ideaId ? (s.ideaId as Id<"ideas">) : undefined;
-      const title = (s.experiment ? `film (experiment): ${s.hook}` : `film: ${s.hook}`).slice(0, 80);
+      const title = clipWords(s.experiment ? `film (experiment): ${bare(s.hook)}` : `film: ${bare(s.hook)}`, 80);
       ids.push(await ctx.db.insert("calendarBlocks", { creatorId: a.creatorId, kind: "film", start: s.film.start, end: s.film.end, title, ideaId, planKey: a.planKey, status: "proposed", createdAt: now }));
-      if (s.edit) ids.push(await ctx.db.insert("calendarBlocks", { creatorId: a.creatorId, kind: "edit", start: s.edit.start, end: s.edit.end, title: `edit: ${s.hook}`.slice(0, 80), ideaId, planKey: a.planKey, status: "proposed", createdAt: now }));
-      ids.push(await ctx.db.insert("calendarBlocks", { creatorId: a.creatorId, kind: "post", start: s.post.at, end: s.post.at + 15 * 60_000, title: `post: ${s.hook}`.slice(0, 80), ideaId, planKey: a.planKey, status: "proposed", createdAt: now }));
+      if (s.edit) ids.push(await ctx.db.insert("calendarBlocks", { creatorId: a.creatorId, kind: "edit", start: s.edit.start, end: s.edit.end, title: clipWords(`edit: ${bare(s.hook)}`, 80), ideaId, planKey: a.planKey, status: "proposed", createdAt: now }));
+      ids.push(await ctx.db.insert("calendarBlocks", { creatorId: a.creatorId, kind: "post", start: s.post.at, end: s.post.at + 15 * 60_000, title: clipWords(`post: ${bare(s.hook)}`, 80), ideaId, planKey: a.planKey, status: "proposed", createdAt: now }));
     }
     return { blockIds: ids };
   },

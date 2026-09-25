@@ -15,6 +15,7 @@ import { v } from "convex/values";
 import { internalQuery } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
 import type { Doc } from "../_generated/dataModel";
+import { clip } from "../lib/clip";
 
 export const GROWTH = {
   /** How long a plan runs before she revises it out loud. */
@@ -65,11 +66,11 @@ export const setPlan = internalMutation({
     // Explicit from chat is theirs; inferred from the dossier is a floor, never below the default.
     const postsPerWeek = a.postsPerWeek !== undefined ? Math.max(1, Math.min(7, Math.round(a.postsPerWeek))) : Math.max(GROWTH.defaultPostsPerWeek, Math.min(7, Math.round(dossier?.cadence?.postsPerWeek ?? GROWTH.defaultPostsPerWeek)));
     const plan: GrowthPlan = {
-      lane: a.lane.trim().slice(0, 80),
+      lane: clip(a.lane.trim(), 80),
       keywords,
       formats: (a.formats ?? []).map((f) => f.trim().slice(0, 40)).filter(Boolean).slice(0, 3),
       postsPerWeek,
-      hypothesis: (a.hypothesis ?? `${postsPerWeek} a week on ${a.lane.trim()} should lift reach against their normal and bring follows`).slice(0, 200),
+      hypothesis: clip(a.hypothesis ?? `${postsPerWeek} a week on ${a.lane.trim()} should lift reach against their normal and bring follows`, 200),
       startedAt: now,
       reviewAt: now + GROWTH.planWeeks * 7 * 86_400_000,
       status: "running",

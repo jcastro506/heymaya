@@ -121,6 +121,15 @@ export const messageByTelegramId = internalQuery({
   },
 });
 
+/** Pure: does the message quote words that are not the latest idea's (so it means an earlier idea)? */
+export function quotesAnotherIdea(body: string, latestHook: string): boolean {
+  const quoted = body.match(/["\u201c]([^"\u201d]{6,})["\u201d]/)?.[1];
+  if (!quoted) return false;
+  const fold = (x: string) => x.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
+  const q = fold(quoted).slice(0, 40);
+  return q.length > 0 && !fold(latestHook).includes(q);
+}
+
 export const run = internalAction({
   args: { creatorId: v.id("creators"), messageId: v.id("messages"), rerouted: v.optional(v.boolean()), handledNote: v.optional(v.string()) },
   handler: async (ctx, args): Promise<{ ok: boolean; reason?: string }> => {
@@ -267,7 +276,7 @@ export const run = internalAction({
         let buttons: Array<{ id: string; label: string }> | undefined;
         if (ci[2] === "yes") {
           await ctx.runMutation(internal.calendar.reminders.touched, { blockId, touch: "yes", filmedAt: Date.now() });
-          body = "good. i'll nudge you at your post time.";
+          body = "love it. i'll nudge you when it's time to post.";
         } else if (ci[2] === "skip") {
           const blk = await ctx.runQuery(internal.calendar.blocks.byId, { blockId });
           await ctx.runAction(internal.calendar.blocks.remove, { blockId });
@@ -331,11 +340,11 @@ export const run = internalAction({
         await ctx.runMutation(internal.agent.cadence.markMissed, { creatorId: creator._id, blockId });
         if (ms[2] === "drop") {
           await ctx.runAction(internal.calendar.blocks.remove, { blockId });
-          await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: "let go. the idea's still in your list if it comes back around.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
+          await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: "all good, letting it go. it's still in your ideas if it ever comes back around.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
         } else {
           const m = await ctx.runQuery(internal.calendar.reminders.proposeMove, { blockId, now: Date.now() });
           const buttons = m ? [...(m.today ? [{ id: `push:${blockId}:${m.today.start}`, label: "today" }] : []), { id: `push:${blockId}:${m.tomorrow.start}`, label: "tomorrow" }, { id: `push:${blockId}:pick`, label: "i'll pick" }] : undefined;
-          await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: buttons ? "when?" : "couldn't find a gap this week. tell me a day and i'll put it in.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply", buttons, awaitingAnswer: true });
+          await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: buttons ? "sure, when works?" : "couldn't find a gap this week. tell me a day and i'll put it in.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply", buttons, awaitingAnswer: true });
         }
         await deliverNow(ctx as never);
         return { ok: true };
@@ -490,13 +499,21 @@ export const run = internalAction({
     // edit and answered with a canned line. With nothing to change, the message is a message:
     // it falls through to the conversation instead of a refusal.
     const latestForEdit = intent.intent === "edit_idea" || intent.intent === "drop_idea" ? await ctx.runQuery(internal.agent.moment.latestIdea, { creatorId: creator._id }) : null;
-    if ((intent.intent === "edit_idea" || intent.intent === "drop_idea") && latestForEdit) {
+    /**
+     * Product sim 2026-09-25: "pass on the "…" one, not for me" named an EARLIER idea, was routed here,
+     * and the latest idea got the change. A message that quotes some other idea's words is about that
+     * idea: it goes to the conversation, where her idea tools find the one they mean.
+     */
+    const namesAnother = latestForEdit ? quotesAnotherIdea(target.body, ((latestForEdit.version as { hook?: string } | undefined)?.hook ?? latestForEdit.messageText)) : false;
+    if ((intent.intent === "edit_idea" || intent.intent === "drop_idea") && latestForEdit && !namesAnother) {
       const latest = latestForEdit;
       let body: string;
       if (!latest) body = "nothing of mine to change yet. send me a moment or wait for the next idea.";
       else if (intent.intent === "drop_idea") {
-        await ctx.runMutation(internal.taste.events.record, { creatorId: creator._id, kind: "notme", ideaId: latest.id, messageId: target._id });
-        body = "scrapped. fewer like that.";
+        // "scrapped" must be true: the idea is passed through the one function the app's swipe uses
+        // (it also records the taste event). It used to record the event only, and the idea stayed in their list.
+        const r = await ctx.runMutation(internal.agent.ideaTools.status, { creatorId: creator._id, ideaId: String(latest.id), act: "pass" });
+        body = r.ok ? "scrapped. i'll send fewer like that." : "couldn't scrap that one on my side. try again in a sec?";
       } else {
         const r = await ctx.runMutation(internal.agent.moment.editIdea, { creatorId: creator._id, ideaId: latest.id, field: intent.field, value: intent.value });
         if (r.ok) await ctx.runAction(internal.calendar.blocks.refreshForIdea, { creatorId: creator._id, ideaId: latest.id }); // the event says the new words

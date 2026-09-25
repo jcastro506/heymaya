@@ -21,6 +21,7 @@ import { inQuietHours } from "../scout/gate";
 import { THRESHOLDS } from "../config/thresholds";
 import { atLocalHour, localHour } from "./postTime";
 import { freeSlotOn, PLAN } from "./planning";
+import { bare, clipWords } from "../lib/clip";
 
 export const REMINDER = {
   maxTouchesPerBlock: 2,
@@ -41,7 +42,8 @@ export const context = internalQuery({
     if (!creator) return null;
     const idea = block.ideaId ? ((await ctx.db.get(block.ideaId)) as Doc<"ideas"> | null) : null;
     const v = idea?.version as { hook?: string; onScreenText?: string; lengthSec?: number; sound?: string } | undefined;
-    const shotList = v ? [v.hook ? `open: ${v.hook}` : null, v.onScreenText ? `text: ${v.onScreenText}` : null, v.lengthSec ? `under ${v.lengthSec}s` : null, v.sound ? `sound: ${v.sound}` : null].filter(Boolean).join(". ") : null;
+    // The hook opens the reminder itself, so the list starts at what's new; each piece bare, so no ".." or ".,".
+    const shotList = v ? [v.onScreenText ? `text on screen "${bare(v.onScreenText)}"` : null, v.lengthSec ? `under ${v.lengthSec}s` : null, v.sound ? `sound: ${bare(v.sound)}` : null].filter(Boolean).join(", ") || null : null;
     return { block, creator, idea, shotList };
   },
 });
@@ -98,14 +100,16 @@ export const fire = internalAction({
     const tz = creator.timezone;
     const t = fmtTime(block.start, tz);
     const hook = block.title.replace(/^(film|edit|post)( \(experiment\))?: /, "");
+    // The idea's own hook, whole (the block title is cut to fit a calendar).
+    const full = clipWords(bare((c.idea?.version as { hook?: string } | undefined)?.hook ?? hook), 120);
     let body: string;
     let buttons: Array<{ id: string; label: string }> | undefined;
     let awaitingAnswer = false;
     if (a.touch === "prep") {
-      body = `today's ${hook}, filming at ${t}.${shotList ? ` shot list: ${shotList}.` : ""}`;
+      body = `filming today at ${t}: "${full}".${shotList ? ` ${shotList}.` : ""}`;
     } else if (a.touch === "checkin") {
       // The shot list appears once: here only if the prep never went out.
-      const withList = !(block.touches ?? []).includes("prep") && shotList ? ` ${shotList}.` : "";
+      const withList = !(block.touches ?? []).includes("prep") ? ` "${full}"${shotList ? `: ${shotList}` : ""}.` : "";
       body = `still good for ${t}? i still like this one.${withList}`;
       buttons = [{ id: `cal:${block._id}:yes`, label: "yes" }, { id: `cal:${block._id}:push`, label: "push it" }, { id: `cal:${block._id}:skip`, label: "skip" }];
       awaitingAnswer = true;

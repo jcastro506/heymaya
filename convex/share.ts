@@ -25,6 +25,7 @@ import { THRESHOLDS } from "./config/thresholds";
 import { unseenIdeas } from "./core/unseen";
 import { coverForUrl, coverKey, mediaUrl } from "./media";
 import { settled } from "./core/normal";
+import { clip } from "./lib/clip";
 
 export const SHARES_PER_DAY = 25; // a person sharing, not a script
 export const SHARE_DEDUPE_MS = 10 * 60_000;
@@ -49,7 +50,7 @@ export function nextAwake(now: number, timezone: string, quiet: { start: string;
 
 /** Pure: only a TikTok or Instagram post link; everything else is refused with a reason. */
 export function shareTarget(url: string): { ok: true; url: string; platform: "tiktok" | "instagram" } | { ok: false; reason: string } {
-  const link = parseLink(url.trim().slice(0, 500));
+  const link = parseLink(clip(url.trim(), 500));
   if (!link) return { ok: false, reason: "only TikTok and Instagram posts can be sent to Maya" };
   return { ok: true, url: link.url, platform: link.platform };
 }
@@ -90,7 +91,7 @@ export const receive = internalMutation({
     if (shares.some((r) => r.objectId === a.url && now - r.at < SHARE_DEDUPE_MS)) return { ok: true, duplicate: true };
 
     // Exactly as if they'd texted her the link: their note is their own words, in the same message.
-    const note = (a.note ?? "").trim().slice(0, 280);
+    const note = clip((a.note ?? "").trim(), 280);
     const surface = creator.channel.kind === "imessage" ? "imessage" : "telegram";
     const { messageId } = await writeInbound(ctx, { creatorId: a.creatorId, surface, body: note ? `${a.url}\n${note}` : a.url, ts: now });
     await recordAction(ctx, { creatorId: a.creatorId, kind: "share", source: "share_ext", objectId: a.url, summary: `sent you a post from ${a.app ?? "their phone"}${note ? ` with a note` : ""}` });
@@ -117,7 +118,7 @@ export const shareHttp = httpAction(async (ctx, req) => {
   }
   const target = shareTarget(String(body.url ?? ""));
   if (!target.ok) return json(400, target);
-  const r = await ctx.runMutation(internal.share.receive, { creatorId, url: target.url, note: typeof body.note === "string" ? body.note : undefined, app: typeof body.app === "string" ? body.app.slice(0, 20) : undefined });
+  const r = await ctx.runMutation(internal.share.receive, { creatorId, url: target.url, note: typeof body.note === "string" ? body.note : undefined, app: typeof body.app === "string" ? clip(body.app, 20) : undefined });
   if (!r.ok) return json(429, r);
   return json(200, { ok: true, duplicate: Boolean(r.duplicate), later: r.answersAt !== undefined && r.answersAt > Date.now() + 60_000 });
 });
@@ -140,7 +141,7 @@ export const askMaya = mutation({
       const id = ctx.db.normalizeId("ideas", a.id);
       const i = id ? ((await ctx.db.get(id)) as Doc<"ideas"> | null) : null;
       if (!i || i.creatorId !== c._id) return { ok: false };
-      label = `the "${((i.version as { hook?: string } | undefined)?.hook ?? i.messageText).slice(0, 60)}" idea`;
+      label = `the "${clip((i.version as { hook?: string } | undefined)?.hook ?? i.messageText, 60)}" idea`;
     } else {
       const id = ctx.db.normalizeId("ownPosts", a.id);
       const p = id ? ((await ctx.db.get(id)) as Doc<"ownPosts"> | null) : null;
@@ -195,7 +196,7 @@ export const widgetData = internalQuery({
       .filter((b) => b.status !== "deleted" && b.kind === "film");
     const firm = (b: Doc<"calendarBlocks">) => b.status === "confirmed" || b.status === "moved";
     const chosen = [...upcoming.filter(firm), ...upcoming.filter((b) => !firm(b))].slice(0, WIDGET_BLOCKS).sort((x, y) => x.start - y.start);
-    const hookOf = (i: Doc<"ideas">) => ((i.version as { hook?: string } | undefined)?.hook ?? i.messageText).slice(0, 90);
+    const hookOf = (i: Doc<"ideas">) => clip((i.version as { hook?: string } | undefined)?.hook ?? i.messageText, 90);
     const blockView = async (b: Doc<"calendarBlocks">): Promise<WidgetBlock> => {
       const idea = b.ideaId ? ((await ctx.db.get(b.ideaId)) as Doc<"ideas"> | null) : null;
       const ours = idea && idea.creatorId === a.creatorId ? idea : null;
@@ -210,7 +211,7 @@ export const widgetData = internalQuery({
     const open = unseen[0] ?? ((await ctx.db.query("ideas").withIndex("by_creator_status", (q) => q.eq("creatorId", a.creatorId).eq("status", "sent")).order("desc").first()) as Doc<"ideas"> | null);
     const link = open?.evidenceLinks[0] ?? null;
     const coverPlatform = link ? (link.includes("instagram.com") ? "instagram" : link.includes("tiktok.com") ? "tiktok" : null) : null;
-    const fitWhy = open?.fitWhy.trim() ? open.fitWhy.trim().slice(0, 140) : null;
+    const fitWhy = open?.fitWhy.trim() ? clip(open.fitWhy.trim(), 140) : null;
 
     const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(WIDGET_POSTS)) as Doc<"ownPosts">[];
     const lastPosts = await Promise.all(posts.map(async (p): Promise<WidgetPost> => ({

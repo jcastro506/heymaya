@@ -117,7 +117,7 @@ type Post = { postId?: string; url?: string | null; caption?: string | null; pos
 function soundName(p: Post): string | null {
   const m = (p as { raw?: { music?: { title?: unknown; author?: unknown } } }).raw?.music;
   const t = typeof m?.title === "string" ? m.title : null;
-  return t ? `${t}${typeof m?.author === "string" && m.author ? ` by ${m.author}` : ""}`.slice(0, 80) : null;
+  return t ? clip(`${t}${typeof m?.author === "string" && m.author ? ` by ${m.author}` : ""}`, 80) : null;
 }
 
 function postLine(p: Post): string {
@@ -145,7 +145,7 @@ function summarize(tool: string, value: unknown): string {
     case "post_comments": {
       const rows = (Array.isArray(value) ? value : []) as Array<{ text?: string; likeCount?: number | null; authorHandle?: string | null }>;
       if (!rows.length) return "no comments returned";
-      return cap(rows.slice(0, 15).map((c) => `(${c.likeCount ?? 0}) ${(c.text ?? "").slice(0, 120)}`).join("\n"));
+      return cap(rows.slice(0, 15).map((c) => `(${c.likeCount ?? 0}) ${clip(c.text ?? "", 120)}`).join("\n"));
     }
     case "suggestions": {
       const rows = (Array.isArray(value) ? value : ((value as { suggestions?: unknown[] } | null)?.suggestions ?? [])) as unknown[];
@@ -154,7 +154,7 @@ function summarize(tool: string, value: unknown): string {
     case "discover_creators":
     case "discover_profiles": {
       const rows = (Array.isArray(value) ? value : ((value as { profiles?: unknown[]; creators?: unknown[]; users?: unknown[] } | null)?.profiles ?? (value as { creators?: unknown[] } | null)?.creators ?? (value as { users?: unknown[] } | null)?.users ?? [])) as Array<{ handle?: string; username?: string; followerCount?: number; followers?: number; bio?: string; displayName?: string }>;
-      return rows.length ? cap(rows.slice(0, 15).map((r) => `@${r.handle ?? r.username ?? "?"} · ${r.followerCount ?? r.followers ?? "?"} followers · ${(r.displayName ?? "")} · "${(r.bio ?? "").slice(0, 80)}"`).join("\n")) : "no profiles returned";
+      return rows.length ? cap(rows.slice(0, 15).map((r) => `@${r.handle ?? r.username ?? "?"} · ${r.followerCount ?? r.followers ?? "?"} followers · ${(r.displayName ?? "")} · "${clip(r.bio ?? "", 80)}"`).join("\n")) : "no profiles returned";
     }
     case "account_posts":
     case "search_keyword":
@@ -266,7 +266,7 @@ async function runToolInner(ctx: ActionCtx, creatorId: Id<"creators">, call: { n
         ...conversations.slice(0, 2).map((h) => `[conversation ${new Date(h.at).toISOString().slice(0, 10)}; source ${h.sourceId}]\n${clip(h.text, 1100)}`),
         ...hits.map((h) => `[${h.kind}; source ${h.refId}; indexed ${new Date(h.at).toISOString().slice(0, 10)}] ${clip(h.text, 400)}`),
       ];
-      return evidence.length ? evidence.join("\n\n").slice(0, 4500) : "No matching evidence found. This is a search miss, not proof they never told you. Ask for one useful clue; never invent the past.";
+      return evidence.length ? clip(evidence.join("\n\n"), 4500) : "No matching evidence found. This is a search miss, not proof they never told you. Ask for one useful clue; never invent the past.";
     }
     if (call.name === "calendar_free") {
       const a = await ctx.runQuery(internal.calendar.availability.forCreator, { creatorId, days: typeof call.args.days === "number" ? call.args.days : undefined });

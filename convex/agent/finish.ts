@@ -170,7 +170,7 @@ export const recent = internalQuery({
   args: { creatorId: v.id("creators"), limit: v.optional(v.number()) },
   handler: async (ctx, a): Promise<Array<{ at: number; about: string; captions: Array<{ n: number; text: string; shape: string; why: string }>; sounds: Array<{ name: string; why: string; source: string }>; outcome: Doc<"finishes">["outcome"] | null }>> => {
     const rows = (await ctx.db.query("finishes").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(a.limit ?? 3)) as Doc<"finishes">[];
-    return rows.map((r) => ({ at: r.createdAt, about: String((r.card as { about?: string } | null)?.about ?? "").slice(0, 200), captions: r.captions.map((c, i) => ({ n: i + 1, ...c })), sounds: r.sounds.map((s) => ({ name: s.name, why: s.why, source: s.source })), outcome: r.outcome ?? null }));
+    return rows.map((r) => ({ at: r.createdAt, about: clip(String((r.card as { about?: string } | null)?.about ?? ""), 200), captions: r.captions.map((c, i) => ({ n: i + 1, ...c })), sounds: r.sounds.map((s) => ({ name: s.name, why: s.why, source: s.source })), outcome: r.outcome ?? null }));
   },
 });
 
@@ -212,7 +212,7 @@ export const run = internalAction({
     const verdict = await critique(ctx, { creatorId: creator._id, kind: "captions (numbered caption options and sound lines are the requested format, not a list to fault)", text: `${out.captions.map((c, i) => `${i + 1}. ${c.text}`).join("\n")}\n\nsounds: ${(out.sounds ?? []).map((s0) => `${s0.name}: ${s0.why}`).join(" / ")}\n${out.platformNote ?? ""}`, evidence: { card, theirVoice: g.voice.slice(0, 4000) }, voice: (creator.dossier as { voice?: unknown } | undefined)?.voice ?? {}, directives: directives.map((d) => d.verbatim) });
     let criticSkipped = verdict.skipped === true;
     if (!verdict.pass) {
-      await ctx.runMutation(internal.eval.expertBench.saveTrace, { creatorId: creator._id, trace: [{ tool: "critic", ok: false, result: `captions: ${verdict.problems.join(", ")} (${verdict.note}) | ${out.captions.map((c) => c.text).join(" / ").slice(0, 600)}` }] }).catch(() => undefined);
+      await ctx.runMutation(internal.eval.expertBench.saveTrace, { creatorId: creator._id, trace: [{ tool: "critic", ok: false, result: `captions: ${verdict.problems.join(", ")} (${verdict.note}) | ${clip(out.captions.map((c) => c.text).join(" / "), 600)}` }] }).catch(() => undefined);
       const rw = await callModel(ctx, { creatorId: creator._id, purpose: "finish_rewrite", model: REGISTRY.writer.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `${user}\n\nYour captions were rejected for: ${verdict.problems.join(", ")} (${verdict.note}). Rewrite only the captions, fixing exactly that, keeping three different kinds. Output ONLY JSON: {"captions": [{"text": "", "shape": "", "why": ""}]}\n\nPrevious:\n${JSON.stringify(out.captions)}` }], temperature: 0.6, maxTokens: 900, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
       const fixed = rw.ok ? parseJson<{ captions: Out["captions"] }>(rw.content) : null;
       if (fixed?.captions?.length && fixed.captions.length >= 2) out = { ...out, captions: fixed.captions };
@@ -227,7 +227,7 @@ export const run = internalAction({
     await ctx.runMutation(internal.agent.finish.record, {
       creatorId: creator._id, messageId: a.messageId, fileId: target.fileId ?? undefined, card,
       captions,
-      sounds: sounds.map((s) => ({ name: s.name.slice(0, 120), clipId: s.clipId, platform: String(s.platform ?? "both"), source: String(s.source ?? ""), why: String(s.why ?? "").slice(0, 200), howToUse: String(s.howToUse ?? "").slice(0, 160), ...("licensedForBusiness" in s && typeof s.licensedForBusiness === "boolean" ? { licensedForBusiness: s.licensedForBusiness } : {}) })),
+      sounds: sounds.map((s) => ({ name: clip(s.name, 120), clipId: s.clipId, platform: String(s.platform ?? "both"), source: String(s.source ?? ""), why: clip(String(s.why ?? ""), 200), howToUse: clip(String(s.howToUse ?? ""), 160), ...("licensedForBusiness" in s && typeof s.licensedForBusiness === "boolean" ? { licensedForBusiness: s.licensedForBusiness } : {}) })),
       dropped, lookups: inv.trace.filter((t) => t.ok).map((t) => t.tool),
     });
     await reply(finishText({ reaction: out.reaction ?? "", read: out.read, captions, sounds, platformNote: out.platformNote }), { produced: producedStamp(REGISTRY.writer.primary), criticSkipped });
@@ -291,7 +291,7 @@ export const learnOne = internalAction({
     const r = await callModel(ctx, { creatorId: m.finish.creatorId, purpose: "finish_lesson", model: REGISTRY.critic.primary, messages: [{ role: "system", content: LESSON_PROMPT }, { role: "user", content: `Offered:\n${m.finish.captions.map((c, i) => `${i + 1}. ${c.text}`).join("\n")}\n\nPosted:\n${clip(m.post.caption, 1200)}` }], temperature: 0, maxTokens: 300, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
     const parsed = r.ok ? parseJson<{ closestCaption: number; lesson: string }>(r.content) : null;
     if (!parsed) return { learned: false, reason: "lesson model failed" };
-    await ctx.runMutation(internal.agent.finish.saveOutcome, { finishId: a.finishId, ownPostId: m.post.id, closestCaption: [0, 1, 2, 3].includes(parsed.closestCaption) ? parsed.closestCaption : 0, soundUsed, lesson: String(parsed.lesson ?? "").slice(0, 200) });
+    await ctx.runMutation(internal.agent.finish.saveOutcome, { finishId: a.finishId, ownPostId: m.post.id, closestCaption: [0, 1, 2, 3].includes(parsed.closestCaption) ? parsed.closestCaption : 0, soundUsed, lesson: clip(String(parsed.lesson ?? ""), 200) });
     return { learned: true, reason: parsed.lesson ? "lesson kept" : "used as offered" };
   },
 });

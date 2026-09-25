@@ -785,7 +785,9 @@ export default defineSchema({
     .index("by_status_and_runAfter", ["status", "runAfter"])
     .index("by_creator", ["creatorId"])
     .index("by_status_and_deadline", ["status", "deadlineAt"])
-    .index("by_creator_kind", ["creatorId", "kind", "createdAt"]),
+    .index("by_creator_kind", ["creatorId", "kind", "createdAt"])
+    // Exact "is a turn already running for this creator": the take(20) of the newest missed it behind 20+ queued texts.
+    .index("by_creator_kind_status", ["creatorId", "kind", "status"]),
 
   // ------------------------------------------------------------------- budgets
   budgets: defineTable({

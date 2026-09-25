@@ -252,18 +252,9 @@ export const claimNext = internalMutation({
      * if that creator has none of it running and it is their oldest one queued.
      * Other creators' turns are unaffected, so the fleet still runs in parallel.
      */
-    // Exact, per creator (index), not a scan of the first 200 running rows: at 219 running the scan
-    // missed creators and two turns ran at once for one person (1,000-creator test, 2026-09-24).
-    const busy = new Set<string>();
-    const serialCreators = new Set(wanted.filter((r) => SERIAL_KINDS.has(r.kind) && r.creatorId).map((r) => `${r.kind}:${r.creatorId}`));
-    for (const key of serialCreators) {
-      const [kind, creatorId] = key.split(":") as [string, Id<"creators">];
-      const inFlight = await ctx.db.query("jobs").withIndex("by_creator_kind", (q) => q.eq("creatorId", creatorId).eq("kind", kind)).order("desc").take(20);
-      if (inFlight.some((r) => r.status === "running")) busy.add(key);
-    }
     // Claim no more turns than the deployment can actually run; the rest wait queued, not leased.
     const turnsRunning = running.filter((r) => SERIAL_KINDS.has(r.kind)).length;
-    const turnCap = maxTurnsInFlight();
+    const capFull = turnsRunning >= maxTurnsInFlight();
     const oldest = new Map<string, Doc<"jobs">>();
     for (const row of wanted) {
       if (!SERIAL_KINDS.has(row.kind) || !row.creatorId) continue;
@@ -273,9 +264,8 @@ export const claimNext = internalMutation({
     }
     const eligible = wanted.filter((row) => {
       if (!SERIAL_KINDS.has(row.kind) || !row.creatorId) return true;
-      if (turnsRunning >= turnCap) return false;
-      const key = `${row.kind}:${row.creatorId}`;
-      return !busy.has(key) && oldest.get(key)?._id === row._id;
+      if (capFull) return false;
+      return oldest.get(`${row.kind}:${row.creatorId}`)?._id === row._id;
     });
     if (eligible.length === 0) return null;
 
@@ -285,7 +275,7 @@ export const claimNext = internalMutation({
       load.set(key, (load.get(key) ?? 0) + 1);
     }
 
-    const job = [...eligible].sort((a, b) => {
+    const ordered = [...eligible].sort((a, b) => {
       const la = load.get(a.creatorId ?? "fleet") ?? 0;
       const lb = load.get(b.creatorId ?? "fleet") ?? 0;
       // 1. Whoever has least in flight.
@@ -298,7 +288,26 @@ export const claimNext = internalMutation({
       if (a.deadlineAt !== b.deadlineAt) return a.deadlineAt - b.deadlineAt;
       // 3. Then arrival, so the ordering is total and a tie cannot flap.
       return a.runAfter - b.runAfter;
-    })[0];
+    });
+
+    /**
+     * Exact, per creator, by index (at 219 running, a scan of the first 200 running rows missed
+     * creators and two turns ran at once for one person; 1,000-creator test, 2026-09-24). Checked
+     * lazily, in pick order: the first free creator wins, so a claim costs a lookup or two instead
+     * of one per creator in the 200-row window. Every turn's inline drain claims, and at a few
+     * hundred turns in flight those 200-lookup mutations were the ones colliding with each other.
+     */
+    let job: Doc<"jobs"> | null = null;
+    for (const row of ordered) {
+      if (SERIAL_KINDS.has(row.kind) && row.creatorId) {
+        const creatorId = row.creatorId;
+        const busy = await ctx.db.query("jobs").withIndex("by_creator_kind_status", (q) => q.eq("creatorId", creatorId).eq("kind", row.kind).eq("status", "running")).first();
+        if (busy) continue;
+      }
+      job = row;
+      break;
+    }
+    if (!job) return null;
 
     await ctx.db.patch(job._id, {
       status: "running",

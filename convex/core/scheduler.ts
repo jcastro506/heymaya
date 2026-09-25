@@ -90,7 +90,12 @@ const handlers: Record<string, Handler> = {
  */
 export async function deliverNow(ctx: { runAction: (ref: never, args: never) => Promise<unknown> }): Promise<void> {
   try {
-    await (ctx as unknown as { runAction: (ref: typeof internal.core.scheduler.drainJobs, a: Record<string, never>) => Promise<unknown> }).runAction(internal.core.scheduler.drainJobs, {});
+    // Everything but turns. Turns are started by their own kick (jobs.kickDrain) and by the turn before
+    // them finishing; claiming them here put a full claim loop inside every turn's action, and at a few
+    // hundred turns in flight those claims collided with each other (1,000-creator test). The first read
+    // after pairing still starts here, right behind the hello.
+    const kinds = [...HANDLED_KINDS].filter((k) => !TURN_KINDS.has(k));
+    await (ctx as unknown as { runAction: (ref: typeof internal.core.scheduler.drainJobs, a: { kinds: string[] }) => Promise<unknown> }).runAction(internal.core.scheduler.drainJobs, { kinds });
   } catch {
     // The cron will pick it up.
   }

@@ -21,7 +21,7 @@ import { pickMilestone } from "./history";
 import { localHourMinute } from "../scout/gate";
 import { THRESHOLDS } from "../config/thresholds";
 import { pairedRows } from "../core/schedule";
-import { clip } from "../lib/clip";
+import { bare, clip } from "../lib/clip";
 
 export const CADENCE = {
   morningHour: 8,
@@ -261,11 +261,15 @@ export const howDidItGo = internalAction({
     const now = a.now ?? Date.now();
     const block = await ctx.runQuery(internal.agent.cadence.shootToAskAbout, { creatorId: a.creatorId, now });
     if (!block) return { sent: false, reason: "no shoot to ask about" };
+    // Product sim 2026-09-25: their unanswered check-in for THIS shoot ("still good for 5?") held the
+    // open-question rail, so the one person who most needed "how'd it go?" never got it. The shoot is
+    // over; that question is moot. Only it is closed: any other open question still blocks.
+    await ctx.runMutation(internal.core.messages.closeOpenByKey, { creatorId: a.creatorId, dedupeKey: `block:${block._id}:checkin` });
     const rails = await railsOk(ctx as never, a.creatorId, now);
     if (!rails.ok) return { sent: false, reason: rails.reason ?? "rails" };
     const hook = hookOf(block.title).replace(/^the\s+/i, "");
     await ctx.runMutation(internal.core.messages.closeOpen, { creatorId: a.creatorId });
-    const sent = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: `how'd the ${hook} shoot go?`, dedupeKey: `howdidit:${block._id}`, ts: now, proactive: true, kind: "checkin", awaitingAnswer: true, buttons: [{ id: `shot:${block._id}:yes`, label: "filmed it" }, { id: `shot:${block._id}:no`, label: "didn't happen" }] });
+    const sent = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: hook.length <= 45 ? `how'd the ${bare(hook)} shoot go?` : "how'd today's shoot go?", dedupeKey: `howdidit:${block._id}`, ts: now, proactive: true, kind: "checkin", awaitingAnswer: true, buttons: [{ id: `shot:${block._id}:yes`, label: "filmed it" }, { id: `shot:${block._id}:no`, label: "didn't happen" }] });
     await ctx.runMutation(internal.calendar.reminders.touched, { blockId: block._id, touch: "howdidit" });
     if (!sent.sent) return { sent: false, reason: "already asked" };
     await deliverNow(ctx as never);

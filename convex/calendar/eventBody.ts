@@ -5,6 +5,7 @@
  * that inspired it, and why it fits them. Pure, plain text, bounded, in her words and not ours: no
  * plumbing, no ids. Google and Apple both render this as the event's notes.
  */
+import { clip } from "../lib/clip";
 
 export interface EventIdea {
   hook?: string;
@@ -25,7 +26,7 @@ const label = (kind: "film" | "edit" | "post") => (kind === "film" ? "Film" : ki
 /** "Film: the shoe rack list". Pure. */
 export function eventSummary(kind: "film" | "edit" | "post", title: string): string {
   const bare = title.replace(/^(film|edit|post)( \(experiment\))?:\s*/i, "").trim();
-  return `${label(kind)}: ${bare || "with Maya"}`.slice(0, 120);
+  return clip(`${label(kind)}: ${bare || "with Maya"}`, 120);
 }
 
 function clean(s: unknown, max: number): string {

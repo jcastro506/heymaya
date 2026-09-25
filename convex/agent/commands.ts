@@ -32,7 +32,7 @@ export const apply = internalMutation({
     }
     if (a.command === "resume") {
       if (c.plan.status === "paused") await ctx.db.patch(c._id, { plan: { ...c.plan, status: "active" }, updatedAt: now });
-      return { body: "back on. i'll pick up from where the lane is now, not from where it was." };
+      return { body: "back on! picking up from where things are now, not where they were." };
     }
     if (a.command === "forget") {
       const live = (c.notes ?? []).filter((n) => !n.tombstonedAt).sort((x, y) => y.at - x.at);
