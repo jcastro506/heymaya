@@ -492,9 +492,11 @@ export const start = internalAction({
         const missing = handles.filter((h) => !has("tiktok", h.tiktok) || !has("instagram", h.instagram));
         if (missing.length) throw new Error(`replay run refused: not in the read cache: ${missing.map((m) => [m.tiktok && `tiktok:@${m.tiktok}`, m.instagram && `instagram:@${m.instagram}`].filter(Boolean).join(" ")).join(", ")}. Cached: ${cached.slice(0, 20).map((c) => `${c.platform}:@${c.handle}`).join(", ")}`);
       } else {
-        const free = (await ctx.runQuery(internal.eval.firstWeek.preflight, { handles: cached.map((c) => ({ [c.platform]: c.handle })) })).filter((x) => x.free);
+        const checked = await ctx.runQuery(internal.eval.firstWeek.preflight, { handles: cached.map((c) => ({ [c.platform]: c.handle })) });
+        const free = checked.filter((x) => x.free);
         subjects = free.slice(0, 4).map((x) => { const c = cached[x.i]; return { [c.platform]: c.handle, note: `from the cache (${c.followers ?? "?"} followers)` } as Subject; });
-        if (subjects.length < 2) throw new Error(`replay run refused: the read cache can onboard ${subjects.length} free account(s); two are needed (one follows through, one flakes). Cached: ${cached.map((c) => `${c.platform}:@${c.handle}`).join(", ") || "none"}`);
+        // Name who holds each one, so the operator knows exactly which earlier run to clear.
+        if (subjects.length < 2) throw new Error(`replay run refused: the read cache can onboard ${subjects.length} free account(s); two are needed (one follows through, one flakes). Held: ${checked.filter((x) => !x.free).map((x) => `${x.handles} by ${x.heldBy}`).join("; ") || "none"}. Free: ${free.map((x) => x.handles).join(", ") || "none"}`);
       }
     }
     if (subjects.length > 12) throw new Error("at most 12 creators a run");
