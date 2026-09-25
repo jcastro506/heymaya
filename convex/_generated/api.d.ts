@@ -118,6 +118,7 @@ import type * as eval_fakes from "../eval/fakes.js";
 import type * as eval_faults from "../eval/faults.js";
 import type * as eval_firstWeek from "../eval/firstWeek.js";
 import type * as eval_gate from "../eval/gate.js";
+import type * as eval_horizonScript from "../eval/horizonScript.js";
 import type * as eval_judge from "../eval/judge.js";
 import type * as eval_livingSim from "../eval/livingSim.js";
 import type * as eval_loadTest from "../eval/loadTest.js";
@@ -325,6 +326,7 @@ declare const fullApi: ApiFromModules<{
   "eval/faults": typeof eval_faults;
   "eval/firstWeek": typeof eval_firstWeek;
   "eval/gate": typeof eval_gate;
+  "eval/horizonScript": typeof eval_horizonScript;
   "eval/judge": typeof eval_judge;
   "eval/livingSim": typeof eval_livingSim;
   "eval/loadTest": typeof eval_loadTest;

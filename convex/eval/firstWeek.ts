@@ -49,6 +49,7 @@ import { actorPromptFor, ageCreatorTable, CREATOR_INDEX, rng } from "./livingSim
 import { clip } from "../lib/clip";
 import { armReplay } from "./replay";
 import { productBeats, roleOf, runBeat, summariseChecks, type Check } from "./productScript";
+import { horizonBeats, HORIZON_STEPS, runHorizonBeat } from "./horizonScript";
 
 const D = 86_400_000;
 const MIN = 60_000;
@@ -152,7 +153,14 @@ export function weekdayOf(d: number, signupWeekday: number): number {
  * review (morning, once they've been here five days, as `dueForReview` requires) and the next week's
  * plan (18:00); the quiet check; their evening reply; the snapshot.
  */
-export function dayPlan(d: number, opts: { signupWeekday: number; script?: "none" | "product" }): Step[] {
+export function dayPlan(d: number, opts: { signupWeekday: number; script?: "none" | "product" | "horizon" }): Step[] {
+  /**
+   * The horizon script: each step is a WEEK. The world ages seven days, then the week's work runs once:
+   * the lane reads, the morning, two scout passes, their replies, the review and next week's plan.
+   */
+  if (opts.script === "horizon") {
+    return ["age", "expireQuestions", "sampler", "sweep", "morning", "scout", "actor", ...horizonBeats(d).map((b) => `beat:${b}` as Step), "scoutAfternoon", "howDidItGo", "review", "weekPlan", "actorEvening", "snapshot"];
+  }
   const sunday = weekdayOf(d, opts.signupWeekday) === 0;
   // The product script's moments run after the morning: she has spoken, and they answer.
   const beats: Step[] = opts.script === "product" ? productBeats(d).map((b) => `beat:${b}` as Step) : [];
@@ -187,7 +195,7 @@ const hours = (ms: number | null | undefined) => (ms === null || ms === undefine
 // ------------------------------------------------------------------ state (syncState rows; no new table)
 
 type CreatorSlot = { i: number; subject: string; handles: { tiktok?: string; instagram?: string }; timezone: string; note?: string; creatorId?: Id<"creators">; error?: string };
-type Opts = { days: number; watchCap: number; transcriptCap: number; admired: number; pairAfterMs: number; day0MaxMs: number; maxCredits: number; signupWeekday: number; seed: number; replay: boolean; script: "none" | "product" };
+type Opts = { days: number; watchCap: number; transcriptCap: number; admired: number; pairAfterMs: number; day0MaxMs: number; maxCredits: number; signupWeekday: number; seed: number; replay: boolean; script: "none" | "product" | "horizon" };
 export type RunState = { runId: string; startedAt: number; opts: Opts; creators: CreatorSlot[]; stopped?: string };
 type Cursor = { phase: "signup" | "day" | "judge" | "done"; d: number; k: number; attempt: number; since: number };
 type Ev = { name: string; simMs: number; detail?: string };
@@ -406,13 +414,16 @@ export const runCredits = internalQuery({
 const optsV = {
   days: v.optional(v.number()), watchCap: v.optional(v.number()), transcriptCap: v.optional(v.number()), admired: v.optional(v.number()),
   pairAfterMs: v.optional(v.number()), day0MaxMs: v.optional(v.number()), maxCredits: v.optional(v.number()), signupWeekday: v.optional(v.number()), seed: v.optional(v.number()),
-  replay: v.optional(v.boolean()), script: v.optional(v.union(v.literal("none"), v.literal("product"))),
+  replay: v.optional(v.boolean()), script: v.optional(v.union(v.literal("none"), v.literal("product"), v.literal("horizon"))),
 };
 
 /** Pure: the run's options, defaults filled and bounds enforced. */
 export function resolveOpts(a: Partial<Opts>): Opts {
   const o = { ...FW_DEFAULTS, ...Object.fromEntries(Object.entries(a).filter(([, x]) => x !== undefined)) } as Opts;
-  if (!Number.isInteger(o.days) || o.days < 1 || o.days > 14) throw new Error("days must be 1–14");
+  // A horizon run's steps are weeks: 24 by default (the race at week 20, then a month after), at most 30.
+  if (o.script === "horizon" && a.days === undefined) o.days = HORIZON_STEPS;
+  const maxSteps = o.script === "horizon" ? 30 : 14;
+  if (!Number.isInteger(o.days) || o.days < 1 || o.days > maxSteps) throw new Error(`days must be 1–${maxSteps}${o.script === "horizon" ? " (weeks)" : ""}`);
   if (o.signupWeekday < 0 || o.signupWeekday > 6) throw new Error("signupWeekday is 0 (Sunday) … 6");
   if (o.maxCredits < 50 && !o.replay) throw new Error("maxCredits under 50 cannot onboard anyone");
   // Replay spends nothing: one credit is already a failure, and it stops the run.
@@ -764,11 +775,12 @@ export const runStep = internalAction({
       const said = (r: { sent?: boolean; reason?: string } | null | undefined) => (r ? `${r.sent ? "sent" : "held"}: ${String(r.reason ?? "")}` : "ran");
       switch (step) {
         case "age": {
-          await ctx.runMutation(internal.eval.firstWeek.ageTable, { creatorId: id, table: "creators", delta: -D });
+          const stride = s.opts.script === "horizon" ? 7 * D : D;
+          await ctx.runMutation(internal.eval.firstWeek.ageTable, { creatorId: id, table: "creators", delta: -stride });
           let rows = 0;
           // Not `schedule`: the creators trigger rewrites it from the aged creator row, and ageing it again would move it twice.
-          for (const table of TABLES_BY_CREATOR) if (CREATOR_INDEX[table] && table !== "schedule") rows += await ctx.runMutation(internal.eval.firstWeek.ageTable, { creatorId: id, table, delta: -D });
-          result = `a day passed (${rows} rows moved)`;
+          for (const table of TABLES_BY_CREATOR) if (CREATOR_INDEX[table] && table !== "schedule") rows += await ctx.runMutation(internal.eval.firstWeek.ageTable, { creatorId: id, table, delta: -stride });
+          result = `${stride === D ? "a day" : "a week"} passed (${rows} rows moved)`;
           break;
         }
         case "expireQuestions": result = `expired ${(await ctx.runMutation(internal.core.messages.expireStaleQuestions, { creatorId: id })).expired}`; break;
@@ -793,7 +805,9 @@ export const runStep = internalAction({
           };
           let checks: Check[];
           try {
-            checks = await runBeat({ ctx, creatorId: id, i: a.i, d: a.d, role: roleOf(a.i), say, runStartedAt: s.startedAt, prior: log.checks ?? [] }, beat);
+            checks = beat.startsWith("h-")
+              ? await runHorizonBeat({ ctx, creatorId: id, i: a.i, d: a.d, say, timezone: slot.timezone, prior: log.checks ?? [] }, beat)
+              : await runBeat({ ctx, creatorId: id, i: a.i, d: a.d, role: roleOf(a.i), say, runStartedAt: s.startedAt, prior: log.checks ?? [] }, beat);
           } catch (e) {
             checks = [{ d: a.d, beat, check: `beat ${beat} ran`, ok: false, detail: e instanceof Error ? clip(e.message, 200) : "error" }];
           }

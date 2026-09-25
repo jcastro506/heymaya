@@ -50,6 +50,8 @@ export type Probe = {
   creator: { quietHours: { start: string; end: string }; tone: string; status: string; careUntil: number | null; timezone: string; notes: string[] };
   /** What she kept about them outside the notes (the personal-memory layer). */
   personal: string[];
+  /** Their calendar, from a day ago to two months out. */
+  events: Array<{ title: string; start: number }>;
   directives: string[];
   blocks: Array<{ id: Id<"calendarBlocks">; kind: string; title: string; start: number; end: number; booked: boolean; filmedAt: number | null; missedAt: number | null; touches: string[]; ideaId: Id<"ideas"> | null; status: string }>;
   ideas: Array<{ id: Id<"ideas">; hook: string; status: string; saved: boolean; createdAt: number; text: string }>;
@@ -65,6 +67,8 @@ export const probe = internalQuery({
     if (!c || !SIM_SUBJECT.test(c.clerkUserId)) return null;
     const directives = (await ctx.db.query("directives").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"directives">[];
     const personal = (await ctx.db.query("personalRecords").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(200)) as Doc<"personalRecords">[];
+    const now = Date.now();
+    const events = (await ctx.db.query("calendarEvents").withIndex("by_creator_start", (q) => q.eq("creatorId", a.creatorId).gte("start", now - 86_400_000).lte("start", now + 60 * 86_400_000)).take(50)) as Doc<"calendarEvents">[];
     const blocks = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(200)) as Doc<"calendarBlocks">[];
     const ideas = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(100)) as Doc<"ideas">[];
     const messages = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId).gte("ts", a.since ?? 0)).order("desc").take(400)) as Doc<"messages">[];
@@ -72,6 +76,7 @@ export const probe = internalQuery({
       creator: { quietHours: c.quietHours, tone: c.tone, status: c.plan.status, careUntil: c.careUntil ?? null, timezone: c.timezone, notes: (c.notes ?? []).filter((n) => !n.tombstonedAt).map((n) => n.text) },
       directives: directives.filter((x) => x.active).map((x) => x.verbatim),
       personal: personal.map((x) => x.text),
+      events: events.filter((e) => e.status === "active").map((e) => ({ title: e.title, start: e.start })),
       blocks: blocks.map((b) => ({ id: b._id, kind: b.kind, title: b.title, start: b.start, end: b.end, booked: Boolean(b.consentAt), filmedAt: b.filmedAt ?? null, missedAt: b.missedAt ?? null, touches: b.touches ?? [], ideaId: b.ideaId ?? null, status: b.status })),
       ideas: ideas.map((i) => ({ id: i._id, hook: hookOf(i), status: i.status, saved: Boolean(i.savedAt), createdAt: i.createdAt, text: i.messageText })),
       messages: messages.reverse().map((m) => ({ id: m._id, direction: m.direction, kind: m.kind ?? (m.direction === "in" ? "inbound" : "reply"), body: m.body, buttons: (m.buttons ?? []).map((b) => b.label), ts: m.ts, proactive: Boolean(m.proactive), capped: countsTowardCap(m) })),

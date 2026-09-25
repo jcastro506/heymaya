@@ -81,3 +81,30 @@ npx convex run eval/firstWeek:clear '{"runId":"fw-..."}'
 - The shared post must already be in the cache (`post.info`); with none, the share beat is `na`.
 - Quiet hours and the check-in read the real clock: start the run in daytime for the chosen zones
   (the default subjects get daytime zones automatically).
+
+## The horizon run: months, in weekly steps (`script: "horizon"`)
+
+Does she hold a goal for months and plan around it on her own? Each step is a **week**: the world ages
+seven days (dates written in words move too: "oct 12" becomes "oct 5"), then the week's work runs once
+(lane reads, the morning line, two scout passes, their replies, the review, next week's plan). Default
+24 weeks; at most 30. Two roles (`eval/horizonScript.ts`):
+
+- **Goal** (even creators): week 1, "i'm running the chicago marathon on <20 weeks out>!! first full
+  marathon" and "yes let's definitely do a series leading up to it". Every week: is the goal still a row;
+  do her ideas or her plan carry the series; in the last three weeks, is it race-day content (taper,
+  race week, nerves); after the race, recap and recovery rather than "still training". Week 8: "remind me
+  what we said we'd do for chicago?" Week 14: "how many weeks till chicago now?" (must be 6, ±1). Week 21:
+  "I FINISHED CHICAGO!!! 3:58": the first line celebrates.
+- **Life** (odd creators): week 1, "we're moving to denver on <8 weeks out>", and a calendar with a half
+  marathon in 10 days, a Boulder trip in 24 days, the move in 8 weeks. Every week: does anything on their
+  calendar 1–3 weeks out show up in her work before it happens; does the move shape her ideas as it gets
+  close, and does she know they live in Denver after. Week 8: "did i tell you about the move?"
+
+```bash
+npx convex run eval/firstWeek:start '{"replay":true,"script":"horizon"}'      # ~24 weeks, ~1–2 h
+npx convex run eval/firstWeek:report '{"runId":"fw-..."}'                      # fleet.promises
+npx convex run eval/firstWeek:days '{"runId":"fw-...","i":0}'                  # the week-by-week arc
+```
+
+Every check named "arc (record)" or "life (record)" is a week's log (ideas on the goal, whether the plan
+had it, weeks to go), kept for reading, not scored.

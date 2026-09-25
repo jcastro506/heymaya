@@ -276,7 +276,7 @@ export const run = internalAction({
         let buttons: Array<{ id: string; label: string }> | undefined;
         if (ci[2] === "yes") {
           await ctx.runMutation(internal.calendar.reminders.touched, { blockId, touch: "yes", filmedAt: Date.now() });
-          body = "good. i'll nudge you at your post time.";
+          body = "love it. i'll nudge you when it's time to post.";
         } else if (ci[2] === "skip") {
           const blk = await ctx.runQuery(internal.calendar.blocks.byId, { blockId });
           await ctx.runAction(internal.calendar.blocks.remove, { blockId });
@@ -340,11 +340,11 @@ export const run = internalAction({
         await ctx.runMutation(internal.agent.cadence.markMissed, { creatorId: creator._id, blockId });
         if (ms[2] === "drop") {
           await ctx.runAction(internal.calendar.blocks.remove, { blockId });
-          await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: "let go. the idea's still in your list if it comes back around.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
+          await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: "all good, letting it go. it's still in your ideas if it ever comes back around.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
         } else {
           const m = await ctx.runQuery(internal.calendar.reminders.proposeMove, { blockId, now: Date.now() });
           const buttons = m ? [...(m.today ? [{ id: `push:${blockId}:${m.today.start}`, label: "today" }] : []), { id: `push:${blockId}:${m.tomorrow.start}`, label: "tomorrow" }, { id: `push:${blockId}:pick`, label: "i'll pick" }] : undefined;
-          await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: buttons ? "when?" : "couldn't find a gap this week. tell me a day and i'll put it in.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply", buttons, awaitingAnswer: true });
+          await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: buttons ? "sure, when works?" : "couldn't find a gap this week. tell me a day and i'll put it in.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply", buttons, awaitingAnswer: true });
         }
         await deliverNow(ctx as never);
         return { ok: true };
@@ -513,7 +513,7 @@ export const run = internalAction({
         // "scrapped" must be true: the idea is passed through the one function the app's swipe uses
         // (it also records the taste event). It used to record the event only, and the idea stayed in their list.
         const r = await ctx.runMutation(internal.agent.ideaTools.status, { creatorId: creator._id, ideaId: String(latest.id), act: "pass" });
-        body = r.ok ? "scrapped. fewer like that." : "couldn't scrap that one on my side. try again in a sec?";
+        body = r.ok ? "scrapped. i'll send fewer like that." : "couldn't scrap that one on my side. try again in a sec?";
       } else {
         const r = await ctx.runMutation(internal.agent.moment.editIdea, { creatorId: creator._id, ideaId: latest.id, field: intent.field, value: intent.value });
         if (r.ok) await ctx.runAction(internal.calendar.blocks.refreshForIdea, { creatorId: creator._id, ideaId: latest.id }); // the event says the new words

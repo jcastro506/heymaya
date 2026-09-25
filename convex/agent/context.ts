@@ -23,6 +23,8 @@ import { separatedCreator } from "../taste/separation";
 import { clip } from "../lib/clip";
 
 export const RECENT_MESSAGES = 20;
+/** How far ahead her calendar sense reaches: far enough to plan content toward an event, not just mention it. */
+export const CALENDAR_LOOKAHEAD_DAYS = 21;
 export const CONTEXT_VERSION = "ctx-2026-09-02.1";
 
 export interface AssembledContext {
@@ -79,7 +81,9 @@ export const gather = internalQuery({
 export async function personalFor(ctx: QueryCtx, creator: Doc<"creators">): Promise<string> {
   const now = Date.now();
   const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).order("desc").take(6)) as Doc<"ownPosts">[];
-  const events = (await ctx.db.query("calendarEvents").withIndex("by_creator_start", (q) => q.eq("creatorId", creator._id).gte("start", now).lte("start", now + 7 * 86_400_000)).take(8)) as Doc<"calendarEvents">[];
+  // Three weeks ahead, not one (horizon sim, 2026-09-25): a race or a trip 10–20 days out is when content
+  // about it gets planned; at seven days she could only mention it once it was nearly here.
+  const events = (await ctx.db.query("calendarEvents").withIndex("by_creator_start", (q) => q.eq("creatorId", creator._id).gte("start", now).lte("start", now + CALENDAR_LOOKAHEAD_DAYS * 86_400_000)).take(12)) as Doc<"calendarEvents">[];
   // The plan, as rows: every block from an hour ago to eight days out, so she knows what is
   // booked, what is only proposed, what has been filmed, and what is happening RIGHT NOW.
   const blocks = ((await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", creator._id).gte("start", now - 3_600_000).lte("start", now + 8 * 86_400_000)).take(40)) as Doc<"calendarBlocks">[]).filter((b) => b.status !== "deleted").sort((a, b) => a.start - b.start);
@@ -92,7 +96,8 @@ export async function personalFor(ctx: QueryCtx, creator: Doc<"creators">): Prom
     const head = freshReach !== null ? `reached ${freshReach.toLocaleString()} (connected)${p.reachMultiple !== undefined ? ` (${p.reachMultiple}× their normal reach)` : ""} · ${p.metrics.views.toLocaleString()} views` : `${p.metrics.views.toLocaleString()} views${p.multiple !== undefined ? ` (${p.multiple}× their normal)` : ""}`;
     return `- ${day(p.createTime)} · ${head} · "${clip(p.caption, 70)}"${p.url ? ` · ${p.url}` : ""}`;
   });
-  const life = events.filter((e) => e.status === "active" && e.class !== "private" && e.title).map((e) => `- ${day(e.start)} · ${e.title}${e.class === "filmable" ? " (could film around this)" : ""}`);
+  const away = (t: number) => { const d = Math.round((t - now) / 86_400_000); return d <= 0 ? "today" : d === 1 ? "tomorrow" : `in ${d} days`; };
+  const life = events.filter((e) => e.status === "active" && e.class !== "private" && e.title).map((e) => `- ${day(e.start)} (${away(e.start)}) · ${e.title}${e.class === "filmable" ? " (could film around this)" : ""}`);
   const plan = blocks.slice(0, 15).map((b) => {
     // Booked means consent. A creator with no calendar connected still books; only the Google id is missing.
     const state = !b.consentAt ? "proposed, not booked" : b.filmedAt ? "booked, filmed" : b.status === "moved" ? "booked, moved once" : "booked";

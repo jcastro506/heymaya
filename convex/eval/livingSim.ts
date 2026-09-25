@@ -39,13 +39,43 @@ const STEP_GAP_MS = 5_000;
 
 // ------------------------------------------------------------------ pure helpers
 
+const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+
+/**
+ * Pure: shift dates written in words ("oct 12", "October 11", "Nov. 3, 2026") by `delta`, keeping the
+ * way they were written. When the world ages, a race "on oct 12" must move with it, or it stays the
+ * same distance away forever (horizon sim, 2026-09-25). A date without a year is read as the nearest
+ * one to `now`. "may" counts only capitalised ("May 5"), since "may 2 posts" is a verb.
+ */
+export function shiftWrittenDates(text: string, delta: number, now: number): string {
+  return text.replace(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|May|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(\.?)\s+(\d{1,2})(st|nd|rd|th)?(,?\s+(\d{4}))?\b/gi, (m, mon: string, dot: string, day: string, suf: string | undefined, yPart: string | undefined, year: string | undefined) => {
+    if (mon === "may" || mon === "MAY") return m;
+    const mi = MONTHS.findIndex((x) => x.startsWith(mon.toLowerCase().slice(0, 3)));
+    const d = Number(day);
+    if (mi < 0 || d < 1 || d > 31) return m;
+    const nowY = new Date(now).getUTCFullYear();
+    let y = year ? Number(year) : nowY;
+    let t = Date.UTC(y, mi, d);
+    if (!year) for (const cand of [nowY - 1, nowY + 1]) { const c = Date.UTC(cand, mi, d); if (Math.abs(c - now) < Math.abs(t - now)) { t = c; y = cand; } }
+    const shifted = new Date(t + delta);
+    const full = shifted.toLocaleString("en-US", { month: "long", timeZone: "UTC" }).toLowerCase();
+    let name = mon.length > 3 && mon.toLowerCase() !== "sept" ? full : full.slice(0, 3);
+    if (mon[0] === mon[0].toUpperCase()) name = name[0].toUpperCase() + name.slice(1);
+    if (mon === mon.toUpperCase() && mon.length > 1) name = name.toUpperCase();
+    const dd = shifted.getUTCDate();
+    const ord = suf ? (dd % 10 === 1 && dd !== 11 ? "st" : dd % 10 === 2 && dd !== 12 ? "nd" : dd % 10 === 3 && dd !== 13 ? "rd" : "th") : "";
+    const yy = year ? `${yPart!.replace(/\d{4}/, "")}${shifted.getUTCFullYear()}` : "";
+    return `${name}${dot} ${dd}${ord}${yy}`;
+  });
+}
+
 /** Pure: shift every epoch-ms number (a plausible timestamp) inside a value by `delta`. Ids are strings; durations are small. */
 export function shiftTimes<T>(value: T, delta: number, now: number): T {
   const lo = Date.UTC(2015, 0, 1), hi = now + 400 * D;
   const walk = (x: unknown): unknown => {
     if (typeof x === "number") return Number.isFinite(x) && x >= lo && x <= hi ? x + delta : x;
     // Day keys ("2026-09-24", "morning:2026-09-24"): the daily budget row and dedupe keys move with the day.
-    if (typeof x === "string" && delta % D === 0 && x.length <= 200 && !x.includes("http")) return x.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (m) => { const t = Date.parse(`${m}T00:00:00Z`); return Number.isFinite(t) ? new Date(t + delta).toISOString().slice(0, 10) : m; });
+    if (typeof x === "string" && delta % D === 0 && x.length <= 200 && !x.includes("http")) return shiftWrittenDates(x.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (m) => { const t = Date.parse(`${m}T00:00:00Z`); return Number.isFinite(t) ? new Date(t + delta).toISOString().slice(0, 10) : m; }), delta, now);
     if (Array.isArray(x)) return x.map(walk);
     if (x && typeof x === "object") {
       if (x instanceof ArrayBuffer) return x;
