@@ -48,6 +48,8 @@ export type Check = { d: number; beat: string; check: string; ok: boolean | null
 /** What a beat needs to see, from rows. Sim creators only (the caller checks the subject). */
 export type Probe = {
   creator: { quietHours: { start: string; end: string }; tone: string; status: string; careUntil: number | null; timezone: string; notes: string[] };
+  /** What she kept about them outside the notes (the personal-memory layer). */
+  personal: string[];
   directives: string[];
   blocks: Array<{ id: Id<"calendarBlocks">; kind: string; title: string; start: number; end: number; booked: boolean; filmedAt: number | null; missedAt: number | null; touches: string[]; ideaId: Id<"ideas"> | null; status: string }>;
   ideas: Array<{ id: Id<"ideas">; hook: string; status: string; saved: boolean; createdAt: number; text: string }>;
@@ -62,12 +64,14 @@ export const probe = internalQuery({
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c || !SIM_SUBJECT.test(c.clerkUserId)) return null;
     const directives = (await ctx.db.query("directives").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"directives">[];
+    const personal = (await ctx.db.query("personalRecords").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(200)) as Doc<"personalRecords">[];
     const blocks = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(200)) as Doc<"calendarBlocks">[];
     const ideas = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(100)) as Doc<"ideas">[];
     const messages = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId).gte("ts", a.since ?? 0)).order("desc").take(400)) as Doc<"messages">[];
     return {
       creator: { quietHours: c.quietHours, tone: c.tone, status: c.plan.status, careUntil: c.careUntil ?? null, timezone: c.timezone, notes: (c.notes ?? []).filter((n) => !n.tombstonedAt).map((n) => n.text) },
       directives: directives.filter((x) => x.active).map((x) => x.verbatim),
+      personal: personal.map((x) => x.text),
       blocks: blocks.map((b) => ({ id: b._id, kind: b.kind, title: b.title, start: b.start, end: b.end, booked: Boolean(b.consentAt), filmedAt: b.filmedAt ?? null, missedAt: b.missedAt ?? null, touches: b.touches ?? [], ideaId: b.ideaId ?? null, status: b.status })),
       ideas: ideas.map((i) => ({ id: i._id, hook: hookOf(i), status: i.status, saved: Boolean(i.savedAt), createdAt: i.createdAt, text: i.messageText })),
       messages: messages.reverse().map((m) => ({ id: m._id, direction: m.direction, kind: m.kind ?? (m.direction === "in" ? "inbound" : "reply"), body: m.body, buttons: (m.buttons ?? []).map((b) => b.label), ts: m.ts, proactive: Boolean(m.proactive), capped: countsTowardCap(m) })),
@@ -190,11 +194,10 @@ export async function runBeat(env: BeatEnv, beat: string): Promise<Check[]> {
       break;
     }
     case "remember": {
+      // What they say in passing is saved by a job after the turn (agent/remember.afterTurn, up to two
+      // minutes later), so it is checked in the day-7 audit, not here. Here: she acknowledges it.
       const r = await say("fyi i'm running the chicago half on oct 12. and please never pitch me dance trends, not my thing");
-      const p = await probeOf(env);
-      const kept = [...p.directives, ...p.creator.notes].map(lc);
-      check("the rule is kept as a row", kept.some((x) => /dance/.test(x)), `directives: ${p.directives.join(" | ") || "none"}; she said: ${r}`);
-      check("the fact is kept as a row", kept.some((x) => /chicago/.test(x)), `notes: ${p.creator.notes.slice(-3).join(" | ") || "none"}`);
+      check("acknowledges a rule and a fact said in passing", r.length > 0 && !/^\(no /.test(r), r);
       break;
     }
     case "book": {
@@ -324,7 +327,10 @@ export async function runBeat(env: BeatEnv, beat: string): Promise<Check[]> {
       if (!inbound) { check("Send to Maya gets an answer", false, "no inbound row"); break; }
       await ctx.runAction(internal.agent.converse.run, { creatorId, messageId: inbound });
       const replies = await ctx.runQuery(internal.eval.converse.repliesTo, { creatorId, inboundId: inbound, since });
-      check("Send to Maya gets an answer", replies.length > 0, replies.map((x) => x.text).join(" / ") || "no reply");
+      const said = replies.map((x) => x.text).join(" / ");
+      // Under replay, "couldn't open that link" means the cache lacks that post's reads: it tested nothing.
+      const missed = /couldn'?t open|can'?t open|couldn'?t load/i.test(said);
+      check("Send to Maya gets an answer about the post", replies.length === 0 ? false : missed ? null : true, missed ? `replay: the post's reads aren't cached (${said})` : said || "no reply");
       break;
     }
     case "askMaya": {
@@ -364,6 +370,9 @@ export async function runBeat(env: BeatEnv, beat: string): Promise<Check[]> {
       for (const m of p.messages) if (m.direction === "out" && m.capped) byDay.set(dayKeyInZone(m.ts, p.creator.timezone), (byDay.get(dayKeyInZone(m.ts, p.creator.timezone)) ?? 0) + 1);
       const worst = Math.max(0, ...byDay.values());
       check(`never over the daily cap (${THRESHOLDS.dailyMessageCap})`, worst <= THRESHOLDS.dailyMessageCap, `most in one day: ${worst}`);
+      const kept = [...p.directives, ...p.creator.notes, ...p.personal].map(lc);
+      check("the rule said in passing is kept as a row", p.directives.some((x) => /dance/i.test(x)), `rules: ${p.directives.join(" | ") || "none"}`);
+      check("the fact said in passing is kept as a row", kept.some((x) => /chicago/.test(x)), `notes: ${p.creator.notes.slice(-4).join(" | ") || "none"}; personal: ${p.personal.slice(-4).join(" | ") || "none"}`);
       const dance = p.ideas.filter((x) => /\bdanc(e|ing)\b/i.test(`${x.hook} ${x.text}`) && x.createdAt > env.runStartedAt);
       check("the rule held all week: no dance-trend ideas", dance.length === 0, dance.map((x) => x.hook).join(" | ") || "none");
       const beforeNine = p.messages.filter((m) => m.direction === "out" && m.proactive && m.kind !== "reminder" && Number(new Intl.DateTimeFormat("en-US", { timeZone: p.creator.timezone, hour: "numeric", hourCycle: "h23" }).format(m.ts)) < 9 && m.ts > env.runStartedAt + 86_400_000);

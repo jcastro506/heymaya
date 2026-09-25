@@ -182,3 +182,21 @@ describe("replay is armed with the signup, in one transaction", () => {
     expect(await t.run((ctx) => ctx.db.query("creators").collect()), "nothing was created").toEqual([]);
   });
 });
+
+describe("found by the product sim, 2026-09-25 (regressions)", () => {
+  it("the flaker's unanswered check-in for this shoot no longer blocks \"how'd it go\"; another open question still does", async () => {
+    const { t, creatorId, ideaId } = await world(1);
+    const blockId = await bookShoot(t, creatorId, ideaId, Date.now() - CADENCE.howDidItGoAfterMs - 2 * H);
+    const checkin = (key: string) => t.run((ctx) => ctx.db.insert("messages", { creatorId, direction: "out", surface: "telegram", body: "still good for 5?", kind: "reminder", proactive: true, awaitingAnswer: true, ts: Date.now() - 3 * H, dedupeKey: key } as never));
+    await checkin(`block:${blockId}:checkin`);
+    const r = await t.action(internal.agent.cadence.howDidItGo, { creatorId });
+    expect(r, "their own shoot's check-in is moot once the shoot is over").toEqual({ sent: true, reason: "asked" });
+
+    const other = await world(3);
+    const b2 = await bookShoot(other.t, other.creatorId, other.ideaId, Date.now() - CADENCE.howDidItGoAfterMs - 2 * H);
+    await other.t.run((ctx) => ctx.db.insert("messages", { creatorId: other.creatorId, direction: "out", surface: "telegram", body: "which platform first?", kind: "reply", awaitingAnswer: true, ts: Date.now() - H, dedupeKey: "q:other" } as never));
+    const held = await other.t.action(internal.agent.cadence.howDidItGo, { creatorId: other.creatorId });
+    expect(held.sent, "an unrelated open question still holds").toBe(false);
+    expect((await other.t.run((ctx) => ctx.db.get(b2)))?.touches ?? []).not.toContain("howdidit");
+  });
+});

@@ -462,6 +462,17 @@ export const closeOpen = internalMutation({
   },
 });
 
+/** Close one open question by its dedupe key (a question that became moot), leaving any other open. */
+export const closeOpenByKey = internalMutation({
+  args: { creatorId: v.id("creators"), dedupeKey: v.string() },
+  handler: async (ctx, a): Promise<{ closed: number }> => {
+    const open = (await ctx.db.query("messages").withIndex("by_creator_and_awaiting", (q) => q.eq("creatorId", a.creatorId).eq("awaitingAnswer", true)).collect()) as Doc<"messages">[];
+    const moot = open.filter((m) => m.dedupeKey === a.dedupeKey);
+    for (const m of moot) await ctx.db.patch(m._id, { awaitingAnswer: false });
+    return { closed: moot.length };
+  },
+});
+
 /** The one open question, if there is one. */
 export const openQuestion = internalQuery({
   args: { creatorId: v.id("creators") },

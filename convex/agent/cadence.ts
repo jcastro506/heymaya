@@ -261,6 +261,10 @@ export const howDidItGo = internalAction({
     const now = a.now ?? Date.now();
     const block = await ctx.runQuery(internal.agent.cadence.shootToAskAbout, { creatorId: a.creatorId, now });
     if (!block) return { sent: false, reason: "no shoot to ask about" };
+    // Product sim 2026-09-25: their unanswered check-in for THIS shoot ("still good for 5?") held the
+    // open-question rail, so the one person who most needed "how'd it go?" never got it. The shoot is
+    // over; that question is moot. Only it is closed: any other open question still blocks.
+    await ctx.runMutation(internal.core.messages.closeOpenByKey, { creatorId: a.creatorId, dedupeKey: `block:${block._id}:checkin` });
     const rails = await railsOk(ctx as never, a.creatorId, now);
     if (!rails.ok) return { sent: false, reason: rails.reason ?? "rails" };
     const hook = hookOf(block.title).replace(/^the\s+/i, "");
