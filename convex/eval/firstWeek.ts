@@ -793,7 +793,7 @@ export const runStep = internalAction({
           };
           let checks: Check[];
           try {
-            checks = await runBeat({ ctx, creatorId: id, i: a.i, d: a.d, role: roleOf(a.i), say, runStartedAt: s.startedAt }, beat);
+            checks = await runBeat({ ctx, creatorId: id, i: a.i, d: a.d, role: roleOf(a.i), say, runStartedAt: s.startedAt, prior: log.checks ?? [] }, beat);
           } catch (e) {
             checks = [{ d: a.d, beat, check: `beat ${beat} ran`, ok: false, detail: e instanceof Error ? clip(e.message, 200) : "error" }];
           }

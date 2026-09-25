@@ -36,7 +36,7 @@ export function facts(posts: PostIn[]): { count: number; perWeek: number | null;
   const perWeek = spanDays >= 3 ? Math.round((times.length / spanDays) * 7 * 10) / 10 : null;
   const secs = posts.map((p) => p.durationSec ?? 0).filter(Boolean).sort((a, b) => a - b);
   const outliers = median
-    ? withViews.map((p) => ({ url: p.url ?? "", views: p.metrics!.viewCount!, multiple: Math.round((p.metrics!.viewCount! / median) * 10) / 10, caption: (p.caption ?? "").slice(0, 120), sec: p.durationSec ?? null })).filter((o) => o.multiple >= 2).sort((a, b) => b.multiple - a.multiple).slice(0, 3)
+    ? withViews.map((p) => ({ url: p.url ?? "", views: p.metrics!.viewCount!, multiple: Math.round((p.metrics!.viewCount! / median) * 10) / 10, caption: clip(p.caption ?? "", 120), sec: p.durationSec ?? null })).filter((o) => o.multiple >= 2).sort((a, b) => b.multiple - a.multiple).slice(0, 3)
     : [];
   return { count: posts.length, perWeek, medianViews: median, outliers, medianSec: secs.length ? secs[Math.floor(secs.length / 2)] : null };
 }
@@ -73,14 +73,14 @@ export const run = internalAction({
       try {
         const t = await ctx.runAction(internal.reads.read.read, { kind: "post.transcript", params: { platform: a.platform, url: o.url }, creatorId: creator._id });
         const text = (t.value as { transcript?: string | null } | null)?.transcript ?? null;
-        if (text) transcripts.push({ url: o.url, transcript: text.slice(0, 900) });
+        if (text) transcripts.push({ url: o.url, transcript: clip(text, 900) });
       } catch {
         /* a missing transcript is a missing citation, not a failure */
       }
     }
     const evidence = { handle: `@${handle}`, platform: a.platform, theirQuestion: clip(target.body, 300), facts: f, recentCaptions: posts.slice(0, 12).map((p) => ({ when: p.createTime ? new Date(p.createTime).toISOString().slice(0, 10) : null, views: p.metrics?.viewCount ?? null, caption: (p.caption ?? "").slice(0, 140) })), transcripts };
     // Eval personas only: the bench judge sees what she read about this account (a no-op for real creators).
-    await ctx.runMutation(internal.eval.expertBench.saveTrace, { creatorId: creator._id, trace: [{ tool: `account_posts @${handle}`, ok: true, result: JSON.stringify(evidence).slice(0, 2400) }] }).catch(() => undefined);
+    await ctx.runMutation(internal.eval.expertBench.saveTrace, { creatorId: creator._id, trace: [{ tool: `account_posts @${handle}`, ok: true, result: clip(JSON.stringify(evidence), 2400) }] }).catch(() => undefined);
     const prefix = buildPrefix({ creator, directives, skill: PROFILE_SKILL, personal: g.personal, voice: g.voice, history: g.history });
     const spec = REGISTRY.writer;
     const inv = await investigate(ctx, { creatorId: creator._id, purpose: "profile_creator", prefix, user: `Evidence (everything you may cite):\n${JSON.stringify(evidence)}`, budget: { calls: 4, credits: 20, deadlineAt: Date.now() + 45_000 }, temperature: 0.4, maxTokens: 1200 });

@@ -208,7 +208,7 @@ export const devPreviewEvent = internalQuery({
     const idea = (await ctx.db.get(a.ideaId)) as Doc<"ideas"> | null;
     if (!idea) return null;
     const kind = a.kind ?? "film";
-    const title = `${kind}: ${((idea.version ?? {}) as { hook?: string }).hook ?? idea.messageText?.slice(0, 40) ?? ""}`;
+    const title = `${kind}: ${((idea.version ?? {}) as { hook?: string }).hook ?? (idea.messageText === undefined ? "" : clip(idea.messageText, 40))}`;
     return { summary: eventSummary(kind, title), description: eventDescription({ kind, idea: ideaForEvent(idea) }) };
   },
 });

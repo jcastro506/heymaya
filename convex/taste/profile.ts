@@ -16,6 +16,7 @@ import { SOUL } from "../agent/soul";
 import { summarize, TASTE, type Affinity } from "./affinities";
 import { isOutcome, separatedCreator } from "./separation";
 import { allRows } from "../core/schedule";
+import { clip } from "../lib/clip";
 
 export const TASTE_PROFILE_SKILL = `taste-profile
 When: weekly, or after their first few reactions. You are writing a private note to yourself about what THIS creator actually takes from you, as opposed to who they are (that's the dossier). Inputs: their affinities (feature, score, count; positive means they took it, negative means they passed) and the last twenty things they did with your ideas.
@@ -63,7 +64,7 @@ export const inputs = internalQuery({
       if (isOutcome(e.kind)) continue;
       if (e.messageId) { const source = await ctx.db.get(e.messageId); if (!source || source.memoryExcludedAt || source.creatorId !== a.creatorId) continue; }
       const idea = e.ideaId ? ((await ctx.db.get(e.ideaId)) as Doc<"ideas"> | null) : null;
-      events.push({ kind: e.kind, weight: e.weight, features: e.features, hook: (idea?.version as { hook?: string } | undefined)?.hook?.slice(0, 80) ?? null, daysAgo: Math.round((now - e.at) / 86_400_000) });
+      events.push({ kind: e.kind, weight: e.weight, features: e.features, hook: ((h) => (h === undefined ? null : clip(h, 80)))((idea?.version as { hook?: string } | undefined)?.hook), daysAgo: Math.round((now - e.at) / 86_400_000) });
     }
     const directives = (await ctx.db.query("directives").withIndex("by_creator_and_active", (q) => q.eq("creatorId", a.creatorId).eq("active", true)).collect()) as Doc<"directives">[];
     return { creator, events, total, rules: directives.map((d) => d.verbatim) };
@@ -91,7 +92,7 @@ export const rewrite = internalAction({
       apiKey: process.env.OPENROUTER_API_KEY ?? "",
     });
     if (!r.ok || !r.content.trim()) return { ok: false, reason: r.ok ? "empty" : r.reason };
-    await ctx.runMutation(internal.taste.profile.store, { creatorId: a.creatorId, text: r.content.trim().slice(0, 700), eventsSeen: inp.total, epoch: inp.creator.memoryEpoch ?? 0 });
+    await ctx.runMutation(internal.taste.profile.store, { creatorId: a.creatorId, text: clip(r.content.trim(), 700), eventsSeen: inp.total, epoch: inp.creator.memoryEpoch ?? 0 });
     return { ok: true };
   },
 });

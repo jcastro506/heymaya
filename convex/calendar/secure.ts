@@ -12,6 +12,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { freeWindows } from "./availability";
 import { habitsFor } from "./habits";
+import { bare, clip, clipWords } from "../lib/clip";
 
 /** Pure: the offer, in words, with why this window (2026-09-07: urgency and their habits). */
 export function offerText(start: number, tz: string, hook: string, opts: { urgency?: "now" | "any"; why?: string; now?: number } = {}): string {
@@ -21,7 +22,7 @@ export function offerText(start: number, tz: string, hook: string, opts: { urgen
   const time = new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(start).toLowerCase().replace(":00", "");
   const lead = opts.urgency === "now" ? `this one goes stale in a few days, so ` : "";
   const why = opts.why ? ` (${opts.why})` : "";
-  return `${lead}${day} ${time} is free for "${hook.slice(0, 60)}"${why}. block it and i'll remind you before?`;
+  return `${lead}${day} ${time} is free for "${clip(hook, 60)}"${why}. block it and i'll remind you before?`;
 }
 
 /**
@@ -35,7 +36,7 @@ export const proposeSlot = internalMutation({
     const idea = (await ctx.db.get(a.ideaId)) as Doc<"ideas"> | null;
     if (!creator || !idea || idea.creatorId !== a.creatorId) return null;
     const now = a.now ?? Date.now();
-    const hook = ((idea.version as { hook?: string } | undefined)?.hook ?? idea.messageText).slice(0, 80);
+    const hook = clip((idea.version as { hook?: string } | undefined)?.hook ?? idea.messageText, 80);
     const blocks = ((await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("start", now - 3_600_000)).take(200)) as Doc<"calendarBlocks">[]).filter((b) => b.status !== "deleted");
     const mine = blocks.find((b) => b.ideaId === a.ideaId && b.kind === "film");
     if (mine) return { blockId: mine._id, start: mine.start, existing: true, consented: Boolean(mine.consentAt), hook };
@@ -52,7 +53,7 @@ export const proposeSlot = internalMutation({
       ? windows[0]
       : windows.find((w) => habits.days.length > 0 && habits.days.includes(new Date(new Intl.DateTimeFormat("en-US", { timeZone: creator.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(w.start)).getDay())) ?? windows.find((w) => !w.label.startsWith("today")) ?? windows[0];
     if (!pick) return null;
-    const blockId = await ctx.db.insert("calendarBlocks", { creatorId: a.creatorId, kind: "film", start: pick.start, end: pick.end, title: `film: ${hook.slice(0, 60)}`, ideaId: a.ideaId, status: "proposed", createdAt: now });
+    const blockId = await ctx.db.insert("calendarBlocks", { creatorId: a.creatorId, kind: "film", start: pick.start, end: pick.end, title: `film: ${clipWords(bare(hook), 70)}`, ideaId: a.ideaId, status: "proposed", createdAt: now });
     return { blockId, start: pick.start, existing: false, consented: false, hook, urgency, why: pick.why };
   },
 });

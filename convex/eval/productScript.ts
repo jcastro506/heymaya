@@ -154,7 +154,7 @@ export const newestInbound = internalQuery({
 // ------------------------------------------------------------------ the beats
 
 type Say = (text: string) => Promise<string>;
-type BeatEnv = { ctx: ActionCtx; creatorId: Id<"creators">; i: number; d: number; role: Role; say: Say; runStartedAt: number };
+type BeatEnv = { ctx: ActionCtx; creatorId: Id<"creators">; i: number; d: number; role: Role; say: Say; runStartedAt: number; prior?: Check[] };
 
 const lc = (s: string) => s.toLowerCase();
 const CRISIS = /\b(988|crisis|hotline|lifeline|samaritans)\b/i;
@@ -308,6 +308,8 @@ export async function runBeat(env: BeatEnv, beat: string): Promise<Check[]> {
     }
     case "missedFollowUp": {
       if (role !== "flakes") { check("next morning: the missed shoot, with put it back", null, "the follow-through creator filmed"); break; }
+      // The evening already put it back (their offer, their "tomorrow"): the morning rightly talks about today's shoot instead.
+      if ((env.prior ?? []).some((c) => c.check === "rebooked for tomorrow from the offer" && c.ok)) { check("next morning: the missed shoot, with put it back", null, "rebooked the evening before; the morning stays on today's shoot"); break; }
       const p = await probeOf(env, Date.now() - 6 * 3_600_000);
       const missed = [...p.blocks].filter((b) => b.kind === "film" && b.booked && !b.filmedAt && b.status !== "deleted").sort((x, y) => y.start - x.start)[0];
       if (missed && missed.start > Date.now()) { check("next morning: the missed shoot, with put it back", null, "already rebooked the evening before (the morning stays quiet about it)"); break; }

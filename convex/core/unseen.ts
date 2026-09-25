@@ -8,6 +8,7 @@ import { v } from "convex/values";
 import { internalQuery, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
+import { clip } from "../lib/clip";
 
 export const UNSEEN_WINDOW_MS = 7 * 86_400_000; // older than a week isn't "new" any more
 
@@ -29,7 +30,7 @@ export async function unseenIdeas(ctx: QueryCtx, creatorId: Id<"creators">, now:
 /** Pure: her context section, or "" when there's nothing new. Hooks are quoted data. */
 export function unseenSection(ideas: Array<Pick<Doc<"ideas">, "_id" | "version" | "messageText" | "createdAt">>, now: number): string {
   if (!ideas.length) return "";
-  const hook = (i: (typeof ideas)[number]) => ((i.version as { hook?: string } | undefined)?.hook ?? i.messageText).slice(0, 80);
+  const hook = (i: (typeof ideas)[number]) => clip((i.version as { hook?: string } | undefined)?.hook ?? i.messageText, 80);
   const days = (t: number) => { const d = Math.floor((now - t) / 86_400_000); return d === 0 ? "today" : d === 1 ? "yesterday" : `${d} days ago`; };
   return `# New ideas in their app they haven't seen (N1)
 ${ideas.slice(0, 3).map((i) => `- "${hook(i)}" (${days(i.createdAt)}; id ${i._id})`).join("\n")}${ideas.length > 3 ? `\n- and ${ideas.length - 3} more` : ""}

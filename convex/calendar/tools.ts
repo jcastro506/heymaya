@@ -10,6 +10,7 @@ import { internalAction, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { zonedTimeToEpoch } from "./time";
+import { bare, clip, clipWords } from "../lib/clip";
 
 const MAX_DAYS_AHEAD = 21;
 
@@ -57,7 +58,7 @@ export const write = internalAction({
       const kind = String(args.kind) as "film" | "edit" | "post";
       if (!["film", "edit", "post"].includes(kind)) return { ok: false, reason: "kind must be film, edit or post" };
       const minutes = Math.max(10, Math.min(240, Number(args.minutes) || 45));
-      const title = `${kind}: ${String(args.title ?? "").slice(0, 70) || "as asked"}`;
+      const title = `${kind}: ${clipWords(bare(String(args.title ?? "")), 70) || "as asked"}`;
       // I1: a block may carry one of THEIR ideas (idea_plan); a foreign id is refused, never attached.
       let ideaId: Id<"ideas"> | undefined;
       if (typeof args.ideaId === "string" && args.ideaId) {

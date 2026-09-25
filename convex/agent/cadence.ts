@@ -21,7 +21,7 @@ import { pickMilestone } from "./history";
 import { localHourMinute } from "../scout/gate";
 import { THRESHOLDS } from "../config/thresholds";
 import { pairedRows } from "../core/schedule";
-import { clip } from "../lib/clip";
+import { bare, clip } from "../lib/clip";
 
 export const CADENCE = {
   morningHour: 8,
@@ -269,7 +269,7 @@ export const howDidItGo = internalAction({
     if (!rails.ok) return { sent: false, reason: rails.reason ?? "rails" };
     const hook = hookOf(block.title).replace(/^the\s+/i, "");
     await ctx.runMutation(internal.core.messages.closeOpen, { creatorId: a.creatorId });
-    const sent = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: `how'd the ${hook} shoot go?`, dedupeKey: `howdidit:${block._id}`, ts: now, proactive: true, kind: "checkin", awaitingAnswer: true, buttons: [{ id: `shot:${block._id}:yes`, label: "filmed it" }, { id: `shot:${block._id}:no`, label: "didn't happen" }] });
+    const sent = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: hook.length <= 45 ? `how'd the ${bare(hook)} shoot go?` : "how'd today's shoot go?", dedupeKey: `howdidit:${block._id}`, ts: now, proactive: true, kind: "checkin", awaitingAnswer: true, buttons: [{ id: `shot:${block._id}:yes`, label: "filmed it" }, { id: `shot:${block._id}:no`, label: "didn't happen" }] });
     await ctx.runMutation(internal.calendar.reminders.touched, { blockId: block._id, touch: "howdidit" });
     if (!sent.sent) return { sent: false, reason: "already asked" };
     await deliverNow(ctx as never);

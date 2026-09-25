@@ -53,7 +53,7 @@ export async function assertPersonalEvidence(ctx: QueryCtx | MutationCtx, creato
 }
 export async function event(ctx: MutationCtx, creatorId: Id<"creators">, opportunityId: Id<"partnershipOpportunities">, key: string, kind: string, text: string, at = Date.now()) {
   const old = await ctx.db.query("partnershipEvents").withIndex("by_key", q => q.eq("creatorId", creatorId).eq("key", key)).first();
-  if (!old) await ctx.db.insert("partnershipEvents", { creatorId, opportunityId, key, kind, text: text.slice(0, 16000), at });
+  if (!old) await ctx.db.insert("partnershipEvents", { creatorId, opportunityId, key, kind, text: clip(text, 16000), at });
   return !old;
 }
 /** Whether their mailbox is connected, so she reads it instead of guessing (§27). */
