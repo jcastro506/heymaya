@@ -125,6 +125,8 @@ import type * as eval_longTenure from "../eval/longTenure.js";
 import type * as eval_memoryGauntlet from "../eval/memoryGauntlet.js";
 import type * as eval_outageDrill from "../eval/outageDrill.js";
 import type * as eval_partnershipGauntlet from "../eval/partnershipGauntlet.js";
+import type * as eval_productScript from "../eval/productScript.js";
+import type * as eval_replay from "../eval/replay.js";
 import type * as eval_run from "../eval/run.js";
 import type * as eval_scaleTest from "../eval/scaleTest.js";
 import type * as eval_scenarios from "../eval/scenarios.js";
@@ -330,6 +332,8 @@ declare const fullApi: ApiFromModules<{
   "eval/memoryGauntlet": typeof eval_memoryGauntlet;
   "eval/outageDrill": typeof eval_outageDrill;
   "eval/partnershipGauntlet": typeof eval_partnershipGauntlet;
+  "eval/productScript": typeof eval_productScript;
+  "eval/replay": typeof eval_replay;
   "eval/run": typeof eval_run;
   "eval/scaleTest": typeof eval_scaleTest;
   "eval/scenarios": typeof eval_scenarios;

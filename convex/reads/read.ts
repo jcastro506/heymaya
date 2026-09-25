@@ -19,6 +19,7 @@ import specFixtures from "../integrations/scrapeCreators/fixtures.spec.json";
 import recordedFixtures from "../integrations/scrapeCreators/fixtures.recorded.json";
 import { fakeRead } from "../eval/dealsWorldData";
 import { drillCheck, faultFetch, faultFor, type Fault } from "../eval/faults";
+import { replayFor } from "../eval/replay";
 
 /** Pure: ScrapeCreators saying the account is out of credits (HTTP 402). */
 export function isOutOfCredits(error: string): boolean {
@@ -155,6 +156,15 @@ export const read = internalAction({
     // cache: a local deployment with EVAL_FAKES=1 answers them from the fake world. Real creators never get here.
     if (!fault && creatorId && process.env.EVAL_FAKES === "1" && process.env.ENVIRONMENT_NAME === "local" && await ctx.runQuery(internal.eval.fakes.isFixture, { creatorId })) {
       return { value: fakeRead(k, normalized), cached: true, key };
+    }
+
+    // Replay (eval/replay.ts): a zero-credit simulation. The cached row answers whatever its age; a read
+    // that was never cached is a named failure, never a vendor call. False in production and for every real creator.
+    if (!fault && k !== "vendor.credits" && (await replayFor(ctx, creatorId))) {
+      const hit = await ctx.runQuery(internal.eval.replay.cached, { kind: k, key });
+      if (hit) return { value: hit.value, cached: true, key };
+      await ctx.runMutation(internal.eval.replay.recordMiss, { creatorId: creatorId!, kind: k, key });
+      throw new ReadFailed(k, key, "replay: not in the cache, and a zero-credit run never calls the vendor");
     }
 
     if (!force && !fault) {

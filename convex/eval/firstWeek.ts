@@ -47,6 +47,8 @@ import { READ_SETTLE_MS, localHourMinute } from "../scout/gate";
 import { MIN_DAYS_BEFORE_REVIEW } from "../review/weekly";
 import { actorPromptFor, ageCreatorTable, CREATOR_INDEX, rng } from "./livingSim";
 import { clip } from "../lib/clip";
+import { armReplay } from "./replay";
+import { productBeats, roleOf, runBeat, summariseChecks, type Check } from "./productScript";
 
 const D = 86_400_000;
 const MIN = 60_000;
@@ -90,6 +92,14 @@ export const FW_DEFAULTS = {
   /** The simulated signup weekday (0 Sunday … 6 Saturday). Monday puts the first Sunday on day 6. */
   signupWeekday: 1,
   seed: 11,
+  /**
+   * Zero ScrapeCreators credits (eval/replay.ts): every read is answered from the deployment's read
+   * cache, a read never cached is a named failure, and the ceiling drops to 1 credit, so a single paid
+   * read stops the run and says so. Subjects default to accounts the cache can onboard.
+   */
+  replay: false,
+  /** "product": the scripted week that exercises everything else (eval/productScript.ts). */
+  script: "none",
 } as const;
 
 const TICK_MS = MIN;
@@ -128,7 +138,7 @@ export function timezonesFor(n: number, now: number): string[] {
   return Array.from({ length: n }, (_, i) => pool[i % pool.length]);
 }
 
-export type Step = "age" | "expireQuestions" | "sampler" | "sweep" | "morning" | "scout" | "actor" | "invite" | "scoutAfternoon" | "howDidItGo" | "review" | "weekPlan" | "quiet" | "actorEvening" | "snapshot";
+export type Step = "age" | "expireQuestions" | "sampler" | "sweep" | "morning" | "scout" | "actor" | "invite" | "scoutAfternoon" | "howDidItGo" | "review" | "weekPlan" | "quiet" | "actorEvening" | "snapshot" | `beat:${string}`;
 
 /** Pure: the simulated weekday of day `d` (0 Sunday). */
 export function weekdayOf(d: number, signupWeekday: number): number {
@@ -142,10 +152,12 @@ export function weekdayOf(d: number, signupWeekday: number): number {
  * review (morning, once they've been here five days, as `dueForReview` requires) and the next week's
  * plan (18:00); the quiet check; their evening reply; the snapshot.
  */
-export function dayPlan(d: number, opts: { signupWeekday: number }): Step[] {
+export function dayPlan(d: number, opts: { signupWeekday: number; script?: "none" | "product" }): Step[] {
   const sunday = weekdayOf(d, opts.signupWeekday) === 0;
+  // The product script's moments run after the morning: she has spoken, and they answer.
+  const beats: Step[] = opts.script === "product" ? productBeats(d).map((b) => `beat:${b}` as Step) : [];
   return [
-    "age", "expireQuestions", "sampler", "sweep", "morning", "scout", "actor",
+    "age", "expireQuestions", "sampler", "sweep", "morning", "scout", "actor", ...beats,
     ...(d === 1 ? (["invite"] as Step[]) : []),
     ...(sunday && d >= MIN_DAYS_BEFORE_REVIEW ? (["review"] as Step[]) : []),
     "scoutAfternoon", "howDidItGo",
@@ -175,7 +187,7 @@ const hours = (ms: number | null | undefined) => (ms === null || ms === undefine
 // ------------------------------------------------------------------ state (syncState rows; no new table)
 
 type CreatorSlot = { i: number; subject: string; handles: { tiktok?: string; instagram?: string }; timezone: string; note?: string; creatorId?: Id<"creators">; error?: string };
-type Opts = { days: number; watchCap: number; transcriptCap: number; admired: number; pairAfterMs: number; day0MaxMs: number; maxCredits: number; signupWeekday: number; seed: number };
+type Opts = { days: number; watchCap: number; transcriptCap: number; admired: number; pairAfterMs: number; day0MaxMs: number; maxCredits: number; signupWeekday: number; seed: number; replay: boolean; script: "none" | "product" };
 export type RunState = { runId: string; startedAt: number; opts: Opts; creators: CreatorSlot[]; stopped?: string };
 type Cursor = { phase: "signup" | "day" | "judge" | "done"; d: number; k: number; attempt: number; since: number };
 type Ev = { name: string; simMs: number; detail?: string };
@@ -187,6 +199,8 @@ export type CreatorLog = {
   failures: Array<{ d: number; step: string; error: string }>;
   snapshots: Array<{ d: number; snap: unknown }>;
   judged?: unknown;
+  /** The product script's checks (eval/productScript.ts): each promise, kept or not, from rows. */
+  checks?: Check[];
 };
 
 const stateKey = (runId: string) => `fw:${runId}:state`;
@@ -243,7 +257,7 @@ async function fwCreator(ctx: MutationCtx, creatorId: Id<"creators">): Promise<D
 
 /** Screen 1 through checkout: the real start path, then a trial on the tier their handles need. */
 export const createOne = internalMutation({
-  args: { runId: v.string(), i: v.number(), handles: v.object({ tiktok: v.optional(v.string()), instagram: v.optional(v.string()) }), timezone: v.string(), watchCap: v.number(), transcriptCap: v.number() },
+  args: { runId: v.string(), i: v.number(), handles: v.object({ tiktok: v.optional(v.string()), instagram: v.optional(v.string()) }), timezone: v.string(), watchCap: v.number(), transcriptCap: v.number(), replay: v.optional(v.boolean()) },
   handler: async (ctx, a): Promise<{ ok: boolean; creatorId?: Id<"creators">; error?: string }> => {
     const subject = subjectFor(a.runId, a.i);
     if (!isFirstWeekSubject(subject)) throw new Error("not a first-week subject");
@@ -251,6 +265,12 @@ export const createOne = internalMutation({
     if (!r.ok || !r.creatorId) return { ok: false, error: r.error ?? "signup refused" };
     const creatorId = r.creatorId as Id<"creators">;
     const c = await fwCreator(ctx, creatorId);
+    // Replay is armed in the same transaction that queued the catalogue read, so no read of theirs can
+    // reach the vendor first. A refusal undoes the signup (the mutation throws): never a paid run by accident.
+    if (a.replay) {
+      const armed = await armReplay(ctx, [creatorId], a.runId);
+      if (!armed.ok) throw new Error(`replay refused: ${armed.reason}`);
+    }
     // Checkout: a trial (no Stripe row, nothing charged), one account on solo, both on duo.
     const both = Boolean(c.handles.tiktok && c.handles.instagram);
     await ctx.db.patch(creatorId, { plan: { ...c.plan, status: "trialing", tier: both ? "duo" : "solo" }, updatedAt: Date.now() });
@@ -386,6 +406,7 @@ export const runCredits = internalQuery({
 const optsV = {
   days: v.optional(v.number()), watchCap: v.optional(v.number()), transcriptCap: v.optional(v.number()), admired: v.optional(v.number()),
   pairAfterMs: v.optional(v.number()), day0MaxMs: v.optional(v.number()), maxCredits: v.optional(v.number()), signupWeekday: v.optional(v.number()), seed: v.optional(v.number()),
+  replay: v.optional(v.boolean()), script: v.optional(v.union(v.literal("none"), v.literal("product"))),
 };
 
 /** Pure: the run's options, defaults filled and bounds enforced. */
@@ -393,7 +414,9 @@ export function resolveOpts(a: Partial<Opts>): Opts {
   const o = { ...FW_DEFAULTS, ...Object.fromEntries(Object.entries(a).filter(([, x]) => x !== undefined)) } as Opts;
   if (!Number.isInteger(o.days) || o.days < 1 || o.days > 14) throw new Error("days must be 1–14");
   if (o.signupWeekday < 0 || o.signupWeekday > 6) throw new Error("signupWeekday is 0 (Sunday) … 6");
-  if (o.maxCredits < 50) throw new Error("maxCredits under 50 cannot onboard anyone");
+  if (o.maxCredits < 50 && !o.replay) throw new Error("maxCredits under 50 cannot onboard anyone");
+  // Replay spends nothing: one credit is already a failure, and it stops the run.
+  if (o.replay) o.maxCredits = 1;
   return { ...o, watchCap: Math.max(0, Math.min(40, o.watchCap)), transcriptCap: Math.max(0, Math.min(40, o.transcriptCap)), admired: Math.max(0, Math.min(6, o.admired)) };
 }
 
@@ -406,6 +429,7 @@ export function resolveOpts(a: Partial<Opts>): Opts {
  * An upper-middle estimate, not a bound; `maxCredits` is the bound. `needed` is what the run can spend.
  */
 export function estimateCredits(subjects: Subject[], o: Opts): { perCreator: number[]; total: number; needed: number } {
+  if (o.replay) return { perCreator: subjects.map(() => 0), total: 0, needed: 0 };
   const perCreator = subjects.map((sub) => {
     const platforms = (sub.tiktok ? 1 : 0) + (sub.instagram ? 1 : 0);
     const onboarding = platforms * 1 + platforms * 2 + o.transcriptCap + 10 * o.watchCap + (o.admired > 0 ? 10 * platforms : 0) + o.admired;
@@ -459,19 +483,32 @@ export const start = internalAction({
   handler: async (ctx, a): Promise<{ runId: string; creators: Array<{ i: number; handles: string; timezone: string; creatorId?: string; error?: string }>; opts: Opts; credits: { balance: number | null; estimate: number; needed: number } }> => {
     const { handles, ...rest } = a;
     const opts = resolveOpts(rest);
-    const subjects = handles?.length ? handles : DEFAULT_SUBJECTS;
+    let subjects = handles?.length ? handles : DEFAULT_SUBJECTS;
+    if (opts.replay) {
+      // Only accounts whose onboarding reads are all in the cache; a named refusal otherwise.
+      const cached = await ctx.runQuery(internal.eval.replay.candidates, { limit: 200 });
+      const has = (platform: string, h?: string) => !h || cached.some((c) => c.platform === platform && c.handle === h.trim().replace(/^@/, "").toLowerCase());
+      if (handles?.length) {
+        const missing = handles.filter((h) => !has("tiktok", h.tiktok) || !has("instagram", h.instagram));
+        if (missing.length) throw new Error(`replay run refused: not in the read cache: ${missing.map((m) => [m.tiktok && `tiktok:@${m.tiktok}`, m.instagram && `instagram:@${m.instagram}`].filter(Boolean).join(" ")).join(", ")}. Cached: ${cached.slice(0, 20).map((c) => `${c.platform}:@${c.handle}`).join(", ")}`);
+      } else {
+        const free = (await ctx.runQuery(internal.eval.firstWeek.preflight, { handles: cached.map((c) => ({ [c.platform]: c.handle })) })).filter((x) => x.free);
+        subjects = free.slice(0, 4).map((x) => { const c = cached[x.i]; return { [c.platform]: c.handle, note: `from the cache (${c.followers ?? "?"} followers)` } as Subject; });
+        if (subjects.length < 2) throw new Error(`replay run refused: the read cache can onboard ${subjects.length} free account(s); two are needed (one follows through, one flakes). Cached: ${cached.map((c) => `${c.platform}:@${c.handle}`).join(", ") || "none"}`);
+      }
+    }
     if (subjects.length > 12) throw new Error("at most 12 creators a run");
     // Credits are scarce: read the balance fresh and refuse, by name, before creating anyone.
     const est = estimateCredits(subjects, opts);
-    let balance: number | null = null;
-    try {
+    let balance: number | null = opts.replay ? 0 : null;
+    if (!opts.replay) try {
       const r = await ctx.runAction(internal.reads.read.read, { kind: "vendor.credits", params: {}, force: true });
       const c = (r.value as { credits?: unknown } | null)?.credits;
       balance = typeof c === "number" && Number.isFinite(c) ? c : null;
     } catch {
       balance = null;
     }
-    const refusal = balanceRefusal(balance, est.needed);
+    const refusal = opts.replay ? null : balanceRefusal(balance, est.needed);
     if (refusal) throw new Error(`first-week run refused: ${refusal}. Estimate: ${est.total} credits for ${subjects.length} creators (${est.perCreator.join(", ")}); ceiling ${opts.maxCredits}.`);
     const now = Date.now();
     const runId = `fw-${now.toString(36)}`;
@@ -480,7 +517,7 @@ export const start = internalAction({
     for (const [i, s] of subjects.entries()) {
       const timezone = s.timezone ?? zones[i];
       const slot: CreatorSlot = { i, subject: subjectFor(runId, i), handles: { tiktok: s.tiktok, instagram: s.instagram }, timezone, note: s.note };
-      const r = await ctx.runMutation(internal.eval.firstWeek.createOne, { runId, i, handles: slot.handles, timezone, watchCap: opts.watchCap, transcriptCap: opts.transcriptCap });
+      const r = await ctx.runMutation(internal.eval.firstWeek.createOne, { runId, i, handles: slot.handles, timezone, watchCap: opts.watchCap, transcriptCap: opts.transcriptCap, replay: opts.replay });
       if (r.ok && r.creatorId) slot.creatorId = r.creatorId;
       else slot.error = `signup refused: ${r.error}`;
       creators.push(slot);
@@ -502,8 +539,10 @@ export const start = internalAction({
 async function overCeiling(ctx: ActionCtx, s: RunState): Promise<string | null> {
   if (s.stopped) return s.stopped;
   const credits = await ctx.runQuery(internal.eval.firstWeek.runCredits, { runId: s.runId });
-  if (credits.total < s.opts.maxCredits) return null;
-  const why = `credit ceiling: ${credits.total} ScrapeCreators credits ≥ ${s.opts.maxCredits}`;
+  // Under replay only this run's own creators count: fleet reads elsewhere on the deployment are not this run's spend.
+  const spent = s.opts.replay ? credits.attributed : credits.total;
+  if (spent < s.opts.maxCredits) return null;
+  const why = s.opts.replay ? `replay run spent ${spent} ScrapeCreators credit(s); a zero-credit run stops at the first` : `credit ceiling: ${credits.total} ScrapeCreators credits ≥ ${s.opts.maxCredits}`;
   const latest = await ctx.runQuery(internal.eval.firstWeek.readState, { runId: s.runId });
   if (latest && !latest.stopped) await ctx.runMutation(internal.eval.firstWeek.writeRun, { runId: s.runId, state: { ...latest, stopped: why } });
   return why;
@@ -742,6 +781,26 @@ export const runStep = internalAction({
         case "quiet": result = said(await ctx.runAction(internal.agent.cadence.quiet, { creatorId: id })); break;
         case "actor": result = await actorTurn(ctx, s, a.i, log, a.d, "morning", 0.6); break;
         case "actorEvening": result = await actorTurn(ctx, s, a.i, log, a.d, "evening", 0.5); break;
+        default: {
+          if (!step.startsWith("beat:")) { failure = `unknown step ${step}`; break; }
+          const beat = step.slice(5);
+          const say = async (text: string) => {
+            log.turns += 1;
+            await ctx.runMutation(internal.eval.firstWeek.patchLog, { runId: a.runId, i: a.i, set: { turns: log.turns } });
+            return await textAsCreator(ctx, a.runId, a.i, log.turns, id, text);
+          };
+          let checks: Check[];
+          try {
+            checks = await runBeat({ ctx, creatorId: id, i: a.i, d: a.d, role: roleOf(a.i), say, runStartedAt: s.startedAt }, beat);
+          } catch (e) {
+            checks = [{ d: a.d, beat, check: `beat ${beat} ran`, ok: false, detail: e instanceof Error ? clip(e.message, 200) : "error" }];
+          }
+          await ctx.runMutation(internal.eval.firstWeek.patchLog, { runId: a.runId, i: a.i, append: { checks } });
+          const failed = checks.filter((c) => c.ok === false);
+          result = `${checks.filter((c) => c.ok).length}/${checks.filter((c) => c.ok !== null).length} kept`;
+          if (failed.length) failure = `${beat}: ${failed.map((c) => c.check).join("; ")}`;
+          break;
+        }
         case "snapshot": {
           const snap = await ctx.runQuery(internal.eval.livingSim.snapshot, { creatorId: id, since: Date.now() - 6 * 3_600_000 });
           await ctx.runMutation(internal.eval.firstWeek.patchLog, { runId: a.runId, i: a.i, append: { snapshots: [{ d: a.d, snap }] } });
@@ -836,6 +895,7 @@ export const judge = internalAction({
 // ------------------------------------------------------------------ the report
 
 export type CreatorReport = {
+  checks?: Check[];
   i: number; handles: { tiktok?: string; instagram?: string }; timezone: string; note?: string; creatorId: string | null; phase: string; dayReached: number;
   timeline: Array<{ what: string; atHours: number | null; detail?: string }>;
   catalogue: { status: string | null; attempts: number; error: string | null; postsRead: { tiktok: number; instagram: number }; readFrom: unknown; doneAtHours: number | null };
@@ -931,6 +991,7 @@ export const creatorReport = internalQuery({
       weekPlans: plans.map((p) => ({ atHours: at(p.ts) ?? 0, key: p.dedupeKey ?? "" })), sundayReviewAtHours: at(review?.ts),
       instagram: { hasInstagram: Boolean(c.handles.instagram), instagramOnly: Boolean(c.handles.instagram && !c.handles.tiktok), igPostsRead: postsRead.instagram, igGroundedIdeas: igGrounded, gotIgGroundedIdea: igGrounded > 0 },
       failures, cost, judged: log?.judged ?? null, actorTurns: log?.turns ?? 0, stepsRun: log?.steps.length ?? 0,
+      checks: log?.checks ?? [],
     };
   },
 });
@@ -944,6 +1005,8 @@ export type FleetSummary = {
   failures: Array<{ i: number; d: number; step: string; error: string }>;
   costPerOnboardedCreator: { modelUsd: number | null; scrapeCredits: number | null; totalUsd: number | null };
   judge: { items: number; meanGrounded: number | null; meanSpecific: number | null; wrongPlatform: number; withInvented: number };
+  /** The product script's promises across the fleet (empty for a plain first-week run). */
+  promises: Array<{ check: string; passed: number; failed: number; na: number }>;
 };
 
 const pct = (n: number, d: number) => (d ? Math.round((n / d) * 100) : null);
@@ -971,6 +1034,7 @@ export function summarise(reports: CreatorReport[]): FleetSummary {
     failures: reports.flatMap((r) => r.failures.map((f) => ({ i: r.i, ...f }))),
     costPerOnboardedCreator: { modelUsd: mean(onboarded.map((r) => r.cost.modelUsd)), scrapeCredits: mean(onboarded.map((r) => r.cost.scrapeCredits)), totalUsd: mean(perCreatorUsd) },
     judge: { items: judgedItems.length, meanGrounded: mean(judgedItems.map((x) => x.grounded)), meanSpecific: mean(judgedItems.map((x) => x.specific)), wrongPlatform: judgedItems.filter((x) => x.rightPlatform === "no").length, withInvented: judgedItems.filter((x) => x.invented.length > 0).length },
+    promises: summariseChecks(started.flatMap((r) => r.checks ?? [])),
   };
 }
 
@@ -1031,6 +1095,9 @@ export const clearPage = internalMutation({
 export const clear = internalAction({
   args: { runId: v.string() },
   handler: async (ctx, a): Promise<{ deleted: number }> => {
+    const st = await ctx.runQuery(internal.eval.firstWeek.readState, { runId: a.runId });
+    const ids = (st?.creators ?? []).map((c) => c.creatorId).filter((x): x is Id<"creators"> => Boolean(x));
+    if (ids.length) await ctx.runMutation(internal.eval.replay.disarm, { creatorIds: ids });
     let deleted = 0;
     for (let n = 0; n < 200; n++) {
       const r = await ctx.runMutation(internal.eval.firstWeek.clearPage, { runId: a.runId });
