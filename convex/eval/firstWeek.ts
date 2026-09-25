@@ -367,7 +367,7 @@ export const unseenFromMaya = internalQuery({
     const fresh = msgs.filter((m) => m._creationTime > a.since && m.direction === "out" && m.proactive).reverse();
     return {
       messages: fresh.map((m) => ({ id: m._id, kind: m.kind ?? "", text: clip(m.body, 700), buttons: (m.buttons ?? []).map((b) => b.label) })),
-      ideas: ideas.filter((x) => x._creationTime > a.since).map((x) => ({ id: x._id, hook: ((x.version as { hook?: string } | undefined)?.hook ?? x.messageText).slice(0, 160) })),
+      ideas: ideas.filter((x) => x._creationTime > a.since).map((x) => ({ id: x._id, hook: clip((x.version as { hook?: string } | undefined)?.hook ?? x.messageText, 160) })),
       newest: Math.max(a.since, ...msgs.map((m) => m._creationTime)),
     };
   },
@@ -378,7 +378,7 @@ export const captionsOf = internalQuery({
   args: { creatorId: v.id("creators") },
   handler: async (ctx, a): Promise<string> => {
     const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(15)) as Doc<"ownPosts">[];
-    return posts.map((p) => `- [${p.platform}] ${p.caption.split("\n")[0].slice(0, 160)}`).join("\n");
+    return posts.map((p) => `- [${p.platform}] ${clip(p.caption.split("\n")[0], 160)}`).join("\n");
   },
 });
 
@@ -662,7 +662,7 @@ async function textAsCreator(ctx: ActionCtx, runId: string, i: number, n: number
     return `(no reply: ${e instanceof Error ? clip(e.message, 80) : "the turn failed"})`;
   }
   const replies = await ctx.runQuery(internal.eval.converse.repliesTo, { creatorId, inboundId: r.messageId, since });
-  return replies.map((x) => x.text).join("\n---\n").slice(0, 600) || "(no reply row)";
+  return clip(replies.map((x) => x.text).join("\n---\n"), 600) || "(no reply row)";
 }
 
 /** One actor turn, with probability `p`, if she has said anything new. Deterministic per run, creator, day and slot. */
@@ -687,7 +687,7 @@ async function actorTurn(ctx: ActionCtx, s: RunState, i: number, log: CreatorLog
   const out = r.ok ? parseJson<{ replies?: Array<{ text?: string }>; ideas?: Array<{ ideaId?: string; act?: string }> }>(r.content) : null;
   const said: string[] = [], heard: string[] = [], acts: string[] = [];
   for (const rep of (out?.replies ?? []).slice(0, 2)) {
-    const text = rep.text?.trim().slice(0, 400);
+    const text = rep.text ? clip(rep.text.trim(), 400) : undefined;
     if (!text) continue;
     log.turns += 1;
     await ctx.runMutation(internal.eval.firstWeek.patchLog, { runId: s.runId, i, set: { turns: log.turns } });
@@ -718,8 +718,8 @@ export const runStep = internalAction({
     const plan = dayPlan(a.d, s.opts);
     const step = plan[a.k];
     const advance = async (failure?: string, result?: string, ms = 0) => {
-      const append: Record<string, unknown[]> = { steps: [{ d: a.d, step: step ?? "?", result: (result ?? failure ?? "").slice(0, 200), ms }] };
-      if (failure) append.failures = [{ d: a.d, step: step ?? "?", error: failure.slice(0, 200) }];
+      const append: Record<string, unknown[]> = { steps: [{ d: a.d, step: step ?? "?", result: clip(result ?? failure ?? "", 200), ms }] };
+      if (failure) append.failures = [{ d: a.d, step: step ?? "?", error: clip(failure, 200) }];
       const nextK = a.k + 1;
       const dayDone = nextK >= plan.length;
       if (dayDone && a.d >= s.opts.days) {
@@ -811,7 +811,7 @@ export const runStep = internalAction({
         }
       }
     } catch (e) {
-      failure = e instanceof Error ? clip(e.message, 200) : String(e).slice(0, 200);
+      failure = e instanceof Error ? clip(e.message, 200) : clip(String(e), 200);
       result = `failed: ${failure}`;
     }
     await advance(failure, result, Date.now() - t0);
@@ -841,7 +841,7 @@ export function parseJudged(content: string, n: number): Array<JudgedItem | null
     const g = Number(x.grounded), sp = Number(x.specific);
     if (!Number.isInteger(i) || i < 0 || i >= n || ![0, 1, 2].includes(g) || ![0, 1, 2].includes(sp)) continue;
     const rp = x.rightPlatform === "yes" || x.rightPlatform === "no" || x.rightPlatform === "na" ? x.rightPlatform : "na";
-    out[i] = { i, grounded: g, specific: sp, rightPlatform: rp, invented: Array.isArray(x.invented) ? x.invented.map(String).slice(0, 5) : [], note: String(x.note ?? "").slice(0, 200) };
+    out[i] = { i, grounded: g, specific: sp, rightPlatform: rp, invented: Array.isArray(x.invented) ? x.invented.map(String).slice(0, 5) : [], note: clip(String(x.note ?? ""), 200) };
   }
   return out;
 }

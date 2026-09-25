@@ -85,9 +85,9 @@ export function parseJudge(content: string, n: number): { cards: Array<Verdict |
       if (!Number.isInteger(i) || i < 0 || i >= n || relevance === null || learnable === null) continue;
       if (real !== "yes" && real !== "no" && real !== "unsure") continue;
       if (acc !== "yes" && acc !== "partly" && acc !== "no") continue;
-      out[i] = { realCreator: real, kind: String(c.kind ?? "unclear").slice(0, 30), relevance, learnable, reasonAccurate: acc, note: String(c.note ?? "").slice(0, 300) };
+      out[i] = { realCreator: real, kind: clip(String(c.kind ?? "unclear"), 30), relevance, learnable, reasonAccurate: acc, note: clip(String(c.note ?? ""), 300) };
     }
-    return { cards: out, setScore: score(j.set?.score), setNote: String(j.set?.note ?? "").slice(0, 400) };
+    return { cards: out, setScore: score(j.set?.score), setNote: clip(String(j.set?.note ?? ""), 400) };
   } catch {
     return { cards: out, setScore: null, setNote: "" };
   }

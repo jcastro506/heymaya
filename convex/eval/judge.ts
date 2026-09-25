@@ -9,6 +9,7 @@ import type { Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
 import { CRITIC_TIMEOUT_MS } from "../agent/critic";
 import { REGISTRY } from "../agent/registry";
+import { clip } from "../lib/clip";
 
 export interface Judgement { corny: number; generic: number; flattering: number; toolSpeak: number; specific: number; wouldSend: number; soundsLikeThem: number; note: string; model: string }
 
@@ -48,7 +49,7 @@ export async function judge(ctx: ActionCtx, input: { creatorId?: Id<"creators">;
     const n = (x: unknown) => Math.max(0, Math.min(3, Number(x) || 0));
     // A judge that forgets the field must not read as "sounds like nobody": default to 3,
     // the same way a message that proposes no line at all scores 3.
-    return { corny: n(j.corny), generic: n(j.generic), flattering: n(j.flattering), toolSpeak: n(j.toolSpeak), specific: n(j.specific), wouldSend: n(j.wouldSend), soundsLikeThem: j.soundsLikeThem === undefined ? 3 : n(j.soundsLikeThem), note: String(j.note ?? "").slice(0, 160), model: spec.primary };
+    return { corny: n(j.corny), generic: n(j.generic), flattering: n(j.flattering), toolSpeak: n(j.toolSpeak), specific: n(j.specific), wouldSend: n(j.wouldSend), soundsLikeThem: j.soundsLikeThem === undefined ? 3 : n(j.soundsLikeThem), note: clip(String(j.note ?? ""), 160), model: spec.primary };
   } catch {
     return null;
   }

@@ -215,7 +215,7 @@ async function judgeCorrectness(ctx: Parameters<typeof callModel>[0], c: ExpertC
   try {
     const m = r.content.match(/\{[\s\S]*\}/);
     const j = JSON.parse(m ? m[0] : "{}") as Partial<Correctness>;
-    return { correct: Math.max(0, Math.min(2, Number(j.correct) || 0)), falseClaims: Array.isArray(j.falseClaims) ? j.falseClaims.map(String).slice(0, 5) : [], askedWhenNeeded: typeof j.askedWhenNeeded === "boolean" ? j.askedWhenNeeded : null, usefulNextStep: Math.max(0, Math.min(2, Number(j.usefulNextStep) || 0)), safetyOk: typeof j.safetyOk === "boolean" ? j.safetyOk : null, note: String(j.note ?? "").slice(0, 200) };
+    return { correct: Math.max(0, Math.min(2, Number(j.correct) || 0)), falseClaims: Array.isArray(j.falseClaims) ? j.falseClaims.map(String).slice(0, 5) : [], askedWhenNeeded: typeof j.askedWhenNeeded === "boolean" ? j.askedWhenNeeded : null, usefulNextStep: Math.max(0, Math.min(2, Number(j.usefulNextStep) || 0)), safetyOk: typeof j.safetyOk === "boolean" ? j.safetyOk : null, note: clip(String(j.note ?? ""), 200) };
   } catch {
     return null;
   }
@@ -257,7 +257,7 @@ export const realCaption = internalQuery({
     const id = a.url.match(/\/video\/(\d+)/)?.[1] ?? a.url.match(/instagram\.com\/(?:p|reel|reels)\/([A-Za-z0-9_-]+)/)?.[1];
     if (!id) return null;
     const rows = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(200)) as Doc<"ownPosts">[];
-    return rows.find((p) => p.postId === id || p.url.includes(id))?.caption.slice(0, 500) ?? null;
+    { const c = rows.find((p) => p.postId === id || p.url.includes(id))?.caption; return c === undefined ? null : clip(c, 500); }
   },
 });
 
