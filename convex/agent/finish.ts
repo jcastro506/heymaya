@@ -25,10 +25,11 @@ import { buildPrefix, producedStamp } from "./context";
 import { critique } from "./critic";
 import { deliverNow } from "../core/scheduler";
 import { investigate } from "./investigate";
-import { isOurSide, parseJson, watchBytes, WATCH_OUR_SIDE } from "./opinion";
+import { isOurSide, parseJson, storedMedia, watchBytes, WATCH_OUR_SIDE } from "./opinion";
 
 export const FINISH_WRITER_DOWN = "i watched it, but couldn't write the captions just now. that's on my side. send it again in a few minutes?";
 import type { ToolCallRecord } from "./tools";
+import { clip } from "../lib/clip";
 
 const WEEK_MS = 7 * 86_400_000;
 
@@ -183,21 +184,21 @@ export const run = internalAction({
       await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body, dedupeKey: `finish:${a.messageId}`, proactive: false, kind: "opinion", ...extra });
       await deliverNow(ctx as never);
     };
-    const file = target.fileId ? await ctx.storage.get(target.fileId) : null;
+    const file = target.fileId ? await storedMedia(ctx, target.fileId, target.fileMime ?? "video/mp4") : null;
     if (!file) return { ok: false, reason: "no file bytes" };
     await ctx.runAction(internal.core.telegram.react, { creatorId: creator._id, messageId: target._id, emoji: "👀" }).catch(() => undefined);
     // Talky videos write long notes: room for them, so the JSON isn't cut off mid-sentence.
-    const w = await watchBytes(ctx, creator._id, "watch_finish", await file.arrayBuffer(), target.fileMime ?? "video/mp4", FINISH_WATCH_PROMPT, 2500);
+    const w = await watchBytes(ctx, creator._id, "watch_finish", file, target.fileMime ?? "video/mp4", FINISH_WATCH_PROMPT, 2500);
     const card = w.text ? parseJson<Record<string, unknown>>(w.text) : null;
     if (!card) {
       const why = w.text ? "my notes on it came out garbled" : (w.reason ?? "the file didn't open");
       // A vendor's words ("The model is overloaded…") never reach them; an outage is said as ours.
       await reply(!w.text && isOurSide(w.reason) ? WATCH_OUR_SIDE : `couldn't watch that one properly (${why}). send it again?`);
-      return { ok: true, reason: `watch failed: ${w.text ? `unparsed: ${w.text.slice(0, 160)}` : w.reason}` };
+      return { ok: true, reason: `watch failed: ${w.text ? `unparsed: ${clip(w.text, 160)}` : w.reason}` };
     }
     const candidates = await ctx.runQuery(internal.agent.finish.soundCandidates, { creatorId: creator._id, now: Date.now() });
     const prefix = buildPrefix({ creator, directives, skill: FINISH_SKILL, personal: g.personal, voice: g.voice, history: g.history });
-    const evidence = { theirWords: target.body.slice(0, 400), card, soundCandidates: candidates, platforms: Object.keys(creator.handles).filter((k) => (creator.handles as Record<string, unknown>)[k]) };
+    const evidence = { theirWords: clip(target.body, 400), card, soundCandidates: candidates, platforms: Object.keys(creator.handles).filter((k) => (creator.handles as Record<string, unknown>)[k]) };
     const user = `Evidence (everything you may cite is here or in a lookup you make):\n${JSON.stringify(evidence)}`;
     const inv = await investigate(ctx, { creatorId: creator._id, sourceMessageId: a.messageId, purpose: "finish", prefix, user, budget: { calls: 5, credits: 12, deadlineAt: Date.now() + 60_000 }, temperature: 0.6, maxTokens: 1800 });
     let out = inv.content ? parseJson<Out>(inv.content) : null;
@@ -287,7 +288,7 @@ export const learnOne = internalAction({
     const m = await ctx.runQuery(internal.agent.finish.postedAfter, { finishId: a.finishId });
     if (!m) return { learned: false, reason: "not posted yet" };
     const soundUsed = m.post.soundClipId && m.finish.sounds.some((s) => s.clipId === m.post.soundClipId) ? m.post.soundClipId : null;
-    const r = await callModel(ctx, { creatorId: m.finish.creatorId, purpose: "finish_lesson", model: REGISTRY.critic.primary, messages: [{ role: "system", content: LESSON_PROMPT }, { role: "user", content: `Offered:\n${m.finish.captions.map((c, i) => `${i + 1}. ${c.text}`).join("\n")}\n\nPosted:\n${m.post.caption.slice(0, 1200)}` }], temperature: 0, maxTokens: 300, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+    const r = await callModel(ctx, { creatorId: m.finish.creatorId, purpose: "finish_lesson", model: REGISTRY.critic.primary, messages: [{ role: "system", content: LESSON_PROMPT }, { role: "user", content: `Offered:\n${m.finish.captions.map((c, i) => `${i + 1}. ${c.text}`).join("\n")}\n\nPosted:\n${clip(m.post.caption, 1200)}` }], temperature: 0, maxTokens: 300, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
     const parsed = r.ok ? parseJson<{ closestCaption: number; lesson: string }>(r.content) : null;
     if (!parsed) return { learned: false, reason: "lesson model failed" };
     await ctx.runMutation(internal.agent.finish.saveOutcome, { finishId: a.finishId, ownPostId: m.post.id, closestCaption: [0, 1, 2, 3].includes(parsed.closestCaption) ? parsed.closestCaption : 0, soundUsed, lesson: String(parsed.lesson ?? "").slice(0, 200) });

@@ -1,3 +1,4 @@
+import { clip } from "../lib/clip";
 /**
  * The deals world (2026-09-24): Maya's whole deals/partnerships job, end to end, on the REAL model
  * and the REAL partnership code, against a deterministic fake market (eval/dealsWorldData.ts),
@@ -328,7 +329,7 @@ async function say(w: World, text: string): Promise<string[]> {
   try {
     await w.ctx.runAction(internal.agent.converse.run, { creatorId: w.creatorId, messageId });
   } catch (e) {
-    const line = `[the turn threw] ${e instanceof Error ? `${e.name}: ${e.message.slice(0, 300)}` : String(e).slice(0, 300)}`;
+    const line = `[the turn threw] ${e instanceof Error ? `${e.name}: ${clip(e.message, 300)}` : String(e).slice(0, 300)}`;
     w.log.push({ who: "code", text: line });
     return [line];
   }

@@ -23,6 +23,7 @@ import { internal } from "./_generated/api";
 import { summarize, type Affinity } from "./taste/affinities";
 import { computeRung, engagement } from "./review/rung";
 import { laneBenchmarkFor } from "./scout/benchmarks";
+import { clip } from "./lib/clip";
 
 async function me(ctx: QueryCtx | MutationCtx): Promise<Doc<"creators"> | null> {
   const identity = await ctx.auth.getUserIdentity();
@@ -174,7 +175,7 @@ export const revokeRule = mutation({
     const row = (await ctx.db.get(a.id)) as Doc<"directives"> | null;
     if (!c || !row || row.creatorId !== c._id) return { ok: false };
     await ctx.db.patch(a.id, { active: false, supersededAt: Date.now() }); // history kept
-    await recordAction(ctx, { creatorId: c._id, kind: "rule.revoke", objectId: a.id, summary: `removed their rule "${row.verbatim.slice(0, 120)}"` });
+    await recordAction(ctx, { creatorId: c._id, kind: "rule.revoke", objectId: a.id, summary: `removed their rule "${clip(row.verbatim, 120)}"` });
     return { ok: true };
   },
 });
@@ -450,7 +451,7 @@ function postNumbersView(p: Doc<"ownPosts">, siblings: Doc<"ownPosts">[], now: n
     createTime: p.createTime,
     contentType: p.contentType,
     cover,
-    caption: p.caption.slice(0, 300),
+    caption: clip(p.caption, 300),
     publicCounts,
     publicAsOf: p.metricsAsOf,
     connected,

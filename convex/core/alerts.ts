@@ -1,3 +1,4 @@
+import { clip } from "../lib/clip";
 /**
  * Nothing fails silently (plan §16, principle 5). Every hour: dead jobs, outbound
  * that has not been delivered for over an hour, a failed vendor smoke, a connection
@@ -32,7 +33,7 @@ export function composeAlert(f: Findings, env: string): string | null {
   if (f.deadJobs.length) lines.push(`☠️ ${f.deadJobs.length} dead job${f.deadJobs.length === 1 ? "" : "s"}: ${f.deadJobs.slice(0, 5).map((j) => `${j.kind} (${j.error.slice(0, 60)})`).join("; ")}`);
   if (f.undelivered.length) lines.push(`📭 ${f.undelivered.length} undelivered for over an hour: ${f.undelivered.slice(0, 5).map((u) => `creator ${u.creatorId.slice(-6)} ${u.ageMin}m (${u.error.slice(0, 50)})`).join("; ")}`);
   if (f.smokeFailed.length) lines.push(`🩺 smoke failed: ${f.smokeFailed.map((s) => `${s.vendor}/${s.check}`).join(", ")}`);
-  if (f.attention.length) lines.push(`🔌 ${f.attention.length} connection${f.attention.length === 1 ? "" : "s"} need attention: ${f.attention.slice(0, 5).map((a) => `${a.provider} for creator ${a.creatorId.slice(-6)}: ${a.detail.slice(0, 60)}`).join("; ")}`);
+  if (f.attention.length) lines.push(`🔌 ${f.attention.length} connection${f.attention.length === 1 ? "" : "s"} need attention: ${f.attention.slice(0, 5).map((a) => `${a.provider} for creator ${a.creatorId.slice(-6)}: ${clip(a.detail, 60)}`).join("; ")}`);
   if (f.staleFacts?.length) lines.push(`📚 ${f.staleFacts.length} platform fact${f.staleFacts.length === 1 ? "" : "s"} older than 60 days (she hedges them; re-check and bump verifiedOn in convex/knowledge/platforms.ts): ${f.staleFacts.slice(0, 5).join(", ")}`);
   if (f.scale) lines.push(`📈 the creators table is ${f.scale.pctOfReadLimit}% of the per-query read limit (${f.scale.creators} creators). Every hourly job that scans it fails at 100%: do S0 #1 (schedule rows) now.`);
   if (!lines.length) return null;

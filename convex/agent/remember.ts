@@ -14,6 +14,7 @@ import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
+import { clip } from "../lib/clip";
 
 export const REMEMBER_PROMPT = `You read one message a content creator sent to their assistant. Decide, strictly:
 - "note": a concrete fact about their life, plans, schedule, people, or situation that would matter to someone planning content with them later (e.g. "training for Chicago in October", "filming with my sister from now on", "off for two weeks in July"). Quote it in their words, ≤ 200 chars. Give expiresDays if it is time-bound (an event, a trip), else null. kind: "life" (plans, events), "fact" (stable facts), "bit" (a running joke or recurring bit they reference).
@@ -39,7 +40,7 @@ export const afterTurn = internalAction({
       messages: [
         { role: "system", content: REMEMBER_PROMPT },
         { role: "user", content: `Their existing plan (ids may link an explicit commitment, never manufacture one): ${g.personal}` },
-        { role: "user", content: `Recent context: ${JSON.stringify(g.recent.filter((m) => m.ts < g.target!.ts).slice(-3).map((m) => ({ who: m.direction === "in" ? "creator" : "assistant", text: m.body.slice(0, 400) })))}\nTheir message: ${text.slice(0, 800)}\n\nThings already kept: ${JSON.stringify((g.creator.notes ?? []).filter((n) => !n.tombstonedAt).map((n) => ({ id: n.id, text: n.text })))}\nRules already kept: ${JSON.stringify(g.directives.map((d) => d.verbatim))}` },
+        { role: "user", content: `Recent context: ${JSON.stringify(g.recent.filter((m) => m.ts < g.target!.ts).slice(-3).map((m) => ({ who: m.direction === "in" ? "creator" : "assistant", text: clip(m.body, 400) })))}\nTheir message: ${text.slice(0, 800)}\n\nThings already kept: ${JSON.stringify((g.creator.notes ?? []).filter((n) => !n.tombstonedAt).map((n) => ({ id: n.id, text: n.text })))}\nRules already kept: ${JSON.stringify(g.directives.map((d) => d.verbatim))}` },
       ],
       temperature: 0,
       maxTokens: 500,
@@ -56,7 +57,7 @@ export const afterTurn = internalAction({
     let note = false, rule = false;
     let epoch = g.creator.memoryEpoch ?? 0;
     if (out.experience && typeof out.experience.quote === "string" && ["goal", "preference", "effort", "decision", "commitment"].includes(out.experience.kind ?? "")) {
-      await ctx.runMutation(internal.agent.remember.recordExperience, { creatorId: a.creatorId, sourceMessageId: a.messageId, kind: out.experience.kind as "goal" | "preference" | "effort" | "decision" | "commitment", quote: out.experience.quote.slice(0, 400), reason: typeof out.experience.reason === "string" ? out.experience.reason.slice(0, 300) : undefined, blockId: out.experience.kind === "commitment" && typeof out.experience.blockId === "string" ? out.experience.blockId : undefined, epoch });
+      await ctx.runMutation(internal.agent.remember.recordExperience, { creatorId: a.creatorId, sourceMessageId: a.messageId, kind: out.experience.kind as "goal" | "preference" | "effort" | "decision" | "commitment", quote: clip(out.experience.quote, 400), reason: typeof out.experience.reason === "string" ? clip(out.experience.reason, 300) : undefined, blockId: out.experience.kind === "commitment" && typeof out.experience.blockId === "string" ? out.experience.blockId : undefined, epoch });
     }
     if (typeof out.note?.text === "string" && out.note.text.trim()) {
       const kind = out.note.kind === "fact" || out.note.kind === "bit" ? out.note.kind : "life";

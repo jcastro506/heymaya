@@ -1,3 +1,4 @@
+import { clip } from "../lib/clip";
 /**
  * B3: her eyes on the real world (audit §7 B3). Two tools on every skill's belt:
  * `web_search` (Tavily search, general or news, a date window) and `web_read` (one page).
@@ -85,7 +86,7 @@ export const search = internalAction({
       });
       return { ok: true, checkedOn: new Date().toISOString().slice(0, 10), results };
     } catch (e) {
-      return { ok: false, reason: e instanceof Error ? e.message.slice(0, 120) : "search failed" };
+      return { ok: false, reason: e instanceof Error ? clip(e.message, 120) : "search failed" };
     }
   },
 });
@@ -106,9 +107,9 @@ export const read = internalAction({
       const body = (await r.json()) as { results?: Array<{ url?: string; raw_content?: string }> };
       const page = body.results?.[0];
       if (!page?.raw_content) return { ok: false, reason: "that page came back empty" };
-      return { ok: true, checkedOn: new Date().toISOString().slice(0, 10), results: [{ url: target, title: "", excerpt: page.raw_content.slice(0, 2500) }] };
+      return { ok: true, checkedOn: new Date().toISOString().slice(0, 10), results: [{ url: target, title: "", excerpt: clip(page.raw_content, 2500) }] };
     } catch (e) {
-      return { ok: false, reason: e instanceof Error ? e.message.slice(0, 120) : "read failed" };
+      return { ok: false, reason: e instanceof Error ? clip(e.message, 120) : "read failed" };
     }
   },
 });

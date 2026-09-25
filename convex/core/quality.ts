@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalAction } from "../_generated/server";
+import { clip } from "../lib/clip";
 /**
  * Research and sweep QUALITY gates.
  *
@@ -368,7 +369,7 @@ export const judgeFiller = internalAction({
       maxTokens: 300,
       messages: [
         { role: "system", content: FILLER_SYSTEM },
-        { role: "user", content: args.text.slice(0, 600) },
+        { role: "user", content: clip(args.text, 600) },
       ],
     });
     if (!completion.ok) return { filler: false, why: "" };

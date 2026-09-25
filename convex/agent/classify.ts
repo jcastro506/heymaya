@@ -10,6 +10,7 @@ import type { ActionCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "./registry";
+import { clip } from "../lib/clip";
 
 export type Intent =
   | { intent: "profile_ask"; platform: "tiktok" | "instagram"; handle: string }
@@ -92,7 +93,7 @@ export async function classifyText(ctx: ActionCtx, input: { creatorId: Id<"creat
     model,
     messages: [
       { role: "system", content: CLASSIFY_PROMPT },
-      { role: "user", content: `Their own handles (never a profile_ask): ${JSON.stringify(input.ownHandles)}\nCurrent quiet hours: ${JSON.stringify(input.quietHours ?? { start: "22:00", end: "07:00" })}\nHer last message to them: ${JSON.stringify((input.lastOutbound ?? "").slice(0, 300))}\n\nTheir message: ${input.text.slice(0, 600)}` },
+      { role: "user", content: `Their own handles (never a profile_ask): ${JSON.stringify(input.ownHandles)}\nCurrent quiet hours: ${JSON.stringify(input.quietHours ?? { start: "22:00", end: "07:00" })}\nHer last message to them: ${JSON.stringify((input.lastOutbound ?? "").slice(0, 300))}\n\nTheir message: ${clip(input.text, 600)}` },
     ],
     temperature: 0,
     // Room for a reasoning model's thinking: 120 tokens came back empty, and empty meant "plain chat".

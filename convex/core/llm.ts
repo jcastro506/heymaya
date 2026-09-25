@@ -1,3 +1,4 @@
+import { clip } from "../lib/clip";
 /**
  * ⭐ The one way `convex/maya` calls a model.
  *
@@ -173,7 +174,7 @@ export async function callModel(
         `+ ${reasoningAllowanceFor(input.maxTokens ?? 0)} allowance. If this repeats, the content budget is too small.`
     );
   } else if (!result.ok) {
-    console.error(`[llm] ${input.purpose}: ${input.model} failed: ${result.reason.slice(0, 200)}`);
+    console.error(`[llm] ${input.purpose}: ${input.model} failed: ${clip(result.reason, 200)}`);
   }
 
   // ⚠️ Recorded on failure too. A call that timed out mid-stream, or returned

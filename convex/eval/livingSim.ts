@@ -32,6 +32,7 @@ import { TABLES_BY_CREATOR } from "../account/deletion";
 import { applyIdeaAct } from "../core/ideaActs";
 import { tiktok } from "../integrations/scrapeCreators/platforms/tiktok";
 import { THRESHOLDS } from "../config/thresholds";
+import { clip } from "../lib/clip";
 
 const D = 86_400_000;
 const STEP_GAP_MS = 5_000;
@@ -268,7 +269,7 @@ export const dayWorld = internalAction({
           notes.push(`draft ${doc.postId}: ${r.reason ?? (r.ok ? "finished" : "failed")}`);
           drafted = true;
         } catch (e) {
-          notes.push(`draft ${doc.postId} skipped: ${e instanceof Error ? e.message.slice(0, 80) : "error"}`);
+          notes.push(`draft ${doc.postId} skipped: ${e instanceof Error ? clip(e.message, 80) : "error"}`);
         }
       }
       // A drafted post goes out after the draft (as it would in life); the rest at their real time of day.
@@ -311,7 +312,7 @@ export const dayMaya = internalAction({
         const r = (await f()) as { sent?: boolean; reason?: string } | null;
         jobs[name] = r && typeof r === "object" && "reason" in r ? `${r.sent ? "sent" : "held"}: ${String(r.reason ?? "")}`.slice(0, 120) : "ran";
       } catch (e) {
-        jobs[name] = `failed: ${e instanceof Error ? e.message.slice(0, 100) : "error"}`;
+        jobs[name] = `failed: ${e instanceof Error ? clip(e.message, 100) : "error"}`;
       }
     };
     // Her lane's keyword tops (the fleet sweep skips eval creators; cached by keyword and week).
@@ -405,7 +406,7 @@ export const todayFromMaya = internalQuery({
     const msgs = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId).gte("ts", a.since)).take(40)) as Doc<"messages">[];
     const ideas = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(10)) as Doc<"ideas">[];
     return {
-      messages: msgs.filter((m) => m.direction === "out" && m.proactive).map((m) => ({ id: m._id, kind: m.kind ?? "", text: m.body.slice(0, 600) })),
+      messages: msgs.filter((m) => m.direction === "out" && m.proactive).map((m) => ({ id: m._id, kind: m.kind ?? "", text: clip(m.body, 600) })),
       ideas: ideas.filter((i) => i.createdAt >= a.since).map((i) => ({ id: i._id, hook: ((i.version as { hook?: string } | undefined)?.hook ?? i.messageText).slice(0, 140) })),
     };
   },
@@ -444,7 +445,7 @@ export const snapshot = internalQuery({
       ideasSaved: ideas.filter((i) => i.savedAt).length,
       ideasPassed: ideas.filter((i) => i.status === "passed").length,
       ideasPosted: ideas.filter((i) => i.status === "posted").length,
-      memory: { records: records.filter((r) => r.active).length, byKind: records.filter((r) => r.active).reduce<Record<string, number>>((acc, r) => ((acc[r.kind] = (acc[r.kind] ?? 0) + 1), acc), {}), notes: (c.notes ?? []).filter((n) => !n.tombstonedAt).length, rules: directives.map((r) => r.verbatim.slice(0, 80)) },
+      memory: { records: records.filter((r) => r.active).length, byKind: records.filter((r) => r.active).reduce<Record<string, number>>((acc, r) => ((acc[r.kind] = (acc[r.kind] ?? 0) + 1), acc), {}), notes: (c.notes ?? []).filter((n) => !n.tombstonedAt).length, rules: directives.map((r) => clip(r.verbatim, 80)) },
       lane: (d?.lane ?? c.niche ?? "").slice(0, 160),
       taste: (c.taste?.text ?? "").slice(0, 220),
       finishes: finishes.length,

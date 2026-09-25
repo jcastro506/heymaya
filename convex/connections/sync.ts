@@ -1,3 +1,4 @@
+import { clip } from "../lib/clip";
 /**
  * Connected numbers, the network half (plan Sprint 4e). Ingestion is code (law 3): she
  * never touches Zernio; rows do.
@@ -143,7 +144,7 @@ export const bootstrap = internalAction({
       await ctx.runMutation(internal.connections.zernio.recordHealth, { check: "bootstrap", ok: true, detail: `${written} rows across ${accounts.length} accounts` });
       return { accounts: accounts.length, rows, written, created };
     } catch (e) {
-      const detail = e instanceof Error ? e.message.slice(0, 200) : "bootstrap failed";
+      const detail = e instanceof Error ? clip(e.message, 200) : "bootstrap failed";
       await ctx.runMutation(internal.connections.zernio.recordHealth, { check: "bootstrap", ok: false, detail });
       return { accounts: accounts.length, rows, written, created, detail };
     }
@@ -223,7 +224,7 @@ export const delta = internalAction({
       }
       await ctx.runMutation(internal.connections.zernio.recordHealth, { check: "delta", ok: true, detail: `${written} written, ${skipped} skipped over ${pages} pages` });
     } catch (e) {
-      await ctx.runMutation(internal.connections.zernio.recordHealth, { check: "delta", ok: false, detail: e instanceof Error ? e.message.slice(0, 200) : "delta failed" });
+      await ctx.runMutation(internal.connections.zernio.recordHealth, { check: "delta", ok: false, detail: e instanceof Error ? clip(e.message, 200) : "delta failed" });
     }
     // B1: a connected post that pops is noticed within the hour, not at the next readback.
     for (const creatorId of touched) {
@@ -231,7 +232,7 @@ export const delta = internalAction({
         await ctx.runMutation(internal.onboarding.ingest.computeMultiples, { creatorId });
         await ctx.runMutation(internal.scout.readback.writeWins, { creatorId, now: Date.now() });
       } catch (e) {
-        console.error(`[zernio delta] wins for ${creatorId}: ${e instanceof Error ? e.message.slice(0, 120) : "failed"}`);
+        console.error(`[zernio delta] wins for ${creatorId}: ${e instanceof Error ? clip(e.message, 120) : "failed"}`);
       }
     }
     return { pages, rows, written, skipped };
@@ -276,7 +277,7 @@ export const followers = internalAction({
           snapshots++;
         }
       } catch (e) {
-        await ctx.runMutation(internal.connections.zernio.recordHealth, { check: "followers", ok: false, detail: e instanceof Error ? e.message.slice(0, 200) : "followers failed" });
+        await ctx.runMutation(internal.connections.zernio.recordHealth, { check: "followers", ok: false, detail: e instanceof Error ? clip(e.message, 200) : "followers failed" });
       }
     }
     return { creators: all.length, snapshots };
