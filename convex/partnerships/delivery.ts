@@ -177,12 +177,17 @@ export const checkOne = internalAction({ args: { creatorId: v.id("creators"), op
       if (check === "submit") candidates.push({ key: `partner-app-submit:${a.opportunityId}`, body: `did you get to submit the ${data.brand} application? tell me when you have, and i'll check back in a couple of weeks.` });
       if (check === "heard_back") candidates.push({ key: `partner-app-heard:${a.opportunityId}`, body: `heard anything back from ${data.brand} about your application?` });
       if (followUpEligible(data, Date.now())) candidates.push({ key: `partner-followup:${a.opportunityId}:${data.followUpAt}`, body: data.followUpBasis === "user_requested" ? `you asked me to revisit ${data.brand} around now. want to work out the next step?` : `we haven’t received a reply from ${data.brand} in the tracked email conversation. want me to prepare a follow-up for you to review?` });
+      // K1: the brand opened their per-brand kit link: said once, and only a statement (nothing to answer).
+      const opened = await ctx.runQuery(internal.partnerships.kitSettings.openedUntold, { creatorId: a.creatorId, opportunityId: a.opportunityId });
+      if (opened) candidates.push({ key: `partner-kit-open:${opened.id}`, body: `${data.brand} opened your media kit. nothing to do yet, just good to know.` });
       // §8.3: one partnerships nudge a day across all their brands; the rest wait for tomorrow.
       if (candidates.length && await ctx.runQuery(internal.partnerships.delivery.nudgedToday, { creatorId: a.creatorId })) return;
       for (const candidate of candidates) {
         if (await ctx.runQuery(internal.core.messages.exists, { creatorId: a.creatorId, dedupeKey: candidate.key })) continue;
-        await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: candidate.body, dedupeKey: candidate.key, proactive: true, kind: "partnership", awaitingAnswer: true });
+        const kitOpen = candidate.key.startsWith("partner-kit-open:");
+        await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: candidate.body, dedupeKey: candidate.key, proactive: true, kind: "partnership", awaitingAnswer: !kitOpen });
         if (candidate.key.startsWith("partner-app-")) await ctx.runMutation(internal.partnerships.delivery.countCheckIn, { creatorId: a.creatorId, opportunityId: a.opportunityId });
+        if (kitOpen && opened) await ctx.runMutation(internal.partnerships.kitSettings.markOpenedTold, { id: opened.id });
         break; // One useful interruption, respecting the existing cadence rails.
       }
     } catch {
