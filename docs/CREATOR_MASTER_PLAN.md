@@ -94,7 +94,7 @@ Three tracks run side by side where they don't depend on each other: **Brain** (
 | 17 | **B5**: re-bench, model decision for diagnosis, sign-off on the scorecard | Brain | 6–10, 13 | Sign the scorecard |
 | 17a | **R1**: the creator product's release path (below) | Platform | 10a | **Go/no-go on replacing the product on staging, then prod** |
 | 17b | **W1**: the landing page for an app (below). **Built 2026-09-25**: the page, `/join` → App Store/TestFlight, QR, smart app banner, tests. Open: real Simulator captures, Lighthouse | App/web | 11, 14, R1 | The C1 copy pass; set `NEXT_PUBLIC_TESTFLIGHT_URL` now, `NEXT_PUBLIC_APP_STORE_URL` once live |
-| 17c | **K1**: the media kit and the pitch, done properly (below). Partner tier only | Brain/app | 13 (B6) | Nothing to start. Live exit: 3 partner-tier pilots |
+| 17c | **K1**: the media kit and the pitch, done properly (below). Partner tier only. **Built 2026-09-26**: kit v2, the page, per-brand links, pitch rules and send window, the app card, the sims. Open: the live sim runs, the Swift build, 10 bench cases | Brain/app | 13 (B6) | Run the sims (docs/DEALS_WORLD_SIM.md). Live exit: 3 partner-tier pilots |
 
 ### Phase 5 — Native surfaces (≈ 1.5 weeks)
 
@@ -292,6 +292,13 @@ N1 lives inside the hourly jobs, so first a look at all of them. **29 crons** in
 **Tests (the five categories):** cross-tenant (A's variant never shows B's posts; A can't read B's kit photo) · fail-closed (below partner tier every kit and variant tool refuses; a revoked slug is a 404) · adversarial (a brand name with markup, a screenshot with injected text, a photo that isn't a person) · sibling coherence (kit numbers equal the numbers she texts; the app and the page read one `readKit`) · TODO grep.
 
 **Exit, live:** 3 partner-tier pilots each have a kit they'd send, and one real pitch draft each that the operator reads and would send unchanged.
+
+**Built (2026-09-26):**
+- `partnerships/kitData.ts` (kit v2, every number a dated row; the public view), `kitSettings.ts` (the one shared function for the one line, audience opt-in, photo, TikTok audience; per-brand links; opens), `kitImage.ts` (a texted photo or TikTok Studio screenshot, one Gemini look; the default photo's one check), `kitTools.ts` (`media_kit` v2 with its one `next:` question, `media_kit_edit`, `kit_for_brand`; partner tier only, like the partnership belt), `pitch.ts` (the playbook, the code checks, the weekday-morning window, the disclosure line). Schema: `mediaKits`, `kitVariants` (both in deletion, export and the sim ageing map).
+- The page `/k/<slug>` (base and per-brand; prints to PDF; views reported after the response).
+- The app: `ui:kit`, `kitSettings:appUpdate`, `photoUploadUrl`; the Deals tab's kit card (photo picker, the one line with Use this / Edit, the audience switch, the link, the per-brand links with "opened"). The Swift is written to the existing patterns but hasn't been compiled here (no Xcode in this container).
+- Sims: 11 deals-world steps, `eval/dealsE2E` (three personas, fakes and real modes), and the same story deterministically in `dealsE2E.test.ts`. Run commands: `docs/DEALS_WORLD_SIM.md`.
+- Not built: the 10 Expert Bench cases; "learn which pitch shapes get replies" (needs real replies first).
 
 ## A1 — Account setup + analytics depth (planned 2026-09-24)
 

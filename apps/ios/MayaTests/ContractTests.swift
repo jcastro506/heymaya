@@ -52,6 +52,15 @@ final class ContractTests: XCTestCase {
     XCTAssertTrue(l.accounts.allSatisfy { $0.avatar != nil }, "watched accounts carry their avatars")
   }
 
+  /// K1: the Deals tab's kit card decodes ui:kit (the server test kitApp.test.ts keeps this fixture's shape true).
+  func testKit() throws {
+    let k = try load("kit", as: KitInfo.self)
+    XCTAssertEqual(k.platforms.map(\.platform), ["instagram", "tiktok"])
+    XCTAssertEqual(k.oneLine?.approved, false, "a proposed line waits for their yes")
+    XCTAssertTrue(k.brandLinks.allSatisfy { $0.url.contains("/k/") })
+    XCTAssertNil(k.showAudience, "not asked yet")
+  }
+
   func testOpportunitiesLockedTeaserIsGrounded() throws {
     let o = try load("opportunities", as: Opportunities.self)
     XCTAssertFalse(o.unlocked)

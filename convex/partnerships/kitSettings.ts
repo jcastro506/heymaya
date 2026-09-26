@@ -174,6 +174,29 @@ export const update = mutation({
   },
 });
 
+/** The app's door with flat arguments (the Swift client sends plain fields); the same shared function. */
+export const appUpdate = mutation({
+  args: { op: v.string(), text: v.optional(v.string()), on: v.optional(v.boolean()), source: v.optional(v.string()), storageId: v.optional(v.id("_storage")) },
+  handler: async (ctx, a): Promise<{ ok: true; note: string }> => {
+    const c = await creatorForIdentity(ctx);
+    if (!c) throw new Error("Not signed in");
+    const change = a.op === "edit_one_line" ? { op: a.op, text: a.text ?? "" }
+      : a.op === "approve_one_line" ? { op: a.op }
+      : a.op === "audience" ? { op: a.op, on: a.on === true }
+      : a.op === "photo" ? { op: a.op, source: a.source === "none" ? "none" : "auto" }
+      : a.op === "photo_upload" ? { op: a.op, storageId: a.storageId ?? "" }
+      : null;
+    if (!change) throw new Error("Not an app action");
+    const parsed = KitChange.parse(change);
+    if (parsed.op === "approve_one_line") {
+      const row = await kitSettings(ctx, c._id);
+      if (!row?.oneLine) throw new Error("There is no proposed one line to approve");
+      return await applyKitChange(ctx, c._id, { op: "edit_one_line", text: row.oneLine.text });
+    }
+    return await applyKitChange(ctx, c._id, parsed);
+  },
+});
+
 export const photoUploadUrl = mutation({
   args: {},
   handler: async (ctx): Promise<string> => {

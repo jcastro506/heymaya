@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 
 /// Money she finds you (spec §6.6, D6). Everyone sees the tab; the partner plan unlocks it.
@@ -178,24 +179,142 @@ enum DealType {
   }
 }
 
-/// B6: the public media-kit link for pitches and brand forms. Public numbers only; off kills the link.
+/// K1: their media kit. The photo (theirs, never made or edited), the one line she proposed (on the kit
+/// only once they say yes), whether brands see who watches, the headline numbers, the link to share, and
+/// the per-brand links she made for pitches (with "opened"). Every change here is one a text can make too.
 struct MediaKitCard: View {
-  @State private var link: URL?
+  @State private var kit = Live<KitInfo?>("ui:kit")
   @State private var busy = false
+  @State private var picked: PhotosPickerItem?
+  @State private var editing = false
+  @State private var draftLine = ""
+  @State private var legacyLink: URL?
 
   var body: some View {
     Card {
       Text("Your media kit").font(MayaFont.headline).foregroundStyle(Palette.ink)
-      Text("A page with your followers, typical views and best posts, to paste into a pitch or a brand's form. Never your rates.").font(MayaFont.callout).foregroundStyle(Palette.muted)
-      if let url = link {
-        HStack {
-          SwiftUI.ShareLink(item: url) { Label("Share", systemImage: "square.and.arrow.up") }.buttonStyle(.borderedProminent).tint(Palette.purple)
-          Spacer()
-          Button("Turn off") { Task { busy = true; _ = await Actions.mediaKitLink(on: false); link = nil; busy = false } }.disabled(busy).foregroundStyle(Palette.muted)
-        }
-      } else {
-        Button { Task { busy = true; link = await Actions.mediaKitLink(on: true); busy = false } } label: { Label("Get my link", systemImage: "link") }.buttonStyle(.bordered).tint(Palette.purple).disabled(busy)
+      switch kit.state {
+      case .loading:
+        SkeletonRows(count: 2)
+      case .failed(let message):
+        ErrorNote(message: message)
+      case .value(nil):
+        EmptyNote(text: "Your media kit comes with the partnerships plan.")
+      case .value(let k?):
+        content(k)
       }
     }
+    .task { await kit.run() }
+    .onChange(of: picked) { _, item in
+      guard let item else { return }
+      Task {
+        busy = true
+        if let data = try? await item.loadTransferable(type: Data.self), let jpeg = Self.jpeg(data) { _ = await Actions.uploadKitPhoto(jpeg) }
+        picked = nil
+        busy = false
+      }
+    }
+    .alert("The line at the top of your kit", isPresented: $editing) {
+      TextField("A few words about you and what you make", text: $draftLine)
+      Button("Save") { Task { _ = await Actions.kitUpdate(["op": "edit_one_line", "text": draftLine]) } }
+      Button("Cancel", role: .cancel) {}
+    } message: {
+      Text("Words only: the numbers come from your accounts.")
+    }
+  }
+
+  @ViewBuilder
+  private func content(_ k: KitInfo) -> some View {
+    HStack(spacing: 14) {
+      Group {
+        if let s = k.photo, let url = URL(string: s) {
+          AsyncImage(url: url) { $0.resizable().scaledToFill() } placeholder: { Palette.wash }
+        } else {
+          ZStack { Palette.wash; Image(systemName: "person.crop.circle").font(.title).foregroundStyle(Palette.muted) }
+        }
+      }
+      .frame(width: 64, height: 64)
+      .clipShape(Circle())
+      VStack(alignment: .leading, spacing: 6) {
+        PhotosPicker(selection: $picked, matching: .images) {
+          Label(k.photoSource == "upload" ? "Change photo" : "Use a photo of me", systemImage: "photo")
+        }
+        .font(MayaFont.callout.weight(.semibold)).tint(Palette.purple).disabled(busy)
+        Menu {
+          Button("Use my profile picture") { Task { _ = await Actions.kitUpdate(["op": "photo", "source": "auto"]) } }
+          Button("No photo on my kit") { Task { _ = await Actions.kitUpdate(["op": "photo", "source": "none"]) } }
+        } label: {
+          Text(k.photoSource == "none" ? "No photo" : "Photo options").font(MayaFont.caption).foregroundStyle(Palette.muted)
+        }
+      }
+    }
+    if k.photoWeak != nil && k.photoSource != "upload" && k.photoSource != "none" {
+      Text("Your profile picture isn't a clear photo of you. Brands like to see who they're working with.")
+        .font(MayaFont.caption).foregroundStyle(Palette.muted)
+    }
+
+    VStack(alignment: .leading, spacing: 6) {
+      if let line = k.oneLine {
+        Text("“\(line.text)”").font(MayaFont.callout).foregroundStyle(Palette.ink)
+        HStack {
+          if !line.approved {
+            Button("Use this") { Task { _ = await Actions.kitUpdate(["op": "approve_one_line"]) } }
+              .buttonStyle(.borderedProminent).tint(Palette.purple)
+          }
+          Button(line.approved ? "Edit" : "Write my own") { draftLine = line.text; editing = true }
+            .foregroundStyle(Palette.purple)
+        }
+        .font(MayaFont.callout)
+      } else {
+        Button("Add a line about you") { draftLine = ""; editing = true }.font(MayaFont.callout).foregroundStyle(Palette.purple)
+      }
+    }
+
+    ForEach(k.platforms) { p in
+      HStack(spacing: 12) {
+        PlatformBadge(platform: p.platform)
+        Text([p.followers.map { "\(Format.count($0)) followers" }, p.typicalViews.map { "\(Format.count($0)) typical views" }, p.engagement.map { "\(String(format: "%.1f", $0 * 100))% engagement" }].compactMap { $0 }.joined(separator: " · "))
+          .font(MayaFont.caption.monospacedDigit()).foregroundStyle(Palette.muted)
+      }
+    }
+
+    if k.platforms.contains(where: \.hasAudience) {
+      Toggle(isOn: Binding(get: { k.showAudience == true }, set: { on in Task { _ = await Actions.kitUpdate(["op": "audience", "on": on]) } })) {
+        Text("Show who watches (age, gender, places)").font(MayaFont.callout)
+      }
+      .tint(Palette.purple)
+    }
+
+    if let s = k.link ?? legacyLink?.absoluteString, let url = URL(string: s) {
+      HStack {
+        SwiftUI.ShareLink(item: url) { Label("Share my kit", systemImage: "square.and.arrow.up") }.buttonStyle(.borderedProminent).tint(Palette.purple)
+        Spacer()
+        Button("Turn off") { Task { busy = true; _ = await Actions.mediaKitLink(on: false); legacyLink = nil; busy = false } }.disabled(busy).foregroundStyle(Palette.muted)
+      }
+    } else {
+      Button { Task { busy = true; legacyLink = await Actions.mediaKitLink(on: true); busy = false } } label: { Label("Get my link", systemImage: "link") }.buttonStyle(.bordered).tint(Palette.purple).disabled(busy)
+    }
+
+    if !k.brandLinks.isEmpty {
+      SectionHeader(text: "Made for a brand")
+      ForEach(k.brandLinks.filter(\.live)) { b in
+        HStack {
+          Text(b.brand).font(MayaFont.callout).foregroundStyle(Palette.ink)
+          if b.opened { Chip(text: "opened", color: Palette.ok) }
+          Spacer()
+          if let url = URL(string: b.url) { SwiftUI.ShareLink(item: url) { Image(systemName: "square.and.arrow.up") }.accessibilityLabel("Share the \(b.brand) link") }
+        }
+      }
+    }
+    Text("Your numbers come straight from your accounts. Never your rates.").font(MayaFont.caption).foregroundStyle(Palette.muted)
+  }
+
+  /// A photo small enough to send (the long side at most 1600 px), as JPEG. Resizing only; never edited.
+  static func jpeg(_ data: Data) -> Data? {
+    guard let image = UIImage(data: data) else { return nil }
+    let scale = min(1, 1600 / max(image.size.width, image.size.height))
+    let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+    let resized = UIGraphicsImageRenderer(size: size).image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
+    return resized.jpegData(compressionQuality: 0.85)
   }
 }

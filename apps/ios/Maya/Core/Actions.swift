@@ -59,6 +59,34 @@ enum Actions {
     await ok("ui:saveIdea", ["id": ideaId, "saved": saved])
   }
 
+  /// K1: a change to their media kit (the one line, the audience switch, the photo), the same function a text uses.
+  static func kitUpdate(_ args: [String: ConvexEncodable?]) async -> Bool {
+    await ok("partnerships/kitSettings:appUpdate", args)
+  }
+
+  /// K1: a photo of them for the kit, from their library. Uploaded to storage, then set; never edited.
+  static func uploadKitPhoto(_ jpeg: Data) async -> Bool {
+    if Fixtures.enabled {
+      Haptics.success()
+      return true
+    }
+    do {
+      let target: String = try await convex.mutation("partnerships/kitSettings:photoUploadUrl", with: [:])
+      guard let url = URL(string: target) else { return false }
+      var request = URLRequest(url: url)
+      request.httpMethod = "POST"
+      request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+      let (body, _) = try await URLSession.shared.upload(for: request, from: jpeg)
+      struct Uploaded: Decodable { let storageId: String }
+      let up = try JSONDecoder().decode(Uploaded.self, from: body)
+      return await ok("partnerships/kitSettings:appUpdate", ["op": "photo_upload", "storageId": up.storageId])
+    } catch {
+      print("[Actions] kit photo: \(error)")
+      Haptics.warning()
+      return false
+    }
+  }
+
   static func revokeRule(id: String) async -> Bool {
     await ok("ui:revokeRule", ["id": id])
   }

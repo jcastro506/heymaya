@@ -1,0 +1,17 @@
+{
+ "link": "https://hey-maya.ai/k/fixturekit01",
+ "photo": "https://impressive-roadrunner-997.convex.cloud/api/storage/00000000-0000-0000-0000-000000000000",
+ "photoSource": "instagram",
+ "photoWeak": null,
+ "oneLine": { "text": "Brisbane runner making honest early-morning running videos", "approved": false },
+ "showAudience": null,
+ "services": ["Sponsored posts", "UGC (videos for the brand's own channels)"],
+ "platforms": [
+  { "platform": "instagram", "followers": 8050, "typicalViews": 9800, "engagement": 0.061, "growth30d": 214, "hasAudience": true, "best": 6 },
+  { "platform": "tiktok", "followers": 2140, "typicalViews": 5100, "engagement": 0.084, "growth30d": null, "hasAudience": false, "best": 4 }
+ ],
+ "brandLinks": [
+  { "brand": "Pacefern Hydration", "url": "https://hey-maya.ai/k/fixturevar01", "opened": true, "live": true },
+  { "brand": "Loopline Running Club", "url": "https://hey-maya.ai/k/fixturevar02", "opened": false, "live": false }
+ ]
+}

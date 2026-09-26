@@ -10,6 +10,8 @@ import { applyIdeaAct } from "./core/ideaActs";
 import { isUnseen } from "./core/unseen";
 import { TIERS, TIER_NAMES, entitlementsFor, price } from "./billing/tiers";
 import { partnershipsOpen } from "./partnerships/store";
+import { readKitV2 } from "./partnerships/kitData";
+import { kitUrl } from "./partnerships/kitPage";
 import { brandsPaying } from "./partnerships/signals";
 import { markApplied as markAppliedFor } from "./partnerships/delivery";
 import { connectedFrom, DIAGNOSIS_WORDS, numbersFor } from "./connections/numbers";
@@ -381,6 +383,38 @@ export const blockControl = mutation({
  * with none, the count is 0 and the app shows no number. Never invented, never another
  * creator's rows.
  */
+/**
+ * K1: the kit, for the Deals tab: the photo, the one line (and whether it's approved), the audience
+ * switch, the headline numbers per platform, the link, and the per-brand links with "opened". Null
+ * below the partnerships plan (the locked Deals screen shows the teaser instead).
+ */
+export const kit = query({
+  args: {},
+  handler: async (ctx) => {
+    const c = await me(ctx);
+    if (!c || !partnershipsOpen(c)) return null;
+    const k = await readKitV2(ctx, c);
+    const variants = (await ctx.db.query("kitVariants").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").take(20)) as Doc<"kitVariants">[];
+    const links = [];
+    for (const x of variants) {
+      const o = (await ctx.db.get(x.opportunityId)) as Doc<"partnershipOpportunities"> | null;
+      const status = String((o?.data as { status?: string } | undefined)?.status ?? "closed");
+      links.push({ brand: x.brand, url: kitUrl(x.slug), opened: Boolean(x.openedAt), live: !["declined", "closed", "suppressed", "completed"].includes(status) });
+    }
+    return {
+      link: c.kitLink ? kitUrl(c.kitLink.slug) : null,
+      photo: k.photo?.url ?? null,
+      photoSource: k.photoSetting === "none" ? "none" : k.photo?.source ?? "missing",
+      photoWeak: k.photoSetting === "auto" && k.photoCheck?.weak ? k.photoCheck.reason : null,
+      oneLine: k.oneLine,
+      showAudience: k.showAudience,
+      services: k.services,
+      platforms: k.platforms.map((p) => ({ platform: p.platform, followers: p.followers, typicalViews: p.normalViews, engagement: p.engagement?.perView ?? null, growth30d: p.growth30d?.net ?? null, hasAudience: Boolean(p.audience), best: p.best.length })),
+      brandLinks: links,
+    };
+  },
+});
+
 export const opportunities = query({
   args: {},
   handler: async (ctx) => {
