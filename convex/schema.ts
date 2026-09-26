@@ -831,6 +831,45 @@ export default defineSchema({
   partnershipDrafts: defineTable({ creatorId: v.id("creators"), opportunityId: v.id("partnershipOpportunities"), data: v.any(), updatedAt: v.number() }).index("by_creator", ["creatorId"]).index("by_opportunity", ["opportunityId"]),
   partnershipEvents: defineTable({ creatorId: v.id("creators"), opportunityId: v.id("partnershipOpportunities"), key: v.string(), kind: v.string(), text: v.string(), at: v.number() }).index("by_creator", ["creatorId"]).index("by_opportunity", ["opportunityId"]).index("by_key", ["creatorId", "key"]),
   partnershipResearch: defineTable({ creatorId: v.id("creators"), month: v.string(), calls: v.number(), data: v.any(), queries: v.optional(v.array(v.object({ q: v.string(), at: v.number() }))), updatedAt: v.number() }).index("by_creator", ["creatorId"]).index("by_month", ["creatorId", "month"]),
+  // K1: the media kit's settings (partner tier). Kept apart from partnershipProfiles on purpose: a
+  // preference change there cancels pending drafts, and a new photo must not.
+  mediaKits: defineTable({
+    creatorId: v.id("creators"),
+    /** Their one line at the top of the kit. She proposes it; only "approved" goes on the page. */
+    oneLine: v.optional(v.object({ text: v.string(), status: v.union(v.literal("proposed"), v.literal("approved")), at: v.number() })),
+    /** Audience on the PUBLIC page: undefined = not asked yet, then their answer. */
+    showAudience: v.optional(v.boolean()),
+    /** "auto" = their profile picture; "upload" = one they sent (its own stored copy); "none" = no photo. */
+    photo: v.optional(v.object({ source: v.union(v.literal("auto"), v.literal("upload"), v.literal("none")), storageId: v.optional(v.id("_storage")), at: v.number() })),
+    /** Her one look at the default photo; offered at most once. */
+    photoCheck: v.optional(v.object({ weak: v.boolean(), reason: v.string(), checkedAt: v.number(), offeredAt: v.optional(v.number()) })),
+    /** TikTok doesn't share an account's audience: read from their TikTok Studio screenshot, dated. */
+    tiktokAudience: v.optional(v.object({
+      age: v.array(v.object({ label: v.string(), share: v.number() })),
+      gender: v.array(v.object({ label: v.string(), share: v.number() })),
+      countries: v.array(v.object({ label: v.string(), share: v.number() })),
+      at: v.number(),
+    })),
+    /** What she asked them for, so their next image goes to the kit (48 h). */
+    pendingAsk: v.optional(v.object({ kind: v.union(v.literal("photo"), v.literal("tiktok_audience")), at: v.number() })),
+    /** The kit's one-time questions, by key ("audience", "oneLine", "photo"), with when she asked. */
+    asked: v.optional(v.record(v.string(), v.number())),
+    updatedAt: v.number(),
+  }).index("by_creator", ["creatorId"]),
+  // K1: a per-brand view of the kit. Leads with the posts she picked for that brand plus one idea;
+  // dies when the relationship closes. Opens are counted only here (never on the base kit).
+  kitVariants: defineTable({
+    creatorId: v.id("creators"),
+    opportunityId: v.id("partnershipOpportunities"),
+    slug: v.string(),
+    brand: v.string(),
+    postUrls: v.array(v.string()),
+    idea: v.string(),
+    createdAt: v.number(),
+    openedAt: v.optional(v.number()),
+    openedToldAt: v.optional(v.number()),
+    closedAt: v.optional(v.number()),
+  }).index("by_slug", ["slug"]).index("by_opportunity", ["opportunityId"]).index("by_creator", ["creatorId"]),
   partnershipMailboxes: defineTable({ creatorId: v.id("creators"), email: v.string(), tokenRef: v.string(), generation: v.string(), attention: v.optional(v.string()), updatedAt: v.number() }).index("by_creator", ["creatorId"]),
 
   // -------------------------------------------------------------- vendorHealth

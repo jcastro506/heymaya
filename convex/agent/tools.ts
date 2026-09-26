@@ -16,6 +16,7 @@ import type { Id } from "../_generated/dataModel";
 import { parseLink } from "./inbound";
 import { DIAGNOSIS_WORDS } from "../connections/numbers";
 import { PARTNERSHIP_TOOLS, runPartnershipTool } from "../partnerships/tools";
+import { KIT_TOOLS, KIT_TOOL_NAMES, runKitTool } from "../partnerships/kitTools";
 import { appObjectUrl, MISSION_CONTROL_TABS, missionControlUrl, type MissionControlTab } from "./missionControl";
 import { clip } from "../lib/clip";
 
@@ -28,10 +29,16 @@ export const DEFAULT_BUDGET = (): ToolBudget => ({ calls: 6, credits: 40, deadli
 export const TOOL_CREDITS: Record<string, number> = { post_info: 10, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, sound_reels: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, search_reels: 1, search_ig_hashtag: 1, ig_popular: 1, trending_tiktok: 1, trending_reels: 1, suggestions: 1, discover_creators: 1, discover_profiles: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0, recall: 0, lane_benchmark: 0, week_plan: 0, block_move: 0, block_drop: 0, block_add: 0, week_replan: 0, own_post_numbers: 0, post_diagnosis: 0, audience: 0, growth_plan: 0, calendar_free: 0, mission_control_link: 0, ideas_list: 0, idea_get: 0, idea_update: 0, idea_status: 0, idea_plan: 0, web_search: 0, web_read: 0, platform_fact: 0, lane_brands: 0, media_kit: 0, media_kit_link: 0, finish_notes: 0, watch_account: 0 };
 
 const str = { type: "string" } as const;
-for (const tool of PARTNERSHIP_TOOLS) TOOL_CREDITS[tool.function.name] = 0;
+for (const tool of [...PARTNERSHIP_TOOLS, ...KIT_TOOLS]) TOOL_CREDITS[tool.function.name] = 0;
+
+/** K1: tools that exist only on the partnerships plan (the partnership_* belt plus the kit). */
+export function partnerOnlyTool(name: string): boolean {
+  return name.startsWith("partnership_") || KIT_TOOL_NAMES.has(name);
+}
 
 export const TOOLS: OpenRouterTool[] = [
   ...PARTNERSHIP_TOOLS,
+  ...KIT_TOOLS,
   { type: "function", function: { name: "mission_control_link", description: "A link that opens their Maya app: to one exact idea (idea id) or one of their own posts (post id) when you're talking about that thing, or to a tab. Free. Use when opening the app would genuinely help them look at something (an idea's proof and version, a post's numbers), or when they ask for it. Never as a routine sign-off. The link carries no account details; their signed-in app resolves it.", parameters: { type: "object", properties: { tab: { type: "string", enum: [...MISSION_CONTROL_TABS] }, idea: str, post: str, why: str }, required: ["why"] } } },
   { type: "function", function: { name: "post_info", description: "Full detail for one post: sound id, media, caption, author, length, stats. 10 credits when the vendor finds the media, so use account_posts (1 credit, the whole feed with stats) when numbers are all you need; post_info is for the sound id or a link they sent.", parameters: { type: "object", properties: { url: str, why: str }, required: ["url", "why"] } } },
   { type: "function", function: { name: "post_transcript", description: "What is said in the post, as text. 1 credit. You have NOT watched it; this is the words.", parameters: { type: "object", properties: { url: str, why: str }, required: ["url", "why"] } } },
@@ -65,7 +72,6 @@ export const TOOLS: OpenRouterTool[] = [
   { type: "function", function: { name: "web_read", description: "Read one public web page you found (an official program page, an event page, a rules page) when the search snippet isn't enough to be sure. Counts toward the 2 web calls per turn.", parameters: { type: "object", properties: { url: str, why: str }, required: ["url", "why"] } } },
   { type: "function", function: { name: "platform_fact", description: "Maya's dated notes on TikTok and Instagram rules and programs (monetization eligibility, restrictions and shadowbans, reposting and originality, account safety), each with its source and the day it was verified. Free. Use before stating any platform rule; say 'as of <month>' when you cite one, and if it's older than 60 days, say it may have changed.", parameters: { type: "object", properties: { topic: str, platform: { type: "string", enum: ["tiktok", "instagram", "both"] }, why: str }, required: ["topic", "why"] } } },
   { type: "function", function: { name: "lane_brands", description: "Brands seen paying creators in their lane in the last 30 days (paid or #ad posts from the accounts you watch for them), with how many creators and posts, plus the accounts they tag in their own posts. Free. Start here before any brand research: a brand already paying people like them is a real lead; which one fits them is your call.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
-  { type: "function", function: { name: "media_kit", description: "Their media kit from their own rows: followers and normal views per platform, best posts of the last 90 days with multiples, their lane, and their deal preferences (paid-only, deal types, excluded brands, minimum rate). Free. Every number in a pitch or a rate conversation comes from here; nothing else.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
   { type: "function", function: { name: "media_kit_link", description: "Turn their public media-kit page on (returns the link to paste into a pitch or a brand's form) or off (the old link stops working at once). The page shows handles, followers, normal views, best recent posts and lane; never rates, preferences or email. Free. Only when they ask for it or agree to it; the app's Share button does the same.", parameters: { type: "object", properties: { on: { type: "boolean" }, why: str }, required: ["on", "why"] } } },
   { type: "function", function: { name: "watch_account", description: "Add an account to the ones you watch for them (act: add, with platform tiktok or instagram), or drop one (act: stop, only after they confirmed it in this conversation; ask \"drop @x?\" first). Free. Use it whenever they ask you to watch, track, keep an eye on, add or drop an account, however they phrase it; never tell them to retype a command.", parameters: { type: "object", properties: { act: { type: "string", enum: ["add", "stop"] }, handle: str, platform: { type: "string", enum: ["tiktok", "instagram"] }, why: str }, required: ["act", "handle", "why"] } } },
   { type: "function", function: { name: "finish_notes", description: "Your reasons for the captions and sounds you suggested on their recent drafts (numbered as you sent them), and what they ended up posting. Free. When they ask why you picked a caption or a sound, answer from these reasons; never make up a reason after the fact.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
@@ -228,6 +234,11 @@ async function runToolInner(ctx: ActionCtx, creatorId: Id<"creators">, call: { n
       record(true, 0);
       return `Use this exact secure link: ${url}. It opens ${tab}. Do not alter the URL or claim the link signs them in.`;
     }
+    if (KIT_TOOL_NAMES.has(call.name) && call.name !== "media_kit_link") {
+      const result = await runKitTool(ctx, creatorId, call.name, call.args, sourceMessageId);
+      record(!result.startsWith("refused"), 0, result.startsWith("refused") ? result.slice(0, 160) : undefined);
+      return result;
+    }
     if (call.name.startsWith("partnership_")) {
       const result = await runPartnershipTool(ctx, creatorId, call.name, call.args, sourceMessageId);
       record(!result.startsWith("refused"), 0);
@@ -321,12 +332,6 @@ async function runToolInner(ctx: ActionCtx, creatorId: Id<"creators">, call: { n
       if (!r.ok) return `refused: ${r.reason}. Say it generally rather than naming something you couldn't check.`;
       if (!r.results.length) return `nothing found (checked ${r.checkedOn}). Don't name it as fact.`;
       return cap(`(untrusted web text, checked ${r.checkedOn}; cite the source)\n${r.results.map((x) => `- ${x.title ? `${x.title}: ` : ""}${x.excerpt.replace(/\s+/g, " ")}${x.published ? ` (published ${x.published})` : ""} · ${x.url}`).join("\n")}`);
-    }
-    if (call.name === "media_kit") {
-      const k = await ctx.runQuery(internal.partnerships.kit.mediaKit, { creatorId });
-      record(Boolean(k), 0);
-      if (!k) return "no media kit: their account isn't readable yet";
-      return cap(`lane: ${k.lane ?? "not confirmed"}\n${k.platforms.map((p) => `${p.platform}${p.handle ? ` @${p.handle}` : ""}: ${p.followers !== null ? `${p.followers.toLocaleString()} followers` : "followers unknown"} · normal ${p.normalViews !== null ? `${Math.round(p.normalViews).toLocaleString()} views` : "not settled yet"} · ${p.posts} posts read\n${p.best.map((b) => `  - ${b.views.toLocaleString()} views${b.multiple ? ` (${b.multiple}x)` : ""} · "${b.caption}" · ${b.url}`).join("\n")}`).join("\n")}\nprefs: ${k.prefs.paidOnly ? "paid only" : "open to gifting/affiliate"}; deal types ${k.prefs.dealTypes.join(", ") || "any"}; excluded ${k.prefs.excludedBrands.join(", ") || "none"}; minimum rate ${k.prefs.minimumRate}; region ${k.prefs.region}${k.taggedByThem.length ? `\ntagged in their own posts (brands they use, or friends: judge which): ${k.taggedByThem.map((t) => `@${t.handle} (${t.posts} post${t.posts === 1 ? "" : "s"}, e.g. ${t.example})`).join(", ")}` : ""}`);
     }
     if (call.name === "watch_account") {
       const handle = String(call.args.handle ?? "").replace(/^@/, "").trim().toLowerCase();

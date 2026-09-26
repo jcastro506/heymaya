@@ -11,14 +11,11 @@ import { query, type MutationCtx } from "../_generated/server";
 import { internalMutation, mutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
 import { creatorForIdentity } from "../core/identity";
-import { readKit } from "./kit";
+import { publicView, readKitV2, type PublicKitV2 } from "./kitData";
+import { partnershipsOpen } from "./store";
+import { CLOSED, Opportunity } from "./contracts";
 
-export interface PublicKit {
-  name: string;
-  lane: string | null;
-  asOf: string;
-  platforms: Array<{ platform: string; handle: string | null; followers: number | null; normalViews: number | null; best: Array<{ url: string; views: number; caption: string }> }>;
-}
+export type PublicKit = PublicKitV2;
 
 function slug(): string {
   const bytes = new Uint8Array(12);
@@ -34,6 +31,8 @@ export function kitUrl(s: string, env: Record<string, string | undefined> = proc
 export async function setKitLink(ctx: MutationCtx, creatorId: Id<"creators">, on: boolean): Promise<{ url: string | null }> {
   const c = (await ctx.db.get(creatorId)) as Doc<"creators"> | null;
   if (!c) throw new Error("creator not found");
+  // K1: the kit is a partnerships-plan thing; turning it OFF always works.
+  if (on && !partnershipsOpen(c)) throw new Error("Media kits are on the partnerships plan");
   if (!on) {
     await ctx.db.patch(creatorId, { kitLink: undefined });
     return { url: null };
@@ -57,19 +56,26 @@ export const kitLinkFor = internalMutation({
   handler: async (ctx, a): Promise<{ url: string | null }> => await setKitLink(ctx, a.creatorId, a.on),
 });
 
-/** Public, by slug: null for an unknown or revoked link. Only public numbers leave here. */
+/**
+ * Public, by slug: the base kit, or a per-brand link (K1). Null for an unknown, revoked or closed
+ * link, and for anyone not on the partnerships plan. Only what `publicView` allows leaves here:
+ * never rates, preferences, excluded brands or the brands they tag; the audience only with their yes.
+ */
 export const publicKit = query({
   args: { slug: v.string() },
   handler: async (ctx, a): Promise<PublicKit | null> => {
     if (!/^[a-z0-9]{8,40}$/.test(a.slug)) return null;
-    const c = (await ctx.db.query("creators").withIndex("by_kit_slug", (q) => q.eq("kitLink.slug", a.slug)).unique()) as Doc<"creators"> | null;
-    if (!c || c.plan.status === "deleting") return null;
-    const k = await readKit(ctx, c);
-    return {
-      name: c.handles.tiktok ?? c.handles.instagram ?? "creator",
-      lane: k.lane,
-      asOf: new Date().toISOString().slice(0, 10),
-      platforms: k.platforms.map((p) => ({ platform: p.platform, handle: p.handle, followers: p.followers, normalViews: p.normalViews, best: p.best.slice(0, 3).map((b) => ({ url: b.url, views: b.views, caption: b.caption })) })),
-    };
+    const variant = (await ctx.db.query("kitVariants").withIndex("by_slug", (q) => q.eq("slug", a.slug)).first()) as Doc<"kitVariants"> | null;
+    const c = variant
+      ? ((await ctx.db.get(variant.creatorId)) as Doc<"creators"> | null)
+      : ((await ctx.db.query("creators").withIndex("by_kit_slug", (q) => q.eq("kitLink.slug", a.slug)).unique()) as Doc<"creators"> | null);
+    if (!c || c.plan.status === "deleting" || !partnershipsOpen(c)) return null;
+    if (variant) {
+      const opp = (await ctx.db.get(variant.opportunityId)) as Doc<"partnershipOpportunities"> | null;
+      const d = opp ? Opportunity.safeParse(opp.data) : null;
+      if (!d?.success || CLOSED.has(d.data.status)) return null;
+      return publicView(await readKitV2(ctx, c), { brand: variant.brand, idea: variant.idea, postUrls: variant.postUrls });
+    }
+    return publicView(await readKitV2(ctx, c));
   },
 });

@@ -185,6 +185,7 @@ export const prepare = internalMutation({
  */
 export const CREATOR_INDEX: Record<(typeof TABLES_BY_CREATOR)[number], string | null> = {
   partnershipProfiles: "by_creator", partnershipOpportunities: "by_creator", partnershipDrafts: "by_creator", partnershipEvents: "by_creator", partnershipResearch: "by_creator", partnershipMailboxes: "by_creator",
+  mediaKits: "by_creator", kitVariants: "by_creator",
   trackedAccounts: "by_creator", ownPosts: "by_creator", ownPostReads: "by_creator", signals: "by_creator", ideas: "by_creator", predictions: "by_creator",
   calendarBlocks: "by_creator", calendarEvents: "by_creator_start", tasteEvents: "by_creator", oauthStates: null, connections: "by_creator", directives: "by_creator",
   messages: "by_creator", jobs: "by_creator", budgets: "by_creator_day", costEvents: "by_creator_at", memories: "by_creator_ref", personalRecords: "by_creator",

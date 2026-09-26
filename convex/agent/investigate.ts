@@ -12,7 +12,7 @@ import type { Id } from "../_generated/dataModel";
 import type { OpenRouterMessage } from "../integrations/openrouter/client";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "./registry";
-import { DEFAULT_BUDGET, runTool, TOOLS, type ToolBudget, type ToolCallRecord } from "./tools";
+import { DEFAULT_BUDGET, partnerOnlyTool, runTool, TOOLS, type ToolBudget, type ToolCallRecord } from "./tools";
 
 export interface InvestigateResult { content: string; trace: ToolCallRecord[]; ended: "answer" | "budget" | "model_error" | "no_answer"; turns: number }
 
@@ -34,7 +34,8 @@ export async function investigate(ctx: ActionCtx, input: { creatorId: Id<"creato
     { role: "user", content: `${input.user}\n\nBudget: ${budget.calls} tool calls, ${budget.credits} credits.` },
   ];
   const maxTurns = budget.calls + 2;
-  const availableTools = input.partnerships && input.sourceMessageId ? TOOLS : TOOLS.filter(t => !t.function.name.startsWith("partnership_"));
+  // K1: the kit tools ride with the partnership belt; below the partnerships plan neither exists.
+  const availableTools = input.partnerships && input.sourceMessageId ? TOOLS : TOOLS.filter(t => !partnerOnlyTool(t.function.name));
   for (let turn = 1; turn <= maxTurns; turn++) {
     const spent = trace.reduce((s, t) => s + (t.credits ?? 0), 0);
     const exhausted = trace.length >= budget.calls || Date.now() > budget.deadlineAt;

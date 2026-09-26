@@ -171,6 +171,11 @@ export const run = internalAction({
     }
     if (route.route === "file") {
       // A photo of a place is a moment, a screenshot is numbers, an edited clip is a draft: Gemini says which (Sprint 3d).
+      // K1: a photo for their media kit, or a TikTok Studio audience screenshot, when they said so or she asked.
+      if (route.media === "image") {
+        const k = await ctx.runAction(internal.partnerships.kitImage.handle, { messageId: target._id });
+        if (k.handled) return { ok: true, reason: `kit image: ${k.reason}` };
+      }
       if (route.media === "video" || route.media === "image") {
         const kind = await ctx.runAction(internal.agent.moment.kindOfMedia, { messageId: target._id });
         if (kind === "scene" || (kind === "unknown" && route.media === "image" && target.body.trim().length > 0)) {

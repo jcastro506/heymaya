@@ -36,7 +36,7 @@ export const CRITIC_TIMEOUT_MS = 25_000;
 /** Catch the distinctive self-description example even when the model swaps its noun. */
 export const reusesVoiceExample = (text: string): boolean => /\byep[,.] software\b[\s\S]{0,120}\bstill watched\b/i.test(text);
 export const assertsUnprovenCause = (text: string): boolean => /\b(worked|performed|took off) because\b|\bwhich is why\b.{0,100}\b(views|reach|followers)\b|\bthat'?s (really )?how people (find|follow)\b|\bwhat actually pulls? people in\b|\bbrands will notice\b|\bwill (do well|perform|take off)\b/i.test(text);
-const MUTATING_TOOLS = new Set(["block_move", "block_drop", "block_add", "idea_update", "idea_status", "idea_plan", "week_replan", "partnership_draft", "partnership_update", "partnership_send", "watch_account", "media_kit_link"]);
+const MUTATING_TOOLS = new Set(["block_move", "block_drop", "block_add", "idea_update", "idea_status", "idea_plan", "week_replan", "partnership_draft", "partnership_update", "partnership_send", "watch_account", "media_kit_link", "media_kit_edit", "kit_for_brand"]);
 export function claimsUnsupportedAction(text: string, trace: Array<{ tool?: string; ok?: boolean }>): boolean {
   // Only statements can claim an action: a question ("have you done a deal before?") can't, and
   // neither can something THEY did ("you've done the hard part"). Bench o1: "have you done paid
