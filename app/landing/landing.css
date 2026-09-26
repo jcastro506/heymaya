@@ -100,36 +100,91 @@
 .float-b .cal b { font-size: 19px; color: var(--ink); }
 @keyframes bob { 50% { transform: translateY(-8px); } }
 
-/* ——— Two halves ——— */
-.halves { padding: 90px 0; border-top: 1px solid var(--line); }
-.half-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-.half { position: relative; overflow: hidden; border-radius: 32px; padding: 36px; min-height: 380px; display: grid; align-content: start; gap: 12px; }
-.half h3 { font: 800 32px/1.05 var(--display); letter-spacing: -0.03em; }
-.half p { color: var(--muted); max-width: 40ch; }
-.half-msg { background: #eef5ff; }
-.half-app { background: var(--wash); }
-.half-icon { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; margin-bottom: 6px; }
-.half-msg .half-icon { background: linear-gradient(#5bf675, #0cbd2a); color: #fff; }
-.half-msg .half-icon svg { width: 30px; height: 30px; }
-.half-app .half-icon { background: var(--ink); }
-.half-app .half-icon .flower { width: 34px; height: 34px; }
-.half-bubbles { display: grid; gap: 6px; margin-top: 18px; font-family: var(--ios); font-size: 16px; }
-.half-bubbles .bub { max-width: 80%; }
-.half .bub-in { color: #000; }
-.half .bub-out { color: #fff; }
-.half-tiles { display: flex; gap: 10px; margin-top: 18px; }
-.half-tiles .cover { width: 90px; height: 150px; border-radius: 16px; box-shadow: 0 16px 30px -18px #29233f88; }
-.half-tiles .cover:nth-child(2) { transform: translateY(-14px) rotate(3deg); }
-.half-tiles .cover:nth-child(3) { transform: rotate(-3deg); }
-
-.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 28px; counter-reset: s; }
+/* ——— Setup steps ——— */
+.setup { padding: 90px 0; border-top: 1px solid var(--line); }
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; counter-reset: s; }
 .steps li { counter-increment: s; display: grid; gap: 4px; padding: 22px 22px 22px 70px; position: relative; border: 1px solid var(--line); border-radius: 22px; background: var(--panel); }
 .steps li::before { content: counter(s); position: absolute; left: 22px; top: 20px; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--coral); color: #fff; font: 800 17px/1 var(--display); }
 .steps b { font-size: 18px; }
 .steps span { color: var(--muted); font-size: 15px; }
 
+/* ——— She lives in your texts ——— */
+.texts { display: grid; grid-template-columns: 1fr 1.1fr; gap: 56px; align-items: center; padding: 100px 0; border-top: 1px solid var(--line); }
+.texts-copy { display: grid; gap: 18px; }
+.texts h2, .appsec h2, .sched h2, .deals h2 { font: 800 clamp(34px, 5vw, 58px)/1.02 var(--display); letter-spacing: -0.035em; }
+.texts h2 span, .appsec h2 span, .sched h2 span, .deals h2 span { color: var(--purple); }
+.texts-copy p, .appsec-copy p, .sched-copy p, .deals-copy > p { color: var(--muted); font-size: 19px; max-width: 44ch; }
+.mx .texts-strong { color: var(--ink); font-weight: 600; }
+.asks { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; font-family: var(--ios); font-size: 18px; padding: 28px; border-radius: 32px; background: #eef5ff; }
+.asks .bub { justify-self: auto; align-self: auto; animation: arrive .5s cubic-bezier(.2, .9, .3, 1.3) both; animation-delay: calc(var(--i) * 90ms); animation-timeline: view(); animation-range: entry 0% cover 30%; }
+.asks .bub:nth-child(3n) { background: #34c759; }
+
+/* ——— The app ——— */
+.appsec { padding: 100px 0; background: var(--wash); }
+.appsec-grid { display: grid; grid-template-columns: 1fr 1.1fr; gap: 56px; align-items: center; }
+.appsec-copy { display: grid; gap: 18px; }
+.appsec-stage { display: flex; justify-content: center; }
+.appsec-stage .ph-small { --w: 270px; }
+.appsec-stage .ph-small:first-child { transform: rotate(-3deg); z-index: 2; }
+.appsec-stage .ph-offset { margin-left: -50px; margin-top: 80px; transform: rotate(4deg); }
+
+/* ——— Team ——— */
+.team { padding: 100px 0; }
+.team-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.role { display: grid; align-content: start; gap: 12px; padding: 28px; border-radius: 28px; background: var(--panel); border: 1px solid var(--line); }
+.role-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.role-head b { font: 800 24px/1.1 var(--display); letter-spacing: -0.02em; }
+.role-plan { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #fff; background: var(--coral); padding: 4px 10px; border-radius: 99px; }
+.role > p { color: var(--muted); font-size: 16px; }
+.role .role-proof { justify-self: start; margin-top: auto; font-family: var(--ios); font-size: 15px; color: #000; }
+.role-6 { background: var(--ink); border-color: var(--ink); }
+.role-6 .role-head b { color: #fff; }
+.role-6 > p { color: #cfc8dc; }
+
+/* ——— Her schedule ——— */
+.sched { padding: 100px 0; background: var(--ink); color: #fff; }
+.sched-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 56px; align-items: start; }
+.sched-copy { display: grid; gap: 18px; position: sticky; top: 40px; }
+.sched-phone { --w: 250px; margin-top: 14px; }
+.sched .eyebrow { color: #cbbcf5; }
+.sched h2 span { color: #ffb3a3; }
+.mx .sched-copy > p { color: #cfc8dc; }
+.mx .sched-rules { color: #fff; font-weight: 600; border-left: 3px solid var(--coral); padding-left: 14px; }
+.sched-list { display: grid; gap: 0; }
+.sched-list > li { display: grid; grid-template-columns: 180px 1fr; gap: 20px; padding: 22px 0; border-top: 1px solid #ffffff22; }
+.sched-list > li > b { font: 800 18px/1.3 var(--display); color: #ffb3a3; }
+.sched-list ul { display: grid; gap: 8px; }
+.sched-list ul li { padding-left: 18px; position: relative; color: #e7e0fa; }
+.sched-list ul li::before { content: ""; position: absolute; left: 0; top: 10px; width: 7px; height: 7px; border-radius: 50%; background: var(--coral); }
+
+/* ——— Brand deals ——— */
+.deals { display: grid; grid-template-columns: 1.15fr 1fr; gap: 56px; align-items: center; padding: 100px 0; }
+.deals-copy { display: grid; gap: 18px; }
+.deal-steps { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; counter-reset: d; margin-top: 6px; }
+.deal-steps li { counter-increment: d; display: grid; gap: 4px; padding: 18px 18px 18px 58px; position: relative; border: 1px solid var(--line); border-radius: 20px; background: var(--panel); }
+.deal-steps li::before { content: counter(d); position: absolute; left: 18px; top: 17px; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--wash); color: var(--purple); font: 800 15px/1 var(--display); }
+.deal-steps b { font-size: 16px; }
+.deal-steps span { color: var(--muted); font-size: 14px; }
+.deals-stage { position: relative; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.deals-stage .ph { --w: 310px; }
+.float-deal { position: relative; left: auto; bottom: auto; max-width: 340px; margin-top: -34px; grid-template-columns: auto 1fr; font-weight: 500; font-family: var(--ios); font-size: 15px; line-height: 1.35; }
+.float-deal .flower { width: 30px; height: 30px; }
+
+/* Deals screen pieces */
+.s-kit { display: grid; gap: 1.6cqw; padding: 4.4cqw; border-radius: 5cqw; background: var(--wash); }
+.s-kit b { font: 600 4.8cqw/1.2 var(--app); }
+.s-kit p { font-size: 3.8cqw; color: var(--muted); line-height: 1.35; }
+.s-kit-row { display: flex; align-items: center; gap: 3cqw; margin-top: 1cqw; }
+.s-kit-btn { background: var(--purple); color: #fff; font-size: 3.8cqw; font-weight: 600; padding: 1.6cqw 4cqw; border-radius: 99px; }
+.s-deal { display: grid; gap: 1.4cqw; padding: 4cqw; border-radius: 5cqw; background: var(--panel); border: 1px solid var(--line); }
+.s-deal-head { display: flex; align-items: center; justify-content: space-between; gap: 2cqw; }
+.s-deal-head b { font: 600 4.6cqw/1.2 var(--app); }
+.s-deal p { font-size: 3.8cqw; line-height: 1.35; }
+.s-deal small { font-size: 3.4cqw; font-weight: 600; color: var(--purple); }
+.chip.purple { color: var(--purple); background: #7661b41f; }
+
 /* ——— Tour ——— */
-.tour { padding: 90px 0 40px; background: linear-gradient(var(--ground), #f7f3fc 20%, #f7f3fc 80%, var(--ground)); }
+.tour { padding: 90px 0 40px; border-top: 1px solid var(--line); background: linear-gradient(var(--ground), #f7f3fc 20%, #f7f3fc 80%, var(--ground)); }
 .row { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 60px; padding: 40px 0; }
 .row-flip .row-copy { order: 2; }
 .row-copy { display: grid; gap: 16px; max-width: 480px; }
@@ -233,7 +288,7 @@
 .msg-row { display: grid; }
 .msg-time { justify-self: center; font-size: 3.4cqw; color: #8e8e93; margin: 2.4cqw 0 1.4cqw; font-weight: 500; }
 .msg .bub { font-size: 4.7cqw; line-height: 1.3; padding: 2.4cqw 3.8cqw; border-radius: 6cqw; max-width: 78%; }
-.bub { margin: 0; overflow-wrap: anywhere; }
+.bub { margin: 0; overflow-wrap: anywhere; white-space: pre-line; }
 .bub-in { background: var(--imsg-in); color: #000; justify-self: start; align-self: flex-start; border-radius: 20px; padding: 10px 16px; }
 .bub-out { background: var(--imsg); color: #fff; justify-self: end; align-self: flex-end; border-radius: 20px; padding: 10px 16px; }
 .msg-read { align-self: flex-end; font-size: 3.3cqw; color: #8e8e93; font-weight: 500; }
@@ -391,11 +446,13 @@
   .lede { margin-inline: auto; }
   .hero-cta { justify-content: center; }
   .hero-stage { height: 620px; max-width: 520px; width: 100%; margin-inline: auto; }
-  .half-grid, .steps, .trust, .prices { grid-template-columns: 1fr; }
+  .steps, .trust, .prices, .team-grid, .appsec-grid, .sched-grid, .deals, .texts { grid-template-columns: 1fr; }
   .row { grid-template-columns: 1fr; gap: 36px; padding: 50px 0; }
   .row-flip .row-copy { order: 0; }
   .row-copy { max-width: none; }
   .faq { grid-template-columns: 1fr; }
+  .sched-copy { position: static; }
+  .team-grid { grid-template-columns: 1fr 1fr; }
   .get-card { grid-template-columns: 1fr; padding: 40px 28px; }
   .get-qr { display: none; }
 }
@@ -405,12 +462,17 @@
   .hero-stage .ph-front { --w: 250px; right: 0; }
   .hero-stage .ph-back { --w: 220px; left: 0; top: 60px; }
   .float { display: none; }
+  .mx .float-deal { display: grid; margin-top: -40px; }
   .row-stage .ph { --w: min(300px, 82vw); }
   .row-stage-pair .ph-small { --w: min(230px, 60vw); }
-  .row-stage-pair .ph-offset { display: none; }
-  .half { padding: 28px 24px; min-height: 0; }
-  .half h3 { font-size: 27px; }
-  .halves, .pricing, .faq, .voice { padding: 64px 0; }
+  .row-stage-pair .ph-offset, .appsec-stage .ph-offset { display: none; }
+  .appsec-stage .ph-small { --w: min(280px, 76vw); transform: none; }
+  .asks { font-size: 16px; padding: 20px; justify-content: flex-start; }
+  .deal-steps { grid-template-columns: 1fr; }
+  .team-grid { grid-template-columns: 1fr; }
+  .sched-list > li { grid-template-columns: 1fr; gap: 10px; }
+  .pricing, .faq, .voice, .texts, .appsec, .team, .sched, .deals, .setup { padding-block: 64px; }
+  .role { padding: 24px; }
   .mx-foot { flex-direction: column; align-items: flex-start; }
 }
 @media (hover: none) {

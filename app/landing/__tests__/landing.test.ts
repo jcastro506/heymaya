@@ -37,13 +37,19 @@ describe("the landing's copy", () => {
   });
 
   it("finds the copy (the reader isn't silently empty)", () => {
-    expect(copy).toMatch(/She texts you the idea/);
-    expect(copy).toMatch(/Messages/);
+    expect(copy).toMatch(/Your whole content team/);
+    expect(copy).toMatch(/iMessage or SMS/);
   });
 });
 
 describe("prices and CTAs (sibling coherence)", () => {
   const landing = read("Landing.tsx");
+
+  it("brand deals always name the plan they come on, from tiers", () => {
+    expect(landing).toMatch(/Brand deals · \{PARTNER\.label\} plan/);
+    expect(landing).toMatch(/const PARTNER = TIERS\.partner/);
+    expect(landing).toMatch(/plan: "Partnerships plan"/);
+  });
 
   it("hardcodes no price: every dollar figure comes from billing/tiers", () => {
     const withoutImports = landing.replace(/import[^;]+;/g, "");

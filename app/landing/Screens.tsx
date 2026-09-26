@@ -305,3 +305,39 @@ export function ReviewScreen() {
     </div>
   );
 }
+
+/* ——— Deals: the partnerships plan (OpportunitiesView / PipelineView). Sample brands, made up. ——— */
+
+const DEALS = [
+  { group: "Ready for you", brand: "Pacefern Hydration", type: "Sponsorship", fit: "Paid two runners you watch this month. Your hill posts are their exact audience.", note: "Pitch drafted · waiting for your OK" },
+  { group: "Ready for you", brand: "Solebird Socks", type: "Gifting", fit: "Their creator program takes accounts your size. Application answers are ready.", note: "Application: answers ready to copy" },
+  { group: "In progress", brand: "Loopline Running Club", type: "Ambassador", fit: "Replied yesterday: they'd like your rates and dates.", note: "They replied · 1 day ago" },
+];
+
+export function DealsScreen() {
+  return (
+    <div className="app">
+      <div className="app-scroll">
+        <h3 className="app-title">Deals</h3>
+        <div className="s-kit">
+          <b>Your media kit</b>
+          <p>Followers, typical views and best posts, ready to paste into a pitch. Never your rates.</p>
+          <span className="s-kit-row"><span className="s-kit-btn">Share</span><span className="s-link">hey-maya.ai/k/sam</span></span>
+        </div>
+        {["Ready for you", "In progress"].map((g) => (
+          <div key={g} className="s-sec">
+            <span className="s-kicker">{g}</span>
+            {DEALS.filter((d) => d.group === g).map((d) => (
+              <div key={d.brand} className="s-deal">
+                <span className="s-deal-head"><b>{d.brand}</b><span className="chip purple">{d.type}</span></span>
+                <p>{d.fit}</p>
+                <small>{d.note}</small>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+      <TabBar active="Deals" />
+    </div>
+  );
+}
