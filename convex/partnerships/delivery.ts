@@ -8,6 +8,7 @@ import type { Doc } from "../_generated/dataModel";
 import { active, event, ownedOpportunity, profile } from "./store";
 import { CLOSED, Draft, Opportunity, email, line, followUpEligible, nextFollowUpAt, spentWithoutReply, applicationCheckIn, APPLICATION_CHECK_IN_DAYS, type DraftData } from "./contracts";
 import { access, gmail } from "./mailbox";
+import { disclosureLine } from "./pitch";
 import { deliverNow } from "../core/scheduler";
 import { emailSendEnabled } from "./providerConfig";
 import { faultFetch, faultFor } from "../eval/faults";
@@ -68,6 +69,10 @@ export const send = internalAction({ args: { creatorId: v.id("creators"), draftI
   const r = await ctx.runQuery(internal.partnerships.drafts.get, a);
   const d = Draft.parse(r.row.data);
   if (d.status !== "approved") return;
+  // K1: a pitch that waited for the morning is re-checked: closed, paused or expired since the approval sends nothing.
+  const o = Opportunity.parse(r.opportunity.data);
+  if (CLOSED.has(o.status) || (o.deadline && o.deadline <= Date.now())) return;
+  if ((await ctx.runQuery(internal.partnerships.store.read, { creatorId: a.creatorId })).profile?.paused) return;
   const mailbox = await ctx.runQuery(internal.partnerships.mailbox.get, { creatorId: a.creatorId });
   if (!mailbox || mailbox.generation !== d.mailboxGeneration) return;
   // Everything that can fail before the network send happens before taking the send claim.
@@ -170,7 +175,7 @@ export const checkOne = internalAction({ args: { creatorId: v.id("creators"), op
       const unansweredReply = !!data.lastInboundAt && data.lastInboundAt >= (data.lastOutboundAt ?? 0);
       const candidates: Array<{ key: string; body: string }> = [];
       if (unansweredReply) candidates.push({ key: `partner-reply:${a.opportunityId}:${data.lastInboundAt}`, body: `${data.brand}’s email conversation has a new message. want to look at it together?` });
-      for (const item of data.deliverables) if (item.status === "agreed" && item.dueAt <= Date.now() + 86400000) candidates.push({ key: `partner-deliverable:${a.opportunityId}:${item.title}:${item.dueAt}`, body: `${item.title} for ${data.brand} ${item.dueAt < Date.now() ? "is past its recorded due date" : "is due within the next day"}. how’s it coming along?` });
+      for (const item of data.deliverables) if (item.status === "agreed" && item.dueAt <= Date.now() + 86400000) candidates.push({ key: `partner-deliverable:${a.opportunityId}:${item.title}:${item.dueAt}`, body: `${item.title} for ${data.brand} ${item.dueAt < Date.now() ? "is past its recorded due date" : "is due within the next day"}. how’s it coming along? when it goes up, ${disclosureLine(data.brand)}.` });
       if (data.deadline && data.deadline > Date.now() && data.deadline <= Date.now() + 2 * 86400000 && ["discovered", "shortlisted"].includes(data.status)) candidates.push({ key: `partner-deadline:${a.opportunityId}:${data.deadline}`, body: `${data.brand}’s opportunity closes within two days, according to the saved program details. want to review it together?` });
       // §8.3 applications: one "did you get to submit it?", then (after they did) one "heard back?".
       const check = applicationCheckIn(data, Date.now());

@@ -22,6 +22,10 @@ import { claimsUnsupportedAction, critique } from "./critic";
 import { enqueueRender } from "./frames";
 import { CONVERSATIONAL_ONBOARDING } from "../onboarding/conversation";
 import { PARTNERSHIP_SKILL } from "../partnerships/contracts";
+import { PITCH_PLAYBOOK } from "../partnerships/pitch";
+
+/** K1: the kit, in one line of her skill. The tool result says what (if anything) to ask next. */
+const KIT_LINE = "Media kit: when they ask about theirs, or a pitch or a brand needs it, read media_kit and follow its `next:` (one question, asked once). A photo for it or their TikTok Studio audience screenshot can simply be texted to you. Turn the public link on only on their yes (media_kit_link). Never offer to make, generate or edit a photo of them.";
 import { partnershipsOpen } from "../partnerships/store";
 import { respectEmojiHabit } from "./voice";
 import { clip } from "../lib/clip";
@@ -41,7 +45,7 @@ export const PARTNER_CAN_LINE = `On this plan you can: research brands and their
 
 /** The converse skill, with the partnership section only for a plan that carries it (§26). Pure. */
 export function converseSkillFor(partnerships: boolean): string {
-  return CONVERSE_SKILL.replace("\nWhen: any message", `\n${partnerships ? `${PARTNERSHIP_SKILL}\n${PARTNER_CAN_LINE}` : NO_PARTNERSHIPS_LINE}\nWhen: any message`);
+  return CONVERSE_SKILL.replace("\nWhen: any message", `\n${partnerships ? `${PARTNERSHIP_SKILL}\n${PITCH_PLAYBOOK}\n${KIT_LINE}\n${PARTNER_CAN_LINE}` : NO_PARTNERSHIPS_LINE}\nWhen: any message`);
 }
 
 export const SHOTLIST_SKILL = `adapt-format (shot list)

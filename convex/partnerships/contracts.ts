@@ -75,6 +75,8 @@ export const Draft = z.object({
   answers: z.array(z.object({ label: line, answer: z.string().trim().min(1).max(3000) })).max(50).optional(),
   approvalCode: z.string(), approvalExpiresAt: z.number(), approvedBy: z.string().optional(),
   providerMessageId: z.string().optional(), error: z.string().optional(), createdAt: z.number(),
+  /** K1: an approved first pitch waits for the weekday-morning window on their clock, unless they said now. */
+  sendAt: z.number().optional(),
 });
 export type DraftData = z.infer<typeof Draft>;
 export const CLOSED = new Set(["declined", "closed", "suppressed", "completed"]);

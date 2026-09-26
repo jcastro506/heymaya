@@ -352,8 +352,9 @@ function lastTools(w: World): string[] {
 }
 
 /** They type the exact code; the real approval and the real (scheduled) send run; wait for the outcome. */
-async function approve(w: World, code: string, draftId?: string): Promise<{ said: string[]; status: string | null }> {
-  const said = await say(w, `SEND ${code}`);
+async function approve(w: World, code: string, draftId?: string, when: "now" | "window" = "now"): Promise<{ said: string[]; status: string | null }> {
+  // K1: a plain SEND on a first pitch waits for the weekday-morning window; the older steps are about delivery, so they say NOW.
+  const said = await say(w, when === "now" ? `SEND ${code} NOW` : `SEND ${code}`);
   let status: string | null = null;
   for (let i = 0; i < 20; i++) {
     const s = await snap(w);
@@ -443,7 +444,9 @@ async function seedPriorPitches(w: World): Promise<string[]> {
       eligibility: "Running creators", compensation: "Paid; rate unknown", route: "email", contactEmail: b.email, contactRole: "Creator program mailbox", evidence: [evidence],
     } } }) as { id?: Id<"partnershipOpportunities"> };
     if (!saved.id) { notes.push(`${b.name}: not saved`); continue; }
-    await w.ctx.runMutation(internal.partnerships.drafts.prepare, { creatorId: w.creatorId, sourceMessageId: messageId, input: { opportunityId: saved.id, subject: "Running creator collab", body: `Hi ${b.name} team, I'm Sam, a US running creator documenting a marathon training block on TikTok. I'd love to talk about a paid collaboration with you. Would you be open to it? Sam` } });
+    // K1: a first email pitch names the brand and links the kit (pitch.ts), like the ones she writes.
+    const kit = (await w.ctx.runMutation(internal.partnerships.kitPage.kitLinkFor, { creatorId: w.creatorId, on: true })).url!;
+    await w.ctx.runMutation(internal.partnerships.drafts.prepare, { creatorId: w.creatorId, sourceMessageId: messageId, input: { opportunityId: saved.id, subject: `${b.name} x Sam: a marathon-block idea`, body: `Hi ${b.name} team, I'm Sam, a US running creator documenting a marathon training block on TikTok. I'd love to talk about a paid collaboration with you. Would you be open to it? My media kit: ${kit} Sam` } });
     const d = draftsOf(await snap(w), key).at(-1);
     if (!d) { notes.push(`${b.name}: no draft`); continue; }
     const r = await approve(w, d.approvalCode, d.id);

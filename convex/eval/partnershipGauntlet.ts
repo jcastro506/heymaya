@@ -234,7 +234,7 @@ export const run = internalAction({
       if (want("approve")) {
         const r0 = await rowsNow();
         code = r0.drafts.find((d) => d.status === "draft")?.approvalCode ?? null;
-        const said = code ? await say(`SEND ${code}`) : [];
+        const said = code ? await say(`SEND ${code} NOW`) : [];
         await sleep(6_000);
         const r = await rowsNow();
         const d = r.drafts.find((x) => x.approvalCode === code);
