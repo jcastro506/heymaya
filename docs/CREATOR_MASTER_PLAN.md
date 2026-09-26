@@ -94,6 +94,7 @@ Three tracks run side by side where they don't depend on each other: **Brain** (
 | 17 | **B5**: re-bench, model decision for diagnosis, sign-off on the scorecard | Brain | 6–10, 13 | Sign the scorecard |
 | 17a | **R1**: the creator product's release path (below) | Platform | 10a | **Go/no-go on replacing the product on staging, then prod** |
 | 17b | **W1**: the landing page for an app (below). **Built 2026-09-25**: the page, `/join` → App Store/TestFlight, QR, smart app banner, tests. Open: real Simulator captures, Lighthouse | App/web | 11, 14, R1 | The C1 copy pass; set `NEXT_PUBLIC_TESTFLIGHT_URL` now, `NEXT_PUBLIC_APP_STORE_URL` once live |
+| 17c | **K1**: the media kit and the pitch, done properly (below). Partner tier only | Brain/app | 13 (B6) | Nothing to start. Live exit: 3 partner-tier pilots |
 
 ### Phase 5 — Native surfaces (≈ 1.5 weeks)
 
@@ -210,6 +211,87 @@ N1 lives inside the hourly jobs, so first a look at all of them. **29 crons** in
 - the bench judge cut off her reply once the facts grew.
 
 **Left:** real phone videos over 20 MB can't arrive by text (Telegram's bot limit; our iMessage intake cap). "Send to Maya" from Photos, uploading straight to storage, is the fix (M5 extension).
+
+## K1 — The media kit and the pitch, done properly (planned 2026-09-26)
+
+**Why:** the landing sells "she builds your media kit and writes the outreach", and B6 has a v1 of both, but the kit is thin (handle, niche, followers, typical views, top 3 posts, no photo, no audience, no engagement) and has never run for a real creator, and the pitch skill has honesty rules but no craft (structure, length, subject, deal type). **Partner tier only**, like the rest of B6: every tool, page and cron below checks `partnershipsOpen`.
+
+**What the research agrees on** (vendor-blog statistics ignored; sources in the session notes):
+- **The kit is one page**, read in 30–60 s. In order: photo, name, one line, handles · per platform: followers, engagement, growth · **audience** (age, gender, top countries/cities), which brands check first · 4–6 best posts from the last ~6 months, as thumbnails · services (sponsored post, UGC, affiliate, gifting) · past brand work · contact. Live and dated beats a stale PDF.
+- **One base kit, tailored per pitch**: which posts lead, plus one idea for that brand. Never a rebuilt kit per brand.
+- **The pitch**: under ~150 words · a specific subject (brand + idea or deliverable, never "Collaboration opportunity") · who you are + one real number · **why this brand** (a real reason) · **one concrete idea** · 2–3 relevant links · **one ask** · the kit as a **link, not an attachment** · sent weekday mornings. By deal type: sponsorship sells audience fit; **UGC sells the work and usage rights, not followers**; gifting is a small ask; affiliate shows the audience buys.
+- **Follow-ups**: first after 5–7 days, one more, then stop (B6 already enforces two at most).
+- **After a yes**: FTC disclosure: "#ad" (or "paid partnership with X") up front, and the platform toggle alone is not enough.
+
+**Decisions (operator: "whatever you think is best", 2026-09-26):**
+- **Rates never go on the kit.** They go in a reply, only with their OK.
+- **Audience demographics on the public kit are opt-in**, asked once when the kit is first turned on.
+- **"They opened your kit"**: yes, told once per brand, inside the one-partnerships-text-a-day rail. Only per-brand links are tracked; the base kit is not.
+- **Her photo** (below).
+
+### The photo
+
+1. **Default: their own profile picture**, already mirrored to storage for both platforms (`media`, kind `avatar`); Instagram first, TikTok second.
+2. **Their choice, any time, both doors:** text her a photo ("use this for my media kit") or pick one in the app (Deals → Your media kit → Photo). It's stored as `kitPhoto` (their upload, never a platform's). The same shared function serves both doors.
+3. **She suggests an upgrade** when the default is weak: too small (under 300 px), or not a face. She checks with one Gemini look when the kit is first built ("your IG picture is your logo. want to send me one of you?"). She asks once, never nags.
+4. **Never generated or edited.** No AI headshot, no touch-up, no background swap (grounded or silent, applied to their face). Crop to a circle or square only.
+5. **Off switch:** "no photo on my kit" is kept as a rule.
+
+### Build
+
+**Phase 1: kit v2 (data and page)**
+1. `readKit` v2, every field a stored row with its source and date: engagement per platform (median of the last 90 days, defined on the page: interactions ÷ views, and ÷ followers where brands expect it) · 30-day follower growth · Instagram audience (A1 rows) · reach · 6 best posts of the last 6 months with stored covers · past brand work (their own #ad/paid posts + closed-won deals) · services (from `dealTypes`) · region · contact email (their connected mailbox, or none).
+2. **The one line:** she drafts it from the dossier and their posts, and they approve it by text or edit it in the app (stored in `partnershipProfiles`, never live-generated on the page).
+3. **TikTok audience from a TikTok Studio screenshot** (the platform doesn't share it). The screenshot reader extracts age, gender and top countries, rejects numbers that don't add up, and stores them labelled "from your TikTok Studio, <date>". It goes stale after 60 days (hidden, and she asks for a fresh one when a pitch needs it).
+4. **Page redesign** (`/k/<slug>`): one page, phone-first, thumbnails, the photo, a print stylesheet ("Save as PDF" for forms that want a file), and `as of` on every number. Public numbers plus opted-in audience only; never rates, preferences, excluded brands or email beyond the contact they chose.
+5. **App:** the kit preview in Deals (M1 kit), sections on/off, photo, the one line, all by chat too (principle 7).
+
+**Phase 2: tailored per brand**
+6. **Per-opportunity link** `/k/<slug>/<variant>`: the same kit, leading with the 3 posts she judges most relevant to that brand (she picks from their rows, and a code check keeps them their own), plus "An idea for <Brand>", taken from the draft. It dies when the relationship closes.
+7. **She decides when the kit goes in:** always linked in a first email pitch · pasted into an application only when the form asks for it (a kit, portfolio or link field) · in a DM, only when they asked for one · in a reply when the brand asks ("send your media kit"). The rates in that same reply are theirs to give.
+8. **Opened notice:** a variant's first view by anyone other than them → one line, "stride lab opened your kit", within the daily partnerships rail.
+
+**Phase 3: pitch writer v2**
+9. **A playbook by deal type** (sponsorship, UGC, gifting, affiliate, ambassador, application) in `PARTNERSHIP_SKILL`, from the research above.
+10. **Code checks on every draft (refused with the reason, and she retries within budget):**
+    - body ≤ 150 words for a first pitch;
+    - subject ≤ 60 characters and names the brand, never "collaboration opportunity";
+    - exactly one ask;
+    - the kit link is present in a first email pitch;
+    - at most 3 links, no attachments;
+    - every number in it equals a kit row (extends the existing grounding check).
+11. **Send timing:** an approved first pitch goes out the next weekday morning, 9–11 their time, unless they say "send now". Replies go at once.
+12. **After a yes:** the disclosure reminder on the post they make for it, and rates, usage rights and exclusivity always go to them (as B6).
+
+### Simulations (all of them run on the real model and the real code, with fakes at the edges)
+
+**KW: the kit world**, new steps on the deals world (`eval/dealsWorld`, same fake market, fake Gmail, fake profile reads). Rows first, then words, then the judge:
+
+| Step | Proves |
+|---|---|
+| kit_first_build | "make me a media kit": built from rows, the default photo, every number equal to a row, no rates, and ONE question (the one line or the audience opt-in) |
+| photo_weak | a logo avatar: she offers once to use a real photo; she never nags again |
+| photo_upload | Sam texts a photo, "use this one": the kit shows the upload; the avatar is gone from the page |
+| tiktok_screenshot | a TikTok Studio screenshot becomes a labelled, dated audience; a screenshot whose shares don't add up is refused |
+| opt_out | "take my audience off" and "no photo" are removed from the page at once; rates never appear even with `minimumRate` set |
+| stale_refresh | 35 days later: numbers and best posts change, `as of` moves, posts older than 6 months drop |
+| variant_sponsorship | Northline: the per-brand link leads with running posts that are Sam's own; its idea equals the draft's idea; the email links it |
+| variant_ugc | Cadence UGC: leads with the best-made posts, not follower counts; usage rights go to Sam as a question |
+| variant_affiliate | TrailFuel: leads with the posts where Sam already tagged it ("you already use it") |
+| kit_decision | a form with no kit field gets no kit; a first DM gets no kit; a brand asking "send your media kit and rates" gets the link and a question to Sam about rates, never a rate |
+| opened | the brand opens its link: Sam hears it once, inside the daily rail; Sam's own views never count |
+| variant_expires | after Arcadia declines, its link is a 404; the base kit is unaffected |
+| pitch_rules | a first pitch that runs long, has a vague subject or two asks is refused by code and redrafted within the budget |
+
+**E2E: the whole job, from nothing to a draft**, three personas so one world doesn't fit all: **Sam** (running, sponsorship), **Priya** (skincare, UGC-first) and **Leo** (home cooking, gifting and affiliate). Each starts with no deals rows. Steps: the sampler's observations of the lane's paid posts → the weekly offer → "yes, look into the first one" → research and a recommend/investigate/pass verdict → save → kit check (ask for what's missing) → per-brand link → pitch **saved as a draft awaiting the exact SEND code** → nothing sent. Checked: every step's row, the draft's code checks, and the judge's craft score (why-this-brand is real, the idea is specific, the ask is one, the deal-type framing is right).
+
+**RW: the real world, drafts only.** The same E2E on the dev deployment against **real** lane data (the replay cache) and **real** brand research (Tavily, needs `TAVILY_API_KEY`; about a dollar a run). Gmail is the fake, so sending is impossible by construction. The output is a report of real brands, verdicts, kits and drafts for the operator to read. That is the honest test of "would I send this".
+
+**Bench:** 10 new Expert Bench cases (kit questions, pitch craft by deal type, "send your rates", disclosure).
+
+**Tests (the five categories):** cross-tenant (A's variant never shows B's posts; A can't read B's kit photo) · fail-closed (below partner tier every kit and variant tool refuses; a revoked slug is a 404) · adversarial (a brand name with markup, a screenshot with injected text, a photo that isn't a person) · sibling coherence (kit numbers equal the numbers she texts; the app and the page read one `readKit`) · TODO grep.
+
+**Exit, live:** 3 partner-tier pilots each have a kit they'd send, and one real pitch draft each that the operator reads and would send unchanged.
 
 ## A1 — Account setup + analytics depth (planned 2026-09-24)
 
