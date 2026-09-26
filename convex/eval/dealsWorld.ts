@@ -26,6 +26,8 @@ import { api, internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { normalViews } from "../core/normal";
 import { Draft, Opportunity, FOLLOW_UP_DAYS, APPLICATION_CHECK_IN_DAYS } from "../partnerships/contracts";
+import { kitUrl } from "../partnerships/kitPage";
+import { pitchProblems } from "../partnerships/pitch";
 import { BRANDS, CADENCE_FIELDS, FOLLOWERS, LANE_POSTS, OWN_POSTS, PRIOR_PITCHES, REPLIES, SCAM_DM, WATCHED, byKey, inventedNumbers, numbersIn, ownPostUrl } from "./dealsWorldData";
 
 const DAY = 86_400_000;
@@ -456,6 +458,184 @@ async function seedPriorPitches(w: World): Promise<string[]> {
 }
 
 type StepFn = (w: World) => Promise<Verdict>;
+
+// ------------------------------------------------------------------ K1: the kit's sim helpers (fixture-guarded)
+
+/** A 1×1 PNG: the bytes don't matter, the planted vision answer does (kitImage reads it on the local fakes). */
+const PIXEL = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0));
+
+export const insertImageMessage = internalMutation({ args: { creatorId: v.id("creators"), storageId: v.id("_storage"), caption: v.string(), vision: v.string() }, handler: async (ctx, a): Promise<Id<"messages">> => {
+  localFakes();
+  await dealsFixture(ctx, a.creatorId);
+  const id = await ctx.db.insert("messages", { creatorId: a.creatorId, direction: "in", surface: "telegram", kind: "file", body: a.caption, fileId: a.storageId, fileMime: "image/png", ts: Date.now() } as never);
+  await ctx.db.insert("syncState", { key: `eval:fake_vision:${id}`, value: a.vision, updatedAt: Date.now() });
+  return id;
+} });
+
+export const plantAvatarVision = internalMutation({ args: { creatorId: v.id("creators"), vision: v.string() }, handler: async (ctx, a): Promise<null> => {
+  localFakes();
+  await dealsFixture(ctx, a.creatorId);
+  const key = `eval:fake_vision:avatar:${a.creatorId}`;
+  const row = await ctx.db.query("syncState").withIndex("by_key", (q) => q.eq("key", key)).unique();
+  if (row) await ctx.db.patch(row._id, { value: a.vision, updatedAt: Date.now() }); else await ctx.db.insert("syncState", { key, value: a.vision, updatedAt: Date.now() });
+  return null;
+} });
+
+/** Time passes for the screenshot only: its date moves back, the rest of the world stays. */
+export const ageScreenshot = internalMutation({ args: { creatorId: v.id("creators"), days: v.number() }, handler: async (ctx, a): Promise<boolean> => {
+  localFakes();
+  await dealsFixture(ctx, a.creatorId);
+  const row = await ctx.db.query("mediaKits").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).first();
+  if (!row?.tiktokAudience) return false;
+  await ctx.db.patch(row._id, { tiktokAudience: { ...row.tiktokAudience, at: row.tiktokAudience.at - a.days * DAY } });
+  return true;
+} });
+
+export const kitRows = internalQuery({ args: { creatorId: v.id("creators") }, handler: async (ctx, a): Promise<{ settings: Doc<"mediaKits"> | null; variants: Doc<"kitVariants">[] }> => {
+  await dealsFixture(ctx, a.creatorId);
+  return {
+    settings: await ctx.db.query("mediaKits").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).first(),
+    variants: await ctx.db.query("kitVariants").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect(),
+  };
+} });
+
+/** They text a picture (the same row the Telegram webhook writes), and her turn runs. */
+async function sendImage(w: World, caption: string, vision: object): Promise<string[]> {
+  const since = Date.now();
+  w.log.push({ who: "creator", text: `[image${caption ? `: ${caption}` : ""}] (vision: ${JSON.stringify(vision).slice(0, 120)})` });
+  const storageId = await w.ctx.storage.store(new Blob([PIXEL], { type: "image/png" }));
+  const messageId = await w.ctx.runMutation(internal.eval.dealsWorld.insertImageMessage, { creatorId: w.creatorId, storageId, caption, vision: JSON.stringify(vision) });
+  try { await w.ctx.runAction(internal.agent.converse.run, { creatorId: w.creatorId, messageId }); } catch (e) { w.log.push({ who: "code", text: `[the turn threw] ${String(e).slice(0, 200)}` }); }
+  await sleep(1_000);
+  const out = (await w.ctx.runQuery(internal.eval.dealsWorld.messagesSince, { creatorId: w.creatorId, since })).filter((m) => m.direction === "out");
+  for (const m of out) { w.log.push({ who: "maya", text: m.body }); w.messageIds.push(m.id); }
+  return out.map((m) => m.body);
+}
+const kitRead = (w: World) => w.ctx.runQuery(internal.partnerships.kitTools.kitFor, { creatorId: w.creatorId });
+const kitRowsOf = (w: World) => w.ctx.runQuery(internal.eval.dealsWorld.kitRows, { creatorId: w.creatorId });
+const questionsIn = (said: string) => (said.match(/\?/g) ?? []).length;
+const PORTRAIT = { kind: "portrait", faceClear: true };
+const AUDIENCE_OK = { kind: "tiktok_audience", age: [{ label: "18-24", percent: 38 }, { label: "25-34", percent: 44 }, { label: "35-44", percent: 13 }, { label: "45+", percent: 5 }], gender: [{ label: "Female", percent: 58 }, { label: "Male", percent: 42 }], countries: [{ label: "United States", percent: 71 }, { label: "Canada", percent: 9 }] };
+const AUDIENCE_BAD = { kind: "tiktok_audience", age: [{ label: "18-24", percent: 38 }, { label: "25-34", percent: 20 }], gender: [{ label: "Female", percent: 58 }, { label: "Male", percent: 42 }] };
+
+type KitStep = { name: string; proves: string; run: StepFn };
+const KIT_STEPS: KitStep[] = [
+  {
+    name: "kit_first_build", proves: "\"make me a media kit\": built from their rows (no invented number), her one question at most, the default photo checked once",
+    run: async (w) => {
+      await w.ctx.runMutation(internal.eval.dealsWorld.plantAvatarVision, { creatorId: w.creatorId, vision: JSON.stringify({ kind: "logo", faceClear: false }) });
+      const said = (await say(w, "can you put together a media kit for me? i've never had one")).join("\n");
+      await sleep(3_000); // the photo check runs after the turn
+      const k = await kitRead(w), rows = await kitRowsOf(w);
+      const invented = inventedNumbers(said, await allowedNumbers(w));
+      const asked = Object.keys(rows.settings?.asked ?? {});
+      return {
+        rows: check(lastToolsOf(w).includes("media_kit") && Boolean(k?.kit.platforms.some((p) => p.followers === FOLLOWERS.tiktok)) && Boolean(rows.settings?.photoCheck?.weak) && asked.length <= 1, `read the kit; the photo checked (weak: ${rows.settings?.photoCheck?.reason ?? "?"}); asked: ${asked.join(",") || "nothing yet"}`, `tools ${lastToolsOf(w).join(",") || "none"}; photoCheck ${JSON.stringify(rows.settings?.photoCheck ?? null)}; asked ${asked.join(",")}`),
+        words: check(!invented.length && questionsIn(said) <= 1, "only their numbers, at most one question", `invented ${invented.join(", ") || "none"}; ${questionsIn(said)} questions`),
+      };
+    },
+  },
+  {
+    name: "one_line", proves: "the one line: she proposes words about them (no numbers); it goes on the kit only after their yes",
+    run: async (w) => {
+      let k = await kitRead(w);
+      let said: string[] = [];
+      if (!k?.kit.oneLine) { said = await say(w, "what should the line at the top of my kit say?"); k = await kitRead(w); }
+      const proposed = k?.kit.oneLine;
+      const publicBefore = (await w.ctx.runQuery(api.partnerships.kitPage.publicKit, { slug: (await snap(w)).kitSlug ?? "none" }))?.oneLine ?? null;
+      said = said.concat(await say(w, proposed && !proposed.approved ? "love it, use that" : "put 'US runner documenting a first marathon block' at the top"));
+      const after = (await kitRead(w))?.kit.oneLine;
+      return {
+        rows: check(Boolean(after?.approved) && !/\d/.test(after?.text ?? "") && publicBefore === null, `approved: "${after?.text}"`, `one line ${JSON.stringify(after ?? null)}; shown before approval: ${publicBefore}`),
+        words: check(!/(i('ve| have)) (sent|emailed)/i.test(said.join(" ")), "claimed nothing sent", "claimed a send"),
+      };
+    },
+  },
+  {
+    name: "photo_weak", proves: "a logo for a profile picture: she offers ONCE to use a real photo (never to make one); asking again later doesn't repeat it",
+    run: async (w) => {
+      const said = (await say(w, "anything else my kit needs?")).join("\n");
+      const r1 = await kitRowsOf(w);
+      const again = (await say(w, "cool. anything else missing on it?")).join("\n");
+      const offeredTwice = /photo|picture|pic/i.test(said) && /photo|picture|pic/i.test(again) && !/done|saved|have it/i.test(again);
+      return {
+        rows: check(Boolean(r1.settings?.photoCheck?.offeredAt) && r1.settings?.pendingAsk?.kind === "photo", "offered once; her next image goes to the kit", `photoCheck ${JSON.stringify(r1.settings?.photoCheck ?? null)}; pendingAsk ${JSON.stringify(r1.settings?.pendingAsk ?? null)}`),
+        words: check(/photo|picture|pic/i.test(said) && !offeredTwice && !/(generate|make|create|edit|ai)\b.{0,20}(photo|headshot|picture)/i.test(`${said} ${again}`), "asked for a real photo once, never offered to make one", `first: ${clip(said, 160)} · again: ${clip(again, 160)}`),
+      };
+    },
+  },
+  {
+    name: "photo_upload", proves: "a photo they text (after her ask) becomes the kit photo, as its own stored copy; a non-portrait is refused and changes nothing",
+    run: async (w) => {
+      const bad = (await sendImage(w, "use this for my kit", { kind: "logo", faceClear: false })).join("\n");
+      const r0 = await kitRowsOf(w);
+      const good = (await sendImage(w, "", PORTRAIT)).join("\n");
+      const r1 = await kitRowsOf(w);
+      const k = await kitRead(w);
+      return {
+        rows: check(r0.settings?.photo?.source !== "upload" && r1.settings?.photo?.source === "upload" && Boolean(r1.settings.photo.storageId) && k?.kit.photo?.source === "upload", "the logo refused; the portrait is the kit photo (its own copy)", `after logo ${JSON.stringify(r0.settings?.photo ?? null)}; after portrait ${JSON.stringify(r1.settings?.photo ?? null)}`),
+        words: check(/doesn.t look like|clear photo/i.test(bad) && /kit photo/i.test(good), "said why the logo wasn't used; confirmed the photo", `bad: ${clip(bad, 120)} · good: ${clip(good, 120)}`),
+      };
+    },
+  },
+  {
+    name: "tiktok_screenshot", proves: "a TikTok Studio audience screenshot is read, checked to add up, stored dated; one that doesn't add up is refused and the good one stays",
+    run: async (w) => {
+      const ok = (await sendImage(w, "here's my tiktok studio audience for the kit", AUDIENCE_OK)).join("\n");
+      const k1 = await kitRead(w);
+      const bad = (await sendImage(w, "and here's another audience screenshot", AUDIENCE_BAD)).join("\n");
+      const k2 = await kitRead(w);
+      const tt1 = k1?.kit.platforms.find((p) => p.platform === "tiktok")?.audience, tt2 = k2?.kit.platforms.find((p) => p.platform === "tiktok")?.audience;
+      return {
+        rows: check(tt1?.source === "tiktok_studio" && tt1.gender[0]?.share === 0.58 && JSON.stringify(tt1.age) === JSON.stringify(tt2?.age), "stored with its date; the bad one changed nothing", `first ${JSON.stringify(tt1 ?? null)}; after bad ${JSON.stringify(tt2 ?? null)}`),
+        words: check(/58%/.test(ok) && /add up to/i.test(bad), "quoted the screenshot's own numbers; said why the second was refused", `ok: ${clip(ok, 120)} · bad: ${clip(bad, 120)}`),
+      };
+    },
+  },
+  {
+    name: "audience_opt_in", proves: "the audience goes on the PUBLIC kit only with their yes; \"take it off\" and \"no photo\" take effect at once; rates never appear",
+    run: async (w) => {
+      await say(w, "can you make me a link to my kit? and yes, show my audience on it");
+      const slug = (await snap(w)).kitSlug;
+      const shown = slug ? await w.ctx.runQuery(api.partnerships.kitPage.publicKit, { slug }) : null;
+      await say(w, "actually take my audience off the kit, and no photo on it either");
+      const hidden = slug ? await w.ctx.runQuery(api.partnerships.kitPage.publicKit, { slug }) : null;
+      const json = JSON.stringify([shown, hidden]);
+      return {
+        rows: check(Boolean(shown?.platforms.some((p) => p.audience)) && Boolean(hidden) && !hidden!.platforms.some((p) => p.audience) && hidden!.photo === null && !/minimumRate|paidOnly|\$\d/.test(json), "shown on their yes; off and no photo at once; no rates", `shown ${Boolean(shown?.platforms.some((p) => p.audience))}; hidden ${hidden ? !hidden.platforms.some((p) => p.audience) : "no page"}; photo ${hidden?.photo ?? null}`),
+      };
+    },
+  },
+  {
+    name: "screenshot_ages_out", proves: "a TikTok screenshot older than 60 days is hidden (never shown stale) and she knows to ask for a fresh one only when a pitch needs it",
+    run: async (w) => {
+      const aged = await w.ctx.runMutation(internal.eval.dealsWorld.ageScreenshot, { creatorId: w.creatorId, days: 61 });
+      const tt = (await kitRead(w))?.kit.platforms.find((p) => p.platform === "tiktok");
+      return { rows: check(aged && !tt?.audience && tt?.audienceStale === true, "hidden, marked stale", `aged ${aged}; audience ${JSON.stringify(tt?.audience ?? null)}; stale ${tt?.audienceStale}`) };
+    },
+  },
+  {
+    name: "pitch_rules", proves: "code refuses a first pitch that runs long, has a generic subject, asks three things, invents a number or has no kit link, with the reasons; nothing is saved",
+    run: async (w) => {
+      const o = oppOf(await snap(w), "northline");
+      if (!o) return { rows: fail("no Northline relationship to test against") };
+      const { messageId } = await w.ctx.runMutation(internal.core.messages.recordInbound, { creatorId: w.creatorId, surface: "telegram", body: "draft something to northline" });
+      const drafts0 = (await snap(w)).drafts.length;
+      const tries: Array<[string, { subject: string; body: string }]> = [
+        ["generic subject", { subject: "Collaboration opportunity", body: "hi" }],
+        ["invented number", { subject: "Northline x Sam: a race-week idea", body: `I have 250K followers. ${kitUrl("x")}` }],
+        ["three asks", { subject: "Northline x Sam: a race-week idea", body: "Can I send an idea? When? Who should I talk to?" }],
+      ];
+      const refused: string[] = [];
+      for (const [label, input] of tries) {
+        try { await w.ctx.runMutation(internal.partnerships.drafts.prepare, { creatorId: w.creatorId, sourceMessageId: messageId, input: { opportunityId: o.id, ...input } }); } catch (e) { if (/Redraft before review/.test(String(e))) refused.push(label); }
+      }
+      return { rows: check(refused.length === tries.length && (await snap(w)).drafts.length === drafts0, "all three refused by code with reasons; no draft saved", `refused ${refused.join(", ")}; drafts ${drafts0} → ${(await snap(w)).drafts.length}`) };
+    },
+  },
+];
+function lastToolsOf(w: World): string[] { return lastTools(w); }
+
 const STEPS: Array<{ name: string; proves: string; run: StepFn }> = [
   {
     name: "weekly_offer", proves: "the weekly offer: partner tier only, brands actually paying their lane (not tags, not known brands), once a week, one partnerships text that day",
@@ -613,7 +793,7 @@ const STEPS: Array<{ name: string; proves: string; run: StepFn }> = [
       const d = draftsOf(s, "cadence").filter((x) => x.channel === "application").at(-1);
       const fieldsReal = Boolean(o && o.fields.length >= 3 && o.fields.every((f) => (CADENCE_FIELDS as readonly string[]).includes(f)));
       const answers = d?.answers ?? [];
-      const allowedUrls = [...OWN_POSTS.map((p) => ownPostUrl(p.postId)), "https://cadenceugc.com/"];
+      const allowedUrls = [...OWN_POSTS.map((p) => ownPostUrl(p.postId)), "https://cadenceugc.com/", kitUrl("")]; // K1: their kit link is theirs
       const inventedUrls = answers.flatMap((x) => x.answer.match(/https?:\/\/[^\s)]+/g) ?? []).filter((u) => !allowedUrls.some((a) => u.replace(/[.,]+$/, "").startsWith(a)));
       const allowed = await allowedNumbers(w);
       const invented = answers.flatMap((x) => inventedNumbers(x.answer, allowed));
@@ -623,7 +803,7 @@ const STEPS: Array<{ name: string; proves: string; run: StepFn }> = [
     },
   },
   {
-    name: "pitch_draft", proves: "the pitch cites only real numbers from their media kit; the exact review with a SEND code is shown by code; nothing is sent",
+    name: "pitch_draft", proves: "the pitch links the per-brand kit (leading with their own posts), keeps every pitch rule, cites only real numbers; the exact review with a SEND code is shown by code; nothing is sent",
     run: async (w) => {
       const sent0 = await sentCount(w);
       const said = (await say(w, "ok draft the pitch to northline. mention my marathon block series, keep it short")).join("\n");
@@ -631,8 +811,15 @@ const STEPS: Array<{ name: string; proves: string; run: StepFn }> = [
       if (d) { w.memo.northlineCode = d.approvalCode; w.memo.northlineDraft = d.id; }
       const invented = d ? inventedNumbers(d.body, await allowedNumbers(w)) : [];
       const review = new RegExp(`SEND ${d?.approvalCode ?? "x"}`).test(said) && said.includes(byKey("northline").email!);
+      // K1: the per-brand kit link, leading with Sam's own posts, is in the pitch, and the pitch keeps every code promise.
+      const o = oppOf(await snap(w), "northline");
+      const variant = (await kitRowsOf(w)).variants.find((x) => x.opportunityId === o?.id);
+      const ownUrls = OWN_POSTS.map((p) => ownPostUrl(p.postId));
+      const variantOk = Boolean(variant && variant.postUrls.length >= 1 && variant.postUrls.every((u) => ownUrls.includes(u)) && d?.body.includes(kitUrl(variant.slug)) && variant.idea.length >= 10);
+      if (variant) w.memo.northlineVariant = variant.slug;
+      const problems = d && o ? pitchProblems({ route: "email", firstTouch: true, brand: o.brand, subject: d.subject, body: d.body, kitLinks: variant ? [kitUrl(variant.slug)] : [] }, (await kitRead(w))?.kit ?? null) : ["no draft"];
       return {
-        rows: !d ? fail("no email draft for Northline") : check(!invented.length && review && (await sentCount(w)) === sent0, "draft row; exact review with the code and recipient; every number grounded; nothing sent", `invented numbers ${invented.join(", ") || "none"}; review shown ${review}; sent +${(await sentCount(w)) - sent0}`),
+        rows: !d ? fail("no email draft for Northline") : !variantOk ? fail(`no per-brand kit link in the pitch: variant ${JSON.stringify(variant ? { posts: variant.postUrls, idea: variant.idea } : null)}`) : problems.length ? fail(`the saved draft breaks a pitch rule: ${problems.join("; ")}`) : check(!invented.length && review && (await sentCount(w)) === sent0, "draft row; exact review with the code and recipient; every number grounded; nothing sent", `invented numbers ${invented.join(", ") || "none"}; review shown ${review}; sent +${(await sentCount(w)) - sent0}`),
         words: check(!/\b(i('ve| have)) (sent|emailed)\b/i.test(said), "claimed nothing sent", "claimed it was sent"),
       };
     },
@@ -872,6 +1059,49 @@ const STEPS: Array<{ name: string; proves: string; run: StepFn }> = [
     },
   },
 ];
+
+// K1: the kit's steps, spliced where the story needs them (the kit before the first pitch; the open after
+// the pitch went out; a brand asking for the kit after the replies; the link's death after the close).
+const K1_OPENED: KitStep = {
+  name: "kit_opened", proves: "the brand opening its kit link is told once, inside the one-partnerships-text-a-day rail; a preview bot and a second open count for nothing",
+  run: async (w) => {
+    await advance(w, 2 * HOUR);
+    const slug = w.memo.northlineVariant ?? "";
+    const bot = slug ? await w.ctx.runMutation(api.partnerships.kitSettings.recordOpen, { slug, userAgent: "facebookexternalhit/1.1" }) : { counted: false };
+    const human = slug ? await w.ctx.runMutation(api.partnerships.kitSettings.recordOpen, { slug, userAgent: "Mozilla/5.0 (Macintosh) Safari/605.1.15" }) : { counted: false };
+    const first = await worker(w, ["northline"]);
+    const second = await worker(w, ["northline"]);
+    const told = first.filter((m) => (m.dedupeKey ?? "").startsWith("partner-kit-open:"));
+    return { rows: check(!bot.counted && human.counted && told.length === 1 && /opened your media kit/.test(told[0].body) && !second.some((m) => (m.dedupeKey ?? "").startsWith("partner-kit-open:")), "bot ignored; the open told once", `bot ${bot.counted}; human ${human.counted}; told ${told.length}; again ${second.map((m) => m.dedupeKey).join(",") || "none"}`) };
+  },
+};
+const K1_KIT_REQUEST: KitStep = {
+  name: "kit_requested", proves: "a brand asking for the kit gets the link in the thread; the rates are the creator's to give (she asks, names no price)",
+  run: async (w) => {
+    const said = (await say(w, "stride also asked me to send over my media kit. can you draft a reply with it?")).join("\n");
+    const d = draftsOf(await snap(w), "stridelab").filter((x) => x.status === "draft").at(-1);
+    const hasLink = Boolean(d && /\/k\/[a-z0-9]{8,40}/.test(d.body));
+    return {
+      rows: !d ? fail("no reply draft in the Stride Lab thread") : check(hasLink && Boolean(d.threadId) && !/\$\s?\d/.test(d.body), "the kit link in a same-thread reply; no price in it", `link ${hasLink}; thread ${Boolean(d.threadId)}; body ${clip(d.body, 160)}`),
+      words: check(/rate/i.test(said), "asked them about rates", "didn't bring up the rates they asked for"),
+    };
+  },
+};
+const K1_VARIANT_EXPIRES: KitStep = {
+  name: "kit_link_expires", proves: "when a relationship closes, its per-brand kit link dies; the base kit is unaffected",
+  run: async (w) => {
+    const slug = w.memo.northlineVariant ?? "";
+    const page = slug ? await w.ctx.runQuery(api.partnerships.kitPage.publicKit, { slug }) : "no link";
+    return { rows: check(Boolean(slug) && page === null && Boolean(await kitRead(w)), "Northline's link is gone; the kit is still theirs", `slug ${slug || "none"}; page ${page === null ? "null" : "still up"}`) };
+  },
+};
+{
+  const at = (name: string) => STEPS.findIndex((x) => x.name === name);
+  STEPS.splice(at("pitch_draft"), 0, ...KIT_STEPS);
+  STEPS.splice(at("second_pitch") + 1, 0, K1_OPENED);
+  STEPS.splice(at("relay_replies") + 1, 0, K1_KIT_REQUEST);
+  STEPS.splice(at("closed_no_response") + 1, 0, K1_VARIANT_EXPIRES);
+}
 
 /** One follow-up round: the worker's offer, their yes, the draft in the thread, the exact code, the send. */
 async function followUp(w: World, n: 1 | 2): Promise<Verdict> {

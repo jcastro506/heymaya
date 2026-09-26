@@ -110,6 +110,8 @@ import type * as core_unseen from "../core/unseen.js";
 import type * as crons from "../crons.js";
 import type * as eval_checks from "../eval/checks.js";
 import type * as eval_converse from "../eval/converse.js";
+import type * as eval_dealsE2E from "../eval/dealsE2E.js";
+import type * as eval_dealsE2EData from "../eval/dealsE2EData.js";
 import type * as eval_dealsWorld from "../eval/dealsWorld.js";
 import type * as eval_dealsWorldData from "../eval/dealsWorldData.js";
 import type * as eval_durableConverse from "../eval/durableConverse.js";
@@ -322,6 +324,8 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   "eval/checks": typeof eval_checks;
   "eval/converse": typeof eval_converse;
+  "eval/dealsE2E": typeof eval_dealsE2E;
+  "eval/dealsE2EData": typeof eval_dealsE2EData;
   "eval/dealsWorld": typeof eval_dealsWorld;
   "eval/dealsWorldData": typeof eval_dealsWorldData;
   "eval/durableConverse": typeof eval_durableConverse;

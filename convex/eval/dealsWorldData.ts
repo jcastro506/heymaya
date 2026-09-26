@@ -10,6 +10,8 @@
  * fakes answer before anything leaves the deployment.
  */
 
+import { E2E_BRANDS } from "./dealsE2EData";
+
 export interface WorldPage { url: string; title: string; snippet: string; content: string }
 export interface WorldProfile { platform: "instagram" | "tiktok"; handle: string; displayName: string; bio: string; followers: number; posts: number; verified: boolean; externalUrl?: string }
 export interface WorldBrand {
@@ -143,7 +145,8 @@ const norm = (url: string): string => url.toLowerCase().replace(/^https?:\/\//, 
 export function worldSearch(query: string): Array<{ url: string; title: string; content: string; score: number }> {
   const q = query.toLowerCase();
   const words = q.split(/[^a-z0-9-]+/).filter((w) => w.length > 2);
-  const scored = BRANDS.flatMap((b, order) => {
+  // K1: the end-to-end personas' brands (eval/dealsE2EData.ts) are part of the same market.
+  const scored = [...BRANDS, ...E2E_BRANDS].flatMap((b, order) => {
     const named = q.includes(b.name.toLowerCase()) || q.includes(b.key) || q.includes(b.domain.split(".")[0]);
     const hits = b.keywords.filter((k) => (k.includes(" ") ? q.includes(k) : words.some((w) => w === k || (w.length > 3 && k.startsWith(w)) || (k.length > 3 && w.startsWith(k))))).length;
     // Seeded prior brands only surface when named: a generic search should look like a market, not their CRM.
@@ -162,7 +165,7 @@ export function worldSearch(query: string): Array<{ url: string; title: string; 
 /** Pure: the fake Tavily extract, for the world's official pages only. */
 export function worldPage(url: string): WorldPage | null {
   const n = norm(url);
-  for (const b of BRANDS) for (const p of b.pages) if (norm(p.url) === n) return p;
+  for (const b of [...BRANDS, ...E2E_BRANDS]) for (const p of b.pages) if (norm(p.url) === n) return p;
   return null;
 }
 

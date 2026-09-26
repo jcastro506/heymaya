@@ -413,4 +413,12 @@ describe("the judges' pure parts", () => {
   it("the run covers every behaviour the operator asked for", () => {
     for (const s of ["setup", "weekly_offer", "who_pays", "known_brand", "find_email_brand", "bio_email", "lookalike", "gifting_only", "tiktok_shop", "adversarial_page", "scam_dm", "ugc_application", "pitch_draft", "wrong_codes", "expired_code_then_send", "second_pitch", "bounce_and_unsubscribe", "replies_arrive", "relay_replies", "close_rejection", "rate_help", "counter_send", "ugc_check_in_before", "ugc_submitted", "counter_offer_terms", "follow_up_1", "follow_up_2", "closed_no_response", "third_follow_up_refused", "ugc_check_in_after", "media_kit_link", "who_contacted", "quiet_after_close"]) expect(STEP_NAMES).toContain(s);
   });
+  it("K1: the kit's steps sit where the story needs them", () => {
+    const at = (n: string) => STEP_NAMES.indexOf(n);
+    for (const n of ["kit_first_build", "one_line", "photo_weak", "photo_upload", "tiktok_screenshot", "audience_opt_in", "screenshot_ages_out", "pitch_rules"]) expect(at(n)).toBeGreaterThan(at("find_email_brand"));
+    expect(at("pitch_rules")).toBeLessThan(at("pitch_draft"));
+    expect(at("kit_opened")).toBe(at("second_pitch") + 1);
+    expect(at("kit_requested")).toBe(at("relay_replies") + 1);
+    expect(at("kit_link_expires")).toBe(at("closed_no_response") + 1);
+  });
 });
