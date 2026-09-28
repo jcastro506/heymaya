@@ -100,11 +100,14 @@ export const read = internalQuery({
       // two and said the rest "haven't been pitched"; three had been, and one had declined).
       const rest = (await ctx.db.query("partnershipOpportunities").withIndex("by_creator", q => q.eq("creatorId", a.creatorId)).order("desc").take(25)).filter(r => r._id !== a.opportunityId);
       const others = await Promise.all(rest.map(async (r) => {
-        const d = r.data as { brand?: string; status?: string; route?: string };
+        const d = r.data as { brand?: string; status?: string; route?: string; lastInboundAt?: number };
         const last = (await ctx.db.query("partnershipEvents").withIndex("by_opportunity", q => q.eq("opportunityId", r._id)).order("desc").first());
-        return { opportunityId: r._id, brand: d.brand ?? r.brandDomain, status: d.status ?? "unknown", route: d.route ?? "unknown", lastEvent: last ? `${last.kind} ${new Date(last.at).toISOString().slice(0, 10)}` : null };
+        return { opportunityId: r._id, brand: d.brand ?? r.brandDomain, status: d.status ?? "unknown", route: d.route ?? "unknown", lastEvent: last ? `${last.kind} ${new Date(last.at).toISOString().slice(0, 10)}` : null, theyReplied: Boolean(d.lastInboundAt) };
       }));
-      return { opportunity: o.row, events, drafts, nextCursor: page.isDone ? null : page.continueCursor, followUpDue: followUpEligible(o.data, Date.now()), mailbox: await mailboxState(ctx, a.creatorId), others, othersNote: "the rest of their relationships, one line each: say nothing about one beyond its line without reading it" };
+      // Said in words, first (2026-09-28, second run: with status codes alone she still said "we haven't heard from anyone else").
+      const replied = others.filter(x => x.theyReplied).map(x => x.brand);
+      const othersNote = `${replied.length ? `THEY REPLIED: ${replied.join(", ")} (read each before saying what they said). ` : "No other brand has replied. "}The rest of their relationships, one line each: say nothing about one beyond its line without reading it.`;
+      return { opportunity: o.row, events, drafts, nextCursor: page.isDone ? null : page.continueCursor, followUpDue: followUpEligible(o.data, Date.now()), mailbox: await mailboxState(ctx, a.creatorId), othersNote, others };
     }
     const opportunities = a.brandDomain ? await ctx.db.query("partnershipOpportunities").withIndex("by_brand", q => q.eq("creatorId", a.creatorId).eq("brandDomain", a.brandDomain!.toLowerCase().replace(/^www\./, ""))).paginate({ cursor: a.cursor ?? null, numItems: 20 }) : await ctx.db.query("partnershipOpportunities").withIndex("by_creator", q => q.eq("creatorId", a.creatorId)).order("desc").paginate({ cursor: a.cursor ?? null, numItems: 20 });
     // Each relationship carries its latest brand reply (untrusted text, capped), so "what did they say?"

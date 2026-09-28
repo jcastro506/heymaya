@@ -155,6 +155,11 @@ describe("partnership evidence and fit", () => {
     await f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "second.com", opportunity: { ...f.input.opportunity, brand: "Second", contactEmail: "team@second.com", evidence: [other] } } });
     const r = await f.t.query(internal.partnerships.store.read, { creatorId: f.a, opportunityId: f.opportunityId }) as { others: Array<{ brand: string; status: string }> };
     expect(r.others.map(o => o.brand)).toEqual(["Second"]);
+    expect((r as unknown as { othersNote: string }).othersNote).toMatch(/^No other brand has replied/);
+    const second = (await f.t.run(ctx => ctx.db.query("partnershipOpportunities").collect())).find(o => o.brandDomain === "second.com")!;
+    await f.t.run(ctx => ctx.db.patch(second._id, { data: { ...second.data, lastInboundAt: Date.now() } }));
+    const r2 = await f.t.query(internal.partnerships.store.read, { creatorId: f.a, opportunityId: f.opportunityId }) as unknown as { othersNote: string };
+    expect(r2.othersNote).toMatch(/^THEY REPLIED: Second/);
     // Tenant-scoped: B's read of its own relationships never sees A's.
     await expect(f.t.query(internal.partnerships.store.read, { creatorId: f.b, opportunityId: f.opportunityId })).rejects.toThrow();
   });
