@@ -63,11 +63,32 @@ async function mailboxState(ctx: QueryCtx | MutationCtx, creatorId: Id<"creators
   return { connected: Boolean(row), email: row?.email ?? null, sendingEnabled: emailSendEnabled(c), needsAttention: row?.attention ?? null };
 }
 
-/** The tool runner's `why` rides along on some calls; it is ours, not part of the record. Pure. */
+/**
+ * Pure: the shape slips a model makes calling partnership_update, undone before the strict parse (deals sim
+ * 2026-09-28: each cost one of her six calls and a pitch or an application never got drafted). The tool
+ * runner's `why` and a repeated `operation` are ours, not the record's; an `opportunity` sent as a JSON
+ * string is parsed; an `assessment` put beside `opportunity` goes inside it. Nothing else is guessed:
+ * every guard after this still runs on what she actually said.
+ */
 export function withoutWhy(input: unknown): unknown {
   if (!input || typeof input !== "object" || Array.isArray(input)) return input;
   const rest = { ...(input as Record<string, unknown>) };
   delete rest.why;
+  delete rest.operation;
+  if (typeof rest.opportunity === "string") {
+    try { rest.opportunity = JSON.parse(rest.opportunity); } catch { /* left as is: the strict parse names it */ }
+  }
+  const opp = rest.opportunity;
+  if (opp && typeof opp === "object" && !Array.isArray(opp)) {
+    const o = opp as Record<string, unknown>;
+    for (const k of ["assessment", "evidence", "applicationFields"]) if (typeof o[k] === "string") {
+      try { rest.opportunity = { ...(rest.opportunity as Record<string, unknown>), [k]: JSON.parse(o[k] as string) }; } catch { /* the strict parse names it */ }
+    }
+  }
+  if (rest.assessment && opp && typeof opp === "object" && !Array.isArray(opp) && !("assessment" in opp)) {
+    rest.opportunity = { ...(opp as Record<string, unknown>), assessment: rest.assessment };
+    delete rest.assessment;
+  }
   return rest;
 }
 

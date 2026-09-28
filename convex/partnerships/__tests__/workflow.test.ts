@@ -132,6 +132,13 @@ describe("partnership evidence and fit", () => {
     await f.t.mutation(internal.core.messages.recordInbound, { creatorId: f.a, surface: "web", body: "put 175 per video for the rate" });
     await expect(prep([{ label: "Your TikTok handle", answer: "@sam" }, { label: "Your rate per video in USD", answer: "$175" }])).resolves.toBeTruthy();
   });
+  it("the model's shape slips are undone before the strict parse, and nothing else is (pure)", async () => {
+    const { withoutWhy } = await import("../store");
+    expect(withoutWhy({ why: "x", operation: "save", brandDomain: "b.com", opportunity: JSON.stringify({ brand: "B" }) })).toEqual({ brandDomain: "b.com", opportunity: { brand: "B" } });
+    expect(withoutWhy({ brandDomain: "b.com", opportunity: { brand: "B" }, assessment: { verdict: "pass" } })).toEqual({ brandDomain: "b.com", opportunity: { brand: "B", assessment: { verdict: "pass" } } });
+    expect(withoutWhy({ brandDomain: "b.com", opportunity: "{not json", extra: 1 })).toEqual({ brandDomain: "b.com", opportunity: "{not json", extra: 1 });
+    expect(withoutWhy({ brandDomain: "b.com", opportunity: { brand: "B", assessment: JSON.stringify({ verdict: "pass" }) } })).toEqual({ brandDomain: "b.com", opportunity: { brand: "B", assessment: { verdict: "pass" } } });
+  });
   it("partnership_update takes its input as an object, and a broken JSON string is refused with what to do", async () => {
     const f = await fixture();
     const ctx = { runQuery: f.t.query, runMutation: f.t.mutation, runAction: f.t.action } as never;
