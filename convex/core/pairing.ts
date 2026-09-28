@@ -92,7 +92,8 @@ export async function mintPairing(ctx: MutationCtx, creator: Doc<"creators">): P
   const now0 = Date.now();
   // §23: a creator who gave a phone number pairs by texting the line; the token rides in the first text.
   if (creator.channel.kind === "imessage") {
-    const lineNumber = process.env.CLAW_LINE_NUMBER;
+    // X1: the line Linq picked for them at signup, else the deployment's configured line.
+    const lineNumber = creator.channel.line ?? process.env.LINQ_LINE_NUMBER ?? process.env.CLAW_LINE_NUMBER;
     if (!lineNumber) return { ok: false, error: "the phone channel isn't configured on this deployment" };
     const live = creator.pairingToken && creator.pairingExpiresAt && creator.pairingExpiresAt > now0;
     const token = live ? creator.pairingToken! : mintToken();

@@ -36,6 +36,7 @@ import { dayScanFloor, isSameDayInZone } from "./cadence";
 import { applyBump, emptyDay } from "./budgets";
 import { THRESHOLDS } from "../config/thresholds";
 import { clip } from "../lib/clip";
+import { phoneRailHold } from "./phoneRail";
 
 /**
  * S0: the ONE definition of what spends the daily allowance of interruptions. Used by the rails,
@@ -294,6 +295,15 @@ export const send = internalMutation({
         return { messageId: null, sent: false, held: "one partnerships text a day" };
       }
     }
+    // X1: on a phone number, Linq's chat health and the silence ladder (core/phoneRail.ts) hold proactive
+    // texts here, beside the cap, so no caller can skip them. A reply to them always goes.
+    if (args.proactive && args.surface !== "system" && args.surface !== "web") {
+      const held = await phoneHold(ctx, args.creatorId, args.kind, args.ts ?? Date.now());
+      if (held) {
+        console.warn(`[messages] held ${args.kind ?? "message"} for ${args.creatorId} (phone rail): ${held}`);
+        return { messageId: null, sent: false, held: `phone rail: ${held}` };
+      }
+    }
     // A person never receives a JSON envelope. Unwrapped here, or refused loudly.
     const envelope = unwrapModelEnvelope(args.body);
     if (envelope.unwrapped) console.error(`[messages] unwrapped a JSON envelope for ${args.kind ?? "message"} ${args.dedupeKey}; the caller sent the raw model output`);
@@ -348,6 +358,20 @@ export const send = internalMutation({
     return { messageId, sent: true };
   },
 });
+
+/** The phone rail's inputs, from rows (bounded: two weeks of their messages). Null means send. */
+async function phoneHold(ctx: MutationCtx, creatorId: Id<"creators">, kind: string | undefined, now: number): Promise<string | null> {
+  const c = (await ctx.db.get(creatorId)) as Doc<"creators"> | null;
+  if (!c || c.channel.kind !== "imessage") return null;
+  const rows = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", creatorId).gte("ts", now - 14 * 86_400_000)).collect()) as Doc<"messages">[];
+  const inbound = rows.filter((m) => m.direction === "in").sort((a, b) => b.ts - a.ts)[0] ?? null;
+  const lastInboundAt = inbound?.ts ?? (c.channel.pairedAt ?? null);
+  const unanswered = rows.filter((m) => m.direction === "out" && m.proactive && m.ts > (lastInboundAt ?? 0)).sort((a, b) => a.ts - b.ts).map((m) => ({ ts: m.ts, kind: m.kind }));
+  const proactiveToday = rows.filter((m) => m.direction === "out" && m.proactive && isSameDayInZone(m.ts, now, c.timezone)).length;
+  const lineRow = c.channel.line ? await ctx.db.query("syncState").withIndex("by_key", (q) => q.eq("key", `linq:line:${c.channel.line}`)).unique() : null;
+  const lineState = lineRow ? (JSON.parse(lineRow.value) as { status: string | null; reputation: string | null }) : null;
+  return phoneRailHold({ now, kind, health: c.channel.health, lineState, optedOutAt: c.channel.optedOutAt, lastInboundAt, unanswered, proactiveToday });
+}
 
 /**
  * Ask the founder something, enforcing invariant 5: at most one open question

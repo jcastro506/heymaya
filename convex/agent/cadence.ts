@@ -274,7 +274,7 @@ export const howDidItGo = internalAction({
     await ctx.runMutation(internal.core.messages.closeOpen, { creatorId: a.creatorId });
     const sent = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: hook.length <= 45 ? `how'd the ${bare(hook)} shoot go?` : "how'd today's shoot go?", dedupeKey: `howdidit:${block._id}`, ts: now, proactive: true, kind: "checkin", awaitingAnswer: true, buttons: [{ id: `shot:${block._id}:yes`, label: "filmed it" }, { id: `shot:${block._id}:no`, label: "didn't happen" }] });
     await ctx.runMutation(internal.calendar.reminders.touched, { blockId: block._id, touch: "howdidit" });
-    if (!sent.sent) return { sent: false, reason: "already asked" };
+    if (!sent.sent) return { sent: false, reason: sent.held ?? "already asked" };
     await deliverNow(ctx as never);
     return { sent: true, reason: "asked" };
   },

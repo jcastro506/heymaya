@@ -30,7 +30,7 @@ function awakeZone(now = Date.now()): string {
 async function world(i = 0) {
   const t = convexTest(schema, modules);
   const tz = awakeZone();
-  const creatorId = await t.run((ctx) => seedCreator(ctx, `sim${i}`, { clerkUserId: `eval-run:fw-test:${i}`, timezone: tz, channel: { paired: true, kind: "imessage" }, plan: { status: "trialing", founding: false } }));
+  const creatorId = await t.run((ctx) => seedCreator(ctx, `sim${i}`, { clerkUserId: `eval-run:fw-test:${i}`, timezone: tz, channel: { paired: true, kind: "imessage", pairedAt: Date.now() - 2 * H }, plan: { status: "trialing", founding: false } })); // paired by texting us: that text is their last word
   const ideaId = await t.run((ctx) => ctx.db.insert("ideas", { creatorId, evidenceLinks: [], fit: "yes", fitWhy: "x", version: { hook: "the 5am long run" }, messageText: "film the 5am long run", produced: { skillVersion: "t", model: "m", thresholdsVersion: "t" }, sentAt: Date.now() - 2 * H, status: "sent", createdAt: Date.now() - 2 * H } as never));
   return { t, creatorId, ideaId, tz };
 }

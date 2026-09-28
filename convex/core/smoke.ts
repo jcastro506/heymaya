@@ -18,7 +18,10 @@ type Readiness = { vendor: string; check: string; ok: boolean; detail: Record<st
 /** Configuration checks are useful even when a safe, free provider call does not exist. */
 export function integrationReadiness(env: Record<string, string | undefined>): Readiness[] {
   const present = (key: string) => Boolean(env[key]?.trim());
+  const linqStarted = present("LINQ_API_KEY") || present("LINQ_WEBHOOK_SECRET");
   return [
+    // X1: Linq direct, checked once any of it is set (half-configured is a real problem; not yet signed up is not). The key and the webhook secret are required; the line is a fallback for the pairing screen (Linq picks a line per signup).
+    ...(linqStarted ? [{ vendor: "linq", check: "configuration", ok: ["LINQ_API_KEY", "LINQ_WEBHOOK_SECRET"].every(present), detail: { apiKey: present("LINQ_API_KEY"), webhookSecret: present("LINQ_WEBHOOK_SECRET"), fallbackLine: present("LINQ_LINE_NUMBER") } }] : []),
     { vendor: "claw", check: "configuration", ok: ["CLAW_API_KEY", "CLAW_LINE_NUMBER", "CLAW_RELAY_URL", "CLAW_WEBHOOK_SECRET"].every(present), detail: { apiKey: present("CLAW_API_KEY"), lineNumber: present("CLAW_LINE_NUMBER"), relayUrl: present("CLAW_RELAY_URL"), webhookSecret: present("CLAW_WEBHOOK_SECRET") } },
     { vendor: "zernio", check: "configuration", ok: ["ZERNIO_API_KEY", "ZERNIO_WEBHOOK_SECRET"].every(present), detail: { apiKey: present("ZERNIO_API_KEY"), webhookSecret: present("ZERNIO_WEBHOOK_SECRET") } },
     { vendor: "tavily", check: "configuration", ok: present("TAVILY_API_KEY"), detail: { apiKey: present("TAVILY_API_KEY") } },
