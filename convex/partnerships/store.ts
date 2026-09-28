@@ -63,6 +63,30 @@ async function mailboxState(ctx: QueryCtx | MutationCtx, creatorId: Id<"creators
   return { connected: Boolean(row), email: row?.email ?? null, sendingEnabled: emailSendEnabled(c), needsAttention: row?.attention ?? null };
 }
 
+/** The tool runner's `why` rides along on some calls; it is ours, not part of the record. Pure. */
+export function withoutWhy(input: unknown): unknown {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return input;
+  const rest = { ...(input as Record<string, unknown>) };
+  delete rest.why;
+  return rest;
+}
+
+/** A piece of their own evidence by id in any of the three tables, or a post by its URL or platform id. Theirs only. */
+async function creatorEvidenceRow(ctx: MutationCtx, creatorId: Id<"creators">, stated: "post" | "message" | "personalRecord", ref: string): Promise<{ kind: "post" | "message" | "personalRecord"; record: Doc<"ownPosts"> | Doc<"messages"> | Doc<"personalRecords"> } | null> {
+  const tables = { post: "ownPosts", message: "messages", personalRecord: "personalRecords" } as const;
+  const order = [stated, ...(["message", "post", "personalRecord"] as const).filter((k) => k !== stated)];
+  for (const kind of order) {
+    const id = ctx.db.normalizeId(tables[kind], ref);
+    const record = id ? ((await ctx.db.get(id)) as Doc<"ownPosts"> | Doc<"messages"> | Doc<"personalRecords"> | null) : null;
+    if (record && record.creatorId === creatorId) return { kind, record };
+  }
+  const postId = ref.match(/\/video\/(\d+)/)?.[1] ?? ref.match(/instagram\.com\/(?:p|reel|reels)\/([A-Za-z0-9_-]+)/)?.[1] ?? (/^[\w-]{6,}$/.test(ref) ? ref : null);
+  if (!postId) return null;
+  const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", creatorId)).order("desc").take(300)) as Doc<"ownPosts">[];
+  const post = posts.find((p) => p.postId === postId || p.url === ref || p.url.includes(`/${postId}`));
+  return post ? { kind: "post", record: post } : null;
+}
+
 export const read = internalQuery({
   args: { creatorId: v.id("creators"), opportunityId: v.optional(v.id("partnershipOpportunities")), brandDomain: v.optional(v.string()), cursor: v.optional(v.string()) },
   handler: async (ctx, a) => {
@@ -150,7 +174,7 @@ export const change = internalMutation({
     const p = await profile(ctx, a.creatorId);
     const now = Date.now();
     if (a.operation === "profile") {
-      const data = Profile.parse({ ...p.data, ...Profile.partial().strict().parse(a.input) });
+      const data = Profile.parse({ ...p.data, ...Profile.partial().strict().parse(withoutWhy(a.input)) });
       if (p.row) await ctx.db.patch(p.row._id, { data, updatedAt: now });
       else await ctx.db.insert("partnershipProfiles", { creatorId: a.creatorId, data, updatedAt: now });
       // Any preference change invalidates pending consent, including pause/unpause.
@@ -162,18 +186,23 @@ export const change = internalMutation({
     }
     if (p.data.paused) throw new Error("Partnerships are paused");
     if (a.operation === "save") {
-      const input = z.object({ opportunityId: z.string().optional(), brandDomain: z.string(), opportunity: Opportunity.omit({ status: true, threadId: true, lastInboundAt: true, lastOutboundAt: true, mailboxGeneration: true, lastMessageId: true, followUpAt: true, followUpBasis: true, deliverables: true }) }).strict().parse(a.input);
+      const input = z.object({ opportunityId: z.string().optional(), brandDomain: z.string(), opportunity: Opportunity.omit({ status: true, threadId: true, lastInboundAt: true, lastOutboundAt: true, mailboxGeneration: true, lastMessageId: true, followUpAt: true, followUpBasis: true, deliverables: true }) }).strict().parse(withoutWhy(a.input));
       const domain = new URL(publicUrl(`https://${input.brandDomain}`)).hostname.replace(/^www\./, "");
       const data = Opportunity.parse(input.opportunity);
-      for (const e of data.assessment.creatorEvidence) {
-        const table = e.kind === "post" ? "ownPosts" : e.kind === "message" ? "messages" : "personalRecords";
-        const id = ctx.db.normalizeId(table, e.id);
-        const record = id ? await ctx.db.get(id) : null;
-        if (!record || record.creatorId !== a.creatorId || ("memoryExcludedAt" in record && record.memoryExcludedAt)) throw new Error("Fit assessment requires available evidence from this creator");
-        const sourceText = e.kind === "post" && "caption" in record ? record.caption : e.kind === "message" && "body" in record ? record.body : "text" in record ? record.text : "";
-        if (!sourceText.includes(e.quote)) throw new Error("Personal evidence quote must appear verbatim in the source");
-        if (e.kind === "message" && "direction" in record && record.direction !== "in") throw new Error("Maya's suggestions are not evidence of the creator's preferences");
-        if (e.kind === "personalRecord" && "active" in record && !record.active) throw new Error("Personal evidence was invalidated");
+      // Each item is found by its id in whichever of the three tables holds it, or a post by its URL, and the
+      // kind is corrected from the row (deals sim 2026-09-28: a post cited by URL and a message labelled a
+      // personal record were refused though the quotes were verbatim, and the retries spent her turn).
+      // The quote must still be the source's own words, and only THEIR words count.
+      for (const [i, e] of data.assessment.creatorEvidence.entries()) {
+        const found = await creatorEvidenceRow(ctx, a.creatorId, e.kind, e.id);
+        if (!found) throw new Error(`Fit assessment requires available evidence from this creator: nothing of theirs has id "${e.id.slice(0, 80)}". Cite a message, post or personal record id from what you read`);
+        const { kind, record } = found;
+        if ("memoryExcludedAt" in record && record.memoryExcludedAt) throw new Error("Fit assessment requires available evidence from this creator");
+        const sourceText = kind === "post" && "caption" in record ? record.caption : kind === "message" && "body" in record ? record.body : "text" in record ? record.text : "";
+        if (!sourceText.includes(e.quote)) throw new Error(`Personal evidence quote must appear verbatim in the source: "${e.quote.slice(0, 60)}" is not in that ${kind}`);
+        if (kind === "message" && "direction" in record && record.direction !== "in") throw new Error("Maya's suggestions are not evidence of the creator's preferences");
+        if (kind === "personalRecord" && "active" in record && !record.active) throw new Error("Personal evidence was invalidated");
+        data.assessment.creatorEvidence[i] = { ...e, kind, id: record._id };
       }
       if (p.data.excludedBrands.some(b => domain === b.toLowerCase() || data.brand.toLowerCase() === b.toLowerCase())) throw new Error("Brand excluded by user");
       if (p.data.paidOnly && ["gifting", "affiliate"].includes(data.type)) throw new Error("This does not meet paid-only preferences");
@@ -231,7 +260,7 @@ export const change = internalMutation({
       await event(ctx, a.creatorId, id, `discovered:${id}`, "discovered", data.fit);
       return { id, ...data };
     }
-    const input = z.object({ opportunityId: z.string(), status: Opportunity.shape.status.optional(), note: z.string().min(1).max(4000), followUpAt: z.number().finite().optional(), deliverables: Opportunity.shape.deliverables.optional() }).strict().parse(a.input);
+    const input = z.object({ opportunityId: z.string(), status: Opportunity.shape.status.optional(), note: z.string().min(1).max(4000), followUpAt: z.number().finite().optional(), deliverables: Opportunity.shape.deliverables.optional() }).strict().parse(withoutWhy(a.input));
     const { row, data } = await ownedOpportunity(ctx, a.creatorId, input.opportunityId as Id<"partnershipOpportunities">);
     if (data.status === "suppressed" && input.status && input.status !== "suppressed") throw new Error("This contact is suppressed; do not resume outreach");
     const key = `user:${source._id}:${row._id}`;

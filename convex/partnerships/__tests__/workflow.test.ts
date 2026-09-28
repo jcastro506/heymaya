@@ -108,6 +108,22 @@ describe("partnership evidence and fit", () => {
     await expect(f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "shoeco.com", opportunity: { ...base, route: "dm", contactEmail: undefined, routeUrl: "https://www.instagram.com/shoe/", evidence: [site] } } })).rejects.toThrow(/Route must be linked/);
     await expect(f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "shoeco.com", opportunity: { ...base, route: "dm", contactEmail: undefined, routeUrl: "https://www.instagram.com/shoeco.collabs/", evidence: [site] } } })).rejects.toThrow(/Route must be linked/);
   });
+  it("deals sim 2026-09-28: her own evidence is found by URL or in the right table, a stray `why` is ignored; another creator's never counts", async () => {
+    const f = await fixture();
+    const url = "https://www.tiktok.com/@sam/video/7777777777777777773";
+    await f.t.run(ctx => ctx.db.insert("ownPosts", { creatorId: f.a, platform: "tiktok", postId: "7777777777777777773", url, createTime: Date.now() - 86_400_000, contentType: "video", caption: "i ran my first sub-3:30 marathon. here's the whole block", hashtags: [], metrics: { views: 29000, likes: 1, comments: 1, shares: 1 }, metricsAsOf: Date.now(), source: "scrape" } as never));
+    const ev = (creatorEvidence: unknown[]) => ({ why: "save the lead", ...f.input, opportunityId: f.opportunityId, opportunity: { ...f.input.opportunity, assessment: { ...f.input.opportunity.assessment, creatorEvidence } } });
+    const saved = await f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: ev([
+      { kind: "post", id: url, quote: "i ran my first sub-3:30 marathon", reason: "their best post" },
+      { kind: "personalRecord", id: f.source, quote: "I want paid running partnerships.", reason: "their goal, in their words" },
+    ]) }) as { id: Id<"partnershipOpportunities"> };
+    const row = await f.t.run(ctx => ctx.db.get(saved.id));
+    expect(Opportunity.parse(row!.data).assessment.creatorEvidence.map(e => e.kind)).toEqual(["post", "message"]);
+    // B's own words can never stand as A's evidence (cross-tenant), and a paraphrase is still refused.
+    const bMsg = await f.t.mutation(internal.core.messages.recordInbound, { creatorId: f.b, surface: "web", body: "I want paid running partnerships." });
+    await expect(f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: ev([{ kind: "message", id: bMsg.messageId, quote: "I want paid running partnerships.", reason: "x" }]) })).rejects.toThrow(/nothing of theirs has id/);
+    await expect(f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: ev([{ kind: "post", id: url, quote: "my fastest marathon ever", reason: "x" }]) })).rejects.toThrow(/verbatim/);
+  });
   it("a draft with template holes is refused and the pending draft survives", async () => {
     const f = await fixture();
     const good = await f.draft();
