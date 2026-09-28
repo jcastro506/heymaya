@@ -1,10 +1,12 @@
 import { httpRouter } from "convex/server";
 import { shareHttp, widgetHttp } from "./share";
 import { tavily as tavilyFake, gmail as gmailFake } from "./eval/fakes";
+import { linq as linqFake } from "./eval/fakeLinq";
 import { stripeWebhook } from "./billing/webhook";
 import { zernioWebhook } from "./connections/zernio";
 import { telegramWebhookHttp } from "./telegram/webhook";
 import { imessageWebhookHttp } from "./imessage/webhook";
+import { linqWebhookHttp } from "./imessage/linqWebhook";
 
 /**
  * HTTP routes. Two rules from the scar-tissue list:
@@ -19,6 +21,7 @@ http.route({ path: "/telegram/webhook", method: "POST", handler: telegramWebhook
 
 // §23: the phone channel (iMessage, RCS, SMS), fed by our relay, signed with our secret.
 http.route({ path: "/imessage/webhook", method: "POST", handler: imessageWebhookHttp });
+http.route({ path: "/linq/webhook", method: "POST", handler: linqWebhookHttp });
 
 // Billing (§19.3): public, signature-verified, idempotent; never behind the web deployment's auth.
 http.route({ path: "/stripe/webhook", method: "POST", handler: stripeWebhook });
@@ -35,5 +38,7 @@ http.route({ path: "/zernio/webhook", method: "POST", handler: zernioWebhook });
 http.route({ pathPrefix: "/fake/tavily/", method: "POST", handler: tavilyFake });
 http.route({ pathPrefix: "/fake/gmail/", method: "GET", handler: gmailFake });
 http.route({ pathPrefix: "/fake/gmail/", method: "POST", handler: gmailFake });
+http.route({ pathPrefix: "/fake/linq/", method: "GET", handler: linqFake });
+http.route({ pathPrefix: "/fake/linq/", method: "POST", handler: linqFake });
 
 export default http;

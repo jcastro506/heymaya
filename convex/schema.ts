@@ -95,6 +95,18 @@ export default defineSchema({
       broken: v.optional(v.boolean()),
       // §23: which app she lives in for this creator. Absent means Telegram, so nothing existing changes.
       kind: v.optional(v.union(v.literal("telegram"), v.literal("imessage"))),
+      /**
+       * X1 (Linq, 2026-09-28): the phone chat as the vendor sees it. `chatId` for typing and the contact
+       * card; `health` is Linq's pre-send gate (HEALTHY | AT_RISK | CRITICAL | OPTED_OUT), cached from
+       * every chat event; `optedOutAt` from an opt-out keyword or a 2024 refusal, cleared by their next
+       * text; `cardSharedAt` so the card is offered at most once a day; `line` is the number they text.
+       */
+      chatId: v.optional(v.string()),
+      health: v.optional(v.string()),
+      healthAt: v.optional(v.number()),
+      optedOutAt: v.optional(v.number()),
+      cardSharedAt: v.optional(v.number()),
+      line: v.optional(v.string()),
     }),
     plan: v.object({
       status: v.union(
@@ -127,6 +139,8 @@ export default defineSchema({
     .index("by_kit_slug", ["kitLink.slug"])
     .index("by_telegram_chat", ["telegramChatId"])
     .index("by_phone", ["phone"])
+    // X1: Linq's chat events name the chat, not the person.
+    .index("by_chat", ["channel.chatId"])
     .index("by_pairing_token", ["pairingToken"])
     .index("by_tiktok", ["handles.tiktok"])
     .index("by_instagram", ["handles.instagram"]),

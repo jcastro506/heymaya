@@ -8,12 +8,28 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery, type ActionCtx } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { splitParts } from "./envelope";
 import { normalizePhone, type ClawReactionType, type ClawService } from "../integrations/claw/client";
+import { isOptOutKeyword } from "../integrations/linq/client";
+
+/**
+ * X1: which vendor carries the phone channel on this deployment. Linq direct when its key is set,
+ * else Claw (Linq's reseller) as before; null when neither is configured.
+ */
+export function phoneVendor(): "linq" | "claw" | null {
+  if (process.env.LINQ_API_KEY) return "linq";
+  if (process.env.CLAW_API_KEY) return "claw";
+  return null;
+}
+
+/** What she says once after an opt-out keyword: the one send Linq lets through (`override_optout`). */
+export const OPT_OUT_REPLY = "got it, you won't hear from me. text me any time and i'll pick right back up.";
+/** The contact card is offered at most this often per chat (Linq: once a day after the first outbound). */
+export const CARD_SHARE_EVERY_MS = 24 * 60 * 60_000;
 
 /** A menu (the buttons of an outbound) is answerable for this long; after that a "1" is just text. */
 export const MENU_TTL_MS = 24 * 60 * 60_000;
@@ -145,6 +161,78 @@ export const receiveInbound = internalMutation({
   },
 });
 
+/**
+ * X1: what the vendor told us about their chat, from any event or send: the chat id (typing, the
+ * card), Linq's health (the rail's gate), the line they text. Their own message clears an opt-out:
+ * Linq lifts it the moment they reply, and so do we.
+ */
+export const recordChat = internalMutation({
+  args: { phone: v.string(), chatId: v.optional(v.string()), health: v.optional(v.string()), line: v.optional(v.string()), theyWrote: v.optional(v.boolean()) },
+  handler: async (ctx, a): Promise<null> => {
+    const c = (await ctx.db.query("creators").withIndex("by_phone", (q) => q.eq("phone", a.phone)).first()) as Doc<"creators"> | null;
+    if (!c || c.channel.kind !== "imessage") return null;
+    const now = Date.now();
+    await ctx.db.patch(c._id, {
+      channel: {
+        ...c.channel,
+        ...(a.chatId ? { chatId: a.chatId } : {}),
+        ...(a.health ? { health: a.health, healthAt: now } : {}),
+        ...(a.line ? { line: a.line } : {}),
+        ...(a.theyWrote ? { optedOutAt: undefined } : {}),
+      },
+      updatedAt: now,
+    });
+    return null;
+  },
+});
+
+export const markOptedOut = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ first: boolean }> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!c) return { first: false };
+    if (c.channel.optedOutAt) return { first: false };
+    await ctx.db.patch(a.creatorId, { channel: { ...c.channel, optedOutAt: Date.now() }, updatedAt: Date.now() });
+    return { first: true };
+  },
+});
+
+export const markCardShared = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<null> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (c) await ctx.db.patch(a.creatorId, { channel: { ...c.channel, cardSharedAt: Date.now() } });
+    return null;
+  },
+});
+
+/** A line's status or reputation changed (phone_number.status_updated): kept for the rail, and the operator hears about a bad turn. */
+export const recordLine = internalMutation({
+  args: { phoneNumber: v.string(), status: v.optional(v.string()), reputation: v.optional(v.string()) },
+  handler: async (ctx, a): Promise<{ worse: boolean }> => {
+    const key = `linq:line:${a.phoneNumber}`;
+    const row = await ctx.db.query("syncState").withIndex("by_key", (q) => q.eq("key", key)).unique();
+    const prev = row ? (JSON.parse(row.value) as { status: string | null; reputation: string | null }) : { status: null, reputation: null };
+    const next = { status: a.status ?? prev.status, reputation: a.reputation ?? prev.reputation };
+    const value = JSON.stringify(next);
+    if (row) await ctx.db.patch(row._id, { value, updatedAt: Date.now() });
+    else await ctx.db.insert("syncState", { key, value, updatedAt: Date.now() });
+    const bad = (x: { status: string | null; reputation: string | null }) => x.status === "FLAGGED" || x.reputation === "CRITICAL" || x.reputation === "AT_RISK";
+    return { worse: bad(next) && !bad(prev) };
+  },
+});
+
+/** A send the vendor accepted and then failed (message.failed): named on the row, never silent. */
+export const markFailedByVendorId = internalMutation({
+  args: { channelMessageId: v.string(), reason: v.string() },
+  handler: async (ctx, a): Promise<{ found: boolean }> => {
+    const row = (await ctx.db.query("messages").withIndex("by_channel_message", (q) => q.eq("channelMessageId", a.channelMessageId)).first()) as Doc<"messages"> | null;
+    if (!row) return { found: false };
+    await ctx.db.patch(row._id, { deliveredAt: undefined, deliveryError: a.reason });
+    return { found: true };
+  },
+});
+
 /** The vendor's id of an outbound, once it is known, so a tapback on it can be found. */
 export const markVendorId = internalMutation({
   args: { messageId: v.id("messages"), channelMessageId: v.string() },
@@ -169,11 +257,23 @@ async function queueTurn(ctx: { runMutation: (ref: never, a: never) => Promise<u
  * why not; nothing goes quietly nowhere.
  */
 export const handleText = internalAction({
-  args: { from: v.string(), text: v.string(), channelMessageId: v.string(), service: v.optional(v.string()), ts: v.optional(v.number()) },
+  args: { from: v.string(), text: v.string(), channelMessageId: v.string(), service: v.optional(v.string()), ts: v.optional(v.number()), chatId: v.optional(v.string()), health: v.optional(v.string()) },
   handler: async (ctx, a): Promise<{ ok: boolean; reason?: string }> => {
     const phone = normalizePhone(a.from);
     if (!phone) return { ok: false, reason: "not a phone number" };
     if (await ctx.runQuery(internal.core.imessage.seenVendorMessage, { channelMessageId: a.channelMessageId })) return { ok: true, reason: "duplicate" };
+    // X1: an exact opt-out keyword (Linq's list) stops everything to them at once, and she says so once.
+    // Anything they send later lifts it (recordChat below, and Linq's side). "stop texting me" in a
+    // sentence is the classifier's pause, not this.
+    if (isOptOutKeyword(a.text)) {
+      const who = await ctx.runQuery(internal.core.imessage.creatorByPhone, { phone });
+      if (!who?.paired) return { ok: true, reason: "opt-out from a number we don't talk to" };
+      const r = await ctx.runMutation(internal.core.imessage.receiveInbound, { creatorId: who.creatorId, body: a.text, kind: "optout", channelMessageId: a.channelMessageId, ts: a.ts });
+      const first = await ctx.runMutation(internal.core.imessage.markOptedOut, { creatorId: who.creatorId });
+      if (first.first) await ctx.runAction(internal.core.imessage.sendRaw, { to: phone, text: OPT_OUT_REPLY, overrideOptout: true, idempotencyKey: `optout:${a.channelMessageId}` });
+      return { ok: true, reason: r.recorded ? "opted out" : "opted out (duplicate)" };
+    }
+    await ctx.runMutation(internal.core.imessage.recordChat, { phone, chatId: a.chatId, health: a.health, theyWrote: true });
 
     // Pairing: their first text. By token when the START came through, by the number they gave us otherwise.
     const token = parseStartText(a.text);
@@ -189,8 +289,8 @@ export const handleText = internalAction({
       return { ok: true, reason: "paired" };
     }
     if (!known) {
-      const appUrl = process.env.APP_URL ?? "https://hey-maya.ai";
-      await ctx.runAction(internal.core.imessage.sendRaw, { to: phone, text: `I don't think we've met. sign up at ${appUrl} and I'll meet you back here.` });
+      // No link: a link in the first text on a line raises its flagging risk (Linq best practices).
+      await ctx.runAction(internal.core.imessage.sendRaw, { to: phone, text: "I don't think we've met. sign up in the Maya app and I'll meet you back here.", idempotencyKey: `stranger:${a.channelMessageId}` });
       return { ok: false, reason: "unknown number" };
     }
 
@@ -199,7 +299,9 @@ export const handleText = internalAction({
     const kind = pick ? "button" : "inbound";
     const r = await ctx.runMutation(internal.core.imessage.receiveInbound, { creatorId: known.creatorId, body: pick ?? a.text, kind, channelMessageId: a.channelMessageId, ts: a.ts });
     if (!r.recorded || !r.messageId) return { ok: false, reason: r.reason };
-    if (pick) await ctx.runAction(internal.core.imessage.sendRaw, { to: phone, text: pick.endsWith(":no") ? "ok, noted" : "on it" });
+    if (pick) await ctx.runAction(internal.core.imessage.sendRaw, { to: phone, text: pick.endsWith(":no") ? "ok, noted" : "on it", idempotencyKey: `ack:${a.channelMessageId}` });
+    // "…is typing" while her turn runs, like Telegram's; one start lasts ~90 s (Linq). Never blocks.
+    await ctx.scheduler.runAfter(0, internal.core.imessage.typing, { creatorId: known.creatorId });
     await queueTurn(ctx as never, known.creatorId, r.messageId, kind);
     return { ok: true };
   },
@@ -207,7 +309,7 @@ export const handleText = internalAction({
 
 /** A tapback: mapped to the reaction the Telegram path already handles, or noticed and dropped. Never fails the webhook. */
 export const handleReaction = internalAction({
-  args: { from: v.string(), aboutChannelMessageId: v.string(), reactionType: v.string(), emoji: v.optional(v.string()), added: v.boolean() },
+  args: { from: v.string(), aboutChannelMessageId: v.string(), reactionType: v.string(), emoji: v.optional(v.string()), added: v.boolean(), eventId: v.optional(v.string()) },
   handler: async (ctx, a): Promise<{ ok: boolean; reason?: string }> => {
     const phone = normalizePhone(a.from);
     if (!phone) return { ok: false, reason: "not a phone number" };
@@ -215,7 +317,8 @@ export const handleReaction = internalAction({
     if (!known?.paired) return { ok: false, reason: "unknown or unpaired number" };
     const emoji = reactionEmoji(a.reactionType as ClawReactionType | "unknown", a.emoji ?? null, a.added);
     if (!emoji) return { ok: true, reason: `noticed a ${a.reactionType}, nothing to do` };
-    const channelMessageId = `rx:${a.aboutChannelMessageId}:${a.reactionType}:${a.added ? "on" : "off"}:${Math.floor(Date.now() / 60_000)}`;
+    // Linq delivers at least once: its event id makes a redelivery a duplicate. Claw has none, so the minute stands in.
+    const channelMessageId = a.eventId ? `rx:${a.eventId}` : `rx:${a.aboutChannelMessageId}:${a.reactionType}:${a.added ? "on" : "off"}:${Math.floor(Date.now() / 60_000)}`;
     const r = await ctx.runMutation(internal.core.imessage.receiveInbound, { creatorId: known.creatorId, body: emoji, kind: "reaction", channelMessageId, aboutChannelMessageId: a.aboutChannelMessageId });
     if (!r.recorded || !r.messageId) return { ok: false, reason: r.reason };
     await queueTurn(ctx as never, known.creatorId, r.messageId, "reaction");
@@ -225,12 +328,13 @@ export const handleReaction = internalAction({
 
 /** An attachment (a draft, a screenshot, a voice note): fetched by URL, stored, and handed to the same file path Telegram uses. */
 export const handleAttachment = internalAction({
-  args: { from: v.string(), url: v.string(), mimeType: v.string(), caption: v.optional(v.string()), channelMessageId: v.string(), ts: v.optional(v.number()) },
+  args: { from: v.string(), url: v.string(), mimeType: v.string(), caption: v.optional(v.string()), channelMessageId: v.string(), ts: v.optional(v.number()), chatId: v.optional(v.string()), health: v.optional(v.string()) },
   handler: async (ctx, a): Promise<{ ok: boolean; reason?: string }> => {
     const phone = normalizePhone(a.from);
     if (!phone) return { ok: false, reason: "not a phone number" };
     const known = await ctx.runQuery(internal.core.imessage.creatorByPhone, { phone });
     if (!known?.paired) return { ok: false, reason: "unknown or unpaired number" };
+    await ctx.runMutation(internal.core.imessage.recordChat, { phone, chatId: a.chatId, health: a.health, theyWrote: true });
     if (await ctx.runQuery(internal.core.imessage.seenVendorMessage, { channelMessageId: a.channelMessageId })) return { ok: true, reason: "duplicate" };
     // Downloaded in Node: a phone video is often far more than the default runtime can hold.
     const got = await ctx.runAction(internal.core.bigMedia.fetchToStorage, { url: a.url, mimeType: a.mimeType });
@@ -242,6 +346,7 @@ export const handleAttachment = internalAction({
     const storageId = got.storageId as Id<"_storage">;
     const r = await ctx.runMutation(internal.core.imessage.receiveInbound, { creatorId: known.creatorId, body: a.caption ?? "", kind: "file", channelMessageId: a.channelMessageId, fileId: storageId, fileMime: mime, ts: a.ts });
     if (!r.recorded || !r.messageId) return { ok: false, reason: r.reason };
+    await ctx.scheduler.runAfter(0, internal.core.imessage.typing, { creatorId: known.creatorId });
     await ctx.runMutation(internal.core.jobs.enqueue, { kind: "converse", idempotencyKey: `converse:${r.messageId}`, creatorId: known.creatorId, payloadJson: JSON.stringify({ messageId: r.messageId, kind: "file", mime }) });
     return { ok: true };
   },
@@ -251,26 +356,61 @@ export const handleAttachment = internalAction({
 /* Outbound                                                                    */
 /* -------------------------------------------------------------------------- */
 
-/** A raw text to a phone, outside the message log: pairing receipts and "I don't think we've met". Never for her own words. */
+/** A raw text to a phone, outside the message log: pairing receipts, "I don't think we've met", the opt-out goodbye. Never for her own words. */
 export const sendRaw = internalAction({
-  args: { to: v.string(), text: v.string() },
-  handler: async (_ctx, a): Promise<{ ok: boolean }> => {
+  args: { to: v.string(), text: v.string(), overrideOptout: v.optional(v.boolean()), idempotencyKey: v.optional(v.string()) },
+  handler: async (_ctx, a): Promise<{ ok: boolean; reason?: string }> => {
+    if (phoneVendor() === "linq") {
+      const { resolveLinqIdentity, sendMessage } = await import("../integrations/linq/client");
+      const identity = resolveLinqIdentity()!;
+      const r = await sendMessage(identity, { to: a.to, parts: [{ type: "text", value: a.text }], idempotencyKey: a.idempotencyKey ?? `raw:${a.to}:${a.text.length}:${Math.floor(Date.now() / 60_000)}`, overrideOptout: a.overrideOptout });
+      return r.ok ? { ok: true } : { ok: false, reason: r.reason };
+    }
     const { resolveClawIdentity, sendClawMessage } = await import("../integrations/claw/client");
     const identity = resolveClawIdentity();
-    if (!identity) return { ok: false };
+    if (!identity) return { ok: false, reason: "the phone channel isn't configured" };
     const r = await sendClawMessage(identity, { to: a.to, text: a.text });
     return { ok: r.ok };
   },
 });
 
-/** Register their number on the line the moment they give it, so their first text is not refused. */
+/** Register their number on the line the moment they give it, so their first text is not refused. Linq needs none: they text first. */
 export const registerPhone = internalAction({
   args: { phone: v.string() },
   handler: async (_ctx, a): Promise<{ ok: boolean; reason?: string }> => {
+    if (phoneVendor() === "linq") {
+      // Onboarding is the one time we pick a line (never per message): Linq's best available line for a
+      // NEW person, sticky if they already have a chat. Kept on the creator; the pairing screen shows it.
+      const { resolveLinqIdentity, availableNumber } = await import("../integrations/linq/client");
+      const r = await availableNumber(resolveLinqIdentity()!, a.phone);
+      if (!r.ok) return { ok: false, reason: `couldn't pick a line: ${r.reason}` };
+      await _ctx.runMutation(internal.core.imessage.recordChat, { phone: a.phone, line: r.phoneNumber });
+      return { ok: true };
+    }
     const { resolveClawIdentity, registerClawRoute } = await import("../integrations/claw/client");
     const identity = resolveClawIdentity();
     if (!identity) return { ok: false, reason: "the phone channel isn't configured on this deployment" };
     return await registerClawRoute(identity, a.phone);
+  },
+});
+
+/** "…is typing" while her turn runs (Linq, iMessage only). Best effort; never blocks the turn. */
+export const typing = internalAction({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ ok: boolean; reason?: string }> => {
+    if (phoneVendor() !== "linq") return { ok: false, reason: "typing is a Linq feature" };
+    const chat = await ctx.runQuery(internal.core.imessage.chatOf, { creatorId: a.creatorId });
+    if (!chat?.chatId) return { ok: false, reason: "no chat yet" };
+    const { resolveLinqIdentity, startTyping } = await import("../integrations/linq/client");
+    return await startTyping(resolveLinqIdentity()!, chat.chatId);
+  },
+});
+
+export const chatOf = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ chatId: string | null; cardSharedAt: number | null; phone: string | null } | null> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    return c ? { chatId: c.channel.chatId ?? null, cardSharedAt: c.channel.cardSharedAt ?? null, phone: c.phone ?? null } : null;
   },
 });
 
@@ -282,6 +422,7 @@ export const registerPhone = internalAction({
 export const deliver = internalAction({
   args: { messageId: v.id("messages"), phone: v.string(), body: v.string(), buttons: v.optional(v.array(v.object({ id: v.string(), label: v.string() }))), frames: v.optional(v.array(v.object({ url: v.string(), caption: v.string() }))) },
   handler: async (ctx, a): Promise<{ delivered: boolean; reason?: string }> => {
+    if (phoneVendor() === "linq") return await deliverLinq(ctx, a);
     const { resolveClawIdentity, sendClawMessage } = await import("../integrations/claw/client");
     const identity = resolveClawIdentity();
     if (!identity) {
@@ -318,3 +459,50 @@ export const deliver = internalAction({
     return { delivered: true };
   },
 });
+
+/**
+ * X1: one row through Linq. One message per text part (Linq rejects consecutive text parts), each
+ * with an idempotency key from the row and the part, so a retried job can never text twice; no
+ * `from`, so Linq picks and fails over the line. Storyboard frames go as one text + media message.
+ * After the first successful part: the chat id and health are kept, and the contact card is offered
+ * at most once a day. An opt-out refusal (2024) is honoured and marked, never retried.
+ */
+async function deliverLinq(
+  ctx: ActionCtx,
+  a: { messageId: Id<"messages">; phone: string; body: string; buttons?: Array<{ id: string; label: string }>; frames?: Array<{ url: string; caption: string }> },
+): Promise<{ delivered: boolean; reason?: string }> {
+  const { resolveLinqIdentity, sendMessage, shareContactCard } = await import("../integrations/linq/client");
+  const identity = resolveLinqIdentity()!;
+  const parts = splitParts(a.body);
+  if (a.buttons?.length) parts[parts.length - 1] = `${parts[parts.length - 1]}\n${menuLine(a.buttons)}`;
+  const sends: Array<{ key: string; parts: Array<{ type: "text"; value: string } | { type: "media"; url: string }> }> = parts.map((t, i) => ({ key: `${a.messageId}:${i}`, parts: [{ type: "text" as const, value: t }] }));
+  if (a.frames?.length) sends.push({ key: `${a.messageId}:frames`, parts: [{ type: "text", value: a.frames.map((f) => f.caption).join(" · ").slice(0, 900) }, ...a.frames.map((f) => ({ type: "media" as const, url: f.url }))] });
+  let lastId: string | null = null;
+  let chatId: string | null = null;
+  for (let i = 0; i < sends.length; i++) {
+    const r = await sendMessage(identity, { to: a.phone, parts: sends[i].parts, idempotencyKey: sends[i].key });
+    if (!r.ok) {
+      const creator = await ctx.runQuery(internal.core.imessage.creatorByPhone, { phone: a.phone });
+      if (r.kind === "opted_out" && creator) await ctx.runMutation(internal.core.imessage.markOptedOut, { creatorId: creator.creatorId });
+      const reason = `${r.reason}${r.retryAfterS ? ` (retry after ${r.retryAfterS}s)` : ""}${i > 0 ? ` (after ${i} of ${sends.length} texts)` : ""}`;
+      await ctx.runMutation(internal.core.telegram.markDelivered, { messageId: a.messageId, error: reason, ...(lastId ? { telegramMessageId: lastId } : {}) });
+      // The first part failing is a failed delivery (the job retries, and the key makes a retry safe); a later part is partial.
+      return i > 0 ? { delivered: true, reason } : { delivered: false, reason: r.retryable ? reason : `${reason} (not retryable)` };
+    }
+    lastId = r.messageId;
+    chatId = r.chatId;
+    if (i === 0) await ctx.runMutation(internal.core.imessage.recordChat, { phone: a.phone, chatId: r.chatId, ...(r.health ? { health: r.health } : {}), ...(r.from ? { line: r.from } : {}) });
+    if (i < sends.length - 1) await new Promise((res) => setTimeout(res, 900));
+  }
+  await ctx.runMutation(internal.core.telegram.markDelivered, { messageId: a.messageId, ...(lastId ? { telegramMessageId: lastId } : {}) });
+  if (lastId) await ctx.runMutation(internal.core.imessage.markVendorId, { messageId: a.messageId, channelMessageId: lastId });
+  // Her name and photo: offered after an outbound, at most once a day (no card on the line yet is not an error for them).
+  const creator = await ctx.runQuery(internal.core.imessage.creatorByPhone, { phone: a.phone });
+  const chat = creator ? await ctx.runQuery(internal.core.imessage.chatOf, { creatorId: creator.creatorId }) : null;
+  if (creator && chatId && (!chat?.cardSharedAt || Date.now() - chat.cardSharedAt >= CARD_SHARE_EVERY_MS)) {
+    const shared = await shareContactCard(identity, chatId);
+    if (shared.ok) await ctx.runMutation(internal.core.imessage.markCardShared, { creatorId: creator.creatorId });
+    else console.warn(`[imessage] contact card not shared for ${creator.creatorId}: ${shared.reason}`);
+  }
+  return { delivered: true };
+}

@@ -46,7 +46,8 @@ _Status 2026-09-24. Code: `codex/creator-ios-app`, released to `staging` (#361, 
 | **Product sim** (zero credits) | 🟡 Built, live run pending | `replay` answers every public read from the dev read cache (a miss is named, never a paid call; 1-credit ceiling) and `script: "product"` adds 15 checked moments to the first-week week: settings and a rule by chat, booking a shoot, prep + check-in, one creator films and posts while one flakes (asked, "didn't get to it" understood, rebooked), the missed-shoot morning, app vs chat idea acts, Send to Maya, Ask Maya, care, pause/resume, memory, and a cap / rule / quiet-hours audit. See `docs/PRODUCT_SIM.md`. |
 | **R1** Release to staging | ✅ Done | The creator product runs on `staging.hey-maya.ai` + `precise-canary-781`. Founder product's history and data kept. **Production (`main`) not touched.** |
 | **C1** Copy | 🔄 Groundwork | Copy check on every app string; "why it's for you" written to them. **Needs the session with you.** |
-| **D9, X1, M3, W1, M7, B5** | ⏳ Waiting | See "Your blockers". |
+| **X1** Messaging (Linq) | 🟡 Built · live exit waits on your Linq account | Linq direct from their public docs (2026-09-28), to their best practices: no-`from` sends with idempotency keys, Standard Webhooks, STOP with one override goodbye, chat health + line reputation as pre-send gates, their silence back-off ladder inside `messages.send`, typing, contact card daily, `available_number` at onboarding, one-command setup (`scripts/linq-setup.mjs`). **Live on dev against a fake Linq: 9/9.** Claw still works until the key is set. See `docs/LINQ.md`. |
+| **D9, M3, W1, M7, B5** | ⏳ Waiting | See "Your blockers". |
 
 ## The order
 

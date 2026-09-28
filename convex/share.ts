@@ -150,7 +150,7 @@ export const askMaya = mutation({
     }
     await recordAction(ctx, { creatorId: c._id, kind: "ask", objectId: `${a.kind}:${a.id}`, summary: `tapped Ask Maya on ${label}; if their next message says "this" or "it", they mean that` });
     const draft = `about ${label.replace(/^your /, "my ")}: `;
-    const url = conversationLink(c.channel.kind === "imessage" ? "imessage" : "telegram", draft, { lineNumber: process.env.CLAW_LINE_NUMBER, botUsername: process.env.TELEGRAM_BOT_USERNAME });
+    const url = conversationLink(c.channel.kind === "imessage" ? "imessage" : "telegram", draft, { lineNumber: c.channel.line ?? process.env.LINQ_LINE_NUMBER ?? process.env.CLAW_LINE_NUMBER, botUsername: process.env.TELEGRAM_BOT_USERNAME });
     return { ok: true, url, draft };
   },
 });
