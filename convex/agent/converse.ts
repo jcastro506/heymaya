@@ -18,7 +18,7 @@ import { investigate } from "./investigate";
 import { internalQuery } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
-import { claimsUnsupportedAction, critique } from "./critic";
+import { claimsUnsupportedAction, critique, failedActions } from "./critic";
 import { enqueueRender } from "./frames";
 import { CONVERSATIONAL_ONBOARDING } from "../onboarding/conversation";
 import { PARTNERSHIP_SKILL } from "../partnerships/contracts";
@@ -284,7 +284,11 @@ export const run = internalAction({
         const blockId = ci[1] as Id<"calendarBlocks">;
         let body: string;
         let buttons: Array<{ id: string; label: string }> | undefined;
-        if (ci[2] === "yes") {
+        const was = await ctx.runQuery(internal.calendar.blocks.byId, { blockId });
+        if (ci[2] === "yes" && was?.filmedAt) {
+          // A second tap on the same button (product sim 2026-09-28: it re-promised a post nudge after they'd posted).
+          body = "got it, already down as filmed.";
+        } else if (ci[2] === "yes") {
           await ctx.runMutation(internal.calendar.reminders.touched, { blockId, touch: "yes", filmedAt: Date.now() });
           body = "love it. i'll nudge you when it's time to post.";
         } else if (ci[2] === "skip") {
@@ -629,7 +633,7 @@ export const run = internalAction({
     const unsupportedAction = claimsUnsupportedAction(text, inv.trace);
     const verdict = unsupportedAction
       ? { pass: false, problems: ["false_action" as const], note: "claimed an action with no successful tool result" }
-      : await critique(ctx, { creatorId: creator._id, kind: "reply", text, evidence: { theirMessage: clip(target.body, 400), creatorContext: gathered.personal.slice(0, 12_000), toolsUsedThisTurn: toolsUsed, toolTrace: inv.trace, partnershipRecords: relationshipEvidence }, voice: (creator.dossier as { voice?: unknown; persona?: unknown } | undefined) ?? {}, directives: directives.map((d) => d.verbatim) });
+      : await critique(ctx, { creatorId: creator._id, kind: "reply", text, evidence: { theirMessage: clip(target.body, 400), creatorContext: gathered.personal.slice(0, 12_000), toolsUsedThisTurn: toolsUsed, toolTrace: inv.trace, failedActions: failedActions(inv.trace), partnershipRecords: relationshipEvidence }, voice: (creator.dossier as { voice?: unknown; persona?: unknown } | undefined) ?? {}, directives: directives.map((d) => d.verbatim) });
     let criticSkipped = verdict.skipped === true;
     if (!verdict.pass) {
       // Eval personas only (saveTrace no-ops for real creators): what the critic rejected, so the bench can see what a rewrite changed.

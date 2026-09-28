@@ -37,6 +37,12 @@ export const CRITIC_TIMEOUT_MS = 25_000;
 export const reusesVoiceExample = (text: string): boolean => /\byep[,.] software\b[\s\S]{0,120}\bstill watched\b/i.test(text);
 export const assertsUnprovenCause = (text: string): boolean => /\b(worked|performed|took off) because\b|\bwhich is why\b.{0,100}\b(views|reach|followers)\b|\bthat'?s (really )?how people (find|follow)\b|\bwhat actually pulls? people in\b|\bbrands will notice\b|\bwill (do well|perform|take off)\b/i.test(text);
 const MUTATING_TOOLS = new Set(["block_move", "block_drop", "block_add", "idea_update", "idea_status", "idea_plan", "week_replan", "partnership_draft", "partnership_update", "partnership_send", "watch_account", "media_kit_link", "media_kit_edit", "kit_for_brand"]);
+/** Pure: actions that failed this turn and never succeeded later in it (the critic's failedActions). */
+export function failedActions(trace: Array<{ tool?: string; ok?: boolean; result?: unknown }>): Array<{ tool: string; error: string }> {
+  return trace.flatMap((t, i) => (t.tool && t.ok === false && MUTATING_TOOLS.has(t.tool) && !trace.slice(i + 1).some((l) => l.tool === t.tool && l.ok))
+    ? [{ tool: t.tool, error: String(t.result ?? "").replace(/\s+at handler[\s\S]*$/, "").slice(0, 200) }] : []);
+}
+
 export function claimsUnsupportedAction(text: string, trace: Array<{ tool?: string; ok?: boolean }>): boolean {
   // Only statements can claim an action: a question ("have you done a deal before?") can't, and
   // neither can something THEY did ("you've done the hard part"). Bench o1: "have you done paid
@@ -46,7 +52,7 @@ export function claimsUnsupportedAction(text: string, trace: Array<{ tool?: stri
   return claims && !trace.some((turn) => turn.ok && turn.tool && MUTATING_TOOLS.has(turn.tool));
 }
 
-const CRITIC_PROMPT = `You are the critic for a creator's assistant named Maya. Read one outbound message and judge it against the standard below. Return ONLY JSON: {"pass": true|false, "problems": ["no_reaction"|"slop"|"invented_number"|"unsupported_claim"|"wrong_request"|"false_action"|"leak"|"off_voice"|"unsafe"|"no_link"|"no_action"|"directive_violation"|"too_long"|"generic_line"|"vague_sound"|"invented_sound"|"mixed_basis"|"unchecked_world_fact"], "note": "≤160 chars, what to fix"}.
+const CRITIC_PROMPT = `You are the critic for a creator's assistant named Maya. Read one outbound message and judge it against the standard below. Return ONLY JSON: {"pass": true|false, "problems": ["no_reaction"|"slop"|"invented_number"|"unsupported_claim"|"wrong_request"|"false_action"|"leak"|"off_voice"|"unsafe"|"no_link"|"no_action"|"directive_violation"|"too_long"|"generic_line"|"vague_sound"|"invented_sound"|"mixed_basis"|"unchecked_world_fact"|"contradicts_tools"], "note": "≤160 chars, what to fix"}.
 
 Fail it if ANY of these is true:
 - no_reaction: a message about one of THEIR posts (a read, an opinion, a scout idea) that opens on a number, a multiple or a metric word instead of what got her as a viewer. The first line is the moment, named from the evidence; the numbers come after.
@@ -59,6 +65,7 @@ Fail it if ANY of these is true:
 - invented_number: a metric, view count, multiple, date or trend that is not in the evidence given.
 - unsupported_claim: (when the evidence has causesWithEvidence, a cause listed there is supported; judge only causes NOT in that list) says a format "gets followers", "pulls people in", caused growth, or will perform when the evidence has no follower conversion or causal result. A strong view is fine; invented certainty about why people followed is not.
 - wrong_request: mainly answers an earlier conversation turn instead of the current theirMessage in the evidence. A useful callback may support the current answer; it may never replace it.
+- contradicts_tools: it says the opposite of what a tool returned this turn (e.g. "they don't list an email" when a result in toolTrace shows one), or evidence.failedActions is not empty and the message doesn't plainly say that thing didn't go through (it may say why, and what it will try instead). A failed save is never covered with a guess.
 - false_action: says something was moved, booked, scheduled, added, updated, removed, dropped, or done when the tool trace has no successful matching action.
 - leak: vendor names, model names, "endpoint", "scrape", "prompt", ids, stack traces, "as an AI".
 - off_voice: it does not read like a friend who works in the industry texting; it lectures; two questions; more than one question when none was needed. Asking which thing they mean is NOT off_voice and NOT a failure when the evidence and toolTrace don't show it (e.g. they ask about "the second caption" and no captions are in the evidence): never push her to answer about something the evidence doesn't contain.

@@ -22,6 +22,7 @@ import { THRESHOLDS } from "../config/thresholds";
 import { atLocalHour, localHour } from "./postTime";
 import { freeSlotOn, PLAN } from "./planning";
 import { bare, clipWords } from "../lib/clip";
+import { mootReasonFor, retireMootFor } from "./liveness";
 
 export const REMINDER = {
   maxTouchesPerBlock: 2,
@@ -35,7 +36,7 @@ const fmtTime = (e: number, tz: string) => new Intl.DateTimeFormat("en-US", { ti
 
 export const context = internalQuery({
   args: { blockId: v.id("calendarBlocks") },
-  handler: async (ctx, a): Promise<{ block: Doc<"calendarBlocks">; creator: Doc<"creators">; idea: Doc<"ideas"> | null; shotList: string | null } | null> => {
+  handler: async (ctx, a): Promise<{ block: Doc<"calendarBlocks">; creator: Doc<"creators">; idea: Doc<"ideas"> | null; shotList: string | null; moot: string | null } | null> => {
     const block = (await ctx.db.get(a.blockId)) as Doc<"calendarBlocks"> | null;
     if (!block) return null;
     const creator = (await ctx.db.get(block.creatorId)) as Doc<"creators"> | null;
@@ -44,7 +45,7 @@ export const context = internalQuery({
     const v = idea?.version as { hook?: string; onScreenText?: string; lengthSec?: number; sound?: string } | undefined;
     // The hook opens the reminder itself, so the list starts at what's new; each piece bare, so no ".." or ".,".
     const shotList = v ? [v.onScreenText ? `text on screen "${bare(v.onScreenText)}"` : null, v.lengthSec ? `under ${v.lengthSec}s` : null, v.sound ? `sound: ${bare(v.sound)}` : null].filter(Boolean).join(", ") || null : null;
-    return { block, creator, idea, shotList };
+    return { block, creator, idea, shotList, moot: await mootReasonFor(ctx, block) };
   },
 });
 
@@ -55,6 +56,8 @@ export const touched = internalMutation({
     if (!b) return null;
     const touches = Array.from(new Set([...(b.touches ?? []), a.touch]));
     await ctx.db.patch(a.blockId, { touches, ...(a.filmedAt ? { filmedAt: a.filmedAt } : {}) });
+    // Filmed: its other film blocks for the same idea are done with (liveness.ts).
+    if (a.filmedAt && b.ideaId) await retireMootFor(ctx, b.creatorId, b.ideaId);
     return null;
   },
 });
@@ -91,6 +94,8 @@ export const fire = internalAction({
     if (block.status === "deleted") return { sent: false, reason: "block dropped" };
     if (block.start !== a.expectedStart) return { sent: false, reason: "block moved; a fresh schedule owns it" };
     if (!block.consentAt) return { sent: false, reason: "never booked" };
+    // Filmed, posted, or nothing filmed for it: a reminder would be about something that no longer exists.
+    if (c.moot) return { sent: false, reason: `moot: ${c.moot}` };
     // Two touches, full stop. A repeat of an earlier touch is also refused here, before the
     // dedupe key would have caught it, so the count is the rule and the key is the backstop.
     if ((block.touches ?? []).length >= REMINDER.maxTouchesPerBlock) return { sent: false, reason: "two touches already" };

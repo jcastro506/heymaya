@@ -72,7 +72,15 @@ export const read = internalQuery({
       const page = await ctx.db.query("partnershipEvents").withIndex("by_opportunity", q => q.eq("opportunityId", a.opportunityId!)).order("desc").paginate({ cursor: a.cursor ?? null, numItems: 10 });
       const events = page.page;
       const drafts = await ctx.db.query("partnershipDrafts").withIndex("by_opportunity", q => q.eq("opportunityId", a.opportunityId!)).order("desc").take(10);
-      return { opportunity: o.row, events, drafts, nextCursor: page.isDone ? null : page.continueCursor, followUpDue: followUpEligible(o.data, Date.now()), mailbox: await mailboxState(ctx, a.creatorId) };
+      // Every other relationship, one line each (deals sim 2026-09-28: asked "anything from the others?", she read
+      // two and said the rest "haven't been pitched"; three had been, and one had declined).
+      const rest = (await ctx.db.query("partnershipOpportunities").withIndex("by_creator", q => q.eq("creatorId", a.creatorId)).order("desc").take(25)).filter(r => r._id !== a.opportunityId);
+      const others = await Promise.all(rest.map(async (r) => {
+        const d = r.data as { brand?: string; status?: string; route?: string };
+        const last = (await ctx.db.query("partnershipEvents").withIndex("by_opportunity", q => q.eq("opportunityId", r._id)).order("desc").first());
+        return { opportunityId: r._id, brand: d.brand ?? r.brandDomain, status: d.status ?? "unknown", route: d.route ?? "unknown", lastEvent: last ? `${last.kind} ${new Date(last.at).toISOString().slice(0, 10)}` : null };
+      }));
+      return { opportunity: o.row, events, drafts, nextCursor: page.isDone ? null : page.continueCursor, followUpDue: followUpEligible(o.data, Date.now()), mailbox: await mailboxState(ctx, a.creatorId), others, othersNote: "the rest of their relationships, one line each: say nothing about one beyond its line without reading it" };
     }
     const opportunities = a.brandDomain ? await ctx.db.query("partnershipOpportunities").withIndex("by_brand", q => q.eq("creatorId", a.creatorId).eq("brandDomain", a.brandDomain!.toLowerCase().replace(/^www\./, ""))).paginate({ cursor: a.cursor ?? null, numItems: 20 }) : await ctx.db.query("partnershipOpportunities").withIndex("by_creator", q => q.eq("creatorId", a.creatorId)).order("desc").paginate({ cursor: a.cursor ?? null, numItems: 20 });
     // Each relationship carries its latest brand reply (untrusted text, capped), so "what did they say?"
@@ -170,11 +178,19 @@ export const change = internalMutation({
       if (p.data.excludedBrands.some(b => domain === b.toLowerCase() || data.brand.toLowerCase() === b.toLowerCase())) throw new Error("Brand excluded by user");
       if (p.data.paidOnly && ["gifting", "affiliate"].includes(data.type)) throw new Error("This does not meet paid-only preferences");
       if (data.deadline && data.deadline <= now) throw new Error("Opportunity expired");
-      const research = await ctx.db.query("partnershipResearch").withIndex("by_creator", q => q.eq("creatorId", a.creatorId)).order("desc").take(2);
-      const fetched = research.flatMap(r => (r.data as Array<{ url: string; excerpt: string; checkedAt: number; kind: string }>));
-      for (const e of data.evidence) {
-        if (!fetched.some(f => f.url === e.url && f.checkedAt === e.checkedAt && f.kind === e.kind && f.excerpt.includes(e.excerpt)) || e.checkedAt < now - 7 * 86400000 || e.checkedAt > now) throw new Error("Evidence must come from recent research results");
-      }
+      // Evidence is matched to what research actually returned, by url and excerpt; its kind and time are
+      // COPIED from that row, never trusted from the model. 2026-09-28 (deals sim): she cited a bio read as
+      // "search", then "extract", was refused twice with no reason given, ran out of turn, and told the
+      // creator the brand had no email. A bio-email save needs three reads (search, site, profile), so the
+      // window is the last six research rows, not two.
+      const research = await ctx.db.query("partnershipResearch").withIndex("by_creator", q => q.eq("creatorId", a.creatorId)).order("desc").take(6);
+      const fetched = research.flatMap(r => (r.data as Array<{ url: string; excerpt: string; checkedAt: number; kind: string }>)).filter(f => f.checkedAt >= now - 7 * 86400000 && f.checkedAt <= now);
+      data.evidence.forEach((e, i) => {
+        const same = fetched.filter(f => f.url === e.url && f.excerpt.includes(e.excerpt));
+        const f = same.find(x => x.checkedAt === e.checkedAt && x.kind === e.kind) ?? same.find(x => x.kind === e.kind) ?? same.sort((x, y) => (y.kind === "search" ? 0 : 1) - (x.kind === "search" ? 0 : 1) || y.checkedAt - x.checkedAt)[0];
+        if (!f) throw new Error(`Evidence must come from recent research results: nothing you read this week at ${e.url} contains "${e.excerpt.slice(0, 60)}". Cite a url you fetched with a phrase copied from its excerpt`);
+        data.evidence[i] = { ...e, kind: f.kind as typeof e.kind, checkedAt: f.checkedAt };
+      });
       // Contact address must be literally published in the cited text. It is NOT deliverability verification.
       const official = data.evidence.filter(e => new URL(e.url).hostname.replace(/^www\./, "") === domain);
       if (!official.length) throw new Error("Read the brand's official website before saving an opportunity");

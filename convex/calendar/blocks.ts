@@ -15,7 +15,8 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { ensureAccessToken } from "./oauth";
 import { createEvent, deleteEvent, patchEvent } from "../integrations/google/calendar";
 import { formatLocal } from "./time";
-import { clip } from "../lib/clip";
+import { clip, clipWords } from "../lib/clip";
+import { liveBlocks, retireMootFor } from "./liveness";
 
 const KIND = v.union(v.literal("film"), v.literal("edit"), v.literal("post"));
 
@@ -23,7 +24,7 @@ export const propose = internalMutation({
   args: { creatorId: v.id("creators"), kind: KIND, start: v.number(), end: v.number(), title: v.string(), ideaId: v.optional(v.id("ideas")) },
   handler: async (ctx, a): Promise<Id<"calendarBlocks">> => {
     if (!(a.end > a.start)) throw new Error("block must end after it starts");
-    return await ctx.db.insert("calendarBlocks", { creatorId: a.creatorId, kind: a.kind, start: a.start, end: a.end, title: clip(a.title, 80), ideaId: a.ideaId, status: "proposed", createdAt: Date.now() });
+    return await ctx.db.insert("calendarBlocks", { creatorId: a.creatorId, kind: a.kind, start: a.start, end: a.end, title: clipWords(a.title, 80), ideaId: a.ideaId, status: "proposed", createdAt: Date.now() });
   },
 });
 
@@ -109,6 +110,8 @@ export const setStatus = internalMutation({
     const { blockId, ...rest } = a;
     const b = (await ctx.db.get(blockId)) as Doc<"calendarBlocks"> | null;
     await ctx.db.patch(blockId, { ...rest, rev: (b?.rev ?? 0) + 1 });
+    // A dropped film takes its edit and post with it when nothing else films that idea (liveness.ts).
+    if (b && a.status === "deleted" && b.kind === "film" && b.ideaId) await retireMootFor(ctx, b.creatorId, b.ideaId);
     return null;
   },
 });
@@ -174,7 +177,42 @@ export const move = internalAction({
       }
     }
     await ctx.runMutation(internal.calendar.blocks.setStatus, { blockId: a.blockId, status: "moved", start: a.start, end: a.end });
+    // A film put back later takes its edit and post along (product sim, 2026-09-28: "put it back" left the
+    // post at its old time, so the post was moot and the "i'll nudge you when it's time to post" never came).
+    if (b.kind === "film" && a.start > b.start) {
+      const delta = a.start - b.start;
+      for (const d of await ctx.runQuery(internal.calendar.blocks.dependents, { blockId: a.blockId, since: b.start })) {
+        if (d.start >= a.end) continue; // still after the new shoot: leave it where they put it
+        const r = await ctx.runAction(internal.calendar.blocks.move, { blockId: d._id, start: d.start + delta, end: d.end + delta });
+        if (r.ok && d.consentAt) await ctx.runAction(internal.calendar.reminders.scheduleFor, { blockId: d._id });
+      }
+    }
     return { ok: true };
+  },
+});
+
+/**
+ * A booked film or edit block already in that window (product sim, 2026-09-28: she said "locked in" and
+ * left two shoots at 5 pm). Post blocks never clash: posting takes a minute. Moot blocks don't count.
+ */
+export const clash = internalQuery({
+  args: { creatorId: v.id("creators"), start: v.number(), end: v.number(), excludeId: v.optional(v.id("calendarBlocks")) },
+  handler: async (ctx, a): Promise<{ id: Id<"calendarBlocks">; kind: string; title: string; start: number } | null> => {
+    const rows = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("start", a.start - 6 * 3_600_000).lte("start", a.end)).take(100)) as Doc<"calendarBlocks">[];
+    const live = await liveBlocks(ctx, a.creatorId, rows.filter((b) => b._id !== a.excludeId && b.kind !== "post" && b.consentAt && b.start < a.end && b.end > a.start));
+    const hit = live[0];
+    return hit ? { id: hit._id, kind: hit.kind, title: hit.title.replace(/^(film|edit|post)( \(experiment\))?: /, ""), start: hit.start } : null;
+  },
+});
+
+/** The edit and post blocks that follow a film block for the same idea (or plan slot), from `since` on. */
+export const dependents = internalQuery({
+  args: { blockId: v.id("calendarBlocks"), since: v.number() },
+  handler: async (ctx, a): Promise<Doc<"calendarBlocks">[]> => {
+    const film = (await ctx.db.get(a.blockId)) as Doc<"calendarBlocks"> | null;
+    if (!film || (!film.ideaId && !film.planKey)) return [];
+    const rows = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", film.creatorId).gte("start", a.since).lte("start", a.since + 14 * 86_400_000)).take(200)) as Doc<"calendarBlocks">[];
+    return rows.filter((r) => r._id !== film._id && r.kind !== "film" && r.status !== "deleted" && (film.ideaId ? r.ideaId === film.ideaId : r.planKey === film.planKey));
   },
 });
 

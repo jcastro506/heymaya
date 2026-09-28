@@ -14,6 +14,7 @@ import type { Id } from "../_generated/dataModel";
 import { buildPrefix } from "../agent/context";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
+import { scrubPostIds } from "../core/plainLanguage";
 
 export const FIRST_IDEAS_SKILL = `first-plan-ideas
 When: once, right after first contact, so the first plan has posts in it.
@@ -32,7 +33,7 @@ export function parseFirstIdeas(content: string, n: number): SeededIdea[] {
     const j = JSON.parse(m[0]) as { ideas?: Array<{ hook?: unknown; why?: unknown; evidencePostIds?: unknown }> };
     return (j.ideas ?? [])
       // Her voice is lowercase; the model capitalises JSON strings. The first letter is hers.
-      .map((i) => ({ hook: lower(String(i.hook ?? "").trim().slice(0, 90)), why: lower(String(i.why ?? "").trim().slice(0, 140)), evidencePostIds: Array.isArray(i.evidencePostIds) ? i.evidencePostIds.map(String).slice(0, 3) : [] }))
+      .map((i) => ({ hook: lower(String(i.hook ?? "").trim().slice(0, 90)), why: lower(scrubPostIds(String(i.why ?? "")).trim().slice(0, 140)), evidencePostIds: Array.isArray(i.evidencePostIds) ? i.evidencePostIds.map(String).slice(0, 3) : [] }))
       .filter((i) => i.hook.length >= 8)
       .slice(0, Math.max(1, Math.min(5, n)));
   } catch {

@@ -76,6 +76,42 @@ describe("partnership evidence and fit", () => {
     const ok = await f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "shoeco.com", opportunity: { ...base, contactEmail: "hello@shoeco.net", evidence: [site, real] } } }) as { id: string };
     expect(ok.id).toBeTruthy();
   });
+  it("deals sim 2026-09-28: a bio email saves when the profile read is cited with the wrong kind, from three separate reads", async () => {
+    const f = await fixture();
+    const now = Date.now();
+    const search = { url: "https://shoeco.com/about", excerpt: "Shoe Co pays trail creators. find us on Instagram.", checkedAt: now - 3000, kind: "search" };
+    const site = { url: "https://shoeco.com/about", excerpt: "Shoe Co makes trail shoes. Follow us: https://instagram.com/shoeco", checkedAt: now - 2000, kind: "extract" };
+    const bio = { url: "https://www.instagram.com/shoeco/", excerpt: "@shoeco\nbio: trail shoes. collabs: hello@shoeco.net", checkedAt: now - 1000, kind: "profile" };
+    for (const r of [search, site, bio]) {
+      const id = await f.t.mutation(internal.partnerships.store.reserveResearch, { creatorId: f.a });
+      await f.t.mutation(internal.partnerships.store.saveResearch, { creatorId: f.a, id, results: [r] });
+    }
+    const base = { ...f.input.opportunity, brand: "Shoe Co" };
+    // She labelled the bio "extract" with a made-up time; the row's own kind and time are what get kept.
+    const saved = await f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "shoeco.com", opportunity: { ...base, contactEmail: "hello@shoeco.net", evidence: [site, { ...bio, kind: "extract", checkedAt: now - 5 }] } } }) as { id: Id<"partnershipOpportunities"> };
+    const row = await f.t.run(ctx => ctx.db.get(saved.id));
+    expect(Opportunity.parse(row!.data).evidence.map(e => [e.kind, e.checkedAt])).toEqual([["extract", now - 2000], ["profile", now - 1000]]);
+    // Still no invented evidence: an excerpt nothing returned is refused, and the refusal says what to cite.
+    await expect(f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "shoeco.com", opportunity: { ...base, contactEmail: "hello@shoeco.net", evidence: [site, { ...bio, excerpt: "collabs: boss@shoeco.net" }] } } })).rejects.toThrow(/nothing you read this week.*Cite a url you fetched/);
+  });
+  it("a draft with template holes is refused and the pending draft survives", async () => {
+    const f = await fixture();
+    const good = await f.draft();
+    await expect(f.t.mutation(internal.partnerships.drafts.prepare, { creatorId: f.a, sourceMessageId: f.source, input: { opportunityId: f.opportunityId, subject: "Brand x runner: a running content idea", body: `My rate is [rate] for [usage window]. My kit: ${f.kit}` } })).rejects.toThrow(/fill in or remove \[rate\], \[usage window\]/);
+    const row = await f.t.query(internal.partnerships.drafts.get, { creatorId: f.a, draftId: good.id });
+    expect(Draft.parse(row.row.data).status).toBe("draft");
+  });
+  it("reading one relationship also lists the others, one line each", async () => {
+    const f = await fixture();
+    const id = await f.t.mutation(internal.partnerships.store.reserveResearch, { creatorId: f.a });
+    const other = { url: "https://second.com/creators", excerpt: "Second pays creators. Email team@second.com.", checkedAt: Date.now(), kind: "extract" };
+    await f.t.mutation(internal.partnerships.store.saveResearch, { creatorId: f.a, id, results: [other] });
+    await f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "second.com", opportunity: { ...f.input.opportunity, brand: "Second", contactEmail: "team@second.com", evidence: [other] } } });
+    const r = await f.t.query(internal.partnerships.store.read, { creatorId: f.a, opportunityId: f.opportunityId }) as { others: Array<{ brand: string; status: string }> };
+    expect(r.others.map(o => o.brand)).toEqual(["Second"]);
+    // Tenant-scoped: B's read of its own relationships never sees A's.
+    await expect(f.t.query(internal.partnerships.store.read, { creatorId: f.b, opportunityId: f.opportunityId })).rejects.toThrow();
+  });
   it("profile specs and links are matched exactly (pure)", () => {
     expect(profileTarget("instagram:@ShoeCo")).toEqual({ platform: "instagram", handle: "shoeco", url: "https://www.instagram.com/shoeco/" });
     expect(profileTarget("youtube:shoeco")).toBeNull();

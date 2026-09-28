@@ -11,7 +11,7 @@ import { checkPlainLanguage } from "../core/plainLanguage";
 import { emailSendEnabled } from "./providerConfig";
 import { readKitV2 } from "./kitData";
 import { kitUrl } from "./kitPage";
-import { nextSendAt, pitchProblems, sendWhen } from "./pitch";
+import { nextSendAt, pitchProblems, placeholders, sendWhen } from "./pitch";
 
 export const prepare = internalMutation({
   args: { creatorId: v.id("creators"), sourceMessageId: v.id("messages"), input: v.any() },
@@ -43,6 +43,9 @@ export const prepare = internalMutation({
     const recent = await ctx.db.query("partnershipDrafts").withIndex("by_creator", q => q.eq("creatorId", a.creatorId)).order("desc").take(100);
     const monthStart = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), 1);
     if (recent.filter(d => d._creationTime >= monthStart).length >= partnershipAllowance(c).draftsPerMonth) throw new Error("Monthly draft allowance reached");
+    // Every route: no template holes. Refused before the old draft is canceled, so a good draft survives.
+    const holes = placeholders([input.subject ?? "", input.body, ...(input.answers ?? []).map((x) => x.answer)].join("\n"));
+    if (holes.length) throw new Error(`Redraft before review: fill in or remove ${holes.slice(0, 3).join(", ")}. If you need a number from them (a rate, a date), ask them first and draft after they answer`);
     for (const d of drafts) {
       const old = Draft.parse(d.data);
       if (["draft", "approved"].includes(old.status)) await ctx.db.patch(d._id, { data: { ...old, status: "canceled" }, updatedAt: now });

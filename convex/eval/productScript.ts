@@ -21,7 +21,7 @@ import { countsTowardCap } from "../core/messages";
 import { dayKeyInZone } from "../core/cadence";
 import { THRESHOLDS } from "../config/thresholds";
 import { CADENCE } from "../agent/cadence";
-import { clip } from "../lib/clip";
+import { clip, clipWords } from "../lib/clip";
 
 export type Role = "follows_through" | "flakes";
 export const roleOf = (i: number): Role => (i % 2 === 0 ? "follows_through" : "flakes");
@@ -106,7 +106,7 @@ export const appAskMaya = internalMutation({
     await simCreator(ctx, a.creatorId);
     const idea = (await ctx.db.get(a.ideaId)) as Doc<"ideas"> | null;
     if (!idea || idea.creatorId !== a.creatorId) throw new Error("not their idea");
-    const label = `the "${hookOf(idea).slice(0, 60)}" idea`;
+    const label = `the "${clipWords(hookOf(idea), 60)}" idea`;
     await recordAction(ctx, { creatorId: a.creatorId, kind: "ask", objectId: `idea:${a.ideaId}`, summary: `tapped Ask Maya on ${label}; if their next message says "this" or "it", they mean that` });
     return { draft: `about ${label}: ` };
   },
@@ -214,20 +214,31 @@ export async function runBeat(env: BeatEnv, beat: string): Promise<Check[]> {
       const p0 = await probeOf(env);
       const idea = openIdeas(p0)[0];
       if (!idea) { check("an idea to book", false, "no open idea by day 2"); break; }
-      const r = await say(`can we film the "${clip(idea.hook, 60)}" one tomorrow at 5pm?`);
+      // 1 pm, not 5: the week plan already holds 5 pm, and a clash is its own beat below.
+      const r = await say(`can we film the "${clipWords(idea.hook, 60)}" one tomorrow at 1pm?`);
       const p = await probeOf(env);
-      const b = shootBlock(p);
+      // The block THIS turn made (2026-09-28: the newest-starting film block was the week plan's, not hers).
+      const before = new Set(p0.blocks.map((x) => x.id));
+      const b = p.blocks.filter((x) => x.kind === "film" && x.status !== "deleted" && x.booked && !before.has(x.id)).sort((x, y) => y.start - x.start)[0] ?? null;
       const tomorrow = dayKeyInZone(Date.now() + 86_400_000, p.creator.timezone);
       const hour = b ? Number(new Intl.DateTimeFormat("en-US", { timeZone: p.creator.timezone, hour: "numeric", hourCycle: "h23" }).format(b.start)) : -1;
-      check("booked by chat: a film block, tomorrow at 5pm, consented", Boolean(b && dayKeyInZone(b.start, p.creator.timezone) === tomorrow && hour === 17), b ? `block "${b.title}" ${new Date(b.start).toISOString()} (local hour ${hour})` : `no booked film block; she said: ${r}`);
+      check("booked by chat: a film block, tomorrow at 1pm, consented", Boolean(b && dayKeyInZone(b.start, p.creator.timezone) === tomorrow && hour === 13), b ? `block "${b.title}" ${new Date(b.start).toISOString()} (local hour ${hour})` : `no booked film block; she said: ${r}`);
       check("the block is for that idea", b ? b.ideaId === idea.id || lc(b.title).includes(lc(idea.hook).slice(0, 20)) : false, b ? `block idea ${b.ideaId ?? "none"}, title "${b.title}"` : "no block");
       if (!b) {
         // The rest of the week needs a shoot: book it through the calendar tool the app and her chat share, and say so.
-        const w = await ctx.runAction(internal.calendar.tools.write, { creatorId, op: "block_add", args: { kind: "film", title: idea.hook, whenLocal: "tomorrow 5pm", minutes: 45 } });
+        const w = await ctx.runAction(internal.calendar.tools.write, { creatorId, op: "block_add", args: { kind: "film", title: idea.hook, whenLocal: `${tomorrow}T13:00`, minutes: 45 } });
         check("fallback: booked through the shared calendar tool", w.ok, w.reason ?? w.detail ?? "");
       }
       const sched = b ? await ctx.runAction(internal.calendar.reminders.scheduleFor, { blockId: b.id }) : { scheduled: [] as string[] };
       check("reminders scheduled at booking", b ? sched.scheduled.length > 0 : null, `scheduled: ${sched.scheduled.join(", ") || "none"}`);
+      // The clash: a second shoot in that same hour must be a question, never two shoots on top of each other.
+      const other = openIdeas(p).find((x) => x.id !== idea.id);
+      if (!b || !other) { check("a clash is asked about, never double-booked", null, b ? "no second open idea" : "nothing booked to clash with"); break; }
+      const r2 = await say(`oh and can we also film the "${clipWords(other.hook, 60)}" one tomorrow at 1pm?`);
+      const p2 = await probeOf(env);
+      const films = p2.blocks.filter((x) => x.kind === "film" && x.status !== "deleted" && x.booked);
+      const overlap = films.some((x) => films.some((y) => x.id !== y.id && x.start < y.end && y.start < x.end && dayKeyInZone(x.start, p2.creator.timezone) === tomorrow));
+      check("a clash is asked about, never double-booked", !overlap, overlap ? `two booked shoots overlap tomorrow; she said: ${r2}` : `no overlap; she said: ${r2}`);
       break;
     }
     case "ideaActs": {

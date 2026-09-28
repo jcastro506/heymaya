@@ -11,6 +11,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { zonedTimeToEpoch } from "./time";
 import { bare, clip, clipWords } from "../lib/clip";
+import { liveBlocks } from "./liveness";
 
 const MAX_DAYS_AHEAD = 21;
 
@@ -19,8 +20,8 @@ export const weekRows = internalQuery({
   handler: async (ctx, a): Promise<Array<{ id: string; when: string; kind: string; title: string; state: string; rev: number }>> => {
     const creator = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!creator) return [];
-    const blocks = ((await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("start", a.now - 3_600_000).lte("start", a.now + 8 * 86_400_000)).take(60)) as Doc<"calendarBlocks">[])
-      .filter((b) => b.status !== "deleted").sort((x, y) => x.start - y.start);
+    const blocks = (await liveBlocks(ctx, a.creatorId, (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("start", a.now - 3_600_000).lte("start", a.now + 8 * 86_400_000)).take(60)) as Doc<"calendarBlocks">[]))
+      .sort((x, y) => x.start - y.start);
     const fmt = new Intl.DateTimeFormat("en-US", { timeZone: creator.timezone, weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
     return blocks.map((b) => ({
       id: String(b._id),
@@ -40,6 +41,11 @@ function parseWhen(whenLocal: unknown, tz: string, now: number): { ok: true; at:
   if (at < now - 5 * 60_000) return { ok: false, reason: "that time is in the past" };
   if (at > now + MAX_DAYS_AHEAD * 86_400_000) return { ok: false, reason: `further out than ${MAX_DAYS_AHEAD} days` };
   return { ok: true, at };
+}
+
+/** Pure: the refusal for a clash, with what she needs to ask them (move the other one, or pick another time). */
+export function clashReason(hit: { id: string; kind: string; title: string; start: number }, fmt: (e: number) => string): string {
+  return `${fmt(hit.start)} already has the ${hit.kind} block for "${hit.title}" (id ${hit.id}). nothing was booked. ask them: move that one (block_move) or drop it, or pick another time for this`;
 }
 
 /** A write they asked for is done at once and confirmed by the caller in one line. */
@@ -66,6 +72,11 @@ export const write = internalAction({
         if (!idea) return { ok: false, reason: "that idea is not on their list" };
         ideaId = idea._id;
       }
+      // One shoot at a time: a clash is a named refusal she turns into a question, never a silent double booking.
+      if (kind !== "post") {
+        const hit = await ctx.runQuery(internal.calendar.blocks.clash, { creatorId: a.creatorId, start: when.at, end: when.at + minutes * 60_000 });
+        if (hit) return { ok: false, reason: clashReason(hit, fmt) };
+      }
       const blockId = await ctx.runMutation(internal.calendar.blocks.propose, { creatorId: a.creatorId, kind, start: when.at, end: when.at + minutes * 60_000, title, ideaId });
       // They asked, so the ask is the consent: book it now.
       const r = await ctx.runAction(internal.calendar.blocks.confirm, { blockId });
@@ -88,6 +99,10 @@ export const write = internalAction({
     const when = parseWhen(args.whenLocal, tz, now);
     if (!when.ok) return { ok: false, reason: when.reason };
     const len = b.end - b.start;
+    if (b.kind !== "post") {
+      const hit = await ctx.runQuery(internal.calendar.blocks.clash, { creatorId: a.creatorId, start: when.at, end: when.at + len, excludeId: blockId });
+      if (hit) return { ok: false, reason: clashReason(hit, fmt) };
+    }
     const r = await ctx.runAction(internal.calendar.blocks.move, { blockId, start: when.at, end: when.at + len, expectedRev });
     if (!r.ok) return { ok: false, reason: r.reason ?? "could not move it" };
     if (b.consentAt) await ctx.runAction(internal.calendar.reminders.scheduleFor, { blockId });
