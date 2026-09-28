@@ -50,6 +50,7 @@ export const deliveryTarget = internalQuery({
     alreadyDelivered: boolean;
     surface: "telegram" | "imessage" | "web" | "system";
     phone: string | null;
+    paired: boolean;
   } | null> => {
     const message = (await ctx.db.get(args.messageId)) as Doc<"messages"> | null;
     if (!message) return null;
@@ -65,8 +66,14 @@ export const deliveryTarget = internalQuery({
       body: message.body,
       buttons: message.buttons,
       ...(frames.length ? { frames } : {}),
-      surface: message.surface,
+      /**
+       * Their messenger NOW, not when the row was written (product sim 2026-09-28): a first read written
+       * at signup, before they gave a number, was stamped "telegram" and would have died as "no Telegram
+       * chat" for someone who then paired by text. The row's own surface still decides web and system.
+       */
+      surface: message.surface === "telegram" || message.surface === "imessage" ? (creator?.channel.kind === "imessage" ? "imessage" : "telegram") : message.surface,
       phone: creator?.phone ?? null,
+      paired: Boolean(creator?.channel.paired),
       // Idempotency: the queue retries, and a retry must not re-send a message
       // that already landed. People notice being told the same thing twice.
       alreadyDelivered: message.deliveredAt !== undefined,
@@ -89,7 +96,9 @@ export const deliverMessage = internalAction({
 
     // §23: one function decides where a row goes; the phone channel is a delegate of it, never a second path.
     if (target.surface === "imessage") {
-      if (!target.phone) {
+      // Inbound-first: nothing is texted to a number until its owner has texted us (pairing). Before that
+      // the row waits and is retried (scheduler), exactly as a Telegram row waits for its chat.
+      if (!target.phone || !target.paired) {
         const reason = "no phone number paired for this account";
         await ctx.runMutation(internal.core.telegram.markDelivered, { messageId: args.messageId, error: reason });
         return { delivered: false, reason };
