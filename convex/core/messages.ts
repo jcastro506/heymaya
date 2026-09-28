@@ -283,6 +283,17 @@ export const send = internalMutation({
         return { messageId: null, sent: false, held: `daily cap (${THRESHOLDS.dailyMessageCap}) reached` };
       }
     }
+    // §8.3: one partnerships text a day across all their brands, held HERE (in the transaction) so neither
+    // a path that forgot to ask (the close notice) nor two brands' workers racing can send a second one.
+    // Deals sim 2026-09-28: "heard back from Cadence?" and "closed Northline" went out on the same day.
+    if (args.proactive && args.kind === "partnership") {
+      const now = args.ts ?? Date.now();
+      const tz = ((await ctx.db.get(args.creatorId)) as Doc<"creators"> | null)?.timezone ?? "UTC";
+      const recent = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", args.creatorId).gte("ts", dayScanFloor(now))).collect()) as Doc<"messages">[];
+      if (recent.some((m) => m.direction === "out" && m.proactive && m.kind === "partnership" && isSameDayInZone(m.ts, now, tz))) {
+        return { messageId: null, sent: false, held: "one partnerships text a day" };
+      }
+    }
     // A person never receives a JSON envelope. Unwrapped here, or refused loudly.
     const envelope = unwrapModelEnvelope(args.body);
     if (envelope.unwrapped) console.error(`[messages] unwrapped a JSON envelope for ${args.kind ?? "message"} ${args.dedupeKey}; the caller sent the raw model output`);

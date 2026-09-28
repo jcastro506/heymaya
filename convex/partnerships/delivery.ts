@@ -190,7 +190,8 @@ export const checkOne = internalAction({ args: { creatorId: v.id("creators"), op
       for (const candidate of candidates) {
         if (await ctx.runQuery(internal.core.messages.exists, { creatorId: a.creatorId, dedupeKey: candidate.key })) continue;
         const kitOpen = candidate.key.startsWith("partner-kit-open:");
-        await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: candidate.body, dedupeKey: candidate.key, proactive: true, kind: "partnership", awaitingAnswer: !kitOpen });
+        const sent = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: candidate.body, dedupeKey: candidate.key, proactive: true, kind: "partnership", awaitingAnswer: !kitOpen });
+        if (!sent.sent) break; // held (today's partnerships text has gone): it waits, and nothing counts it as said
         if (candidate.key.startsWith("partner-app-")) await ctx.runMutation(internal.partnerships.delivery.countCheckIn, { creatorId: a.creatorId, opportunityId: a.opportunityId });
         if (kitOpen && opened) await ctx.runMutation(internal.partnerships.kitSettings.markOpenedTold, { id: opened.id });
         break; // One useful interruption, respecting the existing cadence rails.
@@ -229,7 +230,13 @@ export const closeNoResponse = internalMutation({ args: { creatorId: v.id("creat
   if (!spentWithoutReply(o, Date.now())) return;
   await ctx.db.patch(a.opportunityId, { data: Opportunity.parse({ ...o, status: "closed", closedReason: "no_response", followUpAt: undefined }), updatedAt: Date.now() });
   await event(ctx, a.creatorId, a.opportunityId, `closed:no_response:${a.opportunityId}`, "closed", "No reply after three touches; closed as no response.");
-  await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: `no word from ${o.brand} after three tries, so i've closed that one. say the word if you ever want to try them again.`, dedupeKey: `partner-closed:${a.opportunityId}`, proactive: true, kind: "partnership" });
+  await ctx.runMutation(internal.partnerships.delivery.tellClosed, { creatorId: a.creatorId, opportunityId: a.opportunityId, brand: o.brand, tries: 0 });
+} });
+
+/** "i've closed that one", once. If today's partnerships text has gone, it waits for tomorrow (up to three days), never lost. */
+export const tellClosed = internalMutation({ args: { creatorId: v.id("creators"), opportunityId: v.id("partnershipOpportunities"), brand: v.string(), tries: v.number() }, handler: async (ctx, a) => {
+  const r = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: `no word from ${a.brand} after three tries, so i've closed that one. say the word if you ever want to try them again.`, dedupeKey: `partner-closed:${a.opportunityId}`, proactive: true, kind: "partnership" });
+  if (r.held && a.tries < 3) await ctx.scheduler.runAfter(20 * 3_600_000, internal.partnerships.delivery.tellClosed, { ...a, tries: a.tries + 1 });
 } });
 
 /** An application check-in went out: count it (at most one per stage). */

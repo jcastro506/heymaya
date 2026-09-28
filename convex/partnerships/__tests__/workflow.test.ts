@@ -147,6 +147,24 @@ describe("partnership evidence and fit", () => {
     const bad = await runTool(ctx, f.a, { name: "partnership_update", args: { operation: "profile", input: "{region: US", why: "x" } }, DEFAULT_BUDGET(), [], f.source);
     expect(bad).toMatch(/not valid JSON.*Pass input as an object/);
   });
+  it("deals sim 2026-09-28: one partnerships text a day is held in send itself; a held close notice waits, never lost; other creators and replies unaffected", async () => {
+    const f = await fixture();
+    const send = (who: typeof f.a, key: string, proactive = true) => f.t.mutation(internal.core.messages.send, { creatorId: who, surface: "telegram", body: `x ${key}`, dedupeKey: key, proactive, kind: "partnership" });
+    expect((await send(f.a, "partner-app-heard:1")).sent).toBe(true);
+    expect((await send(f.a, "partner-closed:2")).held).toBe("one partnerships text a day");
+    expect((await send(f.a, "reply:3", false)).sent, "a reply to them always goes").toBe(true);
+    expect((await send(f.b, "partner-app-heard:4")).sent, "another creator's day is their own").toBe(true);
+    await f.t.mutation(internal.partnerships.delivery.tellClosed, { creatorId: f.a, opportunityId: f.opportunityId, brand: "Brand", tries: 0 });
+    expect((await f.t.run(ctx => ctx.db.query("messages").collect())).some(m => m.dedupeKey === `partner-closed:${f.opportunityId}`), "held today").toBe(false);
+    const retries = (await f.t.run(ctx => ctx.db.system.query("_scheduled_functions").collect())).filter(j => j.name.includes("tellClosed"));
+    expect(retries).toHaveLength(1);
+  });
+  it("the relationship list says who has been contacted, in words, every one", async () => {
+    const f = await fixture();
+    await f.t.run(async ctx => { const row = await ctx.db.get(f.opportunityId); await ctx.db.patch(f.opportunityId, { data: { ...row!.data, status: "declined", lastOutboundAt: Date.now() - 86400000 } }); });
+    const r = await f.t.query(internal.partnerships.store.read, { creatorId: f.a }) as unknown as { contactedNote: string };
+    expect(r.contactedNote).toBe("Contacted so far (every one of these, when they ask who): Brand (declined).");
+  });
   it("a draft with template holes is refused and the pending draft survives", async () => {
     const f = await fixture();
     const good = await f.draft();
