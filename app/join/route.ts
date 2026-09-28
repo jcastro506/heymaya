@@ -1,13 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
+import { appLink, campaignToken, joinDestination } from "@/lib/appLink";
 
-const ATTRIBUTION_KEYS = new Set(["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "ref"]);
+const ATTRIBUTION_KEYS = new Set(["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "ref", "where"]);
 
-/** Branded QR/campaign entrance. Attribution survives the Clerk and Stripe redirects. */
+/**
+ * Every "Get the app" tap and every QR code lands here (W1, app spec §5.4). It records the
+ * campaign, then sends the visitor to the App Store with Apple's campaign token, to the
+ * TestFlight beta before the listing is live, or to the web sign-up while neither exists.
+ */
 export function GET(request: NextRequest) {
-  const destination = new URL("/sign-up", request.url);
-  const response = NextResponse.redirect(destination);
+  const params = request.nextUrl.searchParams;
+  const link = appLink();
+  const campaign = campaignToken(params.get("utm_campaign") ?? params.get("ref") ?? params.get("where"));
+  const target = joinDestination(link, campaign);
+  const response = NextResponse.redirect(link.kind === "none" ? new URL(target, request.url) : target);
   const attribution: Record<string, string> = {};
-  for (const [key, value] of request.nextUrl.searchParams) {
+  for (const [key, value] of params) {
     if (ATTRIBUTION_KEYS.has(key) && value.length <= 160) attribution[key] = value;
   }
   if (Object.keys(attribution).length > 0) {

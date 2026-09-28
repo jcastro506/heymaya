@@ -22,6 +22,11 @@ import { claimsUnsupportedAction, critique } from "./critic";
 import { enqueueRender } from "./frames";
 import { CONVERSATIONAL_ONBOARDING } from "../onboarding/conversation";
 import { PARTNERSHIP_SKILL } from "../partnerships/contracts";
+import { PITCH_PLAYBOOK } from "../partnerships/pitch";
+import { soundPlan } from "./finish";
+
+/** K1: the kit, in one line of her skill. The tool result says what (if anything) to ask next. */
+const KIT_LINE = "Media kit: when they ask about theirs, or a pitch or a brand needs it, read media_kit and follow its `next:` (one question, asked once). A photo for it or their TikTok Studio audience screenshot can simply be texted to you. Turn the public link on only on their yes (media_kit_link). Never offer to make, generate or edit a photo of them.";
 import { partnershipsOpen } from "../partnerships/store";
 import { respectEmojiHabit } from "./voice";
 import { clip } from "../lib/clip";
@@ -41,7 +46,7 @@ export const PARTNER_CAN_LINE = `On this plan you can: research brands and their
 
 /** The converse skill, with the partnership section only for a plan that carries it (§26). Pure. */
 export function converseSkillFor(partnerships: boolean): string {
-  return CONVERSE_SKILL.replace("\nWhen: any message", `\n${partnerships ? `${PARTNERSHIP_SKILL}\n${PARTNER_CAN_LINE}` : NO_PARTNERSHIPS_LINE}\nWhen: any message`);
+  return CONVERSE_SKILL.replace("\nWhen: any message", `\n${partnerships ? `${PARTNERSHIP_SKILL}\n${PITCH_PLAYBOOK}\n${KIT_LINE}\n${PARTNER_CAN_LINE}` : NO_PARTNERSHIPS_LINE}\nWhen: any message`);
 }
 
 export const SHOTLIST_SKILL = `adapt-format (shot list)
@@ -171,6 +176,11 @@ export const run = internalAction({
     }
     if (route.route === "file") {
       // A photo of a place is a moment, a screenshot is numbers, an edited clip is a draft: Gemini says which (Sprint 3d).
+      // K1: a photo for their media kit, or a TikTok Studio audience screenshot, when they said so or she asked.
+      if (route.media === "image") {
+        const k = await ctx.runAction(internal.partnerships.kitImage.handle, { messageId: target._id });
+        if (k.handled) return { ok: true, reason: `kit image: ${k.reason}` };
+      }
       if (route.media === "video" || route.media === "image") {
         const kind = await ctx.runAction(internal.agent.moment.kindOfMedia, { messageId: target._id });
         if (kind === "scene" || (kind === "unknown" && route.media === "image" && target.body.trim().length > 0)) {
@@ -460,6 +470,16 @@ export const run = internalAction({
       if (w.startsWith("warm") || w.startsWith("cold")) await ctx.runMutation(internal.taste.events.record, { creatorId: creator._id, kind: w.startsWith("warm") ? "reply_pos" : "reply_neg", ideaId: lastOut.ideaId, messageId: target._id });
       // They're in: it gets a time. The offer follows her reply by a beat, one tap to block.
       if (w.startsWith("warm")) await ctx.scheduler.runAfter(2_000, internal.calendar.secure.offer, { creatorId: creator._id, ideaId: lastOut.ideaId });
+    }
+
+    // B7: she asked "your voice, or a song over it?" after a finished draft; a clear answer picks the sound now.
+    if (target.kind === "inbound" && !args.rerouted) {
+      const pending = await ctx.runQuery(internal.agent.finish.pendingSoundAsk, { creatorId: creator._id, now: Date.now() });
+      const plan = pending ? soundPlan(target.body, null) : "ask";
+      if (pending && plan !== "ask") {
+        const r = await ctx.runAction(internal.agent.finish.pickSounds, { creatorId: creator._id, messageId: target._id, finishId: pending.id, plan });
+        if (r.ok) return { ok: true, reason: `finish sound: ${r.reason}` };
+      }
     }
 
     // §15.3: what do they want? The model decides (one cheap call); code has already taken commands, links and files.

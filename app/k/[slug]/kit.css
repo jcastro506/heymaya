@@ -1,0 +1,58 @@
+/* K1: the media kit page. One page, phone first, prints to one or two A4/Letter pages. */
+.kit {
+  --ink: #29233f; --muted: #756e84; --line: #e4dfea; --wash: #f3eff9; --purple: #7661b4; --coral: #ff795f; --ground: #fcfbf8;
+  max-width: 720px; margin: 0 auto; padding: 40px 16px 56px; color: var(--ink); background: var(--ground);
+  font-family: var(--font-instrument), system-ui, -apple-system, sans-serif; line-height: 1.45;
+}
+:root:has(.kit) body { background: #fcfbf8; }
+.kit h1, .kit h2, .kit p, .kit ul { margin: 0; }
+.kit ul { list-style: none; padding: 0; }
+.kit-kicker { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--purple); }
+.kit-head { display: flex; gap: 20px; align-items: center; }
+.kit-photo { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; flex: none; border: 3px solid #fff; box-shadow: 0 8px 24px -12px #29233f66; }
+.kit-head h1 { font: 800 clamp(30px, 6vw, 40px)/1.05 var(--font-bricolage), system-ui, sans-serif; letter-spacing: -0.03em; margin: 2px 0 6px; }
+.kit-line { font-size: 18px; }
+.kit-meta { color: var(--muted); font-size: 14px; margin-top: 4px; }
+.kit-idea { margin-top: 24px; padding: 18px 20px; border-radius: 18px; background: var(--wash); border-left: 4px solid var(--coral); display: grid; gap: 6px; font-size: 17px; }
+.kit-total { margin-top: 24px; color: var(--muted); }
+.kit-total b { color: var(--ink); font-size: 20px; }
+.kit-platform { margin-top: 24px; padding: 20px; border: 1px solid var(--line); border-radius: 20px; background: #fff; display: grid; gap: 16px; break-inside: avoid; }
+.kit-platform h2 { font-size: 18px; }
+.kit-platform h2 span { color: var(--muted); font-weight: 400; }
+.kit-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.kit-stats div { display: grid; gap: 2px; padding: 12px; border-radius: 14px; background: var(--ground); }
+.kit-stats b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.kit-stats small { color: var(--muted); font-size: 12px; line-height: 1.3; }
+.kit-audience { display: grid; gap: 8px; font-size: 15px; }
+.kit-bars { display: grid; gap: 6px; }
+.kit-bars li { display: grid; grid-template-columns: 56px 1fr 44px; align-items: center; gap: 10px; font-size: 13px; }
+.kit-bars i { height: 8px; border-radius: 99px; background: var(--purple); display: block; }
+.kit-bars em { font-style: normal; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.kit-posts { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+.kit-posts a { display: grid; gap: 6px; text-decoration: none; color: inherit; }
+.kit-posts img, .kit-cover-none { width: 100%; aspect-ratio: 9 / 14; object-fit: cover; border-radius: 12px; background: var(--wash); display: block; }
+.kit-post-meta { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; font-size: 13px; }
+.kit-post-meta em { font-style: normal; color: #2f7d5b; font-weight: 600; }
+.kit-caption { font-size: 12px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.kit-work { margin-top: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.kit-work > div { display: grid; gap: 8px; align-content: start; }
+.kit-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.kit-chips li { font-size: 13px; padding: 5px 10px; border-radius: 99px; background: var(--wash); }
+.kit-contact { margin-top: 24px; }
+.kit-contact a { display: inline-block; background: var(--ink); color: #fff; text-decoration: none; font-weight: 600; padding: 12px 18px; border-radius: 14px; }
+.kit-foot { margin-top: 32px; display: flex; gap: 16px; align-items: center; justify-content: space-between; color: #a39cb0; font-size: 12px; }
+.kit-print { font: inherit; font-size: 13px; font-weight: 600; color: var(--purple); background: none; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; cursor: pointer; flex: none; }
+@media (max-width: 560px) {
+  .kit-head { flex-direction: column; align-items: flex-start; }
+  .kit-stats { grid-template-columns: 1fr 1fr; }
+  .kit-posts { grid-template-columns: repeat(3, 1fr); }
+  .kit-work { grid-template-columns: 1fr; }
+  .kit-foot { flex-direction: column; align-items: flex-start; }
+}
+@media print {
+  .kit { padding: 0; background: #fff; }
+  .kit-print { display: none; }
+  .kit-platform { border-color: #ddd; }
+  .kit-posts { grid-template-columns: repeat(6, 1fr); }
+  .kit-caption { display: none; }
+}

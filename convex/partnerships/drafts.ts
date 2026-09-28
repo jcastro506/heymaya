@@ -9,6 +9,9 @@ import { CLOSED, Draft, MAX_FOLLOW_UPS, email, line } from "./contracts";
 import { APPLICATION_CHECK_IN_DAYS, Opportunity as OpportunitySchema } from "./contracts";
 import { checkPlainLanguage } from "../core/plainLanguage";
 import { emailSendEnabled } from "./providerConfig";
+import { readKitV2 } from "./kitData";
+import { kitUrl } from "./kitPage";
+import { nextSendAt, pitchProblems, sendWhen } from "./pitch";
 
 export const prepare = internalMutation({
   args: { creatorId: v.id("creators"), sourceMessageId: v.id("messages"), input: v.any() },
@@ -51,6 +54,13 @@ export const prepare = internalMutation({
       const unknown = input.answers.filter((x) => !asked.has(x.label)).map((x) => x.label);
       if (unknown.length) throw new Error(`Not questions on the form: ${unknown.slice(0, 3).join(", ")}`);
     }
+    // K1: the pitch's promises, by code. A broken draft is refused with the reasons; she redrafts.
+    if (o.route === "email" || o.route === "dm") {
+      const variant = await ctx.db.query("kitVariants").withIndex("by_opportunity", q => q.eq("opportunityId", row._id)).first();
+      const kitLinks = [variant ? kitUrl(variant.slug) : null, c.kitLink ? kitUrl(c.kitLink.slug) : null].filter((u): u is string => Boolean(u));
+      const problems = pitchProblems({ route: o.route, firstTouch: !o.threadId, brand: o.brand, subject: input.subject, body: input.body, kitLinks }, await readKitV2(ctx, c));
+      if (problems.length) throw new Error(`Redraft before review: ${problems.join("; ")}`);
+    }
     const code = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, "0")).join("");
     const data = Draft.parse({ sourceMessageId: a.sourceMessageId, revision: drafts.length + 1, channel: o.route, subject: input.subject, body: input.body, ...(input.answers?.length ? { answers: input.answers } : {}), recipient, sender: mailbox?.email, mailboxGeneration: mailbox?.generation, threadId: o.threadId, inReplyTo: o.lastMessageId, status: "draft", approvalCode: code, approvalExpiresAt: now + 86400000, createdAt: now });
     const id = await ctx.db.insert("partnershipDrafts", { creatorId: a.creatorId, opportunityId: row._id, data, updatedAt: now });
@@ -71,7 +81,7 @@ export const prepare = internalMutation({
 export const approve = internalMutation({ args: { creatorId: v.id("creators"), sourceMessageId: v.id("messages") }, handler: async (ctx, a): Promise<{ handled: boolean; text?: string; draftId?: Id<"partnershipDrafts"> }> => {
   const source = await ctx.db.get(a.sourceMessageId) as Doc<"messages"> | null;
   if (!source || source.creatorId !== a.creatorId || source.direction !== "in" || source.memoryExcludedAt || source.fileId || source.fileMime || (source.kind && source.kind !== "inbound")) return { handled: false };
-  const match = /^SEND ([a-f0-9]{24})$/i.exec(source.body.trim());
+  const match = /^SEND ([a-f0-9]{24})( NOW)?$/i.exec(source.body.trim());
   if (!match) return { handled: false };
   const creator = await active(ctx, a.creatorId);
   if ((await profile(ctx, a.creatorId)).data.paused) return { handled: true, text: "partnerships are paused. nothing was sent." };
@@ -87,9 +97,13 @@ export const approve = internalMutation({ args: { creatorId: v.id("creators"), s
   const mailbox = await ctx.db.query("partnershipMailboxes").withIndex("by_creator", q => q.eq("creatorId", a.creatorId)).unique();
   if (!mailbox || mailbox.generation !== d.mailboxGeneration || mailbox.email !== d.sender) return { handled: true, text: "your email connection changed. please review a fresh draft." };
   if (!emailSendEnabled(creator)) return { handled: true, text: "email sending isn’t enabled yet. your draft is saved; nothing was sent." };
-  await ctx.db.patch(row._id, { data: { ...d, status: "approved", approvedBy: source._id }, updatedAt: Date.now() });
-  await event(ctx, a.creatorId, row.opportunityId, `approved:${row._id}`, "approved", `Exact revision ${d.revision} approved by ${source._id}`);
-  await ctx.scheduler.runAfter(0, internal.partnerships.delivery.send, { creatorId: a.creatorId, draftId: row._id });
+  // K1: a FIRST pitch waits for the weekday-morning window on their clock (when inboxes get read), unless "NOW".
+  const now = Date.now();
+  const sendAt = !d.threadId && !match[2] ? nextSendAt(now, creator.timezone) : now;
+  await ctx.db.patch(row._id, { data: { ...d, status: "approved", approvedBy: source._id, ...(sendAt > now ? { sendAt } : {}) }, updatedAt: now });
+  await event(ctx, a.creatorId, row.opportunityId, `approved:${row._id}`, "approved", `Exact revision ${d.revision} approved by ${source._id}${sendAt > now ? `; sends ${new Date(sendAt).toISOString()}` : ""}`);
+  await ctx.scheduler.runAfter(Math.max(0, sendAt - now), internal.partnerships.delivery.send, { creatorId: a.creatorId, draftId: row._id });
+  if (sendAt > now) return { handled: true, draftId: row._id, text: `approved. it goes out ${sendWhen(sendAt, creator.timezone)} your time, when inboxes actually get read. to send it right now instead, reply SEND ${d.approvalCode} NOW.` };
   return { handled: true, draftId: row._id, text: "approved. i’ll check the conversation once more before sending." };
 } });
 

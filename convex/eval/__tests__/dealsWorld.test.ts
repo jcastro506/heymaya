@@ -52,15 +52,20 @@ async function world() {
   await t.mutation(internal.eval.dealsWorld.seedWorld, { creatorId });
   await t.action(internal.eval.partnershipGauntlet.connectFakeMailbox, { creatorId });
   const say = async (body: string) => (await t.mutation(internal.core.messages.recordInbound, { creatorId, surface: "telegram", body })).messageId;
+  // K1: a first email pitch links the kit and names the brand (pitch.ts); these tests are about delivery.
+  const kit = (await t.mutation(internal.partnerships.kitPage.kitLinkFor, { creatorId, on: true })).url!;
   const snap = () => t.query(internal.eval.dealsWorld.snapshot, { creatorId, since: 0 });
   const opp = async (key: string) => (await snap()).opps.find((o) => o.domain === byKey(key).domain)!;
   /** One outreach touch through the real code: draft → exact SEND → the send action → the fake Gmail. */
-  async function touch(opportunityId: string, body: string, subject = "Running creator collab") {
+  async function touch(opportunityId: string, body: string, subject?: string) {
     vi.setSystemTime(Date.now() + 60_000); // they answer a minute later, as people do
     const source = await say("send it to them");
-    const r = await t.mutation(internal.partnerships.drafts.prepare, { creatorId, sourceMessageId: source, input: { opportunityId, subject, body } }) as { draftId: Id<"partnershipDrafts"> };
+    const read = await t.query(internal.partnerships.store.read, { creatorId, opportunityId: opportunityId as Id<"partnershipOpportunities"> });
+    const first = !(read.opportunity?.data as { threadId?: string } | undefined)?.threadId;
+    const brand = (read.opportunity?.data as { brand?: string } | undefined)?.brand ?? "Brand";
+    const r = await t.mutation(internal.partnerships.drafts.prepare, { creatorId, sourceMessageId: source, input: { opportunityId, subject: subject ?? `${brand} x Sam: a running idea`, body: first ? `${body} My kit: ${kit}` : body } }) as { draftId: Id<"partnershipDrafts"> };
     const d = Draft.parse((await t.query(internal.partnerships.drafts.get, { creatorId, draftId: r.draftId })).row.data);
-    const approval = await t.mutation(internal.partnerships.drafts.approve, { creatorId, sourceMessageId: await say(`SEND ${d.approvalCode}`) });
+    const approval = await t.mutation(internal.partnerships.drafts.approve, { creatorId, sourceMessageId: await say(`SEND ${d.approvalCode} NOW`) });
     expect(approval.draftId).toBe(r.draftId);
     await t.action(internal.partnerships.delivery.send, { creatorId, draftId: r.draftId });
     return r.draftId;
@@ -92,7 +97,7 @@ async function world() {
     const o = await opp(key);
     await t.mutation(internal.eval.fakes.reply, { threadId: o.threadId!, text, from: `jordan@${byKey(key).domain}` });
   };
-  return { t, creatorId, calls, say, snap, opp, pitch, touch, worker, advance, plant };
+  return { t, creatorId, calls, say, snap, opp, pitch, touch, worker, advance, plant, kit };
 }
 
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-24T15:00:00Z")); });
@@ -293,7 +298,7 @@ describe("every scripted Gmail event drives the real delivery code", () => {
     const source = await w.say("pitch northline");
     const r = await w.t.action(internal.partnerships.research.run, { creatorId: w.creatorId, url: FAKE_BRAND.programUrl }) as { results: Array<{ url: string; excerpt: string; checkedAt: number; kind: "extract" }> };
     const saved = await w.t.mutation(internal.partnerships.store.change, { creatorId: w.creatorId, sourceMessageId: source, operation: "save", input: { brandDomain: FAKE_BRAND.domain, opportunity: { brand: FAKE_BRAND.name, campaign: "Creators", type: "sponsorship", fit: "running", unknowns: [], assessment: { verdict: "recommend", goalAlignment: "g", contentAlignment: "c", audienceFit: "a", commercialFit: "m", concerns: [], creatorEvidence: [{ kind: "message", id: source, quote: "pitch northline", reason: "asked" }] }, eligibility: "", compensation: "Paid", route: "email", contactEmail: FAKE_BRAND.email, evidence: [r.results[0]] } } }) as { id: Id<"partnershipOpportunities"> };
-    const draft = await w.t.mutation(internal.partnerships.drafts.prepare, { creatorId: w.creatorId, sourceMessageId: source, input: { opportunityId: saved.id, subject: "Hi", body: "A pitch" } }) as { draftId: Id<"partnershipDrafts"> };
+    const draft = await w.t.mutation(internal.partnerships.drafts.prepare, { creatorId: w.creatorId, sourceMessageId: source, input: { opportunityId: saved.id, subject: `${FAKE_BRAND.name} x Sam: a pitch`, body: `A pitch. My kit: ${w.kit}` } }) as { draftId: Id<"partnershipDrafts"> };
     const code = Draft.parse((await w.t.query(internal.partnerships.drafts.get, { creatorId: w.creatorId, draftId: draft.draftId })).row.data).approvalCode;
     expect((await w.t.mutation(internal.partnerships.drafts.approve, { creatorId: w.creatorId, sourceMessageId: await w.say(`SEND ${"0f".repeat(12)}`) })).text).toMatch(/couldn.t find/);
     await w.advance(25 * 3_600_000);
@@ -407,5 +412,13 @@ describe("the judges' pure parts", () => {
   });
   it("the run covers every behaviour the operator asked for", () => {
     for (const s of ["setup", "weekly_offer", "who_pays", "known_brand", "find_email_brand", "bio_email", "lookalike", "gifting_only", "tiktok_shop", "adversarial_page", "scam_dm", "ugc_application", "pitch_draft", "wrong_codes", "expired_code_then_send", "second_pitch", "bounce_and_unsubscribe", "replies_arrive", "relay_replies", "close_rejection", "rate_help", "counter_send", "ugc_check_in_before", "ugc_submitted", "counter_offer_terms", "follow_up_1", "follow_up_2", "closed_no_response", "third_follow_up_refused", "ugc_check_in_after", "media_kit_link", "who_contacted", "quiet_after_close"]) expect(STEP_NAMES).toContain(s);
+  });
+  it("K1: the kit's steps sit where the story needs them", () => {
+    const at = (n: string) => STEP_NAMES.indexOf(n);
+    for (const n of ["kit_first_build", "one_line", "photo_weak", "photo_upload", "tiktok_screenshot", "audience_opt_in", "screenshot_ages_out", "pitch_rules"]) expect(at(n)).toBeGreaterThan(at("find_email_brand"));
+    expect(at("pitch_rules")).toBeLessThan(at("pitch_draft"));
+    expect(at("kit_opened")).toBe(at("second_pitch") + 1);
+    expect(at("kit_requested")).toBe(at("relay_replies") + 1);
+    expect(at("kit_link_expires")).toBe(at("closed_no_response") + 1);
   });
 });

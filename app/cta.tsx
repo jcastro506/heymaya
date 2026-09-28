@@ -1,14 +1,16 @@
 "use client";
 
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { track } from "./analytics";
 
-/** A signup link that records where on the page it was clicked (plan §7 S1). */
-export function CtaLink({ href, className, where, children }: { href: string; className?: string; where: string; children: ReactNode }) {
+/**
+ * A "Get the app" link that records where on the page it was clicked (plan §7 S1). A plain
+ * anchor: `/join` is a redirect to the App Store, so it must not be prefetched.
+ */
+export function CtaLink({ href, className, where, children, label }: { href: string; className?: string; where: string; children: ReactNode; label?: string }) {
   return (
-    <Link className={className} href={href} onClick={() => track("cta_click", { where })}>
+    <a className={className} href={href} aria-label={label} onClick={() => track("cta_click", { where })}>
       {children}
-    </Link>
+    </a>
   );
 }

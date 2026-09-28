@@ -91,6 +91,55 @@ Every step records what Sam said, what Maya said, the rows that changed, and two
 | 32 | who_contacted | 21 | She answers from `partnership_read`: Northline, Stride Lab and Arcadia. | R+W |
 | 33 | quiet_after_close | 23 | Closed, declined and suppressed relationships never nudge. Across the whole run, never two partnerships texts in one day. | R |
 
+## K1: the media kit and the pitch (added 2026-09-26)
+
+The deals world has 11 more steps, spliced where the story needs them (`KIT_STEPS` and the `K1_*` steps in `dealsWorld.ts`). The kit's images use a planted vision answer (`eval:fake_vision:<messageId>`), never a real model look, and only on the local fakes.
+
+| Step | Where | Proves |
+|---|---|---|
+| kit_first_build | before the pitch | "make me a media kit": she reads the kit from rows (no invented number), asks one question at most, and the default photo is checked once (the fixture's is planted as a logo) |
+| one_line | 〃 | she proposes words about them (no numbers); it goes on the kit only after their yes |
+| photo_weak | 〃 | she offers once to use a real photo, never to make one; asking again doesn't repeat it |
+| photo_upload | 〃 | a logo "for my kit" is refused and changes nothing; a portrait after her ask becomes the kit photo, as its own stored copy |
+| tiktok_screenshot | 〃 | a TikTok Studio audience is read, checked to add up and stored dated; one that doesn't add up is refused and the good one stays |
+| audience_opt_in | 〃 | the audience goes on the public kit only on their yes; "take it off" and "no photo" take effect at once; no rates |
+| screenshot_ages_out | 〃 | a screenshot older than 60 days is hidden and marked stale |
+| pitch_rules | 〃 | code refuses a generic subject, an invented number and three asks, with reasons; no draft saved |
+| pitch_draft (extended) | | the pitch links the per-brand kit, which leads with Sam's own posts, and keeps every pitch rule |
+| kit_opened | after second_pitch | Northline opening its link is told once; a preview bot counts for nothing |
+| kit_requested | after relay_replies | Stride asks for the kit: the link goes in a same-thread reply, no price, and she asks Sam about rates |
+| kit_link_expires | after closed_no_response | Northline's per-brand link is gone; the kit is still Sam's |
+
+The older steps approve with `SEND <code> NOW`: a plain `SEND` on a first pitch now waits for the next weekday-morning window on the creator's clock (tested in `workflow.test.ts`).
+
+### The whole job, from nothing to a draft: three personas (`eval/dealsE2E.ts`)
+
+Sam (running, sponsorship), Priya (skincare, UGC, an application form) and Leo (home cooking, gifting and affiliate) each start with no deals rows. The story for each: the lane's paid posts, then the weekly offer, "yes, look into <brand>", research and a verdict, the kit, a per-brand link, and a pitch or application answers **saved as a draft awaiting the code**. Nothing is sent (the fake Gmail's count is checked). The personas' brands (Dewdrop Skincare, Panforge Cookware) are in the same fake market (`dealsE2EData.ts`).
+
+```sh
+npx convex run eval/dealsE2E:run '{}'                        # all three, the fakes (same setup as above)
+npx convex run eval/dealsE2E:run '{"personas":["priya"]}'    # one
+npx convex run eval/dealsE2E:report '{}'                     # per persona: checks, brand and verdict, kit link, the draft
+```
+
+It won't start while the deals world or the gauntlet holds the fake mailbox. `dealsE2E.test.ts` runs the same story deterministically through her tools (no model), so the pipes are proven without a live run.
+
+### The real world, drafts only
+
+The same story against the **real web**: she searches for brands paying creators like the persona, picks one, researches it with real Tavily, builds the kit link and drafts. **No mailbox is connected, so nothing can be sent.** The report is for a person to read: would you send this draft?
+
+```sh
+# a non-production deployment with the fakes OFF and a real research key
+npx convex env set EVAL_FAKES 0        # or unset; real mode refuses while the fakes are on
+npx convex env remove TAVILY_BASE_URL  # and GMAIL_BASE_URL: they point at the fakes
+npx convex env remove GMAIL_BASE_URL
+npx convex env set TAVILY_API_KEY <key> # never paste it in chat
+npx convex run eval/dealsE2E:run '{"mode":"real"}'
+npx convex run eval/dealsE2E:report '{}'
+```
+
+It refuses to run in production, with the fakes on, or without the key. Cost: about $1 a run (model and research). Personas have no handles, phone or chat, so no fleet job reads a vendor for them and no text leaves.
+
 ## Cost and time
 
 About 40 texts from Sam. Each one is a converse turn (up to 6 tool calls), plus the critic, a possible rewrite, the memory pass and the judge. The estimate is **$1–3 in model spend** and **30–50 minutes**. The report's `costs.modelUsd` is the real figure.

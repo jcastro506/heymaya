@@ -399,3 +399,38 @@ struct PostNumbers: Decodable, Equatable {
     let basis: String
   }
 }
+
+/// K1: their media kit on the Deals tab (`ui:kit`). Numbers arrive as JSON numbers (Double).
+struct KitInfo: Decodable, Equatable {
+  let link: String?
+  let photo: String?
+  /// "instagram" / "tiktok" (their profile picture), "upload" (one they sent), "none" (their choice), "missing".
+  let photoSource: String
+  /// Why their profile picture is weak for a kit (a logo, no clear face), when it is.
+  let photoWeak: String?
+  let oneLine: OneLine?
+  /// Their answer about showing who watches on the public kit; nil = not asked yet.
+  let showAudience: Bool?
+  let services: [String]
+  let platforms: [KitPlatform]
+  let brandLinks: [BrandLink]
+
+  struct OneLine: Decodable, Equatable { let text: String; let approved: Bool }
+  struct KitPlatform: Decodable, Equatable, Identifiable {
+    let platform: String
+    let followers: Double?
+    let typicalViews: Double?
+    let engagement: Double?
+    let growth30d: Double?
+    let hasAudience: Bool
+    let best: Double
+    var id: String { platform }
+  }
+  struct BrandLink: Decodable, Equatable, Identifiable {
+    let brand: String
+    let url: String
+    let opened: Bool
+    let live: Bool
+    var id: String { url }
+  }
+}

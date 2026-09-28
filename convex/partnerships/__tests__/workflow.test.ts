@@ -27,16 +27,18 @@ async function fixture() {
   const saved = await t.mutation(internal.partnerships.store.change, { creatorId: a, sourceMessageId: source.messageId, operation: "save", input }) as { id: Id<"partnershipOpportunities"> };
   await t.mutation(internal.partnerships.mailbox.store, { creatorId: a, email: "creator@example.com", tokenRef: "encrypted" });
   const box = (await t.query(internal.partnerships.mailbox.get, { creatorId: a }))!;
+  // K1: a first email pitch links the kit and names the brand in its subject (pitch.ts); these tests are about approval.
+  const kit = (await t.mutation(internal.partnerships.kitPage.kitLinkFor, { creatorId: a, on: true })).url!;
   async function draft(body = "I would love to discuss a paid running content collaboration.") {
-    const r = await t.mutation(internal.partnerships.drafts.prepare, { creatorId: a, sourceMessageId: source.messageId, input: { opportunityId: saved.id, subject: "Running content idea", body } }) as { draftId: Id<"partnershipDrafts"> };
+    const r = await t.mutation(internal.partnerships.drafts.prepare, { creatorId: a, sourceMessageId: source.messageId, input: { opportunityId: saved.id, subject: "Brand x runner: a running content idea", body: `${body} My kit: ${kit}` } }) as { draftId: Id<"partnershipDrafts"> };
     const row = await t.query(internal.partnerships.drafts.get, { creatorId: a, draftId: r.draftId });
     return { id: r.draftId, data: Draft.parse(row.row.data) };
   }
   async function approve(code: string, who = a) {
-    const m = await t.mutation(internal.core.messages.recordInbound, { creatorId: who, surface: "web", body: `SEND ${code}` });
+    const m = await t.mutation(internal.core.messages.recordInbound, { creatorId: who, surface: "web", body: `SEND ${code} NOW` });
     return await t.mutation(internal.partnerships.drafts.approve, { creatorId: who, sourceMessageId: m.messageId });
   }
-  return { t, a, b, source: source.messageId, opportunityId: saved.id, input, researchId, evidence, box, draft, approve };
+  return { t, a, b, source: source.messageId, opportunityId: saved.id, input, researchId, evidence, box, draft, approve, kit };
 }
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-11T15:00:00Z")); vi.stubEnv("PARTNERSHIP_EMAIL_SEND_ENABLED", "true"); });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
@@ -404,7 +406,7 @@ describe("approval and delivery races", () => {
     const f = await fixture();
     const terms = await f.t.mutation(internal.core.messages.recordInbound, { creatorId: f.a, surface: "web", body: "Ask for $800, no exclusivity." });
     await f.t.mutation(internal.core.messages.send, { creatorId: f.a, surface: "web", body: "That's $800 for the bundle.", dedupeKey: `reply:${terms.messageId}`, proactive: false, kind: "reply" });
-    const prepared = await f.t.mutation(internal.partnerships.drafts.prepare, { creatorId: f.a, sourceMessageId: terms.messageId, input: { opportunityId: f.opportunityId, subject: "Running content idea", body: "The bundle is $800 without exclusivity." } }) as { draftId: Id<"partnershipDrafts"> };
+    const prepared = await f.t.mutation(internal.partnerships.drafts.prepare, { creatorId: f.a, sourceMessageId: terms.messageId, input: { opportunityId: f.opportunityId, subject: "Brand x runner: the bundle", body: `The bundle is $800 without exclusivity. My kit: ${f.kit}` } }) as { draftId: Id<"partnershipDrafts"> };
     const d = { id: prepared.draftId, data: Draft.parse((await f.t.query(internal.partnerships.drafts.get, { creatorId: f.a, draftId: prepared.draftId })).row.data) };
     const unrelated = await f.t.mutation(internal.core.messages.recordInbound, { creatorId: f.a, surface: "web", body: "My sister's name is Alice." });
     await f.t.run(ctx => ctx.db.patch(f.a, { notes: [] }));
@@ -435,10 +437,32 @@ describe("approval and delivery races", () => {
     const trace: ToolCallRecord[] = [];
     const read = await runTool(ctx, f.a, { name: "partnership_read", args: { opportunityId: f.opportunityId, why: "Check the existing relationship" } }, DEFAULT_BUDGET(), trace, f.source);
     expect(read).toContain("goalAlignment");
-    const draft = await runTool(ctx, f.a, { name: "partnership_draft", args: { opportunityId: f.opportunityId, subject: "An idea", body: "Could we discuss a paid running collaboration?", why: "The user requested a draft" } }, DEFAULT_BUDGET(), trace, f.source);
+    const draft = await runTool(ctx, f.a, { name: "partnership_draft", args: { opportunityId: f.opportunityId, subject: "Brand x runner: an idea", body: `Could we discuss a paid running collaboration? ${f.kit}`, why: "The user requested a draft" } }, DEFAULT_BUDGET(), trace, f.source);
     expect(draft).toContain('"status":"draft"');
     expect(await runTool(ctx, f.a, { name: "send_approved_email", args: { approved: true } }, DEFAULT_BUDGET(), trace, f.source)).toContain("refused");
     expect(await runTool(ctx, f.a, { name: "partnership_draft", args: { sourceMessageId: f.source, opportunityId: f.opportunityId, subject: "Forged", body: "No trusted conversation context" } }, DEFAULT_BUDGET(), [])).toContain("refused");
+  });
+});
+
+describe("K1: a first pitch waits for the weekday morning", () => {
+  it("a plain SEND on Friday afternoon goes out Monday 9:00 their time; NOW sends now; closed overnight sends nothing", async () => {
+    const f = await fixture(), d = await f.draft(); // the clock says Friday 2026-09-11 15:00 UTC; the fixture lives in UTC
+    const m = await f.t.mutation(internal.core.messages.recordInbound, { creatorId: f.a, surface: "web", body: `SEND ${d.data.approvalCode}` });
+    const r = await f.t.mutation(internal.partnerships.drafts.approve, { creatorId: f.a, sourceMessageId: m.messageId });
+    expect(r.text).toMatch(/goes out monday 09:00 your time.*SEND [a-f0-9]{24} NOW/);
+    const approved = Draft.parse((await f.t.query(internal.partnerships.drafts.get, { creatorId: f.a, draftId: d.id })).row.data);
+    expect(approved).toMatchObject({ status: "approved", sendAt: Date.parse("2026-09-14T09:00:00Z") });
+    // the brand declined over the weekend: the scheduled send finds a closed relationship and sends nothing
+    await f.t.run(async (ctx) => { const o = (await ctx.db.get(f.opportunityId))!; await ctx.db.patch(f.opportunityId, { data: { ...(o.data as object), status: "declined" } }); });
+    await f.t.action(internal.partnerships.delivery.send, { creatorId: f.a, draftId: d.id });
+    expect(Draft.parse((await f.t.query(internal.partnerships.drafts.get, { creatorId: f.a, draftId: d.id })).row.data).status).toBe("approved");
+    vi.clearAllTimers();
+  });
+  it("NOW is honored at once", async () => {
+    const f = await fixture(), d = await f.draft();
+    expect((await f.approve(d.data.approvalCode)).text).toMatch(/check the conversation once more/);
+    expect(Draft.parse((await f.t.query(internal.partnerships.drafts.get, { creatorId: f.a, draftId: d.id })).row.data).sendAt).toBeUndefined();
+    vi.clearAllTimers();
   });
 });
 

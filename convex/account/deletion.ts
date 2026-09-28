@@ -23,6 +23,8 @@ import { disconnectFor as zernioDisconnectFor } from "../connections/zernio";
 /** Every table with a creatorId, and the index that reaches it. Adding a table without listing it here fails the deletion test. */
 export const TABLES_BY_CREATOR = [
   "partnershipProfiles", "partnershipOpportunities", "partnershipDrafts", "partnershipEvents", "partnershipResearch", "partnershipMailboxes",
+  "mediaKits", // its uploaded photo is collected with the files below
+  "kitVariants",
   "trackedAccounts",
   "ownPosts",
   "ownPostReads",
@@ -96,6 +98,8 @@ export const exportMine = query({
       partnershipProfiles: await pick("partnershipProfiles"),
       partnershipOpportunities: await pick("partnershipOpportunities"),
       partnershipDrafts: await pick("partnershipDrafts"),
+      mediaKits: (await pick("mediaKits") as Doc<"mediaKits">[]).map(({ photo, ...r }) => ({ ...r, photo: photo ? { source: photo.source, at: photo.at } : null })),
+      kitVariants: await pick("kitVariants"),
       partnershipEvents: await pick("partnershipEvents"),
       partnershipResearch: await pick("partnershipResearch"),
       partnershipMailboxes: (await pick("partnershipMailboxes")).map(r => ({ email: "email" in r ? r.email : null, updatedAt: "updatedAt" in r ? r.updatedAt : null })),
@@ -113,6 +117,9 @@ export const snapshot = internalQuery({
     // §22: the frames she drew for them are files too; DELETE wipes them with everything else.
     const ideas = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"ideas">[];
     for (const idea of ideas) for (const f of idea.frames ?? []) fileIds.push(f.storageId);
+    // K1: a kit photo they sent is its own stored copy (message files age out; the kit's must not).
+    const kit = (await ctx.db.query("mediaKits").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).first()) as Doc<"mediaKits"> | null;
+    if (kit?.photo?.storageId) fileIds.push(kit.photo.storageId);
     const zernio = (await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).eq("provider", "zernio")).first()) as Doc<"connections"> | null;
     return { creator, fileIds, zernio };
   },
