@@ -18,6 +18,7 @@ import { buildPrefix, producedStamp } from "./context";
 import { critique, tooLong } from "./critic";
 import { judgeLadder } from "./guarded";
 import { deliverNow } from "../core/scheduler";
+import { bare, clipWords } from "../lib/clip";
 import { watchMedia } from "../integrations/gemini/client";
 import { storedMedia } from "./opinion";
 import { faultFetch, faultFor } from "../eval/faults";
@@ -174,7 +175,7 @@ export const blockNow = internalMutation({
     if (!idea || idea.creatorId !== a.creatorId) return null;
     const start = Date.now() + 15 * 60_000;
     const minutes = Math.min(120, Math.max(30, Math.round(((idea.version as { lengthSec?: number } | undefined)?.lengthSec ?? 20) * 2)));
-    const blockId = await ctx.db.insert("calendarBlocks", { creatorId: a.creatorId, kind: "film", start, end: start + minutes * 60_000, title: `film: ${((idea.version as { hook?: string } | undefined)?.hook ?? "the moment").slice(0, 60)}`, ideaId: a.ideaId, status: "proposed", createdAt: Date.now() });
+    const blockId = await ctx.db.insert("calendarBlocks", { creatorId: a.creatorId, kind: "film", start, end: start + minutes * 60_000, title: `film: ${clipWords(bare((idea.version as { hook?: string } | undefined)?.hook ?? "the moment"), 70)}`, ideaId: a.ideaId, status: "proposed", createdAt: Date.now() });
     return { blockId, start };
   },
 });

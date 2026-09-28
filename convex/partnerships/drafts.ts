@@ -11,7 +11,7 @@ import { checkPlainLanguage } from "../core/plainLanguage";
 import { emailSendEnabled } from "./providerConfig";
 import { readKitV2 } from "./kitData";
 import { kitUrl } from "./kitPage";
-import { nextSendAt, pitchProblems, sendWhen } from "./pitch";
+import { nextSendAt, pitchProblems, placeholders, sendWhen } from "./pitch";
 
 export const prepare = internalMutation({
   args: { creatorId: v.id("creators"), sourceMessageId: v.id("messages"), input: v.any() },
@@ -43,6 +43,18 @@ export const prepare = internalMutation({
     const recent = await ctx.db.query("partnershipDrafts").withIndex("by_creator", q => q.eq("creatorId", a.creatorId)).order("desc").take(100);
     const monthStart = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), 1);
     if (recent.filter(d => d._creationTime >= monthStart).length >= partnershipAllowance(c).draftsPerMonth) throw new Error("Monthly draft allowance reached");
+    // A rate on a form is theirs to set (deals sim 2026-09-28: she put "$150" in Sam's rate field). A money
+    // answer counts only if they said that number (their messages this month, or their saved minimum rate).
+    const moneyAnswers = (input.answers ?? []).filter((x) => /\b(rate|price|fee|budget|charge|cost)\b/i.test(x.label) && /\d/.test(x.answer));
+    if (moneyAnswers.length) {
+      const theirs = ((await ctx.db.query("messages").withIndex("by_creator_and_ts", q => q.eq("creatorId", a.creatorId).gte("ts", now - 30 * 86400000)).collect()) as Doc<"messages">[]).filter((m) => m.direction === "in").map((m) => m.body).join(" ") + ` ${(await profile(ctx, a.creatorId)).data.minimumRate ?? ""}`;
+      const said = new Set((theirs.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map((n) => n.replace(/,/g, "")));
+      const unsaid = moneyAnswers.filter((x) => (x.answer.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).some((n) => !said.has(n.replace(/,/g, ""))));
+      if (unsaid.length) throw new Error(`Redraft before review: "${unsaid[0].label}" is theirs to set, and they haven't given that number. Leave it out and ask them what they charge`);
+    }
+    // Every route: no template holes. Refused before the old draft is canceled, so a good draft survives.
+    const holes = placeholders([input.subject ?? "", input.body, ...(input.answers ?? []).map((x) => x.answer)].join("\n"));
+    if (holes.length) throw new Error(`Redraft before review: fill in or remove ${holes.slice(0, 3).join(", ")}. If you need a number from them (a rate, a date), ask them first and draft after they answer`);
     for (const d of drafts) {
       const old = Draft.parse(d.data);
       if (["draft", "approved"].includes(old.status)) await ctx.db.patch(d._id, { data: { ...old, status: "canceled" }, updatedAt: now });

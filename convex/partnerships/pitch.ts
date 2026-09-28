@@ -79,6 +79,21 @@ export interface PitchInput {
 }
 
 /** Pure: what's wrong with this draft, each as the reason she'll read. Empty = fine. */
+/**
+ * Pure: template holes left in a draft ("my rate is [rate] for [usage window]"). The deals sim queued one
+ * for approval on 2026-09-28; approved, the brand would have received the brackets. Links in angle
+ * brackets are not holes.
+ */
+export function placeholders(text: string): string[] {
+  const hits = [
+    ...(text.match(/\[[^\]\n]{1,40}\]/g) ?? []),
+    ...(text.match(/\{\{?[^}\n]{1,40}\}\}?/g) ?? []),
+    ...(text.match(/<(?!https?:|mailto:)[A-Za-z][A-Za-z _-]{1,30}>/g) ?? []),
+    ...(text.match(/\b(?:TBD|TK|XXX?)\b/g) ?? []),
+  ];
+  return Array.from(new Set(hits));
+}
+
 export function pitchProblems(p: PitchInput, kit: KitV2 | null): string[] {
   if (p.route === "application") return []; // answers to a form's own questions; the form sets the shape
   const problems: string[] = [];

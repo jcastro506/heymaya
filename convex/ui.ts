@@ -26,6 +26,7 @@ import { summarize, type Affinity } from "./taste/affinities";
 import { computeRung, engagement } from "./review/rung";
 import { laneBenchmarkFor } from "./scout/benchmarks";
 import { clip } from "./lib/clip";
+import { liveBlocks } from "./calendar/liveness";
 
 async function me(ctx: QueryCtx | MutationCtx): Promise<Doc<"creators"> | null> {
   const identity = await ctx.auth.getUserIdentity();
@@ -49,7 +50,7 @@ export const today = query({
     const active = tracked.filter((t) => t.status === "active");
     const lastSample = active.reduce((m, t) => Math.max(m, t.lastSampledAt ?? 0), 0);
     const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").take(7)) as Doc<"ownPosts">[];
-    const blocks = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", c._id).gte("start", now)).take(10)) as Doc<"calendarBlocks">[];
+    const blocks = await liveBlocks(ctx, c._id, (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", c._id).gte("start", now)).take(10)) as Doc<"calendarBlocks">[]);
     const block = blocks.find((b) => b.status === "confirmed" || b.status === "moved") ?? blocks.find((b) => b.status === "proposed") ?? null;
     const statusLine = !c.channel.paired
       ? "Not connected to Messages yet. Text her START to finish."
@@ -287,7 +288,7 @@ export const plan = query({
     if (!c) return null;
     const now = Date.now();
     const horizon = now + 14 * 86_400_000;
-    const blocks = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", c._id).gte("start", now - 86_400_000).lte("start", horizon)).collect()) as Doc<"calendarBlocks">[];
+    const blocks = await liveBlocks(ctx, c._id, (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", c._id).gte("start", now - 86_400_000).lte("start", horizon)).collect()) as Doc<"calendarBlocks">[]);
     const events = (await ctx.db.query("calendarEvents").withIndex("by_creator_start", (q) => q.eq("creatorId", c._id).gte("start", now).lte("start", horizon)).collect()) as Doc<"calendarEvents">[];
     const conn = (await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", c._id).eq("provider", "google_calendar")).first()) as Doc<"connections"> | null;
     const bestHours = (c.dossier as { cadence?: { bestHoursLocal?: number[] } } | undefined)?.cadence?.bestHoursLocal ?? [];

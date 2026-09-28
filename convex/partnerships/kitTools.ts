@@ -44,7 +44,7 @@ const day = (t: number) => new Date(t).toISOString().slice(0, 10);
 export function renderKit(k: KitV2, link: string | null, prefs: { paidOnly: boolean; minimumRate: string; excludedBrands: string[] }, next: string): string {
   const lines: string[] = [];
   lines.push(`kit as of ${day(k.asOf)} · public link: ${link ?? "off"}`);
-  lines.push(`photo: ${k.photoSetting === "none" ? "none (their choice)" : k.photo ? (k.photo.source === "upload" ? "the one they sent" : `their ${k.photo.source} profile picture`) : "none available"}${k.photoCheck?.weak && k.photoSetting === "auto" ? ` (weak: ${k.photoCheck.reason})` : ""}`);
+  lines.push(`photo: ${k.photoSetting === "none" ? "none (their choice)" : k.photo ? (k.photo.source === "upload" ? "the one they sent" : `their ${k.photo.source} profile picture`) : "none available"}${k.photoCheck?.weak && k.photoSetting === "auto" ? (k.photoCheck.offered ? " (you already offered to use a photo of them; don't bring it up again unless they do)" : ` (weak: ${k.photoCheck.reason})`) : ""}`);
   lines.push(`one line: ${k.oneLine ? `${k.oneLine.approved ? "approved" : "proposed, waiting on their yes"}: "${k.oneLine.text}"` : "none yet"} · lane: ${k.lane ?? "not confirmed"}`);
   lines.push(`audience on the public kit: ${k.showAudience === null ? "not asked yet" : k.showAudience ? "yes" : "no (their choice)"}`);
   lines.push(`services: ${k.services.join(", ") || "none listed (deal types not set)"} · region: ${k.region ?? "unknown"} · contact: ${k.contactEmail ?? "none (no mailbox connected)"}`);

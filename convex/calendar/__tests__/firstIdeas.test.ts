@@ -4,7 +4,7 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { parseFirstIdeas } from "../firstIdeas";
+import { multiplesHold, parseFirstIdeas } from "../firstIdeas";
 import { atLocalHour } from "../postTime";
 
 const TZ = "America/New_York";
@@ -39,5 +39,30 @@ describe("the first plan has posts in it (live 2026-09-06)", () => {
       expect(plan?.body).toContain("the rest of this week");
       expect(plan?.body).toContain("shoe rack");
     });
+  });
+});
+
+describe("a multiple in an idea's why belongs to the post it cites (product sim 2026-09-28)", () => {
+  it("pure: cited multiples must match an evidence post's, within rounding", () => {
+    expect(multiplesHold("raw pre-run check-ins hit 1.76x normal", [0.36])).toBe(false);
+    expect(multiplesHold("raw pre-run check-ins hit 1.76x normal", [1.76, 0.36])).toBe(true);
+    expect(multiplesHold("pulled 2× your normal", [1.98])).toBe(true);
+    expect(multiplesHold("your long runs land", [])).toBe(true);
+  });
+  it("rows: a misattributed multiple is replaced by the cited post and its real multiple; a right one is kept", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await t.run((ctx) => seedCreator(ctx, "m"));
+    const day = 86_400_000;
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 8; i++) await ctx.db.insert("ownPosts", { creatorId, platform: "tiktok", postId: `p${i}`, url: `https://www.tiktok.com/@m/video/${i}`, createTime: Date.now() - (5 + i) * day, contentType: "video", caption: i === 0 ? "today is 18 miles and i'm freaking out" : `run ${i}`, hashtags: [], metrics: { views: i === 0 ? 360 : 1000, likes: 1, comments: 1, shares: 1 }, metricsAsOf: Date.now(), source: "scrape" } as never);
+    });
+    const r = await t.mutation(internal.calendar.firstIdeas.write, { creatorId, model: "m", ideas: [
+      { hook: "mile 14 where my brain leaves", why: "raw pre-run check-ins hit 1.76x normal", evidencePostIds: ["p0"] },
+      { hook: "another long run check-in", why: "your runs land around 1x normal", evidencePostIds: ["p1"] },
+    ] });
+    const ideas = await t.run((ctx) => Promise.all(r.ideaIds.map((id) => ctx.db.get(id))));
+    const whys = ideas.map((x) => (x?.version as { why: string }).why);
+    expect(whys[0]).toBe('rhymes with your "today is 18 miles and i\'m freaking out" (0.36× your normal)');
+    expect(whys[1]).toBe("your runs land around 1x normal");
   });
 });

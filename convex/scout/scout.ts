@@ -1,4 +1,4 @@
-import { clip } from "../lib/clip";
+import { clip, clipWords } from "../lib/clip";
 /**
  * `scout` (plan §11.2 #6): after the rails pass, the ranked candidates go to the
  * writer with the dossier, the catalogue and the posts' transcripts. It decides
@@ -30,6 +30,7 @@ import { LOOKUPS } from "../agent/playbooks";
 import { respectEmojiHabit } from "../agent/voice";
 import { pairedRows } from "../core/schedule";
 import { drillCheck, faultFor } from "../eval/faults";
+import { scrubPostIds } from "../core/plainLanguage";
 
 /** The share URL without its tracking query: what a person would paste. */
 export function cleanLink(url: string): string {
@@ -87,7 +88,7 @@ export const writeIdea = internalMutation({
       signalId: a.signalId,
       evidenceLinks: a.evidenceLinks,
       fit: a.fit,
-      fitWhy: a.fitWhy,
+      fitWhy: scrubPostIds(a.fitWhy),
       version: a.version,
       messageText: a.messageText,
       status: "sent",
@@ -288,7 +289,7 @@ export const run = internalAction({
       const start = zonedTimeToEpoch(block.startLocal, g.creator.timezone);
       if (Number.isFinite(start) && start > now) {
         const minutes = Math.min(240, Math.max(15, Number(block.lengthMin) || 60));
-        const blockId = await ctx.runMutation(internal.calendar.blocks.propose, { creatorId: args.creatorId, kind: "film", start, end: start + minutes * 60_000, title: (block.title || "film").slice(0, 80), ideaId });
+        const blockId = await ctx.runMutation(internal.calendar.blocks.propose, { creatorId: args.creatorId, kind: "film", start, end: start + minutes * 60_000, title: clipWords(block.title || "film", 80), ideaId });
         buttons = [
           { id: `block:${blockId}:yes`, label: "block it" },
           { id: `block:${blockId}:no`, label: "idea only" },

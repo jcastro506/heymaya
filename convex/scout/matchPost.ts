@@ -14,12 +14,13 @@ import { internalAction, internalQuery } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
+import { retireMootFor } from "../calendar/liveness";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
 import { THRESHOLDS } from "../config/thresholds";
 import { WEIGHTS } from "../taste/affinities";
 import { deliverNow } from "../core/scheduler";
-import { clip } from "../lib/clip";
+import { bare, clip, clipWords } from "../lib/clip";
 
 const CONFIDENCE = v.union(v.literal("certain"), v.literal("likely"), v.literal("unsure"), v.literal("no"));
 
@@ -69,6 +70,7 @@ export const apply = internalMutation({
     if (a.confidence === "unsure") return { ok: true }; // the question was asked; their tap decides
     if (idea.matchedPostId && idea.matchedPostId !== post._id) return { ok: false, reason: "idea already matched" };
     await ctx.db.patch(idea._id, { matchedPostId: post._id, matchConfidence: a.confidence, postedAt: post.createTime, status: "posted" });
+    await retireMootFor(ctx, idea.creatorId, idea._id);
     return { ok: true };
   },
 });
@@ -118,7 +120,7 @@ export const run = internalAction({
         await ctx.runMutation(internal.core.messages.send, {
           creatorId: a.creatorId,
           surface: "telegram",
-          body: `is this one from the "${(known.hook ?? known.message).slice(0, 60)}" idea? ${post.url}`,
+          body: `is this one from the "${clipWords(bare(known.hook ?? known.message), 60)}" idea? ${post.url}`,
           dedupeKey: `match:${post.id}`,
           proactive: false,
           kind: "match",

@@ -9,6 +9,7 @@
 
 import type { MutationCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
+import { retireMootFor } from "../calendar/liveness";
 import { internal } from "../_generated/api";
 import { recordAction } from "./act";
 import { applyEvent, featureKeys, WEIGHTS, type Affinity } from "../taste/affinities";
@@ -76,6 +77,8 @@ export async function applyIdeaAct(
   if (keys.length) await ctx.db.patch(creatorId, { affinities: applyEvent((creator.affinities ?? []) as Affinity[], keys, weight, now), updatedAt: now });
   const matched = opts.postUrl ? await matchOwnPost(ctx, creatorId, opts.postUrl) : null;
   await ctx.db.patch(ideaId, { status: "posted", postedAt: now, matchConfidence: "certain", ...(matched ? { matchedPostId: matched } : {}) });
+  // Its other film / edit / post blocks are done with: off the plan and their calendar (calendar/liveness).
+  await retireMootFor(ctx, creatorId, ideaId);
   await aware("idea.posted", "marked as posted");
   return { ok: true, hook, changed: true };
 }

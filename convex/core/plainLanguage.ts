@@ -78,7 +78,21 @@ export const INTERNAL_NAMES = [
  */
 export const INTERNAL_ID = /(?<![/\w])[jk][a-z0-9]{31}(?![\w/])/g;
 
+/**
+ * A platform post id (a TikTok video id is 19 digits; an Instagram media id is "<digits>_<digits>").
+ * Product sim 2026-09-28: a plan line read "(… echoing 3469416464831006725_3077920201)": the idea
+ * writer cited the post it was shown by its id. No view count or phone number is 15+ digits.
+ */
+// Never inside a link: a URL carries the id (tiktok.com/@x/video/<id>) and must survive whole.
+const POST_ID = /(?<![/=?&#\w.-])\d{15,}(?:_\d{5,})?\b(?![/\w])/g;
+
+/** Pure: post ids in text a person reads become "one of your posts". For idea reasons, before they're stored. */
+export function scrubPostIds(s: string): string {
+  return s.replace(/\b(?:(?:in|from|on)\s+)?(?:post\s+)?(?<![/=?&#\w.-])\d{15,}(?:_\d{5,})?\b(?![/\w])/gi, (m) => (/^\s*(in|from|on)\b/i.test(m) ? `${m.trim().split(/\s+/)[0]} one of your posts` : " one of your posts")).replace(/\s{2,}/g, " ").trim();
+}
+
 const MACHINE_PATTERNS: Array<{ name: string; re: RegExp }> = [
+  { name: "post id", re: POST_ID },
   { name: "row id", re: INTERNAL_ID },
   // "Error: ...", "TypeError: ...", "AbortError". The single most likely leak,
   // because `catch (e) { return e.message }` is the default thing to write.

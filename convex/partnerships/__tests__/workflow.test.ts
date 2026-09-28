@@ -76,6 +76,118 @@ describe("partnership evidence and fit", () => {
     const ok = await f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "shoeco.com", opportunity: { ...base, contactEmail: "hello@shoeco.net", evidence: [site, real] } } }) as { id: string };
     expect(ok.id).toBeTruthy();
   });
+  it("deals sim 2026-09-28: a bio email saves when the profile read is cited with the wrong kind, from three separate reads", async () => {
+    const f = await fixture();
+    const now = Date.now();
+    const search = { url: "https://shoeco.com/about", excerpt: "Shoe Co pays trail creators. find us on Instagram.", checkedAt: now - 3000, kind: "search" };
+    const site = { url: "https://shoeco.com/about", excerpt: "Shoe Co makes trail shoes. Follow us: https://instagram.com/shoeco", checkedAt: now - 2000, kind: "extract" };
+    const bio = { url: "https://www.instagram.com/shoeco/", excerpt: "@shoeco\nbio: trail shoes. collabs: hello@shoeco.net", checkedAt: now - 1000, kind: "profile" };
+    for (const r of [search, site, bio]) {
+      const id = await f.t.mutation(internal.partnerships.store.reserveResearch, { creatorId: f.a });
+      await f.t.mutation(internal.partnerships.store.saveResearch, { creatorId: f.a, id, results: [r] });
+    }
+    const base = { ...f.input.opportunity, brand: "Shoe Co" };
+    // She labelled the bio "extract" with a made-up time; the row's own kind and time are what get kept.
+    const saved = await f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "shoeco.com", opportunity: { ...base, contactEmail: "hello@shoeco.net", evidence: [site, { ...bio, kind: "extract", checkedAt: now - 5 }] } } }) as { id: Id<"partnershipOpportunities"> };
+    const row = await f.t.run(ctx => ctx.db.get(saved.id));
+    expect(Opportunity.parse(row!.data).evidence.map(e => [e.kind, e.checkedAt])).toEqual([["extract", now - 2000], ["profile", now - 1000]]);
+    // Still no invented evidence: an excerpt nothing returned is refused, and the refusal says what to cite.
+    await expect(f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "shoeco.com", opportunity: { ...base, contactEmail: "hello@shoeco.net", evidence: [site, { ...bio, excerpt: "collabs: boss@shoeco.net" }] } } })).rejects.toThrow(/nothing you read this week.*Cite a url you fetched/);
+  });
+  it("deals sim 2026-09-28: the route is the profile the site links, however the site wrote the link", async () => {
+    const f = await fixture();
+    const now = Date.now();
+    const site = { url: "https://shoeco.com/about", excerpt: "Shoe Co pays trail creators. For partnerships, find us on Instagram: https://instagram.com/shoeco", checkedAt: now - 2000, kind: "extract" };
+    const bio = { url: "https://www.instagram.com/shoeco/", excerpt: "@shoeco\nbio: collabs: hello@shoeco.net", checkedAt: now - 1000, kind: "profile" };
+    const id = await f.t.mutation(internal.partnerships.store.reserveResearch, { creatorId: f.a });
+    await f.t.mutation(internal.partnerships.store.saveResearch, { creatorId: f.a, id, results: [site, bio] });
+    const base = { ...f.input.opportunity, brand: "Shoe Co" };
+    const saved = await f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "shoeco.com", opportunity: { ...base, route: "email", contactEmail: "hello@shoeco.net", routeUrl: "https://www.instagram.com/shoeco/", evidence: [site, bio] } } }) as { id: string };
+    expect(saved.id).toBeTruthy();
+    // A lookalike is still no route: the site never links it, not even as a prefix of the real one.
+    await expect(f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "shoeco.com", opportunity: { ...base, route: "dm", contactEmail: undefined, routeUrl: "https://www.instagram.com/shoe/", evidence: [site] } } })).rejects.toThrow(/Route must be linked/);
+    await expect(f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "shoeco.com", opportunity: { ...base, route: "dm", contactEmail: undefined, routeUrl: "https://www.instagram.com/shoeco.collabs/", evidence: [site] } } })).rejects.toThrow(/Route must be linked/);
+  });
+  it("deals sim 2026-09-28: her own evidence is found by URL or in the right table, a stray `why` is ignored; another creator's never counts", async () => {
+    const f = await fixture();
+    const url = "https://www.tiktok.com/@sam/video/7777777777777777773";
+    await f.t.run(ctx => ctx.db.insert("ownPosts", { creatorId: f.a, platform: "tiktok", postId: "7777777777777777773", url, createTime: Date.now() - 86_400_000, contentType: "video", caption: "i ran my first sub-3:30 marathon. here's the whole block", hashtags: [], metrics: { views: 29000, likes: 1, comments: 1, shares: 1 }, metricsAsOf: Date.now(), source: "scrape" } as never));
+    const ev = (creatorEvidence: unknown[]) => ({ why: "save the lead", ...f.input, opportunityId: f.opportunityId, opportunity: { ...f.input.opportunity, assessment: { ...f.input.opportunity.assessment, creatorEvidence } } });
+    const saved = await f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: ev([
+      { kind: "post", id: url, quote: "i ran my first sub-3:30 marathon", reason: "their best post" },
+      { kind: "personalRecord", id: f.source, quote: "I want paid running partnerships.", reason: "their goal, in their words" },
+    ]) }) as { id: Id<"partnershipOpportunities"> };
+    const row = await f.t.run(ctx => ctx.db.get(saved.id));
+    expect(Opportunity.parse(row!.data).assessment.creatorEvidence.map(e => e.kind)).toEqual(["post", "message"]);
+    // B's own words can never stand as A's evidence (cross-tenant), and a paraphrase is still refused.
+    const bMsg = await f.t.mutation(internal.core.messages.recordInbound, { creatorId: f.b, surface: "web", body: "I want paid running partnerships." });
+    await expect(f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: ev([{ kind: "message", id: bMsg.messageId, quote: "I want paid running partnerships.", reason: "x" }]) })).rejects.toThrow(/nothing of theirs has id/);
+    await expect(f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: ev([{ kind: "post", id: url, quote: "my fastest marathon ever", reason: "x" }]) })).rejects.toThrow(/verbatim/);
+  });
+  it("deals sim 2026-09-28: a rate on a form is theirs; only a number they gave may fill it", async () => {
+    const f = await fixture();
+    await f.t.run(async (ctx) => { const row = await ctx.db.get(f.opportunityId); await ctx.db.patch(f.opportunityId, { data: { ...row!.data, route: "application", routeUrl: "https://brand.com/apply", applicationFields: [{ label: "Your TikTok handle", required: true, type: "text", sourceUrl: "https://brand.com/creators" }, { label: "Your rate per video in USD", required: false, type: "text", sourceUrl: "https://brand.com/creators" }] } }); });
+    const prep = (answers: Array<{ label: string; answer: string }>) => f.t.mutation(internal.partnerships.drafts.prepare, { creatorId: f.a, sourceMessageId: f.source, input: { opportunityId: f.opportunityId, subject: "Application", body: "Answers below.", answers } });
+    await expect(prep([{ label: "Your TikTok handle", answer: "@sam" }, { label: "Your rate per video in USD", answer: "$150" }])).rejects.toThrow(/theirs to set/);
+    await f.t.mutation(internal.core.messages.recordInbound, { creatorId: f.a, surface: "web", body: "put 175 per video for the rate" });
+    await expect(prep([{ label: "Your TikTok handle", answer: "@sam" }, { label: "Your rate per video in USD", answer: "$175" }])).resolves.toBeTruthy();
+  });
+  it("the model's shape slips are undone before the strict parse, and nothing else is (pure)", async () => {
+    const { withoutWhy } = await import("../store");
+    expect(withoutWhy({ why: "x", operation: "save", brandDomain: "b.com", opportunity: JSON.stringify({ brand: "B" }) })).toEqual({ brandDomain: "b.com", opportunity: { brand: "B" } });
+    expect(withoutWhy({ brandDomain: "b.com", opportunity: { brand: "B" }, assessment: { verdict: "pass" } })).toEqual({ brandDomain: "b.com", opportunity: { brand: "B", assessment: { verdict: "pass" } } });
+    expect(withoutWhy({ brandDomain: "b.com", opportunity: "{not json", extra: 1 })).toEqual({ brandDomain: "b.com", opportunity: "{not json", extra: 1 });
+    expect(withoutWhy({ brandDomain: "b.com", opportunity: { brand: "B", assessment: JSON.stringify({ verdict: "pass" }) } })).toEqual({ brandDomain: "b.com", opportunity: { brand: "B", assessment: { verdict: "pass" } } });
+  });
+  it("partnership_update takes its input as an object, and a broken JSON string is refused with what to do", async () => {
+    const f = await fixture();
+    const ctx = { runQuery: f.t.query, runMutation: f.t.mutation, runAction: f.t.action } as never;
+    const ok = await runTool(ctx, f.a, { name: "partnership_update", args: { operation: "profile", input: { region: "US" }, why: "they said US" } }, DEFAULT_BUDGET(), [], f.source);
+    expect(ok).toContain('"region":"US"');
+    const bad = await runTool(ctx, f.a, { name: "partnership_update", args: { operation: "profile", input: "{region: US", why: "x" } }, DEFAULT_BUDGET(), [], f.source);
+    expect(bad).toMatch(/not valid JSON.*Pass input as an object/);
+  });
+  it("deals sim 2026-09-28: one partnerships text a day is held in send itself; a held close notice waits, never lost; other creators and replies unaffected", async () => {
+    const f = await fixture();
+    const send = (who: typeof f.a, key: string, proactive = true) => f.t.mutation(internal.core.messages.send, { creatorId: who, surface: "telegram", body: `x ${key}`, dedupeKey: key, proactive, kind: "partnership" });
+    expect((await send(f.a, "partner-app-heard:1")).sent).toBe(true);
+    expect((await send(f.a, "partner-closed:2")).held).toBe("one partnerships text a day");
+    expect((await send(f.a, "reply:3", false)).sent, "a reply to them always goes").toBe(true);
+    expect((await send(f.b, "partner-app-heard:4")).sent, "another creator's day is their own").toBe(true);
+    await f.t.mutation(internal.partnerships.delivery.tellClosed, { creatorId: f.a, opportunityId: f.opportunityId, brand: "Brand", tries: 0 });
+    expect((await f.t.run(ctx => ctx.db.query("messages").collect())).some(m => m.dedupeKey === `partner-closed:${f.opportunityId}`), "held today").toBe(false);
+    const retries = (await f.t.run(ctx => ctx.db.system.query("_scheduled_functions").collect())).filter(j => j.name.includes("tellClosed"));
+    expect(retries).toHaveLength(1);
+  });
+  it("the relationship list says who has been contacted, in words, every one", async () => {
+    const f = await fixture();
+    await f.t.run(async ctx => { const row = await ctx.db.get(f.opportunityId); await ctx.db.patch(f.opportunityId, { data: { ...row!.data, status: "declined", lastOutboundAt: Date.now() - 86400000 } }); });
+    const r = await f.t.query(internal.partnerships.store.read, { creatorId: f.a }) as unknown as { contactedNote: string };
+    expect(r.contactedNote).toBe("Contacted so far (every one of these, when they ask who): Brand (declined).");
+  });
+  it("a draft with template holes is refused and the pending draft survives", async () => {
+    const f = await fixture();
+    const good = await f.draft();
+    await expect(f.t.mutation(internal.partnerships.drafts.prepare, { creatorId: f.a, sourceMessageId: f.source, input: { opportunityId: f.opportunityId, subject: "Brand x runner: a running content idea", body: `My rate is [rate] for [usage window]. My kit: ${f.kit}` } })).rejects.toThrow(/fill in or remove \[rate\], \[usage window\]/);
+    const row = await f.t.query(internal.partnerships.drafts.get, { creatorId: f.a, draftId: good.id });
+    expect(Draft.parse(row.row.data).status).toBe("draft");
+  });
+  it("reading one relationship also lists the others, one line each", async () => {
+    const f = await fixture();
+    const id = await f.t.mutation(internal.partnerships.store.reserveResearch, { creatorId: f.a });
+    const other = { url: "https://second.com/creators", excerpt: "Second pays creators. Email team@second.com.", checkedAt: Date.now(), kind: "extract" };
+    await f.t.mutation(internal.partnerships.store.saveResearch, { creatorId: f.a, id, results: [other] });
+    await f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "second.com", opportunity: { ...f.input.opportunity, brand: "Second", contactEmail: "team@second.com", evidence: [other] } } });
+    const r = await f.t.query(internal.partnerships.store.read, { creatorId: f.a, opportunityId: f.opportunityId }) as { others: Array<{ brand: string; status: string }> };
+    expect(r.others.map(o => o.brand)).toEqual(["Second"]);
+    expect((r as unknown as { othersNote: string }).othersNote).toMatch(/^No other brand has replied/);
+    const second = (await f.t.run(ctx => ctx.db.query("partnershipOpportunities").collect())).find(o => o.brandDomain === "second.com")!;
+    await f.t.run(ctx => ctx.db.patch(second._id, { data: { ...second.data, lastInboundAt: Date.now() } }));
+    const r2 = await f.t.query(internal.partnerships.store.read, { creatorId: f.a, opportunityId: f.opportunityId }) as unknown as { othersNote: string };
+    expect(r2.othersNote).toMatch(/^THEY REPLIED: Second/);
+    // Tenant-scoped: B's read of its own relationships never sees A's.
+    await expect(f.t.query(internal.partnerships.store.read, { creatorId: f.b, opportunityId: f.opportunityId })).rejects.toThrow();
+  });
   it("profile specs and links are matched exactly (pure)", () => {
     expect(profileTarget("instagram:@ShoeCo")).toEqual({ platform: "instagram", handle: "shoeco", url: "https://www.instagram.com/shoeco/" });
     expect(profileTarget("youtube:shoeco")).toBeNull();

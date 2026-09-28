@@ -22,6 +22,7 @@ import { localHourMinute } from "../scout/gate";
 import { THRESHOLDS } from "../config/thresholds";
 import { pairedRows } from "../core/schedule";
 import { bare, clip } from "../lib/clip";
+import { liveBlocks } from "../calendar/liveness";
 
 export const CADENCE = {
   morningHour: 8,
@@ -144,7 +145,8 @@ export const morningInputs = internalQuery({
     const creator = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!creator) return null;
     const from = a.now - 2 * 86_400_000, to = a.now + 86_400_000;
-    const blocks = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("start", from).lte("start", to)).collect()) as Doc<"calendarBlocks">[];
+    // Only blocks that still mean something: never "filming today" for a video already posted (liveness.ts).
+    const blocks = await liveBlocks(ctx, a.creatorId, (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("start", from).lte("start", to)).collect()) as Doc<"calendarBlocks">[]);
     const events = (await ctx.db.query("calendarEvents").withIndex("by_creator_start", (q) => q.eq("creatorId", a.creatorId).gte("start", a.now - 86_400_000).lte("start", to)).collect()) as Doc<"calendarEvents">[];
     const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("createTime", a.now - 13 * 7 * 86_400_000)).collect()) as Doc<"ownPosts">[];
     const snaps = (await ctx.db.query("followerSnapshots").withIndex("by_creator_day", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(4)) as Doc<"followerSnapshots">[];
@@ -162,7 +164,8 @@ export const shootToAskAbout = internalQuery({
   args: { creatorId: v.id("creators"), now: v.number() },
   handler: async (ctx, a): Promise<Doc<"calendarBlocks"> | null> => {
     const blocks = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("start", a.now - 12 * 3_600_000).lte("start", a.now)).collect()) as Doc<"calendarBlocks">[];
-    return blocks.find((b) => b.kind === "film" && b.status !== "deleted" && b.consentAt && !b.filmedAt && !b.missedAt && a.now - b.end >= CADENCE.howDidItGoAfterMs && a.now - b.end <= CADENCE.howDidItGoUntilMs && !(b.touches ?? []).includes("howdidit")) ?? null;
+    const live = await liveBlocks(ctx, a.creatorId, blocks);
+    return live.find((b) => b.kind === "film" && b.consentAt && !b.filmedAt && !b.missedAt && a.now - b.end >= CADENCE.howDidItGoAfterMs && a.now - b.end <= CADENCE.howDidItGoUntilMs && !(b.touches ?? []).includes("howdidit")) ?? null;
   },
 });
 

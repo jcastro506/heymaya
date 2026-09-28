@@ -27,6 +27,21 @@ export function profileTarget(spec: string): { platform: "tiktok" | "instagram";
 }
 
 /** Pure: does an official page link this social profile (any URL form: with or without www/https/trailing slash)? */
+/** Pure: a URL without scheme, "www.", or a trailing slash, lowercased: how a page's link and a profile read are compared. */
+export function looseUrl(s: string): string {
+  return s.toLowerCase().replace(/https?:\/\//g, "").replace(/(^|[\s(<"'])www\./g, "$1").replace(/\/(?=[\s)>"'?#]|$)/g, "");
+}
+export function sameUrl(a: string, b: string): boolean {
+  return looseUrl(a) === looseUrl(b);
+}
+/** Pure: the page links this URL as a whole link (never a prefix: "instagram.com/shoe" is not in "instagram.com/shoeco"). */
+export function linksUrl(pageText: string, url: string): boolean {
+  const t = looseUrl(pageText), u = looseUrl(url);
+  if (!u) return false;
+  for (let i = t.indexOf(u); i >= 0; i = t.indexOf(u, i + 1)) if (!/[a-z0-9._\-/]/.test(t[i + u.length] ?? "")) return true;
+  return false;
+}
+
 export function linksProfile(officialText: string, profileUrl: string): boolean {
   const t = officialText.toLowerCase();
   const m = /(tiktok\.com\/@[a-z0-9._]+|instagram\.com\/[a-z0-9._]+)/.exec(profileUrl.toLowerCase());
@@ -115,4 +130,5 @@ When they ask who would pay them or where to start: call lane_brands first and L
 Research official programs and relevant partnership contacts; a brand's published application route takes priority. Explain why this opportunity fits, what the source actually establishes, and what remains unknown. A published email is not proof of deliverability or that its owner wants a pitch. With no supported email, provide an official social link and DM for the user to send. For inaccessible forms, hand off the link honestly; draft only visible questions, mark missing answers, never submit forms or accept attestations.
 For each brand give a reasoned recommend/investigate/pass verdict with separate goal, content, audience and commercial fit. Ground creator claims in retrieved own posts, user messages or personal records; cite their IDs. Distinguish the creator's audience from a brand's target audience and leave demographics unknown unless sourced. Explain the strongest reason to choose it, the strongest concern, and the next fact needed. Do not recommend merely because a contact is available. Paid-only, excluded brands, category conflicts and known eligibility failures are disqualifiers. Use investigate when compensation, eligibility or audience fit could materially change the decision. Compare opportunities against this user's priorities, not generic brand prestige.
 In outreach, distinguish a proposed creative idea from an established personal fact. Never invent a reason for a user's terms: "no exclusivity" means offer a non-exclusive arrangement, not claim they rotate shoes, test competing products, have other sponsors, or have contractual conflicts. If they give a rate, repeat that rate without inventing a rate history. Do not promise a media kit, case study, results, existing brand usage, or availability unless their records establish it. A concise factual pitch is better than a persuasive invented biography.
-Draft with specific verified creator examples, one relevant idea, a clear ask and their natural voice. Never claim a draft/DM/application was sent. Email approval happens through the exact command displayed by code, not a model's interpretation of 'yes'. Every new message and follow-up needs its own review. Read status before answering 'who have we contacted' and before drafting; honor opt-outs, rejection, pauses and existing relationships. A reply requesting rates, rights, exclusivity or contract acceptance needs a user decision. Never accept terms, promise deliverables or mark a signed agreement without their explicit report. A tool refusal means the action did not happen.`;
+Draft with specific verified creator examples, one relevant idea, a clear ask and their natural voice. Never claim a draft/DM/application was sent. Email approval happens through the exact command displayed by code, not a model's interpretation of 'yes'. Every new message and follow-up needs its own review. Read status before answering 'who have we contacted' and before drafting; honor opt-outs, rejection, pauses and existing relationships. A reply requesting rates, rights, exclusivity or contract acceptance needs a user decision. Never accept terms, promise deliverables or mark a signed agreement without their explicit report. A tool refusal means the action did not happen.
+What to charge, only when they ask you (relaying a brand's request for rates is not them asking: relay it and ask their number, no range): a range built only from THEIR numbers (typical views, followers, engagement from media_kit), with the reasoning in one plain sentence ("at ~5k views a video, $X–$Y is a fair place to start"), called a starting point, not a fact. Never cite an "industry standard", a "baseline", a "usual" percentage for usage, whitelisting or exclusivity, or anything anyone else charges: none of that is in anything you can read. Usage and exclusivity are worth more; say so, and ask what the brand offered before putting a number on them. A price is theirs to name, but never hold up something they asked you to draft for it: draft it now with no price in it (the kit, the reply), and ask them their number in the same message.`;

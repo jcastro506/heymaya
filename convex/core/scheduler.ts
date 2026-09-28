@@ -44,7 +44,7 @@ const handlers: Record<string, Handler> = {
     const r = (await (ctx as unknown as { runAction: (ref: typeof internal.core.telegram.deliverMessage, a: { messageId: Id<"messages"> }) => Promise<{ delivered: boolean; reason?: string }> })
       .runAction(internal.core.telegram.deliverMessage, { messageId: p.messageId }));
     if (r.delivered) return { ok: true };
-    if (r.reason?.includes("no Telegram chat paired")) return { ok: false, error: r.reason, defer: 10 * 60 * 1000 };
+    if (r.reason?.includes("no Telegram chat paired") || r.reason?.includes("no phone number paired")) return { ok: false, error: r.reason, defer: 10 * 60 * 1000 };
     return { ok: false, error: r.reason ?? "delivery failed" };
   },
   async converse(ctx, job) {

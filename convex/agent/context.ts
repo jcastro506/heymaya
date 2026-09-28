@@ -21,6 +21,7 @@ import { callbacksFor, callbacksSection } from "./callbacks";
 import { personalHistoryFor } from "./personalHistory";
 import { separatedCreator } from "../taste/separation";
 import { clip } from "../lib/clip";
+import { liveBlocks } from "../calendar/liveness";
 
 export const RECENT_MESSAGES = 20;
 /** How far ahead her calendar sense reaches: far enough to plan content toward an event, not just mention it. */
@@ -86,7 +87,8 @@ export async function personalFor(ctx: QueryCtx, creator: Doc<"creators">): Prom
   const events = (await ctx.db.query("calendarEvents").withIndex("by_creator_start", (q) => q.eq("creatorId", creator._id).gte("start", now).lte("start", now + CALENDAR_LOOKAHEAD_DAYS * 86_400_000)).take(12)) as Doc<"calendarEvents">[];
   // The plan, as rows: every block from an hour ago to eight days out, so she knows what is
   // booked, what is only proposed, what has been filmed, and what is happening RIGHT NOW.
-  const blocks = ((await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", creator._id).gte("start", now - 3_600_000).lte("start", now + 8 * 86_400_000)).take(40)) as Doc<"calendarBlocks">[]).filter((b) => b.status !== "deleted").sort((a, b) => a.start - b.start);
+  // Only blocks that still mean something (calendar/liveness): a posted video's leftover film block is not "booked".
+  const blocks = (await liveBlocks(ctx, creator._id, (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", creator._id).gte("start", now - 3_600_000).lte("start", now + 8 * 86_400_000)).take(40)) as Doc<"calendarBlocks">[])).sort((a, b) => a.start - b.start);
   const day = (t: number) => new Intl.DateTimeFormat("en-US", { timeZone: creator.timezone, weekday: "short", month: "short", day: "numeric" }).format(t);
   const time = (t: number) => new Intl.DateTimeFormat("en-US", { timeZone: creator.timezone, hour: "numeric", minute: "2-digit" }).format(t).toLowerCase().replace(":00", "");
   // Sprint 4e: reach where connected and fresh, labelled; the view count stays as the public number.
