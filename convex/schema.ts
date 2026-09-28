@@ -546,6 +546,10 @@ export default defineSchema({
     dropped: v.optional(v.array(v.string())), // sounds she named that no lookup backed; removed by code
     lookups: v.array(v.string()),
     outcome: v.optional(v.object({ ownPostId: v.id("ownPosts"), closestCaption: v.number(), soundUsed: v.union(v.string(), v.null()), lesson: v.string(), at: v.number() })),
+    /** "over" (a song over it, their audio muted), "voice" (their audio stays), or "ask" (she asked which). */
+    soundPlan: v.optional(v.string()),
+    /** She asked "your voice, or a song over it?" and is waiting; their answer picks the sound (24 h). */
+    soundAskAt: v.optional(v.number()),
     createdAt: v.number(),
   }).index("by_creator", ["creatorId", "createdAt"]),
 

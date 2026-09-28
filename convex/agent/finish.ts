@@ -62,6 +62,7 @@ Captions: write three, and make them three DIFFERENT kinds, never three rewordin
 Every caption uses a concrete thing from THIS video (the card's about, spokenWords, onScreenText, payoff). It must read like they wrote it: if they write lowercase with no emoji, so do you. Never: explaining the joke, an abstract noun (journey, mindset, era, discipline, vibes), a borrowed format (pov:, nobody:, tell me why, it's giving, the way I), a stock phrase (hits different, main character, core memory, living my best life, that girl, obsessed, a whole mood, no thoughts just), hashtag stuffing, anything cheesy you'd see on a stock video. If a phrase could be on a thousand other videos, it isn't theirs. A caption can be short. Short and theirs beats clever and generic.
 
 Sounds: one to three, each with why it fits THIS video (the mood, the pace, the words) in a few words, and how to use it ("low under your voice", "start it on the first cut").
+- Follow evidence.soundPlan. "over": they'll mute the clip and put a song over it, so suggest SONGS that fit the pace, the cuts and the mood; never "your own audio" or "keep the song on it" (howToUse says where to start it and to mute the original). "voice": their own audio stays; your own audio or a quiet bed under it. "ask": return "sounds": [] (code asks them which they want); still write the captions.
 - Look the sound up before you name it: sound_info gives its name, how many videos use it, and whether it's cleared for business accounts; sound_videos shows whether people are using it now. A sound you did not look up this turn is not named; code removes it.
 - Prefer a sound the accounts they watch are using this week, or one on their own posts that did well, when it fits the video. A sound that doesn't fit the mood is wrong even if it's big.
 - When voiceCarriesIt, their own audio is usually right, or a quiet music bed under it; say so plainly.
@@ -75,6 +76,36 @@ platformNote is only for practical things: that disclosure label, where to find 
 One "keep your own audio" line at most; don't list the same advice twice under two names.
 Output ONLY JSON:
 {"reaction": "≤200: one line as a viewer, the moment that got you, named from the card", "read": "≤240 or ''", "captions": [{"text": "≤300, exactly as they'd paste it", "shape": "their-usual|question|search", "why": "≤160: why this one, for them (kept for when they ask)"}], "sounds": [{"name": "≤80: 'title by author', or 'your own audio'", "clipId": "the TikTok clip id you looked up, or ''", "platform": "tiktok|instagram|both", "source": "their-own-audio|already-in-the-clip|watched-accounts|their-past-post|trending", "why": "≤120", "howToUse": "≤100"}], "platformNote": "≤160 or ''"}`;
+
+/**
+ * Pure: what kind of sound they want. "over": a song over the video with their own audio muted (they
+ * said so, or there's nothing in the clip worth keeping). "voice": their own audio stays (they said so,
+ * or their words carry it and they didn't ask about a sound). "ask": they talk in it but asked for a
+ * sound, so she can't tell whether the song goes under their voice or instead of it. Their words win.
+ */
+export function soundPlan(words: string, card: { audioNow?: unknown; voiceCarriesIt?: unknown } | null): "over" | "voice" | "ask" {
+  const w = words.toLowerCase();
+  if (/\b(mute|muted|muting|no (talking|voice|audio)|without (my |the )?(voice|audio|sound|talking)|(put|add|throw) (a |some )?(song|music|track|sound|audio) (over|on)|background (music|song|track)|over (it|the video|this)|on top of it)\b/.test(w)) return "over";
+  if (/\b(my (voice|talking)|keep (my|the) (voice|audio|sound|talking)|(i'?m|i am) talking|voice ?over|with my voice|original (audio|sound))\b/.test(w)) return "voice";
+  if (/\b(song|songs|music|track|beat)\b/.test(w)) return "over";
+  if (!card) return "ask";
+  const now = String(card.audioNow ?? "");
+  if (now === "silent" || now === "ambient") return "over";
+  if (now === "music") return "voice"; // a song is already on it: keep it or swap it (the usual path)
+  const asked = /\b(sound|audio|what (should i|to) (use|put))\b/.test(w);
+  if (card.voiceCarriesIt === true) return asked ? "ask" : "voice";
+  return "ask";
+}
+
+/** The question when she can't tell, in her voice. One line, one question. */
+export const SOUND_QUESTION = "for the sound: do you want your voice in it, or a song over it with the original muted? tell me which and i'll pick.";
+/** When a song over it was wanted but nothing she could check fits yet. */
+export const SOUND_NONE_OVER = "i couldn't check a song that fits this one yet. tell me the vibe, or a song you like, and i'll look it up.";
+
+/** Pure: is this sound "keep what's there" (their audio or the song already on the clip)? */
+export function keepsTheirAudio(s: { name: string; source: string }): boolean {
+  return s.source === "their-own-audio" || s.source === "already-in-the-clip" || /own audio|original audio|audio (from|already)|already on it|already in (it|the clip)/i.test(s.name);
+}
 
 export interface SoundCandidates {
   watchedThisWeek: Array<{ clipId: string; accounts: string[]; posts: number; topUrl: string; topViews: number }>;
@@ -148,20 +179,25 @@ export function oneOwnAudio<T extends { name: string; source: string }>(sounds: 
 }
 
 /** Pure: the text she sends. Captions as they'd paste them; sounds with their few-word reason. */
-export function finishText(o: { reaction: string; read?: string; captions: Out["captions"]; sounds: Array<Out["sounds"][number] & { licensedForBusiness?: boolean }>; platformNote?: string }): string {
+export function finishText(o: { reaction: string; read?: string; captions: Out["captions"]; sounds: Array<Out["sounds"][number] & { licensedForBusiness?: boolean }>; platformNote?: string; soundAsk?: string }): string {
   const parts: string[] = [];
   parts.push([o.reaction.trim(), (o.read ?? "").trim()].filter(Boolean).join(" "));
   parts.push(`captions:\n${o.captions.map((c, i) => `${i + 1}. ${c.text.trim()}`).join("\n")}`);
-  // A looked-up TikTok sound carries its page, so they can tap straight into "use this sound".
-  const bare = (t: string) => t.trim().replace(/[.,;:!]+$/, "");
-  const lower = (t: string) => (t ? t[0].toLowerCase() + t.slice(1) : t);
-  const soundLines = o.sounds.map((s) => `${bare(s.name)}: ${lower(bare(s.why))}${s.howToUse?.trim() ? `. ${lower(bare(s.howToUse))}` : ""}${s.licensedForBusiness === false ? " (fine on a personal account, not on a business account or a paid post)" : ""}${s.clipId ? `\nhttps://www.tiktok.com/music/sound-${s.clipId}` : ""}`);
-  parts.push(`${soundLines.length > 1 ? "sounds" : "sound"}:\n${soundLines.join("\n")}${o.platformNote?.trim() ? `\n${o.platformNote.trim()}` : ""}\n\nask me why on any of them.`);
+  parts.push(o.sounds.length ? soundBlock(o.sounds, o.platformNote) : `${o.soundAsk ?? SOUND_QUESTION}${o.platformNote?.trim() ? `\n${o.platformNote.trim()}` : ""}`);
   return parts.join("\n---\n");
 }
 
+/** Pure: the sound lines, each with its few-word reason, how to use it, a licensing note and its page. */
+export function soundBlock(sounds: Array<Out["sounds"][number] & { licensedForBusiness?: boolean }>, platformNote?: string): string {
+  const bare = (t: string) => t.trim().replace(/[.,;:!]+$/, "");
+  const lower = (t: string) => (t ? t[0].toLowerCase() + t.slice(1) : t);
+  // A looked-up TikTok sound carries its page, so they can tap straight into "use this sound".
+  const lines = sounds.map((s) => `${bare(s.name)}: ${lower(bare(s.why))}${s.howToUse?.trim() ? `. ${lower(bare(s.howToUse))}` : ""}${s.licensedForBusiness === false ? " (fine on a personal account, not on a business account or a paid post)" : ""}${s.clipId ? `\nhttps://www.tiktok.com/music/sound-${s.clipId}` : ""}`);
+  return `${lines.length > 1 ? "sounds" : "sound"}:\n${lines.join("\n")}${platformNote?.trim() ? `\n${platformNote.trim()}` : ""}\n\nask me why on any of them.`;
+}
+
 export const record = internalMutation({
-  args: { creatorId: v.id("creators"), messageId: v.id("messages"), fileId: v.optional(v.id("_storage")), card: v.any(), captions: v.array(v.object({ text: v.string(), shape: v.string(), why: v.string() })), sounds: v.array(v.object({ name: v.string(), clipId: v.optional(v.string()), platform: v.string(), source: v.string(), why: v.string(), howToUse: v.string(), licensedForBusiness: v.optional(v.boolean()) })), dropped: v.array(v.string()), lookups: v.array(v.string()) },
+  args: { creatorId: v.id("creators"), messageId: v.id("messages"), fileId: v.optional(v.id("_storage")), card: v.any(), captions: v.array(v.object({ text: v.string(), shape: v.string(), why: v.string() })), sounds: v.array(v.object({ name: v.string(), clipId: v.optional(v.string()), platform: v.string(), source: v.string(), why: v.string(), howToUse: v.string(), licensedForBusiness: v.optional(v.boolean()) })), dropped: v.array(v.string()), lookups: v.array(v.string()), soundPlan: v.optional(v.string()), soundAskAt: v.optional(v.number()) },
   handler: async (ctx, a): Promise<Id<"finishes">> => await ctx.db.insert("finishes", { ...a, createdAt: Date.now() }),
 });
 
@@ -198,7 +234,9 @@ export const run = internalAction({
     }
     const candidates = await ctx.runQuery(internal.agent.finish.soundCandidates, { creatorId: creator._id, now: Date.now() });
     const prefix = buildPrefix({ creator, directives, skill: FINISH_SKILL, personal: g.personal, voice: g.voice, history: g.history });
-    const evidence = { theirWords: clip(target.body, 400), card, soundCandidates: candidates, platforms: Object.keys(creator.handles).filter((k) => (creator.handles as Record<string, unknown>)[k]) };
+    // Their audio kept, a song over it, or ask: their words first, then what's audible in the clip.
+    const plan = soundPlan(target.body, card);
+    const evidence = { theirWords: clip(target.body, 400), card, soundPlan: plan, soundCandidates: candidates, platforms: Object.keys(creator.handles).filter((k) => (creator.handles as Record<string, unknown>)[k]) };
     const user = `Evidence (everything you may cite is here or in a lookup you make):\n${JSON.stringify(evidence)}`;
     const inv = await investigate(ctx, { creatorId: creator._id, sourceMessageId: a.messageId, purpose: "finish", prefix, user, budget: { calls: 5, credits: 12, deadlineAt: Date.now() + 60_000 }, temperature: 0.6, maxTokens: 1800 });
     let out = inv.content ? parseJson<Out>(inv.content) : null;
@@ -222,16 +260,80 @@ export const run = internalAction({
     }
     const captions = out.captions.slice(0, 3).map((c) => ({ text: String(c.text ?? "").slice(0, 400), shape: String(c.shape ?? ""), why: String(c.why ?? "").slice(0, 200) })).filter((c) => c.text.trim());
     const { kept: backed, dropped } = backedSounds(out.sounds, inv.trace);
-    const kept = oneOwnAudio(backed);
-    const sounds = kept.length ? kept : [{ name: "your own audio", platform: "both", source: "their-own-audio", why: card.voiceCarriesIt ? "your words are the point here" : "nothing i checked fit this one better", howToUse: "" }];
+    // "over": the clip gets muted, so "keep your audio" isn't an answer; "ask": no picks until they say which.
+    const kept = plan === "ask" ? [] : plan === "over" ? backed.filter((x) => !keepsTheirAudio(x)) : oneOwnAudio(backed);
+    const sounds = kept.length || plan !== "voice" ? kept : [{ name: "your own audio", platform: "both", source: "their-own-audio", why: card.voiceCarriesIt ? "your words are the point here" : "nothing i checked fit this one better", howToUse: "" }];
+    const waiting = sounds.length === 0;
     await ctx.runMutation(internal.agent.finish.record, {
       creatorId: creator._id, messageId: a.messageId, fileId: target.fileId ?? undefined, card,
       captions,
       sounds: sounds.map((s) => ({ name: clip(s.name, 120), clipId: s.clipId, platform: String(s.platform ?? "both"), source: String(s.source ?? ""), why: clip(String(s.why ?? ""), 200), howToUse: clip(String(s.howToUse ?? ""), 160), ...("licensedForBusiness" in s && typeof s.licensedForBusiness === "boolean" ? { licensedForBusiness: s.licensedForBusiness } : {}) })),
       dropped, lookups: inv.trace.filter((t) => t.ok).map((t) => t.tool),
+      soundPlan: plan, ...(waiting ? { soundAskAt: Date.now() } : {}),
     });
-    await reply(finishText({ reaction: out.reaction ?? "", read: out.read, captions, sounds, platformNote: out.platformNote }), { produced: producedStamp(REGISTRY.writer.primary), criticSkipped });
+    await reply(finishText({ reaction: out.reaction ?? "", read: out.read, captions, sounds, platformNote: out.platformNote, soundAsk: plan === "over" ? SOUND_NONE_OVER : SOUND_QUESTION }), { produced: producedStamp(REGISTRY.writer.primary), criticSkipped });
     return { ok: true, reason: `finish: ${captions.length} captions, ${sounds.length} sounds${dropped.length ? `, dropped ${dropped.length} unbacked` : ""}` };
+  },
+});
+
+// ------------------------------------------------------------------ their answer picks the sound
+
+export const SOUND_ASK_MS = 24 * 3_600_000;
+
+export const SOUND_SKILL = `sound
+When: you finished a video with them and asked whether they want their voice in it or a song over it; they answered. Pick the sound now.
+evidence.soundPlan "over": they'll mute the clip, so suggest one to three SONGS that fit the pace, the cuts and the mood (evidence.card), or that match the vibe or song they named. "voice": their audio stays; your own audio, or a quiet bed under it.
+Look every sound up before you name it (sound_info, sound_videos; suggestions or search_keyword for a vibe); a sound you didn't look up this turn is removed by code. Prefer sounds the accounts they watch use this week or that did well on their posts, when they fit. If one isn't cleared for business accounts, say so. Instagram audio can't always be checked: name the track to search in Reels audio.
+Output ONLY JSON: {"sounds": [{"name": "", "clipId": "", "platform": "tiktok|instagram|both", "source": "their-own-audio|watched-accounts|their-past-post|trending|they-named-it", "why": "≤120", "howToUse": "≤100"}], "platformNote": "≤160 or ''"}`;
+
+/** The latest finish still waiting on "voice or a song?", within 24 hours. */
+export const pendingSoundAsk = internalQuery({
+  args: { creatorId: v.id("creators"), now: v.number() },
+  handler: async (ctx, a): Promise<{ id: Id<"finishes">; card: unknown; plan: string | null } | null> => {
+    const r = (await ctx.db.query("finishes").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").first()) as Doc<"finishes"> | null;
+    return r?.soundAskAt && a.now - r.soundAskAt <= SOUND_ASK_MS ? { id: r._id, card: r.card, plan: r.soundPlan ?? null } : null;
+  },
+});
+
+export const saveSounds = internalMutation({
+  args: { id: v.id("finishes"), plan: v.string(), sounds: v.array(v.object({ name: v.string(), clipId: v.optional(v.string()), platform: v.string(), source: v.string(), why: v.string(), howToUse: v.string(), licensedForBusiness: v.optional(v.boolean()) })), dropped: v.array(v.string()), lookups: v.array(v.string()) },
+  handler: async (ctx, a): Promise<void> => {
+    const r = (await ctx.db.get(a.id)) as Doc<"finishes"> | null;
+    if (!r) return;
+    await ctx.db.patch(a.id, { sounds: a.sounds, soundPlan: a.plan, soundAskAt: undefined, dropped: [...(r.dropped ?? []), ...a.dropped], lookups: [...r.lookups, ...a.lookups] });
+  },
+});
+
+/**
+ * Their answer to "your voice, or a song over it?" (or the vibe she asked for): pick the sounds for the
+ * video she already watched, with the same rules (looked up this turn, or removed), and reply with them.
+ */
+export const pickSounds = internalAction({
+  args: { creatorId: v.id("creators"), messageId: v.id("messages"), finishId: v.id("finishes"), plan: v.union(v.literal("over"), v.literal("voice")) },
+  handler: async (ctx, a): Promise<{ ok: boolean; reason: string }> => {
+    const g = await ctx.runQuery(internal.agent.context.gather, { creatorId: a.creatorId, messageId: a.messageId });
+    if (!g?.target) return { ok: false, reason: "message not found" };
+    const pending = await ctx.runQuery(internal.agent.finish.pendingSoundAsk, { creatorId: a.creatorId, now: Date.now() });
+    if (!pending || pending.id !== a.finishId) return { ok: false, reason: "no sound question pending" };
+    const reply = async (body: string) => {
+      await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body, dedupeKey: `finish-sound:${a.messageId}`, proactive: false, kind: "opinion" });
+      await deliverNow(ctx as never);
+    };
+    const candidates = await ctx.runQuery(internal.agent.finish.soundCandidates, { creatorId: a.creatorId, now: Date.now() });
+    const prefix = buildPrefix({ creator: g.creator, directives: g.directives, skill: SOUND_SKILL, personal: g.personal, voice: g.voice, history: g.history });
+    const user = `Evidence:\n${JSON.stringify({ theirAnswer: clip(g.target.body, 300), soundPlan: a.plan, card: pending.card, soundCandidates: candidates })}`;
+    const inv = await investigate(ctx, { creatorId: a.creatorId, sourceMessageId: a.messageId, purpose: "finish_sound", prefix, user, budget: { calls: 4, credits: 10, deadlineAt: Date.now() + 45_000 }, temperature: 0.5, maxTokens: 900 });
+    const out = inv.content ? parseJson<{ sounds?: Out["sounds"]; platformNote?: string }>(inv.content) : null;
+    const { kept: backed, dropped } = backedSounds(out?.sounds ?? [], inv.trace);
+    const kept = a.plan === "over" ? backed.filter((x) => !keepsTheirAudio(x)) : oneOwnAudio(backed);
+    const sounds = kept.length || a.plan === "over" ? kept : [{ name: "your own audio", platform: "both", source: "their-own-audio", why: "your words are the point here", howToUse: "" }];
+    if (!sounds.length) {
+      await reply(SOUND_NONE_OVER);
+      return { ok: true, reason: `no checkable song${dropped.length ? `, dropped ${dropped.length}` : ""}` };
+    }
+    await ctx.runMutation(internal.agent.finish.saveSounds, { id: a.finishId, plan: a.plan, sounds: sounds.map((x) => ({ name: clip(x.name, 120), clipId: x.clipId, platform: String(x.platform ?? "both"), source: String(x.source ?? ""), why: clip(String(x.why ?? ""), 200), howToUse: clip(String(x.howToUse ?? ""), 160), ...("licensedForBusiness" in x && typeof x.licensedForBusiness === "boolean" ? { licensedForBusiness: x.licensedForBusiness } : {}) })), dropped, lookups: inv.trace.filter((t) => t.ok).map((t) => t.tool) });
+    await reply(soundBlock(sounds, out?.platformNote));
+    return { ok: true, reason: `picked ${sounds.length} sound(s) for plan ${a.plan}` };
   },
 });
 
