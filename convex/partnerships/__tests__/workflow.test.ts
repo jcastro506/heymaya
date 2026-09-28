@@ -94,6 +94,20 @@ describe("partnership evidence and fit", () => {
     // Still no invented evidence: an excerpt nothing returned is refused, and the refusal says what to cite.
     await expect(f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "shoeco.com", opportunity: { ...base, contactEmail: "hello@shoeco.net", evidence: [site, { ...bio, excerpt: "collabs: boss@shoeco.net" }] } } })).rejects.toThrow(/nothing you read this week.*Cite a url you fetched/);
   });
+  it("deals sim 2026-09-28: the route is the profile the site links, however the site wrote the link", async () => {
+    const f = await fixture();
+    const now = Date.now();
+    const site = { url: "https://shoeco.com/about", excerpt: "Shoe Co pays trail creators. For partnerships, find us on Instagram: https://instagram.com/shoeco", checkedAt: now - 2000, kind: "extract" };
+    const bio = { url: "https://www.instagram.com/shoeco/", excerpt: "@shoeco\nbio: collabs: hello@shoeco.net", checkedAt: now - 1000, kind: "profile" };
+    const id = await f.t.mutation(internal.partnerships.store.reserveResearch, { creatorId: f.a });
+    await f.t.mutation(internal.partnerships.store.saveResearch, { creatorId: f.a, id, results: [site, bio] });
+    const base = { ...f.input.opportunity, brand: "Shoe Co" };
+    const saved = await f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "shoeco.com", opportunity: { ...base, route: "email", contactEmail: "hello@shoeco.net", routeUrl: "https://www.instagram.com/shoeco/", evidence: [site, bio] } } }) as { id: string };
+    expect(saved.id).toBeTruthy();
+    // A lookalike is still no route: the site never links it, not even as a prefix of the real one.
+    await expect(f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "shoeco.com", opportunity: { ...base, route: "dm", contactEmail: undefined, routeUrl: "https://www.instagram.com/shoe/", evidence: [site] } } })).rejects.toThrow(/Route must be linked/);
+    await expect(f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "shoeco.com", opportunity: { ...base, route: "dm", contactEmail: undefined, routeUrl: "https://www.instagram.com/shoeco.collabs/", evidence: [site] } } })).rejects.toThrow(/Route must be linked/);
+  });
   it("a draft with template holes is refused and the pending draft survives", async () => {
     const f = await fixture();
     const good = await f.draft();

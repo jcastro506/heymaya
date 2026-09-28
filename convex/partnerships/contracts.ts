@@ -27,6 +27,21 @@ export function profileTarget(spec: string): { platform: "tiktok" | "instagram";
 }
 
 /** Pure: does an official page link this social profile (any URL form: with or without www/https/trailing slash)? */
+/** Pure: a URL without scheme, "www.", or a trailing slash, lowercased: how a page's link and a profile read are compared. */
+export function looseUrl(s: string): string {
+  return s.toLowerCase().replace(/https?:\/\//g, "").replace(/(^|[\s(<"'])www\./g, "$1").replace(/\/(?=[\s)>"'?#]|$)/g, "");
+}
+export function sameUrl(a: string, b: string): boolean {
+  return looseUrl(a) === looseUrl(b);
+}
+/** Pure: the page links this URL as a whole link (never a prefix: "instagram.com/shoe" is not in "instagram.com/shoeco"). */
+export function linksUrl(pageText: string, url: string): boolean {
+  const t = looseUrl(pageText), u = looseUrl(url);
+  if (!u) return false;
+  for (let i = t.indexOf(u); i >= 0; i = t.indexOf(u, i + 1)) if (!/[a-z0-9._\-/]/.test(t[i + u.length] ?? "")) return true;
+  return false;
+}
+
 export function linksProfile(officialText: string, profileUrl: string): boolean {
   const t = officialText.toLowerCase();
   const m = /(tiktok\.com\/@[a-z0-9._]+|instagram\.com\/[a-z0-9._]+)/.exec(profileUrl.toLowerCase());

@@ -54,6 +54,7 @@ import type * as calendar_eventBody from "../calendar/eventBody.js";
 import type * as calendar_firstIdeas from "../calendar/firstIdeas.js";
 import type * as calendar_habits from "../calendar/habits.js";
 import type * as calendar_ics from "../calendar/ics.js";
+import type * as calendar_liveness from "../calendar/liveness.js";
 import type * as calendar_oauth from "../calendar/oauth.js";
 import type * as calendar_planning from "../calendar/planning.js";
 import type * as calendar_postTime from "../calendar/postTime.js";
@@ -154,6 +155,7 @@ import type * as integrations_scrapeCreators_schemas from "../integrations/scrap
 import type * as integrations_telegram_client from "../integrations/telegram/client.js";
 import type * as integrations_zernio_index from "../integrations/zernio/index.js";
 import type * as knowledge_platforms from "../knowledge/platforms.js";
+import type * as lib_clip from "../lib/clip.js";
 import type * as lib_encryption from "../lib/encryption.js";
 import type * as lib_functions from "../lib/functions.js";
 import type * as lib_scheduleRow from "../lib/scheduleRow.js";
@@ -179,6 +181,7 @@ import type * as partnerships_kitPage from "../partnerships/kitPage.js";
 import type * as partnerships_kitSettings from "../partnerships/kitSettings.js";
 import type * as partnerships_kitTools from "../partnerships/kitTools.js";
 import type * as partnerships_mailbox from "../partnerships/mailbox.js";
+import type * as partnerships_pitch from "../partnerships/pitch.js";
 import type * as partnerships_privacy from "../partnerships/privacy.js";
 import type * as partnerships_providerConfig from "../partnerships/providerConfig.js";
 import type * as partnerships_research from "../partnerships/research.js";
@@ -268,6 +271,7 @@ declare const fullApi: ApiFromModules<{
   "calendar/firstIdeas": typeof calendar_firstIdeas;
   "calendar/habits": typeof calendar_habits;
   "calendar/ics": typeof calendar_ics;
+  "calendar/liveness": typeof calendar_liveness;
   "calendar/oauth": typeof calendar_oauth;
   "calendar/planning": typeof calendar_planning;
   "calendar/postTime": typeof calendar_postTime;
@@ -368,6 +372,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/telegram/client": typeof integrations_telegram_client;
   "integrations/zernio/index": typeof integrations_zernio_index;
   "knowledge/platforms": typeof knowledge_platforms;
+  "lib/clip": typeof lib_clip;
   "lib/encryption": typeof lib_encryption;
   "lib/functions": typeof lib_functions;
   "lib/scheduleRow": typeof lib_scheduleRow;
@@ -393,6 +398,7 @@ declare const fullApi: ApiFromModules<{
   "partnerships/kitSettings": typeof partnerships_kitSettings;
   "partnerships/kitTools": typeof partnerships_kitTools;
   "partnerships/mailbox": typeof partnerships_mailbox;
+  "partnerships/pitch": typeof partnerships_pitch;
   "partnerships/privacy": typeof partnerships_privacy;
   "partnerships/providerConfig": typeof partnerships_providerConfig;
   "partnerships/research": typeof partnerships_research;
