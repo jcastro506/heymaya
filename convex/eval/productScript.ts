@@ -299,7 +299,9 @@ export async function runBeat(env: BeatEnv, beat: string): Promise<Check[]> {
       const r = await ctx.runAction(internal.agent.cadence.howDidItGo, { creatorId, now: at });
       const touches = (await probeOf(env)).blocks.find((x) => x.id === b.id)?.touches ?? [];
       if (role === "follows_through") {
-        check("no 'how'd it go' when she already knows it was filmed", !r.sent, r.reason);
+        // About THIS shoot: a second shoot that day that nobody confirmed deserves the question (2026-09-28 run: a 1 pm
+        // booking and the plan's 5 pm; she rightly asked about the unconfirmed one).
+        check("no 'how'd it go' when she already knows it was filmed", !touches.includes("howdidit"), `${r.reason}; touches on the filmed block: ${touches.join(", ")}`);
       } else {
         const asked = r.sent || touches.includes("howdidit");
         check("asks how the shoot went when it wasn't filmed", asked, `${r.reason}; touches ${touches.join(", ")}`);
@@ -307,7 +309,7 @@ export async function runBeat(env: BeatEnv, beat: string): Promise<Check[]> {
           // Their own words first: does she understand it without a button?
           const heard = await say("ugh didn't get to it, work ran late");
           let blk = (await probeOf(env)).blocks.find((x) => x.id === b.id);
-          check("'didn't get to it', in their own words, is understood", Boolean(blk?.missedAt) || /put it back|another day|rebook|tomorrow|move it|which day|when/i.test(heard), heard);
+          check("'didn't get to it', in their own words, is understood", Boolean(blk?.missedAt) || /put it back|another day|rebook|tomorrow|move it|push it|bump it|which day|which (sounds|works)|when/i.test(heard), heard);
           check("no guilt about the missed shoot", !/\b(should have|you promised|disappoint)/i.test(heard), heard);
           // Then the button a person would tap, if the free text didn't record it.
           if (!blk?.missedAt) {

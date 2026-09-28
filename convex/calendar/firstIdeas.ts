@@ -10,7 +10,9 @@ import { v } from "convex/values";
 import { internalAction } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
+import { multipleFor, normalsByPlatform } from "../core/normal";
+import { bare, clipWords } from "../lib/clip";
 import { buildPrefix } from "../agent/context";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
@@ -41,12 +43,29 @@ export function parseFirstIdeas(content: string, n: number): SeededIdea[] {
   }
 }
 
+/**
+ * Pure: a multiple the why cites ("1.76x", "2×") must be one of its evidence posts' multiples (core/normal),
+ * within rounding. Product sim 2026-09-28: a plan line said a post hit 1.76x when that post was at 0.36x and
+ * the 1.76x was another post's. The critic can't see this (the number IS in the evidence, on another post).
+ * Returns the why unchanged when every cited multiple is right, else null.
+ */
+export function multiplesHold(why: string, evidenceMultiples: number[]): boolean {
+  const cited = Array.from(why.matchAll(/(\d+(?:\.\d+)?)\s?[x×]/gi), (m) => Number(m[1]));
+  return cited.every((c) => evidenceMultiples.some((e) => Math.abs(e - c) <= Math.max(0.06, e * 0.05)));
+}
+
 export const write = internalMutation({
   args: { creatorId: v.id("creators"), ideas: v.array(v.object({ hook: v.string(), why: v.string(), evidencePostIds: v.array(v.string()) })), model: v.string() },
   handler: async (ctx, a): Promise<{ ideaIds: Id<"ideas">[] }> => {
     const now = Date.now();
     const ideaIds: Id<"ideas">[] = [];
-    for (const i of a.ideas) {
+    const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(300)) as Doc<"ownPosts">[];
+    const normals = normalsByPlatform(posts, now);
+    for (const raw of a.ideas) {
+      // Grounded by construction: a why whose multiple isn't its cited post's is rewritten by code from that post.
+      const ev = raw.evidencePostIds.map((id) => posts.find((p) => p.postId === id || p.url.includes(`/${id}`))).filter((p): p is Doc<"ownPosts"> => Boolean(p));
+      const mults = ev.map((p) => multipleFor(p, normals)).filter((m): m is number => m !== undefined);
+      const i = multiplesHold(raw.why, mults) ? raw : { ...raw, why: ev[0] ? `rhymes with your "${clipWords(bare(ev[0].caption.split("\n")[0] ?? ""), 50)}"${mults[0] !== undefined ? ` (${mults[0]}× your normal)` : ""}` : raw.why.replace(/\s*\(?\d+(?:\.\d+)?\s?[x×][^,.;)]*\)?/gi, "").trim() };
       ideaIds.push(await ctx.db.insert("ideas", {
         creatorId: a.creatorId,
         evidenceLinks: [],
