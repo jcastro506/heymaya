@@ -124,6 +124,22 @@ describe("partnership evidence and fit", () => {
     await expect(f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: ev([{ kind: "message", id: bMsg.messageId, quote: "I want paid running partnerships.", reason: "x" }]) })).rejects.toThrow(/nothing of theirs has id/);
     await expect(f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: ev([{ kind: "post", id: url, quote: "my fastest marathon ever", reason: "x" }]) })).rejects.toThrow(/verbatim/);
   });
+  it("deals sim 2026-09-28: a rate on a form is theirs; only a number they gave may fill it", async () => {
+    const f = await fixture();
+    await f.t.run(async (ctx) => { const row = await ctx.db.get(f.opportunityId); await ctx.db.patch(f.opportunityId, { data: { ...row!.data, route: "application", routeUrl: "https://brand.com/apply", applicationFields: [{ label: "Your TikTok handle", required: true, type: "text", sourceUrl: "https://brand.com/creators" }, { label: "Your rate per video in USD", required: false, type: "text", sourceUrl: "https://brand.com/creators" }] } }); });
+    const prep = (answers: Array<{ label: string; answer: string }>) => f.t.mutation(internal.partnerships.drafts.prepare, { creatorId: f.a, sourceMessageId: f.source, input: { opportunityId: f.opportunityId, subject: "Application", body: "Answers below.", answers } });
+    await expect(prep([{ label: "Your TikTok handle", answer: "@sam" }, { label: "Your rate per video in USD", answer: "$150" }])).rejects.toThrow(/theirs to set/);
+    await f.t.mutation(internal.core.messages.recordInbound, { creatorId: f.a, surface: "web", body: "put 175 per video for the rate" });
+    await expect(prep([{ label: "Your TikTok handle", answer: "@sam" }, { label: "Your rate per video in USD", answer: "$175" }])).resolves.toBeTruthy();
+  });
+  it("partnership_update takes its input as an object, and a broken JSON string is refused with what to do", async () => {
+    const f = await fixture();
+    const ctx = { runQuery: f.t.query, runMutation: f.t.mutation, runAction: f.t.action } as never;
+    const ok = await runTool(ctx, f.a, { name: "partnership_update", args: { operation: "profile", input: { region: "US" }, why: "they said US" } }, DEFAULT_BUDGET(), [], f.source);
+    expect(ok).toContain('"region":"US"');
+    const bad = await runTool(ctx, f.a, { name: "partnership_update", args: { operation: "profile", input: "{region: US", why: "x" } }, DEFAULT_BUDGET(), [], f.source);
+    expect(bad).toMatch(/not valid JSON.*Pass input as an object/);
+  });
   it("a draft with template holes is refused and the pending draft survives", async () => {
     const f = await fixture();
     const good = await f.draft();
