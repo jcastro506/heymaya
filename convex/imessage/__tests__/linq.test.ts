@@ -41,6 +41,10 @@ describe("Linq client (pure)", () => {
     expect(classifyError(403, { code: 2024, message: "Recipient asked you to stop messaging them" }, null)).toMatchObject({ kind: "opted_out", retryable: false });
     expect(classifyError(403, { code: 2027, message: "restricted" }, null)).toMatchObject({ kind: "line_restricted", retryable: true });
     expect(classifyError(409, {}, null)).toMatchObject({ kind: "line_restricted", retryable: true });
+    // The free line's rule (2008) is a named non-retryable "they must text first", never an opt-out.
+    const na = classifyError(403, { code: 2008, message: "Recipient not allowed" }, null);
+    expect(na).toMatchObject({ kind: "not_allowed", retryable: false });
+    expect((na as { reason: string }).reason).toMatch(/must message first/);
     expect(classifyError(429, { code: 1007 }, "12")).toMatchObject({ kind: "rate_limited", retryable: true, retryAfterS: 12 });
     expect(classifyError(401, { code: 2004 }, null)).toMatchObject({ kind: "auth", retryable: false });
     expect(classifyError(500, { code: 3006 }, null)).toMatchObject({ kind: "server", retryable: true });

@@ -28,6 +28,18 @@ Claw (a Linq reseller) still works as before. Linq takes over as soon as `LINQ_A
 
 Once any `LINQ_*` is set, `smoke` checks the config and a half-set config reaches the hourly alert.
 
+## The free tier (Shared Line) for the pilot
+
+`linq signup` (Linq CLI 2.6+, Node 22+) creates a free **Shared Line**: one Linq Number, **20 contacts max**, and **inbound-first**, so a contact must be added and must text the line before Maya can text them. That fits our pairing (they text `START` first), so it's enough for you, your girlfriend and a few pilots. What to do differently from the paid setup:
+
+1. You run the signup and the contact adds yourself (`linq signup --email …`, then `linq whoami`, then `linq contacts add +1<their number>` for each person before they text). Maya can't create the account, and the contact add isn't in the public REST API, so it isn't automated.
+2. Set the line as the pairing fallback, because `available_number` is a paid-line feature: `npx convex env set LINQ_LINE_NUMBER <the number from linq whoami>`.
+3. `LINQ_API_KEY` is `linq tokens show` (or from the dashboard). Set it on the deployment yourself; don't paste it into chat.
+4. Then `node scripts/linq-setup.mjs --deployment dev:precise-canary-781`. Setting the contact card may be refused on a shared line; the script says so and carries on.
+5. Linq's error `2008` ("recipient not allowed") means that person hasn't texted the line yet. It's a named, non-retryable failure on the row, not an opt-out. The sandbox also has a daily and a per-minute cap (429 with Retry-After).
+
+Past 20 contacts, or for a line that's only ours, ask Linq for a dedicated line.
+
 ## Linq's best practices, and where each one is kept
 
 Their docs ship an audit prompt (Best Practices → "Review your setup with an agent"). Every item is below.

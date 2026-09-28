@@ -127,3 +127,20 @@ describe("the rows", () => {
     expect((await t.run((ctx) => ctx.db.get(post)))?.start).toBe(NOW + D + 22 * H);
   });
 });
+
+describe("a shoot that started or was filmed is never taken off the calendar (product sim 2026-09-28)", () => {
+  it("posting retires the future leftovers but keeps the block that ran and the one they filmed", async () => {
+    vi.useFakeTimers({ now: NOW, toFake: ["Date"] });
+    const t = convexTest(schema, modules);
+    const { creatorId, ideaId, book } = await seed(t, "keep");
+    const running = await book("film", NOW - 15 * 60_000);       // started 15 min ago, still on
+    const filmed = await book("film", NOW + 3 * H);
+    await t.run((ctx) => ctx.db.patch(filmed, { filmedAt: NOW }));
+    const later = await book("edit", NOW + 5 * H);
+    await t.run((ctx) => applyIdeaAct(ctx, creatorId, ideaId, "posted", { origin: "chat" }));
+    const status = async (id: Id<"calendarBlocks">) => (await t.run((ctx) => ctx.db.get(id)))?.status;
+    expect(await status(running)).not.toBe("deleted");
+    expect(await status(filmed)).not.toBe("deleted");
+    expect(await status(later)).toBe("deleted");
+  });
+});

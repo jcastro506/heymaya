@@ -90,7 +90,9 @@ export async function retireMootFor(ctx: MutationCtx, creatorId: Id<"creators">,
   const info: IdeaLike = idea && idea.creatorId === creatorId ? { status: idea.status, postedAt: idea.postedAt } : null;
   let retired = 0;
   for (const b of rows) {
-    if (b.status === "deleted" || b.end < now) continue; // the past is history, not clutter
+    // The past is history, not clutter. A shoot that has started, or that they said they filmed, is never
+    // taken off their calendar because they posted (product sim 2026-09-28: a filmed block was deleted after the post).
+    if (b.status === "deleted" || b.end < now || b.start <= now || b.filmedAt !== undefined) continue;
     const why = mootReason(b, rows, info);
     // "nothing filmed" is only final when no film for the idea is left at all (dropped, not merely missed).
     if (!why || (why === "nothing filmed for it yet" && rows.some((f) => f.kind === "film" && f.status !== "deleted"))) continue;
