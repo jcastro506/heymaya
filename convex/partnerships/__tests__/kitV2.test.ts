@@ -130,6 +130,13 @@ describe("the public view (sibling coherence with the private one)", () => {
     expect(text).toMatch(/engagement 6\.0% of views \(2\.0% of followers\)/);
     expect(text).toMatch(/next: nothing missing$/);
   });
+  it("a weak photo is flagged until she's offered once; after that the read tells her not to raise it again (deals sim 2026-09-28)", () => {
+    const weak = { ...kit(), photo: null, photoSetting: "auto" as const, photoCheck: { weak: true, reason: "their profile picture is a logo", offered: false } };
+    expect(renderKit(weak as never, null, { paidOnly: false, minimumRate: "", excludedBrands: [] }, "photo")).toMatch(/weak: their profile picture is a logo/);
+    const offered = renderKit({ ...weak, photoCheck: { ...weak.photoCheck, offered: true } } as never, null, { paidOnly: false, minimumRate: "", excludedBrands: [] }, "nothing missing");
+    expect(offered).toMatch(/already offered .* don't bring it up again/);
+    expect(offered).not.toMatch(/weak:/);
+  });
 });
 
 // ------------------------------------------------------------------ the rows
