@@ -1,16 +1,17 @@
-import ClerkConvex
 import ClerkKit
 import ConvexMobile
 import SwiftUI
 import WidgetKit
 
-/// The one Convex client. Clerk's session is synced into it by `ClerkConvexAuthProvider`,
-/// so every query runs as the signed-in creator and `me()` on the server resolves them.
+/// The one Convex client. Clerk's session is synced into it by `MayaAuthProvider` (the `convex`
+/// token the server accepts), so every query runs as the signed-in creator and `me()` resolves them.
 @MainActor
-let convex = ConvexClientWithAuth(
-  deploymentUrl: Env.convexURL,
-  authProvider: ClerkConvexAuthProvider()
-)
+let convex: ConvexClientWithAuth<String> = {
+  let provider = MayaAuthProvider()
+  let client = ConvexClientWithAuth(deploymentUrl: Env.convexURL, authProvider: provider as any AuthProvider<String>)
+  provider.bind(client: client)
+  return client
+}()
 
 @main
 struct MayaApp: App {
