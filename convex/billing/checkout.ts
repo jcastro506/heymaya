@@ -56,6 +56,9 @@ export const createCheckout = action({
       subscription_data: { ...(firstTime ? { trial_period_days: TRIAL_DAYS } : {}), metadata: { creatorId: me._id, founding: founding ? "1" : "0", interval: a.interval, tier: a.tier } },
       payment_method_collection: "always",
       automatic_tax: { enabled: true },
+      // Automatic tax on an existing customer needs an address; save the one they type in Checkout
+      // (Stripe refuses the session otherwise: the first real sign-up, 2026-09-29).
+      customer_update: { address: "auto", name: "auto" },
       allow_promotion_codes: true,
       metadata: { creatorId: me._id, founding: founding ? "1" : "0" },
       success_url: `${appUrl}${successPath}`,

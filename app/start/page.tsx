@@ -130,7 +130,7 @@ export default function StartPage() {
     // Idempotent: makes sure their row exists even if the first attempt raced the sign-in.
     const account = await ensureCreator({ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }).catch(() => null);
     if (!account?.ok) { setError("We couldn’t confirm your sign-in. Refresh the page and try again."); setBusy(null); return; }
-    const result = await createCheckout({ tier, interval, returnTo: "onboarding" });
+    const result = await createCheckout({ tier, interval, returnTo: "onboarding" }).catch(() => ({ ok: false as const, reason: "Checkout didn’t open. Try again in a moment." }));
     if (result.ok) window.location.assign(result.url);
     else { setError(result.reason); setBusy(null); }
   }
