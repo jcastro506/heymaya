@@ -95,13 +95,33 @@ export default function StartPage() {
     });
   }, [planIsReady, progress, socialConnections]);
 
+  // Back from connecting: ask which accounts are attached, once the server has their sign-in (asked
+  // earlier, it sees no one and nothing updates: the first real connect, 2026-09-29).
   useEffect(() => {
-    if (step !== 2 || new URLSearchParams(window.location.search).get("connect") !== "back") return;
+    if (!isAuthenticated || step !== 2 || new URLSearchParams(window.location.search).get("connect") !== "back") return;
     reconcileSocialConnections({})
       .then((result) => setNotice(result.accounts > 0 ? "Connected. I’m pulling in your account now." : "Nothing is attached yet. If you completed the connection, give it a moment and try again."))
       .catch(() => setError("I couldn’t check that connection yet. Try again in a moment."))
       .finally(() => setBusy(null));
-  }, [reconcileSocialConnections, step]);
+  }, [isAuthenticated, reconcileSocialConnections, step]);
+
+  // The connect flow can finish in another window or tab: check again whenever they come back to this one.
+  useEffect(() => {
+    if (!isAuthenticated || step !== 2) return;
+    const recheck = () => { if (document.visibilityState === "visible") reconcileSocialConnections({}).catch(() => undefined); };
+    window.addEventListener("focus", recheck);
+    document.addEventListener("visibilitychange", recheck);
+    return () => { window.removeEventListener("focus", recheck); document.removeEventListener("visibilitychange", recheck); };
+  }, [isAuthenticated, reconcileSocialConnections, step]);
+
+  async function checkConnections() {
+    setBusy("recheck");
+    setError(null);
+    const result = await reconcileSocialConnections({}).catch(() => null);
+    if (!result) setError("I couldn’t check that connection yet. Try again in a moment.");
+    else if (result.accounts === 0) setNotice("Nothing is attached yet. If you finished connecting, give it a moment and check again.");
+    setBusy(null);
+  }
 
   // §27: suggestions are chosen from their own posts, so wait for the first ones (or 25 seconds, or a finished read).
   const [waitedForPosts, setWaitedForPosts] = useState(false);
@@ -239,6 +259,7 @@ export default function StartPage() {
           </div>
           {socialConnections?.status === "needs_reconnect" ? <div className="notice-card error">One account needs to be reconnected before I can rely on its numbers.</div> : null}
           {socialConnections?.detail ? <p className="tiny muted">{socialConnections.detail}</p> : null}
+          {connectedCount < 1 && planIsReady ? <button className="link" disabled={busy !== null} onClick={checkConnections}>{busy === "recheck" ? "Checking…" : "Already connected? Check again"}</button> : null}
           <button className="btn" disabled={connectedCount < 1 || busy !== null} onClick={() => go(3)}>{connectedCount < 1 ? "Connect one account to continue" : "Continue"}</button>
           <p className="privacy-note">You stay in control. Maya reads these accounts and never publishes from onboarding.</p>
         </section>
