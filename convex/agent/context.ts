@@ -8,6 +8,7 @@ import { internalQuery, type QueryCtx } from "../_generated/server";
 import { v } from "convex/values";
 import { appActionsSection, unseenActions } from "../core/act";
 import { unseenIdeas, unseenSection } from "../core/unseen";
+import { gapDaysBetween, returnFacts, welcomeBackSection, WELCOME_BACK_AFTER_DAYS } from "./returnFacts";
 import { normalsByPlatform } from "../core/normal";
 import type { Doc, Id } from "../_generated/dataModel";
 import { SOUL, SOUL_VERSION, REGISTER_ADDENDA } from "./soul";
@@ -68,11 +69,28 @@ export const gather = internalQuery({
     // M4 core: what they did in the app since she last spoke, so she knows THAT it happened.
     const appActions = appActionsSection(await unseenActions(ctx, creator._id, Date.now()), Date.now());
     // N1: new ideas that only live in the app so far; she may mention them once, when it's light.
-    const newIdeas = unseenSection(await unseenIdeas(ctx, creator._id, Date.now()), Date.now());
-    const history = [historySection(h), growth, callbacks, personalHistory, partnershipHistory, appActions, newIdeas].filter(Boolean).join("\n\n");
+    // Re-engagement: they're back after a gap, so this turn opens with a welcome and what changed. It carries
+    // the same ideas the note below would, so it replaces it (two instructions to mention them would fight).
+    const welcome = await welcomeBackFor(ctx, creator, target);
+    const newIdeas = welcome ? "" : unseenSection(await unseenIdeas(ctx, creator._id, Date.now()), Date.now());
+    const history = [historySection(h), growth, callbacks, personalHistory, partnershipHistory, appActions, welcome, newIdeas].filter(Boolean).join("\n\n");
     return { creator, directives, recent: recent.filter((m) => !m.memoryExcludedAt).reverse(), target, personal, voice, history };
   },
 });
+
+/**
+ * The welcome-back section for THIS inbound message, or "": their previous message was a week or more
+ * before it. Derived from the two message times, so a retried turn gets the same section and no state is kept.
+ */
+async function welcomeBackFor(ctx: QueryCtx, creator: Doc<"creators">, target: Doc<"messages"> | null): Promise<string> {
+  if (!target || target.direction !== "in") return "";
+  const before = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", creator._id).lt("ts", target.ts)).order("desc").take(80)) as Doc<"messages">[];
+  const previous = before.find((m) => m.direction === "in");
+  if (!previous) return "";
+  const gap = gapDaysBetween(previous.ts, target.ts);
+  if (gap < WELCOME_BACK_AFTER_DAYS) return "";
+  return welcomeBackSection(gap, await returnFacts(ctx, creator, previous.ts, target.ts, { skipSaid: false }));
+}
 
 /**
  * Hyper-personal by construction: every skill sees their last week of posts with the

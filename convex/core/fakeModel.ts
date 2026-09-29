@@ -48,8 +48,12 @@ export function fakeAnswer(purpose: string, messages: OpenRouterMessage[]): Open
     case "saw_it":
     case "saw_it_rewrite":
       return ok("the cut to the shoe rack on the second point got me. that one's yours.");
-    case "quiet":
-      return ok("still here, no pressure. hope the training's going ok.");
+    case "reengage":
+    case "reengage_rewrite":
+      return ok("got a new one for you: the shoe rack list, said to camera. want the shot list?");
+    case "easy_out":
+    case "easy_out_rewrite":
+      return ok("still here. i'll stop texting so much. say pause and i'll go quiet, or send me anything and i'm right back.");
     case "scout_rewrite":
       return ok("shorter version of the same idea, with the link. want the shot list?");
     case "critic":

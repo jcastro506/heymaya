@@ -82,7 +82,7 @@ describe("the human cadence: pure", () => {
     expect(converse).toMatch(/\^shot:\(\[a-zA-Z0-9\]\+\):\(yes\|no\)\$/);
     expect(converse).toMatch(/\^missed:\(\[a-zA-Z0-9\]\+\):\(rebook\|drop\)\$/);
     const cadence = readFileSync(new URL("../cadence.ts", import.meta.url), "utf8");
-    for (const key of ["morning:${day}", "howdidit:${block._id}", "sawit:${a.ownPostId}", "quiet:${monthKey}", "foryou:${a.postId}"]) expect(cadence, `dedupe key ${key}`).toContain(key);
+    for (const key of ["morning:${day}", "howdidit:${block._id}", "sawit:${a.ownPostId}", "foryou:${a.postId}"]) expect(cadence, `dedupe key ${key}`).toContain(key);
     expect(cadence).not.toMatch(/TODO|FIXME/);
     // Live 2026-09-08: "i'll read your lane that way from the next pass" reached a creator. Plumbing words stay out of code strings.
     const manage = readFileSync(new URL("../manage.ts", import.meta.url), "utf8");
@@ -218,20 +218,6 @@ describe("the human cadence: rows and rails, on the fake model", () => {
     expect(shares[0].body).toContain("https://www.tiktok.com/@x/video/1");
     expect(shares[0].awaitingAnswer).toBeFalsy();
     expect((await t.action(internal.agent.cadence.forYou, { creatorId, postId: "fy1", url: "https://t/1", line: "again", now: NOW + 8 * D })).reason, "the same post is never shared twice").toBe("already shared");
-  });
-
-  it("quiet: after a week of silence with things sent, one line, once a month", async () => {
-    const t = convexTest(schema, modules);
-    const creatorId = await seed(t);
-    for (let i = 0; i < 4; i++) await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: `idea ${i}`, dedupeKey: `q:${i}`, proactive: true, kind: "scout", ts: NOW - (10 - i) * D });
-    await t.run((ctx) => ctx.db.insert("messages", { creatorId, direction: "in", surface: "telegram", kind: "inbound", body: "ok", ts: NOW - 9 * D } as never));
-    const r = await t.action(internal.agent.cadence.quiet, { creatorId, now: NOW });
-    expect(r, JSON.stringify(r)).toMatchObject({ sent: true });
-    const q = (await t.run((ctx) => ctx.db.query("messages").collect())).find((m) => m.kind === "quiet");
-    expect(q?.awaitingAnswer).toBeFalsy();
-    expect((await t.action(internal.agent.cadence.quiet, { creatorId, now: NOW + D })).reason).toBe("asked this month");
-    const fresh = await seed(t, "f");
-    expect((await t.action(internal.agent.cadence.quiet, { creatorId: fresh, now: NOW })).reason).toBe("not quiet");
   });
 
   it("the hourly finds who is at 8 and who is at 18 on their own clock", async () => {
