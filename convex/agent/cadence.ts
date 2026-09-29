@@ -32,7 +32,6 @@ export const CADENCE = {
   howDidItGoUntilMs: 6 * 60 * 60_000,
   /** A post older than this is not "when they post"; the review will see it. */
   sawItMaxAgeMs: 36 * 60 * 60_000,
-  quietAfterDays: 7,
   streakWeeks: 3,
 } as const;
 
@@ -44,11 +43,6 @@ Output the text only.`;
 export const SAW_IT_SKILL = `saw it (a viewer's line when they post)
 When: they posted and you watched it; you have the card and the caption.
 The judgment: react as a viewer first, one line, under 30 words: the moment that landed, named from the card. No numbers of any kind, no advice, no question, no "great job". If the card says the post is thin, say the one thing you liked and stop.
-Output the text only.`;
-
-export const QUIET_SKILL = `quiet (they have gone quiet)
-When: they have not written in a week and you have sent several things. You do not know why.
-The judgment: one warm line, under 30 words, that asks nothing they have to answer: you are still around, no pressure, and if the prefix carries something of theirs worth calling back (a race, a trip, a bit), one clause on it. Never "just checking in", never a guilt trip, never a list of what they missed. At most one question mark and it must not require an answer.
 Output the text only.`;
 
 /* -------------------------------------------------------------------------- */
@@ -321,31 +315,14 @@ export const postWithCard = internalQuery({
   },
 });
 
-/** "you alright? no pressure." Once a month at most, only when the pulse says silent for a week. */
+/**
+ * The hourly touch at 18:00 on their clock. Kept under its old name (the cron, the sims and the tests call
+ * it); the decision and the wording live in agent/reengage.ts: a nudge with something true at 3 and 9 days,
+ * the easy-out at 15, then nothing until they write.
+ */
 export const quiet = internalAction({
   args: { creatorId: v.id("creators"), now: v.optional(v.number()) },
-  handler: async (ctx, a): Promise<{ sent: boolean; reason: string }> => {
-    const now = a.now ?? Date.now();
-    const pulse = await ctx.runQuery(internal.review.pulse.pulseFor, { creatorId: a.creatorId, now });
-    if (!pulse) return { sent: false, reason: "creator not found" };
-    if (pulse.daysSinceLastReply === null || pulse.daysSinceLastReply < CADENCE.quietAfterDays || pulse.month.sent < 3) return { sent: false, reason: "not quiet" };
-    const gathered = await ctx.runQuery(internal.agent.context.gather, { creatorId: a.creatorId });
-    if (!gathered) return { sent: false, reason: "creator not found" };
-    const monthKey = dayKeyInZone(now, gathered.creator.timezone).slice(0, 7);
-    if ((gathered.creator.milestonesSaid ?? []).includes(`quiet:${monthKey}`)) return { sent: false, reason: "asked this month" };
-    const rails = await railsOk(ctx as never, a.creatorId, now);
-    if (!rails.ok) return { sent: false, reason: rails.reason ?? "rails" };
-    const prefix = buildPrefix({ creator: gathered.creator, directives: gathered.directives, skill: QUIET_SKILL, personal: gathered.personal, voice: gathered.voice, history: gathered.history });
-    const spec = REGISTRY.writer;
-    const r = await callModel(ctx, { creatorId: a.creatorId, purpose: "quiet", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `They have not written in ${pulse.daysSinceLastReply} days. Write the line.` }], temperature: 0.7, maxTokens: 120, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
-    const text = r.ok ? r.content.trim() : "";
-    if (!text) return { sent: false, reason: "no line" };
-    const sent = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: text, dedupeKey: `quiet:${monthKey}`, ts: now, proactive: true, capped: true, kind: "quiet", produced: producedStamp(spec.primary) });
-    if (!sent.sent) return { sent: false, reason: sent.held ?? "already said" };
-    await ctx.runMutation(internal.agent.history.markSaid, { creatorId: a.creatorId, key: `quiet:${monthKey}` });
-    await deliverNow(ctx as never);
-    return { sent: true, reason: "said" };
-  },
+  handler: async (ctx, a): Promise<{ sent: boolean; reason: string }> => await ctx.runAction(internal.agent.reengage.run, { creatorId: a.creatorId, now: a.now }),
 });
 
 /** "saw this, thought of you": the scout names it on a day it has no idea; this holds the weekly count. */
