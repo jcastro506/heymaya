@@ -1,4 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
 /**
  * Next 16 proxy (the file formerly called middleware). Public routes are listed
@@ -9,7 +10,11 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 const isPublic = createRouteMatcher([
   "/ops","/", "/join", "/privacy", "/terms", "/sign-in(.*)", "/sign-up(.*)", "/api/health", "/onboarding-preview", "/mission-control-preview", "/o/(.*)", "/k/(.*)"]);
 
+// Sign-up and onboarding live in the iPhone app now (app spec §5); the old web screens send people to it.
+const isRetired = createRouteMatcher(["/sign-up(.*)", "/start(.*)", "/app(.*)"]);
+
 export const proxy = clerkMiddleware(async (auth, req) => {
+  if (isRetired(req)) return NextResponse.redirect(new URL("/join?where=web", req.url));
   if (!isPublic(req)) await auth.protect();
 });
 

@@ -1,14 +1,16 @@
 import ConvexMobile
 import SwiftUI
 
-/// Signed out → the welcome screen. Signed in → the three tabs (spec §0 D2).
+/// Signed out → the welcome screen. Signed in → onboarding until they're set up (M3), then the tabs.
 struct RootView: View {
   @State private var auth: AuthState<String> = .loading
   @State private var router = Router()
 
   var body: some View {
     Group {
-      if Fixtures.enabled {
+      if let step = OnboardingPreview.step {
+        OnboardingGate(preview: step)
+      } else if Fixtures.enabled {
         MainTabs()
       } else {
         authed
@@ -29,7 +31,7 @@ struct RootView: View {
       case .unauthenticated:
         WelcomeView()
       case .authenticated:
-        MainTabs()
+        OnboardingGate()
       }
     }
     .animation(.smooth(duration: 0.25), value: stateKey)
@@ -78,5 +80,19 @@ struct LaunchView: View {
       Palette.ground.ignoresSafeArea()
       FlowerMark(size: 64)
     }
+  }
+}
+
+/// Debug only: `-MayaOnboarding plan|connect|watch|meet|done` shows onboarding from that screen with
+/// made-up data and no network, for design review. Release builds never read it.
+enum OnboardingPreview {
+  static var step: OnboardingStep? {
+    #if DEBUG
+      let args = ProcessInfo.processInfo.arguments
+      guard let i = args.firstIndex(of: "-MayaOnboarding"), i + 1 < args.count else { return nil }
+      return ["plan": .plan, "connect": .connect, "watch": .watch, "meet": .meet, "done": .done][args[i + 1]]
+    #else
+      nil
+    #endif
   }
 }

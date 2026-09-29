@@ -115,7 +115,7 @@ export const applyAccounts = internalMutation({
 
 /** Settings: the connect button. Paid plans only (§19.2: connections are not a trial feature). */
 export const startConnect = action({
-  args: { platform: PLATFORM, returnTo: v.optional(v.union(v.literal("onboarding"), v.literal("settings"))) },
+  args: { platform: PLATFORM, returnTo: v.optional(v.union(v.literal("onboarding"), v.literal("settings"), v.literal("app"))) },
   handler: async (ctx, a): Promise<{ ok: true; url: string } | { ok: false; reason: string }> => {
     const me = await ctx.runQuery(internal.connections.zernio.meForConnect, {});
     if (!me) return { ok: false, reason: "no account" };
@@ -137,7 +137,7 @@ export const startConnect = action({
     }
     const appUrl = process.env.APP_URL ?? "http://localhost:3000";
     try {
-      const returnUrl = a.returnTo === "onboarding" ? `${appUrl}/start?step=2&connect=back` : `${appUrl}/app/settings?connect=back`;
+      const returnUrl = a.returnTo === "app" ? `${appUrl}/o/billing?state=connected&auto=1` : a.returnTo === "onboarding" ? `${appUrl}/start?step=2&connect=back` : `${appUrl}/app/settings?connect=back`;
       const { authUrl } = await connectUrl(c, a.platform, profileId, returnUrl);
       return { ok: true, url: authUrl };
     } catch (e) {

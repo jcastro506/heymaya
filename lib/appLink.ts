@@ -36,7 +36,7 @@ export function campaignToken(raw: string | null | undefined): string | null {
  */
 export function joinDestination(link: AppLink, campaign: string | null, env: Env = process.env): string {
   if (link.kind === "beta") return link.url;
-  if (link.kind === "none") return "/sign-up";
+  if (link.kind === "none") return "/#get"; // no app link yet: back to the landing's download section
   const url = new URL(link.url);
   if (campaign) url.searchParams.set("ct", campaign);
   const pt = env.NEXT_PUBLIC_APP_STORE_PROVIDER_TOKEN?.trim();
