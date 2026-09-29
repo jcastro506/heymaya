@@ -34,13 +34,14 @@ struct OnboardingFlow: View {
   var body: some View {
     ZStack {
       Palette.ground.ignoresSafeArea()
-      switch model.step {
+      Group { switch model.step {
       case .plan: PlanStep(model: model)
       case .connect: ConnectStep(model: model)
       case .watch: WatchStep(model: model)
       case .meet: MeetStep(model: model)
       case .done: DoneStep(paired: model.progress?.paired ?? false) { model.celebrate = false }
-      }
+      } }
+      .environment(model)
     }
     .onAppear { model.sawSteps = true }
   }
@@ -49,6 +50,7 @@ struct OnboardingFlow: View {
 // MARK: - The frame every step shares
 
 private struct StepFrame<Content: View, Footer: View>: View {
+  @Environment(OnboardingModel.self) private var model
   let step: OnboardingStep
   let kicker: String
   let title: String
@@ -58,11 +60,20 @@ private struct StepFrame<Content: View, Footer: View>: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      HStack(spacing: 6) {
-        ForEach(1...4, id: \.self) { i in
-          Capsule().fill(i <= step.index ? Palette.purple : Palette.line).frame(height: 4)
+      HStack(spacing: 10) {
+        if model.canGoBack {
+          Button { Haptics.tap(); model.back() } label: {
+            Image(systemName: "chevron.left").font(.headline).foregroundStyle(Palette.ink).frame(width: 32, height: 32)
+          }
+          .accessibilityLabel("Back")
+        }
+        HStack(spacing: 6) {
+          ForEach(1...4, id: \.self) { i in
+            Capsule().fill(i <= step.index ? Palette.purple : Palette.line).frame(height: 4)
+          }
         }
       }
+      .frame(minHeight: 32)
       .padding(.horizontal, 24)
       .padding(.top, 12)
       .accessibilityLabel("Step \(step.index) of 4")
@@ -140,7 +151,7 @@ private struct PlanStep: View {
   }
 
   var body: some View {
-    StepFrame(step: .plan, kicker: "Your plan", title: "Start with a free week.", subtitle: "Pick what fits. You won't be charged for 7 days, and you can cancel before then.") {
+    StepFrame(step: .plan, kicker: "Your plan", title: "Start with a free week.", subtitle: "Seven days on us, then pick up the tab only if she's earned it.") {
       Picker("Billing", selection: $annual) {
         Text("Monthly").tag(false)
         Text("Yearly · 2 months free").tag(true)
@@ -214,7 +225,7 @@ private struct ConnectStep: View {
   private var accounts: [SocialStatus.Account] { model.social?.accounts.filter { !$0.needsReconnect } ?? [] }
 
   var body: some View {
-    StepFrame(step: .connect, kicker: "Your work", title: "Let her see what you make.", subtitle: "Connect Instagram or TikTok. She reads your posts and numbers. She never posts for you.") {
+    StepFrame(step: .connect, kicker: "Your work", title: "Let her see what you make.", subtitle: "She reads your posts and numbers, and never posts a thing.") {
       VStack(spacing: 12) {
         ForEach(["instagram", "tiktok"], id: \.self) { platform in
           let account = accounts.first { $0.platform == platform }
@@ -264,88 +275,163 @@ private struct ConnectStep: View {
   }
 }
 
-// MARK: - 3. Worth watching
+// MARK: - 4. Worth watching
 
 private struct WatchStep: View {
   let model: OnboardingModel
-  @State private var suggestions: [WatchSuggestion]?
   @State private var platform = "instagram"
   @State private var handle = ""
   @State private var busy = false
   @State private var problem: String?
 
   var body: some View {
-    StepFrame(step: .watch, kicker: "Your taste", title: "Who should she keep an eye on?", subtitle: "She watches these accounts for what's working, so her ideas fit your lane. Pick any, or skip and she'll choose.") {
-      if let suggestions {
-        if suggestions.isEmpty {
-          Text("No strong picks yet. Add someone you like, or skip and she'll keep looking.")
-            .font(MayaFont.callout).foregroundStyle(Palette.muted)
-        }
-        VStack(spacing: 12) {
-          ForEach(suggestions) { s in
-            let on = model.watched.contains { $0.platform == s.platform && $0.handle == s.handle }
-            Button { Haptics.tap(); Task { await model.toggle(s) } } label: {
-              HStack(alignment: .top, spacing: 12) {
-                Image(systemName: on ? "checkmark.circle.fill" : "plus.circle")
-                  .font(.title3).foregroundStyle(on ? Palette.purple : Palette.muted)
-                VStack(alignment: .leading, spacing: 4) {
-                  Text(s.displayName ?? "@\(s.handle)").font(MayaFont.headline).foregroundStyle(Palette.ink)
-                  Text("@\(s.handle) · \(s.platform == "tiktok" ? "TikTok" : "Instagram")\(s.followers.map { " · \(Format.count($0))" } ?? "")")
-                    .font(MayaFont.caption).foregroundStyle(Palette.muted)
-                  Text(s.why).font(MayaFont.callout).foregroundStyle(Palette.ink).multilineTextAlignment(.leading)
+    StepFrame(step: .watch, kicker: "Your favorites", title: "Who do you love watching?", subtitle: "She'll keep an eye on them and tell you what's working.") {
+      if let picks = model.picks {
+        if picks.isEmpty {
+          EmptyPicks()
+        } else {
+          ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: 12) {
+              ForEach(picks) { s in
+                PickCard(pick: s, on: model.watched.contains { $0.platform == s.platform && $0.handle == s.handle }) {
+                  Haptics.tap(); Task { await model.toggle(s) }
                 }
-                Spacer(minLength: 0)
               }
-              .padding(16)
-              .background(RoundedRectangle(cornerRadius: 18).fill(on ? Palette.wash : Palette.panel))
-              .overlay(RoundedRectangle(cornerRadius: 18).stroke(on ? Palette.purple : Palette.line, lineWidth: on ? 2 : 1))
             }
-            .buttonStyle(.plain)
+            .scrollTargetLayout()
+            .padding(.horizontal, 24)
           }
+          .scrollTargetBehavior(.viewAligned)
+          .padding(.horizontal, -24)
         }
       } else {
-        HStack(spacing: 10) {
-          ProgressView()
-          Text("Finding people from your posts…").font(MayaFont.callout).foregroundStyle(Palette.muted)
-        }
+        LoadingPicks()
       }
 
-      VStack(alignment: .leading, spacing: 8) {
-        Text("Add someone you like").font(MayaFont.headline).foregroundStyle(Palette.ink)
-        Picker("Platform", selection: $platform) {
-          Text("Instagram").tag("instagram")
-          Text("TikTok").tag("tiktok")
-        }
-        .pickerStyle(.segmented)
-        HStack {
+      VStack(alignment: .leading, spacing: 10) {
+        Text("Add a creator").font(MayaFont.headline).foregroundStyle(Palette.ink)
+        HStack(spacing: 8) {
+          Menu {
+            Button("Instagram") { platform = "instagram" }
+            Button("TikTok") { platform = "tiktok" }
+          } label: {
+            Image(systemName: platform == "instagram" ? "camera" : "music.note")
+              .frame(width: 44, height: 44)
+              .background(RoundedRectangle(cornerRadius: 12).fill(Palette.wash))
+              .foregroundStyle(Palette.purple)
+          }
+          .accessibilityLabel(platform == "instagram" ? "Instagram" : "TikTok")
           TextField("@handle", text: $handle)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
+            .submitLabel(.done)
             .padding(12)
             .background(RoundedRectangle(cornerRadius: 12).fill(Palette.panel))
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line))
-          Button("Add") {
-            Task { busy = true; problem = await model.addOwn(platform: platform, handle: handle); if problem == nil { handle = "" }; busy = false }
-          }
-          .buttonStyle(.bordered)
-          .disabled(handle.trimmingCharacters(in: .whitespaces).isEmpty || busy)
+            .onSubmit(add)
+          Button("Add", action: add)
+            .buttonStyle(.bordered)
+            .disabled(handle.trimmingCharacters(in: .whitespaces).isEmpty || busy)
         }
-        let own = model.watched.filter { w in !(suggestions ?? []).contains { $0.platform == w.platform && $0.handle == w.handle } }
-        ForEach(own) { w in
-          Label("@\(w.handle)", systemImage: "checkmark").font(MayaFont.callout).foregroundStyle(Palette.ink)
+        let own = model.watched.filter { w in !(model.picks ?? []).contains { $0.platform == w.platform && $0.handle == w.handle } }
+        if !own.isEmpty {
+          ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) { ForEach(own) { w in Chip(text: "@\(w.handle)") } }
+          }
         }
       }
       Problem(text: problem)
     } footer: {
-      PrimaryButton(title: model.watched.isEmpty ? "Skip, she'll choose" : "Continue") {
-        model.watchSeen = true
-      }
+      PrimaryButton(title: model.watched.isEmpty ? "Skip for now" : "Done") { model.watchSeen = true }
     }
-    .task { if suggestions == nil { suggestions = await model.suggestions() } }
+    .task { model.prefetchPicks() }
+  }
+
+  private func add() {
+    Task { busy = true; problem = await model.addOwn(platform: platform, handle: handle); if problem == nil { handle = "" }; busy = false }
   }
 }
 
-// MARK: - 4. Meet her
+private struct PickCard: View {
+  let pick: WatchSuggestion
+  let on: Bool
+  let toggle: () -> Void
+
+  var body: some View {
+    Button(action: toggle) {
+      VStack(alignment: .leading, spacing: 10) {
+        HStack(alignment: .top) {
+          PickAvatar(url: pick.avatarUrl.flatMap(URL.init(string:)), letter: String(pick.handle.prefix(1)).uppercased())
+          Spacer()
+          Image(systemName: on ? "checkmark.circle.fill" : "plus.circle")
+            .font(.title2).foregroundStyle(on ? Palette.purple : Palette.muted)
+        }
+        VStack(alignment: .leading, spacing: 2) {
+          Text(pick.displayName ?? "@\(pick.handle)").font(MayaFont.headline).foregroundStyle(Palette.ink).lineLimit(1)
+          Text("\(pick.platform == "tiktok" ? "TikTok" : "Instagram")\(pick.followers.map { " · \(Format.count($0))" } ?? "")")
+            .font(MayaFont.caption).foregroundStyle(Palette.muted)
+        }
+        Text(pick.why).font(MayaFont.callout).foregroundStyle(Palette.ink).lineLimit(3).multilineTextAlignment(.leading)
+        Spacer(minLength: 0)
+      }
+      .padding(16)
+      .frame(width: 240, height: 210, alignment: .topLeading)
+      .background(RoundedRectangle(cornerRadius: 20).fill(on ? Palette.wash : Palette.panel))
+      .overlay(RoundedRectangle(cornerRadius: 20).stroke(on ? Palette.purple : Palette.line, lineWidth: on ? 2 : 1))
+    }
+    .buttonStyle(.plain)
+    .accessibilityAddTraits(on ? .isSelected : [])
+  }
+}
+
+private struct PickAvatar: View {
+  let url: URL?
+  let letter: String
+  var body: some View {
+    ZStack {
+      Circle().fill(Palette.wash)
+      Text(letter).font(MayaFont.headline).foregroundStyle(Palette.purple)
+      if let url {
+        AsyncImage(url: url) { $0.resizable().scaledToFill() } placeholder: { Color.clear }
+          .clipShape(Circle())
+      }
+    }
+    .frame(width: 48, height: 48)
+  }
+}
+
+private struct LoadingPicks: View {
+  var body: some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: 12) {
+        ForEach(0..<3, id: \.self) { _ in
+          RoundedRectangle(cornerRadius: 20).fill(Palette.wash).frame(width: 240, height: 210)
+        }
+      }
+      .padding(.horizontal, 24)
+    }
+    .padding(.horizontal, -24)
+    .overlay(alignment: .bottomLeading) {
+      Text("Finding creators you might love…").font(MayaFont.caption).foregroundStyle(Palette.muted).padding(.top, 8).offset(y: 22)
+    }
+    .padding(.bottom, 22)
+    .redacted(reason: .placeholder)
+  }
+}
+
+private struct EmptyPicks: View {
+  var body: some View {
+    HStack(alignment: .top, spacing: 12) {
+      FlowerMark(size: 32)
+      Text("No picks yet. Add the creators you love below and she'll keep an eye on them.")
+        .font(MayaFont.callout).foregroundStyle(Palette.muted)
+    }
+    .padding(16)
+    .background(RoundedRectangle(cornerRadius: 18).fill(Palette.panel))
+  }
+}
+
+// MARK: - 3. Meet her
 
 private struct MeetStep: View {
   let model: OnboardingModel
@@ -357,7 +443,7 @@ private struct MeetStep: View {
   @State private var problem: String?
 
   var body: some View {
-    StepFrame(step: .meet, kicker: "Meet Maya", title: "She lives in your texts.", subtitle: "Text her START and she'll take it from there. That's where you'll talk to her; this app is where her work lives.") {
+    StepFrame(step: .meet, kicker: "Meet Maya", title: "She lives in your texts.", subtitle: "Text her START; the app is just where her work piles up.") {
       VStack(alignment: .leading, spacing: 8) {
         Text("Your mobile number").font(MayaFont.headline).foregroundStyle(Palette.ink)
         TextField("+1 555 123 4567", text: $phone)
