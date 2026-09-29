@@ -75,11 +75,12 @@ final class OnboardingModel {
   /// They were shown a step in this session (a returning, finished user never is).
   var sawSteps = false
 
-  var connectSeen: Bool { didSet { UserDefaults.standard.set(connectSeen, forKey: Self.key("connectSeen")) } }
-  var watchSeen: Bool { didSet { UserDefaults.standard.set(watchSeen, forKey: Self.key("watchSeen")) } }
-  var meetSkipped: Bool { didSet { UserDefaults.standard.set(meetSkipped, forKey: Self.key("meetSkipped")) } }
+  var connectSeen: Bool { didSet { if !preview { UserDefaults.standard.set(connectSeen, forKey: Self.key("connectSeen")) } } }
+  var watchSeen: Bool { didSet { if !preview { UserDefaults.standard.set(watchSeen, forKey: Self.key("watchSeen")) } } }
+  var meetSkipped: Bool { didSet { if !preview { UserDefaults.standard.set(meetSkipped, forKey: Self.key("meetSkipped")) } } }
 
-  /// Debug only (`-MayaOnboarding plan|connect|watch|meet`): every screen with made-up data, no network.
+  /// Debug only (`-MayaOnboarding plan|connect|watch|meet`): every screen with made-up data, no network,
+  /// and nothing saved to the phone (a preview must never skip a real run's steps).
   let preview: Bool
 
   init(preview: OnboardingStep? = nil) {
