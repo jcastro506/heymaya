@@ -1,5 +1,8 @@
 #include "Shared.xcconfig"
-// The TestFlight pilot runs against the same creator dev deployment as Debug until the
-// creator stack has a staging deployment of its own; change both lines together when it does.
-MAYA_CONVEX_URL = https:/$()/impressive-roadrunner-997.convex.cloud
+// TestFlight runs against STAGING (precise-canary-781), where the creator product lives since R1 and
+// where the Telegram bot, Stripe test mode and the web app (staging.hey-maya.ai) point. It used to point
+// at the creator dev deployment (impressive-roadrunner-997), which runs the sims with fakes on and has
+// no bot or billing: a tester's app and her Messages would have been on two different databases.
+// Production gets its own values when `main` ships. The Clerk dev instance is shared by dev and staging.
+MAYA_CONVEX_URL = https:/$()/precise-canary-781.convex.cloud
 MAYA_CLERK_PUBLISHABLE_KEY = pk_test_cHJvZm91bmQtc2t1bmstNjMuY2xlcmsuYWNjb3VudHMuZGV2JA

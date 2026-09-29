@@ -42,7 +42,7 @@ export interface LinqSendArgs {
   overrideOptout?: boolean;
 }
 
-export type LinqError = { ok: false; code: number | null; reason: string; retryable: boolean; retryAfterS?: number; kind: "opted_out" | "line_restricted" | "rate_limited" | "auth" | "bad_request" | "server" | "delivery" | "unknown" };
+export type LinqError = { ok: false; code: number | null; reason: string; retryable: boolean; retryAfterS?: number; kind: "opted_out" | "not_allowed" | "line_restricted" | "rate_limited" | "auth" | "bad_request" | "server" | "delivery" | "unknown" };
 export type LinqSendResult =
   | { ok: true; messageId: string; chatId: string; from: string | null; service: LinqService | null; newChat: boolean; selection: string | null; health: ChatHealth | null }
   | LinqError;
@@ -69,7 +69,10 @@ export function classifyError(status: number, json: unknown, retryAfterHeader: s
   const retryAfterS = Number(retryAfterHeader ?? r.retry_after ?? NaN);
   const base = { ok: false as const, code, reason: `${message}${code ? ` (${code})` : ""}` };
   if (code === 2024) return { ...base, retryable: false, kind: "opted_out" };
-  if (code === 2026 || code === 2008) return { ...base, retryable: false, kind: "opted_out" };
+  if (code === 2026) return { ...base, retryable: false, kind: "opted_out" };
+  // 2008: on a sandbox or shared line, a recipient must have texted the line first (Linq's free tier). Not an
+  // opt-out and not retryable; they clear it by texting, and pairing is exactly that.
+  if (code === 2008) return { ...base, reason: `${message} (2008): they haven't texted this line yet; on Linq's free line they must message first`, retryable: false, kind: "not_allowed" };
   if (code === 2027 || status === 409) return { ...base, retryable: true, kind: "line_restricted" };
   if (status === 429 || code === 1007) return { ...base, retryable: true, kind: "rate_limited", ...(Number.isFinite(retryAfterS) ? { retryAfterS } : {}) };
   if (status === 401 || status === 403 || code === 2004 || code === 2005 || code === 2006) return { ...base, retryable: false, kind: "auth" };
