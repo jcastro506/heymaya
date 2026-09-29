@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { price, TIERS, TIER_NAMES, type Tier } from "@/convex/billing/tiers";
 import { OnboardShell } from "../onboarding/Shell";
@@ -25,6 +25,7 @@ function followerLabel(value: number | null): string | null {
 }
 
 export default function StartPage() {
+  const { isLoading: authLoading, isAuthenticated } = useConvexAuth();
   const ensureCreator = useMutation(api.onboarding.start.ensureCreator);
   const describe = useMutation(api.onboarding.start.describe);
   const progress = useQuery(api.onboarding.start.progress);
@@ -76,9 +77,15 @@ export default function StartPage() {
     });
   }, [progress]);
 
+  // Only once the server has their sign-in: called earlier, the server sees no one and answers "sign in first",
+  // no row is made, and every later step says "no account" (2026-09-29, the first real sign-up).
   useEffect(() => {
-    ensureCreator({ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }).catch(() => setError("We couldn’t start your setup. Refresh and try again."));
-  }, [ensureCreator]);
+    if (authLoading) return;
+    if (!isAuthenticated) { queueMicrotask(() => setError("We couldn’t confirm your sign-in. Refresh the page, or sign out and back in.")); return; }
+    ensureCreator({ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone })
+      .then((result) => { if (!result.ok) setError("We couldn’t start your setup. Refresh and try again."); else setError(null); })
+      .catch(() => setError("We couldn’t start your setup. Refresh and try again."));
+  }, [authLoading, isAuthenticated, ensureCreator]);
 
   useEffect(() => {
     if (!progress || new URLSearchParams(window.location.search).has("step")) return;
@@ -120,6 +127,9 @@ export default function StartPage() {
   async function beginCheckout(tier: Tier) {
     setBusy(`checkout:${tier}`);
     setError(null);
+    // Idempotent: makes sure their row exists even if the first attempt raced the sign-in.
+    const account = await ensureCreator({ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }).catch(() => null);
+    if (!account?.ok) { setError("We couldn’t confirm your sign-in. Refresh the page and try again."); setBusy(null); return; }
     const result = await createCheckout({ tier, interval, returnTo: "onboarding" });
     if (result.ok) window.location.assign(result.url);
     else { setError(result.reason); setBusy(null); }
