@@ -29,6 +29,16 @@ export const list = query({
   },
 });
 
+/** M3: her proposed favorites, computed on the server once her first read exists; the app follows this live. */
+export const picks = query({
+  args: {},
+  handler: async (ctx): Promise<{ ready: boolean; items: Array<{ platform: "tiktok" | "instagram"; handle: string; followers: number | null; why: string; displayName?: string; avatarUrl?: string }> } | null> => {
+    const creator = await creatorFor(ctx);
+    if (!creator) return null;
+    return creator.picks ? { ready: true, items: creator.picks.items as never } : { ready: false, items: [] };
+  },
+});
+
 /** Validate a handle against the live profile (0 credits on a vendor cache hit for Instagram). */
 export const validate = action({
   args: { platform, handle: v.string() },
