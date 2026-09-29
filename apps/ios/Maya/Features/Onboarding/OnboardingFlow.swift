@@ -344,7 +344,7 @@ private struct WatchStep: View {
     } footer: {
       PrimaryButton(title: model.watched.isEmpty ? "Skip for now" : "Done") { model.watchSeen = true }
     }
-    .task { model.prefetchPicks() }
+    .task { model.waitForPicks() }
   }
 
   private func add() {

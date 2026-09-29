@@ -3,6 +3,7 @@
  * is handed to the model as the response schema. Every claim carries evidence.
  */
 import { z } from "zod";
+import { checkPlainLanguage } from "../core/plainLanguage";
 
 const claim = z.object({ claim: z.string().max(200), evidencePostIds: z.array(z.string()).min(1) });
 
@@ -34,7 +35,7 @@ export const DossierSchema = z.object({
   themes: z.array(z.object({ label: z.string(), share: z.number().min(0).max(1), evidencePostIds: z.array(z.string()) })),
   interests: z.array(z.object({ label: z.string(), source: z.enum(["follows", "sounds", "linkInBio", "admired", "collections", "highlights", "stated", "posts", "captions", "transcripts"]), evidence: z.string().max(120) })),
   audience: z.object({ whoComments: z.string().max(200), asks: z.array(z.string()).max(5), arguesAbout: z.array(z.string()).max(3), evidencePostIds: z.array(z.string()) }),
-  formatsUsed: z.array(z.object({ formatFingerprint: z.string(), label: z.string(), count: z.number(), medianMultiple: z.number(), evidencePostIds: z.array(z.string()) })),
+  formatsUsed: z.array(z.object({ formatFingerprint: z.string(), label: z.string(), count: z.number(), medianMultiple: z.number().nullable(), evidencePostIds: z.array(z.string()) })),
   fingerprint: z.object({
     opening: z.enum(["text-first", "speech-first", "visual-first", "mixed", "unknown"]),
     medianCutSeconds: z.union([z.number(), z.literal("unknown")]),
@@ -65,8 +66,8 @@ export const DOSSIER_JSON_SHAPE = `{
   "themes": [{"label": "", "share": 0.0, "evidencePostIds": [""]}],
   "interests": [{"label": "", "source": "follows|sounds|linkInBio|admired|collections|highlights|stated", "evidence": "≤120 chars"}],
   "audience": {"whoComments": "≤200", "asks": ["≤5"], "arguesAbout": ["≤3"], "evidencePostIds": [""]},
-  "formatsUsed": [{"formatFingerprint": "", "label": "", "count": 0, "medianMultiple": 1.0, "evidencePostIds": [""]}],
-  "fingerprint": {"opening": "text-first|speech-first|visual-first|mixed|unknown", "medianCutSeconds": 0, "textStyle": "≤120", "settings": ["≤5"], "energy": "≤80", "confidence": 0.0},
+  "formatsUsed": [{"formatFingerprint": "", "label": "", "count": 0, "medianMultiple": "1.0, or null under 3 posts", "evidencePostIds": [""]}],
+  "fingerprint": {"opening": "text-first|speech-first|visual-first|mixed|unknown", "medianCutSeconds": "seconds, or 'unknown' unless you watched cards that show it", "textStyle": "≤120", "settings": ["≤5"], "energy": "≤80", "confidence": 0.0},
   "voice": {"sampleLines": ["≤5 real lines they said"], "avoid": ["≤5"]},
   "works": [{"claim": "≤200", "evidencePostIds": [">=1"]}],
   "doesNot": [{"claim": "≤200", "evidencePostIds": [">=1"]}],
@@ -75,3 +76,34 @@ export const DOSSIER_JSON_SHAPE = `{
   "cadence": {"postsPerWeek": 0, "filmingDays": [], "bestHoursLocal": []},
   "keywords": ["3-8 lane keywords"]
 }`;
+
+/**
+ * What code guarantees about a profile, whatever the model wrote (2026-09-29 audit of real profiles:
+ * "472x their normal" from 2 of 10 posts, a 0-second median cut at 95% confidence, "baseline" in a
+ * claim). Applied to every write: the first read, the weekly rewrite and every correction. Pure.
+ */
+export const HONEST = { minPostsForClaims: 5, minEvidenceForClaim: 2, minPostsForMultiple: 3, maxQuotedMultiple: 50 } as const;
+
+export function honestDossier(d: Dossier, facts: { postsRead: number; watched: number }): Dossier {
+  const plain = (t: string) => checkPlainLanguage(t.replace(/\bbaselines?\b/gi, "normal")).clean;
+  const claims = (list: Dossier["works"]) =>
+    facts.postsRead < HONEST.minPostsForClaims ? [] : list.filter((c) => new Set(c.evidencePostIds).size >= HONEST.minEvidenceForClaim).map((c) => ({ ...c, claim: plain(c.claim) }));
+  const cut = d.fingerprint.medianCutSeconds;
+  const ceiling = facts.watched >= 5 ? 1 : facts.watched >= 2 ? 0.6 : 0.3;
+  return {
+    ...d,
+    persona: { ...d.persona, summary: plain(d.persona.summary) },
+    formatsUsed: d.formatsUsed.map((f) => ({
+      ...f,
+      label: plain(f.label),
+      medianMultiple: f.count < HONEST.minPostsForMultiple || f.medianMultiple === null || f.medianMultiple > HONEST.maxQuotedMultiple ? null : f.medianMultiple,
+    })),
+    fingerprint: {
+      ...d.fingerprint,
+      medianCutSeconds: typeof cut === "number" && cut > 0 && facts.watched > 0 ? cut : "unknown",
+      confidence: Math.min(d.fingerprint.confidence, ceiling),
+    },
+    works: claims(d.works),
+    doesNot: claims(d.doesNot),
+  };
+}

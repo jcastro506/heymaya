@@ -14,7 +14,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
-import { DossierSchema, DOSSIER_JSON_SHAPE } from "../contracts/dossier";
+import { DossierSchema, DOSSIER_JSON_SHAPE, honestDossier } from "../contracts/dossier";
 import { driftShare, LANE } from "./lane";
 import { SOUL } from "../agent/soul";
 import { summarize, type Affinity } from "../taste/affinities";
@@ -324,7 +324,7 @@ export const synthesize = internalAction({
       transcript: r.transcript ? clip(r.transcript, 600) : null,
       sample: r.sample ?? null,
     }));
-    const system = `${SOUL}\n\n# Skill: learn-creator\nYou are writing the creator's dossier from their own posts. Every claim must cite post ids from the data. Say "unknown" where the data is silent. Do not invent visuals: you may describe how a post looks ONLY from the watched cards; everything else is captions, transcripts and numbers. The person (persona.look, voice, humor, presence, world, cares) comes ONLY from the cards' "them" and "aFriendWouldNotice" blocks, summarised across posts the way a friend who watched everything would say it, never from a single post and never a guess about age, ethnicity, body or health; leave a field out when the cards are silent.${args.reason === "onboarding" ? "" : " This is a rewrite: the previous dossier, their house rules, their notes and their taste are below. A house rule or a note from them beats anything you inferred. Keep what still holds, change what the new posts contradict, and never keep a claim they corrected."}\nOutput ONLY JSON matching this shape:\n${DOSSIER_JSON_SHAPE}`;
+    const system = `${SOUL}\n\n# Skill: learn-creator\nYou are writing the creator's dossier from their own posts. Every claim must cite post ids from the data. Say "unknown" where the data is silent, never a 0. A "works"/"doesNot" claim needs at least two posts behind it, and a format\'s multiple needs at least three (null otherwise): a couple of runaway posts are luck, not a pattern. Do not invent visuals: you may describe how a post looks ONLY from the watched cards; everything else is captions, transcripts and numbers. The person (persona.look, voice, humor, presence, world, cares) comes ONLY from the cards' "them" and "aFriendWouldNotice" blocks, summarised across posts the way a friend who watched everything would say it, never from a single post and never a guess about age, ethnicity, body or health; leave a field out when the cards are silent.${args.reason === "onboarding" ? "" : " This is a rewrite: the previous dossier, their house rules, their notes and their taste are below. A house rule or a note from them beats anything you inferred. Keep what still holds, change what the new posts contradict, and never keep a claim they corrected."}\nOutput ONLY JSON matching this shape:\n${DOSSIER_JSON_SHAPE}`;
     const watchedCards = cards.filter((c) => c.depth === "watch").slice(0, 40);
     const context = args.reason === "onboarding" ? "" : `\n\nPrevious dossier (version ${learn.dossierVersion}):\n${JSON.stringify(learn.dossier)}\n\nHouse rules, verbatim:\n${JSON.stringify(learn.rules)}\n\nThings they told you:\n${JSON.stringify(learn.notes)}\n\nTheir taste (what they took / passed on):\n${JSON.stringify(learn.taste)}\n\nIdeas of yours they posted this month:\n${JSON.stringify(learn.postedIdeas)}`;
     const user = `Creator handles: ${JSON.stringify(creator.handles)}\nTheir sentence about what they make: ${JSON.stringify(creator.niche)}\nMode: ${mode} (posts read: ${posts}, baseline median views of last 20: ${baseline ?? "unknown"})\n\nPosts (newest first):\n${JSON.stringify(digest)}\n\nWatched cards (${watchedCards.length}; these are the only posts you may describe visually):\n${JSON.stringify(watchedCards)}${context}`;
@@ -348,6 +348,8 @@ export const synthesize = internalAction({
     if (!parsed.ok) return { ok: false, reason: `dossier did not validate: ${parsed.error}` };
     const stored = await ctx.runMutation(internal.onboarding.ingest.writeDossier, { creatorId: creator._id, dossier: parsed.dossier, mode, epoch: creator.memoryEpoch ?? 0 });
     if (!stored.stored) return { ok: false, reason: "memory changed during synthesis" };
+    // Favorites are built from this read, so they start the moment it exists (the app shows them live).
+    if (args.reason === "onboarding") await ctx.scheduler.runAfter(0, internal.onboarding.suggest.refreshPicks, { creatorId: creator._id });
 
     /**
      * Sprint 4d — lane drift. A lane that was right in March is wrong in September, and
@@ -399,7 +401,8 @@ export function parseDossier(content: string, fill: { readFrom: Record<string, n
   const candidate = { version: 0, rewrittenAt: new Date().toISOString(), readFrom: fill.readFrom, mode: fill.mode, ...obj };
   const r = DossierSchema.safeParse(candidate);
   if (!r.success) return { ok: false, error: r.error.issues.slice(0, 5).map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };
-  return { ok: true, dossier: r.data };
+  const rf = fill.readFrom as { tiktokPosts?: number; instagramPosts?: number; watched?: number };
+  return { ok: true, dossier: honestDossier(r.data, { postsRead: Number(rf.tiktokPosts ?? 0) + Number(rf.instagramPosts ?? 0), watched: Number(rf.watched ?? 0) }) };
 }
 
 /**

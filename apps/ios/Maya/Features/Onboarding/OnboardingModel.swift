@@ -62,6 +62,11 @@ struct WatchSuggestion: Decodable, Equatable, Identifiable {
   var id: String { "\(platform):\(handle)" }
 }
 
+struct ServerPicks: Decodable, Equatable {
+  let ready: Bool
+  let items: [WatchSuggestion]
+}
+
 struct Watched: Decodable, Equatable, Identifiable {
   let id: String
   let platform: String
@@ -129,16 +134,23 @@ final class OnboardingModel {
     }
   }
 
-  // MARK: - Picks, fetched early
+  // MARK: - Favorites picks
 
-  /// Worth-watching picks take a while (her read of their posts, then candidates, then a judgment),
-  /// so they start the moment an account is connected and are ready by the time the screen shows.
+  /// Computed on the server the moment her first read of their posts is written, and followed live,
+  /// so they're usually waiting by the time this screen shows. If the read is slow or failed, the
+  /// screen asks directly after a while rather than spin forever.
   private(set) var picks: [WatchSuggestion]?
-  private var picksTask: Task<Void, Never>?
+  private var fallbackTask: Task<Void, Never>?
+  static let picksFallbackAfter: Duration = .seconds(30)
 
-  func prefetchPicks(force: Bool = false) {
-    guard picksTask == nil || force else { return }
-    picksTask = Task { picks = await suggestions() }
+  func waitForPicks() {
+    if preview, picks == nil { fallbackTask = Task { picks = await suggestions() }; return }
+    guard picks == nil, fallbackTask == nil else { return }
+    fallbackTask = Task {
+      try? await Task.sleep(for: Self.picksFallbackAfter)
+      guard !Task.isCancelled, picks == nil else { return }
+      picks = await suggestions()
+    }
   }
 
   /// Makes their account (idempotent), then follows the three things that decide the step.
@@ -148,9 +160,9 @@ final class OnboardingModel {
     _ = try? await convex.mutation("onboarding/start:ensureCreator", with: ["timezone": TimeZone.current.identifier]) as Ensured
     await withTaskGroup(of: Void.self) { group in
       group.addTask { await self.follow("onboarding/start:progress", OnboardingProgress?.self) { self.progress = $0; self.loaded = true } }
-      group.addTask { await self.follow("connections/zernio:status", SocialStatus?.self) { s in
-        self.social = s
-        if (s?.accounts.contains { !$0.needsReconnect } ?? false) { self.prefetchPicks() }
+      group.addTask { await self.follow("connections/zernio:status", SocialStatus?.self) { self.social = $0 } }
+      group.addTask { await self.follow("onboarding/admired:picks", ServerPicks?.self) { p in
+        if let p, p.ready { self.picks = p.items }
       } }
       group.addTask { await self.follow("onboarding/admired:list", [Watched]?.self) { self.watched = $0 ?? [] } }
     }

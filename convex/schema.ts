@@ -52,6 +52,8 @@ export default defineSchema({
     tone: v.union(v.literal("coach"), v.literal("friend"), v.literal("blunt")),
     mode: v.union(v.literal("full"), v.literal("thin"), v.literal("newCreator")),
     dossier: v.optional(v.any()), // Dossier (§14.1), zod-validated at write time
+    /** Favorites she proposes, computed once her first read is written (M3); the app follows them live. */
+    picks: v.optional(v.object({ at: v.number(), items: v.array(v.any()) })),
     dossierVersion: v.number(),
     memoryEpoch: v.optional(v.number()),
     conversationalOnboardingAt: v.optional(v.number()),

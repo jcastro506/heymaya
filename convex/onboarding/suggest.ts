@@ -6,6 +6,7 @@
  */
 import { v } from "convex/values";
 import { internalAction, internalQuery } from "../_generated/server";
+import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
@@ -43,10 +44,10 @@ export function qualifies(s: CandidateStats, followers: number | null): { ok: bo
 }
 
 export const SUGGEST_SKILL = `who to watch
-You pick accounts worth watching for one creator who just signed up. You get their own sentence about what they make, their best posts, and a shortlist of accounts that code has already checked are active, sized and readable, each with its bio, numbers and most-viewed recent captions.
-Pick up to six this creator can actually learn from. Every pick must be a person or a creator-led brand posting its own original content. Never pick repost or aggregator pages, meme pages, community hubs that feature other people's work, magazines, apps, or product and recipe catalogues; the bio and captions usually give them away ("DM for credit", "tag us to be featured", "community", "download the app", a feed of other people's clips).
+You pick creators this person would love you to keep an eye on for them: people making the kind of thing they make or love to watch, whose posts you'll watch and bring back what's working. You get their own sentence about what they make, their best posts, and a shortlist of accounts that code has already checked are active, sized and readable, each with its bio, numbers and most-viewed recent captions. Accounts marked "following" are ones they already follow: their own taste, so prefer them when they fit.
+Pick up to six they'd be glad to see on the list. Every pick must be a person or a creator-led brand posting its own original content. Never pick repost or aggregator pages, meme pages, community hubs that feature other people's work, magazines, apps, or product and recipe catalogues; the bio and captions usually give them away ("DM for credit", "tag us to be featured", "community", "download the app", a feed of other people's clips).
 Relevance comes from their sentence first: the same subject and audience, or an adjacent lane with a format they could borrow. Skip anyone who matches only by size or a broad tag. When the shortlist covers two platforms, pick from both. Fewer good picks beat six weak ones.
-For each pick write one sentence to the creator, second person, under 160 characters: name the specific format, hook or series worth borrowing as it appears in that account's captions, and tie it to their own sentence or posts when you can. A number is optional and at most one; never make a number the reason. No hype, no "inspiring", no emoji, no follower counts.
+For each pick write one short sentence to the creator, second person, under 110 characters: name the specific format, hook or series worth watching as it appears in that account's captions, and tie it to their own sentence or posts when you can. A number is optional and at most one; never make a number the reason. No hype, no "inspiring", no emoji, no follower counts.
 Return STRICT JSON only: {"picks":[{"id":"c0","why":"..."}]}. If none fit, return {"picks":[]}.`;
 
 const GENERIC = new Set(["fyp", "foryou", "foryoupage", "viral", "explore", "explorepage", "reels", "reel", "trending", "tiktok", "instagram", "instagood", "fy", "xyzbca", "capcut", "fypage", "viralvideo", "motivation", "fitnessmotivation", "inspiration", "healthy", "healthydiet", "love", "instadaily", "photooftheday", "trend", "trend2026", "reelsinstagram", "explorar", "fitness", "lifestyle", "tips"]);
@@ -301,7 +302,7 @@ export const suggestFor = internalAction({
       const evidence = JSON.stringify({
         theirSentence: gg.niche ?? null,
         theirBestPosts: gg.own.slice(0, 6).map((p) => ({ platform: p.platform, caption: clip(p.caption, 140), timesTheirNormal: p.multiple })),
-        shortlist: usable.map((d) => ({ id: d.id, platform: d.c.platform, handle: d.c.handle, followers: d.c.followerCount, bio: clip(d.c.bio ?? "", 120), postsLast30Days: d.stats.postsLast30, medianViews: d.stats.medianViews, bestRecentTimesTheirNormal: d.stats.bestMultiple, oneRunawayPost: d.stats.runawayPost, topRecentCaptions: d.stats.topCaptions })),
+        shortlist: usable.map((d) => ({ id: d.id, platform: d.c.platform, handle: d.c.handle, following: d.c.following === true, followers: d.c.followerCount, bio: clip(d.c.bio ?? "", 120), postsLast30Days: d.stats.postsLast30, medianViews: d.stats.medianViews, bestRecentTimesTheirNormal: d.stats.bestMultiple, oneRunawayPost: d.stats.runawayPost, topRecentCaptions: d.stats.topCaptions })),
       });
       for (const model of [REGISTRY.writer.primary, REGISTRY.writer.fallback]) {
         const r = await callModel(ctx, { creatorId: a.creatorId, purpose: "onboarding_suggest", model, messages: [{ role: "system", content: SUGGEST_SKILL }, { role: "user", content: evidence }], temperature: 0.3, maxTokens: 900, timeoutMs: 25_000, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
@@ -339,5 +340,23 @@ export const devCandidates = internalQuery({
       out.push({ id: c._id, handles: c.handles, ownPosts: n });
     }
     return out.sort((x, y) => y.ownPosts - x.ownPosts).slice(0, 20);
+  },
+});
+
+/** After the first read is written: compute the favorites once and keep them on the creator (M3). */
+export const refreshPicks = internalAction({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ picks: number }> => {
+    const r = await ctx.runAction(internal.onboarding.suggest.suggestFor, { creatorId: a.creatorId, waitMs: 0 });
+    await ctx.runMutation(internal.onboarding.suggest.storePicks, { creatorId: a.creatorId, items: r.suggestions });
+    return { picks: r.suggestions.length };
+  },
+});
+
+export const storePicks = internalMutation({
+  args: { creatorId: v.id("creators"), items: v.array(v.any()) },
+  handler: async (ctx, a): Promise<null> => {
+    if (await ctx.db.get(a.creatorId)) await ctx.db.patch(a.creatorId, { picks: { at: Date.now(), items: a.items } });
+    return null;
   },
 });
