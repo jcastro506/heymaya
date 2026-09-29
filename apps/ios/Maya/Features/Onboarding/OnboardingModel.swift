@@ -2,12 +2,13 @@ import ConvexMobile
 import Foundation
 import Observation
 
-/// Onboarding in the app (spec §5, M3): plan → connect → worth watching → meet her → the app.
+/// Onboarding in the app (spec §5, M3): plan → connect → meet her → worth watching → the app.
+/// Watching comes last so her read of their posts (which the picks are built from) has time to land.
 /// The server owns where they are (plan, connected accounts, paired), so killing the app, reinstalling
 /// or signing in on another phone resumes at the right screen. Only the two skippable steps are
 /// remembered on the phone, because skipping them writes nothing to the server.
 enum OnboardingStep: Equatable, CaseIterable {
-  case plan, connect, watch, meet, done
+  case plan, connect, meet, watch, done
 
   struct Facts: Equatable {
     var planStatus: String?
@@ -17,22 +18,25 @@ enum OnboardingStep: Equatable, CaseIterable {
     var paired: Bool
     var watchSeen: Bool
     var meetSkipped: Bool
+    /// Accounts they already watch (so a returning user on a new phone isn't asked again).
+    var watching: Int = 0
   }
 
   static let readyPlans: Set<String> = ["trialing", "active", "comped"]
 
-  /// Pure: the first step that isn't done. Someone already texting her is finished, whatever else.
+  /// Pure: the first step that isn't done. Someone already texting her with a plan, an account and
+  /// people to watch is finished; the phone-only marks cover the steps a fresh install can't know.
   static func decide(_ f: Facts) -> OnboardingStep {
-    if f.paired { return .done }
-    guard let status = f.planStatus, readyPlans.contains(status) else { return .plan }
-    if f.connectedAccounts == 0 || !f.connectSeen { return .connect }
-    if !f.watchSeen { return .watch }
-    if !f.meetSkipped { return .meet }
+    let planReady = f.planStatus.map { readyPlans.contains($0) } ?? false
+    if !planReady && !f.paired { return .plan }
+    if f.connectedAccounts == 0 || !(f.connectSeen || f.paired) { return .connect }
+    if !(f.paired || f.meetSkipped) { return .meet }
+    if !(f.watchSeen || (f.paired && f.watching > 0)) { return .watch }
     return .done
   }
 
   /// The dots across the top: four real steps.
-  var index: Int { [.plan: 1, .connect: 2, .watch: 3, .meet: 4][self] ?? 4 }
+  var index: Int { [.plan: 1, .connect: 2, .meet: 3, .watch: 4][self] ?? 4 }
 }
 
 struct OnboardingProgress: Decodable, Equatable {
@@ -54,6 +58,7 @@ struct WatchSuggestion: Decodable, Equatable, Identifiable {
   let followers: Double?
   let why: String
   let displayName: String?
+  var avatarUrl: String? = nil
   var id: String { "\(platform):\(handle)" }
 }
 
@@ -90,8 +95,8 @@ final class OnboardingModel {
     meetSkipped = UserDefaults.standard.bool(forKey: Self.key("meetSkipped"))
     if let start = preview {
       connectSeen = ![.plan, .connect].contains(start)
-      watchSeen = [.meet, .done].contains(start)
-      meetSkipped = start == .done
+      meetSkipped = [.watch, .done].contains(start)
+      watchSeen = start == .done
       progress = OnboardingProgress(paired: false, planStatus: start == .plan ? "onboarding" : "trialing", phone: nil, posts: 24)
       social = SocialStatus(status: "connected", accounts: [.plan, .connect].contains(start) ? [] : [.init(platform: "instagram", username: "riverloop.runs", needsReconnect: false)])
       loaded = true
@@ -101,10 +106,40 @@ final class OnboardingModel {
   private static func key(_ name: String) -> String { "onboarding.\(name)" }
 
   var facts: OnboardingStep.Facts {
-    .init(planStatus: progress?.planStatus, connectedAccounts: social?.accounts.filter { !$0.needsReconnect }.count ?? 0, connectSeen: connectSeen, paired: progress?.paired ?? false, watchSeen: watchSeen, meetSkipped: meetSkipped)
+    .init(planStatus: progress?.planStatus, connectedAccounts: social?.accounts.filter { !$0.needsReconnect }.count ?? 0, connectSeen: connectSeen, paired: progress?.paired ?? false, watchSeen: watchSeen, meetSkipped: meetSkipped, watching: watched.count)
   }
 
   var step: OnboardingStep { OnboardingStep.decide(facts) }
+
+  /// Back goes to the previous step that is still theirs to change. Payment and pairing are facts on
+  /// the server, so there's no going "back" past them.
+  var canGoBack: Bool {
+    switch step {
+    case .meet: return true
+    case .watch: return !(progress?.paired ?? false)
+    default: return false
+    }
+  }
+
+  func back() {
+    switch step {
+    case .meet: connectSeen = false
+    case .watch: meetSkipped = false
+    default: break
+    }
+  }
+
+  // MARK: - Picks, fetched early
+
+  /// Worth-watching picks take a while (her read of their posts, then candidates, then a judgment),
+  /// so they start the moment an account is connected and are ready by the time the screen shows.
+  private(set) var picks: [WatchSuggestion]?
+  private var picksTask: Task<Void, Never>?
+
+  func prefetchPicks(force: Bool = false) {
+    guard picksTask == nil || force else { return }
+    picksTask = Task { picks = await suggestions() }
+  }
 
   /// Makes their account (idempotent), then follows the three things that decide the step.
   func run() async {
@@ -113,7 +148,10 @@ final class OnboardingModel {
     _ = try? await convex.mutation("onboarding/start:ensureCreator", with: ["timezone": TimeZone.current.identifier]) as Ensured
     await withTaskGroup(of: Void.self) { group in
       group.addTask { await self.follow("onboarding/start:progress", OnboardingProgress?.self) { self.progress = $0; self.loaded = true } }
-      group.addTask { await self.follow("connections/zernio:status", SocialStatus?.self) { self.social = $0 } }
+      group.addTask { await self.follow("connections/zernio:status", SocialStatus?.self) { s in
+        self.social = s
+        if (s?.accounts.contains { !$0.needsReconnect } ?? false) { self.prefetchPicks() }
+      } }
       group.addTask { await self.follow("onboarding/admired:list", [Watched]?.self) { self.watched = $0 ?? [] } }
     }
   }
