@@ -32,9 +32,9 @@ describe("joinDestination", () => {
     expect(url.searchParams.get("ct")).toBe("tiktok-bio");
     expect(url.searchParams.get("pt")).toBe("118");
   });
-  it("sends the beta to TestFlight and, with neither, the web sign-up", () => {
+  it("sends the beta to TestFlight and, with neither, the landing", () => {
     expect(joinDestination({ kind: "beta", url: "https://testflight.apple.com/join/abc" }, "x", {})).toBe("https://testflight.apple.com/join/abc");
-    expect(joinDestination({ kind: "none" }, "x", {})).toBe("/sign-up");
+    expect(joinDestination({ kind: "none" }, "x", {})).toBe("/#get");
   });
 });
 

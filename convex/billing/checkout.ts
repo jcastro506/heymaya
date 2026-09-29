@@ -32,7 +32,7 @@ export const meForBilling = internalQuery({
 });
 
 export const createCheckout = action({
-  args: { interval: v.union(v.literal("monthly"), v.literal("annual")), tier: v.union(v.literal("solo"), v.literal("duo"), v.literal("partner")), returnTo: v.optional(v.union(v.literal("onboarding"), v.literal("settings"), v.literal("app"))) },
+  args: { interval: v.union(v.literal("monthly"), v.literal("annual")), tier: v.union(v.literal("solo"), v.literal("duo"), v.literal("partner")), returnTo: v.optional(v.union(v.literal("onboarding"), v.literal("settings"), v.literal("app"), v.literal("app_onboarding"))) },
   handler: async (ctx, a): Promise<{ ok: true; url: string } | { ok: false; reason: string }> => {
     const me = await ctx.runQuery(internal.billing.checkout.meForBilling, {});
     if (!me) return { ok: false, reason: "no account" };
@@ -47,8 +47,9 @@ export const createCheckout = action({
     const founding = (await ctx.runQuery(internal.billing.plan.seatsLeft, {})) > 0;
     const appUrl = process.env.APP_URL ?? "http://localhost:3000";
     const firstTime = !me.plan.stripeSubscriptionId; // a re-subscriber after cancel is billed now (§19.3)
-    const successPath = a.returnTo === "app" ? `${APP_RETURN}?state=started` : a.returnTo === "onboarding" ? "/start?step=2&billing=started" : "/app/settings?billing=started";
-    const cancelPath = a.returnTo === "app" ? `${APP_RETURN}?state=canceled` : a.returnTo === "onboarding" ? "/start?step=1&billing=canceled" : "/app/settings?billing=canceled";
+    // app_onboarding: the page sends maya:// on load, which closes the in-app sheet by itself.
+    const successPath = a.returnTo === "app_onboarding" ? `${APP_RETURN}?state=started&auto=1` : a.returnTo === "app" ? `${APP_RETURN}?state=started` : a.returnTo === "onboarding" ? "/start?step=2&billing=started" : "/app/settings?billing=started";
+    const cancelPath = a.returnTo === "app_onboarding" ? `${APP_RETURN}?state=canceled&auto=1` : a.returnTo === "app" ? `${APP_RETURN}?state=canceled` : a.returnTo === "onboarding" ? "/start?step=1&billing=canceled" : "/app/settings?billing=canceled";
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,

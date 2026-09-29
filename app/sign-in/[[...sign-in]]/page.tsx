@@ -13,7 +13,7 @@ export default function Page() {
       <section style={{ alignItems: "center", textAlign: "center" }}>
         <h2>Welcome back.</h2>
         <p className="muted small">Pick up where you left off.</p>
-        <SignIn fallbackRedirectUrl="/start" appearance={appearance} />
+        <SignIn fallbackRedirectUrl="/join?where=signin" appearance={appearance} />
       </section>
     </OnboardShell>
   );
