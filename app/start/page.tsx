@@ -77,7 +77,7 @@ export default function StartPage() {
     });
   }, [progress]);
 
-  // Only once Convex has their sign-in: called earlier, the server sees no one and answers "sign in first",
+  // Only once the server has their sign-in: called earlier, the server sees no one and answers "sign in first",
   // no row is made, and every later step says "no account" (2026-09-29, the first real sign-up).
   useEffect(() => {
     if (authLoading) return;
