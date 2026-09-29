@@ -80,8 +80,8 @@ const VOICE = [
 
 const FAQ: Array<[string, string]> = [
   ["What does Maya actually do?", "The work of a content team. She watches your niche and the creators you admire, turns what's working into ideas for you, plans your shoots around your calendar, writes your captions, reads your numbers against your own normal, and on the partnerships plan, finds brand deals and writes the outreach. You stay the creator: she doesn't film, edit or post for you."],
-  ["Where do I talk to her?", "In your texts, over iMessage or SMS. Send her a link, a video, a screenshot, a voice note or half an idea. Anything the app can do, you can ask her for by text. There's no chat inside the app on purpose."],
-  ["Then what's the app for?", "Seeing her work. Every idea she's sent with the post that inspired it, your numbers, your week, your brand deals, and widgets for your home screen. Nothing in it you have to check."],
+  ["Where do I talk to her?", "In your texts, over iMessage or SMS. Anything the app can do, you can ask her for by text. There's no chat inside the app on purpose."],
+  ["Then what's the app for?", "Seeing her work. Every idea she's sent with the post that inspired it, your numbers, your week, your brand deals, and widgets for your home screen."],
   ["Will she text me too much?", "She texts first only when something's worth it, never during your quiet hours, and there's a daily limit on how often. Text her \"pause\" any time, and \"resume\" when you want her back."],
   ["How do brand deals work?", `On the ${PARTNER.label.toLowerCase()} plan, she finds brands already paying creators in your niche, finds a real contact, builds your media kit, and writes the email, DM or application for you. Nothing is sent until you approve it, emails go from your own inbox, and she follows up twice at most. The deal is yours to make.`],
   ["What can she see?", "Your public posts from the start. Connect your accounts in the app and she can read more, like followers over time, and on Instagram reach, saves and Reels watch time. TikTok doesn't share watch time, so she says so instead of guessing. She never makes up a number."],
@@ -181,7 +181,7 @@ export default async function Landing() {
             <span className="eyebrow">How it works</span>
             <h2 id="texts-title">She lives in <span>your texts.</span></h2>
             <p>
-              Maya texts you over iMessage or SMS, like anyone else in your phone. No new chat to open, nothing to check. Send her a link, a video, a screenshot, a voice note or half an idea, and she takes it from there.
+              Maya texts you over iMessage or SMS, like anyone else in your phone.
             </p>
             <p className="texts-strong">Everything she does, you can ask for by text.</p>
           </div>
@@ -198,7 +198,7 @@ export default async function Landing() {
             <div className="appsec-copy">
               <span className="eyebrow">The app</span>
               <h2 id="app-title">The app is where <span>her work lives.</span></h2>
-              <p>Texts are for talking. The app is for seeing everything she&apos;s made for you in one place. Nothing in it you have to check.</p>
+              <p>Text her for talking. The app is for seeing her work.</p>
               <ul className="ticks">
                 <li>Every idea she&apos;s sent, with the post that inspired it. Swipe to save or pass</li>
                 <li>Your TikTok and Instagram numbers, against your own normal</li>
@@ -239,13 +239,11 @@ export default async function Landing() {
         </section>
 
         {/* ——— 5. Her schedule ——— */}
-        <section id="schedule" className="sched" aria-labelledby="sched-title">
+        <section id="schedule" className="sched" aria-label="Her routine">
           <div className="wrap sched-grid">
             <div className="sched-copy">
               <span className="eyebrow">On her own</span>
-              <h2 id="sched-title">She works <span>while you don&apos;t.</span></h2>
-              <p>You don&apos;t have to ask. Maya runs her own routine for you, all day, every day, and texts you only when there&apos;s something worth your time.</p>
-              <p className="sched-rules">Quiet hours you set. A daily limit on texts. Silence when there&apos;s nothing to say.</p>
+                            <p>You don&apos;t have to ask. Maya runs her own routine for you, all day, every day, and texts you only when there&apos;s something worth your time.</p>
               <Phone className="ph-small sched-phone" label="Her Sunday review: a short read of the week and what to try next">
                 <ReviewScreen />
               </Phone>
