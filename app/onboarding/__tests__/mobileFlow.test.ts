@@ -9,7 +9,9 @@ describe("creator mobile onboarding contract", () => {
     expect(source).toContain("step ${step} of 5");
     expect(source).toContain("api.connections.zernio.startConnect");
     expect(source).toContain("Open Messages");
-    expect(source).toContain("Open Mission Control");
+    // The second exit is the iPhone app (the web Mission Control is retired, app spec §2).
+    expect(source).toContain("<GetTheApp />");
+    expect(source).not.toContain("Open Mission Control");
   });
 
   it("does not offer deferred product surfaces in onboarding", () => {
