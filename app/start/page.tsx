@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { price, TIERS, TIER_NAMES, type Tier } from "@/convex/billing/tiers";
 import { OnboardShell } from "../onboarding/Shell";
+import { GetTheApp } from "./GetTheApp";
 
 type Platform = "tiktok" | "instagram";
 type Interval = "monthly" | "annual";
@@ -304,7 +304,7 @@ export default function StartPage() {
           <div className="settings-pair"><label>Timezone<select className="input" value={timezone} onChange={(event) => setTimezone(event.target.value)}>{Array.from(new Set([timezone, Intl.DateTimeFormat().resolvedOptions().timeZone, ...(typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [])])).filter(Boolean).map((zone) => <option value={zone} key={zone}>{zone.replaceAll("_", " ")}</option>)}</select></label><div className="quiet-fields"><label>Quiet from<input className="input" type="time" value={quietStart} onChange={(event) => setQuietStart(event.target.value)} /></label><label>Until<input className="input" type="time" value={quietEnd} onChange={(event) => setQuietEnd(event.target.value)} /></label></div></div>
           <label className="consent-row"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span>I agree to receive messages from Maya at this number. Message and data rates may apply. Reply STOP anytime.</span></label>
           {!messageLink ? <button className="btn" disabled={!phone.trim() || busy !== null} onClick={savePhone}>{busy === "phone" ? "Saving…" : "Finish setup"}</button> : null}
-          {(messageLink || progress?.phone) ? <div className="finish-card"><div className="finish-flower" aria-hidden="true">✿</div><h2>You’re ready.</h2><p className="muted small">I’m getting to know your posts now. I’ll bring the useful part to you in Messages.</p>{messageLink ? <a className="btn" href={messageLink}>Open Messages</a> : null}<Link className="btn-secondary" href="/app/today">Open Mission Control</Link></div> : null}
+          {(messageLink || progress?.phone) ? <div className="finish-card"><div className="finish-flower" aria-hidden="true">✿</div><h2>You’re ready.</h2><p className="muted small">I’m getting to know your posts now. I’ll bring the useful part to you in Messages.</p>{messageLink ? <a className="btn" href={messageLink}>Open Messages</a> : null}<GetTheApp /></div> : null}
         </section>
       )}
 
