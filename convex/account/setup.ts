@@ -7,7 +7,7 @@
  * the Creator Rewards Program, which costs more than the analytics it adds.
  */
 import { v } from "convex/values";
-import { internalAction, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery, query } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -25,6 +25,15 @@ export function setupAdvice(platform: "tiktok" | "instagram", type: AccountType 
   if (type === "business") return { needed: false, title: "A personal TikTok gets every sound", why: "Business accounts can only use TikTok's commercial music, and can't earn from the Creator Rewards Program. Maya works with either; switch back only if that matters to you.", steps: ["Profile, then the menu (☰)", "Settings and privacy, then Account", "Switch to Personal Account"] };
   return null;
 }
+
+/**
+ * The same advice, for a screen that can't know their account type yet (onboarding's Connect step,
+ * before anything is connected): Instagram's switch steps, from the one definition above. Pure read.
+ */
+export const advice = query({
+  args: { platform: v.union(v.literal("tiktok"), v.literal("instagram")), accountType: v.union(v.literal("personal"), v.literal("creator"), v.literal("business")) },
+  handler: async (_ctx, a): Promise<SetupAdvice | null> => setupAdvice(a.platform, a.accountType),
+});
 
 export const handlesFor = internalQuery({
   args: { creatorId: v.id("creators") },
