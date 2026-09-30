@@ -5,6 +5,7 @@
  * while another creator's rows are untouched.
  */
 import { convexTest } from "convex-test";
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import schema from "../../schema";
 import { api, internal } from "../../_generated/api";
@@ -100,5 +101,55 @@ describe("deletion", () => {
     const other = await countFor(t, b);
     for (const table of TABLES_BY_CREATOR) expect(other[table], table).toBeGreaterThanOrEqual(1);
     expect(other.creators).toBe(1);
+  });
+});
+
+describe("deleting the sign-in (step 8)", () => {
+  it("deletes the Clerk user by id; 404 is already gone; sims and a missing key never call out", async () => {
+    const { deleteClerkUser } = await import("../deletion");
+    const calls: Array<{ url: string; method?: string }> = [];
+    const fake = (status: number) => (async (url: string, init?: RequestInit) => { calls.push({ url, method: init?.method }); return new Response(null, { status }); }) as unknown as typeof fetch;
+    const prev = process.env.CLERK_SECRET_KEY;
+    process.env.CLERK_SECRET_KEY = "sk_test_x";
+    try {
+      expect(await deleteClerkUser("user_abc123", fake(200))).toBe("deleted");
+      expect(calls[0]).toEqual({ url: "https://api.clerk.com/v1/users/user_abc123", method: "DELETE" });
+      expect(await deleteClerkUser("user_abc123", fake(404))).toBe("already gone");
+      expect(await deleteClerkUser("user_abc123", fake(500))).toBe("delete failed: HTTP 500");
+      calls.length = 0;
+      for (const id of ["eval:partner", "eval-load:1", "user_../../x", ""]) expect(await deleteClerkUser(id, fake(200))).toBe("no sign-in to delete");
+      expect(calls).toHaveLength(0);
+      delete process.env.CLERK_SECRET_KEY;
+      expect(await deleteClerkUser("user_abc123", fake(200))).toBe("not configured; the sign-in remains");
+      expect(calls).toHaveLength(0);
+    } finally {
+      if (prev === undefined) delete process.env.CLERK_SECRET_KEY; else process.env.CLERK_SECRET_KEY = prev;
+    }
+  });
+});
+
+describe("the purge reads only their rows, in batches", () => {
+  it("a creator with more rows than one batch takes several; nobody else's rows move", async () => {
+    const { PURGE_BATCH } = await import("../deletion");
+    const t = convexTest(schema, modules);
+    const [a, b] = await t.run(async (ctx) => [await seedCreator(ctx, "batch-a"), await seedCreator(ctx, "batch-b")]);
+    await t.run(async (ctx) => {
+      for (let i = 0; i < PURGE_BATCH + 50; i++) await ctx.db.insert("userActions", { creatorId: a, kind: "idea.save", source: "app", summary: "x", at: i });
+      for (let i = 0; i < 5; i++) await ctx.db.insert("userActions", { creatorId: b, kind: "idea.save", source: "app", summary: "x", at: i });
+    });
+    const first = await t.mutation(internal.account.deletion.purgeRows, { creatorId: a });
+    expect(first).toEqual({ deleted: PURGE_BATCH, done: false });
+    const second = await t.mutation(internal.account.deletion.purgeRows, { creatorId: a });
+    expect(second.done).toBe(true);
+    expect(await t.run((ctx) => ctx.db.get(a))).toBeNull();
+    const left = await t.run(async (ctx) => (await ctx.db.query("userActions").collect()).map((r) => r.creatorId));
+    expect(left).toEqual([b, b, b, b, b]);
+  });
+
+  it("never scans a table: every purge uses an index that starts with creatorId", () => {
+    const src = readFileSync(new URL("../deletion.ts", import.meta.url), "utf8");
+    const purge = src.slice(src.indexOf("export const purgeRows"), src.indexOf("export const purgeRows") + 1500);
+    expect(purge).toMatch(/withIndex\(PURGE_INDEX\[table\]/);
+    expect(purge).not.toMatch(/\.filter\(/);
   });
 });
