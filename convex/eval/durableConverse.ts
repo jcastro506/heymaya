@@ -126,8 +126,11 @@ export const cleanup = internalAction({
     if (!state || state.status !== "complete") return { deleted: 0 };
     let deleted = 0;
     for (const creatorId of new Set(state.results.map((result) => result.creatorId))) {
-      const result = await ctx.runMutation(internal.account.deletion.purgeRows, { creatorId: creatorId as Id<"creators"> });
-      deleted += result.deleted;
+      for (let i = 0; i < 500; i++) {
+        const result = await ctx.runMutation(internal.account.deletion.purgeRows, { creatorId: creatorId as Id<"creators"> });
+        deleted += result.deleted;
+        if (result.done) break;
+      }
     }
     return { deleted };
   },

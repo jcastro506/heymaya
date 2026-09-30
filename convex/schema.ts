@@ -647,7 +647,8 @@ export default defineSchema({
     at: v.number(),
   })
     .index("by_at", ["at"])
-    .index("by_suite_at", ["suite", "at"]),
+    .index("by_suite_at", ["suite", "at"])
+    .index("by_creator", ["creatorId"]),
 
   // ---------------------------------------------------------------- evalLabels
   // Sprint 3c: the operator's word, one row per label; these become the golden sets (§17.3).
@@ -662,7 +663,7 @@ export default defineSchema({
     flags: v.optional(v.array(v.string())),
     by: v.string(),
     at: v.number(),
-  }).index("by_at", ["at"]),
+  }).index("by_at", ["at"]).index("by_creator", ["creatorId"]),
 
   // -------------------------------------------------------------- oauthStates
   // Single-use, 15-minute state tokens for OAuth round trips; the token is the auth.
@@ -674,7 +675,7 @@ export default defineSchema({
     expiresAt: v.number(),
     claimedAt: v.optional(v.number()),
     createdAt: v.number(),
-  }).index("by_token", ["token"]),
+  }).index("by_token", ["token"]).index("by_creator", ["creatorId"]),
 
   // --------------------------------------------------------------- connections
   connections: defineTable({

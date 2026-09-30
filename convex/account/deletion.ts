@@ -186,9 +186,15 @@ export const run = internalAction({
       steps.telegram = r && r.ok ? "final message sent, pairing removed" : "final message failed, pairing removed";
     } else steps.telegram = "not paired";
 
-    // 6. Rows.
-    const purged = await ctx.runMutation(internal.account.deletion.purgeRows, { creatorId: a.creatorId });
-    steps.rows = `${purged.deleted} rows across ${purged.tables} tables, creator row gone`;
+    // 6. Rows, in batches.
+    let deleted = 0;
+    let remaining = true;
+    for (let i = 0; i < 500; i++) {
+      const b = await ctx.runMutation(internal.account.deletion.purgeRows, { creatorId: a.creatorId });
+      deleted += b.deleted;
+      if (b.done) { remaining = false; break; }
+    }
+    steps.rows = remaining ? `${deleted} rows deleted; more remain (rerun)` : `${deleted} rows across ${TABLES_BY_CREATOR.length} tables, creator row gone`;
 
     // 7. Files.
     let files = 0;
@@ -210,25 +216,46 @@ export const run = internalAction({
   },
 });
 
-/** Step 6: one mutation, every table keyed by creatorId, then the creator row itself. */
+/**
+ * Each table's index that starts with creatorId, so the purge reads only their rows. A `.filter` scans
+ * the whole table and hit Convex's 16 MB read limit on dev (2026-09-30), which would break Delete
+ * account once there are many users. The type forces an entry for every table in TABLES_BY_CREATOR.
+ */
+export const PURGE_INDEX: Record<(typeof TABLES_BY_CREATOR)[number], string> = {
+  partnershipProfiles: "by_creator", partnershipOpportunities: "by_creator", partnershipDrafts: "by_creator", partnershipEvents: "by_creator", partnershipResearch: "by_creator", partnershipMailboxes: "by_creator",
+  mediaKits: "by_creator", kitVariants: "by_creator",
+  trackedAccounts: "by_creator", ownPosts: "by_creator", ownPostReads: "by_creator", signals: "by_creator", ideas: "by_creator", predictions: "by_creator",
+  calendarBlocks: "by_creator", calendarEvents: "by_creator_start", tasteEvents: "by_creator", oauthStates: "by_creator", connections: "by_creator", directives: "by_creator",
+  messages: "by_creator", jobs: "by_creator", budgets: "by_creator_day", costEvents: "by_creator_at", memories: "by_creator_ref", personalRecords: "by_creator",
+  finishes: "by_creator", laneReads: "by_token", followerSnapshots: "by_creator_day", accountInsights: "by_creator_kind", evalRuns: "by_creator", evalLabels: "by_creator",
+  userActions: "by_creator_at", schedule: "by_creator", engageLinks: "by_creator",
+};
+export const PURGE_BATCH = 400;
+
+/**
+ * Step 6, one batch: up to PURGE_BATCH of their rows, table by table through PURGE_INDEX. When every
+ * table is empty, the creator row itself (notes, affinities, dossier, tokens and the pairing live on
+ * it) and `done`. The caller loops; each batch stays far under Convex's per-mutation limits.
+ */
 export const purgeRows = internalMutation({
   args: { creatorId: v.id("creators") },
-  handler: async (ctx, a): Promise<{ deleted: number; tables: number }> => {
+  handler: async (ctx, a): Promise<{ deleted: number; done: boolean }> => {
     let deleted = 0;
     for (const table of TABLES_BY_CREATOR) {
-      const rows = await ctx.db.query(table).filter((q) => q.eq(q.field("creatorId"), a.creatorId)).collect();
+      const q = ctx.db.query(table) as unknown as { withIndex: (i: string, f: (q: { eq: (f: string, v: unknown) => unknown }) => unknown) => { take: (n: number) => Promise<Array<{ _id: never }>> } };
+      const rows = await q.withIndex(PURGE_INDEX[table], (x) => x.eq("creatorId", a.creatorId)).take(PURGE_BATCH - deleted);
       for (const r of rows) {
         await ctx.db.delete(r._id);
         deleted++;
       }
+      if (deleted >= PURGE_BATCH) return { deleted, done: false };
     }
-    // The creator row last: notes, affinities, dossier, tokens and the pairing all live on it.
     const c = await ctx.db.get(a.creatorId);
     if (c) {
       await ctx.db.delete(a.creatorId);
       deleted++;
     }
-    return { deleted, tables: TABLES_BY_CREATOR.length };
+    return { deleted, done: true };
   },
 });
 

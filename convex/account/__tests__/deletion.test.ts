@@ -5,6 +5,7 @@
  * while another creator's rows are untouched.
  */
 import { convexTest } from "convex-test";
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import schema from "../../schema";
 import { api, internal } from "../../_generated/api";
@@ -124,5 +125,31 @@ describe("deleting the sign-in (step 8)", () => {
     } finally {
       if (prev === undefined) delete process.env.CLERK_SECRET_KEY; else process.env.CLERK_SECRET_KEY = prev;
     }
+  });
+});
+
+describe("the purge reads only their rows, in batches", () => {
+  it("a creator with more rows than one batch takes several; nobody else's rows move", async () => {
+    const { PURGE_BATCH } = await import("../deletion");
+    const t = convexTest(schema, modules);
+    const [a, b] = await t.run(async (ctx) => [await seedCreator(ctx, "batch-a"), await seedCreator(ctx, "batch-b")]);
+    await t.run(async (ctx) => {
+      for (let i = 0; i < PURGE_BATCH + 50; i++) await ctx.db.insert("userActions", { creatorId: a, kind: "idea.save", source: "app", summary: "x", at: i });
+      for (let i = 0; i < 5; i++) await ctx.db.insert("userActions", { creatorId: b, kind: "idea.save", source: "app", summary: "x", at: i });
+    });
+    const first = await t.mutation(internal.account.deletion.purgeRows, { creatorId: a });
+    expect(first).toEqual({ deleted: PURGE_BATCH, done: false });
+    const second = await t.mutation(internal.account.deletion.purgeRows, { creatorId: a });
+    expect(second.done).toBe(true);
+    expect(await t.run((ctx) => ctx.db.get(a))).toBeNull();
+    const left = await t.run(async (ctx) => (await ctx.db.query("userActions").collect()).map((r) => r.creatorId));
+    expect(left).toEqual([b, b, b, b, b]);
+  });
+
+  it("never scans a table: every purge uses an index that starts with creatorId", () => {
+    const src = readFileSync(new URL("../deletion.ts", import.meta.url), "utf8");
+    const purge = src.slice(src.indexOf("export const purgeRows"), src.indexOf("export const purgeRows") + 1500);
+    expect(purge).toMatch(/withIndex\(PURGE_INDEX\[table\]/);
+    expect(purge).not.toMatch(/\.filter\(/);
   });
 });
