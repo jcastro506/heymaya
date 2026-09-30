@@ -89,6 +89,27 @@ export const ownPostByUrl = internalQuery({
   },
 });
 
+/**
+ * How their own best and weakest watched posts are made (from the watch cards): the comparison a
+ * draft's read needs. Only what the cards say; a post she never watched isn't here.
+ */
+export const ownCraft = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ best: CraftRow[]; weakest: CraftRow[] }> => {
+    const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(120)) as Doc<"ownPosts">[];
+    const reads = (await ctx.db.query("ownPostReads").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(200)) as Doc<"ownPostReads">[];
+    const cardOf = new Map(reads.filter((r) => r.depth === "watch").map((r) => [String(r.ownPostId), r.card as WatchCard]));
+    const rows = posts.filter((p) => p.multiple !== undefined && cardOf.has(String(p._id))).map((p) => {
+      const c = cardOf.get(String(p._id))!;
+      return { multiple: Math.round((p.multiple ?? 0) * 100) / 100, caption: clip(p.caption.split("\n")[0], 80), firstSecond: clip(c.firstSecond ?? "", 140), secondsToHook: typeof c.hook?.secondsToHook === "number" ? c.hook.secondsToHook : null, lengthSec: typeof c.pacing?.lengthSec === "number" ? c.pacing.lengthSec : (p.durationSec ?? null), textTiming: c.textOverlay?.timing ?? null, sound: c.sound?.type ?? null };
+    });
+    const sorted = [...rows].sort((x, y) => y.multiple - x.multiple);
+    return { best: sorted.slice(0, 4), weakest: sorted.length > 5 ? sorted.slice(-3).reverse() : [] };
+  },
+});
+type WatchCard = { firstSecond?: string; hook?: { secondsToHook?: number }; pacing?: { lengthSec?: number }; textOverlay?: { timing?: string }; sound?: { type?: string } };
+type CraftRow = { multiple: number; caption: string; firstSecond: string; secondsToHook: number | null; lengthSec: number | null; textTiming: string | null; sound: string | null };
+
 /** The B2 evidence pack for one of their posts, against their own recent posts. */
 export const packFor = internalQuery({
   args: { creatorId: v.id("creators"), ownPostId: v.id("ownPosts") },
@@ -286,6 +307,7 @@ export const run = internalAction({
       // Sprint 4e: the labelled numbers and the four-way read, or what the platform hides.
       ownPost: own ? { ...own, hoursOld: Math.round((Date.now() - own.createTime) / 3_600_000), metricsHoursOld: Math.round((Date.now() - own.metricsAsOf) / 3_600_000), numbers: await ctx.runQuery(internal.connections.numbers.forPost, { ownPostId: own.id }) } : null,
       theirHistory: history,
+      ...(a.mode === "video" ? { theirCraft: await ctx.runQuery(internal.agent.opinion.ownCraft, { creatorId: creator._id }) } : {}),
       ...(pack ? { pack: pack.facts } : {}),
     };
     const user = `Evidence (everything you may cite is here; nothing else):\n${JSON.stringify(evidence)}`;
@@ -294,8 +316,10 @@ export const run = internalAction({
     // §13.11: for a link she may look up the sound, the comments and the author's normal before the read.
     let r: { ok: boolean; content: string; reason?: string };
     let investigation: Array<{ tool: string; params: Record<string, unknown>; why: string; credits?: number; ms: number; ok: boolean }> = [];
-    if (a.mode === "link" || a.mode === "own") {
-      const inv = await investigate(ctx, { creatorId: creator._id, purpose: a.mode === "own" ? "explain_post" : "opinion", prefix, user, budget: { calls: a.mode === "own" ? 3 : 4, credits: 20, deadlineAt: Date.now() + 45_000 }, temperature: 0.4, maxTokens: 1600 });
+    // A draft gets the lookups too (2026-09-30): before this only links and their own posts did, so a
+    // "will this do well?" on a draft could never check their history with the structure or the lane.
+    if (a.mode === "link" || a.mode === "own" || a.mode === "video") {
+      const inv = await investigate(ctx, { creatorId: creator._id, purpose: a.mode === "own" ? "explain_post" : "opinion", prefix, user, budget: { calls: a.mode === "link" ? 4 : 3, credits: a.mode === "video" ? 8 : 20, deadlineAt: Date.now() + 45_000 }, temperature: 0.4, maxTokens: 1600 });
       investigation = inv.trace;
       r = inv.content ? { ok: true, content: inv.content } : { ok: false, content: "", reason: inv.ended };
     } else {

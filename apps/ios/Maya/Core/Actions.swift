@@ -51,6 +51,14 @@ enum Actions {
     }
   }
 
+  /// The engagement round: "I commented on this one" (a mutation she also sees in her context).
+  static func markCommented(platform: String, postId: String, handle: String) async {
+    Haptics.success()
+    guard !Fixtures.enabled else { return }
+    struct R: Decodable { let ok: Bool }
+    _ = try? await convex.mutation("engage/round:markDone", with: ["platform": platform, "postId": postId, "handle": handle]) as R
+  }
+
   static func restoreIdea(ideaId: String) async -> Bool {
     await ok("ui:restoreIdea", ["id": ideaId])
   }

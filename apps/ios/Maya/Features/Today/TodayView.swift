@@ -9,6 +9,7 @@ struct TodayView: View {
   @State private var plan = Live<Plan?>("ui:plan")
   @State private var results = Live<Results?>("ui:results")
   @State private var reading = Live<ReadingState?>("onboarding/start:reading")
+  @State private var engage = Live<EngageRound?>("engage/round:today")
   @Namespace private var zoom
   @Environment(\.dynamicTypeSize) private var typeSize
   @Environment(Router.self) private var router
@@ -39,6 +40,7 @@ struct TodayView: View {
     .task { await plan.run() }
     .task { await results.run() }
     .task { await reading.run() }
+    .task { await engage.run() }
   }
 
   @ViewBuilder
@@ -52,6 +54,8 @@ struct TodayView: View {
     if case .value(let r?) = reading.state { ReadingCard(state: r) }
 
     hero(t)
+
+    if case .value(let round?) = engage.state, !round.items.isEmpty { EngageCard(round: round) }
 
     PostsSection(posts: t.week, reading: !t.dossier)
     comingUp
@@ -473,5 +477,88 @@ struct ReadingCard: View {
     if state.posts == 0 { return "Pulling in your posts now." }
     let read = "\(Int(state.posts)) posts in"
     return state.toWatch > 0 ? "\(read), watched \(Int(state.watched)) of \(Int(state.toWatch))." : "\(read), watching them now."
+  }
+}
+
+/// The engagement round: up to five fresh posts from accounts she watches for them. They open one,
+/// comment themselves (she never comments for them), and tick it off; three a day keeps the streak.
+struct EngageRound: Decodable, Equatable {
+  struct Item: Decodable, Equatable, Identifiable {
+    let platform: String
+    let handle: String
+    let postId: String
+    let url: String
+    let hoursAgo: Double
+    let views: Double
+    let comments: Double
+    let caption: String?
+    let why: String
+    let done: Bool
+    var id: String { "\(platform):\(postId)" }
+  }
+  let items: [Item]
+  let doneToday: Double
+  let goal: Double
+  let streak: Double
+}
+
+struct EngageCard: View {
+  let round: EngageRound
+  @Environment(\.openURL) private var openURL
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack(alignment: .firstTextBaseline) {
+        SectionHeader(text: "Worth a comment today")
+        Spacer()
+        Text(progress).font(MayaFont.caption.monospacedDigit()).foregroundStyle(Palette.muted)
+      }
+      Card {
+        VStack(spacing: 0) {
+          ForEach(Array(round.items.enumerated()), id: \.element.id) { index, item in
+            if index > 0 { Divider().padding(.vertical, 10) }
+            HStack(alignment: .top, spacing: 12) {
+              Button {
+                Haptics.tap()
+                if let url = URL(string: item.url) { openURL(url) }
+              } label: {
+                VStack(alignment: .leading, spacing: 3) {
+                  Text("@\(item.handle)").font(MayaFont.headline).foregroundStyle(Palette.ink)
+                  if let caption = item.caption, !caption.isEmpty {
+                    Text(caption).font(MayaFont.callout).foregroundStyle(Palette.ink).lineLimit(2).multilineTextAlignment(.leading)
+                  }
+                  Text("\(age(item.hoursAgo)) · \(Format.count(item.views)) views · \(item.why)")
+                    .font(MayaFont.caption).foregroundStyle(Palette.muted).multilineTextAlignment(.leading)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+              }
+              .buttonStyle(.plain)
+              .accessibilityHint("Opens the post")
+              Button {
+                guard !item.done else { return }
+                Task { await Actions.markCommented(platform: item.platform, postId: item.postId, handle: item.handle) }
+              } label: {
+                Image(systemName: item.done ? "checkmark.circle.fill" : "circle")
+                  .font(.title2)
+                  .foregroundStyle(item.done ? Palette.ok : Palette.line)
+              }
+              .buttonStyle(.plain)
+              .accessibilityLabel(item.done ? "Commented" : "Mark as commented")
+            }
+          }
+        }
+      }
+      Text("Tap a post to open it and leave a real comment. She never comments for you.")
+        .font(MayaFont.caption).foregroundStyle(Palette.muted)
+    }
+  }
+
+  private var progress: String {
+    let base = "\(Int(round.doneToday)) of \(Int(round.goal)) today"
+    return round.streak >= 2 ? "\(base) · \(Int(round.streak))-day streak" : base
+  }
+
+  private func age(_ hours: Double) -> String {
+    hours < 1 ? "just now" : hours < 24 ? "\(Int(hours))h ago" : "\(Int(hours / 24))d ago"
   }
 }

@@ -114,6 +114,7 @@ import type * as core_telegramFiles from "../core/telegramFiles.js";
 import type * as core_timedJobs from "../core/timedJobs.js";
 import type * as core_unseen from "../core/unseen.js";
 import type * as crons from "../crons.js";
+import type * as engage_round from "../engage/round.js";
 import type * as eval_checks from "../eval/checks.js";
 import type * as eval_converse from "../eval/converse.js";
 import type * as eval_dealsE2E from "../eval/dealsE2E.js";
@@ -345,6 +346,7 @@ declare const fullApi: ApiFromModules<{
   "core/timedJobs": typeof core_timedJobs;
   "core/unseen": typeof core_unseen;
   crons: typeof crons;
+  "engage/round": typeof engage_round;
   "eval/checks": typeof eval_checks;
   "eval/converse": typeof eval_converse;
   "eval/dealsE2E": typeof eval_dealsE2E;

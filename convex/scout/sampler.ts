@@ -126,6 +126,7 @@ export const recordAccountPage = internalMutation({
         comments: p.metrics.commentCount ?? 0,
         shares: p.metrics.shareCount ?? 0,
         saves: p.metrics.saveCount ?? undefined,
+        ...(p.caption ? { caption: clip(p.caption.split("\n")[0], 160) } : {}),
         clipId: (p as { clipId?: string | null }).clipId ?? undefined,
         keywords: [],
         source: "account.posts",
