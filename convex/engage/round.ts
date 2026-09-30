@@ -14,9 +14,13 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { creatorForIdentity } from "../core/identity";
 import { recordAction } from "../core/act";
 
-export const ENGAGE = { show: 5, goal: 3, freshHours: 72, perAuthor: 2, quietComments: 30, earlyHours: 12, /** Her text: around midday their time, up to three links, at most four a week, and only with two or more she hasn't sent. */ textHourLocal: 12, textShow: 3, textMin: 2, textsPerWeek: 4, remember: 200 } as const;
+export const ENGAGE = { show: 5, goal: 3, freshHours: 72, perAuthor: 2, quietComments: 30, earlyHours: 12, /** Her text: around midday their time, up to three links, at most four a week, and only with two or more she hasn't sent. */ textHourLocal: 12, textShow: 3, textMin: 2, textsPerWeek: 4, remember: 200,
+  /** Lane-wide finds (her daily keyword sweep, creators they don't watch yet): at most this many per round. */
+  laneInApp: 2, laneInText: 1, laneKeywords: 8,
+  /** The text goes only to people talking to her: a list of links gets no reply, and texts into silence cost the line (the phone back-off). */
+  textOnlyIfWroteWithinMs: 48 * 3_600_000 } as const;
 
-export type RoundPost = { platform: "tiktok" | "instagram"; handle: string; postId: string; url: string; createTime: number; views: number; comments: number; caption: string | null };
+export type RoundPost = { platform: "tiktok" | "instagram"; handle: string; postId: string; url: string; createTime: number; views: number; comments: number; caption: string | null; fromLane?: boolean };
 export type RoundItem = RoundPost & { hoursAgo: number; why: string };
 
 /** Pure: today's round. Fresh first, quiet posts ahead of crowded ones, never more than two from one account. */
@@ -33,11 +37,29 @@ export function pickRound(posts: RoundPost[], now: number, exclude: ReadonlySet<
     const key = `${p.platform}:${p.handle}`;
     if ((perAuthor.get(key) ?? 0) >= ENGAGE.perAuthor) continue;
     perAuthor.set(key, (perAuthor.get(key) ?? 0) + 1);
-    const why = p.hoursAgo <= ENGAGE.earlyHours && p.comments < ENGAGE.quietComments ? "new and still quiet: an early comment gets seen" : p.hoursAgo <= 24 ? "posted today" : "still picking up";
+    const base = p.hoursAgo <= ENGAGE.earlyHours && p.comments < ENGAGE.quietComments ? "new and still quiet: an early comment gets seen" : p.hoursAgo <= 24 ? "posted today" : "still picking up";
+    const why = p.fromLane ? `new to you, in your lane: ${base}` : base;
     out.push({ ...p, why });
     if (out.length >= show) break;
   }
   return out;
+}
+
+/** Accounts that repost or compile other people's work: nobody to build a relationship with. Pure. */
+const AGGREGATOR = /(repost|reposts|memes?|compilation|clips|dailydose|fyp|viral|funny(videos)?|tiktokfeed)/i;
+export const looksLikeAggregator = (handle: string) => AGGREGATOR.test(handle);
+
+/**
+ * Pure: their accounts first, then up to `laneMax` new-to-them lane finds; if their accounts run
+ * short, lane finds fill the rest (still never more than two from one account).
+ */
+export function mixRound(watched: RoundPost[], lane: RoundPost[], now: number, exclude: ReadonlySet<string>, show: number, laneMax: number): RoundItem[] {
+  const own = pickRound(watched, now, exclude, show);
+  const taken = new Set([...exclude, ...own.map((i) => `${i.platform}:${i.postId}`)]);
+  const finds = pickRound(lane.map((p) => ({ ...p, fromLane: true })), now, taken, show);
+  const laneSlots = Math.min(finds.length, Math.max(laneMax, show - own.length)); // more lane only when theirs run short
+  const ownSlots = Math.min(own.length, show - laneSlots);
+  return [...own.slice(0, ownSlots), ...finds.slice(0, show - ownSlots)];
 }
 
 /** Pure: their calendar day, in their timezone (the streak is theirs, not UTC's). */
@@ -59,8 +81,9 @@ export function afterDone(prev: Doc<"creators">["engage"], postKey: string, toda
   return { ...base, done, commented };
 }
 
-async function gather(ctx: QueryCtx, creator: Doc<"creators">): Promise<RoundPost[]> {
-  const tracked = ((await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).collect()) as Doc<"trackedAccounts">[]).filter((t) => t.status === "active").slice(0, 12);
+async function gather(ctx: QueryCtx, creator: Doc<"creators">, now: number): Promise<{ watched: RoundPost[]; lane: RoundPost[] }> {
+  const allTracked = ((await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).collect()) as Doc<"trackedAccounts">[]).filter((t) => t.status === "active");
+  const tracked = allTracked.slice(0, 12);
   const posts: RoundPost[] = [];
   for (const t of tracked) {
     const obs = (await ctx.db.query("observations").withIndex("by_author", (q) => q.eq("platform", t.platform).eq("authorHandle", t.handle)).order("desc").take(24)) as Doc<"observations">[];
@@ -68,7 +91,23 @@ async function gather(ctx: QueryCtx, creator: Doc<"creators">): Promise<RoundPos
     for (const o of obs) if (!latest.has(o.postId)) latest.set(o.postId, o); // newest sample of each post
     for (const o of latest.values()) posts.push({ platform: o.platform, handle: o.authorHandle, postId: o.postId, url: o.url, createTime: o.createTime, views: o.views, comments: o.comments, caption: o.caption ?? null });
   }
-  return posts;
+  // Lane-wide finds: what her daily keyword sweep saved for THEIR lane keywords (no extra reads), from
+  // creators they don't already watch and that aren't them, minus repost and meme pages.
+  const keywords = new Set(((creator.dossier as { keywords?: string[] } | undefined)?.keywords ?? []).slice(0, ENGAGE.laneKeywords).map((k) => k.toLowerCase()));
+  const skip = new Set([...allTracked.map((t) => `${t.platform}:${t.handle.toLowerCase()}`), ...Object.entries(creator.handles).filter(([, h]) => h).map(([p, h]) => `${p}:${String(h).toLowerCase()}`)]);
+  const lane: RoundPost[] = [];
+  if (keywords.size) {
+    const recent = (await ctx.db.query("observations").withIndex("by_sampledAt", (q) => q.gte("sampledAt", now - ENGAGE.freshHours * 3_600_000)).order("desc").take(1500)) as Doc<"observations">[];
+    const latest = new Map<string, Doc<"observations">>();
+    for (const o of recent) {
+      if (!o.source.startsWith("search.") || !o.keywords.some((k) => keywords.has(k.toLowerCase()))) continue;
+      if (!o.authorHandle || skip.has(`${o.platform}:${o.authorHandle.toLowerCase()}`) || looksLikeAggregator(o.authorHandle)) continue;
+      const key = `${o.platform}:${o.postId}`;
+      if (!latest.has(key)) latest.set(key, o);
+    }
+    for (const o of latest.values()) lane.push({ platform: o.platform, handle: o.authorHandle, postId: o.postId, url: o.url, createTime: o.createTime, views: o.views, comments: o.comments, caption: o.caption ?? null, fromLane: true });
+  }
+  return { watched: posts, lane };
 }
 
 export const today = query({
@@ -82,7 +121,8 @@ export const today = query({
     const yesterday = localDay(now - 86_400_000, c.timezone);
     // Posts they commented on before today never return; today's stay, ticked.
     const before = new Set((c.engage?.commented ?? []).filter((k) => !(state?.done ?? []).includes(k)));
-    const items = pickRound(await gather(ctx, c), now, before);
+    const g = await gather(ctx, c, now);
+    const items = mixRound(g.watched, g.lane, now, before, ENGAGE.show, ENGAGE.laneInApp);
     // A streak that wasn't kept yesterday (or today) is over; show it as it is.
     const streak = c.engage && (c.engage.lastGoalDay === day || c.engage.lastGoalDay === yesterday) ? c.engage.streak : 0;
     const tracked = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).collect()) as Doc<"trackedAccounts">[];
@@ -122,24 +162,27 @@ const OPENERS = [
 /** Pure: the text. Code writes it from rows (no model): an opener that rotates by day, then each post on its own lines. */
 export function engageText(items: RoundItem[], day: string): { body: string; links: string[] } {
   const opener = OPENERS[[...day].reduce((h, ch) => h + ch.charCodeAt(0), 0) % OPENERS.length];
-  const lines = items.map((i) => `@${i.handle}${i.caption ? `: ${clip(i.caption, 60)}` : ""}\n${i.url}`);
+  const lines = items.map((i) => `@${i.handle}${i.fromLane ? " (new to you)" : ""}${i.caption ? `: ${clip(i.caption, 60)}` : ""}\n${i.url}`);
   return { body: [opener, ...lines].join("\n---\n"), links: items.map((i) => i.url) };
 }
 
 export const textInputs = internalQuery({
   args: { creatorId: v.id("creators"), now: v.number() },
-  handler: async (ctx, a): Promise<{ paired: boolean; day: string; doneToday: number; items: RoundItem[]; textsThisWeek: number } | null> => {
+  handler: async (ctx, a): Promise<{ paired: boolean; day: string; doneToday: number; items: RoundItem[]; textsThisWeek: number; lastInboundAt: number | null } | null> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c) return null;
     const day = localDay(a.now, c.timezone);
     const never = new Set([...(c.engage?.commented ?? []), ...(c.engage?.sent ?? [])]);
     const recent = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId).gte("ts", a.now - 7 * 86_400_000)).collect()) as Doc<"messages">[];
+    const g = await gather(ctx, c, a.now);
+    const lastIn = recent.filter((m) => m.direction === "in").sort((x, y) => y.ts - x.ts)[0];
     return {
       paired: c.channel.paired === true,
       day,
       doneToday: c.engage?.day === day ? c.engage.done.length : 0,
-      items: pickRound(await gather(ctx, c), a.now, never, ENGAGE.textShow),
+      items: mixRound(g.watched, g.lane, a.now, never, ENGAGE.textShow, ENGAGE.laneInText),
       textsThisWeek: recent.filter((m) => m.direction === "out" && m.kind === "engage").length,
+      lastInboundAt: lastIn?.ts ?? null,
     };
   },
 });
@@ -170,6 +213,9 @@ export const sendText = internalAction({
     if (!f) return { sent: false, reason: "no creator" };
     if (!f.paired) return { sent: false, reason: "not paired" };
     if (f.doneToday > 0) return { sent: false, reason: "they're already on it today" };
+    // The back-off (core/phoneRail) counts every proactive text since their last reply. Nobody replies to a
+    // list of links, so this text only goes into a live conversation; otherwise the round waits in the app.
+    if (f.lastInboundAt === null || now - f.lastInboundAt > ENGAGE.textOnlyIfWroteWithinMs) return { sent: false, reason: "they haven't written lately; the round waits in the app" };
     if (f.textsThisWeek >= ENGAGE.textsPerWeek) return { sent: false, reason: `${f.textsThisWeek} this week already (cap ${ENGAGE.textsPerWeek})` };
     if (f.items.length < ENGAGE.textMin) return { sent: false, reason: "fewer than two fresh posts she hasn't sent" };
     const rails = await ctx.runQuery(internal.scout.gate.railsOnly, { creatorId: a.creatorId, now });

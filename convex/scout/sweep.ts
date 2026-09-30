@@ -9,6 +9,7 @@
  * the watcher runs on the lane.
  */
 
+import { clip } from "../lib/clip";
 import { v } from "convex/values";
 import { coverKey, rememberMedia } from "../media";
 import { internalAction, internalQuery } from "../_generated/server";
@@ -82,6 +83,7 @@ export const recordSearch = internalMutation({
         clipId: (p as { clipId?: string | null }).clipId ?? undefined,
         keywords: [a.keyword],
         source: `search.${a.platform}`,
+        ...(p.caption ? { caption: clip(p.caption.split("\n")[0], 160) } : {}),
         paidPromotion: false,
       });
       out.push({ postId: p.postId, url, author, velocity: views / ageHours, views, ageHours: Number(ageHours.toFixed(1)) });

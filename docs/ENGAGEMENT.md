@@ -12,6 +12,8 @@ Growing means showing up on other people's posts and answering your own comments
 - Each tick is a `userActions` row (`engage.commented`), so she knows what they did.
 - `markEngaged` is the one writer; a chat tool can call the same function.
 - **Her text** (`sendText`, on the hourly cadence at midday their time): up to three of those posts with their links, written by code from rows. At most once a day and four a week; only with two or more she hasn't sent; not when they've already commented today; counted toward the daily cap, and held by quiet hours, pause and the back-off when they aren't replying.
+- **New to you, in her lane.** Besides the accounts they watch, the round takes fresh posts her daily keyword sweep already saved for THEIR lane keywords (from her read of them), from creators they don't watch and that aren't them, minus repost and meme pages. Their accounts come first; up to two lane finds in the app and one in a text (more only when their accounts run short). Labelled "New to you". No extra reads.
+- **The text only goes into a live conversation** (they texted her in the last 48 hours). The phone back-off counts every proactive text since their last reply, and nobody replies to a list of links, so a text into silence would slow her idea texts and cost the line. Otherwise the round waits in the app.
 - **Never the same post twice.** `creators.engage` remembers the newest 200 posts she has texted (`sent`) and the newest 200 they commented on (`commented`). A texted post is never texted again; a commented post never returns, in a text or in the app.
 
 ## Built: an opinion on a draft has her full tools (2026-09-30)

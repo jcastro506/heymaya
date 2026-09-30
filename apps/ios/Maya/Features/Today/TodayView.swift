@@ -494,6 +494,8 @@ struct EngageRound: Decodable, Equatable {
     let caption: String?
     let why: String
     let done: Bool
+    /// From her lane-wide sweep: a creator they don't watch yet.
+    var fromLane: Bool? = nil
     var id: String { "\(platform):\(postId)" }
   }
   let items: [Item]
@@ -523,11 +525,14 @@ struct EngageCard: View {
                 if let url = URL(string: item.url) { openURL(url) }
               } label: {
                 VStack(alignment: .leading, spacing: 3) {
-                  Text("@\(item.handle)").font(MayaFont.headline).foregroundStyle(Palette.ink)
+                  HStack(spacing: 6) {
+                    Text("@\(item.handle)").font(MayaFont.headline).foregroundStyle(Palette.ink)
+                    if item.fromLane == true { Chip(text: "New to you") }
+                  }
                   if let caption = item.caption, !caption.isEmpty {
                     Text(caption).font(MayaFont.callout).foregroundStyle(Palette.ink).lineLimit(2).multilineTextAlignment(.leading)
                   }
-                  Text("\(age(item.hoursAgo)) · \(Format.count(item.views)) views · \(item.why)")
+                  Text("\(age(item.hoursAgo)) · \(Format.count(item.views)) views · \(item.why.replacingOccurrences(of: "new to you, in your lane: ", with: ""))")
                     .font(MayaFont.caption).foregroundStyle(Palette.muted).multilineTextAlignment(.leading)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
