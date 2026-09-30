@@ -11,7 +11,7 @@ import { api, internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
 import { addTracked } from "../../agent/manage";
-import { afterDone, ENGAGE, engageText, localDay, pickRound, type RoundPost } from "../round";
+import { afterDone, ENGAGE, engageText, localDay, looksLikeAggregator, mixRound, pickRound, type RoundPost } from "../round";
 import type { Id } from "../../_generated/dataModel";
 
 const H = 3_600_000;
@@ -116,9 +116,11 @@ describe("the round on rows", () => {
 describe("her text, and never the same post twice", () => {
   const D = 24 * H;
   const produced = (t: ReturnType<typeof convexTest>, handle: string, id: string, at: number, caption = "taper week honesty") => t.run((ctx) => ctx.db.insert("observations", { platform: "tiktok", postId: id, authorHandle: handle, url: `https://www.tiktok.com/@${handle}/video/${id}`, createTime: at - 2 * H, sampledAt: at, ageHours: 2, views: 5000, likes: 10, comments: 4, shares: 0, keywords: [], source: "account.posts", caption } as never));
-  async function paired(t: ReturnType<typeof convexTest>, suffix: string, over: Record<string, unknown> = {}) {
+  async function paired(t: ReturnType<typeof convexTest>, suffix: string, over: Record<string, unknown> = {}, wroteAt: number | null = NOW - 20 * H) {
     const c = await t.run((ctx) => seedCreator(ctx, suffix, { timezone: "UTC", channel: { paired: true, pairedAt: NOW - 30 * D, kind: "imessage" }, plan: { status: "active", founding: true }, ...over }));
     await t.run(async (ctx) => { for (const h of ["one", "two", "three", "four"]) await addTracked(ctx as never, c, "tiktok", h, [], { addedBy: "creator" }); });
+    // A live conversation: they texted her recently (the text only goes into one).
+    if (wroteAt !== null) await t.run((ctx) => ctx.db.insert("messages", { creatorId: c, direction: "in", surface: "imessage", kind: "inbound", body: "ok", ts: wroteAt } as never));
     return c;
   }
   const texts = async (t: ReturnType<typeof convexTest>, c: Id<"creators">) => (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.creatorId === c && m.kind === "engage");
@@ -147,13 +149,15 @@ describe("her text, and never the same post twice", () => {
     const state = (await t.run((ctx) => ctx.db.get(c)))!.engage!;
     expect(state.sent).toHaveLength(3);
 
-    // The next day: one left over from yesterday plus one new post is two, and none of the three already sent.
+    // The next day (they wrote again): one left over from yesterday plus one new post is two, and none of the three already sent.
+    await t.run((ctx) => ctx.db.insert("messages", { creatorId: c, direction: "in", surface: "imessage", kind: "inbound", body: "thanks", ts: NOW + D - 2 * H } as never));
     await produced(t, "one", "e", NOW + D);
     expect(await t.action(internal.engage.round.sendText, { creatorId: c, now: NOW + D })).toEqual({ sent: true, reason: "sent" });
     const second = (await texts(t, c)).sort((x, y) => x.ts - y.ts)[1];
     for (const url of first.links ?? []) expect(second.body).not.toContain(url);
     expect(second.links).toHaveLength(2);
     // And then there is nothing she hasn't sent: she says nothing.
+    await t.run((ctx) => ctx.db.insert("messages", { creatorId: c, direction: "in", surface: "imessage", kind: "inbound", body: "k", ts: NOW + 2 * D - 2 * H } as never));
     expect(await t.action(internal.engage.round.sendText, { creatorId: c, now: NOW + 2 * D })).toEqual({ sent: false, reason: "fewer than two fresh posts she hasn't sent" });
   });
 
@@ -201,5 +205,63 @@ describe("her text, and never the same post twice", () => {
     expect(src).toMatch(/d\.touch === "engage" \? internal\.engage\.round\.sendText/);
     const { countsTowardCap } = await import("../../core/messages");
     expect(countsTowardCap({ direction: "out", proactive: true, kind: "engage" } as never)).toBe(true);
+  });
+});
+
+describe("the back-off: the text only goes into a live conversation", () => {
+  const D = 24 * H;
+  it("someone who hasn't written in two days gets the round in the app, not a text; writing again brings it back", async () => {
+    const t = convexTest(schema, modules);
+    const c = await t.run((ctx) => seedCreator(ctx, "bo1", { timezone: "UTC", channel: { paired: true, pairedAt: NOW - 30 * D, kind: "imessage" }, plan: { status: "active", founding: true } }));
+    await t.run(async (ctx) => { for (const h of ["one", "two"]) await addTracked(ctx as never, c, "tiktok", h, [], { addedBy: "creator" }); });
+    for (const [h, id] of [["one", "a"], ["two", "b"]] as const) await t.run((ctx) => ctx.db.insert("observations", { platform: "tiktok", postId: id, authorHandle: h, url: `https://www.tiktok.com/@${h}/video/${id}`, createTime: NOW - 2 * H, sampledAt: NOW, ageHours: 2, views: 900, likes: 1, comments: 1, shares: 0, keywords: [], source: "account.posts" } as never));
+    expect(await t.action(internal.engage.round.sendText, { creatorId: c, now: NOW })).toEqual({ sent: false, reason: "they haven't written lately; the round waits in the app" });
+    await t.run((ctx) => ctx.db.insert("messages", { creatorId: c, direction: "in", surface: "imessage", kind: "inbound", body: "old", ts: NOW - 3 * D } as never));
+    expect((await t.action(internal.engage.round.sendText, { creatorId: c, now: NOW })).reason).toMatch(/haven't written lately/);
+    await t.run((ctx) => ctx.db.insert("messages", { creatorId: c, direction: "in", surface: "imessage", kind: "inbound", body: "hey", ts: NOW - 5 * H } as never));
+    expect(await t.action(internal.engage.round.sendText, { creatorId: c, now: NOW })).toEqual({ sent: true, reason: "sent" });
+  });
+});
+
+describe("new to you, from her lane sweep", () => {
+  const lanePost = (handle: string, id: string, hoursAgo: number, comments = 3): RoundPost => ({ ...post(handle, id, hoursAgo, comments), fromLane: true });
+  it("mixes: their accounts first, at most the lane quota, more lane only when theirs run short", () => {
+    const watched = [post("a", "1", 2, 1), post("b", "2", 3, 1), post("c", "3", 4, 1), post("d", "4", 5, 1)];
+    const lane = [lanePost("x", "10", 1), lanePost("y", "11", 2), lanePost("z", "12", 3)];
+    const full = mixRound(watched, lane, NOW, new Set(), 5, 2);
+    expect(full.map((i) => i.postId)).toEqual(["1", "2", "3", "10", "11"]);
+    expect(full.filter((i) => i.fromLane).length).toBe(2);
+    expect(full.find((i) => i.fromLane)!.why).toMatch(/^new to you, in your lane: /);
+    const short = mixRound([post("a", "1", 2, 1)], lane, NOW, new Set(), 5, 2);
+    expect(short.map((i) => i.postId), "one of theirs, lane fills the rest").toEqual(["1", "10", "11", "12"]);
+    expect(mixRound(watched, lane, NOW, new Set(), 3, 1).filter((i) => i.fromLane)).toHaveLength(1);
+    expect(mixRound(watched, [], NOW, new Set(), 5, 2).map((i) => i.postId)).toEqual(["1", "2", "3", "4"]);
+    expect(mixRound([], lane, NOW, new Set(["tiktok:10"]), 5, 2).map((i) => i.postId), "the never-again memory applies to lane finds too").toEqual(["11", "12"]);
+  });
+  it("repost and meme pages are nobody to build a relationship with", () => {
+    for (const h of ["dailymemes", "fyp.clips", "runningreposts", "viralrunning", "funnyvideos"]) expect(looksLikeAggregator(h), h).toBe(true);
+    for (const h of ["hillsforbreakfast", "slowmilesclub", "cam.luyckx"]) expect(looksLikeAggregator(h), h).toBe(false);
+  });
+  it("on rows: only sweep posts for THEIR keywords, not from accounts they watch or from them, labelled in the text", async () => {
+    const t = convexTest(schema, modules);
+    const c = await t.run((ctx) => seedCreator(ctx, "ln1", { timezone: "UTC", handles: { tiktok: "me_runs" }, dossier: { keywords: ["marathon training", "running tips"] } }));
+    await t.run((ctx) => addTracked(ctx as never, c, "tiktok", "one", [], { addedBy: "creator" }));
+    const obs = (handle: string, id: string, keyword: string, source = "search.tiktok") => t.run((ctx) => ctx.db.insert("observations", { platform: "tiktok", postId: id, authorHandle: handle, url: `https://www.tiktok.com/@${handle}/video/${id}`, createTime: Date.now() - 3 * H, sampledAt: Date.now(), ageHours: 3, views: 40000, likes: 1, comments: 5, shares: 0, keywords: [keyword], source, caption: `${keyword} post` } as never));
+    await obs("newrunner", "L1", "marathon training");
+    await obs("otherlane", "L2", "sourdough");            // not their lane
+    await obs("one", "L3", "marathon training");          // they already watch this account
+    await obs("me_runs", "L4", "running tips");           // it's them
+    await obs("runningmemes", "L5", "running tips");      // an aggregator
+    await obs("one", "W1", "", "account.posts");          // their watched account's own post
+    const me = t.withIdentity({ subject: (await t.run((ctx) => ctx.db.get(c)))!.clerkUserId });
+    const r = (await me.query(api.engage.round.today, {}))!;
+    // L3 is by an account they already watch (the sweep found it too): it's theirs, not "new to you".
+    expect(r.items.map((i) => [i.postId, i.fromLane ?? false])).toEqual([["W1", false], ["L3", false], ["L1", true]]);
+    expect(engageText(r.items, "2026-09-30").body).toMatch(/@newrunner \(new to you\): marathon training post/);
+    // Someone with no profile keywords gets no lane finds.
+    const bare = await t.run((ctx) => seedCreator(ctx, "ln2", { timezone: "UTC" }));
+    await t.run((ctx) => addTracked(ctx as never, bare, "tiktok", "one", [], { addedBy: "creator" }));
+    const r2 = (await t.withIdentity({ subject: (await t.run((ctx) => ctx.db.get(bare)))!.clerkUserId }).query(api.engage.round.today, {}))!;
+    expect(r2.items.every((i) => !i.fromLane)).toBe(true);
   });
 });
