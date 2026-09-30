@@ -190,7 +190,7 @@ export const CREATOR_INDEX: Record<(typeof TABLES_BY_CREATOR)[number], string | 
   calendarBlocks: "by_creator", calendarEvents: "by_creator_start", tasteEvents: "by_creator", oauthStates: null, connections: "by_creator", directives: "by_creator",
   messages: "by_creator", jobs: "by_creator", budgets: "by_creator_day", costEvents: "by_creator_at", memories: "by_creator_ref", personalRecords: "by_creator",
   finishes: "by_creator", laneReads: "by_token", followerSnapshots: "by_creator_day", accountInsights: "by_creator_kind", evalRuns: null, evalLabels: null,
-  userActions: "by_creator_at", schedule: "by_creator",
+  userActions: "by_creator_at", schedule: "by_creator", engageLinks: "by_creator",
 };
 
 /**

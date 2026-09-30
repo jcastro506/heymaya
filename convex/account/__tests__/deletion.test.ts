@@ -52,6 +52,7 @@ async function oneRowEverywhere(t: ReturnType<typeof convexTest>, creatorId: Id<
     const run = await ctx.db.insert("evalRuns", { suite: "recent", skill: "reply", creatorId, text: "x", checks: [], pass: true, at: now });
     await ctx.db.insert("evalLabels", { evalRunId: run, creatorId, skill: "reply", label: "good", reason: "", by: "operator", at: now });
     await ctx.db.insert("userActions", { creatorId, kind: "idea.pass", source: "app", summary: "passed on an idea", at: now });
+    await ctx.db.insert("engageLinks", { creatorId, code: `c${String(creatorId).slice(-9)}`, key: "tiktok:1", handle: "someone", url: "https://www.tiktok.com/@someone/video/1", sentAt: now, opens: 0 });
   });
 }
 

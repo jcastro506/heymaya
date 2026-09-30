@@ -13,6 +13,7 @@ import { clip } from "../lib/clip";
 import type { Doc, Id } from "../_generated/dataModel";
 import { creatorForIdentity } from "../core/identity";
 import { recordAction } from "../core/act";
+import { goUrl, newCode, saveLinks } from "./links";
 
 export const ENGAGE = { show: 5, goal: 3, freshHours: 72, perAuthor: 2, quietComments: 30, earlyHours: 12, /** Her text: around midday their time, up to three links, at most four a week, and only with two or more she hasn't sent. */ textHourLocal: 12, textShow: 3, textMin: 2, textsPerWeek: 4, remember: 200,
   /** Lane-wide finds (her daily keyword sweep, creators they don't watch yet): at most this many per round. */
@@ -160,10 +161,10 @@ const OPENERS = [
 ] as const;
 
 /** Pure: the text. Code writes it from rows (no model): an opener that rotates by day, then each post on its own lines. */
-export function engageText(items: RoundItem[], day: string): { body: string; links: string[] } {
+export function engageText(items: RoundItem[], day: string, hrefs: string[] = items.map((i) => i.url)): { body: string; links: string[] } {
   const opener = OPENERS[[...day].reduce((h, ch) => h + ch.charCodeAt(0), 0) % OPENERS.length];
-  const lines = items.map((i) => `@${i.handle}${i.fromLane ? " (new to you)" : ""}${i.caption ? `: ${clip(i.caption, 60)}` : ""}\n${i.url}`);
-  return { body: [opener, ...lines].join("\n---\n"), links: items.map((i) => i.url) };
+  const lines = items.map((i, n) => `@${i.handle}${i.fromLane ? " (new to you)" : ""}${i.caption ? `: ${clip(i.caption, 60)}` : ""}\n${hrefs[n]}`);
+  return { body: [opener, ...lines].join("\n---\n"), links: hrefs };
 }
 
 export const textInputs = internalQuery({
@@ -188,10 +189,11 @@ export const textInputs = internalQuery({
 });
 
 export const markSent = internalMutation({
-  args: { creatorId: v.id("creators"), keys: v.array(v.string()), now: v.number() },
+  args: { creatorId: v.id("creators"), keys: v.array(v.string()), now: v.number(), links: v.optional(v.array(v.object({ code: v.string(), key: v.string(), handle: v.string(), url: v.string(), fromLane: v.optional(v.boolean()) }))) },
   handler: async (ctx, a): Promise<null> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c) return null;
+    if (a.links) await saveLinks(ctx, a.creatorId, a.links, a.now);
     const day = localDay(a.now, c.timezone);
     const prev = c.engage ?? { day, done: [], streak: 0 };
     await ctx.db.patch(a.creatorId, { engage: { ...prev, sent: [...(prev.sent ?? []).filter((k) => !a.keys.includes(k)), ...a.keys].slice(-ENGAGE.remember) } });
@@ -221,10 +223,12 @@ export const sendText = internalAction({
     const rails = await ctx.runQuery(internal.scout.gate.railsOnly, { creatorId: a.creatorId, now });
     if (!rails) return { sent: false, reason: "no creator" };
     if (!rails.ok) return { sent: false, reason: rails.reason ?? "rails" };
-    const { body, links } = engageText(f.items, f.day);
+    // Each post goes out as our short link, so she learns which ones they opened (engage/links).
+    const tracked = f.items.map((i) => ({ code: newCode(), key: `${i.platform}:${i.postId}`, handle: i.handle, url: i.url, fromLane: i.fromLane }));
+    const { body, links } = engageText(f.items, f.day, tracked.map((l) => goUrl(l.code)));
     const sent = (await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body, dedupeKey: `engage:${f.day}`, ts: now, proactive: true, capped: true, kind: "engage", links, criticSkipped: true, awaitingAnswer: false })) as { sent: boolean; held?: string };
     if (!sent.sent) return { sent: false, reason: sent.held ?? "already sent today" };
-    await ctx.runMutation(internal.engage.round.markSent, { creatorId: a.creatorId as Id<"creators">, keys: f.items.map((i) => `${i.platform}:${i.postId}`), now });
+    await ctx.runMutation(internal.engage.round.markSent, { creatorId: a.creatorId as Id<"creators">, keys: tracked.map((l) => l.key), now, links: tracked });
     return { sent: true, reason: "sent" };
   },
 });

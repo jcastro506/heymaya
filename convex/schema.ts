@@ -896,6 +896,19 @@ export default defineSchema({
     openedToldAt: v.optional(v.number()),
     closedAt: v.optional(v.number()),
   }).index("by_slug", ["slug"]).index("by_opportunity", ["opportunityId"]).index("by_creator", ["creatorId"]),
+  // The engagement text's links (2026-09-30): each post she texts goes out as a short link of ours that
+  // forwards to the post, so she knows which ones they opened. Link previews and bots never count.
+  engageLinks: defineTable({
+    creatorId: v.id("creators"),
+    code: v.string(),
+    key: v.string(), // platform:postId
+    handle: v.string(),
+    url: v.string(),
+    fromLane: v.optional(v.boolean()),
+    sentAt: v.number(),
+    openedAt: v.optional(v.number()),
+    opens: v.number(),
+  }).index("by_code", ["code"]).index("by_creator", ["creatorId"]),
   partnershipMailboxes: defineTable({ creatorId: v.id("creators"), email: v.string(), tokenRef: v.string(), generation: v.string(), attention: v.optional(v.string()), updatedAt: v.number() }).index("by_creator", ["creatorId"]),
 
   // -------------------------------------------------------------- vendorHealth
