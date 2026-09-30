@@ -24,6 +24,13 @@ describe("the draft opinion", () => {
     expect(LOOKUPS.opinion).not.toMatch(/nothing to look up except own_rhymes/);
   });
 
+  it("is honest that nobody can predict virality: a read and fixes, never a score or a view count", async () => {
+    const { OPINION_SKILL } = await import("../opinion");
+    expect(OPINION_SKILL).toMatch(/nobody can predict that, you included/);
+    expect(OPINION_SKILL).toMatch(/Never a score, a percentage chance, or a view count/);
+    expect(OPINION_SKILL).toMatch(/never promise a number/);
+  });
+
   it("their craft is only what she watched: best and weakest by their own multiple, nobody else's", async () => {
     const t = convexTest(schema, modules);
     const a = await t.run((ctx) => seedCreator(ctx, "dc1"));
