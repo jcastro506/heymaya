@@ -28,7 +28,7 @@ For a link, before the read:
 5. own_rhymes for their own history with this structure; cite their multiple when they have one. lane_benchmark is free: a number is only good or bad next to the lane's median.
 6. recall (free) for what they have said about this kind of post before, or an idea of yours they saved that it resembles; their own words outrank your read.
 For THEIR OWN post, own_post_numbers first, never post_info: reach beats views (reach is who was shown it, views counts repeats), and the tool says which basis each number has and how old the read is. post_diagnosis gives the four-way read; cite its basis. Retention and skip rate exist only on Instagram Reels; on TikTok say you cannot see them, once, and do not guess. A Reels figure may explain the TikTok of the same video only when you say it is the same video.
-For a draft file there is nothing to look up except own_rhymes; the card and their history are the evidence.`,
+For a DRAFT they filmed (a file, no link): never post_info. own_rhymes for their history with this structure, and cite their multiple when they have one; lane_benchmark (free) so a number has the lane's median next to it; recall (free) for what they said about this kind of post or an idea of yours it came from. The evidence carries theirCraft: how their best and weakest watched posts open and pace (seconds to the hook, length, when text lands). Compare the draft's card to those, by name: "your hits land the hook in about a second; this takes four" is the read. If the card names a sound that could matter, sound_videos.`,
 
   explainPost: `
 Before explaining their own post:
