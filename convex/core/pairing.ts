@@ -19,6 +19,7 @@
  * id is where every future message goes.
  */
 
+import { FIRST_GLANCE } from "../onboarding/firstGlanceRules";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { type MutationCtx } from "../_generated/server";
@@ -35,7 +36,7 @@ import { partnershipsOpen } from "../partnerships/store";
 export const PAIRING_TTL_MS = 15 * 60_000;
 
 /** What she says the moment they pair, before the read is done. */
-export const HELLO = `hey — i'm maya. i'm going through your posts now so i can get a feel for what you make, what sounds like you, and what's actually been working.\n---\ntext me like you'd text someone on your team. send me a half-formed idea, ask what to post, tell me to remember something, or ask me to make room to film it. i'll also message you when i find something in your world worth trying.\n---\nyou don't need to figure everything out today. i'll share what i notice first, then we can work out what you'd like me to help with most.`;
+export const HELLO = `hey, i'm maya. i'm your content person: i find what's working in your lane, turn it into ideas you'd actually film, and help you get them posted.\n---\ni'm watching your posts right now so i know what you make and what's landing. give me a few minutes.\n---\nwhile i do: send me a video you've filmed and i'll write the caption and pick a sound, or send any link that caught your eye and i'll tell you if it's worth making your own.`;
 /** The first hello, with the opening for their plan (§26). Pure. */
 export function helloFor(partnerships: boolean): string {
   void partnerships;
@@ -150,6 +151,7 @@ export const claimPairingByPhone = internalMutation({
       ? { creatorId: creator._id, surface: "imessage", body: openingQuestionFor(partnershipsOpen(creator)), dedupeKey: `onboarding_goal:${creator._id}`, proactive: true, kind: "status", awaitingAnswer: true }
       : { creatorId: creator._id, surface: "imessage", body: helloFor(partnershipsOpen(creator)), dedupeKey: `hello:${creator._id}`, proactive: true, kind: "status", awaitingAnswer: false });
     await ctx.runMutation(internal.core.jobs.enqueue, { kind: "first_read", idempotencyKey: `first_read:${creator._id}`, creatorId: creator._id, payloadJson: JSON.stringify({ phone: args.phone, service: args.service ?? null }) });
+    if (!firstRead) await ctx.scheduler.runAfter(FIRST_GLANCE.afterMs, internal.onboarding.firstGlance.send, { creatorId: creator._id, attempt: 0 });
     await ctx.runMutation(internal.core.jobs.wakeDeliveries, { creatorId: creator._id });
     await ctx.scheduler.runAfter(0, internal.core.scheduler.drainJobs, { kinds: ["deliver_message"] });
     return { paired: true, creatorId: creator._id };
@@ -223,6 +225,7 @@ export const claimPairing = internalMutation({
     await ctx.runMutation(internal.core.messages.send, firstRead
       ? { creatorId: creator._id, surface: "telegram", body: openingQuestionFor(partnershipsOpen(creator)), dedupeKey: `onboarding_goal:${creator._id}`, proactive: true, kind: "status", awaitingAnswer: true }
       : { creatorId: creator._id, surface: "telegram", body: helloFor(partnershipsOpen(creator)), dedupeKey: `hello:${creator._id}`, proactive: true, kind: "status", awaitingAnswer: false });
+    if (!firstRead) await ctx.scheduler.runAfter(FIRST_GLANCE.afterMs, internal.onboarding.firstGlance.send, { creatorId: creator._id, attempt: 0 });
     // Everything written while unpaired (the first read, at least) goes out now, not at the
     // next minute tick, and not behind whatever long job the drain is on.
     await ctx.runMutation(internal.core.jobs.wakeDeliveries, { creatorId: creator._id });

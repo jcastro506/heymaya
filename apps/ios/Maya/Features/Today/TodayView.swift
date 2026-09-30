@@ -8,6 +8,7 @@ struct TodayView: View {
   @State private var ideas = Live<[Idea]?>("ui:ideas", args: ["unpostedOnly": false, "savedOnly": false])
   @State private var plan = Live<Plan?>("ui:plan")
   @State private var results = Live<Results?>("ui:results")
+  @State private var reading = Live<ReadingState?>("onboarding/start:reading")
   @Namespace private var zoom
   @Environment(\.dynamicTypeSize) private var typeSize
   @Environment(Router.self) private var router
@@ -37,6 +38,7 @@ struct TodayView: View {
     .task { await ideas.run() }
     .task { await plan.run() }
     .task { await results.run() }
+    .task { await reading.run() }
   }
 
   @ViewBuilder
@@ -46,6 +48,8 @@ struct TodayView: View {
         .font(MayaFont.kicker).kerning(0.8).foregroundStyle(Palette.muted)
       StatusPill(text: t.statusLine)
     }
+
+    if case .value(let r?) = reading.state { ReadingCard(state: r) }
 
     hero(t)
 
@@ -420,5 +424,54 @@ struct PressableStyle: ButtonStyle {
 struct NoAccountNote: View {
   var body: some View {
     EmptyNote(text: "This sign-in isn't linked to a Maya account yet. Finish setting up and she'll start here.")
+  }
+}
+
+/// Day one: while her first read runs, show the work on their own posts (live counts, the last one
+/// she watched); once it lands, what she saw, for a few days. Nothing to do here; it's a receipt.
+struct ReadingState: Decodable, Equatable {
+  let stage: String
+  let posts: Double
+  let watched: Double
+  let toWatch: Double
+  let lastWatched: String?
+  let summary: String?
+  let topFormat: String?
+  let readAt: Double?
+}
+
+struct ReadingCard: View {
+  let state: ReadingState
+  static let showReadForDays = 3.0
+
+  var body: some View {
+    if state.stage != "read" {
+      Card {
+        HStack(alignment: .top, spacing: 12) {
+          ProgressView().padding(.top, 2)
+          VStack(alignment: .leading, spacing: 6) {
+            Text("She's reading your posts").font(MayaFont.headline).foregroundStyle(Palette.ink)
+            Text(progressLine).font(MayaFont.callout).foregroundStyle(Palette.muted)
+            if let last = state.lastWatched, !last.isEmpty {
+              Text("Just watched: \u{201C}\(last)\u{201D}").font(MayaFont.caption).foregroundStyle(Palette.muted).lineLimit(2)
+            }
+          }
+        }
+      }
+    } else if let summary = state.summary, let at = state.readAt, Date.now.timeIntervalSince1970 * 1000 - at < Self.showReadForDays * 86_400_000 {
+      Card {
+        VStack(alignment: .leading, spacing: 6) {
+          Text("WHAT SHE SEES").font(MayaFont.kicker).kerning(0.8).foregroundStyle(Palette.coral)
+          Text(summary).font(MayaFont.body).foregroundStyle(Palette.ink)
+          if let top = state.topFormat { Text("Your go-to: \(top)").font(MayaFont.caption).foregroundStyle(Palette.muted) }
+        }
+      }
+    }
+  }
+
+  private var progressLine: String {
+    if state.posts == 0 { return "Pulling in your posts now." }
+    let read = "\(Int(state.posts)) posts in"
+    return state.toWatch > 0 ? "\(read), watched \(Int(state.watched)) of \(Int(state.toWatch))." : "\(read), watching them now."
   }
 }

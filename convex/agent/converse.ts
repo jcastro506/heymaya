@@ -218,6 +218,18 @@ export const run = internalAction({
 
     // One-tap options on an idea (§7 S3). Handled here without a model call where the answer is code.
     if (target.kind === "button") {
+      // Day one's favorites offer: watch the ones she found, or not.
+      const fp = target.body.match(/^favpicks:(yes|no)$/);
+      if (fp) {
+        let body = "no problem. send me anyone you love and i'll watch them for you.";
+        if (fp[1] === "yes") {
+          const r = await ctx.runMutation(internal.onboarding.suggest.acceptPicks, { creatorId: creator._id });
+          body = r.added.length ? `done, i'm watching ${r.added.map((h) => `@${h}`).join(", ")}. i'll tell you when they post something worth your time.` : "couldn't add those just now. send me their handles and i'll add them.";
+        }
+        await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body, dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
+        await deliverNow(ctx as never);
+        return { ok: true };
+      }
       // Lane drift (Sprint 4d): widen it, or leave it as a phase.
       const ld = target.body.match(/^lanedrift:widen:(yes|no)$/);
       if (ld) {

@@ -275,7 +275,47 @@ private struct ConnectStep: View {
   }
 }
 
-// MARK: - 4. Worth watching
+// MARK: - 3. Meet her
+
+private struct MeetStep: View {
+  let model: OnboardingModel
+  @Environment(\.openURL) private var openURL
+  @State private var busy = false
+  @State private var waiting = false
+  @State private var problem: String?
+
+  var body: some View {
+    StepFrame(step: .meet, kicker: "Meet Maya", title: "She lives in your texts.", subtitle: "Text her START; the app is just where her work piles up.") {
+      VStack(alignment: .leading, spacing: 14) {
+        MayaBubble(text: "hey, i'm maya. send me START and i'll get to work.")
+        if waiting {
+          HStack(spacing: 10) {
+            ProgressView()
+            Text("Waiting for your text…").font(MayaFont.callout).foregroundStyle(Palette.muted)
+          }
+        }
+        Problem(text: problem)
+      }
+    } footer: {
+      PrimaryButton(title: waiting ? "Open Messages again" : "Text Maya", busy: busy) {
+        Task {
+          busy = true
+          let r = await model.meet()
+          busy = false
+          problem = r.problem
+          if let link = r.link { waiting = true; openURL(link) } else if model.preview { waiting = true }
+        }
+      }
+      Text("By texting, you agree to get texts from Maya. Msg & data rates may apply. Reply STOP anytime.")
+        .font(MayaFont.caption).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
+      Button("I'll do this later") { model.meetSkipped = true }
+        .font(MayaFont.callout)
+        .foregroundStyle(Palette.muted)
+    }
+  }
+}
+
+// MARK: - 4. Favorites (theirs; she offers more by text once her read is done)
 
 private struct WatchStep: View {
   let model: OnboardingModel
@@ -285,31 +325,8 @@ private struct WatchStep: View {
   @State private var problem: String?
 
   var body: some View {
-    StepFrame(step: .watch, kicker: "Your favorites", title: "Who do you love watching?", subtitle: "She'll keep an eye on them and tell you what's working.") {
-      if let picks = model.picks {
-        if picks.isEmpty {
-          EmptyPicks()
-        } else {
-          ScrollView(.horizontal, showsIndicators: false) {
-            LazyHStack(spacing: 12) {
-              ForEach(picks) { s in
-                PickCard(pick: s, on: model.watched.contains { $0.platform == s.platform && $0.handle == s.handle }) {
-                  Haptics.tap(); Task { await model.toggle(s) }
-                }
-              }
-            }
-            .scrollTargetLayout()
-            .padding(.horizontal, 24)
-          }
-          .scrollTargetBehavior(.viewAligned)
-          .padding(.horizontal, -24)
-        }
-      } else {
-        LoadingPicks()
-      }
-
+    StepFrame(step: .watch, kicker: "Your favorites", title: "Who do you love watching?", subtitle: "Add a few and she'll keep an eye on them for you.") {
       VStack(alignment: .leading, spacing: 10) {
-        Text("Add a creator").font(MayaFont.headline).foregroundStyle(Palette.ink)
         HStack(spacing: 8) {
           Menu {
             Button("Instagram") { platform = "instagram" }
@@ -333,10 +350,19 @@ private struct WatchStep: View {
             .buttonStyle(.bordered)
             .disabled(handle.trimmingCharacters(in: .whitespaces).isEmpty || busy)
         }
-        let own = model.watched.filter { w in !(model.picks ?? []).contains { $0.platform == w.platform && $0.handle == w.handle } }
-        if !own.isEmpty {
-          ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) { ForEach(own) { w in Chip(text: "@\(w.handle)") } }
+        if model.watched.isEmpty {
+          Text("No one in mind? Skip it. Once she's read your posts she'll text you a few she thinks you'd love.")
+            .font(MayaFont.caption).foregroundStyle(Palette.muted)
+        } else {
+          ForEach(model.watched) { w in
+            HStack(spacing: 10) {
+              Image(systemName: w.platform == "tiktok" ? "music.note" : "camera").foregroundStyle(Palette.purple).frame(width: 20)
+              Text("@\(w.handle)").font(MayaFont.headline).foregroundStyle(Palette.ink)
+              Spacer()
+              Image(systemName: "checkmark.circle.fill").foregroundStyle(Palette.ok)
+            }
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Palette.panel))
           }
         }
       }
@@ -344,143 +370,10 @@ private struct WatchStep: View {
     } footer: {
       PrimaryButton(title: model.watched.isEmpty ? "Skip for now" : "Done") { model.watchSeen = true }
     }
-    .task { model.waitForPicks() }
   }
 
   private func add() {
     Task { busy = true; problem = await model.addOwn(platform: platform, handle: handle); if problem == nil { handle = "" }; busy = false }
-  }
-}
-
-private struct PickCard: View {
-  let pick: WatchSuggestion
-  let on: Bool
-  let toggle: () -> Void
-
-  var body: some View {
-    Button(action: toggle) {
-      VStack(alignment: .leading, spacing: 10) {
-        HStack(alignment: .top) {
-          PickAvatar(url: pick.avatarUrl.flatMap(URL.init(string:)), letter: String(pick.handle.prefix(1)).uppercased())
-          Spacer()
-          Image(systemName: on ? "checkmark.circle.fill" : "plus.circle")
-            .font(.title2).foregroundStyle(on ? Palette.purple : Palette.muted)
-        }
-        VStack(alignment: .leading, spacing: 2) {
-          Text(pick.displayName ?? "@\(pick.handle)").font(MayaFont.headline).foregroundStyle(Palette.ink).lineLimit(1)
-          Text("\(pick.platform == "tiktok" ? "TikTok" : "Instagram")\(pick.followers.map { " · \(Format.count($0))" } ?? "")")
-            .font(MayaFont.caption).foregroundStyle(Palette.muted)
-        }
-        Text(pick.why).font(MayaFont.callout).foregroundStyle(Palette.ink).lineLimit(3).multilineTextAlignment(.leading)
-        Spacer(minLength: 0)
-      }
-      .padding(16)
-      .frame(width: 240, height: 210, alignment: .topLeading)
-      .background(RoundedRectangle(cornerRadius: 20).fill(on ? Palette.wash : Palette.panel))
-      .overlay(RoundedRectangle(cornerRadius: 20).stroke(on ? Palette.purple : Palette.line, lineWidth: on ? 2 : 1))
-    }
-    .buttonStyle(.plain)
-    .accessibilityAddTraits(on ? .isSelected : [])
-  }
-}
-
-private struct PickAvatar: View {
-  let url: URL?
-  let letter: String
-  var body: some View {
-    ZStack {
-      Circle().fill(Palette.wash)
-      Text(letter).font(MayaFont.headline).foregroundStyle(Palette.purple)
-      if let url {
-        AsyncImage(url: url) { $0.resizable().scaledToFill() } placeholder: { Color.clear }
-          .clipShape(Circle())
-      }
-    }
-    .frame(width: 48, height: 48)
-  }
-}
-
-private struct LoadingPicks: View {
-  var body: some View {
-    ScrollView(.horizontal, showsIndicators: false) {
-      HStack(spacing: 12) {
-        ForEach(0..<3, id: \.self) { _ in
-          RoundedRectangle(cornerRadius: 20).fill(Palette.wash).frame(width: 240, height: 210)
-        }
-      }
-      .padding(.horizontal, 24)
-    }
-    .padding(.horizontal, -24)
-    .overlay(alignment: .bottomLeading) {
-      Text("Finding creators you might love…").font(MayaFont.caption).foregroundStyle(Palette.muted).padding(.top, 8).offset(y: 22)
-    }
-    .padding(.bottom, 22)
-    .redacted(reason: .placeholder)
-  }
-}
-
-private struct EmptyPicks: View {
-  var body: some View {
-    HStack(alignment: .top, spacing: 12) {
-      FlowerMark(size: 32)
-      Text("No picks yet. Add the creators you love below and she'll keep an eye on them.")
-        .font(MayaFont.callout).foregroundStyle(Palette.muted)
-    }
-    .padding(16)
-    .background(RoundedRectangle(cornerRadius: 18).fill(Palette.panel))
-  }
-}
-
-// MARK: - 3. Meet her
-
-private struct MeetStep: View {
-  let model: OnboardingModel
-  @Environment(\.openURL) private var openURL
-  @State private var phone = ""
-  @State private var consent = false
-  @State private var busy = false
-  @State private var waiting = false
-  @State private var problem: String?
-
-  var body: some View {
-    StepFrame(step: .meet, kicker: "Meet Maya", title: "She lives in your texts.", subtitle: "Text her START; the app is just where her work piles up.") {
-      VStack(alignment: .leading, spacing: 8) {
-        Text("Your mobile number").font(MayaFont.headline).foregroundStyle(Palette.ink)
-        TextField("+1 555 123 4567", text: $phone)
-          .keyboardType(.phonePad)
-          .textContentType(.telephoneNumber)
-          .padding(14)
-          .background(RoundedRectangle(cornerRadius: 12).fill(Palette.panel))
-          .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line))
-      }
-      Toggle(isOn: $consent) {
-        Text("I agree to get texts from Maya at this number. Message and data rates may apply. Reply STOP anytime.")
-          .font(MayaFont.caption).foregroundStyle(Palette.muted)
-      }
-      .toggleStyle(.switch)
-      .tint(Palette.purple)
-      if waiting {
-        HStack(spacing: 10) {
-          ProgressView()
-          Text("Waiting for your START…").font(MayaFont.callout).foregroundStyle(Palette.muted)
-        }
-      }
-      Problem(text: problem)
-    } footer: {
-      PrimaryButton(title: waiting ? "Open Messages again" : "Text her START", busy: busy, disabled: phone.filter(\.isNumber).count < 10 || !consent) {
-        Task {
-          busy = true
-          let r = await model.meet(phone: phone)
-          busy = false
-          problem = r.problem
-          if let link = r.link { waiting = true; openURL(link) } else if model.preview { waiting = true }
-        }
-      }
-      Button("I'll do this later") { model.meetSkipped = true }
-        .font(MayaFont.callout)
-        .foregroundStyle(Palette.muted)
-    }
-    .onAppear { if phone.isEmpty, let saved = model.progress?.phone { phone = saved } }
   }
 }
 

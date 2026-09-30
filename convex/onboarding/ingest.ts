@@ -15,6 +15,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
 import { DossierSchema, DOSSIER_JSON_SHAPE, honestDossier } from "../contracts/dossier";
+import { OFFER } from "./suggest";
 import { driftShare, LANE } from "./lane";
 import { SOUL } from "../agent/soul";
 import { summarize, type Affinity } from "../taste/affinities";
@@ -348,8 +349,9 @@ export const synthesize = internalAction({
     if (!parsed.ok) return { ok: false, reason: `dossier did not validate: ${parsed.error}` };
     const stored = await ctx.runMutation(internal.onboarding.ingest.writeDossier, { creatorId: creator._id, dossier: parsed.dossier, mode, epoch: creator.memoryEpoch ?? 0 });
     if (!stored.stored) return { ok: false, reason: "memory changed during synthesis" };
-    // Favorites are built from this read, so they start the moment it exists (the app shows them live).
-    if (args.reason === "onboarding") await ctx.scheduler.runAfter(0, internal.onboarding.suggest.refreshPicks, { creatorId: creator._id });
+    // Favorites are offered by text a little after her first read, from this read, and only if they
+    // didn't name any themselves (no search, no spend, when they already told us).
+    if (args.reason === "onboarding") await ctx.scheduler.runAfter(OFFER.afterReadMs, internal.onboarding.suggest.offerPicks, { creatorId: creator._id, attempt: 0 });
 
     /**
      * Sprint 4d — lane drift. A lane that was right in March is wrong in September, and
