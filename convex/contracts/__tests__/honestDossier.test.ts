@@ -72,3 +72,28 @@ describe("honestDossier", () => {
     expect(d.works).toHaveLength(1);
   });
 });
+
+describe("one off-list field never costs the whole read (live 2026-09-29)", () => {
+  it("an unknown trend, a cut like '2-3s' or 'n/a', a bad interest source: coerced, and the profile still saves", async () => {
+    const { coerceDossier } = await import("../../onboarding/ingest");
+    const { version: _v, rewrittenAt: _r, readFrom: _f, mode: _m, ...fromModel } = base;
+    const messy = {
+      ...fromModel,
+      trajectory: { postsPerWeekTrend: "rising", viewsTrend: "Down", breaks: [] },
+      fingerprint: { ...fromModel.fingerprint, medianCutSeconds: "n/a", opening: "Text-First", confidence: 3 },
+      persona: { ...fromModel.persona, register: "chill" },
+      interests: [{ label: "hills", source: "vibes", evidence: "x" }, { label: "races", source: "captions", evidence: "y" }],
+    };
+    const c = coerceDossier(messy as never) as typeof messy;
+    expect(c.trajectory).toMatchObject({ postsPerWeekTrend: "unknown", viewsTrend: "down" });
+    expect(c.fingerprint).toMatchObject({ medianCutSeconds: "unknown", opening: "text-first", confidence: 1 });
+    expect(c.persona.register).toBe("unknown");
+    expect(c.interests.map((i) => i.label)).toEqual(["races"]);
+    const r = parseDossier(JSON.stringify(messy), { readFrom: base.readFrom, mode: "thin" });
+    expect(r.ok, JSON.stringify(r)).toBe(true);
+    const two = parseDossier(JSON.stringify({ ...fromModel, fingerprint: { ...fromModel.fingerprint, medianCutSeconds: "2.5" } }), { readFrom: base.readFrom, mode: "thin" });
+    expect((two as { dossier: Dossier }).dossier.fingerprint.medianCutSeconds, "a numeric string is still a number").toBe(2.5);
+    const long = parseDossier(JSON.stringify({ ...fromModel, interests: [{ label: "x", source: "captions", evidence: "e".repeat(150) }], persona: { ...fromModel.persona, summary: "s".repeat(500) } }), { readFrom: base.readFrom, mode: "thin" });
+    expect(long.ok, "over-long text is trimmed, not a rejected read").toBe(true);
+  });
+});

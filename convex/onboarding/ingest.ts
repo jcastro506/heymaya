@@ -311,6 +311,8 @@ export const synthesize = internalAction({
     const baseline = views.length >= 5 ? views[Math.floor(views.length / 2)] : null;
     const reads = await ctx.runQuery(internal.onboarding.watch.readsFor, { creatorId: creator._id });
     const cards = reads.map((r) => ({ postId: (r.card as { postId?: string })?.postId ?? "", depth: r.depth, card: r.card }));
+    // The honesty rules judge what is stored, not the onboarding counters (which a rewrite inherits, and which read 0 for Instagram-only accounts, live 2026-09-29).
+    const facts = { postsRead: posts, watched: cards.filter((c) => c.depth === "watch").length };
     const readFrom = (args.readFrom as Record<string, unknown> | undefined) ?? (learn.dossier as { readFrom?: Record<string, unknown> } | null)?.readFrom ?? { tiktokPosts: 0, instagramPosts: 0, transcripts: 0, watched: cards.filter((c) => c.depth === "watch").length, sampledFromHistory: false };
     const digest = fresh.slice(0, 200).map((r) => ({
       id: r.postId,
@@ -333,7 +335,7 @@ export const synthesize = internalAction({
     if (!result.ok) result = await callModel(ctx, { creatorId: creator._id, purpose: "learn_creator_fallback", model: spec.fallback, messages: [{ role: "system", content: system }, { role: "user", content: user }], temperature: 0.3, maxTokens: 3000, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
     if (!result.ok) return { ok: false, reason: `dossier synthesis failed: ${result.reason}` };
 
-    let parsed = parseDossier(result.content, { readFrom: readFrom as never, mode });
+    let parsed = parseDossier(result.content, { readFrom: readFrom as never, mode, facts });
     /**
      * ⭐ One retry with a bigger answer budget, because the failure mode here is length,
      * not competence: the first live creator's dossier came back cut off mid-object twice.
@@ -343,7 +345,7 @@ export const synthesize = internalAction({
     if (!parsed.ok) {
       console.warn(`[ingest] dossier retry after: ${parsed.error}`);
       const retry = await callModel(ctx, { creatorId: creator._id, purpose: "learn_creator_retry", model: spec.primary, messages: [{ role: "system", content: system }, { role: "user", content: `${user}\n\nYour previous answer was cut off before the JSON closed. Answer again, complete and valid, and keep every string short.` }], temperature: 0.2, maxTokens: 4500, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
-      if (retry.ok) parsed = parseDossier(retry.content, { readFrom: readFrom as never, mode });
+      if (retry.ok) parsed = parseDossier(retry.content, { readFrom: readFrom as never, mode, facts });
     }
     if (!parsed.ok) return { ok: false, reason: `dossier did not validate: ${parsed.error}` };
     const stored = await ctx.runMutation(internal.onboarding.ingest.writeDossier, { creatorId: creator._id, dossier: parsed.dossier, mode, epoch: creator.memoryEpoch ?? 0 });
@@ -389,7 +391,46 @@ export const learnInputs = internalQuery({
 });
 
 /** Extract the JSON object from a completion (models wrap it in fences) and validate. */
-export function parseDossier(content: string, fill: { readFrom: Record<string, number | boolean>; mode: "full" | "thin" | "newCreator" }): { ok: true; dossier: unknown } | { ok: false; error: string } {
+/**
+ * An off-list word in one field ("viewsTrend": "rising", a cut of "2-3s") is not a reason to throw
+ * away the whole read and redo it: live 2026-09-29, two real accounts lost their profile that way,
+ * three full retries each. Anything outside a closed choice becomes "unknown"; a malformed list item
+ * is dropped. Everything else is still Zod's to judge. Pure.
+ */
+export function coerceDossier(o: Record<string, unknown>): Record<string, unknown> {
+  const pick = (v: unknown, allowed: readonly string[]) => (typeof v === "string" && allowed.includes(v.trim().toLowerCase()) ? v.trim().toLowerCase() : "unknown");
+  const obj = (v: unknown) => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined);
+  const out: Record<string, unknown> = { ...o };
+  const persona = obj(o.persona);
+  if (persona) out.persona = { ...persona, register: pick(persona.register, ["casual", "expert", "comic", "calm", "hype", "mixed"]), onCamera: pick(persona.onCamera, ["face", "voice", "hands", "text", "mixed"]) };
+  const fp = obj(o.fingerprint);
+  if (fp) {
+    const cut = typeof fp.medianCutSeconds === "number" ? fp.medianCutSeconds : Number.parseFloat(String(fp.medianCutSeconds));
+    const conf = Number(fp.confidence);
+    out.fingerprint = { ...fp, opening: pick(fp.opening, ["text-first", "speech-first", "visual-first", "mixed"]), medianCutSeconds: Number.isFinite(cut) && cut > 0 ? cut : "unknown", confidence: Number.isFinite(conf) ? Math.max(0, Math.min(1, conf)) : 0 };
+  }
+  const tr = obj(o.trajectory);
+  if (tr) out.trajectory = { ...tr, postsPerWeekTrend: pick(tr.postsPerWeekTrend, ["up", "flat", "down"]), viewsTrend: pick(tr.viewsTrend, ["up", "flat", "down"]), breaks: Array.isArray(tr.breaks) ? tr.breaks : [] };
+  const sources = ["follows", "sounds", "linkInBio", "admired", "collections", "highlights", "stated", "posts", "captions", "transcripts"];
+  if (Array.isArray(o.interests)) out.interests = o.interests.filter((i) => sources.includes(String(obj(i)?.source)));
+  for (const k of ["works", "doesNot"] as const) if (Array.isArray(o[k])) out[k] = (o[k] as unknown[]).filter((c) => typeof obj(c)?.claim === "string" && Array.isArray(obj(c)?.evidencePostIds) && (obj(c)!.evidencePostIds as unknown[]).length > 0);
+  // Over-long text is trimmed, never a reason to reject the read (the same live day: an interest's evidence at 150 chars).
+  const clipTo = (v: unknown, n: number) => (typeof v === "string" && v.length > n ? `${v.slice(0, n - 1)}…` : v);
+  const p2 = obj(out.persona);
+  if (p2) out.persona = { ...p2, summary: clipTo(p2.summary, 400), whyTheyPost: clipTo(p2.whyTheyPost, 200), look: clipTo(p2.look, 200), voice: clipTo(p2.voice, 200), humor: clipTo(p2.humor, 160), presence: clipTo(p2.presence, 160), world: clipTo(p2.world, 200), cares: clipTo(p2.cares, 160) };
+  if (Array.isArray(out.interests)) out.interests = (out.interests as Array<Record<string, unknown>>).map((i) => ({ ...i, evidence: clipTo(i.evidence, 120) }));
+  const aud = obj(o.audience);
+  if (aud) out.audience = { ...aud, whoComments: clipTo(aud.whoComments, 200), asks: Array.isArray(aud.asks) ? aud.asks.slice(0, 5) : [], arguesAbout: Array.isArray(aud.arguesAbout) ? aud.arguesAbout.slice(0, 3) : [] };
+  const fp2 = obj(out.fingerprint);
+  if (fp2) out.fingerprint = { ...fp2, textStyle: clipTo(fp2.textStyle, 120), energy: clipTo(fp2.energy, 80), settings: Array.isArray(fp2.settings) ? fp2.settings.slice(0, 5) : [] };
+  const voice = obj(o.voice);
+  if (voice) out.voice = { ...voice, sampleLines: Array.isArray(voice.sampleLines) ? voice.sampleLines.slice(0, 5) : [], avoid: Array.isArray(voice.avoid) ? voice.avoid.slice(0, 5) : [] };
+  for (const k of ["works", "doesNot"] as const) if (Array.isArray(out[k])) out[k] = (out[k] as Array<Record<string, unknown>>).map((c) => ({ ...c, claim: clipTo(c.claim, 200) }));
+  if (Array.isArray(o.triedAndAbandoned)) out.triedAndAbandoned = (o.triedAndAbandoned as Array<Record<string, unknown>>).map((t) => ({ ...t, what: clipTo(t.what, 120) }));
+  return out;
+}
+
+export function parseDossier(content: string, fill: { readFrom: Record<string, number | boolean>; mode: "full" | "thin" | "newCreator"; facts?: { postsRead: number; watched: number } }): { ok: true; dossier: unknown } | { ok: false; error: string } {
   const m = content.match(/\{[\s\S]*\}/);
   if (!m) return { ok: false, error: "no JSON object in completion" };
   let obj: Record<string, unknown>;
@@ -398,11 +439,11 @@ export function parseDossier(content: string, fill: { readFrom: Record<string, n
   } catch (e) {
     return { ok: false, error: `JSON parse: ${String(e)}` };
   }
-  const candidate = { version: 0, rewrittenAt: new Date().toISOString(), readFrom: fill.readFrom, mode: fill.mode, ...obj };
+  const candidate = coerceDossier({ version: 0, rewrittenAt: new Date().toISOString(), readFrom: fill.readFrom, mode: fill.mode, ...obj });
   const r = DossierSchema.safeParse(candidate);
   if (!r.success) return { ok: false, error: r.error.issues.slice(0, 5).map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };
   const rf = fill.readFrom as { tiktokPosts?: number; instagramPosts?: number; watched?: number };
-  return { ok: true, dossier: honestDossier(r.data, { postsRead: Number(rf.tiktokPosts ?? 0) + Number(rf.instagramPosts ?? 0), watched: Number(rf.watched ?? 0) }) };
+  return { ok: true, dossier: honestDossier(r.data, fill.facts ?? { postsRead: Number(rf.tiktokPosts ?? 0) + Number(rf.instagramPosts ?? 0), watched: Number(rf.watched ?? 0) }) };
 }
 
 /**
