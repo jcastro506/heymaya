@@ -126,7 +126,20 @@ export const snapshot = internalQuery({
   },
 });
 
-/** Steps 2–7, in order. Each step is logged on its own so a partial run is visible. */
+/** Step 8: the Clerk user. A 404 is success (already gone); eval and sim creators have no real sign-in. */
+export async function deleteClerkUser(clerkUserId: string, fetcher: typeof fetch = fetch): Promise<string> {
+  const key = process.env.CLERK_SECRET_KEY;
+  if (!/^user_[A-Za-z0-9]+$/.test(clerkUserId)) return "no sign-in to delete";
+  if (!key) return "not configured; the sign-in remains";
+  try {
+    const r = await fetcher(`https://api.clerk.com/v1/users/${clerkUserId}`, { method: "DELETE", headers: { authorization: `Bearer ${key}` } });
+    return r.ok ? "deleted" : r.status === 404 ? "already gone" : `delete failed: HTTP ${r.status}`;
+  } catch (e) {
+    return `delete failed: ${e instanceof Error ? clip(e.message, 80) : "error"}`;
+  }
+}
+
+/** Steps 2–8, in order. Each step is logged on its own so a partial run is visible. */
 export const run = internalAction({
   args: { creatorId: v.id("creators") },
   handler: async (ctx, a): Promise<{ ok: boolean; steps: Record<string, string> }> => {
@@ -164,7 +177,7 @@ export const run = internalAction({
 
     // 5. Telegram: the final message BEFORE the pairing goes.
     const identity = resolveTelegramBotIdentity();
-    if (creator.channel.kind === "imessage" && creator.phone) {
+    if (creator.channel.kind === "imessage" && creator.phone && creator.channel.paired) {
       // §23: the final text goes to their number, outside the log that is about to be purged.
       const r = await ctx.runAction(internal.core.imessage.sendRaw, { to: creator.phone, text: FINAL_MESSAGE }).catch(() => ({ ok: false }));
       steps.telegram = r.ok ? "final text sent to their phone, pairing removed" : "final text failed, pairing removed";
@@ -188,6 +201,10 @@ export const run = internalAction({
       }
     }
     steps.files = `${files} of ${snap.fileIds.length}`;
+
+    // 8. The sign-in, last, so signing in again can't find a half-deleted account. The app has no web
+    // session to do this from, so the server does it (the web route's own delete then finds it gone).
+    steps.identity = await deleteClerkUser(creator.clerkUserId);
     console.log(`[deletion] ${a.creatorId}: ${JSON.stringify(steps)}`);
     return { ok: true, steps };
   },

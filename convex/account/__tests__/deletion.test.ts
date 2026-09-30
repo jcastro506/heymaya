@@ -102,3 +102,27 @@ describe("deletion", () => {
     expect(other.creators).toBe(1);
   });
 });
+
+describe("deleting the sign-in (step 8)", () => {
+  it("deletes the Clerk user by id; 404 is already gone; sims and a missing key never call out", async () => {
+    const { deleteClerkUser } = await import("../deletion");
+    const calls: Array<{ url: string; method?: string }> = [];
+    const fake = (status: number) => (async (url: string, init?: RequestInit) => { calls.push({ url, method: init?.method }); return new Response(null, { status }); }) as unknown as typeof fetch;
+    const prev = process.env.CLERK_SECRET_KEY;
+    process.env.CLERK_SECRET_KEY = "sk_test_x";
+    try {
+      expect(await deleteClerkUser("user_abc123", fake(200))).toBe("deleted");
+      expect(calls[0]).toEqual({ url: "https://api.clerk.com/v1/users/user_abc123", method: "DELETE" });
+      expect(await deleteClerkUser("user_abc123", fake(404))).toBe("already gone");
+      expect(await deleteClerkUser("user_abc123", fake(500))).toBe("delete failed: HTTP 500");
+      calls.length = 0;
+      for (const id of ["eval:partner", "eval-load:1", "user_../../x", ""]) expect(await deleteClerkUser(id, fake(200))).toBe("no sign-in to delete");
+      expect(calls).toHaveLength(0);
+      delete process.env.CLERK_SECRET_KEY;
+      expect(await deleteClerkUser("user_abc123", fake(200))).toBe("not configured; the sign-in remains");
+      expect(calls).toHaveLength(0);
+    } finally {
+      if (prev === undefined) delete process.env.CLERK_SECRET_KEY; else process.env.CLERK_SECRET_KEY = prev;
+    }
+  });
+});

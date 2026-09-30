@@ -37,6 +37,16 @@ export const PAIRING_TTL_MS = 15 * 60_000;
 
 /** What she says the moment they pair, before the read is done. */
 export const HELLO = `hey, i'm maya. i'm your content person: i find what's working in your lane, turn it into ideas you'd actually film, and help you get them posted.\n---\ni'm watching your posts right now so i know what you make and what's landing. give me a few minutes.\n---\nwhile i do: send me a video you've filmed and i'll write the caption and pick a sound, or send any link that caught your eye and i'll tell you if it's worth making your own.`;
+/**
+ * Her first read may be written before they ever text (they skipped "Text Maya", or the line wasn't set
+ * up yet). Its delivery waits a day for pairing and then gives up, so pairing later hands it over again:
+ * otherwise they'd get the opening question about a read they never saw.
+ */
+async function redeliverFirstRead(ctx: MutationCtx, firstRead: Doc<"messages"> | null): Promise<void> {
+  if (!firstRead || firstRead.deliveredAt !== undefined) return;
+  await ctx.runMutation(internal.core.jobs.enqueue, { kind: "deliver_message", idempotencyKey: `redeliver:${firstRead._id}`, creatorId: firstRead.creatorId, payloadJson: JSON.stringify({ messageId: firstRead._id }) });
+}
+
 /** The first hello, with the opening for their plan (§26). Pure. */
 export function helloFor(partnerships: boolean): string {
   void partnerships;
@@ -147,6 +157,7 @@ export const claimPairingByPhone = internalMutation({
     await ctx.db.patch(creator._id, { phone: args.phone, phoneVerifiedAt: now, channel: { paired: true, pairedAt: now, kind: "imessage" }, pairingToken: undefined, pairingExpiresAt: undefined, updatedAt: now });
     const firstRead = await ctx.db.query("messages").withIndex("by_creator_and_dedupe", (q) => q.eq("creatorId", creator._id).eq("dedupeKey", `first_read:${creator._id}`)).first();
     await ctx.db.patch(creator._id, { conversationalOnboardingAt: creator.conversationalOnboardingAt ?? now });
+    await redeliverFirstRead(ctx, firstRead);
     await ctx.runMutation(internal.core.messages.send, firstRead
       ? { creatorId: creator._id, surface: "imessage", body: openingQuestionFor(partnershipsOpen(creator)), dedupeKey: `onboarding_goal:${creator._id}`, proactive: true, kind: "status", awaitingAnswer: true }
       : { creatorId: creator._id, surface: "imessage", body: helloFor(partnershipsOpen(creator)), dedupeKey: `hello:${creator._id}`, proactive: true, kind: "status", awaitingAnswer: false });
@@ -222,6 +233,7 @@ export const claimPairing = internalMutation({
     // what she is doing, so pairing is never followed by silence. Once, ever.
     const firstRead = await ctx.db.query("messages").withIndex("by_creator_and_dedupe", (q) => q.eq("creatorId", creator._id).eq("dedupeKey", `first_read:${creator._id}`)).first();
     await ctx.db.patch(creator._id, { conversationalOnboardingAt: creator.conversationalOnboardingAt ?? now });
+    await redeliverFirstRead(ctx, firstRead);
     await ctx.runMutation(internal.core.messages.send, firstRead
       ? { creatorId: creator._id, surface: "telegram", body: openingQuestionFor(partnershipsOpen(creator)), dedupeKey: `onboarding_goal:${creator._id}`, proactive: true, kind: "status", awaitingAnswer: true }
       : { creatorId: creator._id, surface: "telegram", body: helloFor(partnershipsOpen(creator)), dedupeKey: `hello:${creator._id}`, proactive: true, kind: "status", awaitingAnswer: false });
