@@ -50,10 +50,12 @@ export const gathered = internalQuery({
 
 /** Dev: her ideas plus an equal number from a plain chatbot with the same bio, each scored by the judge. */
 export const collect = internalAction({
-  args: { runId: v.string() },
+  // `only`: one account per call (judging a whole run's ideas outlasts a single action); `batch` keeps the calls together.
+  args: { runId: v.string(), only: v.optional(v.number()), batch: v.optional(v.string()) },
   handler: async (ctx, a): Promise<{ batch: string; items: Item[]; accounts: number; failures: string[] }> => {
-    const rows = await ctx.runQuery(internal.eval.ideaTaste.gathered, { runId: a.runId });
-    const batch = `${a.runId}-${Date.now().toString(36)}`;
+    const all = await ctx.runQuery(internal.eval.ideaTaste.gathered, { runId: a.runId });
+    const rows = a.only === undefined ? all : all.slice(a.only, a.only + 1);
+    const batch = a.batch ?? `${a.runId}-${Date.now().toString(36)}`;
     const items: Item[] = [];
     const failures: string[] = [];
     for (const r of rows) {
@@ -67,9 +69,11 @@ export const collect = internalAction({
         } catch { failures.push(`${JSON.stringify(r.account.handles)}: baseline unparseable`); }
       } else failures.push(`${JSON.stringify(r.account.handles)}: baseline ${b.reason.slice(0, 80)}`);
       for (const m of mine) {
-        const j = await judge(ctx, { text: m.text, kind: "scout", evidence: { expect: "one idea worth filming, specific to this creator", account: r.account } });
-        items.push({ ...m, account: r.account, judge: j ? { ...j, model: REGISTRY.critic.primary } : null, batch });
+        items.push({ ...m, account: r.account, judge: null, batch });
       }
+      // Judged together: one account's ideas at a time would still be slow one by one.
+      const judged = await Promise.all(items.slice(-mine.length).map((m) => judge(ctx, { text: m.text, kind: "scout", evidence: { expect: "one idea worth filming, specific to this creator", account: r.account } })));
+      judged.forEach((j, k) => { items[items.length - mine.length + k].judge = j ? { ...j, model: REGISTRY.critic.primary } : null; });
     }
     return { batch, items, accounts: rows.length, failures };
   },
