@@ -11,6 +11,8 @@ Growing means showing up on other people's posts and answering your own comments
 - Tap a post to open it in TikTok or Instagram; tick it when they've commented. Three a day is the goal; days at the goal in a row are the streak (their timezone).
 - Each tick is a `userActions` row (`engage.commented`), so she knows what they did.
 - `markEngaged` is the one writer; a chat tool can call the same function.
+- **Her text** (`sendText`, on the hourly cadence at midday their time): up to three of those posts with their links, written by code from rows. At most once a day and four a week; only with two or more she hasn't sent; not when they've already commented today; counted toward the daily cap, and held by quiet hours, pause and the back-off when they aren't replying.
+- **Never the same post twice.** `creators.engage` remembers the newest 200 posts she has texted (`sent`) and the newest 200 they commented on (`commented`). A texted post is never texted again; a commented post never returns, in a text or in the app.
 
 ## Built: an opinion on a draft has her full tools (2026-09-30)
 "Will this do well?" on a draft file now runs her lookup step (their history with the structure, the lane's benchmark, what they've said before) and carries `theirCraft`: how their best and weakest watched posts open and pace. She still gives a read and three fixes, never a score or a predicted view count.
@@ -19,5 +21,5 @@ Growing means showing up on other people's posts and answering your own comments
 1. **Their own comments, through the connection they already have** (Zernio's inbox API: reading is unmetered and included; webhooks for new comments). Today we read comments through the scraper at 15 credits a post on Instagram. Surface the few worth answering (a real question, a collab, a complaint) and the questions that are video ideas. Replies are theirs to write; if she ever drafts one, it is approved one at a time.
    - Instagram: read, reply, hide are supported. Liking comments is restricted to Zernio's own testers.
    - TikTok: reading needs the TikTok for Business connection; whether replying works is unclear in their docs and must be tested against a real account before it is promised. DMs only for TikTok Business accounts.
-2. **A nudge by text right after they post** (when engaging helps most), inside the daily cap.
+2. **Time the text to right after they post** (when engaging helps most) instead of midday.
 3. **A "check a draft" screen in the app** with her notes pinned to the moments they're about, and the track record of her calls.
