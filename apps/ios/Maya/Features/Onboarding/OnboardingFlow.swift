@@ -221,6 +221,10 @@ private struct ConnectStep: View {
   let model: OnboardingModel
   @State private var busy: String?
   @State private var problem: String?
+  /// Instagram only connects as a Creator or Business account; the steps come from the server's one
+  /// definition (account/setup.ts), the same ones the Analytics screen shows.
+  @State private var igSetup = Live<AccountSetup?>("account/setup:advice", args: ["platform": "instagram", "accountType": "personal"])
+  @State private var showIGSetup = false
 
   private var accounts: [SocialStatus.Account] { model.social?.accounts.filter { !$0.needsReconnect } ?? [] }
 
@@ -245,7 +249,16 @@ private struct ConnectStep: View {
               Image(systemName: "checkmark.circle.fill").font(.title2).foregroundStyle(Palette.ok)
             } else {
               Button {
-                Task { busy = platform; problem = await model.connect(platform: platform); busy = nil }
+                Task {
+                  busy = platform
+                  problem = await model.connect(platform: platform)
+                  busy = nil
+                  // Came back without Instagram attached: almost always a personal account. Show how to switch.
+                  if platform == "instagram", !model.preview, !(model.social?.accounts.contains { $0.platform == "instagram" } ?? false) {
+                    problem = "Instagram didn't connect. It needs a Creator account first: here's how."
+                    showIGSetup = true
+                  }
+                }
               } label: {
                 if busy == platform { ProgressView() } else { Text("Connect").font(MayaFont.headline) }
               }
@@ -256,6 +269,16 @@ private struct ConnectStep: View {
           .padding(16)
           .background(RoundedRectangle(cornerRadius: 18).fill(Palette.panel))
           .overlay(RoundedRectangle(cornerRadius: 18).stroke(account != nil ? Palette.ok.opacity(0.5) : Palette.line))
+          if platform == "instagram", account == nil {
+            Button { Haptics.tap(); showIGSetup = true } label: {
+              Label("Needs a Creator account (free, about a minute). How to switch", systemImage: "info.circle")
+                .font(MayaFont.caption)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 4)
+            .padding(.top, -4)
+          }
         }
       }
       Problem(text: problem)
@@ -271,6 +294,14 @@ private struct ConnectStep: View {
         model.connectSeen = true
       }
       .disabled(accounts.isEmpty)
+    }
+    .task { await igSetup.run() }
+    .sheet(isPresented: $showIGSetup) {
+      if case .value(let setup?) = igSetup.state {
+        AccountSetupSheet(platform: "instagram", setup: setup)
+      } else {
+        ProgressView().presentationDetents([.medium])
+      }
     }
   }
 }
