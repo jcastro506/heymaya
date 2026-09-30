@@ -11,6 +11,7 @@ import { api, internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { creatorForIdentity } from "../core/identity";
 import { getStripe, priceIdFor, TRIAL_DAYS } from "./stripe";
+import { planSwitchConfigId } from "./portal";
 import type { Tier } from "./tiers";
 
 /** Where Stripe hands them back when they came from the iPhone app: a page that returns them to it (P1). */
@@ -77,7 +78,9 @@ export const openPortal = action({
     if (!me) return { ok: false, reason: "no account" };
     if (!me.plan.stripeCustomerId) return { ok: false, reason: "no billing yet" };
     const appUrl = process.env.APP_URL ?? "http://localhost:3000";
-    const session = await getStripe().billingPortal.sessions.create({ customer: me.plan.stripeCustomerId, return_url: a.returnTo === "app" ? `${appUrl}${APP_RETURN}?state=done` : `${appUrl}/app/settings` });
+    const stripe = getStripe();
+    const configuration = await planSwitchConfigId(stripe).catch(() => undefined);
+    const session = await stripe.billingPortal.sessions.create({ customer: me.plan.stripeCustomerId, ...(configuration ? { configuration } : {}), return_url: a.returnTo === "app" ? `${appUrl}${APP_RETURN}?state=done` : `${appUrl}/app/settings` });
     return { ok: true, url: session.url };
   },
 });
@@ -105,8 +108,11 @@ export const changePlan = action({
       const sub = await stripe.subscriptions.retrieve(me.plan.stripeSubscriptionId!);
       const item = sub.items.data[0];
       const interval = a.interval ?? (item?.price.recurring?.interval === "year" ? "annual" : "monthly");
+      // Our own portal configuration: Stripe's default has plan switching off (live 2026-09-29).
+      const configuration = await planSwitchConfigId(stripe);
       const session = await stripe.billingPortal.sessions.create({
         customer: me.plan.stripeCustomerId!,
+        configuration,
         return_url: `${appUrl}${APP_RETURN}?state=done`,
         flow_data: {
           type: "subscription_update_confirm",
