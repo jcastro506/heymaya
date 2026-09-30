@@ -654,6 +654,8 @@ export default defineSchema({
     skill: v.string(),
     label: v.union(v.literal("good"), v.literal("bad")),
     reason: v.string(),
+    /** The idea taste test (2026-09-30): what was wrong with it, in the operator's words. */
+    flags: v.optional(v.array(v.string())),
     by: v.string(),
     at: v.number(),
   }).index("by_at", ["at"]),
