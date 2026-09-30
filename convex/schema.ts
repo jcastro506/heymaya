@@ -55,7 +55,7 @@ export default defineSchema({
     /** Favorites she proposes, computed once her first read is written (M3); the app follows them live. */
     picks: v.optional(v.object({ at: v.number(), items: v.array(v.any()) })),
     /** The engagement round: which of today's posts they commented on, and their streak of days at the goal. */
-    engage: v.optional(v.object({ day: v.string(), done: v.array(v.string()), streak: v.number(), lastGoalDay: v.optional(v.string()) })),
+    engage: v.optional(v.object({ day: v.string(), done: v.array(v.string()), streak: v.number(), lastGoalDay: v.optional(v.string()), /** Never again: posts they commented on, and posts she already texted them (the newest 200 of each). */ commented: v.optional(v.array(v.string())), sent: v.optional(v.array(v.string())) })),
     dossierVersion: v.number(),
     memoryEpoch: v.optional(v.number()),
     conversationalOnboardingAt: v.optional(v.number()),

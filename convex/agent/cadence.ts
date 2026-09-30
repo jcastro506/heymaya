@@ -19,6 +19,7 @@ import { buildPrefix, producedStamp } from "./context";
 import { critique } from "./critic";
 import { pickMilestone } from "./history";
 import { localHourMinute } from "../scout/gate";
+import { ENGAGE } from "../engage/round";
 import { THRESHOLDS } from "../config/thresholds";
 import { pairedRows } from "../core/schedule";
 import { bare, clip } from "../lib/clip";
@@ -121,13 +122,15 @@ export function followerMilestone(followers: number | null, said: string[]): { k
 
 export const dueNow = internalQuery({
   args: { now: v.number() },
-  handler: async (ctx, a): Promise<Array<{ creatorId: Id<"creators">; touch: "morning" | "quiet" }>> => {
-    const out: Array<{ creatorId: Id<"creators">; touch: "morning" | "quiet" }> = [];
+  handler: async (ctx, a): Promise<Array<{ creatorId: Id<"creators">; touch: "morning" | "quiet" | "engage" }>> => {
+    const out: Array<{ creatorId: Id<"creators">; touch: "morning" | "quiet" | "engage" }> = [];
     for (const c of await pairedRows(ctx, { activeOnly: true })) {
       if (c.status === "onboarding") continue;
       const { hour } = localHourMinute(a.now, c.timezone);
       if (hour === morningHourFor(c.quietHours)) out.push({ creatorId: c.creatorId, touch: "morning" });
       if (hour === CADENCE.quietHourLocal) out.push({ creatorId: c.creatorId, touch: "quiet" });
+      // The engagement round by text: a few fresh posts in their lane worth a comment (engage/round.ts holds the rules).
+      if (hour === ENGAGE.textHourLocal) out.push({ creatorId: c.creatorId, touch: "engage" });
     }
     return out;
   },
@@ -195,7 +198,7 @@ export const runAll = internalAction({
   handler: async (ctx): Promise<{ scheduled: number }> => {
     const now = Date.now();
     const due = await ctx.runQuery(internal.agent.cadence.dueNow, { now });
-    for (const d of due) await ctx.scheduler.runAfter(0, d.touch === "morning" ? internal.agent.cadence.morning : internal.agent.cadence.quiet, { creatorId: d.creatorId });
+    for (const d of due) await ctx.scheduler.runAfter(0, d.touch === "morning" ? internal.agent.cadence.morning : d.touch === "engage" ? internal.engage.round.sendText : internal.agent.cadence.quiet, { creatorId: d.creatorId });
     // The evening question runs on its own window, every hour, for everyone paired.
     await ctx.scheduler.runAfter(0, internal.agent.cadence.howDidItGoAll, {});
     return { scheduled: due.length };
