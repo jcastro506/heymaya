@@ -67,7 +67,7 @@ export const DOSSIER_JSON_SHAPE = `{
   "interests": [{"label": "", "source": "follows|sounds|linkInBio|admired|collections|highlights|stated", "evidence": "≤120 chars"}],
   "audience": {"whoComments": "≤200", "asks": ["≤5"], "arguesAbout": ["≤3"], "evidencePostIds": [""]},
   "formatsUsed": [{"formatFingerprint": "", "label": "", "count": 0, "medianMultiple": "1.0, or null under 3 posts", "evidencePostIds": [""]}],
-  "fingerprint": {"opening": "text-first|speech-first|visual-first|mixed|unknown", "medianCutSeconds": "seconds, or 'unknown' unless you watched cards that show it", "textStyle": "≤120", "settings": ["≤5"], "energy": "≤80", "confidence": 0.0},
+  "fingerprint": {"opening": "text-first|speech-first|visual-first|mixed|unknown", "medianCutSeconds": "a number of seconds from watched cards, or \"unknown\"", "textStyle": "≤120", "settings": ["≤5"], "energy": "≤80", "confidence": 0.0},
   "voice": {"sampleLines": ["≤5 real lines they said"], "avoid": ["≤5"]},
   "works": [{"claim": "≤200", "evidencePostIds": [">=1"]}],
   "doesNot": [{"claim": "≤200", "evidencePostIds": [">=1"]}],
