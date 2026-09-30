@@ -173,6 +173,8 @@ import type * as onboarding_admired from "../onboarding/admired.js";
 import type * as onboarding_clusters from "../onboarding/clusters.js";
 import type * as onboarding_conversation from "../onboarding/conversation.js";
 import type * as onboarding_dev from "../onboarding/dev.js";
+import type * as onboarding_firstGlance from "../onboarding/firstGlance.js";
+import type * as onboarding_firstGlanceRules from "../onboarding/firstGlanceRules.js";
 import type * as onboarding_firstRead from "../onboarding/firstRead.js";
 import type * as onboarding_ingest from "../onboarding/ingest.js";
 import type * as onboarding_lane from "../onboarding/lane.js";
@@ -399,6 +401,8 @@ declare const fullApi: ApiFromModules<{
   "onboarding/clusters": typeof onboarding_clusters;
   "onboarding/conversation": typeof onboarding_conversation;
   "onboarding/dev": typeof onboarding_dev;
+  "onboarding/firstGlance": typeof onboarding_firstGlance;
+  "onboarding/firstGlanceRules": typeof onboarding_firstGlanceRules;
   "onboarding/firstRead": typeof onboarding_firstRead;
   "onboarding/ingest": typeof onboarding_ingest;
   "onboarding/lane": typeof onboarding_lane;

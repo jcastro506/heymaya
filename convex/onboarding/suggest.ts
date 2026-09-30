@@ -7,6 +7,7 @@
 import { v } from "convex/values";
 import { internalAction, internalQuery } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
+import { addTracked } from "../agent/manage";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
@@ -358,5 +359,77 @@ export const storePicks = internalMutation({
   handler: async (ctx, a): Promise<null> => {
     if (await ctx.db.get(a.creatorId)) await ctx.db.patch(a.creatorId, { picks: { at: Date.now(), items: a.items } });
     return null;
+  },
+});
+
+/** Text 4 of day one: the favorites offer. */
+export const OFFER = { afterReadMs: 10 * 60_000, retryMs: 10 * 60_000, maxAttempts: 12, show: 3 } as const;
+
+export function offerLine(picks: Array<{ handle: string }>): string {
+  const names = picks.slice(0, OFFER.show).map((p) => `@${p.handle}`);
+  const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0];
+  return `also: found ${names.length === 1 ? "a creator" : `${names.length} creators`} in your lane i can keep an eye on for you: ${list}. want me to watch them?`;
+}
+
+export const offerFacts = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ paired: boolean; watching: number; firstReadSent: boolean; offered: boolean; picks: Suggestion[] | null } | null> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!c) return null;
+    const tracked = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"trackedAccounts">[];
+    const msg = (key: string) => ctx.db.query("messages").withIndex("by_creator_and_dedupe", (q) => q.eq("creatorId", a.creatorId).eq("dedupeKey", key)).first();
+    return {
+      paired: c.channel.paired === true,
+      watching: tracked.filter((t) => t.status !== "removed").length,
+      firstReadSent: (await msg(`first_read:${a.creatorId}`)) !== null,
+      offered: (await msg(`favpicks:${a.creatorId}`)) !== null,
+      picks: c.picks ? (c.picks.items as Suggestion[]) : null,
+    };
+  },
+});
+
+/**
+ * A little after her first read: if they named nobody to watch, find a few from her read and offer
+ * them by text, with a one-tap yes. Waits for pairing and for the first read to go out; never twice.
+ */
+export const offerPicks = internalAction({
+  args: { creatorId: v.id("creators"), attempt: v.number() },
+  handler: async (ctx, a): Promise<{ offered: boolean; reason: string }> => {
+    const f = await ctx.runQuery(internal.onboarding.suggest.offerFacts, { creatorId: a.creatorId });
+    if (!f) return { offered: false, reason: "no creator" };
+    if (f.offered) return { offered: false, reason: "already offered" };
+    if (f.watching > 0) return { offered: false, reason: "they already chose who to watch" };
+    if (!f.paired || !f.firstReadSent) {
+      if (a.attempt + 1 >= OFFER.maxAttempts) return { offered: false, reason: "never paired or no first read; stood down" };
+      await ctx.scheduler.runAfter(OFFER.retryMs, internal.onboarding.suggest.offerPicks, { creatorId: a.creatorId, attempt: a.attempt + 1 });
+      return { offered: false, reason: f.paired ? "waiting for her first read" : "waiting for pairing" };
+    }
+    let picks = f.picks;
+    if (!picks) {
+      picks = (await ctx.runAction(internal.onboarding.suggest.suggestFor, { creatorId: a.creatorId, waitMs: 0 })).suggestions;
+      await ctx.runMutation(internal.onboarding.suggest.storePicks, { creatorId: a.creatorId, items: picks });
+    }
+    if (!picks.length) return { offered: false, reason: "no picks worth offering" };
+    await ctx.runMutation(internal.core.messages.send, {
+      creatorId: a.creatorId, surface: "telegram", body: offerLine(picks), dedupeKey: `favpicks:${a.creatorId}`, proactive: true, kind: "status", awaitingAnswer: false,
+      buttons: [{ id: "favpicks:yes", label: "watch them" }, { id: "favpicks:no", label: "no thanks" }],
+    });
+    return { offered: true, reason: "offered" };
+  },
+});
+
+/** Their yes to the offer: the offered picks join who she watches (the same writer as adding by hand). */
+export const acceptPicks = internalMutation({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ added: string[] }> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    const picks = ((c?.picks?.items ?? []) as Suggestion[]).slice(0, OFFER.show);
+    const added: string[] = [];
+    for (const p of picks) {
+      const existing = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"trackedAccounts">[];
+      const r = await addTracked(ctx, a.creatorId, p.platform, p.handle, existing, { addedBy: "suggested", why: p.why });
+      if (r.ok) added.push(p.handle);
+    }
+    return { added };
   },
 });

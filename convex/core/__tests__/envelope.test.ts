@@ -44,7 +44,12 @@ describe("first contact", () => {
     expect(rows.filter((m) => m.creatorId === b && m.awaitingAnswer).length).toBe(1);
     expect(HELLO).toMatch(/maya/);
     expect(HELLO).not.toContain("?");
-    expect(HELLO).toMatch(/someone on your team/);
+    expect(HELLO).toMatch(/content person/);
+    expect(HELLO).toMatch(/watching your posts right now/);
+    // Before her read is done she offers only what works without it: captions and sounds, and opinions on a link.
+    expect(HELLO).toMatch(/caption and pick a sound/);
+    expect(HELLO).toMatch(/any link/);
+    expect(HELLO).not.toMatch(/idea for you|what to post/);
     expect(HELLO.split("\n---\n").length, "three short orientation texts before the read").toBe(3);
   });
 });

@@ -244,3 +244,35 @@ export const progress = query({
     return { state: paired ? "paired" : dossier ? "read" : posts.length ? "reading" : "none", posts: posts.length, transcripts, dossier, paired, ingest: ingest?.status ?? null, firstRead: firstRead?.status ?? null, timezone: creator.timezone, quietHours: creator.quietHours, channelKind: creator.channel.kind ?? "imessage", phone: creator.phone ?? null, planStatus: creator.plan.status, tier: creator.plan.tier ?? null };
   },
 });
+
+/**
+ * Today's "she's reading your posts" card (day one): live counts while her first read runs, then
+ * what she saw. Only rows; nothing here is written for the card.
+ */
+export const reading = query({
+  args: {},
+  handler: async (ctx): Promise<{ stage: "waiting" | "reading" | "read"; posts: number; watched: number; toWatch: number; lastWatched: string | null; summary: string | null; topFormat: string | null; readAt: number | null } | null> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+    const c = (await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject)).first()) as Doc<"creators"> | null;
+    if (!c) return null;
+    const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).take(400)) as Doc<"ownPosts">[];
+    const reads = (await ctx.db.query("ownPostReads").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).take(200)) as Doc<"ownPostReads">[];
+    const watchedReads = reads.filter((r) => r.depth === "watch");
+    const last = watchedReads.sort((x, y) => y._creationTime - x._creationTime)[0];
+    const lastPost = last ? posts.find((p) => p._id === last.ownPostId) : undefined;
+    const d = c.dossier as { persona?: { summary?: string }; formatsUsed?: Array<{ label: string; count: number }>; rewrittenAt?: string } | undefined;
+    const top = [...(d?.formatsUsed ?? [])].sort((x, y) => y.count - x.count)[0];
+    const toWatch = posts.filter((p) => (p.sample ?? []).length > 0 && p.contentType === "video").length;
+    return {
+      stage: d ? "read" : posts.length ? "reading" : "waiting",
+      posts: posts.length,
+      watched: watchedReads.length,
+      toWatch: Math.max(toWatch, watchedReads.length),
+      lastWatched: lastPost ? lastPost.caption.split("\n")[0].slice(0, 80) : null,
+      summary: d?.persona?.summary ?? null,
+      topFormat: top?.label ?? null,
+      readAt: d?.rewrittenAt ? Date.parse(d.rewrittenAt) : null,
+    };
+  },
+});

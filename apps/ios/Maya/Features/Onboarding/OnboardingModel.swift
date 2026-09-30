@@ -3,7 +3,7 @@ import Foundation
 import Observation
 
 /// Onboarding in the app (spec §5, M3): plan → connect → meet her → worth watching → the app.
-/// Watching comes last so her read of their posts (which the picks are built from) has time to land.
+/// Favorites come last: optional, their own picks; she offers more by text once her read is done.
 /// The server owns where they are (plan, connected accounts, paired), so killing the app, reinstalling
 /// or signing in on another phone resumes at the right screen. Only the two skippable steps are
 /// remembered on the phone, because skipping them writes nothing to the server.
@@ -50,21 +50,6 @@ struct SocialStatus: Decodable, Equatable {
   struct Account: Decodable, Equatable { let platform: String; let username: String?; let needsReconnect: Bool }
   let status: String
   let accounts: [Account]
-}
-
-struct WatchSuggestion: Decodable, Equatable, Identifiable {
-  let platform: String
-  let handle: String
-  let followers: Double?
-  let why: String
-  let displayName: String?
-  var avatarUrl: String? = nil
-  var id: String { "\(platform):\(handle)" }
-}
-
-struct ServerPicks: Decodable, Equatable {
-  let ready: Bool
-  let items: [WatchSuggestion]
 }
 
 struct Watched: Decodable, Equatable, Identifiable {
@@ -134,25 +119,6 @@ final class OnboardingModel {
     }
   }
 
-  // MARK: - Favorites picks
-
-  /// Computed on the server the moment her first read of their posts is written, and followed live,
-  /// so they're usually waiting by the time this screen shows. If the read is slow or failed, the
-  /// screen asks directly after a while rather than spin forever.
-  private(set) var picks: [WatchSuggestion]?
-  private var fallbackTask: Task<Void, Never>?
-  static let picksFallbackAfter: Duration = .seconds(30)
-
-  func waitForPicks() {
-    if preview, picks == nil { fallbackTask = Task { picks = await suggestions() }; return }
-    guard picks == nil, fallbackTask == nil else { return }
-    fallbackTask = Task {
-      try? await Task.sleep(for: Self.picksFallbackAfter)
-      guard !Task.isCancelled, picks == nil else { return }
-      picks = await suggestions()
-    }
-  }
-
   /// Makes their account (idempotent), then follows the three things that decide the step.
   func run() async {
     guard !preview else { return }
@@ -161,9 +127,6 @@ final class OnboardingModel {
     await withTaskGroup(of: Void.self) { group in
       group.addTask { await self.follow("onboarding/start:progress", OnboardingProgress?.self) { self.progress = $0; self.loaded = true } }
       group.addTask { await self.follow("connections/zernio:status", SocialStatus?.self) { self.social = $0 } }
-      group.addTask { await self.follow("onboarding/admired:picks", ServerPicks?.self) { p in
-        if let p, p.ready { self.picks = p.items }
-      } }
       group.addTask { await self.follow("onboarding/admired:list", [Watched]?.self) { self.watched = $0 ?? [] } }
     }
   }
@@ -219,30 +182,6 @@ final class OnboardingModel {
     return r.accounts == 0 ? "Nothing's attached yet. If you finished connecting, give it a moment and check again." : nil
   }
 
-  func suggestions() async -> [WatchSuggestion] {
-    if preview {
-      try? await Task.sleep(for: .milliseconds(600))
-      return [
-        .init(platform: "tiktok", handle: "hillsforbreakfast", followers: 182_000, why: "Films the same early-morning hill runs you do, and her hooks land in the first second.", displayName: "Hills for Breakfast"),
-        .init(platform: "instagram", handle: "slowmilesclub", followers: 64_000, why: "A peer at your size who turns easy-pace advice into posts people save.", displayName: "Slow Miles Club"),
-        .init(platform: "tiktok", handle: "racedaymaddie", followers: 410_000, why: "Race-week honesty like yours, a step ahead of you.", displayName: nil),
-      ]
-    }
-    return (try? await convex.action("onboarding/admired:suggest")) ?? []
-  }
-
-  func toggle(_ s: WatchSuggestion) async {
-    if let row = watched.first(where: { $0.platform == s.platform && $0.handle == s.handle }) {
-      if preview { watched.removeAll { $0.id == row.id }; return }
-      struct R: Decodable { let ok: Bool }
-      _ = try? await convex.mutation("onboarding/admired:remove", with: ["id": row.id]) as R
-    } else {
-      if preview { watched.append(.init(id: s.id, platform: s.platform, handle: s.handle)); return }
-      struct R: Decodable { let ok: Bool }
-      _ = try? await convex.mutation("onboarding/admired:add", with: ["platform": s.platform, "handle": s.handle, "addedBy": "suggested", "why": s.why]) as R
-    }
-  }
-
   func addOwn(platform: String, handle: String) async -> String? {
     let clean = handle.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "@", with: "")
     guard !clean.isEmpty else { return nil }
@@ -255,16 +194,15 @@ final class OnboardingModel {
     return nil
   }
 
-  /// Saves their number and opens Messages with START to her. Pairing lands from the server.
-  func meet(phone: String) async -> (link: URL?, problem: String?) {
+
+  /// The link that opens Messages with START and a one-time code to her. Texting it is what pairs
+  /// them (the server reads their number from that text), so nothing here asks for a phone number.
+  func meet() async -> (link: URL?, problem: String?) {
     if preview { return (nil, nil) }
-    struct Saved: Decodable { let ok: Bool; let error: String? }
     struct Pairing: Decodable { let ok: Bool; let deepLink: String?; let error: String? }
     do {
-      let saved: Saved = try await convex.mutation("onboarding/start:setPhone", with: ["phone": phone, "consent": true])
-      guard saved.ok else { return (nil, saved.error.map { Self.plain($0) } ?? "That number didn't work. Check it and try again.") }
       let pairing: Pairing = try await convex.mutation("core/pairing:createPairingLink")
-      guard pairing.ok, let link = pairing.deepLink.flatMap(URL.init(string:)) else { return (nil, "Your number is saved. Texting her isn't ready yet; she'll text you first.") }
+      guard pairing.ok, let link = pairing.deepLink.flatMap(URL.init(string:)) else { return (nil, "Texting her isn't ready yet. You can do this later from the app.") }
       return (link, nil)
     } catch {
       print("[Onboarding] meet: \(error)")

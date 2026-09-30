@@ -36,9 +36,9 @@ describe("favorites picks", () => {
     expect(await t.query(api.onboarding.admired.picks, {})).toBeNull();
   });
 
-  it("they start the moment her first read is stored (onboarding only, not every rewrite)", async () => {
+  it("after her first read is stored, the favorites offer is scheduled (onboarding only, not every rewrite)", async () => {
     const { readFileSync } = await import("node:fs");
     const src = readFileSync(new URL("../ingest.ts", import.meta.url), "utf8");
-    expect(src).toMatch(/if \(args\.reason === "onboarding"\) await ctx\.scheduler\.runAfter\(0, internal\.onboarding\.suggest\.refreshPicks/);
+    expect(src).toMatch(/if \(args\.reason === "onboarding"\) await ctx\.scheduler\.runAfter\(OFFER\.afterReadMs, internal\.onboarding\.suggest\.offerPicks/);
   });
 });
