@@ -17,6 +17,7 @@ export type Awareness = "state" | "noticed" | "reacted";
 export const ASK_WINDOW_MS = 10 * 60_000;
 
 export const AWARENESS: Record<string, Awareness> = {
+  "engage.opened": "noticed",
   "idea.save": "state",
   "idea.unsave": "state",
   "idea.pass": "noticed",
