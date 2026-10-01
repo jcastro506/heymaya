@@ -37,6 +37,10 @@ import { applyBump, emptyDay } from "./budgets";
 import { THRESHOLDS } from "../config/thresholds";
 import { clip } from "../lib/clip";
 import { phoneRailHold } from "./phoneRail";
+import { inQuietHours } from "../scout/gate";
+
+/** A proactive text may go in quiet hours only into a conversation this live (they wrote this recently). */
+export const QUIET_LIVE_MS = 30 * 60_000;
 
 /**
  * S0: the ONE definition of what spends the daily allowance of interruptions. Used by the rails,
@@ -304,6 +308,19 @@ export const send = internalMutation({
         return { messageId: null, sent: false, held: "one partnerships text a day" };
       }
     }
+    // Quiet hours, held here for every proactive text (2026-10-01): before, only the scout's rails checked
+    // them, so a 1am signup's first plan would have gone at 1:20. A text into a conversation they're in
+    // right now (they wrote in the last half hour) still goes: they're up, and it's what they asked for.
+    if (args.proactive && args.surface !== "system" && args.surface !== "web") {
+      const now = args.ts ?? Date.now();
+      const c = (await ctx.db.get(args.creatorId)) as Doc<"creators"> | null;
+      if (c && inQuietHours(now, c.timezone, c.quietHours)) {
+        const lastIn = await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", args.creatorId).gte("ts", now - QUIET_LIVE_MS)).filter((q) => q.eq(q.field("direction"), "in")).first();
+        // Their START counts as writing: the pairing text is recorded just after her hello goes.
+        const justPaired = c.channel.pairedAt !== undefined && now - c.channel.pairedAt < QUIET_LIVE_MS;
+        if (!lastIn && !justPaired) return { messageId: null, sent: false, held: "quiet hours" };
+      }
+    }
     // X1: on a phone number, Linq's chat health and the silence ladder (core/phoneRail.ts) hold proactive
     // texts here, beside the cap, so no caller can skip them. A reply to them always goes.
     if (args.proactive && args.surface !== "system" && args.surface !== "web") {
@@ -379,7 +396,7 @@ async function phoneHold(ctx: MutationCtx, creatorId: Id<"creators">, kind: stri
   const proactiveToday = rows.filter((m) => m.direction === "out" && m.proactive && isSameDayInZone(m.ts, now, c.timezone)).length;
   const lineRow = c.channel.line ? await ctx.db.query("syncState").withIndex("by_key", (q) => q.eq("key", `linq:line:${c.channel.line}`)).unique() : null;
   const lineState = lineRow ? (JSON.parse(lineRow.value) as { status: string | null; reputation: string | null }) : null;
-  return phoneRailHold({ now, kind, health: c.channel.health, lineState, optedOutAt: c.channel.optedOutAt, lastInboundAt, unanswered, proactiveToday });
+  return phoneRailHold({ now, kind, health: c.channel.health, lineState, optedOutAt: c.channel.optedOutAt, lastInboundAt, unanswered, proactiveToday, pairedAt: c.channel.pairedAt ?? null });
 }
 
 /**
