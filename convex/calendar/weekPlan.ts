@@ -7,6 +7,7 @@
  * model asked to restate five times gets one wrong. Her voice is in the framing line only.
  */
 
+import { deviceBusyOf } from "./device";
 import { v } from "convex/values";
 import { HOURLY_SPREAD_MS, spreadDelays } from "../core/fanout";
 import { eventDescription, ideaForEvent } from "./eventBody";
@@ -57,6 +58,8 @@ export const inputsFor = internalQuery({
       busy: [
         ...events.filter((e) => e.status === "active" && !e.allDay).map((e) => ({ start: e.start, end: e.end })),
         ...blocks.filter((b) => b.status !== "deleted").map((b) => ({ start: b.start, end: b.end })),
+        // Busy times from their iPhone's calendar, start and end only (calendar/device).
+        ...deviceBusyOf(creator),
       ],
       model,
       ideas: [...hearted, ...ideas].map((i) => ({

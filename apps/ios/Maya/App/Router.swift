@@ -9,6 +9,8 @@ enum Route: Equatable {
   case tab(AppTab)
   case idea(String)
   case post(String)
+  /// "want them on your calendar? tap here" (calendar/device): Today, then the iPhone's permission prompt.
+  case calendar
 
   static func parse(_ url: URL) -> Route? {
     let isOurs = url.scheme == "maya" || (["https", "http"].contains(url.scheme ?? "") && (url.host.map { $0 == "hey-maya.ai" || $0.hasSuffix(".hey-maya.ai") } ?? false))
@@ -27,6 +29,7 @@ enum Route: Equatable {
       }
     case "app":
       switch parts.count > 1 ? parts[1] : "today" {
+      case "calendar": return .calendar
       case "ideas": return .tab(.ideas)
       case "lane", "settings", "you", "plan", "billing": return .tab(.you)
       default: return .tab(.today) // today, results, plan: all live on Today now
@@ -44,6 +47,8 @@ final class Router {
   /// An object to push once its tab is showing; the tab clears it after pushing.
   var pendingIdea: String?
   var pendingPost: String?
+  /// Set by the calendar link; Today asks for the calendar once it's showing, then clears it.
+  var pendingCalendar = false
 
   func open(_ url: URL) {
     guard let route = Route.parse(url) else { return }
@@ -51,6 +56,7 @@ final class Router {
     case .tab(let t): tab = t
     case .idea(let id): tab = .ideas; pendingIdea = id
     case .post(let id): tab = .today; pendingPost = id
+    case .calendar: tab = .today; pendingCalendar = true
     }
   }
 }

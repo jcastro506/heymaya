@@ -5,6 +5,7 @@
  * code; picking, and saying why, is hers.
  */
 
+import { deviceBusyOf } from "./device";
 import { v } from "convex/values";
 import { internalQuery, type QueryCtx } from "../_generated/server";
 import type { Doc } from "../_generated/dataModel";
@@ -64,12 +65,12 @@ export function availabilitySection(windows: Window[], bestHours: string): strin
 export async function availabilityFor(ctx: QueryCtx, creator: Doc<"creators">, now: number, days?: number): Promise<{ windows: Window[]; bestHours: string }> {
   const events = (await ctx.db.query("calendarEvents").withIndex("by_creator_start", (q) => q.eq("creatorId", creator._id).gte("start", now - 3_600_000).lte("start", now + 8 * 86_400_000)).take(200)) as Doc<"calendarEvents">[];
   const blocks = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", creator._id).gte("start", now - 3_600_000).lte("start", now + 8 * 86_400_000)).take(200)) as Doc<"calendarBlocks">[];
-  const busy: Busy[] = [...events.filter((e) => e.status === "active" && !e.allDay).map((e) => ({ start: e.start, end: e.end })), ...blocks.filter((b) => b.status !== "deleted").map((b) => ({ start: b.start, end: b.end }))];
+  const busy: Busy[] = [...events.filter((e) => e.status === "active" && !e.allDay).map((e) => ({ start: e.start, end: e.end })), ...blocks.filter((b) => b.status !== "deleted").map((b) => ({ start: b.start, end: b.end })), ...deviceBusyOf(creator)];
   const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).order("desc").take(60)) as Doc<"ownPosts">[];
   const model = buildPostTimeModel(posts.map((p) => ({ createTime: p.createTime, multiple: p.reachMultiple ?? p.multiple ?? null })), creator.timezone);
   // Their habits (two real blocks) set the hour; before that it is the planner's default and says so.
   const habits = await habitsFor(ctx, creator, now);
-  const windows = freeWindows({ now, timeZone: creator.timezone, busy, filmHour: habits.hour, days, quiet: creator.quietHours });
+  const windows = freeWindows({ now, timeZone: creator.timezone, busy, filmHour: creator.filmPrefs?.hour ?? habits.hour, days, quiet: creator.quietHours });
   return { windows, bestHours: bestHoursLine(model, creator.timezone) };
 }
 

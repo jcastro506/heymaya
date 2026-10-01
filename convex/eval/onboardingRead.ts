@@ -107,13 +107,14 @@ export const clear = internalMutation({
  * (`core/pairing:claimPairingByPhone`, as their START text would) can run on it. Test creators only.
  */
 export const pairingCode = internalMutation({
-  args: { creatorId: v.id("creators") },
+  args: { creatorId: v.id("creators"), timezone: v.optional(v.string()) },
   handler: async (ctx, a): Promise<{ token: string }> => {
     if (process.env.ENVIRONMENT_NAME === "production") throw new Error("never on production");
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c || !c.clerkUserId.startsWith(OR_PREFIX)) throw new Error("only an onboarding-read test creator");
     const token = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, "0")).join(""); // the shape a real START carries
-    await ctx.db.patch(a.creatorId, { pairingToken: token, pairingExpiresAt: Date.now() + 10 * 60_000, channel: { paired: false, kind: "imessage" } });
+    // A time zone lets a sim be "9:40pm" without waiting for the evening.
+    await ctx.db.patch(a.creatorId, { pairingToken: token, pairingExpiresAt: Date.now() + 10 * 60_000, channel: { paired: false, kind: "imessage" }, ...(a.timezone ? { timezone: a.timezone } : {}) });
     return { token };
   },
 });

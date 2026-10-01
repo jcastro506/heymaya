@@ -64,6 +64,8 @@ targets:
         MayaConvexURL: $(MAYA_CONVEX_URL)
         MayaClerkPublishableKey: $(MAYA_CLERK_PUBLISHABLE_KEY)
         LSApplicationQueriesSchemes: [sms, tiktok, instagram]
+        NSCalendarsFullAccessUsageDescription: Maya puts the filming sessions you book on your calendar, and plans them around when you're busy. She only sees when you're busy, never what the event is.
+        NSCalendarsUsageDescription: Maya puts the filming sessions you book on your calendar, and plans them around when you're busy.
         CFBundleURLTypes:
           - CFBundleURLName: ai.heymaya.maya
             CFBundleURLSchemes: [maya]

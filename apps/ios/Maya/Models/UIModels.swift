@@ -144,6 +144,8 @@ struct Taste: Decodable, Equatable {
 
 struct Plan: Decodable, Equatable {
   let connected: Bool
+  /// The iPhone calendar's answer: nil until asked ("granted" / "denied").
+  var deviceCalendar: String? = nil
   let timezone: String
   let blocks: [PlanBlock]
   let events: [PlanEvent]
