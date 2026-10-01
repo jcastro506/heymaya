@@ -20,6 +20,11 @@ describe("is her read still running", () => {
     await t.run(async (ctx) => {
       for (let i = 0; i < 3; i++) await ctx.db.insert("ownPosts", { creatorId: c, platform: "tiktok", postId: `p${i}`, url: `https://t/${i}`, createTime: Date.now() - i, contentType: "video", caption: `post ${i}`, hashtags: [], metrics: { views: 1, likes: 0, comments: 0, shares: 0 }, metricsAsOf: Date.now(), source: "scrape", sample: ["top"] } as never);
     });
+    // Nothing under way (an account read long ago with no first-read text on record): not "still reading".
+    expect(await t.query(internal.onboarding.start.readStillRunning, { creatorId: c })).toBeNull();
+    const reading = (id: typeof c) => t.run((ctx) => ctx.db.insert("jobs", { kind: "ingest_catalogue", idempotencyKey: `ingest:${id}`, creatorId: id, status: "running", attempts: 0, maxAttempts: 3, runAfter: Date.now(), createdAt: Date.now(), updatedAt: Date.now(), deadlineAt: Date.now() + 60_000 } as never));
+    await reading(c);
+    await reading(other);
     expect(await t.query(internal.onboarding.start.readStillRunning, { creatorId: c })).toEqual({ posts: 3, watched: 0, toWatch: 3 });
     expect(await t.query(internal.onboarding.start.readStillRunning, { creatorId: other })).toEqual({ posts: 0, watched: 0, toWatch: 0 });
     await t.run((ctx) => ctx.db.insert("messages", { creatorId: c, direction: "out", surface: "imessage", body: "the read", ts: Date.now(), dedupeKey: `first_read:${c}`, kind: "first_read" }));
@@ -30,6 +35,7 @@ describe("is her read still running", () => {
   it("every reply path is told (the shared context), the read itself and proactive texts are not", async () => {
     const t = convexTest(schema, modules);
     const c = await t.run((ctx) => seedCreator(ctx, "ctx1"));
+    await t.run((ctx) => ctx.db.insert("jobs", { kind: "first_read", idempotencyKey: `first_read:${c}`, creatorId: c, status: "queued", attempts: 0, maxAttempts: 3, runAfter: Date.now(), createdAt: Date.now(), updatedAt: Date.now(), deadlineAt: Date.now() + 60_000 } as never));
     const msg = await t.run((ctx) => ctx.db.insert("messages", { creatorId: c, direction: "in", surface: "imessage", body: "is the london stuff working?", ts: Date.now() }));
     const reply = await t.query(internal.agent.context.gather, { creatorId: c, messageId: msg });
     expect(reply?.history).toMatch(/still going through their posts/);

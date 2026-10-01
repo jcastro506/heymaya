@@ -83,7 +83,9 @@ export const setPlan = internalMutation({
     };
     // Agreeing to (or tweaking) the month she proposed keeps its goal and its why (agent/monthPlan).
     const prev = c.growthPlan as GrowthPlan | undefined;
+    // A running plan changed in chat keeps its goal, its why and its review date; what they changed is theirs.
     if (prev && prev.status === "proposed") Object.assign(plan, { goal: prev.goal, goalStated: prev.goalStated, builtOn: prev.builtOn, howItHelps: prev.howItHelps, reviewAt: prev.reviewAt, formats: plan.formats.length ? plan.formats : prev.formats, hypothesis: a.hypothesis ? plan.hypothesis : prev.hypothesis, postsPerWeek: a.postsPerWeek !== undefined ? plan.postsPerWeek : prev.postsPerWeek });
+    else if (prev && prev.status === "running" && prev.goal) Object.assign(plan, { goal: prev.goal, goalStated: prev.goalStated, builtOn: prev.builtOn, howItHelps: prev.howItHelps, reviewAt: prev.reviewAt });
     await ctx.db.patch(a.creatorId, { growthPlan: plan, updatedAt: now });
     return { ok: true, plan };
   },

@@ -63,3 +63,22 @@ describe("on rows", () => {
     expect(readFileSync(new URL("../../onboarding/firstRead.ts", import.meta.url), "utf8")).toMatch(/FIRST_PLAN_DELAY_MS, internal\.agent\.monthPlan\.proposeThenWeek/);
   });
 });
+
+describe("an explicit pace, applied by code", () => {
+  it("reads only a clear pace", async () => {
+    const { obviousCadence } = await import("../classify");
+    expect(obviousCadence("2 a week is more realistic for me")).toBe(2);
+    expect(obviousCadence("let's do three posts a week")).toBe(3);
+    expect(obviousCadence("2x/week")).toBe(2);
+    expect(obviousCadence("twice a week")).toBe(2);
+    expect(obviousCadence("should i post 3 a week?"), "a question is hers to answer").toBeNull();
+    expect(obviousCadence("i went to the gym 4 times last week")).toBeNull();
+    expect(obviousCadence("10 a week")).toBeNull();
+  });
+  it("is wired before her reply, only with a plan in place, and keeps the plan's goal", () => {
+    const src = readFileSync(new URL("../converse.ts", import.meta.url), "utf8");
+    expect(src).toMatch(/obviousCadence\(target\.body\)[\s\S]{0,400}internal\.agent\.growth\.setPlan/);
+    expect(src).toMatch(/gp\.status === "proposed" \|\| gp\.status === "running"/);
+    expect(readFileSync(new URL("../growth.ts", import.meta.url), "utf8")).toMatch(/prev\.status === "running" && prev\.goal\) Object\.assign\(plan, \{ goal: prev\.goal/);
+  });
+});
