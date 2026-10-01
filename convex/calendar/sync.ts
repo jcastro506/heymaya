@@ -139,9 +139,9 @@ export const syncOne = internalAction({
 
 export const creatorTz = internalQuery({
   args: { creatorId: v.id("creators") },
-  handler: async (ctx, a): Promise<{ timezone: string } | null> => {
+  handler: async (ctx, a): Promise<{ timezone: string; quietHours: { start: string; end: string } } | null> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
-    return c ? { timezone: c.timezone } : null;
+    return c ? { timezone: c.timezone, quietHours: c.quietHours } : null;
   },
 });
 

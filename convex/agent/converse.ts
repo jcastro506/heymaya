@@ -593,7 +593,12 @@ export const run = internalAction({
     const greetingRule = bareGreeting ? "\n\nThis is only a greeting. Greet them back naturally in one short line. Mention a pending item only if the recent conversation or current calendar proves it is pending. Do not turn an old dossier idea into a current plan. Do not ask what they want, their focus, or what's on their mind." : "";
     const unclearRule = /^\s*[?.!]+\s*$/.test(target.body) ? "\n\nTheir message contains no request you can infer. Ask what they need in a few natural words. Do not answer a previous topic, quote a voice example, or invent a pending task." : "";
     const deleteRule = /\b(delete|close)\b.{0,20}\b(account|everything)\b/i.test(target.body) ? "\n\nFor account deletion, be direct and neutral: in the app, You → Settings → Delete account. Say it cancels the subscription and removes their Maya data, connections, calendar rows, messages, and uploaded files. Do not add sympathy, guilt, praise, cheerleading, or a personal goodbye." : "";
-    const suffix = buildSuffix({ recent: recent.filter((m) => m._id !== target._id), target }) + `\n\nCurrent user-message evidence ID (internal, do not display): ${target._id}` + partnershipEvidence + recalled + greetingRule + unclearRule + deleteRule + (args.handledNote ? `\n\n(Already done by code this turn, and already said to them: "${args.handledNote.slice(0, 200)}". Answer the REST of their message now; do not repeat the done part.)` : "");
+    // Said again right by their message, where it's heard (day sim, 2026-10-01): mid-read, "what do you think of my
+    // stuff so far?" got an early verdict; "2 a week is more realistic" got "let's lock that in" and no plan change.
+    const stillReading = await ctx.runQuery(internal.onboarding.start.readStillRunning, { creatorId: creator._id });
+    const readingNow = stillReading ? `\n\nRight now you're still going through their posts (${stillReading.watched} of ${stillReading.toWatch || stillReading.posts}). No verdict on their posts yet, not even a first impression: say you'll come back with it in a few minutes.` : "";
+    const proposedPlan = (creator.growthPlan as { status?: string } | undefined)?.status === "proposed" ? "\n\nYour month plan is proposed, not agreed. If this message agrees with it or changes it (posts a week, formats, the test), call growth_plan set with the change first, then say what changed." : "";
+    const suffix = buildSuffix({ recent: recent.filter((m) => m._id !== target._id), target }) + `\n\nCurrent user-message evidence ID (internal, do not display): ${target._id}` + partnershipEvidence + recalled + greetingRule + unclearRule + deleteRule + readingNow + proposedPlan + (args.handledNote ? `\n\n(Already done by code this turn, and already said to them: "${args.handledNote.slice(0, 200)}". Answer the REST of their message now; do not repeat the done part.)` : "");
     const apiKey = process.env.OPENROUTER_API_KEY ?? "";
     const spec = REGISTRY.writer;
 
@@ -667,13 +672,20 @@ export const run = internalAction({
         model: spec.primary,
         messages: [
           { role: "system", content: prefix },
-          { role: "user", content: `${suffix}${relationshipContext}\n\nYour previous reply was rejected for: ${verdict.problems.join(", ")} (${verdict.note}). Send it again as one plain text message, fixing exactly that. No markdown, no asterisks, no headings, no bullet list.\n\nPrevious reply:\n${text}` },
+          { role: "user", content: `${suffix}${relationshipContext}\n\nYour previous reply was rejected for: ${verdict.problems.join(", ")} (${verdict.note}). Send it again as one plain text message, fixing exactly that. Never say you changed, booked, moved or removed anything your tools didn't actually change this turn: if you need something from them first, ask. No markdown, no asterisks, no headings, no bullet list.\n\nPrevious reply:\n${text}` },
         ],
         temperature: spec.temperature,
         maxTokens: spec.maxTokens,
         apiKey,
       });
-      if (rewrite.ok && rewrite.content.trim()) text = rewrite.content.trim();
+      // Truth beats style (day sim, 2026-10-01): the critic rejected an honest "what time is dinner? i'll move it
+      // then" and the rewrite said "i moved sunday filming to 12 pm" with no tool having moved anything. A rewrite
+      // that claims an action no tool took never replaces a draft that didn't.
+      const rewritten = rewrite.ok ? rewrite.content.trim() : "";
+      if (rewritten && claimsUnsupportedAction(rewritten, inv.trace) && !unsupportedAction) {
+        console.error(`[converse] rewrite claimed an action no tool took; kept the honest draft for ${creator._id}`);
+        criticSkipped = true;
+      } else if (rewritten) text = rewritten;
       else criticSkipped = true;
     }
     text = respectEmojiHabit(text, gathered.voice);

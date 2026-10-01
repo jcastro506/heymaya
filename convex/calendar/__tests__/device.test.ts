@@ -5,6 +5,7 @@
  */
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import schema from "../../schema";
 import { api, internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
@@ -125,5 +126,32 @@ describe("the week's name", () => {
     expect(weekLabel([slot(thu + 24 * H)], thu, "UTC", false)).toBe("this week");
     expect(weekLabel([slot(thu + 5 * 24 * H)], thu, "UTC", false)).toBe("next week");
     expect(weekLabel([slot(thu + 24 * H)], thu, "UTC", true)).toBe("the rest of this week");
+  });
+});
+
+describe("asking first: quiet hours and their own plans", () => {
+  it("a session inside quiet hours or over their own event is a question first; their yes books it", async () => {
+    const t = convexTest(schema, modules);
+    const { c } = await world(t, "ask1");
+    const day = new Date(Date.now() + 2 * 24 * H).toISOString().slice(0, 10);
+    const add = (whenLocal: string, extra: Record<string, unknown> = {}) => t.action(internal.calendar.tools.write, { creatorId: c, op: "block_add", args: { kind: "film", whenLocal, minutes: 45, title: "x", ...extra } });
+    const late = await add(`${day}T23:00`);
+    expect(late.ok).toBe(false);
+    expect(late.reason).toMatch(/inside their quiet hours \(22:00–07:00\); ask/);
+    expect((await add(`${day}T23:00`, { quietOk: true })).ok, "they said yes").toBe(true);
+    // Their dinner, on their calendar.
+    await t.run((ctx) => ctx.db.insert("calendarEvents", { creatorId: c, calendarId: "primary", externalId: "dinner", title: "Dinner with Sam", start: Date.parse(`${day}T18:00:00Z`), end: Date.parse(`${day}T20:00:00Z`), allDay: false, recurring: false, class: "filmable", classifiedBy: "code", status: "active", updatedAt: Date.now(), createdAt: Date.now() }));
+    const clash = await add(`${day}T18:30`);
+    expect(clash.reason).toMatch(/overlaps Dinner with Sam .*ask before double-booking/);
+    expect((await add(`${day}T18:30`, { overlapOk: true })).ok).toBe(true);
+    // A private event clashes too, unnamed.
+    await t.run((ctx) => ctx.db.insert("calendarEvents", { creatorId: c, calendarId: "primary", externalId: "p", title: "", start: Date.parse(`${day}T09:00:00Z`), end: Date.parse(`${day}T10:00:00Z`), allDay: false, recurring: false, class: "private", classifiedBy: "code", status: "active", updatedAt: Date.now(), createdAt: Date.now() }));
+    expect((await add(`${day}T09:15`)).reason).toMatch(/overlaps something private on their calendar/);
+  });
+
+  it("a rewrite never replaces an honest draft with an action no tool took", () => {
+    const src = readFileSync(new URL("../../agent/converse.ts", import.meta.url), "utf8");
+    expect(src).toMatch(/claimsUnsupportedAction\(rewritten, inv\.trace\) && !unsupportedAction/);
+    expect(src).toMatch(/Never say you changed, booked, moved or removed anything your tools didn't actually change/);
   });
 });

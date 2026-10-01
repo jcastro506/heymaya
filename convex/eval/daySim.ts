@@ -28,7 +28,7 @@ import { clip } from "../lib/clip";
 import { encrypt } from "../lib/encryption";
 import { TABLES_BY_CREATOR, PURGE_INDEX } from "../account/deletion";
 import { liveBlocks } from "../calendar/liveness";
-import { DEVICE_CALENDAR_ID } from "../calendar/device";
+import { DEVICE_CALENDAR_ID, devicePlanFor } from "../calendar/device";
 
 const H = 3_600_000;
 const D = 24 * H;
@@ -52,7 +52,7 @@ const LIFE = [
 const CRUD: Step[] = [
   { say: "can you plan my week?", expect: "she proposes this week's sessions around their real calendar (not over the dinner, the standup or the dentist)" },
   { say: "book it", expect: "every proposed session is booked and on their calendar; she says so" },
-  { say: "move the first film session to the next day, same time", expect: "exactly that session moves one day later, same time; nothing else changes; she says the new time" },
+  { say: "move the first film session to the next day, same time", expect: "that film session moves one day later, same time; its own edit and post sessions may follow it (editing can't come before filming) but nothing unrelated changes; she says the new times" },
   { say: "drop the edit block", expect: "the edit session is removed (if there is more than one, she asks which or removes the one they clearly meant); nothing else changes" },
   { say: "add a film session sunday at 11am", expect: "a new film session on Sunday 11:00 their time, booked; she confirms" },
   { say: "can we do one at 11pm tonight?", expect: "she doesn't book inside their quiet hours without saying so; offers a sensible time or asks" },
@@ -282,10 +282,7 @@ export const step = internalAction({
 
 export const phonePlan = internalQuery({
   args: { creatorId: v.id("creators") },
-  handler: async (ctx, a) => {
-    const { devicePlanFor } = await import("../calendar/device");
-    return await devicePlanFor(ctx, (await ctx.db.get(a.creatorId)) as Doc<"creators">);
-  },
+  handler: async (ctx, a) => await devicePlanFor(ctx, (await ctx.db.get(a.creatorId)) as Doc<"creators">),
 });
 export const phoneSynced = internalMutation({
   args: { creatorId: v.id("creators"), written: v.array(v.object({ id: v.string(), eventId: v.string() })), removed: v.array(v.string()) },

@@ -205,6 +205,16 @@ export const clash = internalQuery({
   },
 });
 
+/** One of THEIR own events overlapping a time (day sim 2026-10-01: "move it to my dinner with sam" double-booked silently). Private ones count, unnamed. */
+export const lifeClash = internalQuery({
+  args: { creatorId: v.id("creators"), start: v.number(), end: v.number() },
+  handler: async (ctx, a): Promise<{ title: string; start: number; end: number } | null> => {
+    const rows = (await ctx.db.query("calendarEvents").withIndex("by_creator_start", (q) => q.eq("creatorId", a.creatorId).gte("start", a.start - 12 * 3_600_000).lte("start", a.end)).take(100)) as Doc<"calendarEvents">[];
+    const hit = rows.find((e) => e.status === "active" && !e.allDay && e.start < a.end && e.end > a.start);
+    return hit ? { title: hit.class === "private" || !hit.title ? "something private on their calendar" : hit.title, start: hit.start, end: hit.end } : null;
+  },
+});
+
 /** The edit and post blocks that follow a film block for the same idea (or plan slot), from `since` on. */
 export const dependents = internalQuery({
   args: { blockId: v.id("calendarBlocks"), since: v.number() },
