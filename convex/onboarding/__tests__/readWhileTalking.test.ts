@@ -27,11 +27,18 @@ describe("is her read still running", () => {
     expect(await t.query(internal.onboarding.start.readStillRunning, { creatorId: other }), "their read is theirs").not.toBeNull();
   });
 
-  it("her reply is told, and told not to judge their posts yet", () => {
-    const src = readFileSync(new URL("../../agent/converse.ts", import.meta.url), "utf8");
-    expect(src).toMatch(/internal\.onboarding\.start\.readStillRunning/);
-    expect(src).toMatch(/do not summarize, rank or judge their posts/);
-    expect(src).toMatch(/deleteRule \+ readingRule/);
+  it("every reply path is told (the shared context), the read itself and proactive texts are not", async () => {
+    const t = convexTest(schema, modules);
+    const c = await t.run((ctx) => seedCreator(ctx, "ctx1"));
+    const msg = await t.run((ctx) => ctx.db.insert("messages", { creatorId: c, direction: "in", surface: "imessage", body: "is the london stuff working?", ts: Date.now() }));
+    const reply = await t.query(internal.agent.context.gather, { creatorId: c, messageId: msg });
+    expect(reply?.history).toMatch(/still going through their posts/);
+    expect(reply?.history).toMatch(/do not summarize, rank or judge their posts/);
+    const proactive = await t.query(internal.agent.context.gather, { creatorId: c });
+    expect(proactive?.history ?? "").not.toMatch(/still going through their posts/);
+    await t.run((ctx) => ctx.db.insert("messages", { creatorId: c, direction: "out", surface: "imessage", body: "the read", ts: Date.now(), dedupeKey: `first_read:${c}`, kind: "first_read" }));
+    const after = await t.query(internal.agent.context.gather, { creatorId: c, messageId: msg });
+    expect(after?.history ?? "").not.toMatch(/still going through their posts/);
   });
 });
 

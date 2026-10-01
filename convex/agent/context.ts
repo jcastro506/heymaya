@@ -4,6 +4,8 @@
  * across two consecutive turns.
  */
 
+import { stillReading, stillReadingSection } from "../onboarding/reading";
+import { knowThemSection, knownAbout } from "../onboarding/knowThem";
 import { internalQuery, type QueryCtx } from "../_generated/server";
 import { v } from "convex/values";
 import { appActionsSection, unseenActions } from "../core/act";
@@ -74,7 +76,15 @@ export const gather = internalQuery({
     const welcome = await welcomeBackFor(ctx, creator, target);
     const newIdeas = welcome ? "" : unseenSection(await unseenIdeas(ctx, creator._id, Date.now()), Date.now());
     const history = [historySection(h), growth, callbacks, personalHistory, partnershipHistory, appActions, welcome, newIdeas].filter(Boolean).join("\n\n");
-    return { creator, directives, recent: recent.filter((m) => !m.memoryExcludedAt).reverse(), target, personal, voice, history };
+    // Answering them while her first read still runs: every reply path (chat, opinions, moments, profiles,
+    // care) builds from here, so all of them know, not only the main chat (2026-10-01). Proactive paths
+    // and the read itself pass no message and never see it.
+    const reading = args.messageId ? await stillReading(ctx, creator) : null;
+    // What they've told her about themselves goes everywhere (ideas need "no face" most); what's still
+    // worth asking only where she's answering them (onboarding/knowThem).
+    const knowThem = knowThemSection(await knownAbout(ctx, creator._id), Date.now(), Boolean(args.messageId));
+    const historyNow = [history, knowThem, reading ? stillReadingSection(reading) : ""].filter(Boolean).join("\n\n");
+    return { creator, directives, recent: recent.filter((m) => !m.memoryExcludedAt).reverse(), target, personal, voice, history: historyNow };
   },
 });
 
