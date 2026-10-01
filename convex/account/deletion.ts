@@ -47,6 +47,7 @@ export const TABLES_BY_CREATOR = [
   "laneReads",
   "followerSnapshots",
   "accountInsights",
+  "postComments",
   "evalRuns",
   "evalLabels",
   "userActions",
@@ -96,6 +97,7 @@ export const exportMine = query({
       trackedAccounts: await pick("trackedAccounts"),
       followerSnapshots: await pick("followerSnapshots"),
       accountInsights: await pick("accountInsights"),
+      postComments: await pick("postComments"),
       partnershipProfiles: await pick("partnershipProfiles"),
       partnershipOpportunities: await pick("partnershipOpportunities"),
       partnershipDrafts: await pick("partnershipDrafts"),
@@ -227,7 +229,7 @@ export const PURGE_INDEX: Record<(typeof TABLES_BY_CREATOR)[number], string> = {
   trackedAccounts: "by_creator", ownPosts: "by_creator", ownPostReads: "by_creator", signals: "by_creator", ideas: "by_creator", predictions: "by_creator",
   calendarBlocks: "by_creator", calendarEvents: "by_creator_start", tasteEvents: "by_creator", oauthStates: "by_creator", connections: "by_creator", directives: "by_creator",
   messages: "by_creator", jobs: "by_creator", budgets: "by_creator_day", costEvents: "by_creator_at", memories: "by_creator_ref", personalRecords: "by_creator",
-  finishes: "by_creator", laneReads: "by_token", followerSnapshots: "by_creator_day", accountInsights: "by_creator_kind", evalRuns: "by_creator", evalLabels: "by_creator",
+  finishes: "by_creator", laneReads: "by_token", followerSnapshots: "by_creator_day", accountInsights: "by_creator_kind", postComments: "by_creator", evalRuns: "by_creator", evalLabels: "by_creator",
   userActions: "by_creator_at", schedule: "by_creator", engageLinks: "by_creator",
 };
 export const PURGE_BATCH = 400;

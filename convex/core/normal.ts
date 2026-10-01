@@ -70,6 +70,42 @@ export function appendHistory(history: Point[] | undefined, point: Point): Point
 }
 
 /**
+ * Merge readings from elsewhere (A2: a connected post's daily timeline) into the history, in time
+ * order. A reading that disagrees with time (fewer views later than more views earlier) is dropped,
+ * since a cumulative count never falls; the cap keeps the first reading and the most recent ones. Pure.
+ */
+export function mergeHistory(history: Point[] | undefined, points: Point[]): Point[] {
+  const byAt = new Map<number, number>();
+  for (const x of [...(history ?? []), ...points]) if (Number.isFinite(x.at) && Number.isFinite(x.views) && x.views >= 0) byAt.set(x.at, Math.max(byAt.get(x.at) ?? 0, x.views));
+  const sorted = [...byAt.entries()].sort((a, b) => a[0] - b[0]).map(([at, views]) => ({ at, views }));
+  const out: Point[] = [];
+  for (const x of sorted) {
+    const last = out[out.length - 1];
+    if (last && x.views < last.views) continue;
+    if (last && x.views === last.views) continue;
+    out.push(x);
+  }
+  return out.length > HISTORY_MAX ? [out[0], ...out.slice(out.length - HISTORY_MAX + 1)] : out;
+}
+
+/**
+ * The numbers behind `shapeOf`, in words she may cite: how many of the views had arrived by the end
+ * of day two, and after the first week. Null when the readings can't say (the same gates as shapeOf).
+ */
+export function shapeEvidence(p: PostLike & { history?: Point[] }, now: number): { byDay2: number; afterWeek: number | null; total: number; readings: number } | null {
+  if (!settled(p, now)) return null;
+  const h = (p.history ?? []).filter((x) => x.at >= p.createTime);
+  const total = p.metrics.views;
+  if (h.length < 2 || total <= 0) return null;
+  const viewsBy = (t: number) => { let v = 0; for (const x of h) if (x.at <= t) v = x.views; return v; };
+  if (!h.some((x) => x.at > p.createTime + SETTLED_HOURS * 3_600_000)) return null;
+  const byDay2 = viewsBy(p.createTime + SETTLED_HOURS * 3_600_000);
+  if (byDay2 === 0) return null;
+  const day7 = viewsBy(p.createTime + 7 * 86_400_000);
+  return { byDay2, afterWeek: ageHours(p, now) > 8 * 24 && day7 > 0 ? Math.max(0, total - day7) : null, total, readings: h.length };
+}
+
+/**
  * How the views arrived, as a fact from the readings: most of them in the first two days
  * (a spike), a large share after the first week (a slow burn, e.g. search or a resurfacing),
  * still inside its first two days (early), or not enough readings to say.

@@ -158,13 +158,42 @@ export async function instagramDemographics(c: ZernioClient, q: { accountId: str
   return await c.request("/api/v1/analytics/instagram/demographics", { query: { accountId: q.accountId, metric: q.metric, breakdown: q.breakdown?.length ? q.breakdown.join(",") : undefined, timeframe: q.timeframe } });
 }
 
+/** A page of their post analytics (Zernio ids, platform ids and urls); `page` AND `limit`, or the API answers 400. */
+export async function postAnalyticsPage(c: ZernioClient, q: { accountId: string; fromDate: string; limit: number }): Promise<unknown> {
+  return await c.request("/api/v1/analytics", { query: { accountId: q.accountId, fromDate: q.fromDate, page: 1, limit: q.limit } });
+}
+
 /** TikTok account insights: follower/likes/video counters and gained/lost. Max 89 days; 412 without the user.info.stats scope. */
 export async function tiktokAccountInsights(c: ZernioClient, q: Omit<AccountInsightsQuery, "breakdown">): Promise<unknown> {
   return await c.request("/api/v1/analytics/tiktok/account-insights", { query: insightsQuery(q) });
 }
 
+// ------------------------------------------------ A2: per-post reads (recorded live 2026-10-01)
+// fixtures.live-2026-10-01.json: every one of these answered 200 on the operator's own accounts.
+
+/** One post's daily rows since Zernio started reading it. `postId` is Zernio's id or the platform's (TikTok video id; Instagram media id, not the shortcode). */
+export async function postTimeline(c: ZernioClient, postId: string): Promise<unknown> {
+  return await c.request("/api/v1/analytics/post-timeline", { query: { postId } });
+}
+
+/** Their posts that have comments (id = the platform's post id, with permalink and commentCount). Cached up to 10 minutes by Zernio. */
+export async function commentedPosts(c: ZernioClient, q: { accountId: string; profileId?: string; since?: string; minComments?: number; limit?: number }): Promise<unknown> {
+  return await c.request("/api/v1/inbox/comments", { query: { accountId: q.accountId, profileId: q.profileId, since: q.since, minComments: q.minComments, limit: q.limit ?? 20, sortBy: "date", sortOrder: "desc" } });
+}
+
+/** One post's top-level comments, READ ONLY. Replying, hiding and deleting exist at Zernio and are deliberately absent here. */
+export async function postComments(c: ZernioClient, q: { platformPostId: string; accountId: string; limit?: number }): Promise<unknown> {
+  return await c.request(`/api/v1/inbox/comments/${encodeURIComponent(q.platformPostId)}`, { query: { accountId: q.accountId, limit: q.limit ?? 50 } });
+}
+
 /** The events we care about for connections; publishing events are not subscribed. */
 export const CONNECTION_EVENTS = ["account.connected", "account.disconnected", "analytics.synced"] as const;
+/**
+ * What the deployment's webhook SHOULD carry (2026-10-01): the connection events plus
+ * `comment.received`, which `connections/zernio.zernioWebhook` stores. Subscribing is an operator
+ * step (PUT /v1/webhooks/settings on the existing subscription); this list is the one place it is named.
+ */
+export const HANDLED_EVENTS = [...CONNECTION_EVENTS, "comment.received"] as const;
 
 export async function subscribeWebhook(c: ZernioClient, args: { name: string; url: string; secret: string; events?: string[] }): Promise<{ id: string }> {
   const raw = await c.request<{ _id?: string; id?: string }>("/api/v1/webhooks/settings", { method: "POST", body: { name: args.name, url: args.url, events: args.events ?? [...CONNECTION_EVENTS], secret: args.secret, isActive: true } });

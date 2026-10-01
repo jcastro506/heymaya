@@ -517,13 +517,15 @@ export default defineSchema({
   // A1: account-level reads per connected account, latest only (one row per account and kind).
   // "insights": Instagram's last 30 days (reach, views, accounts engaged, interactions, profile
   // link taps, follows/unfollows, reach per day) or TikTok's gained/lost totals. "audience":
-  // Instagram demographics (100+ followers), weekly. A number absent from `metrics` was not
-  // reported; `status` says why a row is empty, in a word the app and Maya both say plainly.
+  // Instagram demographics (100+ followers), weekly. "engaged" (A2): the same demographics for the
+  // accounts that ENGAGED this month rather than those who follow, weekly. A number absent from
+  // `metrics` was not reported; `status` says why a row is empty, in a word the app and Maya both say plainly.
   accountInsights: defineTable({
     creatorId: v.id("creators"),
     platform: v.string(),
     accountId: v.string(),
-    kind: v.union(v.literal("insights"), v.literal("audience")),
+    // "comments" (A2): when their comments were last read and how many, so "none yet" and "not read yet" differ.
+    kind: v.union(v.literal("insights"), v.literal("audience"), v.literal("engaged"), v.literal("comments")),
     status: v.union(v.literal("ok"), v.literal("not_reported"), v.literal("too_few_followers"), v.literal("not_available")),
     fromDate: v.optional(v.string()),
     toDate: v.optional(v.string()),
@@ -700,7 +702,37 @@ export default defineSchema({
     // secrets live in Convex env / encrypted fields, never plain
     tokenRef: v.optional(v.string()),
     updatedAt: v.number(),
-  }).index("by_creator", ["creatorId", "provider"]),
+  })
+    .index("by_creator", ["creatorId", "provider"])
+    // S0 fleet scale: every Zernio connection, paged, so nothing past the first thousand is dropped.
+    .index("by_provider", ["provider", "status"]),
+
+  // ------------------------------------------------------------- postComments
+  // A2: comments on THEIR OWN posts, read (never written) from a connected account, by the daily
+  // pass and the comment webhook. Idempotent by the platform's comment id. The commenter is kept as
+  // a one-way key (to count repeat askers), never a name; the text is untrusted data, clipped.
+  postComments: defineTable({
+    creatorId: v.id("creators"),
+    platform,
+    accountId: v.string(),
+    platformPostId: v.string(),
+    ownPostId: v.optional(v.id("ownPosts")),
+    postUrl: v.optional(v.string()),
+    commentId: v.string(),
+    parentId: v.optional(v.string()),
+    text: v.string(),
+    authorKey: v.string(),
+    isOwner: v.boolean(),
+    question: v.boolean(),
+    likeCount: v.optional(v.number()),
+    replyCount: v.optional(v.number()),
+    createdAt: v.number(),
+    fetchedAt: v.number(),
+    source: v.union(v.literal("sync"), v.literal("webhook"), v.literal("tool")),
+  })
+    .index("by_creator", ["creatorId", "createdAt"])
+    .index("by_creator_comment", ["creatorId", "commentId"])
+    .index("by_creator_post", ["creatorId", "platformPostId"]),
 
   // ---------------------------------------------------------------- directives
   directives: defineTable({

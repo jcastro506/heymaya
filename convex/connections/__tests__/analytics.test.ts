@@ -39,12 +39,14 @@ describe("normalizing the recorded rows", () => {
     // 107 views and reach 0 is a sync gap, not an audience of nobody.
     expect(c.reach, "0 while views > 0 is not zero").toBeNull();
     expect(c.impressions).toBeNull();
-    // TikTok never exposes these; null by construction, not by value.
+    // The 2026-09-05 account was not on TikTok's business lane: its watch time and follows came back 0,
+    // which is "not reported" (null), never "nobody watched". The skip rate is Reels only, by construction.
     expect(c.avgWatchMs).toBeNull();
     expect(c.totalWatchMs).toBeNull();
     expect(c.skipRatePct).toBeNull();
     expect(c.follows).toBeNull();
-    expect(EXPOSES.tiktok.has("avgWatchMs")).toBe(false);
+    expect(EXPOSES.tiktok.has("skipRatePct")).toBe(false);
+    expect(EXPOSES.tiktok.has("avgWatchMs"), "the 2026-10-01 live recording fills it on TikTok").toBe(true);
   });
 
   it("an unknown platform is refused, and a native id is parsed from either platform's url", () => {

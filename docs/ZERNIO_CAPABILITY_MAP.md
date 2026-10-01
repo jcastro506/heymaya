@@ -58,6 +58,21 @@ Sources: [post analytics](https://docs.zernio.com/analytics/get-analytics), [ana
 
 Some old planning comments are stale: they say no accounts have ever been connected or that skip rate is never exposed. The September 5 recording/tests and current field definitions supersede those notes. No claim here relies solely on an old plan.
 
+## Live recording, 2026-10-01 (A2)
+
+`scripts/zernio-record.mjs` (GET only, sanitized) recorded the operator's own Instagram (@heymaya182) and TikTok (@kevin.castro9996) into `convex/integrations/zernio/fixtures.live-2026-10-01.json`. Every call answered 200. What it showed, and what was built on it:
+
+| Read | Instagram | TikTok | Built |
+| --- | --- | --- | --- |
+| Post analytics | reach, impressions, views (photos: no watch time) | views, reach, likes, shares, saves, **average and total watch time** (the spec says "Reels only"; the recording disagrees), share who finished, follows, view sources, viewer types; impressions 0; **viewer countries `{}`**; no video duration | TikTok watch time and follows parsed (`connections/analytics.ts`), cited in `numbers.ts` |
+| Post timeline | 1 daily row per post | 1 daily row per post | Merged into `ownPosts.history` (`connections/timeline.ts`), so `shapeOf` reads it |
+| Engaged / follower demographics | 200, empty arrays (under 100 followers) | n/a | Weekly `engaged` row; `audience` tool and media kit |
+| Stories | 200, no active story | n/a | Not built: no story to read insights from |
+| Comments | 200, zero comments on every post | 200, zero comments | Read-only sync, webhook and tool (`connections/comments.ts`), parsed to the spec's shape |
+| Best time, content decay | 200 (one slot / one bucket) | 200 | Not used: Maya has her own posting-time model |
+
+The staging webhook is subscribed to `account.connected`, `account.disconnected`, `analytics.synced`. `comment.received` must be added (PUT `/v1/webhooks/settings` with its `webhookId`) for comments to arrive between daily reads; the list Maya handles is `HANDLED_EVENTS` in the client.
+
 ## Changes made to the landing page
 
 - Add “Your numbers” navigation and an interactive “She gets your vibe. And your numbers.” section.

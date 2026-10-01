@@ -53,6 +53,9 @@ const specRoute = (followers = 8000): Route => (url) => {
   if (p.endsWith("/instagram/follower-history")) return { status: 200, body: history("instagram", followers) };
   if (p.endsWith("/tiktok/account-insights")) return { status: 200, body: history("tiktok", 2000) };
   if (p.endsWith("/instagram/demographics")) return followers < 100 ? { status: 400, body: S.igDemographicsInsufficient400 } : { status: 200, body: S.igDemographics };
+  // A2 reads answer as the live recording did (2026-10-01): no comments, one-day timelines.
+  if (p === "/api/v1/inbox/comments") return { status: 200, body: { data: [], pagination: { hasMore: false } } };
+  if (p === "/api/v1/analytics") return { status: 200, body: { posts: [] } };
   if (p.endsWith("/instagram/account-insights")) {
     if (url.searchParams.get("breakdown") === "follow_type") return { status: 200, body: S.igFollowsBreakdown };
     if (url.searchParams.get("metricType") === "time_series") return { status: 200, body: { ...S.igInsightsTimeSeries, metrics: { reach: (S.igInsightsTimeSeries.metrics as Record<string, unknown>).reach } } };
@@ -99,7 +102,7 @@ describe("the sync writes rows", () => {
     const aud = rows.find((x) => x.kind === "audience")!;
     expect(aud).toMatchObject({ status: "ok", platform: "instagram", audienceBase: 7800 });
     expect(aud.audience?.country?.[0].label).toBe("US");
-    const tt = rows.find((x) => x.platform === "tiktok")!;
+    const tt = rows.find((x) => x.platform === "tiktok" && x.kind === "insights")!;
     expect(tt.metrics).toEqual({ followersGained: 90, followersLost: 30 });
     expect(rows.every((x) => x.creatorId === a)).toBe(true);
 
@@ -113,7 +116,7 @@ describe("the sync writes rows", () => {
     calls.length = 0;
     await t.action(internal.connections.insightsSync.syncCreator, { creatorId: a });
     expect((await t.run((ctx) => ctx.db.query("followerSnapshots").collect())).length).toBe(80);
-    expect((await t.run((ctx) => ctx.db.query("accountInsights").collect())).length).toBe(3);
+    expect((await t.run((ctx) => ctx.db.query("accountInsights").collect())).map((x) => `${x.platform}:${x.kind}`).sort()).toEqual(["instagram:audience", "instagram:comments", "instagram:engaged", "instagram:insights", "tiktok:comments", "tiktok:insights"]);
     expect(calls.filter((c) => c.includes("demographics")).length, "audience is weekly, not on every pass").toBe(0);
   });
 
@@ -169,7 +172,7 @@ describe("budget and fail-closed", () => {
     const r = await t.action(internal.connections.insightsSync.run, {});
     expect(r.failed).toBe(0);
     const rows = await t.run((ctx) => ctx.db.query("accountInsights").collect());
-    expect(rows.map((x) => `${x.platform}:${x.kind}:${x.status}`).sort()).toEqual(["instagram:audience:not_available", "instagram:insights:not_available", "tiktok:insights:not_available"]);
+    expect(rows.map((x) => `${x.platform}:${x.kind}:${x.status}`).sort()).toEqual(["instagram:audience:not_available", "instagram:comments:not_available", "instagram:engaged:not_available", "instagram:insights:not_available", "tiktok:comments:not_available", "tiktok:insights:not_available"]);
   });
 });
 
