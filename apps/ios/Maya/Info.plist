@@ -41,6 +41,10 @@
 	<string>$(MAYA_CLERK_PUBLISHABLE_KEY)</string>
 	<key>MayaConvexURL</key>
 	<string>$(MAYA_CONVEX_URL)</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Maya puts the filming sessions you book on your calendar, and plans them around when you're busy. She only sees when you're busy, never what the event is.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Maya puts the filming sessions you book on your calendar, and plans them around when you're busy.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 </dict>

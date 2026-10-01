@@ -7,6 +7,7 @@
  * model asked to restate five times gets one wrong. Her voice is in the framing line only.
  */
 
+import { deviceBusyOf } from "./device";
 import { v } from "convex/values";
 import { HOURLY_SPREAD_MS, spreadDelays } from "../core/fanout";
 import { eventDescription, ideaForEvent } from "./eventBody";
@@ -48,14 +49,17 @@ export const inputsFor = internalQuery({
     return {
       timezone: tz,
       // Sprint 4f: a running growth plan sets the cadence before the dossier does.
-      postsPerWeek: ((creator.growthPlan as { status?: string; postsPerWeek?: number } | undefined)?.status === "running" ? (creator.growthPlan as { postsPerWeek?: number }).postsPerWeek : undefined) ?? dossier?.cadence?.postsPerWeek ?? 2,
+      postsPerWeek: (["running", "proposed"].includes((creator.growthPlan as { status?: string; postsPerWeek?: number } | undefined)?.status ?? "") ? (creator.growthPlan as { postsPerWeek?: number }).postsPerWeek : undefined) ?? dossier?.cadence?.postsPerWeek ?? 2,
       // Their habits from real blocks come first; the dossier's read of their catalogue second.
-      filmDays: habits.days.length ? habits.days : (dossier?.cadence?.filmingDays ?? []).map((d) => WEEKDAY[d.slice(0, 3).toLowerCase()]).filter((n): n is number => typeof n === "number"),
-      filmHour: habits.hour,
+      // What they told her beats what she inferred (2026-10-01): their words, then habits from real blocks, then the catalogue.
+      filmDays: creator.filmPrefs?.days.length ? creator.filmPrefs.days : habits.days.length ? habits.days : (dossier?.cadence?.filmingDays ?? []).map((d) => WEEKDAY[d.slice(0, 3).toLowerCase()]).filter((n): n is number => typeof n === "number"),
+      filmHour: creator.filmPrefs?.hour ?? habits.hour,
       editMinutes: editMinutesFor({ medianCutSeconds: typeof medianCut === "number" ? medianCut : null }, creator.noEditBlock),
       busy: [
         ...events.filter((e) => e.status === "active" && !e.allDay).map((e) => ({ start: e.start, end: e.end })),
         ...blocks.filter((b) => b.status !== "deleted").map((b) => ({ start: b.start, end: b.end })),
+        // Busy times from their iPhone's calendar, start and end only (calendar/device).
+        ...deviceBusyOf(creator),
       ],
       model,
       ideas: [...hearted, ...ideas].map((i) => ({
@@ -121,6 +125,13 @@ export const draft = internalAction({
     // Paired and on a live plan; the daily cap does not apply to the week's one message.
     if (!g.creator.channel.paired) return { sent: false, reason: "not paired" };
     if (["paused", "canceled", "deleting"].includes(g.creator.plan.status)) return { sent: false, reason: `plan is ${g.creator.plan.status}` };
+    // Night (2026-10-01): a plan held at send used to be written anyway and never sent. It waits for
+    // morning whole; the first ideas are already in their app.
+    const quiet = await ctx.runQuery(internal.core.messages.quietNow, { creatorId: a.creatorId, now });
+    if (quiet.quiet) {
+      await ctx.scheduler.runAt(quiet.endsAt + 15 * 60_000, internal.calendar.weekPlan.draft, { creatorId: a.creatorId, horizon: a.horizon, opener: a.opener, force: a.force });
+      return { sent: false, reason: "quiet hours; planned for the morning" };
+    }
     const inp = await ctx.runQuery(internal.calendar.weekPlan.inputsFor, { creatorId: a.creatorId, now });
     if (!inp) return { sent: false, reason: "creator not found" };
     if (inp.alreadyPlanned && !a.force) return { sent: false, reason: "this week is already planned" };

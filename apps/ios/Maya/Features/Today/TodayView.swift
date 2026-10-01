@@ -35,6 +35,12 @@ struct TodayView: View {
       linkedPost = LinkedID(id: id)
       router.pendingPost = nil
     }
+    // "want them on your calendar? tap here": they asked, so the iPhone's prompt comes straight up.
+    .onChange(of: router.pendingCalendar, initial: true) { _, pending in
+      guard pending else { return }
+      router.pendingCalendar = false
+      Task { await CalendarSync.connect() }
+    }
     .task { await today.run() }
     .task { await ideas.run() }
     .task { await plan.run() }
@@ -126,6 +132,9 @@ struct TodayView: View {
               Chip(text: b.status == "proposed" ? "waiting for you" : "booked", color: b.status == "proposed" ? Palette.warn : Palette.ok)
             }
           }
+          if p.deviceCalendar == nil, !p.connected, upcoming.contains(where: { $0.status != "proposed" }) {
+            CalendarAsk()
+          }
         }
       }
     }
@@ -142,6 +151,28 @@ struct TodayView: View {
 }
 
 // MARK: - Pieces
+
+/// Asked once, when there's something to put on the calendar (calendar/device).
+struct CalendarAsk: View {
+  @State private var busy = false
+  var body: some View {
+    Button {
+      Task { busy = true; await CalendarSync.connect(); busy = false }
+    } label: {
+      HStack(spacing: 10) {
+        Image(systemName: "calendar.badge.plus")
+        Text("Add these to my calendar").font(MayaFont.callout.weight(.semibold))
+        Spacer()
+        if busy { ProgressView() }
+      }
+      .padding(14)
+      .background(RoundedRectangle(cornerRadius: 14).fill(Palette.wash))
+      .foregroundStyle(Palette.purple)
+    }
+    .buttonStyle(PressableStyle())
+    .disabled(busy)
+  }
+}
 
 struct StatusPill: View {
   let text: String

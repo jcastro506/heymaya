@@ -5,6 +5,7 @@ import SwiftUI
 struct RootView: View {
   @State private var auth: AuthState<String> = .loading
   @State private var router = Router()
+  @Environment(\.scenePhase) private var scenePhase
 
   var body: some View {
     Group {
@@ -20,6 +21,10 @@ struct RootView: View {
     .onOpenURL { router.open($0) }
     .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
       if let url = activity.webpageURL { router.open(url) }
+    }
+    // Their booked sessions onto the phone's calendar, and busy times back, every time the app opens.
+    .onChange(of: scenePhase) { _, phase in
+      if phase == .active, case .authenticated = auth { Task { await CalendarSync.sync() } }
     }
   }
 

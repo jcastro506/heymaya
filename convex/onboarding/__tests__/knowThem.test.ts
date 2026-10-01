@@ -71,3 +71,26 @@ describe("on rows", () => {
     expect(await t.mutation(internal.agent.remember.recordExperience, { creatorId: b, sourceMessageId: msg, kind: "hesitation", quote: "my coworkers finding it", epoch: 0 }), "another creator's message").toBe(false);
   });
 });
+
+describe("when they film", () => {
+  it("their words become days and an hour the week planner uses; nothing usable is nothing", async () => {
+    const { parseFilmTime } = await import("../../agent/remember");
+    expect(parseFilmTime({ days: ["Mon", "tue", "wed", "thu", "fri"], hour: 19, quote: "weekday evenings around 7" })).toEqual({ days: [1, 2, 3, 4, 5], hour: 19, said: "weekday evenings around 7" });
+    expect(parseFilmTime({ days: ["sat", "sun"], hour: null, quote: "weekends" })).toEqual({ days: [0, 6], hour: null, said: "weekends" });
+    expect(parseFilmTime({ days: [], hour: 3, quote: "3am lol" }), "an hour outside 5–23 isn't a plan").toBeNull();
+    expect(parseFilmTime({ days: ["mon"], hour: 19, quote: "" }), "no words of theirs").toBeNull();
+    expect(parseFilmTime(null)).toBeNull();
+  });
+
+  it("saved only from their own message; then it's known and the planner reads it", async () => {
+    const t = convexTest(schema, modules);
+    const c = await t.run((ctx) => seedCreator(ctx, "ft1"));
+    const msg = await t.run((ctx) => ctx.db.insert("messages", { creatorId: c, direction: "in", surface: "imessage", body: "weekday evenings around 7 usually", ts: NOW }));
+    expect(await t.mutation(internal.agent.remember.setFilmPrefs, { creatorId: c, sourceMessageId: msg, days: [1, 2, 3, 4, 5], hour: 19, said: "made up words", epoch: 0 })).toBe(false);
+    expect(await t.mutation(internal.agent.remember.setFilmPrefs, { creatorId: c, sourceMessageId: msg, days: [1, 2, 3, 4, 5], hour: 19, said: "weekday evenings around 7", epoch: 0 })).toBe(true);
+    const reply = await t.query(internal.agent.context.gather, { creatorId: c, messageId: msg });
+    expect(reply!.history).toContain('when they usually film: "weekday evenings around 7"');
+    const inp = await t.query(internal.calendar.weekPlan.inputsFor, { creatorId: c, now: NOW });
+    expect(inp).toMatchObject({ filmDays: [1, 2, 3, 4, 5], filmHour: 19 });
+  });
+});

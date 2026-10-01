@@ -93,3 +93,42 @@ describe("no second 'reading your posts' after the hello", () => {
     expect(pending.map((m) => m.creatorId)).toEqual([without]);
   });
 });
+
+describe("day one and quiet hours, at send", () => {
+  const H = 3_600_000;
+  const DAY = Date.UTC(2026, 9, 1, 14, 0);
+  it("day one: nothing waits on the silence ladder, and day one's texts never count toward it after", async () => {
+    const { phoneRailHold, PHONE_RAIL } = await import("../../core/phoneRail");
+    const base = { kind: "idea", health: "HEALTHY", lineState: null, optedOutAt: undefined, proactiveToday: 1 };
+    const pairedAt = DAY;
+    // The read went out unanswered: inside day one the plan still goes.
+    expect(phoneRailHold({ ...base, now: DAY + 20 * 60_000, pairedAt, lastInboundAt: DAY, unanswered: [{ ts: DAY + 4 * 60_000, kind: "first_read" }] })).toBeNull();
+    // Day two: the read and the plan don't count, so the next idea isn't held for "two unanswered".
+    expect(phoneRailHold({ ...base, now: pairedAt + PHONE_RAIL.dayOneMs + H, pairedAt, lastInboundAt: DAY, unanswered: [{ ts: DAY + 4 * 60_000, kind: "first_read" }, { ts: DAY + 20 * 60_000, kind: "plan" }] })).toBeNull();
+    // A day-two text that goes unanswered still starts the ladder.
+    expect(phoneRailHold({ ...base, now: pairedAt + PHONE_RAIL.dayOneMs + 3 * H, pairedAt, lastInboundAt: DAY, unanswered: [{ ts: pairedAt + PHONE_RAIL.dayOneMs + H, kind: "idea" }] })).toMatch(/waits about a day/);
+    // Without a pairing time the ladder works as before.
+    expect(phoneRailHold({ ...base, now: DAY + 20 * 60_000, pairedAt: null, lastInboundAt: DAY, unanswered: [{ ts: DAY + 4 * 60_000, kind: "first_read" }] })).toMatch(/waits about a day/);
+  });
+
+  it("a proactive text in quiet hours is held, unless they're texting right now; a reply always goes", async () => {
+    const t = convexTest(schema, modules);
+    const night = Date.UTC(2026, 9, 1, 23, 30); // their quiet hours are 22:00–07:00 UTC
+    const c = await t.run((ctx) => seedCreator(ctx, "qh1", { timezone: "UTC", channel: { paired: true, pairedAt: night - 48 * H, kind: "telegram", chatId: "1" } }));
+    const send = (key: string, proactive: boolean, ts: number) => t.mutation(internal.core.messages.send, { creatorId: c, surface: "telegram", body: "x", dedupeKey: key, proactive, kind: proactive ? "plan" : "reply", ts });
+    expect(await send("p1", true, night)).toMatchObject({ sent: false, held: "quiet hours" });
+    expect((await send("r1", false, night)).sent).toBe(true);
+    await t.run((ctx) => ctx.db.insert("messages", { creatorId: c, direction: "in", surface: "telegram", body: "still up", ts: night - 10 * 60_000 }));
+    expect((await send("p2", true, night)).sent, "they wrote 10 minutes ago").toBe(true);
+    expect((await send("p3", true, Date.UTC(2026, 9, 2, 9, 0))).sent, "morning").toBe(true);
+  });
+});
+
+describe("the read asks nothing while her question waits", () => {
+  it("tells her, from the row, that a question is still open", () => {
+    const src = readFileSync(new URL("../firstRead.ts", import.meta.url), "utf8");
+    expect(src).toMatch(/internal\.core\.messages\.openQuestion/);
+    expect(src).toMatch(/they haven't answered yet: ask NOTHING in this text/);
+    expect(src).toMatch(/content: `\$\{waitingLine\}/);
+  });
+});

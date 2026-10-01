@@ -22,9 +22,9 @@ export const REMEMBER_PROMPT = `You read one message a content creator sent to t
 - A name they give, especially in answer to "what should i call you" (a bare "Josh", "call me kev", "it's Vanessa"), is a "fact" note, written as "call them Josh". No expiry.
 - Otherwise nothing. Questions, opinions on a post, small talk, thanks, one-off logistics: nothing.
 If they explicitly correct a stored fact, include supersedesNoteId with the exact existing note id. Only supersede a direct contradiction about the same fact, not a new topic or a guess. A temporary experiment does not replace their identity. Use recent conversation only to resolve a short answer (such as a name); never extract the assistant's claims as user facts.
-Also capture one "experience" when they explicitly express a goal, creative preference, effort/repeatability, a decision/rejection, or a commitment. kind: goal|preference|effort|decision|commitment. Getting to know them (her last message usually asked; a short reply answers it): "hesitation" = what gets in the way of posting or what they worry about ("being on camera", "my coworkers seeing it", "i run out of ideas"); "origin" = why or how they started posting; "boundary" = something they won't do or show on camera ("no face", "never my kids", "not filming in public"); "audience" = who they picture watching or want to reach; "proud" = a post they're proudest of, or why. If they decline one of those questions ("rather not say", "idk", "skip"), still capture it under that kind, quoting the decline, so it is never asked again. A boundary is also a rule when it says what she should never suggest. Goals include "post twice a week", "better paid partnerships", or a short answer like "brand deals" to a question about what they want help with. Prioritize a stated goal over a generic preference. Save motivations, boundaries and capacity as notes too when stated; do not let "opinions: nothing" discard these. quote must be an exact passage from THEIR message, <=400 chars. reason is an exact quote of their reason if stated, never invented. A goal is not a scheduled commitment: blockId must be null for goals. For commitments, blockId may only be an existing block id in their plan that clearly corresponds to this commitment; otherwise null. Do not mistake a question, suggestion, or Maya's words for consent or completion.
+Also capture one "experience" when they explicitly express a goal, creative preference, effort/repeatability, a decision/rejection, or a commitment. kind: goal|preference|effort|decision|commitment. Getting to know them (her last message usually asked; a short reply answers it): "hesitation" = what gets in the way of posting or what they worry about ("being on camera", "my coworkers seeing it", "i run out of ideas"); "origin" = why or how they started posting; "boundary" = something they won't do or show on camera ("no face", "never my kids", "not filming in public"); "audience" = who they picture watching or want to reach; "proud" = a post they're proudest of, or why. If they decline one of those questions ("rather not say", "idk", "skip"), still capture it under that kind, quoting the decline, so it is never asked again. A boundary is also a rule when it says what she should never suggest. If they say when they usually film or have time to ("weekday evenings", "sunday mornings", "after work around 7"), also output "filmTime": {"days": ["mon","tue",…], "hour": 19 or null, "quote": "their exact words"}; weekdays only when they named or clearly implied them ("weekday evenings" is mon–fri, "weekends" is sat and sun). Goals include "post twice a week", "better paid partnerships", or a short answer like "brand deals" to a question about what they want help with. Prioritize a stated goal over a generic preference. Save motivations, boundaries and capacity as notes too when stated; do not let "opinions: nothing" discard these. quote must be an exact passage from THEIR message, <=400 chars. reason is an exact quote of their reason if stated, never invented. A goal is not a scheduled commitment: blockId must be null for goals. For commitments, blockId may only be an existing block id in their plan that clearly corresponds to this commitment; otherwise null. Do not mistake a question, suggestion, or Maya's words for consent or completion.
 If the new rule directly replaces one of the rules already kept (a changed time, a reversed instruction), give supersedesRule as the EXACT text of that old rule; otherwise null. Never supersede a rule about a different thing.
-Output ONLY JSON: {"note": {"text": "", "kind": "life|fact|bit", "expiresDays": 30, "supersedesNoteId": null} | null, "rule": "" | null, "supersedesRule": "" | null, "experience": {"kind":"goal|preference|effort|decision|commitment|hesitation|origin|boundary|audience|proud", "quote":"", "reason":null, "blockId":null} | null}`;
+Output ONLY JSON: {"filmTime": {"days": ["mon"], "hour": 19, "quote": ""} | null, "note": {"text": "", "kind": "life|fact|bit", "expiresDays": 30, "supersedesNoteId": null} | null, "rule": "" | null, "supersedesRule": "" | null, "experience": {"kind":"goal|preference|effort|decision|commitment|hesitation|origin|boundary|audience|proud", "quote":"", "reason":null, "blockId":null} | null}`;
 
 export const afterTurn = internalAction({
   args: { creatorId: v.id("creators"), messageId: v.id("messages") },
@@ -47,7 +47,7 @@ export const afterTurn = internalAction({
       apiKey: process.env.OPENROUTER_API_KEY ?? "",
     });
     if (!r.ok) return { note: false, rule: false };
-    let out: { note?: { text?: string; kind?: string; expiresDays?: number | null; supersedesNoteId?: string | null } | null; rule?: string | null; supersedesRule?: string | null; experience?: { kind?: string; quote?: string; reason?: string; blockId?: string } } = {};
+    let out: { filmTime?: { days?: unknown; hour?: unknown; quote?: unknown } | null; note?: { text?: string; kind?: string; expiresDays?: number | null; supersedesNoteId?: string | null } | null; rule?: string | null; supersedesRule?: string | null; experience?: { kind?: string; quote?: string; reason?: string; blockId?: string } } = {};
     try {
       const m = r.content.match(/\{[\s\S]*\}/);
       out = JSON.parse(m ? m[0] : "{}") as typeof out;
@@ -56,6 +56,8 @@ export const afterTurn = internalAction({
     }
     let note = false, rule = false;
     let epoch = g.creator.memoryEpoch ?? 0;
+    const ft = parseFilmTime(out.filmTime);
+    if (ft) await ctx.runMutation(internal.agent.remember.setFilmPrefs, { creatorId: a.creatorId, sourceMessageId: a.messageId, ...ft, epoch });
     if (out.experience && typeof out.experience.quote === "string" && (EXPERIENCE_KINDS as readonly string[]).includes(out.experience.kind ?? "")) {
       await ctx.runMutation(internal.agent.remember.recordExperience, { creatorId: a.creatorId, sourceMessageId: a.messageId, kind: out.experience.kind as ExperienceKind, quote: clip(out.experience.quote, 400), reason: typeof out.experience.reason === "string" ? clip(out.experience.reason, 300) : undefined, blockId: out.experience.kind === "commitment" && typeof out.experience.blockId === "string" ? out.experience.blockId : undefined, epoch });
     }
@@ -140,6 +142,30 @@ export const addRule = internalMutation({
     }
     await ctx.db.insert("directives", { creatorId: a.creatorId, kind: "rule", verbatim: a.verbatim, active: true, source: "chat", sourceMessageId: a.sourceMessageId, createdAt: Date.now() });
     return { added: true, ...(superseded ? { superseded } : {}) };
+  },
+});
+
+const DAY_INDEX: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+/** Pure: their stated filming time, held to shapes the week planner can use. Null when there's nothing usable. */
+export function parseFilmTime(x: unknown): { days: number[]; hour: number | null; said: string } | null {
+  if (!x || typeof x !== "object") return null;
+  const o = x as { days?: unknown; hour?: unknown; quote?: unknown };
+  const days = Array.from(new Set((Array.isArray(o.days) ? o.days : []).map((d) => DAY_INDEX[String(d).slice(0, 3).toLowerCase()]).filter((n): n is number => typeof n === "number"))).sort();
+  const h = typeof o.hour === "number" && Number.isInteger(o.hour) && o.hour >= 5 && o.hour <= 23 ? o.hour : null;
+  const said = typeof o.quote === "string" ? o.quote.trim().slice(0, 160) : "";
+  if (!said || (!days.length && h === null)) return null;
+  return { days, hour: h, said };
+}
+
+export const setFilmPrefs = internalMutation({
+  args: { creatorId: v.id("creators"), sourceMessageId: v.id("messages"), days: v.array(v.number()), hour: v.union(v.number(), v.null()), said: v.string(), epoch: v.number() },
+  handler: async (ctx, a): Promise<boolean> => {
+    const c = await ctx.db.get(a.creatorId);
+    const source = await ctx.db.get(a.sourceMessageId);
+    // Their own words from their own message, like every other memory.
+    if (!c || (c.memoryEpoch ?? 0) !== a.epoch || !source || source.creatorId !== c._id || source.direction !== "in" || !source.body.toLowerCase().includes(a.said.toLowerCase())) return false;
+    await ctx.db.patch(a.creatorId, { filmPrefs: { days: a.days, hour: a.hour, said: a.said, at: source.ts }, updatedAt: Date.now() });
+    return true;
   },
 });
 

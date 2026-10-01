@@ -10,12 +10,13 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { recordVisible } from "../agent/personalHistory";
 import { clip } from "../lib/clip";
 
-export type Topic = "goal" | "hesitation" | "origin" | "boundary" | "audience" | "proud";
+export type Topic = "goal" | "hesitation" | "origin" | "boundary" | "audience" | "proud" | "filmTime";
 
 /** In the order they usually come up. `when` is the moment it fits; `ask` is the gist, never a script. */
 export const TOPICS: Array<{ kind: Topic; label: string; when: string; ask: string; use: string }> = [
   { kind: "goal", label: "what they want out of this", when: "her hello asks it", ask: "what do you most want out of this?", use: "points every suggestion at it" },
   { kind: "hesitation", label: "what gets in the way", when: "right after your read, or the first time they mention falling off, being busy or nerves", ask: "what usually gets in the way of posting more?", use: "shapes ideas around it: no face if they're camera-shy, quick to film if time is short, private if they worry who sees it" },
+  { kind: "filmTime", label: "when they usually film", when: "right after they react to the month plan, or when booking a week", ask: "when do you usually have time to film? i'll put your sessions there", use: "every week's sessions land in those slots" },
   { kind: "origin", label: "how they started", when: "a relaxed moment, or when they share a win", ask: "what got you posting in the first place?", use: "the reason they care; bring it back when they're discouraged" },
   { kind: "boundary", label: "what they won't do on camera", when: "before the first idea that needs their face, voice, a public place or other people, or when they push back on one", ask: "anything you'd rather not do on camera? i'll keep it out of what i send", use: "never suggest it again" },
   { kind: "audience", label: "who they picture watching", when: "when you're talking about a hook, a caption or who a post is for", ask: "when you film, who are you picturing watching?", use: "write hooks and captions for that person" },
@@ -41,8 +42,11 @@ How: at most one of these a day, never in the same text as an idea or a plan, an
 /** Their saved answers, visible ones only (the same rule as the rest of her memory). */
 export async function knownAbout(ctx: QueryCtx, creatorId: Id<"creators">): Promise<Known[]> {
   const out: Known[] = [];
+  const c = (await ctx.db.get(creatorId)) as Doc<"creators"> | null;
+  if (c?.filmPrefs) out.push({ kind: "filmTime", text: c.filmPrefs.said, at: c.filmPrefs.at });
   for (const t of TOPICS) {
-    const rows = (await ctx.db.query("personalRecords").withIndex("by_creator_kind", (q) => q.eq("creatorId", creatorId).eq("kind", t.kind)).order("desc").take(5)) as Doc<"personalRecords">[];
+    if (t.kind === "filmTime") continue;
+    const rows = (await ctx.db.query("personalRecords").withIndex("by_creator_kind", (q) => q.eq("creatorId", creatorId).eq("kind", t.kind as Exclude<Topic, "filmTime">)).order("desc").take(5)) as Doc<"personalRecords">[];
     for (const r of rows) if (await recordVisible(ctx, r, creatorId)) { out.push({ kind: t.kind, text: r.text, at: r.at }); break; }
   }
   return out;

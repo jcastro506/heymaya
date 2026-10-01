@@ -34,6 +34,8 @@ export type RailInput = {
   unanswered: Array<{ ts: number; kind: string | undefined }>;
   /** Proactive outbounds already sent today on their clock. */
   proactiveToday: number;
+  /** When their START landed (day one is a conversation they just started). */
+  pairedAt?: number | null;
 };
 
 export const COMMITMENT_KINDS = ["reminder", "checkin"] as const;
@@ -42,6 +44,14 @@ export const PHONE_RAIL = {
   firstFollowUpAfterMs: 20 * 60 * 60_000,
   secondFollowUpAfterMs: 3 * 24 * 60 * 60_000,
   atRiskPerDay: 1,
+  /**
+   * Day one (2026-10-01, the operator's own staging run): they texted START minutes ago, so her read,
+   * the plan and the first ideas are the conversation they started, not texting into silence. Live,
+   * the ladder counted the read as unanswered and held everything after it for a day. Inside this
+   * window nothing waits on the ladder, and texts from it never count toward it later. The daily cap
+   * (in messages.send) still holds.
+   */
+  dayOneMs: 24 * 60 * 60_000,
 } as const;
 
 /** Pure: null when the proactive text may go; otherwise the named reason it is held. */
@@ -51,10 +61,12 @@ export function phoneRailHold(r: RailInput): string | null {
   if (worst.includes("OPTED_OUT")) return "chat is opted out";
   if (worst.includes("CRITICAL")) return "chat or line health is critical; holding proactive texts until it recovers";
   if (worst.includes("AT_RISK") && r.proactiveToday >= PHONE_RAIL.atRiskPerDay) return "chat or line health is at risk; one proactive text a day";
+  const dayOneEnds = r.pairedAt ? r.pairedAt + PHONE_RAIL.dayOneMs : 0;
+  if (r.now < dayOneEnds) return null;
   const engaged = r.lastInboundAt !== null && r.now - r.lastInboundAt < PHONE_RAIL.commitmentWhileWroteWithinMs;
   const isCommitment = (kind: string | undefined) => (COMMITMENT_KINDS as readonly string[]).includes(kind ?? "");
   if (engaged && isCommitment(r.kind)) return null;
-  const counted = engaged ? r.unanswered.filter((m) => !isCommitment(m.kind)) : r.unanswered;
+  const counted = (engaged ? r.unanswered.filter((m) => !isCommitment(m.kind)) : r.unanswered).filter((m) => m.ts >= dayOneEnds);
   const k = counted.length;
   if (k === 0) return null;
   const last = counted[k - 1].ts;

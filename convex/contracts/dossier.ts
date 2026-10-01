@@ -6,6 +6,14 @@ import { z } from "zod";
 import { checkPlainLanguage } from "../core/plainLanguage";
 
 const claim = z.object({ claim: z.string().max(200), evidencePostIds: z.array(z.string()).min(1) });
+/**
+ * Why something worked (operator, 2026-10-01): a concert post that blew up is not a plan unless they
+ * are at concerts all the time. "skill" travels anywhere (their delivery, timing, editing, storytelling,
+ * a format they own); "routine" is their real life on repeat (a city they live in, a weekly class);
+ * "circumstance" is a one-off (a trip, an event, a trend wave, a collab, luck).
+ */
+const DRIVER = z.enum(["skill", "routine", "circumstance"]);
+const worksClaim = claim.extend({ driver: DRIVER.optional(), travels: z.string().max(160).optional() });
 
 export const DossierSchema = z.object({
   version: z.number(),
@@ -45,8 +53,12 @@ export const DossierSchema = z.object({
     confidence: z.number().min(0).max(1),
   }),
   voice: z.object({ sampleLines: z.array(z.string()).max(5), avoid: z.array(z.string()).max(5) }),
-  works: z.array(claim),
+  works: z.array(worksClaim),
   doesNot: z.array(claim),
+  /** What they're good at wherever they are: the thing a plan is built on. */
+  strengths: z.array(z.object({ skill: z.string().max(120), how: z.string().max(160), evidencePostIds: z.array(z.string()).min(1) })).max(4).optional(),
+  /** Outliers explained: why it did well, and the part of it that carries to an ordinary day. */
+  oneOffs: z.array(z.object({ postId: z.string(), why: z.string().max(160), travels: z.string().max(160) })).max(4).optional(),
   triedAndAbandoned: z.array(z.object({ what: z.string().max(120), when: z.string(), evidencePostIds: z.array(z.string()) })),
   trajectory: z.object({
     postsPerWeekTrend: z.enum(["up", "flat", "down", "unknown"]),
@@ -69,7 +81,9 @@ export const DOSSIER_JSON_SHAPE = `{
   "formatsUsed": [{"formatFingerprint": "", "label": "", "count": 0, "medianMultiple": "1.0, or null under 3 posts", "evidencePostIds": [""]}],
   "fingerprint": {"opening": "text-first|speech-first|visual-first|mixed|unknown", "medianCutSeconds": "a number of seconds from watched cards, or \"unknown\"", "textStyle": "≤120", "settings": ["≤5"], "energy": "≤80", "confidence": 0.0},
   "voice": {"sampleLines": ["≤5 real lines they said"], "avoid": ["≤5"]},
-  "works": [{"claim": "≤200", "evidencePostIds": [">=1"]}],
+  "works": [{"claim": "≤200", "evidencePostIds": [">=2"], "driver": "skill|routine|circumstance", "travels": "≤160, the part they can repeat on an ordinary day"}],
+  "strengths": [{"skill": "≤120, what they're good at wherever they are: talking to camera, comic timing, editing pace, storytelling, a format they own", "how": "≤160, what it looks like in their posts", "evidencePostIds": [">=2"]}],
+  "oneOffs": [{"postId": "", "why": "≤160, what drove it: a trip, an event, a trend wave, a collab, a lucky moment", "travels": "≤160, the part that carries to an ordinary day, or 'nothing'"}],
   "doesNot": [{"claim": "≤200", "evidencePostIds": [">=1"]}],
   "triedAndAbandoned": [{"what": "≤120", "when": "YYYY-MM", "evidencePostIds": [""]}],
   "trajectory": {"postsPerWeekTrend": "up|flat|down|unknown", "viewsTrend": "up|flat|down|unknown", "breaks": [{"from": "YYYY-MM", "to": "YYYY-MM"}]},
@@ -82,7 +96,9 @@ export const DOSSIER_JSON_SHAPE = `{
  * "472x their normal" from 2 of 10 posts, a 0-second median cut at 95% confidence, "baseline" in a
  * claim). Applied to every write: the first read, the weekly rewrite and every correction. Pure.
  */
-export const HONEST = { minPostsForClaims: 5, minEvidenceForClaim: 2, minPostsForMultiple: 3, maxQuotedMultiple: 50 } as const;
+export const HONEST = { minPostsForClaims: 5, minEvidenceForClaim: 2, minPostsForMultiple: 3, maxQuotedMultiple: 50, minPostsForRoutine: 3, maxStrengths: 3 } as const;
+
+const clipTo = (t: string, n: number) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
 
 export function honestDossier(d: Dossier, facts: { postsRead: number; watched: number }): Dossier {
   const plain = (t: string) => checkPlainLanguage(t.replace(/\bbaselines?\b/gi, "normal")).clean;
@@ -103,7 +119,14 @@ export function honestDossier(d: Dossier, facts: { postsRead: number; watched: n
       medianCutSeconds: typeof cut === "number" && cut > 0 && facts.watched > 0 ? cut : "unknown",
       confidence: Math.min(d.fingerprint.confidence, ceiling),
     },
-    works: claims(d.works),
+    // A one-off is never "what works": it's explained in oneOffs. A "routine" needs the setting in
+    // at least three posts, or it is a one-off too (a single trip is not their life).
+    works: claims(d.works).filter((c) => c.driver !== "circumstance" && !(c.driver === "routine" && new Set(c.evidencePostIds).size < HONEST.minPostsForRoutine)),
     doesNot: claims(d.doesNot),
+    strengths: facts.postsRead < HONEST.minPostsForClaims ? [] : (d.strengths ?? []).filter((x) => new Set(x.evidencePostIds).size >= HONEST.minEvidenceForClaim).slice(0, HONEST.maxStrengths).map((x) => ({ ...x, skill: plain(x.skill), how: plain(x.how) })),
+    oneOffs: [
+      ...(d.oneOffs ?? []),
+      ...d.works.filter((c) => c.driver === "circumstance" || (c.driver === "routine" && new Set(c.evidencePostIds).size < HONEST.minPostsForRoutine)).map((c) => ({ postId: c.evidencePostIds[0], why: clipTo(plain(c.claim), 160), travels: clipTo(plain(c.travels ?? "nothing"), 160) })),
+    ].slice(0, 4),
   };
 }

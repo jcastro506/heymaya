@@ -1,3 +1,4 @@
+import EventKit
 import SwiftUI
 
 /// The account side of Maya, behind the gear on You: how she texts you, your accounts,
@@ -19,6 +20,13 @@ struct SettingsView: View {
       Section("Your accounts") {
         if let tiktok = settings.handles.tiktok { row("TikTok", "@\(tiktok)") }
         if let ig = settings.handles.instagram { row("Instagram", "@\(ig)") }
+      }
+      Section {
+        CalendarRow()
+      } header: {
+        Text("Your calendar")
+      } footer: {
+        Text("She puts the sessions you book on your iPhone's calendar and plans around when you're busy. She never sees what your events are.")
       }
       Section("Plan") {
         NavigationLink { PlanView() } label: { LabeledContent("Your plan", value: settings.tier.capitalized) }
@@ -69,6 +77,25 @@ struct SettingsView: View {
 
   private func row(_ label: String, _ value: String) -> some View {
     LabeledContent(label, value: value)
+  }
+}
+
+/// The iPhone calendar: on, off (in iPhone Settings), or not asked yet.
+private struct CalendarRow: View {
+  @State private var granted = CalendarSync.granted
+  @State private var asked = EKEventStore.authorizationStatus(for: .event) != .notDetermined
+  @Environment(\.openURL) private var openURL
+
+  var body: some View {
+    if granted {
+      LabeledContent("Calendar", value: "On")
+    } else if asked {
+      Button("Turn on in iPhone Settings") { if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) } }
+    } else {
+      Button("Add my sessions to my calendar") {
+        Task { granted = await CalendarSync.connect(); asked = true }
+      }
+    }
   }
 }
 

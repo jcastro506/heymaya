@@ -144,6 +144,13 @@ export async function personalFor(ctx: QueryCtx, creator: Doc<"creators">): Prom
   return `# Their recent posts (newest first; the numbers you may cite about them)\n${week.join("\n") || "- none read yet"}${normalsLine}\n\n# Their week's plan (film / edit / post blocks; the ids are for the block tools)\nNow on their clock: ${nowLocal} (${creator.timezone}).\n${plan.join("\n") || "- no plan yet this week; you can lay one out with week_replan, or they can ask for one"}\n\n# Their next few days (titles only; never private events)\n${life.join("\n") || "- nothing on the calendar, or no calendar connected"}\n\n${availabilitySection(avail.windows, avail.bestHours)}`;
 }
 
+/**
+ * How to use "what works" (operator, 2026-10-01): a plan or an idea is built on what they're good at
+ * wherever they are, and on their real routines, never on the setting of a one-off. Every path reads it.
+ */
+export const WHY_IT_WORKED = `# Why their posts worked (read this before you build on any of it)
+Their "strengths" and the "skill" works are what you build plans and ideas on: they travel to an ordinary day. A "routine" works only as long as that part of their life keeps happening. A "oneOffs" post (a trip, a concert, a trend, a collab, luck) is never the plan: if you mention it, say plainly what drove it and build on what "travels" from it. Never tell them to keep doing something they can't do on a normal week (another concert, another trip, the same trend after it's gone). When a strength and a setting are tangled ("the london night pans"), name the strength ("you let the scene breathe, no talking, a line of text that lands") and say the setting is optional.`;
+
 /** Build the stable prefix: soul → register → skill → dossier → directives → live notes. */
 export function buildPrefix(input: { creator: Doc<"creators">; directives: Doc<"directives">[]; skill: string; personal?: string; voice?: string; history?: string }): string {
   const c = input.creator;
@@ -154,6 +161,7 @@ export function buildPrefix(input: { creator: Doc<"creators">; directives: Doc<"
     REGISTER_ADDENDA[c.tone ?? "friend"],
     `# Skill\n${input.skill}`,
     `# The creator (their dossier, evidence-backed; say "unknown" for anything not in it)\nHandles: ${JSON.stringify(c.handles)}\nTheir words about what they make: ${JSON.stringify(c.niche)}\nTimezone: ${c.timezone}\n${dossier}`,
+    WHY_IT_WORKED,
     planSection(c),
     `# Current messaging settings (authoritative)\nQuiet hours: ${c.quietHours.start}–${c.quietHours.end} on their clock (${c.timezone}). If an older remembered rule differs, this current setting wins. Never infer or round these hours.`,
     tasteSection(c),

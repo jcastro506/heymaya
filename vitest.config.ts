@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     environment: "edge-runtime",
     server: { deps: { inline: ["convex-test"] } },
+    setupFiles: ["tests/_clock.setup.ts"],
     include: ["convex/**/*.test.ts", "lib/**/*.test.ts", "app/**/*.test.ts", "tests/**/*.test.ts"],
     coverage: { provider: "v8", reporter: ["text-summary"] },
   },

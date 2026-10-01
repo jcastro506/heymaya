@@ -293,9 +293,11 @@ export const plan = query({
     const conn = (await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", c._id).eq("provider", "google_calendar")).first()) as Doc<"connections"> | null;
     const bestHours = (c.dossier as { cadence?: { bestHoursLocal?: number[] } } | undefined)?.cadence?.bestHoursLocal ?? [];
     return {
-      connected: conn?.status === "connected",
+      connected: conn?.status === "connected" || c.deviceCalendar?.status === "granted",
+      /** The iPhone calendar's answer: null until asked (calendar/device). */
+      deviceCalendar: c.deviceCalendar?.status ?? null,
       timezone: c.timezone,
-      blocks: blocks.filter((b) => b.status !== "deleted").map((b) => ({ id: b._id, rev: b.rev ?? 0, kind: b.kind, title: b.title, start: b.start, end: b.end, status: b.status, onCalendar: Boolean(b.externalEventId), ideaId: b.ideaId ?? null })),
+      blocks: blocks.filter((b) => b.status !== "deleted").map((b) => ({ id: b._id, rev: b.rev ?? 0, kind: b.kind, title: b.title, start: b.start, end: b.end, status: b.status, onCalendar: Boolean(b.externalEventId || b.deviceEventId), ideaId: b.ideaId ?? null })),
       events: events.filter((e) => e.status === "active" && e.class !== "private").map((e) => ({ id: e.externalId, title: e.title, start: e.start, end: e.end, allDay: e.allDay, class: e.class, link: e.htmlLink ?? null })),
       bestHours,
     };

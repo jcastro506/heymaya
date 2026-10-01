@@ -107,6 +107,10 @@ export const run = internalAction({
     const saidHello = await ctx.runQuery(internal.core.messages.exists, { creatorId: creator._id, dedupeKey: `hello:${creator._id}` });
 
     const conversational = Boolean(creator.conversationalOnboardingAt);
+    // A question of hers they haven't answered yet (dev sim, 2026-10-01: the read asked "what gets in the
+    // way?" on top of the unanswered goal question, twice). Code knows; it tells her plainly.
+    const waiting = conversational ? await ctx.runQuery(internal.core.messages.openQuestion, { creatorId: creator._id }) : null;
+    const waitingLine = waiting ? ` You asked them "${clip(waiting.body.split("\n---\n").pop() ?? waiting.body, 200)}" and they haven't answered yet: ask NOTHING in this text, not even a light question; end on the observation.` : "";
     const prefix = buildPrefix({ creator, directives, skill: firstReadSkill(saidHello, conversational), personal: gathered.personal, voice: gathered.voice, history: gathered.history });
     const spec = REGISTRY.writer;
     /**
@@ -141,7 +145,7 @@ export const run = internalAction({
       messages: [
         { role: "system", content: prefix },
         ...(conversational ? [{ role: "user" as const, content: buildSuffix({ recent: gathered.recent, target: null }) }] : []),
-        { role: "user", content: `${saidHello ? "You already said hello when they paired (\"hey, it's maya. i'm going through your posts now…\"), so do NOT introduce yourself again: open straight with the read, and fold what you do for them into one short line at most." : "Write the first message. Address them directly. This is the first thing they will ever read from you."}${laneLine ? ` This is the lane read from their rows; say it in your own words, keep every number and name in it, and let its question be the ONLY question in the message: "${laneLine}"` : ""}` },
+        { role: "user", content: `${waitingLine}${saidHello ? "You already said hello when they paired (\"hey, it's maya. i'm going through your posts now…\"), so do NOT introduce yourself again: open straight with the read, and fold what you do for them into one short line at most." : "Write the first message. Address them directly. This is the first thing they will ever read from you."}${laneLine ? ` This is the lane read from their rows; say it in your own words, keep every number and name in it, and let its question be the ONLY question in the message: "${laneLine}"` : ""}` },
       ],
       temperature: 0.6,
       maxTokens: 900,
@@ -238,7 +242,8 @@ export const run = internalAction({
       await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: args.creatorId, step: "first_read" });
       // Day one is a working day (plan 4f addendum): the rest of this week follows the read,
       // and the scout judges the roster it sampled during onboarding, after the read, not before.
-      await ctx.scheduler.runAt(Date.now() + FIRST_PLAN_DELAY_MS, internal.calendar.weekPlan.draft, { creatorId: creator._id, horizon: "first" });
+      // The month first, then its first week, as one text (agent/monthPlan).
+      await ctx.scheduler.runAt(Date.now() + FIRST_PLAN_DELAY_MS, internal.agent.monthPlan.proposeThenWeek, { creatorId: creator._id });
       await ctx.scheduler.runAt(Date.now() + FIRST_SCOUT_DELAY_MS, internal.scout.scout.run, { creatorId: creator._id });
     return { ok: true };
   },

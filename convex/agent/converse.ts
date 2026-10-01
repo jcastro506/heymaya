@@ -135,6 +135,17 @@ export function quotesAnotherIdea(body: string, latestHook: string): boolean {
   return q.length > 0 && !fold(latestHook).includes(q);
 }
 
+
+/**
+ * After "book it" when no Google calendar took them (2026-10-01): the iPhone's calendar does, through the
+ * app. Asked once, at the moment there's something to put on it; a no is respected. Pure.
+ */
+export function bookedNoGoogle(device: "granted" | "denied" | null, appUrl = process.env.APP_URL): string {
+  if (device === "granted") return "booked. they'll go on your calendar from the app, and i'll remind you before each one.";
+  if (device === "denied") return "booked, and i'll remind you before each one.";
+  return `booked, and i'll remind you before each one. want them on your calendar too? tap here: ${(appUrl ?? "https://hey-maya.ai").replace(/\/$/, "")}/app/calendar`;
+}
+
 export const run = internalAction({
   args: { creatorId: v.id("creators"), messageId: v.id("messages"), rerouted: v.optional(v.boolean()), handledNote: v.optional(v.string()) },
   handler: async (ctx, args): Promise<{ ok: boolean; reason?: string }> => {
@@ -281,7 +292,7 @@ export const run = internalAction({
         let body: string;
         if (pl[2] === "book") {
           const r = await ctx.runAction(internal.calendar.weekPlan.book, { creatorId: creator._id, planKey: pl[1] });
-          body = r.booked === 0 ? "couldn't find that plan; ask me for the week again." : r.written === r.booked ? "booked. it's all on your calendar, and i'll check in before each one." : r.written === 0 ? "booked here, and i'll remind you before each one. connect your calendar in Settings and i'll put them on it too." : `booked. ${r.written} of ${r.booked} made it onto your calendar; the rest live here and i'll remind you.`;
+          body = r.booked === 0 ? "couldn't find that plan; ask me for the week again." : r.written === r.booked ? "booked. it's all on your calendar, and i'll check in before each one." : r.written === 0 ? bookedNoGoogle(creator.deviceCalendar?.status ?? null) : `booked. ${r.written} of ${r.booked} made it onto your calendar; the rest live here and i'll remind you.`;
         } else {
           await ctx.runMutation(internal.calendar.weekPlan.skip, { creatorId: creator._id, planKey: pl[1] });
           body = "ok, no plan this week. the ideas are still in Ideas; say the word and i'll lay it out again.";
