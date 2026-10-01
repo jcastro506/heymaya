@@ -5,6 +5,7 @@
  * skill-choice arrive with Sprint 3; the shape they plug into is this file.
  */
 
+import { obviousCadence } from "./classify";
 import { v } from "convex/values";
 import { internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
@@ -597,8 +598,16 @@ export const run = internalAction({
     // stuff so far?" got an early verdict; "2 a week is more realistic" got "let's lock that in" and no plan change.
     const stillReading = await ctx.runQuery(internal.onboarding.start.readStillRunning, { creatorId: creator._id });
     const readingNow = stillReading ? `\n\nRight now you're still going through their posts (${stillReading.watched} of ${stillReading.toWatch || stillReading.posts}). No verdict on their posts yet, not even a first impression: say you'll come back with it in a few minutes.` : "";
-    const proposedPlan = (creator.growthPlan as { status?: string } | undefined)?.status === "proposed" ? "\n\nYour month plan is proposed, not agreed. If this message agrees with it or changes it (posts a week, formats, the test), call growth_plan set with the change first, then say what changed." : "";
-    const suffix = buildSuffix({ recent: recent.filter((m) => m._id !== target._id), target }) + `\n\nCurrent user-message evidence ID (internal, do not display): ${target._id}` + partnershipEvidence + recalled + greetingRule + unclearRule + deleteRule + readingNow + proposedPlan + (args.handledNote ? `\n\n(Already done by code this turn, and already said to them: "${args.handledNote.slice(0, 200)}". Answer the REST of their message now; do not repeat the done part.)` : "");
+    // An explicit pace with a plan in place is applied by code, so "2 a week it is" is true when she says it.
+    const gp = creator.growthPlan as { status?: string; lane?: string; keywords?: string[]; postsPerWeek?: number } | undefined;
+    const pace = gp && (gp.status === "proposed" || gp.status === "running") && gp.lane && gp.keywords?.length ? obviousCadence(target.body) : null;
+    let paceNote = "";
+    if (pace !== null && pace !== gp!.postsPerWeek) {
+      const r = await ctx.runMutation(internal.agent.growth.setPlan, { creatorId: creator._id, lane: gp!.lane!, keywords: gp!.keywords!, postsPerWeek: pace, setBy: "chat" });
+      if (r.ok) paceNote = `\n\n(Already done by code this turn: their month plan is now ${pace} posts a week, agreed. Say so in a few words and what it changes; don't call growth_plan for it.)`;
+    }
+    const proposedPlan = !paceNote && gp?.status === "proposed" ? "\n\nYour month plan is proposed, not agreed. If this message agrees with it or changes it (posts a week, formats, the test), call growth_plan set with the change first, then say what changed." : "";
+    const suffix = buildSuffix({ recent: recent.filter((m) => m._id !== target._id), target }) + `\n\nCurrent user-message evidence ID (internal, do not display): ${target._id}` + partnershipEvidence + recalled + greetingRule + unclearRule + deleteRule + readingNow + proposedPlan + paceNote + (args.handledNote ? `\n\n(Already done by code this turn, and already said to them: "${args.handledNote.slice(0, 200)}". Answer the REST of their message now; do not repeat the done part.)` : "");
     const apiKey = process.env.OPENROUTER_API_KEY ?? "";
     const spec = REGISTRY.writer;
 

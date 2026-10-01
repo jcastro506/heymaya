@@ -33,6 +33,11 @@ export async function readingOf(ctx: QueryCtx, c: Doc<"creators">): Promise<Read
 export async function stillReading(ctx: QueryCtx, c: Doc<"creators">): Promise<{ posts: number; watched: number; toWatch: number } | null> {
   const sent = await ctx.db.query("messages").withIndex("by_creator_and_dedupe", (q) => q.eq("creatorId", c._id).eq("dedupeKey", `first_read:${c._id}`)).first();
   if (sent) return null;
+  // Only while the read is actually under way (day sim, 2026-10-01: an account read long ago, with no
+  // first-read text on record, got "still finishing your posts" on every reply and "plan my week" deferred).
+  const jobs = (await ctx.db.query("jobs").withIndex("by_creator_and_createdAt", (q) => q.eq("creatorId", c._id)).order("desc").take(30)) as Doc<"jobs">[];
+  const underWay = jobs.some((j) => (j.kind === "ingest_catalogue" || j.kind === "first_read") && (j.status === "queued" || j.status === "running"));
+  if (!underWay) return null;
   const r = await readingOf(ctx, c);
   return { posts: r.posts, watched: r.watched, toWatch: r.toWatch };
 }

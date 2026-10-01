@@ -67,6 +67,21 @@ Output ONLY JSON: {"intent": "profile_ask|recall|opinion_ask|calendar_answer|man
  * (2026-09-24) sent "add @x to my list" / "keep an eye on @x on insta" through the classifier under load;
  * a third came back as plain chat and Maya told people to retype it. Anything less clear goes to the model.
  */
+/**
+ * An unmistakable posting pace ("2 a week is more realistic", "let's do three posts a week", "2x/week"),
+ * read by code (day sim, 2026-10-01: "2 a week" got "locked that in" and the plan never changed). Only a
+ * whole message about pace; anything else goes to the model. Pure.
+ */
+export function obviousCadence(text: string): number | null {
+  const t = text.trim().toLowerCase();
+  if (t.length > 120 || /\?\s*$/.test(t)) return null;
+  const words: Record<string, number> = { one: 1, once: 1, two: 2, twice: 2, three: 3, four: 4, five: 5, six: 6, seven: 7 };
+  const m = /\b(\d|one|once|two|twice|three|four|five|six|seven)\s*(?:x|times|posts?|videos?)?\s*(?:a|per|\/)\s*week\b/.exec(t);
+  if (!m) return null;
+  const n = /^\d$/.test(m[1]) ? Number(m[1]) : words[m[1]];
+  return n >= 1 && n <= 7 ? n : null;
+}
+
 export function obviousWatch(text: string, own: { tiktok?: string; instagram?: string }): Intent | null {
   const t = text.trim();
   if (t.length > 160) return null;
