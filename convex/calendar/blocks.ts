@@ -71,7 +71,7 @@ export const refreshForIdea = internalAction({
       if (!c) continue;
       try {
         const token = await ensureAccessToken(ctx, conn);
-        await patchEvent(token, { calendarId: b.calendarId ?? conn.calendarIds?.[0] ?? "primary", eventId: b.externalEventId!, timeZone: c.timezone, summary: eventSummary(b.kind, b.title), description: eventDescription({ kind: b.kind, idea: ideaForEvent(c.idea) }) });
+        await patchEvent(token, { calendarId: b.calendarId ?? conn.calendarIds?.[0] ?? "primary", eventId: b.externalEventId!, timeZone: c.timezone, summary: eventSummary(b.kind, b.title), description: eventDescription({ kind: b.kind, idea: ideaForEvent(c.idea), title: b.title }) });
         refreshed += 1;
       } catch (e) {
         console.error(`[calendar] refresh of ${b._id} failed: ${e instanceof Error ? clip(e.message, 120) : String(e)}`);
@@ -141,7 +141,7 @@ export const confirm = internalAction({
       const token = await ensureAccessToken(ctx, conn);
       // What they see when they click into it: the idea, the shot list, the post that started it (2026-09-09).
       const c = await ctx.runQuery(internal.calendar.blocks.eventContext, { blockId: a.blockId });
-      const ev = await createEvent(token, { calendarId, summary: eventSummary(b.kind, b.title), description: eventDescription({ kind: b.kind, idea: ideaForEvent(c?.idea) }), start: new Date(b.start).toISOString(), end: new Date(b.end).toISOString(), timeZone: tz });
+      const ev = await createEvent(token, { calendarId, summary: eventSummary(b.kind, b.title), description: eventDescription({ kind: b.kind, idea: ideaForEvent(c?.idea), title: b.title }), start: new Date(b.start).toISOString(), end: new Date(b.end).toISOString(), timeZone: tz });
       await ctx.runMutation(internal.calendar.blocks.recordExternal, { blockId: a.blockId, externalEventId: ev.id, calendarId });
       return { ok: true, htmlLink: ev.htmlLink, when };
     } catch (e) {
@@ -247,6 +247,6 @@ export const devPreviewEvent = internalQuery({
     if (!idea) return null;
     const kind = a.kind ?? "film";
     const title = `${kind}: ${((idea.version ?? {}) as { hook?: string }).hook ?? (idea.messageText === undefined ? "" : clip(idea.messageText, 40))}`;
-    return { summary: eventSummary(kind, title), description: eventDescription({ kind, idea: ideaForEvent(idea) }) };
+    return { summary: eventSummary(kind, title), description: eventDescription({ kind, idea: ideaForEvent(idea), title }) };
   },
 });

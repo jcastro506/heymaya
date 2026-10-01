@@ -21,25 +21,30 @@ async function windowBlocks(ctx: QueryCtx, creatorId: Id<"creators">, now: numbe
   return (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", creatorId).gte("start", now - 86_400_000).lte("start", now + DEVICE.aheadDays * 86_400_000)).take(200)) as Doc<"calendarBlocks">[];
 }
 
-/** What their phone's calendar should hold: every booked session ahead, and the ones to take off. */
+type DevicePlan = { status: "granted" | "denied" | null; write: Array<{ id: string; title: string; notes: string; start: number; end: number; eventId: string | null }>; remove: Array<{ id: string; eventId: string }> };
+
+/** What their phone's calendar should hold: every booked session ahead, and the ones to take off. One definition: the app's sync and the day sim both read it. */
+export async function devicePlanFor(ctx: QueryCtx, c: Doc<"creators">): Promise<DevicePlan> {
+  const now = Date.now();
+  const all = await windowBlocks(ctx, c._id, now);
+  const live = new Set((await liveBlocks(ctx, c._id, all)).map((b) => String(b._id)));
+  const write: DevicePlan["write"] = [];
+  const remove: DevicePlan["remove"] = [];
+  for (const b of all) {
+    const keep = live.has(String(b._id)) && b.status !== "deleted" && Boolean(b.consentAt) && b.end > now;
+    if (keep) {
+      const idea = b.ideaId ? ((await ctx.db.get(b.ideaId)) as Doc<"ideas"> | null) : null;
+      write.push({ id: String(b._id), title: eventSummary(b.kind, b.title), notes: eventDescription({ kind: b.kind, idea: ideaForEvent(idea), title: b.title }), start: b.start, end: b.end, eventId: b.deviceEventId ?? null });
+    } else if (b.deviceEventId) remove.push({ id: String(b._id), eventId: b.deviceEventId });
+  }
+  return { status: c.deviceCalendar?.status ?? null, write, remove };
+}
+
 export const plan = query({
   args: {},
-  handler: async (ctx): Promise<{ status: "granted" | "denied" | null; write: Array<{ id: string; title: string; notes: string; start: number; end: number; eventId: string | null }>; remove: Array<{ id: string; eventId: string }> } | null> => {
+  handler: async (ctx): Promise<DevicePlan | null> => {
     const c = await creatorForIdentity(ctx);
-    if (!c) return null;
-    const now = Date.now();
-    const all = await windowBlocks(ctx, c._id, now);
-    const live = new Set((await liveBlocks(ctx, c._id, all)).map((b) => String(b._id)));
-    const write = [];
-    const remove = [];
-    for (const b of all) {
-      const keep = live.has(String(b._id)) && b.status !== "deleted" && Boolean(b.consentAt) && b.end > now;
-      if (keep) {
-        const idea = b.ideaId ? ((await ctx.db.get(b.ideaId)) as Doc<"ideas"> | null) : null;
-        write.push({ id: String(b._id), title: eventSummary(b.kind, b.title), notes: eventDescription({ kind: b.kind, idea: ideaForEvent(idea) }), start: b.start, end: b.end, eventId: b.deviceEventId ?? null });
-      } else if (b.deviceEventId) remove.push({ id: String(b._id), eventId: b.deviceEventId });
-    }
-    return { status: c.deviceCalendar?.status ?? null, write, remove };
+    return c ? await devicePlanFor(ctx, c) : null;
   },
 });
 

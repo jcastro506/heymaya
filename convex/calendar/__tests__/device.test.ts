@@ -116,3 +116,14 @@ describe("their iPhone's events, titles included", () => {
     expect((await rows(c)).find((r) => r.externalId === "device:b")!.status).toBe("cancelled");
   });
 });
+
+describe("the week's name", () => {
+  it("is from when the sessions fall: tomorrow is this week, not next", async () => {
+    const { weekLabel } = await import("../weekPlan");
+    const thu = Date.UTC(2026, 9, 1, 16); // Thursday
+    const slot = (start: number) => ({ day: 0, film: { start, end: start + H }, edit: null, post: { at: start + 2 * H, hour: 18, fromHistory: false }, ideaId: null, hook: "h", experiment: false });
+    expect(weekLabel([slot(thu + 24 * H)], thu, "UTC", false)).toBe("this week");
+    expect(weekLabel([slot(thu + 5 * 24 * H)], thu, "UTC", false)).toBe("next week");
+    expect(weekLabel([slot(thu + 24 * H)], thu, "UTC", true)).toBe("the rest of this week");
+  });
+});

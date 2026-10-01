@@ -99,6 +99,20 @@ export const write = internalMutation({
 });
 
 /** The week, as she'd text it. Deterministic. */
+/**
+ * What to call the week, from when its sessions actually fall (day sim, 2026-10-01: a Thursday ask got
+ * "next week" for sessions on Friday and Saturday). Pure.
+ */
+export function weekLabel(slots: Slot[], now: number, tz: string, restOfWeek: boolean): string {
+  if (restOfWeek) return "the rest of this week";
+  const first = slots.reduce((t, s) => Math.min(t, s.film.start), Infinity);
+  if (!Number.isFinite(first)) return "next week";
+  const daysOut = Math.round((Date.parse(localDateKey(first, tz)) - Date.parse(localDateKey(now, tz))) / 86_400_000);
+  // Days until Sunday, the week's last day (0 on a Sunday: Monday is next week).
+  const weekday = new Date(`${localDateKey(now, tz)}T12:00:00Z`).getUTCDay();
+  return daysOut <= (7 - weekday) % 7 ? "this week" : "next week";
+}
+
 export function composeWeek(slots: Slot[], tz: string, fromHistory: boolean, label = "next week", opener?: string): string {
   const lines = slots.map((s) => {
     const day = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(s.film.start).toLowerCase();
@@ -154,7 +168,7 @@ export const draft = internalAction({
     if (slots.length === 0) return { sent: false, reason: "no free time found in the week" };
     const planKey = planKeyFor(now, inp.timezone);
     await ctx.runMutation(internal.calendar.weekPlan.write, { creatorId: a.creatorId, planKey, slots });
-    const body = composeWeek(slots, inp.timezone, inp.model.hours.length > 0, restOfWeek ? "the rest of this week" : "next week", a.opener);
+    const body = composeWeek(slots, inp.timezone, inp.model.hours.length > 0, weekLabel(slots, now, inp.timezone, restOfWeek), a.opener);
     if (a.horizon === "first") await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: a.creatorId, step: "first_plan" });
     // One question for the whole week: this IS the open question, and it supersedes any other.
     await ctx.runMutation(internal.core.messages.closeOpen, { creatorId: a.creatorId });
@@ -198,7 +212,7 @@ export const book = internalAction({
           const withNotes: Array<{ id: string; kind: "film" | "edit" | "post"; title: string; start: number; end: number; description: string }> = [];
           for (const b of blocks) {
             const c = await ctx.runQuery(internal.calendar.blocks.eventContext, { blockId: b._id });
-            withNotes.push({ id: String(b._id), kind: b.kind, title: b.title, start: b.start, end: b.end, description: eventDescription({ kind: b.kind, idea: ideaForEvent(c?.idea) }) });
+            withNotes.push({ id: String(b._id), kind: b.kind, title: b.title, start: b.start, end: b.end, description: eventDescription({ kind: b.kind, idea: ideaForEvent(c?.idea), title: b.title }) });
           }
           const ics = buildIcs(withNotes, Date.now());
           const ok = await sendTelegramDocument(identity, { chatId: chat.telegramChatId, filename: `maya-${a.planKey.replace("week:", "")}.ics`, content: ics, caption: "tap to add the week to your calendar. move anything and tell me; i'll follow." });

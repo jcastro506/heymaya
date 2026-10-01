@@ -33,10 +33,25 @@ function clean(s: unknown, max: number): string {
   return String(s ?? "").replace(/[*_`#>]+/g, "").replace(/\s+/g, " ").trim().slice(0, max);
 }
 
-/** The notes. Pure. Sections appear only when there is something true to put in them. */
-export function eventDescription(input: { kind: "film" | "edit" | "post"; idea?: EventIdea | null; name?: string | null }): string {
+/**
+ * The day's job, first (day sim, 2026-10-01: a session from the week's experiment had notes that only
+ * said "Filming block planned with Maya", and a judge scored them 1 of 5). One line they can act on
+ * from the event alone, built from what's true: the idea's hook if there is one, else the session's
+ * own title. Pure.
+ */
+export function jobLine(kind: "film" | "edit" | "post", what: string, i?: EventIdea | null): string {
+  const w = what ? `"${clean(what, 120)}"` : "today's idea";
+  const len = i?.lengthSec && i.lengthSec > 0 ? `under ${Math.round(i.lengthSec)}s` : "short";
+  if (kind === "film") return `Today's job: film ${w}. Get the opening line in two or three takes, then the shots below${i?.shotList ? "" : " (a wide, a close-up, and you reacting)"}.`;
+  if (kind === "edit") return `Today's job: cut ${w} ${len === "short" ? "tight" : `to ${len}`}, with the hook in the first second${i?.onScreenText ? " and the on-screen text below" : ""}.`;
+  return `Today's job: post ${w}, then answer the first comments for the next hour.`;
+}
+
+/** The notes. Pure. The job first; then the idea's details, only when there is something true to put in them. */
+export function eventDescription(input: { kind: "film" | "edit" | "post"; idea?: EventIdea | null; name?: string | null; title?: string }): string {
   const i = input.idea;
-  const lines: string[] = [];
+  const what = i?.hook ? i.hook : (input.title ?? "").replace(/^(film|edit|post)( \(experiment\))?:\s*/i, "").trim();
+  const lines: string[] = [jobLine(input.kind, what, i), ""];
   if (i?.hook) lines.push(`Hook: ${clean(i.hook, 160)}`);
   if (i?.onScreenText) lines.push(`On screen: "${clean(i.onScreenText, 100)}"`);
   const bits: string[] = [];
@@ -44,12 +59,11 @@ export function eventDescription(input: { kind: "film" | "edit" | "post"; idea?:
   if (i?.sound && clean(i.sound, 80)) bits.push(`sound: ${clean(i.sound, 80)}`);
   if (bits.length) lines.push(bits.join(" · "));
   const shots = Array.isArray(i?.shotList) ? i!.shotList!.map((s) => clean(s, 120)).filter(Boolean) : i?.shotList ? [clean(i.shotList, 900)] : [];
-  if (shots.length) lines.push("", "Shot list:", ...(Array.isArray(i?.shotList) ? shots.map((s, n) => `${n + 1}. ${s}`) : shots));
+  if (shots.length && input.kind === "film") lines.push("", "Shot list:", ...(Array.isArray(i?.shotList) ? shots.map((s, n) => `${n + 1}. ${s}`) : shots));
   if (i?.fitWhy) lines.push("", `Why this one: ${clean(i.fitWhy, 200)}`);
-  const links = (i?.evidenceLinks ?? []).filter((u) => /^https?:\/\//.test(u)).slice(0, 2);
-  if (links.length) lines.push("", `The post that started it: ${links[0]}`, ...(links[1] ? [`Also: ${links[1]}`] : []));
-  if (!lines.length && i?.messageText) lines.push(clean(i.messageText, 500));
-  lines.push("", `${input.kind === "film" ? "Filming" : input.kind === "edit" ? "Editing" : "Posting"} block planned with Maya${input.name ? ` for ${clean(input.name, 40)}` : ""}. Move or delete it here and she follows; reply in the chat to change the idea.`);
+  const links = (i?.evidenceLinks ?? []).filter((u) => /^https?:\/\//.test(u)).slice(0, 1);
+  if (links.length && input.kind === "film") lines.push("", `The post that started it: ${links[0]}`);
+  lines.push("", `Planned with Maya${input.name ? ` for ${clean(input.name, 40)}` : ""}. Text her to change it.`);
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim().slice(0, DESCRIPTION_CAP);
 }
 
