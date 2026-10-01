@@ -6,7 +6,7 @@
 
 import { v } from "convex/values";
 import { normalizePhone } from "../integrations/claw/client";
-import { query, type MutationCtx } from "../_generated/server";
+import { internalQuery, query, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { internalMutation, mutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -249,30 +249,55 @@ export const progress = query({
  * Today's "she's reading your posts" card (day one): live counts while her first read runs, then
  * what she saw. Only rows; nothing here is written for the card.
  */
+type Reading = { stage: "waiting" | "reading" | "read"; posts: number; watched: number; toWatch: number; lastWatched: string | null; summary: string | null; topFormat: string | null; readAt: number | null };
+
+/** One definition of "how far is her read": the Today card and her replies both read this. */
+async function readingOf(ctx: QueryCtx, c: Doc<"creators">): Promise<Reading> {
+  const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).take(400)) as Doc<"ownPosts">[];
+  const reads = (await ctx.db.query("ownPostReads").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).take(200)) as Doc<"ownPostReads">[];
+  const watchedReads = reads.filter((r) => r.depth === "watch");
+  const last = watchedReads.sort((x, y) => y._creationTime - x._creationTime)[0];
+  const lastPost = last ? posts.find((p) => p._id === last.ownPostId) : undefined;
+  const d = c.dossier as { persona?: { summary?: string }; formatsUsed?: Array<{ label: string; count: number }>; rewrittenAt?: string } | undefined;
+  const top = [...(d?.formatsUsed ?? [])].sort((x, y) => y.count - x.count)[0];
+  const toWatch = posts.filter((p) => (p.sample ?? []).length > 0 && p.contentType === "video").length;
+  return {
+    stage: d ? "read" : posts.length ? "reading" : "waiting",
+    posts: posts.length,
+    watched: watchedReads.length,
+    toWatch: Math.max(toWatch, watchedReads.length),
+    lastWatched: lastPost ? lastPost.caption.split("\n")[0].slice(0, 80) : null,
+    summary: d?.persona?.summary ?? null,
+    topFormat: top?.label ?? null,
+    readAt: d?.rewrittenAt ? Date.parse(d.rewrittenAt) : null,
+  };
+}
+
 export const reading = query({
   args: {},
-  handler: async (ctx): Promise<{ stage: "waiting" | "reading" | "read"; posts: number; watched: number; toWatch: number; lastWatched: string | null; summary: string | null; topFormat: string | null; readAt: number | null } | null> => {
+  handler: async (ctx): Promise<Reading | null> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
     const c = (await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject)).first()) as Doc<"creators"> | null;
     if (!c) return null;
-    const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).take(400)) as Doc<"ownPosts">[];
-    const reads = (await ctx.db.query("ownPostReads").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).take(200)) as Doc<"ownPostReads">[];
-    const watchedReads = reads.filter((r) => r.depth === "watch");
-    const last = watchedReads.sort((x, y) => y._creationTime - x._creationTime)[0];
-    const lastPost = last ? posts.find((p) => p._id === last.ownPostId) : undefined;
-    const d = c.dossier as { persona?: { summary?: string }; formatsUsed?: Array<{ label: string; count: number }>; rewrittenAt?: string } | undefined;
-    const top = [...(d?.formatsUsed ?? [])].sort((x, y) => y.count - x.count)[0];
-    const toWatch = posts.filter((p) => (p.sample ?? []).length > 0 && p.contentType === "video").length;
-    return {
-      stage: d ? "read" : posts.length ? "reading" : "waiting",
-      posts: posts.length,
-      watched: watchedReads.length,
-      toWatch: Math.max(toWatch, watchedReads.length),
-      lastWatched: lastPost ? lastPost.caption.split("\n")[0].slice(0, 80) : null,
-      summary: d?.persona?.summary ?? null,
-      topFormat: top?.label ?? null,
-      readAt: d?.rewrittenAt ? Date.parse(d.rewrittenAt) : null,
-    };
+    return await readingOf(ctx, c);
   },
 });
+
+/**
+ * For her replies (2026-10-01): is her first read of their posts still running? Until her first-read
+ * text exists, it is. Live on staging she summed up their posts from the half she'd seen and asked
+ * which to lean into; a minute later the read landed with a different take, over her own question.
+ */
+export const readStillRunning = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ posts: number; watched: number; toWatch: number } | null> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!c) return null;
+    const sent = await ctx.db.query("messages").withIndex("by_creator_and_dedupe", (q) => q.eq("creatorId", c._id).eq("dedupeKey", `first_read:${c._id}`)).first();
+    if (sent) return null;
+    const r = await readingOf(ctx, c);
+    return { posts: r.posts, watched: r.watched, toWatch: r.toWatch };
+  },
+});
+

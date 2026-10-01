@@ -118,6 +118,7 @@ import type * as engage_links from "../engage/links.js";
 import type * as engage_round from "../engage/round.js";
 import type * as eval_checks from "../eval/checks.js";
 import type * as eval_converse from "../eval/converse.js";
+import type * as eval_criticSpeed from "../eval/criticSpeed.js";
 import type * as eval_dealsE2E from "../eval/dealsE2E.js";
 import type * as eval_dealsE2EData from "../eval/dealsE2EData.js";
 import type * as eval_dealsWorld from "../eval/dealsWorld.js";
@@ -351,6 +352,7 @@ declare const fullApi: ApiFromModules<{
   "engage/round": typeof engage_round;
   "eval/checks": typeof eval_checks;
   "eval/converse": typeof eval_converse;
+  "eval/criticSpeed": typeof eval_criticSpeed;
   "eval/dealsE2E": typeof eval_dealsE2E;
   "eval/dealsE2EData": typeof eval_dealsE2EData;
   "eval/dealsWorld": typeof eval_dealsWorld;

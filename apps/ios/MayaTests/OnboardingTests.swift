@@ -13,14 +13,18 @@ final class OnboardingTests: XCTestCase {
     XCTAssertEqual(step(plan: "onboarding"), .plan)
     XCTAssertEqual(step(plan: "trialing"), .connect)
     XCTAssertEqual(step(plan: "trialing", accounts: 1), .connect, "connecting one account doesn't rush them past the other")
-    XCTAssertEqual(step(plan: "trialing", accounts: 1, connectSeen: true), .meet)
-    XCTAssertEqual(step(plan: "trialing", accounts: 1, connectSeen: true, meetSkipped: true), .watch, "watching comes after meeting her, so her read has time to land")
+    XCTAssertEqual(step(plan: "trialing", accounts: 1, connectSeen: true), .watch)
+    XCTAssertEqual(step(plan: "trialing", accounts: 1, connectSeen: true, watchSeen: true), .meet, "texting her is last: once they're in Messages nobody comes back to finish a step")
     XCTAssertEqual(step(plan: "trialing", accounts: 1, connectSeen: true, watchSeen: true, meetSkipped: true), .done)
   }
 
-  func testTextingHerMovesThemOnToWatching() {
-    XCTAssertEqual(step(plan: "trialing", accounts: 1, connectSeen: true, paired: true), .watch)
+  func testAddingAFavoriteDoesNotRushThemOn() {
+    XCTAssertEqual(step(plan: "trialing", accounts: 1, connectSeen: true, watching: 2), .watch)
+  }
+
+  func testTextingHerFinishesOnboarding() {
     XCTAssertEqual(step(plan: "trialing", accounts: 1, connectSeen: true, paired: true, watchSeen: true), .done)
+    XCTAssertEqual(step(plan: "trialing", accounts: 1, connectSeen: true, paired: true), .done, "paired from any earlier screen: Home, nothing left to tap")
   }
 
   func testOnlyAPaidOrFreePlanGetsPastThePlan() {
@@ -41,12 +45,10 @@ final class OnboardingTests: XCTestCase {
     XCTAssertEqual(m.step, .meet)
     XCTAssertTrue(m.canGoBack)
     m.back()
-    XCTAssertEqual(m.step, .connect, "back from meeting her reopens Connect")
+    XCTAssertEqual(m.step, .watch, "back from texting her reopens favorites")
+    m.back()
+    XCTAssertEqual(m.step, .connect, "back from favorites reopens Connect")
     XCTAssertFalse(m.canGoBack, "no going back past payment")
-    let w = OnboardingModel(preview: .watch)
-    XCTAssertEqual(w.step, .watch)
-    w.back()
-    XCTAssertEqual(w.step, .meet)
   }
 
   @MainActor func testServerReasonsReadAsSentences() {

@@ -1,8 +1,8 @@
 /** Shared by the phone and Telegram flows; free text, never a required survey. */
-export const OPENING_QUESTION = "what should we focus on first—posting more consistently, growing your audience, improving what you're making, landing partnerships, or something else?";
+export const OPENING_QUESTION = "what do you most want out of this? posting more consistently, figuring out what actually hits, a bigger audience, landing partnerships, something else?";
 /** §26: brand deals are named only when the plan can act on them. Pure. */
 export function openingQuestionFor(partnerships: boolean): string {
-  return partnerships ? OPENING_QUESTION : "what should we focus on first—posting more consistently, growing your audience, improving what you're making, or something else?";
+  return partnerships ? OPENING_QUESTION : "what do you most want out of this? posting more consistently, figuring out what actually hits, a bigger audience, something else?";
 }
 
 export const CONVERSATIONAL_ONBOARDING = `# Getting to know them through conversation

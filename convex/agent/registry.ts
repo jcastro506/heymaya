@@ -38,12 +38,14 @@ export const REGISTRY: Record<ModelRole, ModelSpec> = {
     json: true,
   },
   critic: {
-    // 2026-09-07: GLM timed out on a third of critic calls for a week (34 of 100 today), so the
-    // "critic" was often the fallback or nobody. DeepSeek answered every time it was asked.
-    // Still a different family from the writer (Gemini), which is the point of the critic.
-    primary: env("MODEL_CRITIC", "deepseek/deepseek-v4-flash"),
-    fallback: env("MODEL_CRITIC_FALLBACK", "z-ai/glm-5.3-flash"),
-    family: "deepseek",
+    // 2026-09-07: GLM timed out on a third of critic calls (it thought as long as it liked), so DeepSeek
+    // took over. 2026-10-01: DeepSeek's thinking was 20–25 s of every reply on staging. With thinking
+    // capped at "low" (callModel's MODEL_REASONING), eval/criticSpeed over 20 real replies: GLM median
+    // 2.6 s, 0 failures, 14/14 verdicts the same as unbounded; DeepSeek "low" stayed ~16 s and "off"
+    // disagreed on 6 of 17. Still a different family from the writer (Gemini), the point of a critic.
+    primary: env("MODEL_CRITIC", "z-ai/glm-5.3-flash"),
+    fallback: env("MODEL_CRITIC_FALLBACK", "openai/gpt-oss-120b"),
+    family: "zai",
     maxTokens: 400,
     temperature: 0,
     json: true,
@@ -57,6 +59,19 @@ export const REGISTRY: Record<ModelRole, ModelSpec> = {
     json: true,
   },
 };
+
+/**
+ * How long a thinking model may think, by model prefix, unless the caller says otherwise. Uncapped,
+ * GLM took 20–40 s to judge one short reply; at "low" it answers in ~2–3 s with the same verdicts
+ * (eval/criticSpeed, 2026-10-01). GLM rejects thinking "off", so it is "low", never disabled.
+ */
+export const MODEL_REASONING: Array<[prefix: string, reasoning: { effort: "low" }]> = [
+  ["z-ai/glm", { effort: "low" }],
+  ["openai/gpt-oss", { effort: "low" }],
+];
+export function reasoningFor(model: string): { effort: "low" } | undefined {
+  return MODEL_REASONING.find(([p]) => model.startsWith(p))?.[1];
+}
 
 /** The watch model is called direct (Google), never through OpenRouter. */
 export const WATCH_MODEL = env("MODEL_WATCH", "gemini-3.1-flash-lite");

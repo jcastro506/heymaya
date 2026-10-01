@@ -21,9 +21,11 @@ struct OnboardingGate: View {
     }
     .animation(.smooth(duration: 0.3), value: model.step)
     .task { await model.run() }
-    // "You're in" once, only for someone who went through the steps here (not a returning user).
+    // "You're in" once, only for someone who went through the steps here (not a returning user), and
+    // only if they skipped texting her: when their START lands they're in Messages, and coming back
+    // to the app should land on Home with nothing left to tap.
     .onChange(of: model.step) { old, new in
-      if new == .done, old != .done, model.sawSteps { model.celebrate = true; Haptics.success() }
+      if new == .done, old != .done, model.sawSteps, !(model.progress?.paired ?? false) { model.celebrate = true; Haptics.success() }
     }
   }
 }

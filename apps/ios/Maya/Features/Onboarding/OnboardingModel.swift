@@ -2,13 +2,14 @@ import ConvexMobile
 import Foundation
 import Observation
 
-/// Onboarding in the app (spec §5, M3): plan → connect → meet her → worth watching → the app.
-/// Favorites come last: optional, their own picks; she offers more by text once her read is done.
+/// Onboarding in the app (spec §5, M3): plan → connect → favorites → text her → the app.
+/// Texting her is last (2026-10-01): once they're in Messages nobody comes back to finish a step, so
+/// the moment their START lands the server says paired and the app is already Home when they return.
 /// The server owns where they are (plan, connected accounts, paired), so killing the app, reinstalling
 /// or signing in on another phone resumes at the right screen. Only the two skippable steps are
 /// remembered on the phone, because skipping them writes nothing to the server.
 enum OnboardingStep: Equatable, CaseIterable {
-  case plan, connect, meet, watch, done
+  case plan, connect, watch, meet, done
 
   struct Facts: Equatable {
     var planStatus: String?
@@ -30,13 +31,13 @@ enum OnboardingStep: Equatable, CaseIterable {
     let planReady = f.planStatus.map { readyPlans.contains($0) } ?? false
     if !planReady && !f.paired { return .plan }
     if f.connectedAccounts == 0 || !(f.connectSeen || f.paired) { return .connect }
+    if !(f.watchSeen || f.paired) { return .watch }
     if !(f.paired || f.meetSkipped) { return .meet }
-    if !(f.watchSeen || (f.paired && f.watching > 0)) { return .watch }
     return .done
   }
 
   /// The dots across the top: four real steps.
-  var index: Int { [.plan: 1, .connect: 2, .meet: 3, .watch: 4][self] ?? 4 }
+  var index: Int { [.plan: 1, .connect: 2, .watch: 3, .meet: 4][self] ?? 4 }
 }
 
 struct OnboardingProgress: Decodable, Equatable {
@@ -85,8 +86,8 @@ final class OnboardingModel {
     meetSkipped = UserDefaults.standard.bool(forKey: Self.key("meetSkipped"))
     if let start = preview {
       connectSeen = ![.plan, .connect].contains(start)
-      meetSkipped = [.watch, .done].contains(start)
-      watchSeen = start == .done
+      watchSeen = [.meet, .done].contains(start)
+      meetSkipped = start == .done
       progress = OnboardingProgress(paired: false, planStatus: start == .plan ? "onboarding" : "trialing", phone: nil, posts: 24)
       social = SocialStatus(status: "connected", accounts: [.plan, .connect].contains(start) ? [] : [.init(platform: "instagram", username: "riverloop.runs", needsReconnect: false)])
       loaded = true
@@ -105,16 +106,16 @@ final class OnboardingModel {
   /// the server, so there's no going "back" past them.
   var canGoBack: Bool {
     switch step {
-    case .meet: return true
-    case .watch: return !(progress?.paired ?? false)
+    case .watch: return true
+    case .meet: return !(progress?.paired ?? false)
     default: return false
     }
   }
 
   func back() {
     switch step {
-    case .meet: connectSeen = false
-    case .watch: meetSkipped = false
+    case .watch: connectSeen = false
+    case .meet: watchSeen = false
     default: break
     }
   }

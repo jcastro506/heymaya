@@ -56,6 +56,10 @@ const handlers: Record<string, Handler> = {
   },
   async first_read(ctx, job) {
     if (!job.creatorId) return { ok: false, error: "first_read job has no creator" };
+    // Never over one of her replies: live on staging the read landed a second after she'd asked them
+    // something, and stepped over her own question. It waits a few seconds for the reply to go first.
+    const busy = await (ctx as unknown as { runQuery: (ref: typeof internal.core.jobs.turnInFlight, a: { creatorId: Id<"creators"> }) => Promise<boolean> }).runQuery(internal.core.jobs.turnInFlight, { creatorId: job.creatorId });
+    if (busy) return { ok: false, error: "waiting for her reply to go first", defer: 5_000 };
     const r = (await (ctx as unknown as { runAction: (ref: typeof internal.onboarding.firstRead.run, a: { creatorId: Id<"creators"> }) => Promise<{ ok: boolean; reason?: string }> })
       .runAction(internal.onboarding.firstRead.run, { creatorId: job.creatorId }));
     return r.ok ? { ok: true } : { ok: false, error: r.reason ?? "first read failed" };

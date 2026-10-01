@@ -92,8 +92,9 @@ describe("the tiers", () => {
     expect(openingQuestionFor(true)).toMatch(/partnerships/);
     expect(openingQuestionFor(false)).not.toMatch(/brand/);
     expect(helloFor(false)).not.toMatch(/brand/);
-    expect(helloFor(true)).not.toMatch(/brand|partnership/);
-    expect(helloFor(false)).toMatch(/i'm maya/);
+    expect(helloFor(true)).toMatch(/partnerships/); // the hello asks the goal; deals are named only for a plan that can act on them
+    expect(helloFor(false)).not.toMatch(/partnership/);
+    expect(helloFor(false)).toMatch(/it's maya/);
   });
 
   it("the belt: a duo creator never sees partnership tools; the investigate loop filters them unless told the plan allows", () => {

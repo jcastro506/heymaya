@@ -44,6 +44,11 @@ export interface OpenRouterRequest {
   model: string;
   messages: OpenRouterMessage[];
   /**
+   * How much a thinking model may think (OpenRouter's `reasoning`). Unset, it thinks as long as it likes:
+   * the critic took 20–25 s a reply on staging (2026-10-01). Short judging calls set it low.
+   */
+  reasoning?: { effort?: "minimal" | "low" | "medium" | "high"; enabled?: boolean };
+  /**
    * How long to wait before giving up, in ms. Defaults to OPENROUTER_TIMEOUT_MS.
    *
    * ⚠️ Latency is a correctness property on the reply path. The critic's primary timed out
@@ -128,6 +133,7 @@ export async function callOpenRouter(
         messages: request.messages,
         temperature: request.temperature ?? 0.2,
         max_tokens: request.maxTokens ?? 4_000,
+        ...(request.reasoning ? { reasoning: request.reasoning } : {}),
         ...(request.tools && request.tools.length ? { tools: request.tools, tool_choice: request.toolChoice ?? "auto" } : {}),
         // Opt in to cost reporting. Without this the response carries token
         // counts and no price, which is the half that can't be budgeted.
