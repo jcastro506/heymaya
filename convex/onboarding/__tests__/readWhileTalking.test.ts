@@ -123,3 +123,12 @@ describe("day one and quiet hours, at send", () => {
     expect((await send("p3", true, Date.UTC(2026, 9, 2, 9, 0))).sent, "morning").toBe(true);
   });
 });
+
+describe("the read asks nothing while her question waits", () => {
+  it("tells her, from the row, that a question is still open", () => {
+    const src = readFileSync(new URL("../firstRead.ts", import.meta.url), "utf8");
+    expect(src).toMatch(/internal\.core\.messages\.openQuestion/);
+    expect(src).toMatch(/they haven't answered yet: ask NOTHING in this text/);
+    expect(src).toMatch(/content: `\$\{waitingLine\}/);
+  });
+});

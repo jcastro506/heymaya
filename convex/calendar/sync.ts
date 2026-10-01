@@ -23,7 +23,8 @@ import { eventBounds, listEvents, MAYA_EVENT_PROPERTY } from "../integrations/go
 import { formatLocal } from "./time";
 
 const LOOKBACK_MS = 24 * 3600 * 1000;
-const HORIZON_MS = 14 * 24 * 3600 * 1000;
+// The same three weeks her context shows (agent/context CALENDAR_LOOKAHEAD_DAYS); it read two, so week three was always empty.
+const HORIZON_MS = 21 * 24 * 3600 * 1000;
 const MIN_LEAD_MS = 2 * 24 * 3600 * 1000; // the rail: a calendar idea needs two days of runway
 
 export type EventClass = Doc<"calendarEvents">["class"];

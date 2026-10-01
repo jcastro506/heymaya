@@ -60,9 +60,14 @@ export function buildPostTimeModel(posts: PostSample[], timeZone: string): PostT
  * The next good post time at or after `after`, on their clock: the best known hour that
  * still lies ahead today, else the best hour tomorrow. Returns an epoch and the hour used.
  */
+/** Posting hours we'll suggest: a person has to be up to post. */
+export const AWAKE = { from: 7, to: 22 } as const;
+
 export function nextPostTime(model: PostTimeModel, after: number, timeZone: string): { at: number; hour: number; fromHistory: boolean } {
-  const candidates = model.hours.length ? model.hours.map((h) => h.hour) : [model.defaultHour];
-  const fromHistory = model.hours.length > 0;
+  // They post it themselves, so it's a time they're awake (dev sim 2026-10-01: "post 5 am").
+  const awake = model.hours.map((h) => h.hour).filter((h) => h >= AWAKE.from && h <= AWAKE.to);
+  const candidates = awake.length ? awake : [model.defaultHour];
+  const fromHistory = awake.length > 0;
   const nowHour = localHour(after, timeZone);
   // Try each preferred hour today, in preference order, then the best one tomorrow.
   for (const hour of candidates) {

@@ -117,3 +117,35 @@ export const classifier = internalAction({
     return out;
   },
 });
+
+/**
+ * Is her prompt cache-friendly, measured (2026-10-01)? The same real prefix twice, back to back, through
+ * OpenRouter; reports prompt tokens, how many were billed as cached, and the cost of each call.
+ */
+export const cacheCheck = internalAction({
+  args: { creatorId: v.id("creators"), model: v.optional(v.string()), explicit: v.optional(v.boolean()) },
+  handler: async (ctx, a): Promise<Array<{ call: number; promptTokens: number; cachedTokens: number; costUsd: number | null; ms: number }>> => {
+    const g = await ctx.runQuery(internal.agent.context.gather, { creatorId: a.creatorId });
+    if (!g) return [];
+    const { buildPrefix } = await import("../agent/context");
+    const prefix = buildPrefix({ creator: g.creator, directives: g.directives, skill: "reply", personal: g.personal, voice: g.voice, history: g.history });
+    const out = [];
+    for (const [i, q] of ["what should i post this week?", "is the london stuff working?", "give me one idea for tomorrow"].entries()) {
+      const t0 = Date.now();
+      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${process.env.OPENROUTER_API_KEY ?? ""}` }, body: JSON.stringify({ model: a.model ?? "google/gemini-3.7-flash", messages: [{ role: "system", content: a.explicit ? [{ type: "text", text: prefix, cache_control: { type: "ephemeral" } }] : prefix }, { role: "user", content: q }], max_tokens: 3200, usage: { include: true } }) });
+      const j = (await res.json()) as { usage?: { prompt_tokens?: number; cost?: number; prompt_tokens_details?: { cached_tokens?: number } } };
+      out.push({ call: i + 1, promptTokens: j.usage?.prompt_tokens ?? 0, cachedTokens: j.usage?.prompt_tokens_details?.cached_tokens ?? 0, costUsd: j.usage?.cost ?? null, ms: Date.now() - t0 });
+    }
+    return out;
+  },
+});
+
+/** OpenRouter's live model list, filtered: the source of truth for names and prices (memory: verify prices first). */
+export const models = internalAction({
+  args: { match: v.string() },
+  handler: async (_ctx, a): Promise<Array<{ id: string; inPerM: number; outPerM: number; cachedInPerM: number | null; context: number | null }>> => {
+    const j = (await (await fetch("https://openrouter.ai/api/v1/models")).json()) as { data: Array<{ id: string; context_length?: number; pricing?: { prompt?: string; completion?: string; input_cache_read?: string } }> };
+    const m = new RegExp(a.match, "i");
+    return j.data.filter((x) => m.test(x.id)).slice(0, 25).map((x) => ({ id: x.id, inPerM: Number(x.pricing?.prompt ?? 0) * 1e6, outPerM: Number(x.pricing?.completion ?? 0) * 1e6, cachedInPerM: x.pricing?.input_cache_read ? Number(x.pricing.input_cache_read) * 1e6 : null, context: x.context_length ?? null }));
+  },
+});

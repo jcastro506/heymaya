@@ -79,3 +79,12 @@ describe("after 'book it'", () => {
     expect(bookedNoGoogle(null)).not.toMatch(/Settings/);
   });
 });
+
+describe("posting times are waking hours", () => {
+  it("a 5am best hour is never suggested; with nothing awake, the default", async () => {
+    const { nextPostTime } = await import("../postTime");
+    const after = Date.UTC(2026, 9, 1, 12, 0);
+    expect(nextPostTime({ hours: [{ hour: 5 } as never, { hour: 19 } as never], confidence: "some", defaultHour: 18 } as never, after, "UTC").hour).toBe(19);
+    expect(nextPostTime({ hours: [{ hour: 4 } as never], confidence: "some", defaultHour: 18 } as never, after, "UTC")).toMatchObject({ hour: 18, fromHistory: false });
+  });
+});
