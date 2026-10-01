@@ -311,15 +311,8 @@ export const send = internalMutation({
     // Quiet hours, held here for every proactive text (2026-10-01): before, only the scout's rails checked
     // them, so a 1am signup's first plan would have gone at 1:20. A text into a conversation they're in
     // right now (they wrote in the last half hour) still goes: they're up, and it's what they asked for.
-    if (args.proactive && args.surface !== "system" && args.surface !== "web") {
-      const now = args.ts ?? Date.now();
-      const c = (await ctx.db.get(args.creatorId)) as Doc<"creators"> | null;
-      if (c && inQuietHours(now, c.timezone, c.quietHours)) {
-        const lastIn = await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", args.creatorId).gte("ts", now - QUIET_LIVE_MS)).filter((q) => q.eq(q.field("direction"), "in")).first();
-        // Their START counts as writing: the pairing text is recorded just after her hello goes.
-        const justPaired = c.channel.pairedAt !== undefined && now - c.channel.pairedAt < QUIET_LIVE_MS;
-        if (!lastIn && !justPaired) return { messageId: null, sent: false, held: "quiet hours" };
-      }
+    if (args.proactive && args.surface !== "system" && args.surface !== "web" && (await quietFor(ctx, args.creatorId, args.ts ?? Date.now())).quiet) {
+      return { messageId: null, sent: false, held: "quiet hours" };
     }
     // X1: on a phone number, Linq's chat health and the silence ladder (core/phoneRail.ts) hold proactive
     // texts here, beside the cap, so no caller can skip them. A reply to them always goes.
@@ -386,6 +379,23 @@ export const send = internalMutation({
 });
 
 /** The phone rail's inputs, from rows (bounded: two weeks of their messages). Null means send. */
+/** Is it their quiet hours, with no live conversation? And when do they end. One definition, used by send and by callers that must wait for morning. */
+export async function quietFor(ctx: QueryCtx | MutationCtx, creatorId: Id<"creators">, now: number): Promise<{ quiet: boolean; endsAt: number }> {
+  const c = (await ctx.db.get(creatorId)) as Doc<"creators"> | null;
+  if (!c || !inQuietHours(now, c.timezone, c.quietHours)) return { quiet: false, endsAt: now };
+  let endsAt = now;
+  while (inQuietHours(endsAt, c.timezone, c.quietHours) && endsAt - now < 26 * 3_600_000) endsAt += 5 * 60_000;
+  const lastIn = await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", creatorId).gte("ts", now - QUIET_LIVE_MS)).filter((q) => q.eq(q.field("direction"), "in")).first();
+  // Their START counts as writing: the pairing text is recorded just after her hello goes.
+  const justPaired = c.channel.pairedAt !== undefined && now - c.channel.pairedAt < QUIET_LIVE_MS;
+  return { quiet: !lastIn && !justPaired, endsAt };
+}
+
+export const quietNow = internalQuery({
+  args: { creatorId: v.id("creators"), now: v.number() },
+  handler: async (ctx, a): Promise<{ quiet: boolean; endsAt: number }> => await quietFor(ctx, a.creatorId, a.now),
+});
+
 async function phoneHold(ctx: MutationCtx, creatorId: Id<"creators">, kind: string | undefined, now: number): Promise<string | null> {
   const c = (await ctx.db.get(creatorId)) as Doc<"creators"> | null;
   if (!c || c.channel.kind !== "imessage") return null;

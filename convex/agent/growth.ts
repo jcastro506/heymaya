@@ -32,7 +32,12 @@ export interface GrowthPlan {
   hypothesis: string;
   startedAt: number;
   reviewAt: number;
-  status: "running" | "revised" | "dropped";
+  status: "proposed" | "running" | "revised" | "dropped";
+  /** The month plan's own words (agent/monthPlan): their goal, what it's built on, how it reaches the goal. */
+  goal?: string;
+  goalStated?: boolean;
+  builtOn?: string[];
+  howItHelps?: string;
   setBy: "tap" | "chat" | "review";
 }
 
@@ -45,11 +50,11 @@ How to guide someone who does not know how to grow: lead with what their own pos
 
 /** Pure: the prefix block, only while it earns its place. */
 export function growthSection(input: { standing: "new" | "thin" | "solid"; laneConfirmed: boolean; plan: GrowthPlan | null; now: number; timeZone: string }): string | null {
-  const running = input.plan?.status === "running";
+  const running = input.plan?.status === "running" || input.plan?.status === "proposed";
   if (input.standing === "solid" && input.laneConfirmed && !running) return null;
   const day = (t: number) => new Intl.DateTimeFormat("en-US", { timeZone: input.timeZone, month: "short", day: "numeric" }).format(t);
   const plan = input.plan
-    ? `# Their growth plan (${input.plan.status}; set ${day(input.plan.startedAt)}, review ${day(input.plan.reviewAt)}${input.now >= input.plan.reviewAt && running ? " — DUE: revise it out loud with the numbers" : ""})\nLane: ${input.plan.lane} (${input.plan.keywords.join(", ")})\nFormats: ${input.plan.formats.join(", ") || "not fixed"} · ${input.plan.postsPerWeek} posts a week\nHypothesis: ${input.plan.hypothesis}`
+    ? `# Their plan for the month (${input.plan.status === "proposed" ? "proposed, not agreed yet: when they agree or tweak it, set it with growth_plan; until then it still shapes the weeks" : input.plan.status}; set ${day(input.plan.startedAt)}, review ${day(input.plan.reviewAt)}${input.now >= input.plan.reviewAt && running ? " — DUE: tell them what worked against their goal, with the numbers, and propose next month" : ""})${input.plan.goal ? `\nTheir goal: ${input.plan.goal}${input.plan.goalStated === false ? " (your assumption; they haven't said)" : ""}` : ""}${input.plan.builtOn?.length ? `\nBuilt on: ${input.plan.builtOn.join("; ")}` : ""}\nLane: ${input.plan.lane} (${input.plan.keywords.join(", ")})\nFormats: ${input.plan.formats.join(", ") || "not fixed"} · ${input.plan.postsPerWeek} posts a week\nTesting: ${input.plan.hypothesis}${input.plan.howItHelps ? `\nHow it reaches the goal: ${input.plan.howItHelps}` : ""}\nEvery idea and every week should serve this plan; say how when it isn't obvious.`
     : `# Their growth plan\nNone yet. Once the lane is confirmed, set one: lane, format, cadence, one sentence on what should move.`;
   return `${GROWTH_PLAYBOOK}\n\n${plan}`;
 }
@@ -76,6 +81,9 @@ export const setPlan = internalMutation({
       status: "running",
       setBy: a.setBy,
     };
+    // Agreeing to (or tweaking) the month she proposed keeps its goal and its why (agent/monthPlan).
+    const prev = c.growthPlan as GrowthPlan | undefined;
+    if (prev && prev.status === "proposed") Object.assign(plan, { goal: prev.goal, goalStated: prev.goalStated, builtOn: prev.builtOn, howItHelps: prev.howItHelps, reviewAt: prev.reviewAt, formats: plan.formats.length ? plan.formats : prev.formats, hypothesis: a.hypothesis ? plan.hypothesis : prev.hypothesis, postsPerWeek: a.postsPerWeek !== undefined ? plan.postsPerWeek : prev.postsPerWeek });
     await ctx.db.patch(a.creatorId, { growthPlan: plan, updatedAt: now });
     return { ok: true, plan };
   },

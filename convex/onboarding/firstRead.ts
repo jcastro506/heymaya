@@ -238,7 +238,8 @@ export const run = internalAction({
       await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: args.creatorId, step: "first_read" });
       // Day one is a working day (plan 4f addendum): the rest of this week follows the read,
       // and the scout judges the roster it sampled during onboarding, after the read, not before.
-      await ctx.scheduler.runAt(Date.now() + FIRST_PLAN_DELAY_MS, internal.calendar.weekPlan.draft, { creatorId: creator._id, horizon: "first" });
+      // The month first, then its first week, as one text (agent/monthPlan).
+      await ctx.scheduler.runAt(Date.now() + FIRST_PLAN_DELAY_MS, internal.agent.monthPlan.proposeThenWeek, { creatorId: creator._id });
       await ctx.scheduler.runAt(Date.now() + FIRST_SCOUT_DELAY_MS, internal.scout.scout.run, { creatorId: creator._id });
     return { ok: true };
   },
