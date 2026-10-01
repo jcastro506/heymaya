@@ -18,7 +18,7 @@ import { clip } from "../lib/clip";
 import { v } from "convex/values";
 import { appendHistory } from "../core/normal";
 import { entitlementsFor, accountsWithinPlan } from "../billing/tiers";
-import { internalAction, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery, type ActionCtx } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -168,7 +168,6 @@ export const setCursor = internalMutation({
   },
 });
 
-/** Which creator owns a Zernio account id. */
 /** The plan's connected-account cap (§26). */
 export const accountCap = internalQuery({
   args: { creatorId: v.id("creators") },
@@ -178,11 +177,17 @@ export const accountCap = internalQuery({
   },
 });
 
+/**
+ * Which creator owns a Zernio account id. Streams the Zernio connections by index (S0 fleet scale:
+ * this was a `take(1000)` over the whole table, so the 1,001st connection's rows were never written).
+ */
 export const creatorForAccount = internalQuery({
   args: { accountId: v.string() },
   handler: async (ctx, a): Promise<Id<"creators"> | null> => {
-    const conns = (await ctx.db.query("connections").take(1000)) as Doc<"connections">[];
-    const conn = conns.find((c) => c.provider === "zernio" && (c.zernioAccounts ?? []).some((x) => x.accountId === a.accountId));
+    let conn: Doc<"connections"> | null = null;
+    for await (const c of ctx.db.query("connections").withIndex("by_provider", (q) => q.eq("provider", "zernio"))) {
+      if ((c.zernioAccounts ?? []).some((x) => x.accountId === a.accountId)) { conn = c as Doc<"connections">; break; }
+    }
     if (!conn) return null;
     // §26: an account past the plan's cap is nobody's; its rows are never written.
     const creator = (await ctx.db.get(conn.creatorId)) as Doc<"creators"> | null;
@@ -190,6 +195,36 @@ export const creatorForAccount = internalQuery({
     return accountsWithinPlan(conn.zernioAccounts ?? [], entitlementsFor(creator.plan).accounts).some((x) => x.accountId === a.accountId) ? conn.creatorId : null;
   },
 });
+
+export const OWNERS_PAGE = 200;
+
+/** One page of Zernio connections as account → creator, only accounts within each plan (§26). */
+export const accountOwnersPage = internalQuery({
+  args: { cursor: v.union(v.string(), v.null()) },
+  handler: async (ctx, a): Promise<{ owners: Array<{ accountId: string; creatorId: Id<"creators"> }>; isDone: boolean; continueCursor: string }> => {
+    const res = await ctx.db.query("connections").withIndex("by_provider", (q) => q.eq("provider", "zernio")).paginate({ cursor: a.cursor, numItems: OWNERS_PAGE });
+    const owners: Array<{ accountId: string; creatorId: Id<"creators"> }> = [];
+    for (const conn of res.page as Doc<"connections">[]) {
+      const creator = (await ctx.db.get(conn.creatorId)) as Doc<"creators"> | null;
+      if (!creator) continue;
+      for (const x of accountsWithinPlan(conn.zernioAccounts ?? [], entitlementsFor(creator.plan).accounts)) owners.push({ accountId: x.accountId, creatorId: conn.creatorId });
+    }
+    return { owners, isDone: res.isDone, continueCursor: res.continueCursor };
+  },
+});
+
+/** Every page into one map, built once per delta run instead of one table scan per row. */
+async function accountOwners(ctx: Pick<ActionCtx, "runQuery">): Promise<Map<string, Id<"creators">>> {
+  const map = new Map<string, Id<"creators">>();
+  let cursor: string | null = null;
+  for (let pages = 0; pages < 500; pages++) {
+    const r: { owners: Array<{ accountId: string; creatorId: Id<"creators"> }>; isDone: boolean; continueCursor: string } = await ctx.runQuery(internal.connections.sync.accountOwnersPage, { cursor });
+    for (const o of r.owners) map.set(o.accountId, o.creatorId);
+    if (r.isDone) break;
+    cursor = r.continueCursor;
+  }
+  return map;
+}
 
 /**
  * Fleet-wide: everything that changed since the cursor, in one stream. The first call
@@ -202,6 +237,7 @@ export const delta = internalAction({
     let cur = await ctx.runQuery(internal.connections.sync.cursor, { key: "zernio:analytics:delta" });
     let pages = 0, rows = 0, written = 0, skipped = 0;
     const touched = new Set<Id<"creators">>();
+    let owners: Map<string, Id<"creators">> | null = null;
     try {
       for (;;) {
         const res = await c.request<{ data?: Array<Record<string, unknown>>; nextCursor?: string; hasMore?: boolean }>("/api/v1/analytics/delta", { query: cur ? { cursor: cur } : {} });
@@ -212,7 +248,8 @@ export const delta = internalAction({
           const row = (item.post ?? item) as ZernioPostRow;
           const conn = normalizeConnected(row);
           const accountId = String((row.platforms?.[0]?.accountId ?? (item as { accountId?: string }).accountId) ?? "");
-          const creatorId = accountId ? await ctx.runQuery(internal.connections.sync.creatorForAccount, { accountId }) : null;
+          owners ??= await accountOwners(ctx);
+          const creatorId = accountId ? owners.get(accountId) ?? null : null;
           if (!conn || !creatorId) { skipped++; continue; }
           await ctx.runMutation(internal.connections.sync.upsert, { creatorId, connected: conn, caption: row.content ?? "" });
           touched.add(creatorId);
@@ -251,20 +288,39 @@ export const writeSnapshot = internalMutation({
   },
 });
 
+type ConnectedCreator = { creatorId: Id<"creators">; accounts: Array<{ accountId: string; platform: string }> };
+
+/** One page of connected Zernio creators (index on provider + status; S0: no silent thousand-row cap). */
 export const connectedCreators = internalQuery({
-  args: {},
-  handler: async (ctx): Promise<Array<{ creatorId: Id<"creators">; accounts: Array<{ accountId: string; platform: string }> }>> =>
-    ((await ctx.db.query("connections").take(1000)) as Doc<"connections">[])
-      .filter((c) => c.provider === "zernio" && c.status === "connected")
-      .map((c) => ({ creatorId: c.creatorId, accounts: (c.zernioAccounts ?? []).filter((x) => x.canFetchAnalytics).map((x) => ({ accountId: x.accountId, platform: x.platform })) })),
+  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  handler: async (ctx, a): Promise<{ page: ConnectedCreator[]; isDone: boolean; continueCursor: string }> => {
+    const res = await ctx.db.query("connections").withIndex("by_provider", (q) => q.eq("provider", "zernio").eq("status", "connected")).paginate({ cursor: a.cursor ?? null, numItems: OWNERS_PAGE });
+    return {
+      page: (res.page as Doc<"connections">[]).map((c) => ({ creatorId: c.creatorId, accounts: (c.zernioAccounts ?? []).filter((x) => x.canFetchAnalytics).map((x) => ({ accountId: x.accountId, platform: x.platform })) })),
+      isDone: res.isDone,
+      continueCursor: res.continueCursor,
+    };
+  },
 });
+
+export async function allConnectedCreators(ctx: Pick<ActionCtx, "runQuery">): Promise<ConnectedCreator[]> {
+  const all: ConnectedCreator[] = [];
+  let cursor: string | null = null;
+  for (let pages = 0; pages < 500; pages++) {
+    const r: { page: ConnectedCreator[]; isDone: boolean; continueCursor: string } = await ctx.runQuery(internal.connections.sync.connectedCreators, { cursor });
+    all.push(...r.page);
+    if (r.isDone) break;
+    cursor = r.continueCursor;
+  }
+  return all;
+}
 
 /** Daily: today's follower count per connected account. */
 export const followers = internalAction({
   args: {},
   handler: async (ctx): Promise<{ creators: number; snapshots: number }> => {
     const c = client();
-    const all = await ctx.runQuery(internal.connections.sync.connectedCreators, {});
+    const all = await allConnectedCreators(ctx);
     const day = new Date().toISOString().slice(0, 10);
     let snapshots = 0;
     for (const cr of all) {

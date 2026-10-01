@@ -58,13 +58,23 @@ export interface Connected {
   viewerCountries: Record<string, number> | null;
 }
 
-/** Which metrics each platform can actually report, per Zernio's spec and the recording. */
+/**
+ * Which metrics each platform can actually report, per Zernio's spec and the recordings.
+ *
+ * TikTok average/total watch time and follows: the spec (1.196.0) calls `igReelsAvgWatchTime`
+ * "Instagram Reels only", but the live recording of 2026-10-01 (fixtures.live-2026-10-01.json,
+ * a TikTok connected through the business lane) fills it on every TikTok post, and it agrees with
+ * itself: 1,136 views × 4.32 s = 4,916 s, the recorded total. `follows` came back 2 on one post.
+ * TikTok sends no video duration, so its retention (a share of the length) is not computed here.
+ */
 export const EXPOSES: Record<Platform, ReadonlySet<keyof Connected>> = {
-  tiktok: new Set(["views", "likes", "comments", "shares", "saves", "impressions", "reach", "clicks", "completionRate", "profileViews", "viewSources", "viewerTypes", "viewerCountries"] as const),
+  tiktok: new Set(["views", "likes", "comments", "shares", "saves", "impressions", "reach", "clicks", "follows", "avgWatchMs", "totalWatchMs", "completionRate", "profileViews", "viewSources", "viewerTypes", "viewerCountries"] as const),
   instagram: new Set(["views", "likes", "comments", "shares", "saves", "impressions", "reach", "clicks", "follows", "avgWatchMs", "totalWatchMs", "skipRatePct", "durationSec"] as const),
 };
 
 const num = (x: unknown): number | null => (typeof x === "number" && Number.isFinite(x) ? x : x === null ? null : typeof x === "string" && x.trim() !== "" && Number.isFinite(Number(x)) ? Number(x) : null);
+
+const positive = (x: number | null): number | null => (x !== null && x > 0 ? x : null);
 
 /** Pure: a share map (fractions 0-1) or null when TikTok reported nothing (Zernio sends {} then). */
 export function shares01(x: unknown): Record<string, number> | null {
@@ -135,9 +145,10 @@ export function normalizeConnected(row: ZernioPostRow): Connected | null {
     impressions: take("impressions", a?.impressions),
     reach: take("reach", a?.reach),
     clicks: take("clicks", a?.clicks),
-    follows: take("follows", a?.follows),
-    avgWatchMs: isVideoWithDuration ? take("avgWatchMs", a?.igReelsAvgWatchTime) : null,
-    totalWatchMs: isVideoWithDuration ? take("totalWatchMs", a?.igReelsVideoViewTotalTime) : null,
+    // TikTok: a 0 follows or 0 watch time is "not reported" (other lanes, not filled yet), never a finding.
+    follows: p === "tiktok" ? positive(take("follows", a?.follows)) : take("follows", a?.follows),
+    avgWatchMs: p === "tiktok" ? positive(take("avgWatchMs", a?.igReelsAvgWatchTime)) : isVideoWithDuration ? take("avgWatchMs", a?.igReelsAvgWatchTime) : null,
+    totalWatchMs: p === "tiktok" ? positive(take("totalWatchMs", a?.igReelsVideoViewTotalTime)) : isVideoWithDuration ? take("totalWatchMs", a?.igReelsVideoViewTotalTime) : null,
     skipRatePct: isVideoWithDuration ? take("skipRatePct", a?.reelsSkipRate) : null,
     durationSec,
     // Zernio sends 0 and {} for "not reported" (other platforms, other connection lanes, not filled yet).

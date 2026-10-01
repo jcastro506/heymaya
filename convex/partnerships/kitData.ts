@@ -12,7 +12,8 @@
 import type { QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { normalViews } from "../core/normal";
-import { appCards } from "../connections/audience";
+import { appCards, tiktokViewerCountries } from "../connections/audience";
+import { countryName } from "../connections/accountInsights";
 import { avatarKey, coverForUrl, mediaUrl } from "../media";
 import { Opportunity, Profile } from "./contracts";
 
@@ -43,6 +44,10 @@ export interface KitPlatform {
   audience: KitAudience | null;
   /** TikTok only: a screenshot they sent is older than the window; she asks for a fresh one when it matters. */
   audienceStale?: boolean;
+  /** A2, Instagram connected: who engaged this month (not who follows). Absent or null = not reported. */
+  engagedAudience?: KitAudience | null;
+  /** A2, TikTok connected: viewer countries across recent posts, weighted by views. Absent or null = not reported. */
+  viewerCountries?: { asOf: number | null; posts: number; countries: KitShare[] } | null;
   best: KitPost[];
 }
 export interface KitV2 {
@@ -138,6 +143,7 @@ export async function readKitV2(ctx: QueryCtx, c: Doc<"creators">, now = Date.no
   const since = new Date(now - 95 * DAY).toISOString().slice(0, 10);
   const snaps = (await ctx.db.query("followerSnapshots").withIndex("by_creator_day", (q) => q.eq("creatorId", c._id).gte("day", since)).take(400)) as Doc<"followerSnapshots">[];
   const audienceRows = (await ctx.db.query("accountInsights").withIndex("by_creator_kind", (q) => q.eq("creatorId", c._id).eq("kind", "audience")).take(20)) as Doc<"accountInsights">[];
+  const engagedRows = (await ctx.db.query("accountInsights").withIndex("by_creator_kind", (q) => q.eq("creatorId", c._id).eq("kind", "engaged")).take(20)) as Doc<"accountInsights">[];
   const prof = (await ctx.db.query("partnershipProfiles").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).unique()) as Doc<"partnershipProfiles"> | null;
   const prefs = Profile.parse(prof?.data ?? {});
   const mailbox = (await ctx.db.query("partnershipMailboxes").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).first()) as Doc<"partnershipMailboxes"> | null;
@@ -163,6 +169,16 @@ export async function readKitV2(ctx: QueryCtx, c: Doc<"creators">, now = Date.no
       if (freshScreenshot(settings.tiktokAudience.at, now)) audience = { source: "tiktok_studio", asOf: settings.tiktokAudience.at, age: settings.tiktokAudience.age, gender: settings.tiktokAudience.gender, countries: settings.tiktokAudience.countries, cities: [] };
       else audienceStale = true;
     }
+    let engagedAudience: KitAudience | null = null;
+    let viewerCountries: KitPlatform["viewerCountries"] = null;
+    if (platform === "instagram") {
+      const row = engagedRows.find((r) => r.platform === "instagram" && r.status === "ok") ?? null;
+      const a = row ? appCards("instagram", true, { insights: null, audience: row, snaps: [] }, now).audience : null;
+      if (row && a && a.status === "ok") engagedAudience = { source: "connected", asOf: a.asOf ?? row.fetchedAt, age: a.age, gender: a.gender, countries: a.countries, cities: a.cities };
+    } else {
+      const vc = await tiktokViewerCountries(ctx, c._id, now);
+      if (vc) viewerCountries = { asOf: vc.asOf, posts: vc.posts, countries: vc.countries.map((x) => ({ label: countryName(x.code), share: x.share })) };
+    }
     const best = bestPosts(mine.map((x) => ({ url: x.url, platform, views: x.metrics.views, multiple: x.multiple ?? null, caption: x.caption.split("\n")[0].slice(0, 100), createTime: x.createTime, cover: null as string | null })), now);
     for (const b of best) b.cover = await coverForUrl(ctx, b.url).catch(() => null);
     platforms.push({
@@ -176,6 +192,8 @@ export async function readKitV2(ctx: QueryCtx, c: Doc<"creators">, now = Date.no
       growth30d: growthOf(pSnaps.map((s) => ({ day: s.day, followers: s.followers, gained: s.gained, lost: s.lost })), now),
       audience,
       ...(audienceStale ? { audienceStale } : {}),
+      engagedAudience,
+      viewerCountries,
       best,
     });
   }
@@ -230,7 +248,7 @@ export interface PublicKitV2 {
   region: string | null;
   contactEmail: string | null;
   brandWork: string[];
-  platforms: Array<Omit<KitPlatform, "audience" | "audienceStale" | "posts"> & { audience: KitAudience | null }>;
+  platforms: Array<Omit<KitPlatform, "audience" | "audienceStale" | "posts" | "engagedAudience" | "viewerCountries"> & { audience: KitAudience | null; engagedAudience: KitAudience | null; viewerCountries: KitPlatform["viewerCountries"] }>;
   /** A per-brand view: the posts she picked for them lead, and one idea. */
   forBrand?: { brand: string; idea: string };
 }
@@ -247,11 +265,13 @@ export function publicView(k: KitV2, variant?: { brand: string; idea: string; po
       const lead = variant.postUrls.map((u) => best.find((b) => b.url === u)).filter((b): b is KitPost => Boolean(b));
       best = [...lead, ...best.filter((b) => !variant.postUrls.includes(b.url))];
     }
-    const { audience, audienceStale: _s, posts: _n, ...rest } = p;
+    const { audience, audienceStale: _s, posts: _n, engagedAudience, viewerCountries, ...rest } = p;
     void _s; void _n;
     // Who they tag stays private: handles are cut from captions on anything a brand sees.
     const shown = best.map((b) => ({ ...b, caption: publicCaption(b.caption) }));
-    return { ...rest, best: shown, audience: k.showAudience === true ? audience : null };
+    // Every audience read (followers, engaged, viewer countries) only with their yes.
+    const yes = k.showAudience === true;
+    return { ...rest, best: shown, audience: yes ? audience : null, engagedAudience: yes ? engagedAudience ?? null : null, viewerCountries: yes ? viewerCountries ?? null : null };
   });
   if (variant) platforms.sort((a, b) => Number(b.best.some((x) => variant.postUrls.includes(x.url))) - Number(a.best.some((x) => variant.postUrls.includes(x.url))));
   return {

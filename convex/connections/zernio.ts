@@ -16,6 +16,7 @@ import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { creatorForIdentity } from "../core/identity";
+import { storeWebhookComment } from "./comments";
 import { accountsHealth, connectUrl, createProfile, deleteAccount, deleteProfile, listAccounts, postAnalytics, verifySignature, zernioClient, ZERNIO_SIGNATURE_HEADER, ZernioError, subscribeWebhook, listWebhooks, type ZernioAccount } from "../integrations/zernio";
 
 function client() {
@@ -33,7 +34,7 @@ export const connection = internalQuery({
 export const byProfile = internalQuery({
   args: { zernioProfileId: v.string() },
   handler: async (ctx, a): Promise<Doc<"connections"> | null> =>
-    (await ctx.db.query("connections").filter((q) => q.and(q.eq(q.field("provider"), "zernio"), q.eq(q.field("zernioProfileId"), a.zernioProfileId))).first()) as Doc<"connections"> | null,
+    (await ctx.db.query("connections").withIndex("by_provider", (q) => q.eq("provider", "zernio")).filter((q) => q.eq(q.field("zernioProfileId"), a.zernioProfileId)).first()) as Doc<"connections"> | null,
 });
 
 export const meForConnect = internalQuery({
@@ -265,6 +266,18 @@ export const zernioWebhook = httpAction(async (ctx, request) => {
   // Sprint 4e: numbers landed somewhere; pull the delta now rather than at the next hour.
   // Scheduled, so the webhook answers fast and a slow pull can never make Zernio retry it.
   if (type === "analytics.synced") await ctx.scheduler.runAfter(0, internal.connections.sync.delta, {});
+  // A2: a comment on one of their posts, stored (read only; nothing replies). Idempotent by comment id,
+  // so Zernio's retries and redeliveries land once. Answered 200 whatever happens: a comment never makes Zernio retry.
+  if (type === "comment.received") {
+    try {
+      return new Response(await storeWebhookComment(ctx, body, Date.now()), { status: 200 });
+    } catch (e) {
+      const detail = e instanceof Error ? clip(e.message, 160) : "failed";
+      console.error(`[zernio webhook] comment: ${detail}`);
+      await ctx.runMutation(internal.connections.zernio.recordHealth, { check: "comment webhook", ok: false, detail }).catch(() => null);
+      return new Response("comment not stored", { status: 200 });
+    }
+  }
   const profileId = String(body.profileId ?? body.data?.profileId ?? (body.data?.account as { profileId?: string } | undefined)?.profileId ?? "");
   if (!type.startsWith("account.") || !profileId) return new Response("ignored", { status: 200 });
   const conn = await ctx.runQuery(internal.connections.zernio.byProfile, { zernioProfileId: profileId });

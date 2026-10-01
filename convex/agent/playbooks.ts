@@ -17,6 +17,7 @@ Before you judge a candidate that might be notable, answer these with tools (ski
 5. Is it theirs to take? own_rhymes with the topic or format; if they have done it and it beat their normal, say so with the number; if they have done it and it fell flat, say that too.
 6. Does something in their life fit it? calendar_upcoming, once, when the idea could ride an event.
 7. Have they told you anything about this, or saved something like it? recall (free) with the idea's plainest words: a saved idea or a note they gave you beats your guess about their taste.
+8. Is their own audience asking for it? own_comments (free, connected accounts): a question asked under their posts by two or more people is an idea in their audience's own words; quote it, never invent one.
 Spend on at most two candidates. If the budget is gone, answer with what you have and say what you could not check.`,
 
   opinion: `
@@ -27,7 +28,7 @@ For a link, before the read:
 4. post_comments only when the reaction changes a fix (people asking the same question is a fix; "fire" fifty times is not).
 5. own_rhymes for their own history with this structure; cite their multiple when they have one. lane_benchmark is free: a number is only good or bad next to the lane's median.
 6. recall (free) for what they have said about this kind of post before, or an idea of yours they saved that it resembles; their own words outrank your read.
-For THEIR OWN post, own_post_numbers first, never post_info: reach beats views (reach is who was shown it, views counts repeats), and the tool says which basis each number has and how old the read is. post_diagnosis gives the four-way read; cite its basis. Retention and skip rate exist only on Instagram Reels; on TikTok say you cannot see them, once, and do not guess. A Reels figure may explain the TikTok of the same video only when you say it is the same video.
+For THEIR OWN post, own_post_numbers first, never post_info: reach beats views (reach is who was shown it, views counts repeats), and the tool says which basis each number has and how old the read is. post_diagnosis gives the four-way read; cite its basis. Retention and skip rate exist only on Instagram Reels; a connected TikTok gives average watch time and the share who finished, never the skip rate: say what you cannot see, once, and do not guess. A Reels figure may explain the TikTok of the same video only when you say it is the same video.
 For a DRAFT they filmed (a file, no link): never post_info. own_rhymes for their history with this structure, and cite their multiple when they have one; lane_benchmark (free) so a number has the lane's median next to it; recall (free) for what they said about this kind of post or an idea of yours it came from. The evidence carries theirCraft: how their best and weakest watched posts open and pace (seconds to the hook, length, when text lands). Compare the draft's card to those, by name: "your hits land the hook in about a second; this takes four" is the read. If the card names a sound that could matter, sound_videos.`,
 
   explainPost: `

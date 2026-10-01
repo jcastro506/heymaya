@@ -8,6 +8,8 @@ import { clip } from "../lib/clip";
  *                      account-insights, last 30 days: totals, the follows split, reach per day
  *   Instagram, weekly  demographics (only at 100+ followers; under that, said, not called)
  *   TikTok, daily      account-insights time series (89 days: count, gained, lost) → followerSnapshots
+ *   Both, daily (A2)   comments on posts with new ones (read only) → postComments; post timelines → ownPosts.history
+ *   Instagram, weekly  engaged-audience demographics (who engaged this month) → accountInsights "engaged"
  *
  * Bounded: an hourly pass takes the stalest 40 creators whose reads are over 20 hours old, four
  * at a time, so every connected creator is read about once a day up to ~900 of them. Fail-soft:
@@ -24,6 +26,8 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { accountsWithinPlan, entitlementsFor } from "../billing/tiers";
 import { instagramAccountInsights, instagramDemographics, instagramFollowerHistory, tiktokAccountInsights, zernioClient, type ZernioClient } from "../integrations/zernio/index";
+import { syncAccountComments } from "./comments";
+import { syncAccountTimelines } from "./timeline";
 import { classifyError, flowOver, IG_TOTAL_METRICS, normalizeDemographics, normalizeFollowerHistory, normalizeIgInsights, type FollowerDay, type ReadStatus } from "./accountInsights";
 
 export const INSIGHTS = {
@@ -52,11 +56,17 @@ export function readableAccounts(conn: Pick<Doc<"connections">, "provider" | "st
 
 const lastTry = (r: Doc<"accountInsights"> | undefined) => (r ? Math.max(r.fetchedAt, r.attemptedAt ?? 0) : 0);
 
-/** Who is due, stalest first, bounded. */
-export const due = internalQuery({
-  args: { now: v.number(), limit: v.optional(v.number()) },
-  handler: async (ctx, a): Promise<Id<"creators">[]> => {
-    const conns = ((await ctx.db.query("connections").take(1000)) as Doc<"connections">[]).filter((c) => c.provider === "zernio" && c.status !== "disconnected");
+export const DUE_PAGE = 200;
+
+/**
+ * Who is due, one page of Zernio connections at a time (S0 fleet scale: a `take(1000)` silently
+ * dropped every connection after the thousandth). The action walks the pages and keeps the stalest.
+ */
+export const duePage = internalQuery({
+  args: { now: v.number(), cursor: v.union(v.string(), v.null()), numItems: v.optional(v.number()) },
+  handler: async (ctx, a): Promise<{ due: Array<{ creatorId: Id<"creators">; oldest: number }>; isDone: boolean; continueCursor: string }> => {
+    const res = await ctx.db.query("connections").withIndex("by_provider", (q) => q.eq("provider", "zernio")).paginate({ cursor: a.cursor, numItems: Math.min(a.numItems ?? DUE_PAGE, 500) });
+    const conns = (res.page as Doc<"connections">[]).filter((c) => c.status !== "disconnected");
     const out: Array<{ creatorId: Id<"creators">; oldest: number }> = [];
     for (const conn of conns) {
       const creator = (await ctx.db.get(conn.creatorId)) as Doc<"creators"> | null;
@@ -67,9 +77,22 @@ export const due = internalQuery({
       const oldest = Math.min(...accounts.map((acc) => lastTry(rows.find((r) => r.accountId === acc.accountId))));
       if (oldest <= a.now - INSIGHTS.staleAfterMs) out.push({ creatorId: conn.creatorId, oldest });
     }
-    return out.sort((x, y) => x.oldest - y.oldest).slice(0, a.limit ?? INSIGHTS.creatorsPerPass).map((x) => x.creatorId);
+    return { due: out, isDone: res.isDone, continueCursor: res.continueCursor };
   },
 });
+
+/** Every page, then the stalest `limit`. Bounded by the page count, never by a silent cap. */
+export async function dueCreators(ctx: Pick<ActionCtx, "runQuery">, now: number, limit: number = INSIGHTS.creatorsPerPass): Promise<Id<"creators">[]> {
+  const all: Array<{ creatorId: Id<"creators">; oldest: number }> = [];
+  let cursor: string | null = null;
+  for (let pages = 0; pages < 500; pages++) {
+    const r: { due: Array<{ creatorId: Id<"creators">; oldest: number }>; isDone: boolean; continueCursor: string } = await ctx.runQuery(internal.connections.insightsSync.duePage, { now, cursor });
+    all.push(...r.due);
+    if (r.isDone) break;
+    cursor = r.continueCursor;
+  }
+  return all.sort((x, y) => x.oldest - y.oldest).slice(0, limit).map((x) => x.creatorId);
+}
 
 /** One creator's readable accounts, and what is already stored for each. */
 export const state = internalQuery({
@@ -121,7 +144,7 @@ const sliceArr = v.array(v.object({ label: v.string(), value: v.number(), share:
 /** Latest-only: one row per creator, account and kind. `status: failed` touches only the attempt time. */
 export const writeInsights = internalMutation({
   args: {
-    creatorId: v.id("creators"), platform: v.string(), accountId: v.string(), kind: v.union(v.literal("insights"), v.literal("audience")), now: v.number(),
+    creatorId: v.id("creators"), platform: v.string(), accountId: v.string(), kind: v.union(v.literal("insights"), v.literal("audience"), v.literal("engaged"), v.literal("comments")), now: v.number(),
     status: v.union(v.literal("ok"), v.literal("not_reported"), v.literal("too_few_followers"), v.literal("not_available"), v.literal("failed")),
     fromDate: v.optional(v.string()), toDate: v.optional(v.string()),
     metrics: v.optional(v.record(v.string(), v.number())),
@@ -179,6 +202,13 @@ async function syncAccount(ctx: ActionCtx, c: ZernioClient, creatorId: Id<"creat
   const h = await history(ctx, c, creatorId, acc, now);
   if (h.status === "failed") failures.push(`${acc.platform} history: ${h.detail}`);
 
+  // A2, both platforms: comments on their recent posts (read only) and how their views arrived.
+  const cm = await syncAccountComments(ctx, c, creatorId, acc, now, classifyError);
+  if (cm.status === "failed") failures.push(`${acc.platform} comments: ${cm.detail}`);
+  await ctx.runMutation(internal.connections.insightsSync.writeInsights, { ...base, kind: "comments", status: cm.status === "ok" ? "ok" : cm.status, ...(cm.status === "ok" ? { metrics: { postsRead: cm.posts, commentsRead: cm.read } } : {}) });
+  const tl = await syncAccountTimelines(ctx, c, creatorId, acc, now, classifyError);
+  if (tl.failure) failures.push(`${acc.platform} timeline: ${tl.failure}`);
+
   if (acc.platform === "tiktok") {
     // TikTok's account endpoint has nothing else at account level (no reach, no demographics, per the spec).
     const flow = flowOver(h.days, INSIGHTS.insightsDays, dayOf(now));
@@ -211,6 +241,7 @@ async function syncAccount(ctx: ActionCtx, c: ZernioClient, creatorId: Id<"creat
     const followers = h.days.filter((d) => d.followers !== null).at(-1)?.followers ?? acc.latestFollowers;
     if (followers !== null && followers < INSIGHTS.audienceMinFollowers) {
       await ctx.runMutation(internal.connections.insightsSync.writeInsights, { ...base, kind: "audience", status: "too_few_followers" });
+      await ctx.runMutation(internal.connections.insightsSync.writeInsights, { ...base, kind: "engaged", status: "too_few_followers" });
     } else {
       const r = await attempt(() => instagramDemographics(c, { accountId: acc.accountId, metric: "follower_demographics", breakdown: ["age", "gender", "country", "city"], timeframe: "this_month" }));
       if (r.status === "failed") failures.push(`instagram audience: ${r.detail}`);
@@ -220,6 +251,20 @@ async function syncAccount(ctx: ActionCtx, c: ZernioClient, creatorId: Id<"creat
         await ctx.runMutation(internal.connections.insightsSync.writeInsights, { ...base, kind: "audience", status: "ok", audience, ...(aud.base !== null ? { audienceBase: aud.base } : {}) });
       } else {
         await ctx.runMutation(internal.connections.insightsSync.writeInsights, { ...base, kind: "audience", status: r.status === "ok" ? "not_reported" : r.status });
+      }
+      // A2: who ENGAGED this month (not who follows), the same breakdowns, the same gate.
+      if (r.status === "not_available") {
+        await ctx.runMutation(internal.connections.insightsSync.writeInsights, { ...base, kind: "engaged", status: "not_available" });
+      } else {
+        const e = await attempt(() => instagramDemographics(c, { accountId: acc.accountId, metric: "engaged_audience_demographics", breakdown: ["age", "gender", "country", "city"], timeframe: "this_month" }));
+        if (e.status === "failed") failures.push(`instagram engaged audience: ${e.detail}`);
+        const eng = e.status === "ok" ? normalizeDemographics(e.raw) : null;
+        if (eng) {
+          const audience = Object.fromEntries((["age", "gender", "country", "city"] as const).filter((k) => eng[k]).map((k) => [k, eng[k]!]));
+          await ctx.runMutation(internal.connections.insightsSync.writeInsights, { ...base, kind: "engaged", status: "ok", audience, ...(eng.base !== null ? { audienceBase: eng.base } : {}) });
+        } else {
+          await ctx.runMutation(internal.connections.insightsSync.writeInsights, { ...base, kind: "engaged", status: e.status === "ok" ? "not_reported" : e.status });
+        }
       }
     }
   }
@@ -250,7 +295,7 @@ export const run = internalAction({
   args: {},
   handler: async (ctx): Promise<{ creators: number; accounts: number; failed: number }> => {
     const now = Date.now();
-    const ids = await ctx.runQuery(internal.connections.insightsSync.due, { now });
+    const ids = await dueCreators(ctx, now);
     if (!ids.length) return { creators: 0, accounts: 0, failed: 0 };
     let c: ZernioClient;
     try {

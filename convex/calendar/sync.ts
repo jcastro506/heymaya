@@ -42,7 +42,7 @@ export function classifyByCode(input: { title: string; recurring: boolean }): Ev
 export const connectedCreators = internalQuery({
   args: {},
   handler: async (ctx): Promise<Id<"creators">[]> => {
-    const rows = (await ctx.db.query("connections").filter((q) => q.and(q.eq(q.field("provider"), "google_calendar"), q.eq(q.field("status"), "connected"))).collect()) as Doc<"connections">[];
+    const rows = (await ctx.db.query("connections").withIndex("by_provider", (q) => q.eq("provider", "google_calendar").eq("status", "connected")).collect()) as Doc<"connections">[];
     return rows.map((r) => r.creatorId);
   },
 });
