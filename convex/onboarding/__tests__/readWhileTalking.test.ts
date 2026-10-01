@@ -73,3 +73,16 @@ describe("no em dashes", () => {
     expect(row?.body).toBe("your pans, easily your best");
   });
 });
+
+describe("no second 'reading your posts' after the hello", () => {
+  it("when the read starts before their posts are in, the hello already said it; without a hello it's said once", async () => {
+    const t = convexTest(schema, modules);
+    const withHello = await t.run((ctx) => seedCreator(ctx, "nh1", { dossier: undefined }));
+    const without = await t.run((ctx) => seedCreator(ctx, "nh2", { dossier: undefined }));
+    await t.run((ctx) => ctx.db.insert("messages", { creatorId: withHello, direction: "out", surface: "imessage", body: "hey, it's maya", ts: Date.now(), dedupeKey: `hello:${withHello}`, kind: "status" }));
+    await t.action(internal.onboarding.firstRead.run, { creatorId: withHello });
+    await t.action(internal.onboarding.firstRead.run, { creatorId: without });
+    const pending = (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.dedupeKey?.startsWith("first_read_pending:"));
+    expect(pending.map((m) => m.creatorId)).toEqual([without]);
+  });
+});
