@@ -50,8 +50,9 @@ export const inputsFor = internalQuery({
       // Sprint 4f: a running growth plan sets the cadence before the dossier does.
       postsPerWeek: (["running", "proposed"].includes((creator.growthPlan as { status?: string; postsPerWeek?: number } | undefined)?.status ?? "") ? (creator.growthPlan as { postsPerWeek?: number }).postsPerWeek : undefined) ?? dossier?.cadence?.postsPerWeek ?? 2,
       // Their habits from real blocks come first; the dossier's read of their catalogue second.
-      filmDays: habits.days.length ? habits.days : (dossier?.cadence?.filmingDays ?? []).map((d) => WEEKDAY[d.slice(0, 3).toLowerCase()]).filter((n): n is number => typeof n === "number"),
-      filmHour: habits.hour,
+      // What they told her beats what she inferred (2026-10-01): their words, then habits from real blocks, then the catalogue.
+      filmDays: creator.filmPrefs?.days.length ? creator.filmPrefs.days : habits.days.length ? habits.days : (dossier?.cadence?.filmingDays ?? []).map((d) => WEEKDAY[d.slice(0, 3).toLowerCase()]).filter((n): n is number => typeof n === "number"),
+      filmHour: creator.filmPrefs?.hour ?? habits.hour,
       editMinutes: editMinutesFor({ medianCutSeconds: typeof medianCut === "number" ? medianCut : null }, creator.noEditBlock),
       busy: [
         ...events.filter((e) => e.status === "active" && !e.allDay).map((e) => ({ start: e.start, end: e.end })),
