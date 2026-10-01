@@ -6,7 +6,9 @@
  * be on the calendar; the app makes it so whenever it runs and reports back the event ids.
  */
 import { v } from "convex/values";
-import { query, type QueryCtx } from "../_generated/server";
+import { internalAction, query, type QueryCtx } from "../_generated/server";
+import { internal } from "../_generated/api";
+import { ingestRows } from "./sync";
 import { mutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
 import { creatorForIdentity } from "../core/identity";
@@ -96,3 +98,40 @@ export const busy = mutation({
 export function deviceBusyOf(c: Pick<Doc<"creators">, "deviceCalendar">): Array<{ start: number; end: number }> {
   return c.deviceCalendar?.status === "granted" ? (c.deviceCalendar.busy ?? []).map((w) => ({ start: w.s, end: w.e })) : [];
 }
+
+/**
+ * Their iPhone's events, titles included (operator, 2026-10-01: Apple users should get "film the build-up
+ * to the half marathon" too). Through the same pipeline as Google (calendar/sync ingestRows): private
+ * titles (health, money, relationships; when in doubt) are never stored, filmable ones become signals.
+ * Busy times come from the same list, so the separate busy report is no longer needed.
+ */
+export const DEVICE_CALENDAR_ID = "device";
+
+export const events = mutation({
+  args: { events: v.array(v.object({ id: v.string(), title: v.string(), s: v.number(), e: v.number(), allDay: v.boolean(), recurring: v.boolean() })) },
+  handler: async (ctx, a): Promise<{ ok: boolean; kept: number }> => {
+    const c = await creatorForIdentity(ctx);
+    if (!c || c.deviceCalendar?.status !== "granted") return { ok: false, kept: 0 };
+    const now = Date.now();
+    const rows = a.events.slice(0, 400)
+      .filter((x) => x.id.length > 0 && x.id.length <= 300 && Number.isFinite(x.s) && Number.isFinite(x.e) && x.e > x.s && x.e > now - 86_400_000 && x.s < now + DEVICE.aheadDays * 86_400_000)
+      .map((x) => ({ calendarId: DEVICE_CALENDAR_ID, externalId: `device:${x.id}`, title: x.title.slice(0, 120), start: x.s, end: x.e, allDay: x.allDay, recurring: x.recurring, cancelled: false }));
+    // An event gone from their phone is gone: cancel what we had for it inside the window.
+    const had = (await ctx.db.query("calendarEvents").withIndex("by_creator_start", (q) => q.eq("creatorId", c._id).gte("start", now - 86_400_000).lte("start", now + DEVICE.aheadDays * 86_400_000)).take(500)) as Doc<"calendarEvents">[];
+    const seen = new Set(rows.map((r) => r.externalId));
+    for (const h of had) if (h.calendarId === DEVICE_CALENDAR_ID && h.status === "active" && !seen.has(h.externalId)) rows.push({ calendarId: DEVICE_CALENDAR_ID, externalId: h.externalId, title: h.title, start: h.start, end: h.end, allDay: h.allDay, recurring: h.recurring, cancelled: true });
+    const busyWindows = cleanBusy(rows.filter((r) => !r.cancelled && !r.allDay).map((r) => ({ s: r.start, e: r.end })), now);
+    await ctx.db.patch(c._id, { deviceCalendar: { ...c.deviceCalendar, busy: busyWindows, busyAt: now } });
+    await ctx.scheduler.runAfter(0, internal.calendar.device.ingest, { creatorId: c._id, rows });
+    return { ok: true, kept: rows.length };
+  },
+});
+
+export const ingest = internalAction({
+  args: { creatorId: v.id("creators"), rows: v.array(v.object({ calendarId: v.string(), externalId: v.string(), title: v.string(), start: v.number(), end: v.number(), allDay: v.boolean(), recurring: v.boolean(), cancelled: v.boolean() })) },
+  handler: async (ctx, a): Promise<{ signals: number }> => {
+    const tz = await ctx.runQuery(internal.calendar.sync.creatorTz, { creatorId: a.creatorId });
+    if (!tz) return { signals: 0 };
+    return { signals: await ingestRows(ctx, a.creatorId, a.rows, tz.timezone, Date.now()) };
+  },
+});

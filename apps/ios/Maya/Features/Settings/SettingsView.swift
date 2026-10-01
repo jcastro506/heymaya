@@ -26,7 +26,7 @@ struct SettingsView: View {
       } header: {
         Text("Your calendar")
       } footer: {
-        Text("She puts the sessions you book on your iPhone's calendar and plans around when you're busy. She never sees what your events are.")
+        Text("She puts the sessions you book on your iPhone's calendar, plans around your week, and suggests content for things worth filming, like a trip or a race. Anything personal stays private.")
       }
       Section("Plan") {
         NavigationLink { PlanView() } label: { LabeledContent("Your plan", value: settings.tier.capitalized) }

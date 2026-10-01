@@ -88,3 +88,31 @@ describe("posting times are waking hours", () => {
     expect(nextPostTime({ hours: [{ hour: 4 } as never], confidence: "some", defaultHour: 18 } as never, after, "UTC")).toMatchObject({ hour: 18, fromHistory: false });
   });
 });
+
+describe("their iPhone's events, titles included", () => {
+  it("go through the same pipeline as Google: private titles never stored, a gone event cancelled, nobody else's", async () => {
+    const t = convexTest(schema, modules);
+    const { c, as, now } = await world(t, "d5");
+    const other = await world(t, "d6");
+    const ev = (id: string, title: string, inH: number, over: Record<string, unknown> = {}) => ({ id, title, s: now + inH * H, e: now + (inH + 1) * H, allDay: false, recurring: false, ...over });
+    expect((await as.mutation(api.calendar.device.events, { events: [ev("a", "x", 1)] })).ok, "not asked yet").toBe(false);
+    await as.mutation(api.calendar.device.setStatus, { status: "granted" });
+    expect((await as.mutation(api.calendar.device.events, { events: [ev("a", "dentist appointment", 24), ev("b", "therapy", 30), ev("c", "Half marathon", 72, { allDay: true }), ev("d", "team standup", 26, { recurring: true })] })).ok).toBe(true);
+    // The ingest is scheduled; run it the way the scheduler would.
+    const rows = (q: typeof c) => t.run(async (ctx) => (await ctx.db.query("calendarEvents").collect()).filter((r) => r.creatorId === q));
+    await t.finishAllScheduledFunctions(() => undefined);
+    const mine = await rows(c);
+    expect(mine.map((r) => r.externalId).sort()).toEqual(["device:a", "device:b", "device:c", "device:d"]);
+    expect(mine.find((r) => r.externalId === "device:b")).toMatchObject({ class: "private", title: "" });
+    expect(mine.find((r) => r.externalId === "device:d")).toMatchObject({ class: "routine", title: "team standup" });
+    expect(mine.find((r) => r.externalId === "device:c")!.title).toBe("Half marathon");
+    expect(await rows(other.c)).toHaveLength(0);
+    // Busy times come from the same list (not the all-day race).
+    const inp = await t.query(internal.calendar.weekPlan.inputsFor, { creatorId: c, now });
+    expect(inp!.busy).toContainEqual({ start: now + 24 * H, end: now + 25 * H });
+    // The therapy session was deleted on the phone: it's cancelled here.
+    await as.mutation(api.calendar.device.events, { events: [ev("a", "dentist appointment", 24), ev("c", "Half marathon", 72, { allDay: true }), ev("d", "team standup", 26, { recurring: true })] });
+    await t.finishAllScheduledFunctions(() => undefined);
+    expect((await rows(c)).find((r) => r.externalId === "device:b")!.status).toBe("cancelled");
+  });
+});
