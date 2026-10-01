@@ -97,3 +97,40 @@ describe("one off-list field never costs the whole read (live 2026-09-29)", () =
     expect(long.ok, "over-long text is trimmed, not a rejected read").toBe(true);
   });
 });
+
+describe("why it worked (2026-10-01): skill and routine are a plan, a one-off is not", () => {
+  const facts = { postsRead: 20, watched: 8 };
+  const d: Dossier = {
+    ...base,
+    works: [
+      { claim: "Deadpan delivery to camera lands every time", evidencePostIds: ["a", "b", "c"], driver: "skill", travels: "the deadpan, anywhere" },
+      { claim: "The concert clip blew up", evidencePostIds: ["d", "e"], driver: "circumstance", travels: "catching a moment as it happens" },
+      { claim: "London night pans beat her normal", evidencePostIds: ["f", "g"], driver: "routine", travels: "letting the scene breathe" },
+      { claim: "Weekly run club clips do well", evidencePostIds: ["h", "i", "j"], driver: "routine" },
+    ],
+    strengths: [
+      { skill: "Comic timing", how: "a beat of silence before the punchline", evidencePostIds: ["a", "b"] },
+      { skill: "Seen once", how: "one post", evidencePostIds: ["a"] },
+    ],
+  };
+  const h = honestDossier(d, facts);
+  it("works keeps skills and real routines only", () => {
+    expect(h.works.map((w) => w.claim)).toEqual(["Deadpan delivery to camera lands every time", "Weekly run club clips do well"]);
+  });
+  it("a one-off, or a 'routine' seen in under three posts, becomes a one-off with what travels", () => {
+    expect(h.oneOffs?.map((o) => o.why)).toEqual(["The concert clip blew up", "London night pans beat her normal"]);
+    expect(h.oneOffs?.[0].travels).toBe("catching a moment as it happens");
+  });
+  it("a strength needs two posts behind it", () => {
+    expect(h.strengths?.map((s) => s.skill)).toEqual(["Comic timing"]);
+  });
+  it("a thin read claims no strengths", () => {
+    expect(honestDossier(d, { postsRead: 3, watched: 1 }).strengths).toEqual([]);
+  });
+  it("every prompt carries the rule", async () => {
+    const { buildPrefix, WHY_IT_WORKED } = await import("../../agent/context");
+    expect(WHY_IT_WORKED).toMatch(/never the plan/);
+    const prefix = buildPrefix({ creator: { handles: {}, niche: "", timezone: "UTC", quietHours: { start: "22:00", end: "07:00" }, plan: { status: "active" }, notes: [], dossier: h } as never, directives: [], skill: "x" });
+    expect(prefix).toContain(WHY_IT_WORKED);
+  });
+});
