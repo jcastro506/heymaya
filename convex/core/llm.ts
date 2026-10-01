@@ -194,6 +194,7 @@ export async function callModel(
       costUsd: usage?.costUsd,
       promptTokens: usage?.promptTokens,
       completionTokens: usage?.completionTokens,
+      cachedTokens: usage?.cachedTokens,
       latencyMs: Date.now() - callStartedAt,
       succeeded: result.ok,
       failureKind: result.ok ? undefined : timedOut ? "timeout" : "provider_error",
