@@ -2,6 +2,7 @@ import { httpRouter } from "convex/server";
 import { shareHttp, widgetHttp } from "./share";
 import { tavily as tavilyFake, gmail as gmailFake } from "./eval/fakes";
 import { linq as linqFake } from "./eval/fakeLinq";
+import { gcal as gcalFake } from "./eval/fakeGoogle";
 import { stripeWebhook } from "./billing/webhook";
 import { zernioWebhook } from "./connections/zernio";
 import { telegramWebhookHttp } from "./telegram/webhook";
@@ -40,5 +41,7 @@ http.route({ pathPrefix: "/fake/gmail/", method: "GET", handler: gmailFake });
 http.route({ pathPrefix: "/fake/gmail/", method: "POST", handler: gmailFake });
 http.route({ pathPrefix: "/fake/linq/", method: "GET", handler: linqFake });
 http.route({ pathPrefix: "/fake/linq/", method: "POST", handler: linqFake });
+// A fake Google Calendar for the calendar sims (eval/fakeGoogle), reached only through GOOGLE_CALENDAR_BASE_URL.
+for (const method of ["GET", "POST", "PATCH", "DELETE"] as const) http.route({ pathPrefix: "/fake/gcal/", method, handler: gcalFake });
 
 export default http;

@@ -11,7 +11,7 @@ import { clip } from "../lib/clip";
  */
 
 import { v } from "convex/values";
-import { internalAction, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery, type ActionCtx } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -56,6 +56,45 @@ export const runAll = internalAction({
   },
 });
 
+/**
+ * After events are read, wherever from (Google, or their iPhone through calendar/device): store them,
+ * follow any of her blocks that moved or vanished with them, sort the titles code can't place in one
+ * cheap call (private when in doubt, and private titles are never stored), and write a signal for each
+ * filmable event with runway. One pipeline, so both calendars behave the same.
+ */
+export async function ingestRows(ctx: ActionCtx, creatorId: Id<"creators">, rows: Array<{ calendarId: string; externalId: string; title: string; htmlLink?: string; start: number; end: number; allDay: boolean; recurring: boolean; cancelled: boolean }>, timezone: string, now: number): Promise<number> {
+  const { unknown, moved, dropped } = await ctx.runMutation(internal.calendar.sync.upsertEvents, { creatorId, rows });
+  if (moved.length || dropped.length) await ctx.runAction(internal.calendar.sync.followMoves, { creatorId, moved, dropped });
+  if (unknown.length > 0) {
+    const spec = REGISTRY.screener;
+    const r = await callModel(ctx, {
+      creatorId,
+      purpose: "calendar_classify",
+      model: spec.primary,
+      messages: [
+        { role: "system", content: `You sort a content creator's calendar titles. For each, answer one of: "filmable" (an outing, trip, event, launch, milestone, collaboration, anything a short video could ride), "routine" (life admin, meetings, chores, appointments with no story), "private" (health, legal, money, HR, relationships; when in doubt, private). Output ONLY JSON: [{"id": "", "class": ""}]` },
+        { role: "user", content: JSON.stringify(unknown.map((u: { id: Id<"calendarEvents">; title: string }) => ({ id: u.id, title: u.title }))) },
+      ],
+      temperature: 0,
+      maxTokens: 600,
+      apiKey: process.env.OPENROUTER_API_KEY ?? "",
+    });
+    const classes: Array<{ id: Id<"calendarEvents">; class: EventClass }> = [];
+    if (r.ok) {
+      try {
+        const m = r.content.match(/\[[\s\S]*\]/);
+        for (const x of JSON.parse(m ? m[0] : "[]") as Array<{ id: string; class: string }>) {
+          if (x.class === "filmable" || x.class === "routine" || x.class === "private") classes.push({ id: x.id as Id<"calendarEvents">, class: x.class });
+        }
+      } catch {
+        /* leave unknown; the next sync tries again */
+      }
+    }
+    if (classes.length) await ctx.runMutation(internal.calendar.sync.applyClasses, { creatorId, classes });
+  }
+  return await ctx.runMutation(internal.calendar.sync.writeSignals, { creatorId, timezone, now });
+}
+
 export const syncOne = internalAction({
   args: { creatorId: v.id("creators") },
   handler: async (ctx, a): Promise<{ ok: boolean; reason?: string; events?: number; signals?: number }> => {
@@ -92,39 +131,7 @@ export const syncOne = internalAction({
       }
     }
 
-    const { unknown, moved, dropped } = await ctx.runMutation(internal.calendar.sync.upsertEvents, { creatorId: a.creatorId, rows });
-    if (moved.length || dropped.length) await ctx.runAction(internal.calendar.sync.followMoves, { creatorId: a.creatorId, moved, dropped });
-
-    // The model half: only titles code could not place, in one cheap call.
-    if (unknown.length > 0) {
-      const spec = REGISTRY.screener;
-      const r = await callModel(ctx, {
-        creatorId: a.creatorId,
-        purpose: "calendar_classify",
-        model: spec.primary,
-        messages: [
-          { role: "system", content: `You sort a content creator's calendar titles. For each, answer one of: "filmable" (an outing, trip, event, launch, milestone, collaboration, anything a short video could ride), "routine" (life admin, meetings, chores, appointments with no story), "private" (health, legal, money, HR, relationships; when in doubt, private). Output ONLY JSON: [{"id": "", "class": ""}]` },
-          { role: "user", content: JSON.stringify(unknown.map((u) => ({ id: u.id, title: u.title }))) },
-        ],
-        temperature: 0,
-        maxTokens: 600,
-        apiKey: process.env.OPENROUTER_API_KEY ?? "",
-      });
-      const classes: Array<{ id: Id<"calendarEvents">; class: EventClass }> = [];
-      if (r.ok) {
-        try {
-          const m = r.content.match(/\[[\s\S]*\]/);
-          for (const x of JSON.parse(m ? m[0] : "[]") as Array<{ id: string; class: string }>) {
-            if (x.class === "filmable" || x.class === "routine" || x.class === "private") classes.push({ id: x.id as Id<"calendarEvents">, class: x.class });
-          }
-        } catch {
-          /* leave unknown; the next sync tries again */
-        }
-      }
-      if (classes.length) await ctx.runMutation(internal.calendar.sync.applyClasses, { creatorId: a.creatorId, classes });
-    }
-
-    const signals = await ctx.runMutation(internal.calendar.sync.writeSignals, { creatorId: a.creatorId, timezone: creator.timezone, now });
+    const signals = await ingestRows(ctx, a.creatorId, rows, creator.timezone, now);
     await ctx.runMutation(internal.calendar.oauth.patchConnection, { id: conn._id, lastSyncedAt: now, status: "connected", detail: undefined });
     return { ok: true, events: rows.length, signals };
   },
@@ -132,9 +139,9 @@ export const syncOne = internalAction({
 
 export const creatorTz = internalQuery({
   args: { creatorId: v.id("creators") },
-  handler: async (ctx, a): Promise<{ timezone: string } | null> => {
+  handler: async (ctx, a): Promise<{ timezone: string; quietHours: { start: string; end: string } } | null> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
-    return c ? { timezone: c.timezone } : null;
+    return c ? { timezone: c.timezone, quietHours: c.quietHours } : null;
   },
 });
 

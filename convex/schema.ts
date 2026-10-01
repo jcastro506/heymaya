@@ -852,6 +852,8 @@ export default defineSchema({
     latencyMs: v.optional(v.number()),
     succeeded: v.optional(v.boolean()),
     failureKind: v.optional(v.string()),
+    /** Prompt tokens billed at the cached rate (2026-10-01): the proof caching works, call by call. */
+    cachedTokens: v.optional(v.number()),
     at: v.number(),
   })
     .index("by_at", ["at"])

@@ -278,7 +278,7 @@ export const makePartner = internalMutation({
 
 /** Start a run: one fresh clone of the persona, then one scheduled step per case. */
 export const start = internalAction({
-  args: { ids: v.optional(v.array(v.string())) },
+  args: { ids: v.optional(v.array(v.string())), beatMs: v.optional(v.number()) },
   handler: async (ctx, a): Promise<{ runId: string; cases: number }> => {
     const runId = `expert-${Date.now()}`;
     const cases = a.ids?.length ? EXPERT_CASES.filter((c) => a.ids!.includes(c.id)) : EXPERT_CASES;
@@ -291,20 +291,21 @@ export const start = internalAction({
       creators[key] = await ctx.runMutation(internal.eval.scenarios.cloneForRun, { sourceId: source, runId: partner ? `${runId}:partner` : runId });
       if (partner) await ctx.runMutation(internal.eval.expertBench.makePartner, { creatorId: creators[key] });
     }
-    await ctx.scheduler.runAfter(0, internal.eval.expertBench.step, { runId, creators, ids: cases.map((c) => c.id), index: 0 });
+    await ctx.scheduler.runAfter(0, internal.eval.expertBench.step, { runId, creators, ids: cases.map((c) => c.id), index: 0, beatMs: a.beatMs });
     return { runId, cases: cases.length };
   },
 });
 
 export const step = internalAction({
-  args: { runId: v.string(), creators: v.record(v.string(), v.id("creators")), ids: v.array(v.string()), index: v.number() },
+  // beatMs: the spacing between cases (default 4 min). Shorter is fine since replies take seconds (2026-10-01).
+  args: { runId: v.string(), creators: v.record(v.string(), v.id("creators")), ids: v.array(v.string()), index: v.number(), beatMs: v.optional(v.number()) },
   handler: async (ctx, args): Promise<null> => {
     const c = EXPERT_CASES.find((x) => x.id === args.ids[args.index]);
     if (!c) return null;
     const a = { ...args, creatorId: args.creators[cloneKey(c)] };
     // The next case is scheduled FIRST, on a fixed beat: a case whose action dies (timeout, deploy)
     // used to end the chain silently, and a run of 18 stopped at 4 with no error anywhere.
-    if (args.index + 1 < args.ids.length) await ctx.scheduler.runAfter(STEP_BEAT_MS, internal.eval.expertBench.step, { ...args, index: args.index + 1 });
+    if (args.index + 1 < args.ids.length) await ctx.scheduler.runAfter(Math.max(60_000, args.beatMs ?? STEP_BEAT_MS), internal.eval.expertBench.step, { ...args, index: args.index + 1 });
     const since = Date.now();
     let reply = "", trace: unknown = null, correctness: Correctness | null = null, error: string | undefined;
     try {

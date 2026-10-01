@@ -42,9 +42,9 @@
 	<key>MayaConvexURL</key>
 	<string>$(MAYA_CONVEX_URL)</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Maya puts the filming sessions you book on your calendar, and plans them around when you're busy. She only sees when you're busy, never what the event is.</string>
+	<string>Maya puts the filming sessions you book on your calendar, plans them around your week, and suggests content for the things worth filming, like a trip or a race. Anything personal stays private.</string>
 	<key>NSCalendarsUsageDescription</key>
-	<string>Maya puts the filming sessions you book on your calendar, and plans them around when you're busy.</string>
+	<string>Maya puts the filming sessions you book on your calendar and plans them around your week.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 </dict>

@@ -5,6 +5,7 @@
  * the creator's clock as YYYY-MM-DDTHH:MM; the model never does timezone arithmetic.
  */
 
+import { inQuietHours } from "../scout/gate";
 import { v } from "convex/values";
 import { internalAction, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
@@ -57,6 +58,18 @@ export const write = internalAction({
     const tz = creator?.timezone ?? "UTC";
     const args = (a.args ?? {}) as Record<string, unknown>;
     const fmt = (e: number) => new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short", hour: "numeric", minute: "2-digit" }).format(e).toLowerCase().replace(":00", "");
+    /**
+     * Their quiet hours and their own events (day sim, 2026-10-01: she booked 11pm tonight without a word,
+     * and moved a session onto their dinner). Filming late or over plans is theirs to choose, so these are
+     * named refusals she turns into a question; she passes quietOk / overlapOk only after they say yes.
+     */
+    const askFirst = async (kind: string, start: number, end: number): Promise<string | null> => {
+      if (kind === "post") return null;
+      if (creator && args.quietOk !== true && (inQuietHours(start, tz, creator.quietHours) || inQuietHours(end - 60_000, tz, creator.quietHours))) return `${fmt(start)} is inside their quiet hours (${creator.quietHours.start}–${creator.quietHours.end}); ask if they really want it then, and pass quietOk: true only after they say yes`;
+      const life = args.overlapOk === true ? null : await ctx.runQuery(internal.calendar.blocks.lifeClash, { creatorId: a.creatorId, start, end });
+      if (life) return `that overlaps ${life.title} (${fmt(life.start)}–${fmt(life.end)}); ask before double-booking, and pass overlapOk: true only if they say go ahead`;
+      return null;
+    };
 
     if (a.op === "block_add") {
       const when = parseWhen(args.whenLocal, tz, now);
@@ -77,6 +90,8 @@ export const write = internalAction({
         const hit = await ctx.runQuery(internal.calendar.blocks.clash, { creatorId: a.creatorId, start: when.at, end: when.at + minutes * 60_000 });
         if (hit) return { ok: false, reason: clashReason(hit, fmt) };
       }
+      const ask = await askFirst(kind, when.at, when.at + minutes * 60_000);
+      if (ask) return { ok: false, reason: ask };
       const blockId = await ctx.runMutation(internal.calendar.blocks.propose, { creatorId: a.creatorId, kind, start: when.at, end: when.at + minutes * 60_000, title, ideaId });
       // They asked, so the ask is the consent: book it now.
       const r = await ctx.runAction(internal.calendar.blocks.confirm, { blockId });
@@ -103,6 +118,8 @@ export const write = internalAction({
       const hit = await ctx.runQuery(internal.calendar.blocks.clash, { creatorId: a.creatorId, start: when.at, end: when.at + len, excludeId: blockId });
       if (hit) return { ok: false, reason: clashReason(hit, fmt) };
     }
+    const ask = await askFirst(b.kind, when.at, when.at + len);
+    if (ask) return { ok: false, reason: ask };
     const r = await ctx.runAction(internal.calendar.blocks.move, { blockId, start: when.at, end: when.at + len, expectedRev });
     if (!r.ok) return { ok: false, reason: r.reason ?? "could not move it" };
     if (b.consentAt) await ctx.runAction(internal.calendar.reminders.scheduleFor, { blockId });

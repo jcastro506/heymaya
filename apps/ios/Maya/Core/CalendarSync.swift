@@ -5,8 +5,9 @@ import Foundation
 /// Their sessions on the iPhone's own calendar (2026-10-01; server side `convex/calendar/device.ts`).
 /// Asked once, when there's something to put on it. EventKit writes to whatever calendar the phone
 /// uses (iCloud, Google, Outlook) with no sign-in. The server says which booked sessions belong on it;
-/// this makes it so whenever the app runs, and reports busy times back: start and end only, never
-/// what the event is.
+/// this makes it so whenever the app runs, and reports their upcoming events back (titles included) so
+/// she plans around them and suggests content for the ones worth filming. The server keeps no title it
+/// sorts as private (health, money, relationships; when in doubt).
 @MainActor
 enum CalendarSync {
   private static let store = EKEventStore()
@@ -45,7 +46,7 @@ enum CalendarSync {
     if !written.isEmpty || !removed.isEmpty {
       _ = try? await convex.mutation("calendar/device:synced", with: ["written": written.map { $0 as ConvexEncodable? }, "removed": removed]) as R
     }
-    _ = try? await convex.mutation("calendar/device:busy", with: ["windows": busyWindows().map { $0 as ConvexEncodable? }]) as R
+    _ = try? await convex.mutation("calendar/device:events", with: ["events": upcoming().map { $0 as ConvexEncodable? }]) as R
   }
 
   /// Make the calendar match the plan: create or update each booked session, remove dropped ones.
@@ -78,14 +79,14 @@ enum CalendarSync {
     return (written, removed)
   }
 
-  /// The next three weeks of their real life, as start/end only. All-day events and Maya's own are left out.
-  private static func busyWindows() -> [[String: ConvexEncodable?]] {
+  /// The next three weeks of their real life. Maya's own sessions and events marked free are left out.
+  private static func upcoming() -> [[String: ConvexEncodable?]] {
     let now = Date.now
     let predicate = store.predicateForEvents(withStart: now, end: now.addingTimeInterval(21 * 86_400), calendars: nil)
     return store.events(matching: predicate)
-      .filter { !$0.isAllDay && !($0.url?.absoluteString.hasPrefix(marker) ?? false) && $0.availability != .free }
+      .filter { !($0.url?.absoluteString.hasPrefix(marker) ?? false) && $0.availability != .free }
       .prefix(300)
-      .map { ["s": $0.startDate.timeIntervalSince1970 * 1000, "e": $0.endDate.timeIntervalSince1970 * 1000] }
+      .map { ["id": $0.calendarItemIdentifier + "@" + String(Int($0.startDate.timeIntervalSince1970)), "title": String(($0.title ?? "").prefix(120)), "s": $0.startDate.timeIntervalSince1970 * 1000, "e": $0.endDate.timeIntervalSince1970 * 1000, "allDay": $0.isAllDay, "recurring": $0.hasRecurrenceRules] }
   }
 
   private static func firstValue() async -> Plan? {

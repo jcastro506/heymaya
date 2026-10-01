@@ -56,6 +56,7 @@ export const record = internalMutation({
     costUsd: v.optional(v.number()),
     promptTokens: v.optional(v.number()),
     completionTokens: v.optional(v.number()),
+    cachedTokens: v.optional(v.number()),
     latencyMs: v.optional(v.number()),
     succeeded: v.optional(v.boolean()),
     failureKind: v.optional(v.string()),
@@ -74,6 +75,7 @@ export const record = internalMutation({
       latencyMs: a.latencyMs,
       succeeded: a.succeeded,
       failureKind: a.failureKind,
+      cachedTokens: a.cachedTokens,
       at: a.now ?? Date.now(),
     });
     // §3: budgets, never booleans. Every priced event lands on the creator's day.

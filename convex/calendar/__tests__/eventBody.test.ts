@@ -19,20 +19,26 @@ describe("the event body", () => {
     expect(d).toContain("open on the rack");
     expect(d).toContain("Why this one: you did the list twice");
     expect(d).toContain("The post that started it: https://www.tiktok.com/@runwithcarly/video/7395965676629888274");
-    expect(d).toContain("Filming block planned with Maya");
+    expect(d.split("\n")[0], "the day's job first").toBe(`Today's job: film "the shoe rack list, said to camera". Get the opening line in two or three takes, then the shots below.`);
+    expect(d).toContain("Planned with Maya. Text her to change it.");
     expect(d, "nothing of ours in their calendar").not.toMatch(/prefix|dossier|convex|internal|skill|critic|ideaId|\bid\b/i);
     expect(d).not.toMatch(/\*\*|##|`/);
   });
 
   it("shows only what is true, and never a bare template", () => {
-    const empty = eventDescription({ kind: "edit", idea: null });
-    expect(empty).toBe("Editing block planned with Maya. Move or delete it here and she follows; reply in the chat to change the idea.");
+    // Day sim 2026-10-01: a session with no idea row (the week's experiment) said only "Editing block planned
+    // with Maya" and scored 1 of 5. It now says the job, from the session's own title.
+    const bare = eventDescription({ kind: "edit", idea: null, title: "edit (experiment): post-run selfie with an exhaustion overlay" });
+    expect(bare).toBe(`Today's job: cut "post-run selfie with an exhaustion overlay" tight, with the hook in the first second.\n\nPlanned with Maya. Text her to change it.`);
+    expect(eventDescription({ kind: "post", idea: null, title: "post: the list" }).split("\n")[0]).toBe(`Today's job: post "the list", then answer the first comments for the next hour.`);
+    expect(eventDescription({ kind: "film", idea: null }).split("\n")[0]).toMatch(/film today's idea/);
     const shots = eventDescription({ kind: "film", idea: { hook: "h", shotList: ["a", "b"] } });
     expect(shots).toContain("1. a");
     expect(shots).toContain("2. b");
     expect(shots).not.toContain("On screen");
-    expect(eventDescription({ kind: "post", idea: { evidenceLinks: ["javascript:alert(1)", "https://ok/1"] } })).toContain("https://ok/1");
-    expect(eventDescription({ kind: "post", idea: { evidenceLinks: ["javascript:alert(1)"] } })).not.toContain("javascript");
+    expect(eventDescription({ kind: "film", idea: { evidenceLinks: ["javascript:alert(1)", "https://ok/1"] } })).toContain("https://ok/1");
+    expect(eventDescription({ kind: "film", idea: { evidenceLinks: ["javascript:alert(1)"] } })).not.toContain("javascript");
+    expect(eventDescription({ kind: "post", idea: { evidenceLinks: ["https://ok/1"] } }), "the inspiration is for the shoot, not the post").not.toContain("https://ok/1");
   });
 
   it("is bounded, strips markdown from the writer, and the summary reads as a calendar title", () => {

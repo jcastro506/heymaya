@@ -103,9 +103,32 @@ export type OpenRouterResult =
          * reported $0.025 against a $22 bill.
          */
         costUsd?: number;
+        /** Prompt tokens billed at the cached rate. */
+        cachedTokens?: number;
       };
     }
   | { ok: false; reason: string };
+
+/**
+ * Where her prompt stops being the same from turn to turn (2026-10-01). Measured: Gemini through
+ * OpenRouter cached 0 of ~6,700 prompt tokens per reply until the stable part was marked, then all of
+ * it (about 55% cheaper a call). OpenAI models cache a repeated prefix on their own; for them, and for
+ * models that take no marker, the break is just a paragraph break.
+ */
+export const CACHE_BREAK = "\n\n<<maya:cache-break>>\n\n";
+const MARKS_CACHE = ["google/", "anthropic/"];
+
+/** Pure: the messages as sent. A system message with a break becomes a cached part and a live part. */
+export function withCacheBreaks(model: string, messages: OpenRouterMessage[]): unknown[] {
+  const marks = MARKS_CACHE.some((p) => model.startsWith(p));
+  return messages.map((m) => {
+    if (typeof m.content !== "string" || !m.content.includes(CACHE_BREAK)) return m;
+    const [stable, ...rest] = m.content.split(CACHE_BREAK);
+    const live = rest.join("\n\n");
+    if (!marks || m.role !== "system") return { ...m, content: [stable, live].filter(Boolean).join("\n\n") };
+    return { ...m, content: [{ type: "text", text: stable, cache_control: { type: "ephemeral" } }, ...(live ? [{ type: "text", text: live }] : [])] };
+  });
+}
 
 /**
  * One chat completion.
@@ -130,7 +153,7 @@ export async function callOpenRouter(
       },
       body: JSON.stringify({
         model: request.model,
-        messages: request.messages,
+        messages: withCacheBreaks(request.model, request.messages),
         temperature: request.temperature ?? 0.2,
         max_tokens: request.maxTokens ?? 4_000,
         ...(request.reasoning ? { reasoning: request.reasoning } : {}),
@@ -153,6 +176,7 @@ export async function callOpenRouter(
         prompt_tokens?: number;
         completion_tokens?: number;
         cost?: number;
+        prompt_tokens_details?: { cached_tokens?: number };
       };
     };
     try {
@@ -176,6 +200,7 @@ export async function callOpenRouter(
         ? {
             promptTokens: parsed.usage.prompt_tokens ?? 0,
             completionTokens: parsed.usage.completion_tokens ?? 0,
+            cachedTokens: parsed.usage.prompt_tokens_details?.cached_tokens ?? 0,
             // Left undefined rather than defaulted to 0 — see the field docs.
             costUsd:
               typeof parsed.usage.cost === "number" ? parsed.usage.cost : undefined,

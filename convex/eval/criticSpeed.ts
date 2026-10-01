@@ -123,22 +123,30 @@ export const classifier = internalAction({
  * OpenRouter; reports prompt tokens, how many were billed as cached, and the cost of each call.
  */
 export const cacheCheck = internalAction({
-  args: { creatorId: v.id("creators"), model: v.optional(v.string()), explicit: v.optional(v.boolean()) },
-  handler: async (ctx, a): Promise<Array<{ call: number; promptTokens: number; cachedTokens: number; costUsd: number | null; ms: number }>> => {
-    const g = await ctx.runQuery(internal.agent.context.gather, { creatorId: a.creatorId });
-    if (!g) return [];
+  args: { creatorId: v.id("creators"), model: v.optional(v.string()), gapMs: v.optional(v.number()) },
+  handler: async (ctx, a): Promise<Array<{ call: number; promptTokens: number; cachedTokens: number; costUsd: number | null; ms: number; stableChars: number; stableSameAsFirst: boolean; firstDiffAt: number | null }>> => {
+    const { callOpenRouter, CACHE_BREAK } = await import("../integrations/openrouter/client");
+    let firstStable = "";
     const { buildPrefix } = await import("../agent/context");
-    const prefix = buildPrefix({ creator: g.creator, directives: g.directives, skill: "reply", personal: g.personal, voice: g.voice, history: g.history });
     const out = [];
     for (const [i, q] of ["what should i post this week?", "is the london stuff working?", "give me one idea for tomorrow"].entries()) {
+      if (i > 0 && a.gapMs) await new Promise((r) => setTimeout(r, a.gapMs));
+      // Rebuilt every call, the way a real turn does: the live part (time, free windows) changes; the stable part must not.
+      const g = await ctx.runQuery(internal.agent.context.gather, { creatorId: a.creatorId });
+      if (!g) return [];
+      const prefix = buildPrefix({ creator: g.creator, directives: g.directives, skill: "reply", personal: g.personal, voice: g.voice, history: g.history });
       const t0 = Date.now();
-      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${process.env.OPENROUTER_API_KEY ?? ""}` }, body: JSON.stringify({ model: a.model ?? "google/gemini-3.7-flash", messages: [{ role: "system", content: a.explicit ? [{ type: "text", text: prefix, cache_control: { type: "ephemeral" } }] : prefix }, { role: "user", content: q }], max_tokens: 3200, usage: { include: true } }) });
-      const j = (await res.json()) as { usage?: { prompt_tokens?: number; cost?: number; prompt_tokens_details?: { cached_tokens?: number } } };
-      out.push({ call: i + 1, promptTokens: j.usage?.prompt_tokens ?? 0, cachedTokens: j.usage?.prompt_tokens_details?.cached_tokens ?? 0, costUsd: j.usage?.cost ?? null, ms: Date.now() - t0 });
+      const r = await callOpenRouter({ model: a.model ?? "google/gemini-3.7-flash", messages: [{ role: "system", content: prefix }, { role: "user", content: q }], maxTokens: 3200, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+      const stable = prefix.split(CACHE_BREAK)[0];
+      if (i === 0) firstStable = stable;
+      let diff: number | null = null;
+      for (let k = 0; k < Math.max(stable.length, firstStable.length); k++) if (stable[k] !== firstStable[k]) { diff = k; break; }
+      out.push({ call: i + 1, promptTokens: r.ok ? r.usage?.promptTokens ?? 0 : 0, cachedTokens: r.ok ? r.usage?.cachedTokens ?? 0 : 0, costUsd: r.ok ? r.usage?.costUsd ?? null : null, ms: Date.now() - t0, stableChars: stable.length, stableSameAsFirst: diff === null, firstDiffAt: diff });
     }
     return out;
   },
 });
+
 
 /** OpenRouter's live model list, filtered: the source of truth for names and prices (memory: verify prices first). */
 export const models = internalAction({
