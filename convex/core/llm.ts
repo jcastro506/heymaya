@@ -20,6 +20,7 @@ import { clip } from "../lib/clip";
  * which stop her talking are not the product. This measures. See `cogs.ts`.
  */
 
+import { reasoningFor } from "../agent/registry";
 import type { ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
@@ -30,6 +31,8 @@ import type {
   OpenRouterResult, OpenRouterTool } from "../integrations/openrouter/client";
 
 export interface CallModelInput {
+  /** How much a thinking model may think; see OpenRouterRequest.reasoning. */
+  reasoning?: { effort?: "minimal" | "low" | "medium" | "high"; enabled?: boolean };
   /** Whose bill this lands on. Required — spend with no owner is unpriceable. */
   creatorId: Id<"creators">;
   /**
@@ -153,6 +156,7 @@ export async function callModel(
     maxTokens: budgetFor(input.model, input.maxTokens),
     timeoutMs: input.timeoutMs,
     apiKey: input.apiKey,
+    reasoning: input.reasoning ?? reasoningFor(input.model),
   });
 
   /**

@@ -199,6 +199,15 @@ export const enqueue = internalMutation({
  * `running`. Returns null when there's nothing to do.
  */
 /** How many jobs of one kind are running right now, fleet-wide (§22 render cap). */
+/** Is one of her replies to them queued or being written? Her first read waits for it (scheduler). */
+export const turnInFlight = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<boolean> => {
+    const rows = await ctx.db.query("jobs").withIndex("by_creator_and_createdAt", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(30);
+    return rows.some((r) => r.kind === "converse" && (r.status === "queued" || r.status === "running"));
+  },
+});
+
 export const runningOfKind = internalQuery({
   args: { kind: v.string() },
   handler: async (ctx, a): Promise<number> => {

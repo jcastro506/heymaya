@@ -85,9 +85,13 @@ describe("a timeout is not the token bug", () => {
     const { CRITIC_TIMEOUT_MS } = await import("../../agent/critic");
     const { OPENROUTER_TIMEOUT_MS } = await import("../../integrations/openrouter/client");
     expect(CRITIC_TIMEOUT_MS).toBeLessThan(OPENROUTER_TIMEOUT_MS);
-    // Long enough that the fallback actually completes: at 12s both models missed and a
-    // live reply went out ungated. Short enough to beat the shared default.
-    expect(CRITIC_TIMEOUT_MS).toBeGreaterThanOrEqual(20_000);
+    // Long enough that the fallback actually completes: at 12s with unbounded thinking both models
+    // missed and a live reply went out ungated. Now both critic models have thinking capped (slowest
+    // of 20 real replies: 11.2 s and 13.7 s, eval/criticSpeed 2026-10-01), so 15 s holds only WITH the cap.
+    expect(CRITIC_TIMEOUT_MS).toBeGreaterThanOrEqual(15_000);
+    const { REGISTRY, reasoningFor } = await import("../../agent/registry");
+    expect(reasoningFor(REGISTRY.critic.primary), "critic primary must have thinking capped").toBeDefined();
+    expect(reasoningFor(REGISTRY.critic.fallback), "critic fallback must have thinking capped").toBeDefined();
   });
 
   it("both critic calls carry the short budget, or only half the failover is fast", async () => {

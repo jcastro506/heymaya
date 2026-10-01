@@ -28,10 +28,12 @@ export interface CritiqueResult {
  * it, so a live reply went out ungated carrying the exact vague sound ("low-key trending
  * audio") the critic exists to reject. A gate that never runs is worse than a slow one.
  *
- * 25s is what the fallback was actually measured completing in. Raise it if the skip rate
- * on `criticSkipped` climbs; do not lower it without measuring that rate first.
+ * 2026-10-01: with thinking capped at "low" (registry MODEL_REASONING) the critic's slowest of
+ * 20 real replies was 11.2 s (median 2.6 s), the fallback's 13.7 s; it was 25 s per call before,
+ * and most of a 64 s reply. Raise this if the skip rate on `criticSkipped` climbs; re-measure
+ * with eval/criticSpeed before lowering it.
  */
-export const CRITIC_TIMEOUT_MS = 25_000;
+export const CRITIC_TIMEOUT_MS = 15_000;
 
 /** Catch the distinctive self-description example even when the model swaps its noun. */
 export const reusesVoiceExample = (text: string): boolean => /\byep[,.] software\b[\s\S]{0,120}\bstill watched\b/i.test(text);
@@ -52,7 +54,7 @@ export function claimsUnsupportedAction(text: string, trace: Array<{ tool?: stri
   return claims && !trace.some((turn) => turn.ok && turn.tool && MUTATING_TOOLS.has(turn.tool));
 }
 
-const CRITIC_PROMPT = `You are the critic for a creator's assistant named Maya. Read one outbound message and judge it against the standard below. Return ONLY JSON: {"pass": true|false, "problems": ["no_reaction"|"slop"|"invented_number"|"unsupported_claim"|"wrong_request"|"false_action"|"leak"|"off_voice"|"unsafe"|"no_link"|"no_action"|"directive_violation"|"too_long"|"generic_line"|"vague_sound"|"invented_sound"|"mixed_basis"|"unchecked_world_fact"|"contradicts_tools"], "note": "≤160 chars, what to fix"}.
+export const CRITIC_PROMPT = `You are the critic for a creator's assistant named Maya. Read one outbound message and judge it against the standard below. Return ONLY JSON: {"pass": true|false, "problems": ["no_reaction"|"slop"|"invented_number"|"unsupported_claim"|"wrong_request"|"false_action"|"leak"|"off_voice"|"unsafe"|"no_link"|"no_action"|"directive_violation"|"too_long"|"generic_line"|"vague_sound"|"invented_sound"|"mixed_basis"|"unchecked_world_fact"|"contradicts_tools"], "note": "≤160 chars, what to fix"}.
 
 Fail it if ANY of these is true:
 - no_reaction: a message about one of THEIR posts (a read, an opinion, a scout idea) that opens on a number, a multiple or a metric word instead of what got her as a viewer. The first line is the moment, named from the evidence; the numbers come after.

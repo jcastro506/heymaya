@@ -21,17 +21,17 @@ describe("conversational onboarding", () => {
     expect(rows.filter((r) => r.body === openingQuestionFor(false))).toHaveLength(1); // §26: no plan tier means no brand deals in the opening
     expect(rows.filter((r) => r.kind === "first_read")).toHaveLength(1);
   });
-  it.each(["imessage", "telegram"] as const)("pairs %s with clear orientation before asking a question", async (surface) => {
+  it.each(["imessage", "telegram"] as const)("pairs %s with a short hello and the goal question, once, while she reads", async (surface) => {
     const t = convexTest(schema, modules);
     const creatorId = await t.run((ctx) => seedCreator(ctx, surface, { phone: "+15555550100", channel: { kind: surface, paired: false }, pairingToken: "hello", pairingExpiresAt: Date.now() + 60_000 }));
     if (surface === "imessage") await t.mutation(internal.core.pairing.claimPairingByPhone, { token: "hello", phone: "+15555550100" });
     else await t.mutation(internal.core.pairing.claimPairing, { token: "hello", chatId: "123" });
     const rows = await t.run((ctx) => ctx.db.query("messages").collect());
     expect(rows.every((m) => m.surface === surface)).toBe(true);
-    expect(rows.map((m) => m.body).join("\n")).toContain("i'm maya");
-    expect(rows.map((m) => m.body).join("\n")).not.toContain(openingQuestionFor(false));
-    expect(rows.map((m) => m.body).join("\n")).not.toContain("?");
-    expect(rows.some((m) => m.awaitingAnswer)).toBe(false);
+    expect(rows.map((m) => m.body).join("\n")).toContain("it's maya");
+    // 2026-10-01: the goal question rides the hello, so the minutes she spends reading become context.
+    expect(rows.map((m) => m.body).join("\n")).toContain(`while i do, ${openingQuestionFor(false)}`);
+    expect(rows.filter((m) => m.awaitingAnswer)).toHaveLength(1);
     expect((await t.run((ctx) => ctx.db.get(creatorId)))?.conversationalOnboardingAt).toBeTypeOf("number");
     if (surface === "imessage") {
       await t.mutation(internal.core.pairing.claimPairingByPhone, { phone: "+15555550100" });

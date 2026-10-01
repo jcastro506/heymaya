@@ -70,9 +70,9 @@ describe("sending the first glance", () => {
     expect((await t.action(internal.onboarding.firstGlance.send, { creatorId: unpaired, attempt: 0, now: NOW })).reason).toBe("not paired");
   });
 
-  it("is scheduled on START, on both pairing paths, only before her first read", () => {
+  it("is no longer scheduled on START (2026-10-01): the hello asks what they want, and her read follows", () => {
     const src = readFileSync(new URL("../../core/pairing.ts", import.meta.url), "utf8");
-    expect(src.match(/if \(!firstRead\) await ctx\.scheduler\.runAfter\(FIRST_GLANCE\.afterMs, internal\.onboarding\.firstGlance\.send/g)).toHaveLength(2);
+    expect(src).not.toMatch(/firstGlance\.send/);
   });
 });
 

@@ -139,6 +139,15 @@ export const recordInbound = internalMutation({
  */
 
 
+/**
+ * No em dashes in her texts (2026-10-01). A friend texting doesn't type "—"; it is the plainest tell
+ * that a model wrote the message, the prompt rule wasn't holding (her first read on staging had one),
+ * and the operator flagged the symbols. Pure; an en dash in a range ("2–3") is left alone.
+ */
+export function plainDashes(body: string): string {
+  return body.replace(/\s*—\s*(?=\S)/g, ", ").replace(/\s*—\s*$/gm, "").replace(/^, /gm, "");
+}
+
 async function writeOutbound(
   ctx: MutationCtx,
   row: {
@@ -193,7 +202,7 @@ async function writeOutbound(
     creatorId: row.creatorId,
     direction: "out",
     surface: row.surface,
-    body: plain.clean,
+    body: plainDashes(plain.clean),
     kind: row.kind,
     produced: row.produced,
     buttons: row.buttons,

@@ -9,7 +9,8 @@ import { clip } from "../lib/clip";
  */
 
 import { v } from "convex/values";
-import { internalAction } from "../_generated/server";
+import { internalAction, internalQuery } from "../_generated/server";
+import type { Doc } from "../_generated/dataModel";
 import { internal } from "../_generated/api";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
@@ -33,7 +34,7 @@ export const FIRST_SCOUT_DELAY_MS = READ_SETTLE_MS;
  */
 export function firstReadSkill(saidHello: boolean, conversational = false): string {
   if (conversational) return `first-read
-The opening conversation is already underway. Add a short useful observation from the posts you actually read, with one or two concrete examples. Use any goals or preferences already shared to explain why this matters to them; never assume they want growth or brand deals. If evidence is thin, say so briefly. No re-introduction, no survey, no lane buttons, and NO question: the live conversation owns the next question. Do not say you went through everything when you only sampled posts. Under 100 words, two short texts at most, separated by a line containing only ---. No invented details or metrics. This read is a contribution, not a new conversation.`;
+The opening conversation is already underway: they've been texting you while you read. Open as the natural next text (e.g. "ok, done going through your posts"), never as a fresh start. If they told you what they want, tie the read to it. Build on anything you already told them; never repeat or contradict it. Add a short useful observation from the posts you actually read, with one or two concrete examples. Use any goals or preferences already shared to explain why this matters to them; never assume they want growth or brand deals. If evidence is thin, say so briefly. No re-introduction, no survey, no lane buttons, and NO question: the live conversation owns the next question. Do not say you went through everything when you only sampled posts. Under 100 words, two short texts at most, separated by a line containing only ---. No invented details or metrics. This read is a contribution, not a new conversation.`;
   const arrangement = saidHello
     ? `2. Nothing about what you do: the hello at pairing already said it. No name, no re-introduction.`
     : `2. Then what this is, in your own voice, the way you'd text a friend who just agreed to let you help, two or three lines, no list, never a manual's opener ("here is how this works"): you scroll for them every day (their lane, what's blowing up in general, who's worth stealing from), you keep their content calendar, you bring ideas, and they can throw anything at you for a straight opinion. Say your name once, lightly.`;
@@ -61,6 +62,16 @@ export function ensureCandidatesNamed(text: string, labels: string[], laneLine: 
   return candidatesNamed(text, labels) ? text : `${text}\n\n${laneLine}`;
 }
 
+/** How long her read waits for a reply she's writing to go first: up to a minute, checked every 5 s. */
+export const READ_WAIT = { polls: 12, everyMs: 5_000 } as const;
+
+/** Their texts and hers after `after`, oldest first (what the read didn't see while it was written). */
+export const since = internalQuery({
+  args: { creatorId: v.id("creators"), after: v.number() },
+  handler: async (ctx, a): Promise<Doc<"messages">[]> =>
+    (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId).gt("ts", a.after)).take(20)) as Doc<"messages">[],
+});
+
 export const run = internalAction({
   args: { creatorId: v.id("creators") },
   handler: async (ctx, args): Promise<{ ok: boolean; reason?: string }> => {
@@ -75,8 +86,11 @@ export const run = internalAction({
         creatorId: creator._id,
         payloadJson: JSON.stringify({ reason: "first_read" }),
       });
-      // Said once: `send` dedupes on the key, so a retry of this job is silent.
-      await ctx.runMutation(internal.core.messages.send, {
+      // Said once: `send` dedupes on the key, so a retry of this job is silent. Not at all when her hello
+      // already said it (2026-10-01): live in the sim it landed between her question and their answer,
+      // so "honestly all of it lol" read as an answer to "reading your posts now" and she asked if life was a lot.
+      const helloSaid = await ctx.runQuery(internal.core.messages.exists, { creatorId: creator._id, dedupeKey: `hello:${creator._id}` });
+      if (!helloSaid) await ctx.runMutation(internal.core.messages.send, {
         creatorId: creator._id,
         surface: creator.channel.kind ?? "imessage",
         body: "reading your posts now. give me a few minutes and I'll tell you what I see.",
@@ -127,7 +141,7 @@ export const run = internalAction({
       messages: [
         { role: "system", content: prefix },
         ...(conversational ? [{ role: "user" as const, content: buildSuffix({ recent: gathered.recent, target: null }) }] : []),
-        { role: "user", content: `${saidHello ? "You already said hello when they paired (\"hey, i'm maya. i'm going through your posts…\"), so do NOT introduce yourself again: open straight with the read, and fold what you do for them into one short line at most." : "Write the first message. Address them directly. This is the first thing they will ever read from you."}${laneLine ? ` This is the lane read from their rows; say it in your own words, keep every number and name in it, and let its question be the ONLY question in the message: "${laneLine}"` : ""}` },
+        { role: "user", content: `${saidHello ? "You already said hello when they paired (\"hey, it's maya. i'm going through your posts now…\"), so do NOT introduce yourself again: open straight with the read, and fold what you do for them into one short line at most." : "Write the first message. Address them directly. This is the first thing they will ever read from you."}${laneLine ? ` This is the lane read from their rows; say it in your own words, keep every number and name in it, and let its question be the ONLY question in the message: "${laneLine}"` : ""}` },
       ],
       temperature: 0.6,
       maxTokens: 900,
@@ -173,6 +187,18 @@ export const run = internalAction({
       text = ensureCandidatesNamed(text, laneAsk.candidates.map((c) => c.label), laneLine);
     }
 
+    // The conversation is live while she reads (2026-10-01): never land over one of her replies, and if
+    // they talked while she wrote this, write it once more so it follows the conversation as it now is.
+    if (conversational) {
+      for (let i = 0; i < READ_WAIT.polls && (await ctx.runQuery(internal.core.jobs.turnInFlight, { creatorId: creator._id })); i++) await new Promise((r) => setTimeout(r, READ_WAIT.everyMs));
+      const lastSeen = gathered.recent.reduce((t, m) => Math.max(t, m.ts), 0);
+      const fresh = await ctx.runQuery(internal.onboarding.firstRead.since, { creatorId: creator._id, after: lastSeen });
+      if (fresh.length) {
+        const again = await callModel(ctx, { creatorId: creator._id, purpose: "first_read_rewrite", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: buildSuffix({ recent: [...gathered.recent, ...fresh], target: null }) }, { role: "user", content: `The conversation moved on while you were reading. Your read so far:\n"""\n${text}\n"""\nRewrite it to follow the LAST message above: keep its findings, numbers and examples, drop anything you've since said, answer nothing twice, and ask nothing. Message text only.` }], temperature: 0.4, maxTokens: 900, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+        if (again.ok && again.content.trim() && !tooLong(again.content.trim(), true)) text = again.content.trim();
+      }
+    }
+
     await ctx.runMutation(internal.core.messages.send, {
       creatorId: creator._id,
       surface: creator.channel.kind ?? "imessage",
@@ -198,7 +224,8 @@ export const run = internalAction({
     });
     // Orientation comes first, then proof, then one clear goal question. Keeping the
     // question in its own deduped message prevents it from being buried in a long read.
-    await ctx.runMutation(internal.core.messages.send, {
+    // The hello asks it already (2026-10-01) whenever she said hello before the read.
+    if (!saidHello) await ctx.runMutation(internal.core.messages.send, {
       creatorId: creator._id,
       surface: creator.channel.kind ?? "imessage",
       body: openingQuestionFor(partnershipsOpen(creator)),

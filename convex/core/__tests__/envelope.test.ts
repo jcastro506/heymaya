@@ -42,15 +42,14 @@ describe("first contact", () => {
     expect(rows.filter((m) => m.creatorId === a && m.body === helloFor(false)).length).toBe(1);
     expect(rows.filter((m) => m.creatorId === b && m.body === helloFor(false)).length).toBe(0);
     expect(rows.filter((m) => m.creatorId === b && m.awaitingAnswer).length).toBe(1);
-    expect(HELLO).toMatch(/maya/);
-    expect(HELLO).not.toContain("?");
-    expect(HELLO).toMatch(/content person/);
-    expect(HELLO).toMatch(/watching your posts right now/);
-    // Before her read is done she offers only what works without it: captions and sounds, and opinions on a link.
-    expect(HELLO).toMatch(/caption and pick a sound/);
-    expect(HELLO).toMatch(/any link/);
-    expect(HELLO).not.toMatch(/idea for you|what to post/);
-    expect(HELLO.split("\n---\n").length, "three short orientation texts before the read").toBe(3);
+    // 2026-10-01: two short texts. She's on it; then the one question worth asking while she reads.
+    const hello = helloFor(false);
+    expect(rows.filter((m) => m.creatorId === a && m.body === hello)[0]?.awaitingAnswer).toBe(true);
+    expect(HELLO).toMatch(/it's maya/);
+    expect(HELLO).toMatch(/going through your posts now/);
+    expect(hello.split("\n---\n")).toHaveLength(2);
+    expect(hello.split("\n---\n")[1]).toMatch(/^while i do, what do you most want out of this\?/);
+    for (const banned of ["—", ": ", "pick a sound", "content person"]) expect(hello, banned).not.toContain(banned);
   });
 });
 
