@@ -53,7 +53,9 @@ export async function personalHistoryFor(ctx: QueryCtx, creatorId: Id<"creators"
   const goalRows = await ctx.db.query("personalRecords").withIndex("by_creator_kind", (q) => q.eq("creatorId", creatorId).eq("kind", "goal")).order("desc").take(20);
   const goals: Doc<"personalRecords">[] = [];
   for (const row of goalRows) if (await recordVisible(ctx, row, creatorId)) goals.push(row);
-  const current = [...goals.slice(0, 4), ...live.filter((r) => r.kind !== "style" && r.kind !== "goal").slice(0, 8)];
+  // The getting-to-know-them answers have their own section (onboarding/knowThem); not twice.
+  const aboutThem = new Set(["hesitation", "origin", "boundary", "audience", "proud"]);
+  const current = [...goals.slice(0, 4), ...live.filter((r) => r.kind !== "style" && r.kind !== "goal" && !aboutThem.has(r.kind)).slice(0, 8)];
   const lines: string[] = [];
   for (const r of current) {
     let state = r.kind === "goal" ? "stated aspiration, not consent or a booked action; newest explicit correction wins" : r.kind === "commitment" ? "discussed; no linked scheduled action" : "creator's words";

@@ -577,7 +577,7 @@ export default defineSchema({
   personalRecords: defineTable({
     creatorId: v.id("creators"),
     key: v.string(),
-    kind: v.union(v.literal("goal"), v.literal("preference"), v.literal("effort"), v.literal("decision"), v.literal("commitment"), v.literal("style")),
+    kind: v.union(v.literal("goal"), v.literal("preference"), v.literal("effort"), v.literal("decision"), v.literal("commitment"), v.literal("style"), v.literal("hesitation"), v.literal("origin"), v.literal("boundary"), v.literal("audience"), v.literal("proud")),
     text: v.string(),
     reason: v.optional(v.string()),
     sourceMessageIds: v.array(v.id("messages")),
