@@ -26,13 +26,32 @@ export function unwrapModelEnvelope(body: string): { text: string; unwrapped: bo
 /** At most this many texts from one message row. */
 export const MAX_PARTS = 4;
 
+/** A text this long with no `---` reads as a wall; under it, one text is fine. */
+export const WALL_CHARS = 320;
+
+/** Pure: a wall split at blank lines, small neighbours kept together so no bubble is a fragment. */
+export function paragraphs(body: string): string[] {
+  if (body.length <= WALL_CHARS) return [body];
+  const paras = body.split(/\n[ \t]*\n/).map((p) => p.trim()).filter(Boolean);
+  const out: string[] = [];
+  for (const p of paras) {
+    const last = out[out.length - 1];
+    // A short paragraph joins its neighbour; a fragment ("ok.") always does.
+    if (last !== undefined && (last.length + p.length < 160 || p.length < 40)) out[out.length - 1] = `${last}\n\n${p}`;
+    else out.push(p);
+  }
+  return out;
+}
+
 /**
  * Pure. A body may carry several texts, the way a person sends three short messages
  * instead of one long one: a line containing only `---` separates them. Buttons and links
- * ride the last. One text when there is no separator.
+ * ride the last. A long body with no separator is split at its paragraphs (2026-10-02: a first
+ * tester got one 1,100-character text and didn't want to read it); a short one stays one text.
  */
 export function splitParts(body: string): string[] {
-  const parts = body.split(/\n[ \t]*---[ \t]*\n/).map((p) => p.trim()).filter(Boolean);
+  let parts = body.split(/\n[ \t]*---[ \t]*\n/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length <= 1) parts = paragraphs(body.trim());
   if (parts.length <= 1) return [body.trim()];
   if (parts.length <= MAX_PARTS) return parts;
   return [...parts.slice(0, MAX_PARTS - 1), parts.slice(MAX_PARTS - 1).join("\n\n")];

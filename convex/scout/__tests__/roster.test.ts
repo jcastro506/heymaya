@@ -206,3 +206,14 @@ describe("§27: the roster keeps the platform", () => {
     expect(converse).toMatch(/\^roster:\(\?:\(tiktok\|instagram\):\)\?/);
   });
 });
+
+describe("views the way a person says them (2026-10-02)", () => {
+  it("never a raw median", async () => {
+    const { roughViews } = await import("../roster");
+    expect(roughViews(963_610)).toBe("close to a million views");
+    expect(roughViews(2_400_000)).toBe("around 2.4M views");
+    expect(roughViews(41_200)).toBe("around 41k views");
+    expect(roughViews(1_250)).toBe("around 1.3k views");
+    expect(roughViews(87)).toBe("around 90 views");
+  });
+});

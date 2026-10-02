@@ -21,7 +21,7 @@ import { scrubPostIds } from "../core/plainLanguage";
 export const FIRST_IDEAS_SKILL = `first-plan-ideas
 When: once, right after first contact, so the first plan has posts in it.
 The judgment: from THEIR OWN posts (the dossier's works claims, the recent posts with their multiples, the lane you proposed and the growth plan if there is one), write the next few posts they should make. Each one is a specific, filmable idea in their voice: a hook line a person would say, and one clause on why, citing the post of theirs it rhymes with. Lead with the lane you recommended; at most one idea may sit outside it. No trend talk, no "viral", no generic advice. If their history is thin, say so in the why and keep the ideas close to what already worked.
-Output ONLY JSON, lowercase the way you text: {"ideas":[{"hook":"≤90 chars, the line", "why":"≤140 chars, one clause, cites their post", "evidencePostIds":["their post id"]}]}`;
+Output ONLY JSON, lowercase the way you text: {"ideas":[{"hook":"≤90 chars, the line", "why":"≤140 chars, one clause, cites their post by what happens in it (\"like your legal grounds breakfast run\"), in plain words, no multiples, numbers or stats", "evidencePostIds":["their post id"]}]}`;
 
 const lower = (t: string) => (t ? t[0].toLowerCase() + t.slice(1) : t);
 

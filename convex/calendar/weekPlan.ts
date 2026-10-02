@@ -117,11 +117,19 @@ export function composeWeek(slots: Slot[], tz: string, fromHistory: boolean, lab
   const lines = slots.map((s) => {
     const day = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(s.film.start).toLowerCase();
     const t = (e: number) => new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(e).toLowerCase().replace(":00", "");
-    const edit = s.edit ? `, edit ${t(s.edit.start)}` : "";
-    return `${day} ${t(s.film.start)} film${edit}, post ${t(s.post.at)} — ${s.hook}${s.why ? ` (${s.why})` : ""}${s.experiment ? " (this week's experiment)" : ""}`;
+    // The why rides the line when it's in plain words (2026-09-07: a line with no why felt generic). One
+    // carrying a stat stays in the app and on the calendar event (2026-10-02: "(hit 1.77x on the panic
+    // order)" in a text read as a spreadsheet).
+    const why = s.why && !/\d/.test(s.why) ? ` (${s.why})` : "";
+    return `${day}: ${s.hook}${why}${s.experiment ? " (this week's experiment)" : ""}. film around ${t(s.film.start)}, post at ${t(s.post.at)}`;
   });
-  const basis = fromHistory ? "post times are your best hours from your own numbers." : "post times are a default until i've seen more of your posts.";
-  return `${opener ? `${opener} ` : ""}${label}, ${slots.length} post${slots.length === 1 ? "" : "s"}:\n\n${lines.join("\n")}\n\n${basis} book it and i'll put the blocks on your calendar and check in before each one. move any of them by telling me.`;
+  const basis = fromHistory ? "those post times are when your people are usually on." : "post times are a guess until i've seen more of your posts.";
+  // Separate texts, the way a person would send it: the month (if any), the week, the ask.
+  return [
+    ...(opener ? [opener] : []),
+    `${label}, ${slots.length} post${slots.length === 1 ? "" : "s"}:\n\n${lines.join("\n\n")}`,
+    `${basis} say the word and i'll put them on your calendar and check in before each one. tell me if any should move.`,
+  ].join("\n---\n");
 }
 
 /** Days from tomorrow through the coming Sunday, inclusive, on their clock. Sunday → 7 (next week). */
