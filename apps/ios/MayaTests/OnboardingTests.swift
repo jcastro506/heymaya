@@ -4,8 +4,8 @@ import XCTest
 /// Onboarding resumes from the server's facts (spec §5.1): the right screen after a kill, a reinstall
 /// or a sign-in on another phone, and nobody who's already set up is sent back through it.
 final class OnboardingTests: XCTestCase {
-  private func step(plan: String? = nil, accounts: Int = 0, connectSeen: Bool = false, paired: Bool = false, watchSeen: Bool = false, meetSkipped: Bool = false, watching: Int = 0) -> OnboardingStep {
-    OnboardingStep.decide(.init(planStatus: plan, connectedAccounts: accounts, connectSeen: connectSeen, paired: paired, watchSeen: watchSeen, meetSkipped: meetSkipped, watching: watching))
+  private func step(plan: String? = nil, accounts: Int = 0, connectSeen: Bool = false, paired: Bool = false, watchSeen: Bool = false, watching: Int = 0) -> OnboardingStep {
+    OnboardingStep.decide(.init(planStatus: plan, connectedAccounts: accounts, connectSeen: connectSeen, paired: paired, watchSeen: watchSeen, watching: watching))
   }
 
   func testTheOrder() {
@@ -15,7 +15,13 @@ final class OnboardingTests: XCTestCase {
     XCTAssertEqual(step(plan: "trialing", accounts: 1), .connect, "connecting one account doesn't rush them past the other")
     XCTAssertEqual(step(plan: "trialing", accounts: 1, connectSeen: true), .watch)
     XCTAssertEqual(step(plan: "trialing", accounts: 1, connectSeen: true, watchSeen: true), .meet, "texting her is last: once they're in Messages nobody comes back to finish a step")
-    XCTAssertEqual(step(plan: "trialing", accounts: 1, connectSeen: true, watchSeen: true, meetSkipped: true), .done)
+    XCTAssertEqual(step(plan: "trialing", accounts: 1, connectSeen: true, paired: true, watchSeen: true), .done)
+  }
+
+  func testTextingHerIsRequired() {
+    // No skipping it, however far along they are: the app is where her work lives, but she works over Messages.
+    XCTAssertEqual(step(plan: "active", accounts: 2, connectSeen: true, watchSeen: true, watching: 3), .meet)
+    XCTAssertEqual(step(plan: "active", accounts: 2, connectSeen: true, paired: true, watchSeen: true), .done)
   }
 
   func testAddingAFavoriteDoesNotRushThemOn() {

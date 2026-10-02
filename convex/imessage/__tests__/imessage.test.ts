@@ -140,6 +140,11 @@ describe("her number: rows and doors, on the fake vendor", () => {
     const after = await t.run((ctx) => ctx.db.get(creatorId));
     expect(after?.channel).toMatchObject({ paired: true, kind: "imessage" });
     expect(after?.pairingToken).toBeUndefined();
+    // Not the instant they hit send (2026-10-02): scheduled behind the typing dots, then sent.
+    const scheduled = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
+    expect(scheduled.map((f) => f.name), "the hello is scheduled, not sent").toContainEqual(expect.stringMatching(/hello/));
+    expect((await t.run((ctx) => ctx.db.query("messages").collect())).some((m) => m.dedupeKey === `hello:${creatorId}`)).toBe(false);
+    await t.action(internal.onboarding.hello.send, { creatorId });
     const rows = await t.run((ctx) => ctx.db.query("messages").collect());
     const hello = rows.find((m) => m.dedupeKey === `hello:${creatorId}`);
     expect(hello?.surface, "the writer was told telegram; the row is the creator's channel").toBe("imessage");

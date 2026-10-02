@@ -15,7 +15,7 @@ struct WelcomeView: View {
         Text("Meet Maya")
           .font(MayaFont.display)
           .foregroundStyle(Palette.ink)
-        Text("She watches your lane, finds what's working,\nand texts you the idea worth making.")
+        Text("Your personal content assistant.\nShe finds what's working, plans your week,\nand texts you the idea worth making.")
           .font(MayaFont.body)
           .foregroundStyle(Palette.muted)
           .multilineTextAlignment(.center)

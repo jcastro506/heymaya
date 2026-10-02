@@ -231,7 +231,7 @@ private struct ConnectStep: View {
   private var accounts: [SocialStatus.Account] { model.social?.accounts.filter { !$0.needsReconnect } ?? [] }
 
   var body: some View {
-    StepFrame(step: .connect, kicker: "Your work", title: "Let her see what you make.", subtitle: "She reads your posts and numbers, and never posts a thing.") {
+    StepFrame(step: .connect, kicker: "Your work", title: "Let her see what you make.", subtitle: "She learns your vibe: how you make things and what lands with your audience, so her ideas sound like you. She only reads, and never posts for you.") {
       VStack(spacing: 12) {
         ForEach(["instagram", "tiktok"], id: \.self) { platform in
           let account = accounts.first { $0.platform == platform }
@@ -254,12 +254,17 @@ private struct ConnectStep: View {
                 Task {
                   busy = platform
                   problem = await model.connect(platform: platform)
-                  busy = nil
-                  // Came back without Instagram attached: almost always a personal account. Show how to switch.
-                  if platform == "instagram", !model.preview, !(model.social?.accounts.contains { $0.platform == "instagram" } ?? false) {
-                    problem = "Instagram didn't connect. It needs a Creator account first: here's how."
-                    showIGSetup = true
+                  // Wait for Zernio to attach it before deciding (it confirms a moment after the sheet closes).
+                  // Only if it still isn't there is it almost always a personal account: show how to switch.
+                  if platform == "instagram", !model.preview {
+                    if await model.waitForAccount(platform: "instagram") {
+                      problem = nil
+                    } else {
+                      problem = "Instagram didn't connect. It needs a Creator account first: here's how."
+                      showIGSetup = true
+                    }
                   }
+                  busy = nil
                 }
               } label: {
                 if busy == platform { ProgressView() } else { Text("Connect").font(MayaFont.headline) }
@@ -298,6 +303,11 @@ private struct ConnectStep: View {
       .disabled(accounts.isEmpty)
     }
     .task { await igSetup.run() }
+    // An Instagram error is wrong the moment Instagram shows up connected (it can arrive after the check).
+    .onChange(of: accounts.contains { $0.platform == "instagram" }) { _, connected in
+      if connected, problem?.hasPrefix("Instagram") == true { problem = nil }
+      if connected { showIGSetup = false }
+    }
     .sheet(isPresented: $showIGSetup) {
       if case .value(let setup?) = igSetup.state {
         AccountSetupSheet(platform: "instagram", setup: setup)
@@ -341,9 +351,6 @@ private struct MeetStep: View {
       }
       Text("By texting, you agree to get texts from Maya. Msg & data rates may apply. Reply STOP anytime.")
         .font(MayaFont.caption).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
-      Button("I'll do this later") { model.meetSkipped = true }
-        .font(MayaFont.callout)
-        .foregroundStyle(Palette.muted)
     }
   }
 }
