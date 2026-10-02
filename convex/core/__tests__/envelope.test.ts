@@ -57,6 +57,15 @@ describe("several short texts from one row", () => {
   it("splits on a --- line, keeps order, caps the count, and leaves a plain body alone", () => {
     expect(splitParts("hey.\n---\nyour london clip landed.\n---\ntravel or running?")).toEqual(["hey.", "your london clip landed.", "travel or running?"]);
     expect(splitParts("one block, no separator")).toEqual(["one block, no separator"]);
+    // A wall with no separator is split at its paragraphs (2026-10-02: a 1,100-character text); a short
+    // message with paragraphs stays one text.
+    const para = (n: number) => `${"word ".repeat(n).trim()}.`;
+    const wall = [para(30), para(30), para(30), para(30)].join("\n\n");
+    expect(splitParts(wall).length).toBeGreaterThan(1);
+    expect(splitParts(wall).every((p) => p.length <= 320)).toBe(true);
+    expect(splitParts("hey.\n\nshort one.")).toEqual(["hey.\n\nshort one."]);
+    // Tiny paragraphs travel with a neighbour rather than becoming one-word bubbles.
+    expect(splitParts([para(60), "ok.", para(60)].join("\n\n")).some((p) => p === "ok.")).toBe(false);
     expect(splitParts("a --- b in prose")).toEqual(["a --- b in prose"]);
     const many = Array.from({ length: 7 }, (_, i) => `t${i}`).join("\n---\n");
     expect(splitParts(many).length).toBe(MAX_PARTS);

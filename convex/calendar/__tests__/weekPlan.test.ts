@@ -54,7 +54,7 @@ describe("the Sunday plan", () => {
     expect(out[0].kind).toBe("plan");
     expect(out[0].awaitingAnswer).toBe(true);
     expect(out[0].buttons?.map((b) => b.id.split(":").pop())).toEqual(["book", "skip"]);
-    expect(out[0].body).toMatch(/post times are your best hours/);
+    expect(out[0].body).toMatch(/post times are when your people are usually on/);
     // Not twice for the same week.
     const again = await t.action(internal.calendar.weekPlan.draft, { creatorId, now: SUNDAY_6PM + 60_000 });
     expect(again.sent).toBe(false);
@@ -276,6 +276,18 @@ describe("every plan line carries its why (2026-09-07)", () => {
     const plan = (await t.run((ctx) => ctx.db.query("messages").collect())).find((m) => m.kind === "plan");
     expect(plan?.body).toMatch(/\(rhymes with your piccadilly pan\)/);
   });
+
+  it("a why carrying a stat stays in the app, not the text (2026-10-02)", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await creatorWithIdeas(t);
+    await t.run(async (ctx) => {
+      for (const i of await ctx.db.query("ideas").collect()) await ctx.db.patch(i._id, { fitWhy: "your coffee walk hit 1.77x your normal" });
+    });
+    await t.action(internal.calendar.weekPlan.draft, { creatorId, now: SUNDAY_6PM });
+    const plan = (await t.run((ctx) => ctx.db.query("messages").collect())).find((m) => m.kind === "plan");
+    expect(plan?.body).not.toMatch(/1\.77x/);
+    expect(plan?.body.split(/\n---\n/).length).toBeGreaterThan(1);
+  });
 });
 
 describe("the plan answers their choice (2026-09-07)", () => {
@@ -285,6 +297,7 @@ describe("the plan answers their choice (2026-09-07)", () => {
     const r = await t.action(internal.calendar.weekPlan.draft, { creatorId, now: SUNDAY_6PM, opener: "travel it is." });
     expect(r.sent).toBe(true);
     const plan = (await t.run((ctx) => ctx.db.query("messages").collect())).find((m) => m.kind === "plan");
-    expect(plan?.body.startsWith("travel it is. next week")).toBe(true);
+    // Its own text, then the week (2026-10-02: one long text was too much to read).
+    expect(plan?.body.startsWith("travel it is.\n---\nnext week")).toBe(true);
   });
 });

@@ -120,6 +120,14 @@ export const accept = internalMutation({
   },
 });
 
+/** Pure: views the way a person says them ("close to a million views", "around 40k views"). */
+export function roughViews(n: number): string {
+  if (n >= 950_000) { const m = Math.round(n / 100_000) / 10; return m < 1.05 ? "close to a million views" : `around ${m % 1 ? m.toFixed(1) : m}M views`; }
+  if (n >= 10_000) return `around ${Math.round(n / 1000)}k views`;
+  if (n >= 1000) return `around ${(Math.round(n / 100) / 10).toString().replace(/\.0$/, "")}k views`;
+  return `around ${Math.max(10, Math.round(n / 10) * 10)} views`;
+}
+
 /** Offer one account, to one creator, with a button. Silent when there is nothing worth asking. */
 export const offer = internalAction({
   args: { creatorId: v.id("creators"), now: v.optional(v.number()) },
@@ -140,7 +148,7 @@ export const offer = internalAction({
     const sent = await ctx.runMutation(internal.core.messages.send, {
       creatorId: a.creatorId,
       surface: "telegram",
-      body: `@${pick.handle} keeps coming up in your lane on ${pick.platform === "instagram" ? "Instagram" : "TikTok"} — ${pick.posts} posts on ${pick.days} different days, median ${pick.medianViews.toLocaleString()} views. want me to watch them?`,
+      body: `@${pick.handle} keeps showing up in the stuff like yours on ${pick.platform === "instagram" ? "Instagram" : "TikTok"}, ${roughViews(pick.medianViews)} a post. want me to keep an eye on them for ideas?`,
       // One ask per account, ever. §27: per platform, since the same handle elsewhere is someone else.
       dedupeKey: `roster:${pick.platform}:${pick.handle}`,
       proactive: true,
