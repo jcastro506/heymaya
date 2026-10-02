@@ -106,7 +106,7 @@ enum SessionActions {
   static func signOut() async {
     ShareSetup.forget() // the share extension stops sending as them
     // The skipped-step marks belong to this person, not the phone.
-    for key in ["connectSeen", "watchSeen", "meetSkipped"] { UserDefaults.standard.removeObject(forKey: "onboarding.\(key)") }
+    for key in ["connectSeen", "watchSeen", "calendarSeen", "meetSkipped"] { UserDefaults.standard.removeObject(forKey: "onboarding.\(key)") }
     await convex.logout()
   }
 

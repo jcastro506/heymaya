@@ -1,15 +1,16 @@
 import ConvexMobile
+import EventKit
 import Foundation
 import Observation
 
-/// Onboarding in the app (spec §5, M3): plan → connect → favorites → text her → the app.
+/// Onboarding in the app (spec §5, M3): name → plan → connect → favorites → calendar → text her → the app.
 /// Texting her is last (2026-10-01): once they're in Messages nobody comes back to finish a step, so
 /// the moment their START lands the server says paired and the app is already Home when they return.
 /// The server owns where they are (plan, connected accounts, paired), so killing the app, reinstalling
 /// or signing in on another phone resumes at the right screen. Only the two skippable steps are
 /// remembered on the phone, because skipping them writes nothing to the server.
 enum OnboardingStep: Equatable, CaseIterable {
-  case name, plan, connect, watch, meet, done
+  case name, plan, connect, watch, calendar, meet, done
 
   struct Facts: Equatable {
     var planStatus: String?
@@ -20,6 +21,8 @@ enum OnboardingStep: Equatable, CaseIterable {
     var watchSeen: Bool
     /// They told her what to call them (the first screen). Someone already texting her isn't stopped for it.
     var nameConfirmed: Bool = true
+    /// They answered the calendar screen (yes, no, or not now). Apple doesn't let an app require it.
+    var calendarSeen: Bool = true
     /// Accounts they already watch (so a returning user on a new phone isn't asked again).
     var watching: Int = 0
   }
@@ -34,14 +37,16 @@ enum OnboardingStep: Equatable, CaseIterable {
     if !planReady && !f.paired { return .plan }
     if f.connectedAccounts == 0 || !(f.connectSeen || f.paired) { return .connect }
     if !(f.watchSeen || f.paired) { return .watch }
+    // Before texting her (2026-10-02): her first plan arrives minutes after START, ready to go on their calendar.
+    if !(f.calendarSeen || f.paired) { return .calendar }
     // Texting her is required (operator, 2026-10-02): she works over Messages, so there's no way past it but to text.
     if !f.paired { return .meet }
     return .done
   }
 
-  /// The dots across the top: five real steps.
-  var index: Int { [.name: 1, .plan: 2, .connect: 3, .watch: 4, .meet: 5][self] ?? 5 }
-  static let count = 5
+  /// The dots across the top: six real steps.
+  var index: Int { [.name: 1, .plan: 2, .connect: 3, .watch: 4, .calendar: 5, .meet: 6][self] ?? 6 }
+  static let count = 6
 }
 
 struct OnboardingProgress: Decodable, Equatable {
@@ -80,6 +85,7 @@ final class OnboardingModel {
 
   var connectSeen: Bool { didSet { if !preview { UserDefaults.standard.set(connectSeen, forKey: Self.key("connectSeen")) } } }
   var watchSeen: Bool { didSet { if !preview { UserDefaults.standard.set(watchSeen, forKey: Self.key("watchSeen")) } } }
+  var calendarSeen: Bool { didSet { if !preview { UserDefaults.standard.set(calendarSeen, forKey: Self.key("calendarSeen")) } } }
 
   /// Debug only (`-MayaOnboarding plan|connect|watch|meet`): every screen with made-up data, no network,
   /// and nothing saved to the phone (a preview must never skip a real run's steps).
@@ -89,9 +95,12 @@ final class OnboardingModel {
     self.preview = preview != nil
     connectSeen = UserDefaults.standard.bool(forKey: Self.key("connectSeen"))
     watchSeen = UserDefaults.standard.bool(forKey: Self.key("watchSeen"))
+    // Already answered the iPhone's prompt (say, a reinstall): don't ask again.
+    calendarSeen = UserDefaults.standard.bool(forKey: Self.key("calendarSeen")) || EKEventStore.authorizationStatus(for: .event) != .notDetermined
     if let start = preview {
       connectSeen = ![.name, .plan, .connect].contains(start)
-      watchSeen = [.meet, .done].contains(start)
+      watchSeen = [.calendar, .meet, .done].contains(start)
+      calendarSeen = [.meet, .done].contains(start)
       progress = OnboardingProgress(paired: start == .done, planStatus: [.name, .plan].contains(start) ? "onboarding" : "trialing", phone: nil, posts: 24, firstName: "Riley", nameConfirmed: start != .name)
       social = SocialStatus(status: "connected", accounts: [.name, .plan, .connect].contains(start) ? [] : [.init(platform: "instagram", username: "riverloop.runs", needsReconnect: false)])
       loaded = true
@@ -101,7 +110,7 @@ final class OnboardingModel {
   private static func key(_ name: String) -> String { "onboarding.\(name)" }
 
   var facts: OnboardingStep.Facts {
-    .init(planStatus: progress?.planStatus, connectedAccounts: social?.accounts.filter { !$0.needsReconnect }.count ?? 0, connectSeen: connectSeen, paired: progress?.paired ?? false, watchSeen: watchSeen, nameConfirmed: progress?.nameConfirmed ?? true, watching: watched.count)
+    .init(planStatus: progress?.planStatus, connectedAccounts: social?.accounts.filter { !$0.needsReconnect }.count ?? 0, connectSeen: connectSeen, paired: progress?.paired ?? false, watchSeen: watchSeen, nameConfirmed: progress?.nameConfirmed ?? true, calendarSeen: calendarSeen, watching: watched.count)
   }
 
   var step: OnboardingStep { OnboardingStep.decide(facts) }
@@ -110,7 +119,7 @@ final class OnboardingModel {
   /// the server, so there's no going "back" past them.
   var canGoBack: Bool {
     switch step {
-    case .watch: return true
+    case .watch, .calendar: return true
     case .meet: return !(progress?.paired ?? false)
     default: return false
     }
@@ -119,7 +128,8 @@ final class OnboardingModel {
   func back() {
     switch step {
     case .watch: connectSeen = false
-    case .meet: watchSeen = false
+    case .calendar: watchSeen = false
+    case .meet: calendarSeen = false
     default: break
     }
   }
