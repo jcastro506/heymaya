@@ -16,12 +16,15 @@ import { callModel } from "../core/llm";
 import { REGISTRY } from "./registry";
 import { buildPrefix } from "./context";
 import { critique, tooLong } from "./critic";
+import { investigate } from "./investigate";
 import { clip } from "../lib/clip";
 import { GROWTH, type GrowthPlan } from "./growth";
 
 export const MONTH_PLAN_SKILL = `month-plan
 When: once, right after your read, as the start of the text that carries their first week.
 The judgment: propose how the next four weeks go, the way a friend in the industry would sketch it over coffee. Build it on what they're genuinely good at wherever they are (the dossier's strengths and "skill" works, and their real routines), never on the setting of a one-off. Shape it around what they've told you (what gets in the way, what they won't do on camera). Keep the number of posts a week to what they can really do: their current pace or one more, never a jump that becomes homework.
+Before you propose, you may look things up (you have a small budget): the comments on their one or two best recent posts tell you what people come for, the topic or them as a person. If the comments say it's them (their humor, their look, how they talk, someone in their life), build the plan on that as much as the topic. With few comments, don't dig: lean on the posts.
+Size it to them from their own numbers, not a bucket: their pace or one step more, one shoot can be several posts, and if their goal is paid work, the step that fits their normal views (proof first at a small normal; at a large normal, the brand categories that fit their world and a media kit, priced from their own numbers, never a market rate as fact).
 Open with their goal in their words. If they haven't said one, say what you're assuming ("i'm guessing you mainly want…, tell me if not"). Then the plan, then one plain sentence on how it gets them to that goal. One thing to test, so the month teaches you both something. Say you'll check back on the review date with what the numbers say. End by inviting a tweak, not a yes/no form. Lowercase, the way you text. Under 90 words for the message.
 Output ONLY JSON: {"goal": "their words, or what you're assuming", "goalStated": true|false, "builtOn": ["≤60 chars each, what they're good at"], "formats": ["≤40 chars each, at most 3"], "postsPerWeek": 3, "test": "≤120, one thing to try", "howItHelps": "≤200, how this reaches the goal", "lane": "≤60", "keywords": ["3-8 lane keywords"], "message": "the text"}`;
 
@@ -100,9 +103,13 @@ export const proposeThenWeek = internalAction({
     if (!g) return { proposed: false, reason: "creator not found" };
     const prefix = buildPrefix({ creator: g.creator, directives: g.directives, skill: MONTH_PLAN_SKILL, personal: g.personal, voice: g.voice, history: g.history });
     const spec = REGISTRY.writer;
-    const ask = (extra?: string) => callModel(ctx, { creatorId: a.creatorId, purpose: extra ? "month_plan_rewrite" : "month_plan", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `# Recent conversation\n${g.recent.slice(-10).map((m) => `${m.direction === "in" ? "them" : "you"}: ${clip(m.body, 300)}`).join("\n")}\n\nPropose the month now.${extra ?? ""}` }], temperature: 0.5, maxTokens: 900, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+    const convo = `# Recent conversation\n${g.recent.slice(-10).map((m) => `${m.direction === "in" ? "them" : "you"}: ${clip(m.body, 300)}`).join("\n")}\n\nPropose the month now.`;
+    // She may read what people come for first (their best posts' comments), on a small budget (2026-10-01:
+    // for a 450K account her read said "people are there watching you", then the plan built only on gear).
+    const inv = await investigate(ctx, { creatorId: a.creatorId, purpose: "month_plan", prefix, user: convo, budget: { calls: 3, credits: 6, deadlineAt: Date.now() + 60_000 }, temperature: 0.5, maxTokens: 1200 });
+    const ask = (extra?: string) => callModel(ctx, { creatorId: a.creatorId, purpose: "month_plan_rewrite", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `${convo}${inv.trace.length ? `\n\nWhat you looked up:\n${inv.trace.map((t) => `${t.tool}: ${clip(t.result ?? "", 600)}`).join("\n")}` : ""}${extra ?? ""}` }], temperature: 0.5, maxTokens: 900, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
     const now = Date.now();
-    let r = await ask();
+    let r = inv.ended === "answer" && inv.content ? { ok: true as const, content: inv.content } : await ask();
     let parsed = r.ok ? parseMonthPlan(r.content, inp, now) : null;
     if (parsed) {
       const d = g.creator.dossier as { strengths?: unknown; works?: unknown; oneOffs?: unknown; cadence?: unknown } | undefined;

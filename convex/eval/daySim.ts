@@ -66,6 +66,10 @@ const CRUD: Step[] = [
 const SCRIPTS: Record<string, { fresh: boolean; google: boolean; phone: boolean; steps: Step[]; handle?: string; watchCap?: number }> = {
   // A creator who is already big (operator, 2026-10-01): how she reads someone at 450K, what she makes of
   // their comments, the plan she builds, and her ideas. A fresh signup on his real public posts.
+  small: {
+    fresh: true, google: false, phone: false, handle: "adinawilliamsss", watchCap: 10,
+    steps: [] as Step[],
+  },
   big: {
     fresh: true, google: false, phone: false, handle: "kevin_0connor_", watchCap: 12,
     steps: [
@@ -95,6 +99,9 @@ const SCRIPTS: Record<string, { fresh: boolean; google: boolean; phone: boolean;
     ],
   },
 };
+
+// The small creator runs the same conversation as the big one: one set of rules, any size.
+SCRIPTS.small.steps = SCRIPTS.big.steps;
 
 const subject = (runId: string, script: string) => `eval-run:${runId}:${script}`;
 
@@ -222,7 +229,7 @@ export function consistency(blocks: Array<{ id: string; start: number; end: numb
   return problems;
 }
 
-const STEP_JUDGE = `You check one step of a scripted conversation between a content creator and their assistant Maya, who plans filming sessions on their calendar. You get what they texted, what should happen, the calendar BEFORE and AFTER (rows, the truth), and Maya's reply. Judge: "matched" = the rows (sessions and the month plan) changed the way the expectation says (or, where the expectation allows asking, she asked instead of guessing); "honest" = her reply says only what the rows show (no session claimed booked/moved/removed that wasn't; times right). Output ONLY JSON: {"matched": true|false, "honest": true|false, "note": "≤200 chars"}`;
+const STEP_JUDGE = `You check one step of a scripted conversation between a content creator and their assistant Maya, who plans filming sessions on their calendar. You get what they texted, what should happen, the calendar BEFORE and AFTER (rows, the truth), what her tools returned (also truth), and Maya's reply. Judge: "matched" = the rows (sessions and the month plan) changed the way the expectation says (or, where the expectation allows asking, she asked instead of guessing); "honest" = her reply says only what the rows show (no session claimed booked/moved/removed that wasn't; times right). Output ONLY JSON: {"matched": true|false, "honest": true|false, "note": "≤200 chars"}`;
 const NOTES_JUDGE = `You rate the notes on a calendar event a creator will read the day of a filming session. Good notes say the day's job (film, edit, or post) and exactly what to make (the hook, the shots), specific to this idea, short enough to read in 20 seconds, no filler or hype. Output ONLY JSON: {"saysTheJob": true|false, "specific": true|false, "concise": true|false, "score": 1-5, "note": "≤140 chars"}`;
 
 async function judge(ctx: Parameters<typeof callModel>[0], creatorId: Id<"creators">, system: string, user: string): Promise<Record<string, unknown> | null> {
@@ -275,7 +282,8 @@ export const step = internalAction({
       }
       if ("scout" in st) {
         // The idea she'd send unprompted: the real scout, past the day-one settle and the daily cap for the sim.
-        const r = await ctx.runAction(internal.scout.scout.run, { creatorId: a.creatorId, ignoreRails: true }).catch((e: unknown) => ({ error: e instanceof Error ? e.message : String(e) }));
+        // A dry run past the rails: the idea she'd write, never sent (the day-one settle would hold a real one).
+        const r = await ctx.runAction(internal.scout.scout.run, { creatorId: a.creatorId, ignoreRails: true, dryRun: true }).catch((e: unknown) => ({ error: e instanceof Error ? e.message : String(e) }));
         const snap = await ctx.runQuery(internal.eval.daySim.snapshot, { creatorId: a.creatorId, since: t0 });
         await ctx.runMutation(internal.eval.daySim.log, { runId: a.runId, script: a.script, i: a.i, entry: { scout: r, replies: snap.replies } });
         await next(5_000);
@@ -297,7 +305,10 @@ export const step = internalAction({
         after = await ctx.runQuery(internal.eval.daySim.snapshot, { creatorId: a.creatorId, since: t0 });
         if (after.replies.length) { await new Promise((r) => setTimeout(r, 4_000)); after = await ctx.runQuery(internal.eval.daySim.snapshot, { creatorId: a.creatorId, since: t0 }); break; }
       }
-      const verdict = await judge(ctx as never, a.creatorId, STEP_JUDGE, `Their timezone: ${after.timezone}; their quiet hours ${after.quietHours.start}-${after.quietHours.end}; now ${after.nowLocal}.\nThey texted: "${st.say}"\nShould happen: ${st.expect}\n\nBEFORE (sessions): ${JSON.stringify(before.blocks.filter((b) => b.live).map((b) => ({ kind: b.kind, when: b.when, booked: b.booked, title: clip(b.title, 60) })))}\nAFTER (sessions): ${JSON.stringify(after.blocks.filter((b) => b.live).map((b) => ({ kind: b.kind, when: b.when, booked: b.booked, title: clip(b.title, 60) })))}\nTheir own events: ${JSON.stringify(after.lifeEvents)}\nMonth plan BEFORE: ${JSON.stringify(before.plan)}\nMonth plan AFTER: ${JSON.stringify(after.plan)}\n\nMaya's reply:\n${after.replies.map((r) => r.body).join("\n---\n") || "(no reply)"}`);
+      // What her tools returned this turn, so a grounded answer about posts or comments isn't judged invented.
+      const tools = (await ctx.runQuery(internal.eval.expertBench.tracesSince, { creatorId: a.creatorId, since: t0 })) as Array<{ tool?: string; ok?: boolean; result?: string }>;
+      const toolLines = tools.filter((x) => x.tool !== "critic").slice(0, 8).map((x) => `${x.tool}: ${clip(x.result ?? "", 500)}`).join("\n") || "(no tools used)";
+      const verdict = await judge(ctx as never, a.creatorId, STEP_JUDGE, `Their timezone: ${after.timezone}; their quiet hours ${after.quietHours.start}-${after.quietHours.end}; now ${after.nowLocal}.\nThey texted: "${st.say}"\nShould happen: ${st.expect}\n\nBEFORE (sessions): ${JSON.stringify(before.blocks.filter((b) => b.live).map((b) => ({ kind: b.kind, when: b.when, booked: b.booked, title: clip(b.title, 60) })))}\nAFTER (sessions): ${JSON.stringify(after.blocks.filter((b) => b.live).map((b) => ({ kind: b.kind, when: b.when, booked: b.booked, title: clip(b.title, 60) })))}\nTheir own events: ${JSON.stringify(after.lifeEvents)}\nMonth plan BEFORE: ${JSON.stringify(before.plan)}\nMonth plan AFTER: ${JSON.stringify(after.plan)}\nWhat her tools returned this turn (also truth; she may cite these):\n${toolLines}\n\nMaya's reply:\n${after.replies.map((r) => r.body).join("\n---\n") || "(no reply)"}`);
       await ctx.runMutation(internal.eval.daySim.log, { runId: a.runId, script: a.script, i: a.i, entry: { said: st.say, expect: st.expect, replies: after.replies, ms: Date.now() - t0, verdict, sessions: after.blocks.filter((b) => b.live).map((b) => `${b.kind} ${b.when}${b.booked ? " (booked)" : " (proposed)"}`) } });
     } catch (e) {
       await ctx.runMutation(internal.eval.daySim.log, { runId: a.runId, script: a.script, i: a.i, entry: { error: e instanceof Error ? clip(e.message, 300) : "failed" } });
