@@ -467,11 +467,18 @@ export const deliver = internalAction({
  * After the first successful part: the chat id and health are kept, and the contact card is offered
  * at most once a day. An opt-out refusal (2024) is honoured and marked, never retried.
  */
+/** Pure: how long to type before the next bubble, from its length (a short one is quick, a long one takes a few seconds). */
+export function partGapMs(next: string): number {
+  return Math.max(1_100, Math.min(4_500, 500 + 30 * next.length));
+}
+/** Tests set this to 0 so the suite doesn't sit through real pauses. */
+const PART_GAP_SCALE = (): number => Number(process.env.PART_GAP_SCALE ?? "1");
+
 async function deliverLinq(
   ctx: ActionCtx,
   a: { messageId: Id<"messages">; phone: string; body: string; buttons?: Array<{ id: string; label: string }>; frames?: Array<{ url: string; caption: string }> },
 ): Promise<{ delivered: boolean; reason?: string }> {
-  const { resolveLinqIdentity, sendMessage, shareContactCard } = await import("../integrations/linq/client");
+  const { resolveLinqIdentity, sendMessage, shareContactCard, startTyping } = await import("../integrations/linq/client");
   const identity = resolveLinqIdentity()!;
   const parts = splitParts(a.body);
   if (a.buttons?.length) parts[parts.length - 1] = `${parts[parts.length - 1]}\n${menuLine(a.buttons)}`;
@@ -492,7 +499,13 @@ async function deliverLinq(
     lastId = r.messageId;
     chatId = r.chatId;
     if (i === 0) await ctx.runMutation(internal.core.imessage.recordChat, { phone: a.phone, chatId: r.chatId, ...(r.health ? { health: r.health } : {}), ...(r.from ? { line: r.from } : {}) });
-    if (i < sends.length - 1) await new Promise((res) => setTimeout(res, 900));
+    if (i < sends.length - 1) {
+      // Typed, not dumped (2026-10-02): the dots, then a pause that fits the next bubble's length.
+      const next = sends[i + 1].parts.find((p) => p.type === "text");
+      const gap = partGapMs(next && next.type === "text" ? next.value : "") * PART_GAP_SCALE();
+      if (chatId && gap > 0) await startTyping(identity, chatId).catch(() => undefined);
+      await new Promise((res) => setTimeout(res, gap));
+    }
   }
   await ctx.runMutation(internal.core.telegram.markDelivered, { messageId: a.messageId, ...(lastId ? { telegramMessageId: lastId } : {}) });
   if (lastId) await ctx.runMutation(internal.core.imessage.markVendorId, { messageId: a.messageId, channelMessageId: lastId });

@@ -60,6 +60,9 @@ const handlers: Record<string, Handler> = {
     // something, and stepped over her own question. It waits a few seconds for the reply to go first.
     const busy = await (ctx as unknown as { runQuery: (ref: typeof internal.core.jobs.turnInFlight, a: { creatorId: Id<"creators"> }) => Promise<boolean> }).runQuery(internal.core.jobs.turnInFlight, { creatorId: job.creatorId });
     if (busy) return { ok: false, error: "waiting for her reply to go first", defer: 5_000 };
+    // Nor before her hello (2026-10-02): it goes out after a pause now, and the read must not beat it.
+    const helloPending = await (ctx as unknown as { runQuery: (ref: typeof internal.onboarding.hello.pending, a: { creatorId: Id<"creators">; now: number }) => Promise<boolean> }).runQuery(internal.onboarding.hello.pending, { creatorId: job.creatorId, now: Date.now() });
+    if (helloPending) return { ok: false, error: "waiting for her hello to go first", defer: 5_000 };
     const r = (await (ctx as unknown as { runAction: (ref: typeof internal.onboarding.firstRead.run, a: { creatorId: Id<"creators"> }) => Promise<{ ok: boolean; reason?: string }> })
       .runAction(internal.onboarding.firstRead.run, { creatorId: job.creatorId }));
     return r.ok ? { ok: true } : { ok: false, error: r.reason ?? "first read failed" };

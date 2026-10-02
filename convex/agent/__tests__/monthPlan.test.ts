@@ -82,3 +82,13 @@ describe("an explicit pace, applied by code", () => {
     expect(readFileSync(new URL("../growth.ts", import.meta.url), "utf8")).toMatch(/prev\.status === "running" && prev\.goal\) Object\.assign\(plan, \{ goal: prev\.goal/);
   });
 });
+
+describe("what nobody outside can know", () => {
+  it("is in every prompt, in the stable part", async () => {
+    const { buildPrefix, PLATFORM_HONESTY } = await import("../context");
+    const { CACHE_BREAK } = await import("../../integrations/openrouter/client");
+    expect(PLATFORM_HONESTY).toMatch(/Say them as "tends to"/);
+    const prefix = buildPrefix({ creator: { handles: {}, niche: "", timezone: "UTC", quietHours: { start: "22:00", end: "07:00" }, plan: { status: "active" }, notes: [] } as never, directives: [], skill: "x" });
+    expect(prefix.split(CACHE_BREAK)[0]).toContain(PLATFORM_HONESTY);
+  });
+});

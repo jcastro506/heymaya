@@ -26,6 +26,7 @@ import { internalMutation, mutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
 import { pairingSmsLink } from "./imessage";
 import { openingQuestionFor } from "../onboarding/conversation";
+import { HELLO_PACE } from "../onboarding/hello";
 import { partnershipsOpen } from "../partnerships/store";
 
 /**
@@ -161,9 +162,14 @@ export const claimPairingByPhone = internalMutation({
     const firstRead = await ctx.db.query("messages").withIndex("by_creator_and_dedupe", (q) => q.eq("creatorId", creator._id).eq("dedupeKey", `first_read:${creator._id}`)).first();
     await ctx.db.patch(creator._id, { conversationalOnboardingAt: creator.conversationalOnboardingAt ?? now });
     await redeliverFirstRead(ctx, firstRead);
-    await ctx.runMutation(internal.core.messages.send, firstRead
-      ? { creatorId: creator._id, surface: "imessage", body: openingQuestionFor(partnershipsOpen(creator)), dedupeKey: `onboarding_goal:${creator._id}`, proactive: true, kind: "status", awaitingAnswer: true }
-      : { creatorId: creator._id, surface: "imessage", body: helloFor(partnershipsOpen(creator)), dedupeKey: `hello:${creator._id}`, proactive: true, kind: "status", awaitingAnswer: true });
+    if (firstRead) {
+      await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "imessage", body: openingQuestionFor(partnershipsOpen(creator)), dedupeKey: `onboarding_goal:${creator._id}`, proactive: true, kind: "status", awaitingAnswer: true });
+    } else {
+      // Not the instant they hit send (operator, 2026-10-02: "it came a bit abruptly"): the typing dots, a
+      // pause, then a greeting written for them (onboarding/hello). Her read waits for it.
+      await ctx.scheduler.runAfter(HELLO_PACE.typingAfterMs, internal.core.imessage.typing, { creatorId: creator._id });
+      await ctx.scheduler.runAfter(HELLO_PACE.baseMs + Math.floor(Math.random() * HELLO_PACE.jitterMs), internal.onboarding.hello.send, { creatorId: creator._id });
+    }
     await ctx.runMutation(internal.core.jobs.enqueue, { kind: "first_read", idempotencyKey: `first_read:${creator._id}`, creatorId: creator._id, payloadJson: JSON.stringify({ phone: args.phone, service: args.service ?? null }) });
     await ctx.runMutation(internal.core.jobs.wakeDeliveries, { creatorId: creator._id });
     await ctx.scheduler.runAfter(0, internal.core.scheduler.drainJobs, { kinds: ["deliver_message"] });

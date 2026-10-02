@@ -46,6 +46,9 @@ export default defineSchema({
     laneConfirmedAt: v.optional(v.number()),
     // Sprint 4f: what their posts are about, grouped (onboarding/clusters.ts Lanes), and the growth plan (agent/growth.ts GrowthPlan). v.any(): the schema sits at the TS instantiation ceiling and both shapes are Zod/TS-typed at the edges.
     lanes: v.optional(v.any()),
+    /** Their name (lib/personName): from sign-in, or what they told her to call them. First name is how she greets them. */
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
     growthPlan: v.optional(v.any()),
     /** When they said they usually film (2026-10-01): weekdays 0–6 (Sunday 0), an hour on their clock, their words. Beats habits from blocks. */
     /** The iPhone's calendar (calendar/device): their answer to the permission, and busy times only (no titles), next three weeks. */

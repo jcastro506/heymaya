@@ -26,9 +26,11 @@ describe("conversational onboarding", () => {
     const creatorId = await t.run((ctx) => seedCreator(ctx, surface, { phone: "+15555550100", channel: { kind: surface, paired: false }, pairingToken: "hello", pairingExpiresAt: Date.now() + 60_000 }));
     if (surface === "imessage") await t.mutation(internal.core.pairing.claimPairingByPhone, { token: "hello", phone: "+15555550100" });
     else await t.mutation(internal.core.pairing.claimPairing, { token: "hello", chatId: "123" });
+    // On a phone her hello comes after a typed pause (onboarding/hello); Telegram (dev) is immediate.
+    if (surface === "imessage") await t.action(internal.onboarding.hello.send, { creatorId });
     const rows = await t.run((ctx) => ctx.db.query("messages").collect());
     expect(rows.every((m) => m.surface === surface)).toBe(true);
-    expect(rows.map((m) => m.body).join("\n")).toContain("it's maya");
+    expect(rows.map((m) => m.body).join("\n")).toMatch(/maya/i);
     // 2026-10-01: the goal question rides the hello, so the minutes she spends reading become context.
     expect(rows.map((m) => m.body).join("\n")).toContain(`while i do, ${openingQuestionFor(false)}`);
     expect(rows.filter((m) => m.awaitingAnswer)).toHaveLength(1);

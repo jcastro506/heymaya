@@ -11,6 +11,7 @@ import { internalMutation, mutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { addTracked } from "../agent/manage";
+import { namesFromIdentity } from "../lib/personName";
 import { mintPairing } from "../core/pairing";
 import { readingOf, stillReading, type Reading } from "./reading";
 
@@ -35,11 +36,17 @@ export const ensureCreator = mutation({
       .query("creators")
       .withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject))
       .first()) as Doc<"creators"> | null;
-    if (existing) return { ok: true, creatorId: existing._id };
+    const names = namesFromIdentity(identity);
+    if (existing) {
+      // An account made before names were kept gets its name now; one they gave in chat is never overwritten.
+      if (!existing.firstName && names.firstName) await ctx.db.patch(existing._id, { ...names, updatedAt: Date.now() });
+      return { ok: true, creatorId: existing._id };
+    }
     const now = Date.now();
     const creatorId = await ctx.db.insert("creators", {
       clerkUserId: identity.subject,
       email: identity.email ?? "",
+      ...names,
       handles: {},
       ownership: "unverified",
       niche: "",

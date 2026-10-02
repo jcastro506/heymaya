@@ -18,7 +18,6 @@ enum OnboardingStep: Equatable, CaseIterable {
     var connectSeen: Bool
     var paired: Bool
     var watchSeen: Bool
-    var meetSkipped: Bool
     /// Accounts they already watch (so a returning user on a new phone isn't asked again).
     var watching: Int = 0
   }
@@ -32,7 +31,8 @@ enum OnboardingStep: Equatable, CaseIterable {
     if !planReady && !f.paired { return .plan }
     if f.connectedAccounts == 0 || !(f.connectSeen || f.paired) { return .connect }
     if !(f.watchSeen || f.paired) { return .watch }
-    if !(f.paired || f.meetSkipped) { return .meet }
+    // Texting her is required (operator, 2026-10-02): she works over Messages, so there's no way past it but to text.
+    if !f.paired { return .meet }
     return .done
   }
 
@@ -73,7 +73,6 @@ final class OnboardingModel {
 
   var connectSeen: Bool { didSet { if !preview { UserDefaults.standard.set(connectSeen, forKey: Self.key("connectSeen")) } } }
   var watchSeen: Bool { didSet { if !preview { UserDefaults.standard.set(watchSeen, forKey: Self.key("watchSeen")) } } }
-  var meetSkipped: Bool { didSet { if !preview { UserDefaults.standard.set(meetSkipped, forKey: Self.key("meetSkipped")) } } }
 
   /// Debug only (`-MayaOnboarding plan|connect|watch|meet`): every screen with made-up data, no network,
   /// and nothing saved to the phone (a preview must never skip a real run's steps).
@@ -83,12 +82,10 @@ final class OnboardingModel {
     self.preview = preview != nil
     connectSeen = UserDefaults.standard.bool(forKey: Self.key("connectSeen"))
     watchSeen = UserDefaults.standard.bool(forKey: Self.key("watchSeen"))
-    meetSkipped = UserDefaults.standard.bool(forKey: Self.key("meetSkipped"))
     if let start = preview {
       connectSeen = ![.plan, .connect].contains(start)
       watchSeen = [.meet, .done].contains(start)
-      meetSkipped = start == .done
-      progress = OnboardingProgress(paired: false, planStatus: start == .plan ? "onboarding" : "trialing", phone: nil, posts: 24)
+      progress = OnboardingProgress(paired: start == .done, planStatus: start == .plan ? "onboarding" : "trialing", phone: nil, posts: 24)
       social = SocialStatus(status: "connected", accounts: [.plan, .connect].contains(start) ? [] : [.init(platform: "instagram", username: "riverloop.runs", needsReconnect: false)])
       loaded = true
     }
@@ -97,7 +94,7 @@ final class OnboardingModel {
   private static func key(_ name: String) -> String { "onboarding.\(name)" }
 
   var facts: OnboardingStep.Facts {
-    .init(planStatus: progress?.planStatus, connectedAccounts: social?.accounts.filter { !$0.needsReconnect }.count ?? 0, connectSeen: connectSeen, paired: progress?.paired ?? false, watchSeen: watchSeen, meetSkipped: meetSkipped, watching: watched.count)
+    .init(planStatus: progress?.planStatus, connectedAccounts: social?.accounts.filter { !$0.needsReconnect }.count ?? 0, connectSeen: connectSeen, paired: progress?.paired ?? false, watchSeen: watchSeen, watching: watched.count)
   }
 
   var step: OnboardingStep { OnboardingStep.decide(facts) }
@@ -183,6 +180,18 @@ final class OnboardingModel {
     return r.accounts == 0 ? "Nothing's attached yet. If you finished connecting, give it a moment and check again." : nil
   }
 
+  /// The account is attached by Zernio a moment after the sheet closes. Waits (checking with Zernio now and then)
+  /// before anyone calls it a failure: the screen used to decide in the first instant and show an error for an
+  /// account that was about to turn green.
+  func waitForAccount(platform: String, seconds: Int = 12) async -> Bool {
+    for second in 0..<seconds {
+      if social?.accounts.contains(where: { $0.platform == platform && !$0.needsReconnect }) == true { return true }
+      if second % 4 == 2 { _ = await recheck() }
+      try? await Task.sleep(for: .seconds(1))
+    }
+    return social?.accounts.contains(where: { $0.platform == platform && !$0.needsReconnect }) == true
+  }
+
   func addOwn(platform: String, handle: String) async -> String? {
     let clean = handle.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "@", with: "")
     guard !clean.isEmpty else { return nil }
@@ -203,7 +212,7 @@ final class OnboardingModel {
     struct Pairing: Decodable { let ok: Bool; let deepLink: String?; let error: String? }
     do {
       let pairing: Pairing = try await convex.mutation("core/pairing:createPairingLink")
-      guard pairing.ok, let link = pairing.deepLink.flatMap(URL.init(string:)) else { return (nil, "Texting her isn't ready yet. You can do this later from the app.") }
+      guard pairing.ok, let link = pairing.deepLink.flatMap(URL.init(string:)) else { return (nil, "Texting her isn't ready yet. Give it a moment and try again.") }
       return (link, nil)
     } catch {
       print("[Onboarding] meet: \(error)")
