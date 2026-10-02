@@ -157,3 +157,31 @@ export const models = internalAction({
     return j.data.filter((x) => m.test(x.id)).slice(0, 25).map((x) => ({ id: x.id, inPerM: Number(x.pricing?.prompt ?? 0) * 1e6, outPerM: Number(x.pricing?.completion ?? 0) * 1e6, cachedInPerM: x.pricing?.input_cache_read ? Number(x.pricing.input_cache_read) * 1e6 : null, context: x.context_length ?? null }));
   },
 });
+
+/**
+ * Does the critic catch a false claim she actually made (2026-10-01)? Replays bench replies the judge
+ * found false through the critic exactly as a reply turn calls it (their message + her context), with
+ * thinking capped (production) and uncapped, and reports what each said.
+ */
+export const replay = internalAction({
+  args: { creatorId: v.id("creators"), cases: v.array(v.object({ id: v.string(), theirs: v.string(), reply: v.string() })), withDossier: v.optional(v.boolean()) },
+  handler: async (ctx, a): Promise<Array<{ id: string; capped: string; uncapped: string }>> => {
+    const { callOpenRouter } = await import("../integrations/openrouter/client");
+    const g = await ctx.runQuery(internal.agent.context.gather, { creatorId: a.creatorId });
+    if (!g) return [];
+    const model = "z-ai/glm-5.3-flash";
+    const out = [];
+    for (const c of a.cases) {
+      const evidence = { theirMessage: c.theirs.slice(0, 400), creatorContext: g.personal.slice(0, 12_000), ...(a.withDossier ? { theirProfile: g.creator.dossier ?? null } : {}), toolsUsedThisTurn: [], toolTrace: [], failedActions: [] };
+      const user = `Kind: reply\n\nHouse rules:\n- none\n\nCreator voice block:\n{}\n\nEvidence the message may cite:\n${JSON.stringify(evidence)}\n\nMessage:\n"""\n${c.reply}\n"""`;
+      const ask = async (reasoning?: { effort: "low" }) => {
+        const r = await callOpenRouter({ model, messages: [{ role: "system", content: CRITIC_PROMPT }, { role: "user", content: user }], temperature: 0, maxTokens: budgetFor(model, 400), timeoutMs: 60_000, apiKey: process.env.OPENROUTER_API_KEY ?? "", reasoning });
+        if (!r.ok) return `error: ${r.reason.slice(0, 80)}`;
+        try { const j = JSON.parse(r.content.match(/\{[\s\S]*\}/)?.[0] ?? "") as { pass?: boolean; problems?: string[]; note?: string }; return `${j.pass ? "PASS" : "FAIL"} ${JSON.stringify(j.problems ?? [])} ${String(j.note ?? "").slice(0, 120)}`; } catch { return "no json"; }
+      };
+      const [capped, uncapped] = await Promise.all([ask({ effort: "low" }), ask(undefined)]);
+      out.push({ id: c.id, capped, uncapped });
+    }
+    return out;
+  },
+});

@@ -39,7 +39,8 @@ type Step =
   | { wait: "read" }
   | { plan: true }
   | { syncPhone: true }
-  | { syncGoogle: true };
+  | { syncGoogle: true }
+  | { scout: true };
 
 /** Their life, planted on the calendar relative to "now" (hours from now, local-agnostic). */
 const LIFE = [
@@ -62,11 +63,30 @@ const CRUD: Step[] = [
   { say: "cancel everything this week", expect: "all of this week's sessions are removed from the plan and the calendar; she confirms plainly" },
 ];
 
-const SCRIPTS: Record<string, { fresh: boolean; google: boolean; phone: boolean; steps: Step[] }> = {
+const SCRIPTS: Record<string, { fresh: boolean; google: boolean; phone: boolean; steps: Step[]; handle?: string; watchCap?: number }> = {
+  // A creator who is already big (operator, 2026-10-01): how she reads someone at 450K, what she makes of
+  // their comments, the plan she builds, and her ideas. A fresh signup on his real public posts.
+  small: {
+    fresh: true, google: false, phone: false, handle: "adinawilliamsss", watchCap: 10,
+    steps: [] as Step[],
+  },
+  big: {
+    fresh: true, google: false, phone: false, handle: "kevin_0connor_", watchCap: 12,
+    steps: [
+      { say: "hey", expect: "a short friendly reply; no judgement of their posts yet" },
+      { say: "honestly i want to turn this into real income, mostly brand deals, without burning out", expect: "she takes the goal on board; may ask what gets in the way" },
+      { wait: "read" },
+      { say: "what are people asking in my comments lately?", expect: "she reads real comments on their recent posts and reports what people actually ask, quoting or paraphrasing real ones; nothing invented" },
+      { plan: true },
+      { say: "give me 3 ideas for this week", expect: "three specific ideas built on what they're good at (not a one-off's setting), right for an account this size, each with why" },
+      { say: "which of my recent posts underperformed and why?", expect: "names real posts below their normal with grounded reasons, no invented numbers or causes stated as fact" },
+      { scout: true },
+    ],
+  },
   google: { fresh: false, google: true, phone: false, steps: [{ syncGoogle: true }, ...CRUD.flatMap((s) => [s, { syncGoogle: true } as Step])] },
   iphone: { fresh: false, google: false, phone: true, steps: [{ syncPhone: true }, ...CRUD.flatMap((s) => [s, { syncPhone: true } as Step])] },
   opening: {
-    fresh: true, google: false, phone: false,
+    fresh: true, google: false, phone: false, handle: "kevin.castro9996",
     steps: [
       { say: "hey!", expect: "a short friendly reply; no judgement of their posts yet" },
       { say: "so what do you think of my stuff so far?", expect: "she says she's still going through their posts and will come back with it; no early verdict" },
@@ -80,6 +100,9 @@ const SCRIPTS: Record<string, { fresh: boolean; google: boolean; phone: boolean;
   },
 };
 
+// The small creator runs the same conversation as the big one: one set of rules, any size.
+SCRIPTS.small.steps = SCRIPTS.big.steps;
+
 const subject = (runId: string, script: string) => `eval-run:${runId}:${script}`;
 
 export const start = internalAction({
@@ -88,19 +111,25 @@ export const start = internalAction({
     if (process.env.ENVIRONMENT_NAME === "production") throw new Error("never on production");
     const runId = `day-${Date.now().toString(36)}`;
     const creators: Record<string, Id<"creators">> = {};
+    const phones: Record<string, string> = {};
+    const handles = a.scripts.map((n) => SCRIPTS[n]?.fresh ? (SCRIPTS[n].handle ?? a.freshHandle ?? "adinawilliamsss") : null).filter(Boolean);
+    if (new Set(handles).size !== handles.length) throw new Error("two fresh scripts would sign up the same handle");
     for (const name of a.scripts) {
       const s = SCRIPTS[name];
       if (!s) throw new Error(`no script ${name}`);
       let creatorId: Id<"creators">;
       if (s.fresh) {
-        const r = await ctx.runMutation(internal.eval.onboardingRead.start, { subjects: [{ tiktok: a.freshHandle ?? "adinawilliamsss" }], watchCap: 8, transcriptCap: 4 });
+        const r = await ctx.runMutation(internal.eval.onboardingRead.start, { subjects: [{ tiktok: s.handle ?? a.freshHandle ?? "adinawilliamsss" }], watchCap: s.watchCap ?? 8, transcriptCap: 4 });
         creatorId = (await ctx.runQuery(internal.eval.daySim.byPrefix, { prefix: `eval-run:${r.runId}:` }))!;
       } else {
         const source = await ctx.runQuery(internal.eval.expertBench.personaSource, { clerkUserId: RUNNER });
         if (!source) throw new Error("persona missing");
         creatorId = await ctx.runMutation(internal.eval.scenarios.cloneForRun, { sourceId: source, runId: `${runId}:${name}` });
       }
-      const phone = `+1555019${String(Object.keys(creators).length).padStart(4, "0")}`.slice(0, 12);
+      // Unique per run and script (2026-10-01: two runs both used +15550190000, and one script's texts
+      // reached the other's creator). Fictional 555-01xx range, never a real phone.
+      const seed = [...`${runId}:${name}`].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
+      const phone = `+1555010${String(seed % 10_000).padStart(4, "0")}`;
       await ctx.runMutation(internal.eval.daySim.prepare, { creatorId, phone, google: s.google, phoneCal: s.phone, fresh: s.fresh });
       if (s.google) await ctx.runMutation(internal.eval.fakeGoogle.plant, { calendarId: `primary:${creatorId}`, events: LIFE.map((l) => ({ summary: l.summary, start: Date.now() + l.inH * H, end: Date.now() + (l.inH + l.h) * H, recurring: l.recurring })) });
       if (s.google) await ctx.runAction(internal.eval.daySim.seedGoogle, { creatorId });
@@ -109,8 +138,10 @@ export const start = internalAction({
         await ctx.runAction(internal.core.imessage.handleText, { from: phone, text: `START ${t.token}`, channelMessageId: `${runId}:${name}:start` });
       }
       creators[name] = creatorId;
-      await ctx.scheduler.runAfter(5_000, internal.eval.daySim.step, { runId, script: name, creatorId, phone, i: 0 });
+      phones[name] = phone;
     }
+    // Only once every script's creator exists (2026-10-01: a failed start left the earlier scripts running).
+    for (const name of Object.keys(creators)) await ctx.scheduler.runAfter(5_000, internal.eval.daySim.step, { runId, script: name, creatorId: creators[name], phone: phones[name], i: 0 });
     return { runId, creators };
   },
 });
@@ -203,7 +234,7 @@ export function consistency(blocks: Array<{ id: string; start: number; end: numb
   return problems;
 }
 
-const STEP_JUDGE = `You check one step of a scripted conversation between a content creator and their assistant Maya, who plans filming sessions on their calendar. You get what they texted, what should happen, the calendar BEFORE and AFTER (rows, the truth), and Maya's reply. Judge: "matched" = the rows changed the way the expectation says (or, where the expectation allows asking, she asked instead of guessing); "honest" = her reply says only what the rows show (no session claimed booked/moved/removed that wasn't; times right). Output ONLY JSON: {"matched": true|false, "honest": true|false, "note": "≤200 chars"}`;
+const STEP_JUDGE = `You check one step of a scripted conversation between a content creator and their assistant Maya, who plans filming sessions on their calendar. You get what they texted, what should happen, the calendar BEFORE and AFTER (rows, the truth), what her tools returned (also truth), and Maya's reply. Judge: "matched" = the rows (sessions and the month plan) changed the way the expectation says (or, where the expectation allows asking, she asked instead of guessing); "honest" = her reply says only what the rows show (no session claimed booked/moved/removed that wasn't; times right). Output ONLY JSON: {"matched": true|false, "honest": true|false, "note": "≤200 chars"}`;
 const NOTES_JUDGE = `You rate the notes on a calendar event a creator will read the day of a filming session. Good notes say the day's job (film, edit, or post) and exactly what to make (the hook, the shots), specific to this idea, short enough to read in 20 seconds, no filler or hype. Output ONLY JSON: {"saysTheJob": true|false, "specific": true|false, "concise": true|false, "score": 1-5, "note": "≤140 chars"}`;
 
 async function judge(ctx: Parameters<typeof callModel>[0], creatorId: Id<"creators">, system: string, user: string): Promise<Record<string, unknown> | null> {
@@ -254,6 +285,15 @@ export const step = internalAction({
         await next(5_000);
         return null;
       }
+      if ("scout" in st) {
+        // The idea she'd send unprompted: the real scout, past the day-one settle and the daily cap for the sim.
+        // A dry run past the rails: the idea she'd write, never sent (the day-one settle would hold a real one).
+        const r = await ctx.runAction(internal.scout.scout.run, { creatorId: a.creatorId, ignoreRails: true, dryRun: true }).catch((e: unknown) => ({ error: e instanceof Error ? e.message : String(e) }));
+        const snap = await ctx.runQuery(internal.eval.daySim.snapshot, { creatorId: a.creatorId, since: t0 });
+        await ctx.runMutation(internal.eval.daySim.log, { runId: a.runId, script: a.script, i: a.i, entry: { scout: r, replies: snap.replies } });
+        await next(5_000);
+        return null;
+      }
       if ("plan" in st) {
         const r = await ctx.runAction(internal.agent.monthPlan.proposeThenWeek, { creatorId: a.creatorId });
         const snap = await ctx.runQuery(internal.eval.daySim.snapshot, { creatorId: a.creatorId, since: t0 });
@@ -270,7 +310,10 @@ export const step = internalAction({
         after = await ctx.runQuery(internal.eval.daySim.snapshot, { creatorId: a.creatorId, since: t0 });
         if (after.replies.length) { await new Promise((r) => setTimeout(r, 4_000)); after = await ctx.runQuery(internal.eval.daySim.snapshot, { creatorId: a.creatorId, since: t0 }); break; }
       }
-      const verdict = await judge(ctx as never, a.creatorId, STEP_JUDGE, `Their timezone: ${after.timezone}; their quiet hours ${after.quietHours.start}-${after.quietHours.end}; now ${after.nowLocal}.\nThey texted: "${st.say}"\nShould happen: ${st.expect}\n\nBEFORE (sessions): ${JSON.stringify(before.blocks.filter((b) => b.live).map((b) => ({ kind: b.kind, when: b.when, booked: b.booked, title: clip(b.title, 60) })))}\nAFTER (sessions): ${JSON.stringify(after.blocks.filter((b) => b.live).map((b) => ({ kind: b.kind, when: b.when, booked: b.booked, title: clip(b.title, 60) })))}\nTheir own events: ${JSON.stringify(after.lifeEvents)}\n\nMaya's reply:\n${after.replies.map((r) => r.body).join("\n---\n") || "(no reply)"}`);
+      // What her tools returned this turn, so a grounded answer about posts or comments isn't judged invented.
+      const tools = (await ctx.runQuery(internal.eval.expertBench.tracesSince, { creatorId: a.creatorId, since: t0 })) as Array<{ tool?: string; ok?: boolean; result?: string }>;
+      const toolLines = tools.filter((x) => x.tool !== "critic").slice(0, 8).map((x) => `${x.tool}: ${clip(x.result ?? "", 500)}`).join("\n") || "(no tools used)";
+      const verdict = await judge(ctx as never, a.creatorId, STEP_JUDGE, `Their timezone: ${after.timezone}; their quiet hours ${after.quietHours.start}-${after.quietHours.end}; now ${after.nowLocal}.\nThey texted: "${st.say}"\nShould happen: ${st.expect}\n\nBEFORE (sessions): ${JSON.stringify(before.blocks.filter((b) => b.live).map((b) => ({ kind: b.kind, when: b.when, booked: b.booked, title: clip(b.title, 60) })))}\nAFTER (sessions): ${JSON.stringify(after.blocks.filter((b) => b.live).map((b) => ({ kind: b.kind, when: b.when, booked: b.booked, title: clip(b.title, 60) })))}\nTheir own events: ${JSON.stringify(after.lifeEvents)}\nMonth plan BEFORE: ${JSON.stringify(before.plan)}\nMonth plan AFTER: ${JSON.stringify(after.plan)}\nWhat her tools returned this turn (also truth; she may cite these):\n${toolLines}\n\nMaya's reply:\n${after.replies.map((r) => r.body).join("\n---\n") || "(no reply)"}`);
       await ctx.runMutation(internal.eval.daySim.log, { runId: a.runId, script: a.script, i: a.i, entry: { said: st.say, expect: st.expect, replies: after.replies, ms: Date.now() - t0, verdict, sessions: after.blocks.filter((b) => b.live).map((b) => `${b.kind} ${b.when}${b.booked ? " (booked)" : " (proposed)"}`) } });
     } catch (e) {
       await ctx.runMutation(internal.eval.daySim.log, { runId: a.runId, script: a.script, i: a.i, entry: { error: e instanceof Error ? clip(e.message, 300) : "failed" } });
