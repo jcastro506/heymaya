@@ -11,7 +11,7 @@ import { internalMutation, mutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { addTracked } from "../agent/manage";
-import { namesFromIdentity } from "../lib/personName";
+import { cleanNamePart, namesFromIdentity } from "../lib/personName";
 import { mintPairing } from "../core/pairing";
 import { readingOf, stillReading, type Reading } from "./reading";
 
@@ -235,9 +235,27 @@ export const chooseTelegram = mutation({
   },
 });
 
+/**
+ * "What should Maya call you?" (2026-10-02): onboarding's first screen, required, pre-filled from sign-in.
+ * What they type is what she calls them (Jay, not Jason); a name that isn't a name is refused with a reason.
+ */
+export const setName = mutation({
+  args: { firstName: v.string() },
+  handler: async (ctx, a): Promise<{ ok: boolean; firstName?: string; error?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { ok: false, error: "sign in first" };
+    const creator = (await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject)).first()) as Doc<"creators"> | null;
+    if (!creator) return { ok: false, error: "no account" };
+    const firstName = cleanNamePart(a.firstName);
+    if (!firstName) return { ok: false, error: "just your first name, letters only" };
+    await ctx.db.patch(creator._id, { firstName, nameConfirmedAt: Date.now(), updatedAt: Date.now() });
+    return { ok: true, firstName };
+  },
+});
+
 export const progress = query({
   args: {},
-  handler: async (ctx): Promise<{ state: "none" | "reading" | "read" | "paired"; posts: number; transcripts: number; dossier: boolean; paired: boolean; ingest: string | null; firstRead: string | null; timezone: string; quietHours: { start: string; end: string }; channelKind: "telegram" | "imessage"; phone: string | null; planStatus: string; tier: "solo" | "duo" | "partner" | null } | null> => {
+  handler: async (ctx): Promise<{ state: "none" | "reading" | "read" | "paired"; posts: number; transcripts: number; dossier: boolean; paired: boolean; ingest: string | null; firstRead: string | null; timezone: string; quietHours: { start: string; end: string }; channelKind: "telegram" | "imessage"; phone: string | null; planStatus: string; tier: "solo" | "duo" | "partner" | null; firstName: string | null; nameConfirmed: boolean } | null> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
     const creator = (await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject)).first()) as Doc<"creators"> | null;
@@ -249,7 +267,7 @@ export const progress = query({
     const jobs = (await ctx.db.query("jobs").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).collect()) as Doc<"jobs">[];
     const ingest = jobs.filter((j) => j.kind === "ingest_catalogue").sort((x, y) => y.createdAt - x.createdAt)[0];
     const firstRead = jobs.filter((j) => j.kind === "first_read").sort((x, y) => y.createdAt - x.createdAt)[0];
-    return { state: paired ? "paired" : dossier ? "read" : posts.length ? "reading" : "none", posts: posts.length, transcripts, dossier, paired, ingest: ingest?.status ?? null, firstRead: firstRead?.status ?? null, timezone: creator.timezone, quietHours: creator.quietHours, channelKind: creator.channel.kind ?? "imessage", phone: creator.phone ?? null, planStatus: creator.plan.status, tier: creator.plan.tier ?? null };
+    return { state: paired ? "paired" : dossier ? "read" : posts.length ? "reading" : "none", posts: posts.length, transcripts, dossier, paired, ingest: ingest?.status ?? null, firstRead: firstRead?.status ?? null, timezone: creator.timezone, quietHours: creator.quietHours, channelKind: creator.channel.kind ?? "imessage", phone: creator.phone ?? null, planStatus: creator.plan.status, tier: creator.plan.tier ?? null, firstName: creator.firstName ?? null, nameConfirmed: Boolean(creator.nameConfirmedAt) };
   },
 });
 

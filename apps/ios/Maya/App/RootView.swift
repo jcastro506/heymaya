@@ -88,14 +88,14 @@ struct LaunchView: View {
   }
 }
 
-/// Debug only: `-MayaOnboarding plan|connect|watch|meet|done` shows onboarding from that screen with
+/// Debug only: `-MayaOnboarding name|plan|connect|watch|meet|done` shows onboarding from that screen with
 /// made-up data and no network, for design review. Release builds never read it.
 enum OnboardingPreview {
   static var step: OnboardingStep? {
     #if DEBUG
       let args = ProcessInfo.processInfo.arguments
       guard let i = args.firstIndex(of: "-MayaOnboarding"), i + 1 < args.count else { return nil }
-      return ["plan": .plan, "connect": .connect, "watch": .watch, "meet": .meet, "done": .done][args[i + 1]]
+      return ["name": .name, "plan": .plan, "connect": .connect, "watch": .watch, "meet": .meet, "done": .done][args[i + 1]]
     #else
       nil
     #endif

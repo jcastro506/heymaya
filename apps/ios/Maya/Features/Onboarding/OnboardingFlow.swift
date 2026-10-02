@@ -37,6 +37,7 @@ struct OnboardingFlow: View {
     ZStack {
       Palette.ground.ignoresSafeArea()
       Group { switch model.step {
+      case .name: NameStep(model: model)
       case .plan: PlanStep(model: model)
       case .connect: ConnectStep(model: model)
       case .watch: WatchStep(model: model)
@@ -70,7 +71,7 @@ private struct StepFrame<Content: View, Footer: View>: View {
           .accessibilityLabel("Back")
         }
         HStack(spacing: 6) {
-          ForEach(1...4, id: \.self) { i in
+          ForEach(1...OnboardingStep.count, id: \.self) { i in
             Capsule().fill(i <= step.index ? Palette.purple : Palette.line).frame(height: 4)
           }
         }
@@ -78,7 +79,7 @@ private struct StepFrame<Content: View, Footer: View>: View {
       .frame(minHeight: 32)
       .padding(.horizontal, 24)
       .padding(.top, 12)
-      .accessibilityLabel("Step \(step.index) of 4")
+      .accessibilityLabel("Step \(step.index) of \(OnboardingStep.count)")
 
       ScrollView {
         VStack(alignment: .leading, spacing: 20) {
@@ -137,6 +138,46 @@ private struct Problem: View {
 }
 
 // MARK: - 1. Plan
+
+// MARK: - 0. Their name
+
+/// What Maya should call them (2026-10-02): required, pre-filled from sign-in, one tap when it's right.
+private struct NameStep: View {
+  let model: OnboardingModel
+  @State private var name = ""
+  @State private var busy = false
+  @State private var problem: String?
+  @FocusState private var focused: Bool
+
+  var body: some View {
+    StepFrame(step: .name, kicker: "Hi", title: "What should Maya call you?", subtitle: "Your first name, or what friends call you. She'll use it when she texts you.") {
+      VStack(alignment: .leading, spacing: 10) {
+        TextField("First name", text: $name)
+          .textContentType(.givenName)
+          .textInputAutocapitalization(.words)
+          .autocorrectionDisabled()
+          .submitLabel(.continue)
+          .font(MayaFont.title)
+          .padding(16)
+          .background(RoundedRectangle(cornerRadius: 16).fill(Palette.panel))
+          .overlay(RoundedRectangle(cornerRadius: 16).stroke(focused ? Palette.purple : Palette.line, lineWidth: focused ? 2 : 1))
+          .focused($focused)
+          .onSubmit(save)
+        Problem(text: problem)
+      }
+    } footer: {
+      PrimaryButton(title: "Continue", busy: busy, disabled: name.trimmingCharacters(in: .whitespaces).isEmpty, action: save)
+    }
+    .onAppear {
+      if name.isEmpty { name = model.progress?.firstName ?? "" }
+      focused = name.isEmpty
+    }
+  }
+
+  private func save() {
+    Task { busy = true; problem = await model.saveName(name); busy = false }
+  }
+}
 
 private struct PlanStep: View {
   let model: OnboardingModel
