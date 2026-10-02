@@ -86,7 +86,7 @@ const SCRIPTS: Record<string, { fresh: boolean; google: boolean; phone: boolean;
   google: { fresh: false, google: true, phone: false, steps: [{ syncGoogle: true }, ...CRUD.flatMap((s) => [s, { syncGoogle: true } as Step])] },
   iphone: { fresh: false, google: false, phone: true, steps: [{ syncPhone: true }, ...CRUD.flatMap((s) => [s, { syncPhone: true } as Step])] },
   opening: {
-    fresh: true, google: false, phone: false,
+    fresh: true, google: false, phone: false, handle: "kevin.castro9996",
     steps: [
       { say: "hey!", expect: "a short friendly reply; no judgement of their posts yet" },
       { say: "so what do you think of my stuff so far?", expect: "she says she's still going through their posts and will come back with it; no early verdict" },
@@ -111,6 +111,9 @@ export const start = internalAction({
     if (process.env.ENVIRONMENT_NAME === "production") throw new Error("never on production");
     const runId = `day-${Date.now().toString(36)}`;
     const creators: Record<string, Id<"creators">> = {};
+    const phones: Record<string, string> = {};
+    const handles = a.scripts.map((n) => SCRIPTS[n]?.fresh ? (SCRIPTS[n].handle ?? a.freshHandle ?? "adinawilliamsss") : null).filter(Boolean);
+    if (new Set(handles).size !== handles.length) throw new Error("two fresh scripts would sign up the same handle");
     for (const name of a.scripts) {
       const s = SCRIPTS[name];
       if (!s) throw new Error(`no script ${name}`);
@@ -135,8 +138,10 @@ export const start = internalAction({
         await ctx.runAction(internal.core.imessage.handleText, { from: phone, text: `START ${t.token}`, channelMessageId: `${runId}:${name}:start` });
       }
       creators[name] = creatorId;
-      await ctx.scheduler.runAfter(5_000, internal.eval.daySim.step, { runId, script: name, creatorId, phone, i: 0 });
+      phones[name] = phone;
     }
+    // Only once every script's creator exists (2026-10-01: a failed start left the earlier scripts running).
+    for (const name of Object.keys(creators)) await ctx.scheduler.runAfter(5_000, internal.eval.daySim.step, { runId, script: name, creatorId: creators[name], phone: phones[name], i: 0 });
     return { runId, creators };
   },
 });
