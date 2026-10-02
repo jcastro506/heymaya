@@ -118,3 +118,15 @@ export const pairingCode = internalMutation({
     return { token };
   },
 });
+
+/** A first name for one of this run's test creators (what sign-in would have given), so a sim can see her greet by name. */
+export const setName = internalMutation({
+  args: { creatorId: v.id("creators"), firstName: v.string(), lastName: v.optional(v.string()) },
+  handler: async (ctx, a): Promise<null> => {
+    if (process.env.ENVIRONMENT_NAME === "production") throw new Error("never on production");
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!c || !c.clerkUserId.startsWith(OR_PREFIX)) throw new Error("only an onboarding-read test creator");
+    await ctx.db.patch(a.creatorId, { firstName: a.firstName, ...(a.lastName ? { lastName: a.lastName } : {}) });
+    return null;
+  },
+});

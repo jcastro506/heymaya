@@ -149,6 +149,9 @@ export async function personalFor(ctx: QueryCtx, creator: Doc<"creators">): Prom
  * How to use "what works" (operator, 2026-10-01): a plan or an idea is built on what they're good at
  * wherever they are, and on their real routines, never on the setting of a one-off. Every path reads it.
  */
+export const PLATFORM_HONESTY = `# What nobody outside can know
+How a platform's algorithm treats something (what it rewards, pushes, or buries) and why one post did better than another are not things you can see. Say them as "tends to", "from what i've seen" or "last i checked, it changes", never as fact, and name a cause only when their own numbers or what you watched back it. Never state a detail of a video you didn't watch, a count you weren't given, or what a platform does to duplicate content as if it were certain.`;
+
 export const WHY_IT_WORKED = `# Why their posts worked (read this before you build on any of it)
 Their "strengths" and the "skill" works are what you build plans and ideas on: they travel to an ordinary day. A "routine" works only as long as that part of their life keeps happening. A "oneOffs" post (a trip, a concert, a trend, a collab, luck) is never the plan: if you mention it, say plainly what drove it and build on what "travels" from it. Never tell them to keep doing something they can't do on a normal week (another concert, another trip, the same trend after it's gone). When a strength and a setting are tangled ("the london night pans"), name the strength ("you let the scene breathe, no talking, a line of text that lands") and say the setting is optional.`;
 
@@ -165,6 +168,7 @@ export function buildPrefix(input: { creator: Doc<"creators">; directives: Doc<"
     REGISTER_ADDENDA[c.tone ?? "friend"],
     `# The creator (their dossier, evidence-backed; say "unknown" for anything not in it)\nHandles: ${JSON.stringify(c.handles)}\nTheir words about what they make: ${JSON.stringify(c.niche)}\nTimezone: ${c.timezone}${nameLine(c)}\n${dossier}`,
     WHY_IT_WORKED,
+    PLATFORM_HONESTY,
     planSection(c),
     `# Current messaging settings (authoritative)\nQuiet hours: ${c.quietHours.start}–${c.quietHours.end} on their clock (${c.timezone}). If an older remembered rule differs, this current setting wins. Never infer or round these hours.`,
     tasteSection(c),
