@@ -41,6 +41,7 @@ struct OnboardingFlow: View {
       case .plan: PlanStep(model: model)
       case .connect: ConnectStep(model: model)
       case .watch: WatchStep(model: model)
+      case .calendar: CalendarStep(model: model)
       case .meet: MeetStep(model: model)
       case .done: DoneStep(paired: model.progress?.paired ?? false) { model.celebrate = false }
       } }
@@ -194,7 +195,7 @@ private struct PlanStep: View {
   }
 
   var body: some View {
-    StepFrame(step: .plan, kicker: "Your plan", title: "Start with a free week.", subtitle: "Seven days on us, then pick up the tab only if she's earned it.") {
+    StepFrame(step: .plan, kicker: "Your plan", title: "Try Maya free for a week.", subtitle: "Seven days free. If she's not worth it, cancel in one tap.") {
       Picker("Billing", selection: $annual) {
         Text("Monthly").tag(false)
         Text("Yearly · 2 months free").tag(true)
@@ -272,7 +273,7 @@ private struct ConnectStep: View {
   private var accounts: [SocialStatus.Account] { model.social?.accounts.filter { !$0.needsReconnect } ?? [] }
 
   var body: some View {
-    StepFrame(step: .connect, kicker: "Your work", title: "Let her see what you make.", subtitle: "She learns your vibe: how you make things and what lands with your audience, so her ideas sound like you. She only reads, and never posts for you.") {
+    StepFrame(step: .connect, kicker: "Your accounts", title: "Connect your accounts.", subtitle: "So she can see your posts and what your followers love, and her ideas sound like you. She never posts for you.") {
       VStack(spacing: 12) {
         ForEach(["instagram", "tiktok"], id: \.self) { platform in
           let account = accounts.first { $0.platform == platform }
@@ -369,7 +370,7 @@ private struct MeetStep: View {
   @State private var problem: String?
 
   var body: some View {
-    StepFrame(step: .meet, kicker: "Meet Maya", title: "She lives in your texts.", subtitle: "Text her START; the app is just where her work piles up.") {
+    StepFrame(step: .meet, kicker: "Meet Maya", title: "Maya works over text.", subtitle: "She texts you ideas and your plan for the week. Send her START to say hi. Everything she sends is saved in this app.") {
       VStack(alignment: .leading, spacing: 14) {
         MayaBubble(text: "hey, i'm maya. send me START and i'll get to work.")
         if waiting {
@@ -406,7 +407,7 @@ private struct WatchStep: View {
   @State private var problem: String?
 
   var body: some View {
-    StepFrame(step: .watch, kicker: "Your favorites", title: "Who do you love watching?", subtitle: "Add a few and she'll keep an eye on them for you.") {
+    StepFrame(step: .watch, kicker: "Your favorites", title: "Who do you love watching?", subtitle: "Add a few creators you like. She'll keep an eye on them for ideas.") {
       VStack(alignment: .leading, spacing: 10) {
         HStack(spacing: 8) {
           Menu {
@@ -455,6 +456,31 @@ private struct WatchStep: View {
 
   private func add() {
     Task { busy = true; problem = await model.addOwn(platform: platform, handle: handle); if problem == nil { handle = "" }; busy = false }
+  }
+}
+
+// MARK: - 5. Calendar (asked here so her first plan can go straight on it; Apple doesn't let it be required)
+
+private struct CalendarStep: View {
+  let model: OnboardingModel
+  @State private var busy = false
+
+  var body: some View {
+    StepFrame(step: .calendar, kicker: "Your calendar", title: "Maya plans your week for you.", subtitle: "She puts filming and posting times on your calendar, around the plans you already have, so you don't have to.") {
+      VStack(alignment: .leading, spacing: 12) {
+        Label("Works with the calendars on your iPhone, Google included", systemImage: "calendar")
+        Label("She only adds the times you say yes to", systemImage: "checkmark.circle")
+        Label("She never shares your plans with anyone", systemImage: "lock")
+      }
+      .font(MayaFont.callout)
+      .foregroundStyle(Palette.ink)
+    } footer: {
+      PrimaryButton(title: "Use my calendar", busy: busy) {
+        Task { busy = true; _ = await CalendarSync.connect(); busy = false; model.calendarSeen = true }
+      }
+      Button("Not now") { model.calendarSeen = true }
+        .font(MayaFont.callout).foregroundStyle(Palette.muted)
+    }
   }
 }
 
