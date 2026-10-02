@@ -4,8 +4,8 @@ import XCTest
 /// Onboarding resumes from the server's facts (spec §5.1): the right screen after a kill, a reinstall
 /// or a sign-in on another phone, and nobody who's already set up is sent back through it.
 final class OnboardingTests: XCTestCase {
-  private func step(plan: String? = nil, accounts: Int = 0, connectSeen: Bool = false, paired: Bool = false, watchSeen: Bool = false, watching: Int = 0) -> OnboardingStep {
-    OnboardingStep.decide(.init(planStatus: plan, connectedAccounts: accounts, connectSeen: connectSeen, paired: paired, watchSeen: watchSeen, watching: watching))
+  private func step(plan: String? = nil, accounts: Int = 0, connectSeen: Bool = false, paired: Bool = false, watchSeen: Bool = false, nameConfirmed: Bool = true, watching: Int = 0) -> OnboardingStep {
+    OnboardingStep.decide(.init(planStatus: plan, connectedAccounts: accounts, connectSeen: connectSeen, paired: paired, watchSeen: watchSeen, nameConfirmed: nameConfirmed, watching: watching))
   }
 
   func testTheOrder() {
@@ -16,6 +16,14 @@ final class OnboardingTests: XCTestCase {
     XCTAssertEqual(step(plan: "trialing", accounts: 1, connectSeen: true), .watch)
     XCTAssertEqual(step(plan: "trialing", accounts: 1, connectSeen: true, watchSeen: true), .meet, "texting her is last: once they're in Messages nobody comes back to finish a step")
     XCTAssertEqual(step(plan: "trialing", accounts: 1, connectSeen: true, paired: true, watchSeen: true), .done)
+  }
+
+  func testTheirNameComesFirstAndIsRequired() {
+    XCTAssertEqual(step(nameConfirmed: false), .name, "a brand-new signup is asked what Maya should call them first")
+    XCTAssertEqual(step(plan: "trialing", accounts: 1, connectSeen: true, nameConfirmed: false), .name, "required: nothing goes past it")
+    XCTAssertEqual(step(plan: "active", accounts: 2, connectSeen: true, paired: true, watchSeen: true, nameConfirmed: false), .done, "someone already texting her isn't stopped for it")
+    XCTAssertEqual(OnboardingStep.name.index, 1)
+    XCTAssertEqual(OnboardingStep.meet.index, OnboardingStep.count)
   }
 
   func testTextingHerIsRequired() {

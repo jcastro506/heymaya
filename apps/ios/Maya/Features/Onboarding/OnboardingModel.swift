@@ -9,7 +9,7 @@ import Observation
 /// or signing in on another phone resumes at the right screen. Only the two skippable steps are
 /// remembered on the phone, because skipping them writes nothing to the server.
 enum OnboardingStep: Equatable, CaseIterable {
-  case plan, connect, watch, meet, done
+  case name, plan, connect, watch, meet, done
 
   struct Facts: Equatable {
     var planStatus: String?
@@ -18,6 +18,8 @@ enum OnboardingStep: Equatable, CaseIterable {
     var connectSeen: Bool
     var paired: Bool
     var watchSeen: Bool
+    /// They told her what to call them (the first screen). Someone already texting her isn't stopped for it.
+    var nameConfirmed: Bool = true
     /// Accounts they already watch (so a returning user on a new phone isn't asked again).
     var watching: Int = 0
   }
@@ -28,6 +30,7 @@ enum OnboardingStep: Equatable, CaseIterable {
   /// people to watch is finished; the phone-only marks cover the steps a fresh install can't know.
   static func decide(_ f: Facts) -> OnboardingStep {
     let planReady = f.planStatus.map { readyPlans.contains($0) } ?? false
+    if !f.nameConfirmed && !f.paired { return .name }
     if !planReady && !f.paired { return .plan }
     if f.connectedAccounts == 0 || !(f.connectSeen || f.paired) { return .connect }
     if !(f.watchSeen || f.paired) { return .watch }
@@ -36,8 +39,9 @@ enum OnboardingStep: Equatable, CaseIterable {
     return .done
   }
 
-  /// The dots across the top: four real steps.
-  var index: Int { [.plan: 1, .connect: 2, .watch: 3, .meet: 4][self] ?? 4 }
+  /// The dots across the top: five real steps.
+  var index: Int { [.name: 1, .plan: 2, .connect: 3, .watch: 4, .meet: 5][self] ?? 5 }
+  static let count = 5
 }
 
 struct OnboardingProgress: Decodable, Equatable {
@@ -45,6 +49,9 @@ struct OnboardingProgress: Decodable, Equatable {
   let planStatus: String
   let phone: String?
   let posts: Double
+  /// From sign-in, or what they typed on the first screen.
+  var firstName: String? = nil
+  var nameConfirmed: Bool? = nil
 }
 
 struct SocialStatus: Decodable, Equatable {
@@ -83,10 +90,10 @@ final class OnboardingModel {
     connectSeen = UserDefaults.standard.bool(forKey: Self.key("connectSeen"))
     watchSeen = UserDefaults.standard.bool(forKey: Self.key("watchSeen"))
     if let start = preview {
-      connectSeen = ![.plan, .connect].contains(start)
+      connectSeen = ![.name, .plan, .connect].contains(start)
       watchSeen = [.meet, .done].contains(start)
-      progress = OnboardingProgress(paired: start == .done, planStatus: start == .plan ? "onboarding" : "trialing", phone: nil, posts: 24)
-      social = SocialStatus(status: "connected", accounts: [.plan, .connect].contains(start) ? [] : [.init(platform: "instagram", username: "riverloop.runs", needsReconnect: false)])
+      progress = OnboardingProgress(paired: start == .done, planStatus: [.name, .plan].contains(start) ? "onboarding" : "trialing", phone: nil, posts: 24, firstName: "Riley", nameConfirmed: start != .name)
+      social = SocialStatus(status: "connected", accounts: [.name, .plan, .connect].contains(start) ? [] : [.init(platform: "instagram", username: "riverloop.runs", needsReconnect: false)])
       loaded = true
     }
   }
@@ -94,7 +101,7 @@ final class OnboardingModel {
   private static func key(_ name: String) -> String { "onboarding.\(name)" }
 
   var facts: OnboardingStep.Facts {
-    .init(planStatus: progress?.planStatus, connectedAccounts: social?.accounts.filter { !$0.needsReconnect }.count ?? 0, connectSeen: connectSeen, paired: progress?.paired ?? false, watchSeen: watchSeen, watching: watched.count)
+    .init(planStatus: progress?.planStatus, connectedAccounts: social?.accounts.filter { !$0.needsReconnect }.count ?? 0, connectSeen: connectSeen, paired: progress?.paired ?? false, watchSeen: watchSeen, nameConfirmed: progress?.nameConfirmed ?? true, watching: watched.count)
   }
 
   var step: OnboardingStep { OnboardingStep.decide(facts) }
@@ -153,6 +160,21 @@ final class OnboardingModel {
     } catch {
       print("[Onboarding] checkout: \(error)")
       return "Checkout didn't open. Try again in a moment."
+    }
+  }
+
+  /// The first screen: what Maya should call them. Returns a problem to show, or nil.
+  func saveName(_ name: String) async -> String? {
+    let clean = name.trimmingCharacters(in: .whitespaces)
+    guard !clean.isEmpty else { return "What should she call you?" }
+    if preview { progress = OnboardingProgress(paired: false, planStatus: "onboarding", phone: nil, posts: 24, firstName: clean, nameConfirmed: true); return nil }
+    struct R: Decodable { let ok: Bool; let firstName: String?; let error: String? }
+    do {
+      let r: R = try await convex.mutation("onboarding/start:setName", with: ["firstName": clean])
+      return r.ok ? nil : Self.plain(r.error)
+    } catch {
+      print("[Onboarding] name: \(error)")
+      return "That didn't save. Try again in a moment."
     }
   }
 
