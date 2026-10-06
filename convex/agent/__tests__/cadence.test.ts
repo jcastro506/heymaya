@@ -136,7 +136,7 @@ describe("the human cadence: rows and rails, on the fake model", () => {
     // A paused plan.
     const paused = await t.run((ctx) => seedCreator(ctx, "p", { timezone: "UTC", channel: { paired: true }, plan: { status: "paused", founding: true } }));
     await block(t, paused, { start: NOW + 9 * H, end: NOW + 10 * H });
-    expect((await t.action(internal.agent.cadence.morning, { creatorId: paused, now: NOW })).reason).toMatch(/paused/);
+    expect((await t.action(internal.agent.cadence.morning, { creatorId: paused, now: NOW })).reason).toMatch(/stop texting first/);
   });
 
   it("B's block never produces A's line (cross-tenant)", async () => {

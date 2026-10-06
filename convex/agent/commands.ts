@@ -15,10 +15,11 @@ import { forgetEvidence, recordVisible } from "./personalHistory";
 import { Draft, Opportunity } from "../partnerships/contracts";
 import { MISSION_CONTROL_TABS, missionControlUrl, type MissionControlTab } from "./missionControl";
 import { clip } from "../lib/clip";
+import { statusAfterLegacyPause } from "../core/paused";
 
 export const apply = internalMutation({
   args: { creatorId: v.id("creators"), command: v.union(v.literal("stop"), v.literal("resume"), v.literal("forget"), v.literal("delete"), v.literal("mission_control")), topic: v.optional(v.string()) },
-  handler: async (ctx, a): Promise<{ body: string }> => {
+  handler: async (ctx, a): Promise<{ body: string; resumed?: boolean }> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c) return { body: "" };
     const now = Date.now();
@@ -26,13 +27,20 @@ export const apply = internalMutation({
       const tab = MISSION_CONTROL_TABS.includes(a.topic as MissionControlTab) ? a.topic as MissionControlTab : "today";
       return { body: `here's your Mission Control: ${missionControlUrl(process.env.APP_URL, tab)}` };
     }
+    // Their pause is its own field (core/paused): billing events can't undo it, and resume can't turn a
+    // trial into "active". STOP is honored every time (it's the opt-out word); the reply says it like a
+    // person and leaves the door open for what they may have meant.
     if (a.command === "stop") {
-      if (c.plan.status !== "paused") await ctx.db.patch(c._id, { plan: { ...c.plan, status: "paused" }, updatedAt: now });
-      return { body: "paused. i'll stop texting first. say resume whenever, and i'm still here if you write." };
+      if (!c.messagingPausedAt) await ctx.db.patch(c._id, { messagingPausedAt: now, updatedAt: now });
+      return { body: "got it, i'll stop texting you first.\n---\nif you only meant one kind of text (like the comment picks), tell me and i'll just drop those. otherwise text me resume whenever you want me back, and i'm always here if you write." };
     }
     if (a.command === "resume") {
-      if (c.plan.status === "paused") await ctx.db.patch(c._id, { plan: { ...c.plan, status: "active" }, updatedAt: now });
-      return { body: "back on! picking up from where things are now, not where they were." };
+      const wasPaused = Boolean(c.messagingPausedAt) || c.plan.status === "paused";
+      // A pause from before this field lives in the plan status: put back what billing says it was.
+      const legacy = c.plan.status === "paused" ? { plan: { ...c.plan, status: statusAfterLegacyPause(c.plan, now) } } : {};
+      await ctx.db.patch(c._id, { messagingPausedAt: undefined, ...legacy, updatedAt: now });
+      // Back means back: the week gets planned again right after this (converse schedules it).
+      return { body: wasPaused ? "yay, i'm back 🙂 give me a minute to catch up on your week." : "i never left 🙂 what's up?", ...(wasPaused ? { resumed: true } : {}) };
     }
     if (a.command === "forget") {
       const live = (c.notes ?? []).filter((n) => !n.tombstonedAt).sort((x, y) => y.at - x.at);

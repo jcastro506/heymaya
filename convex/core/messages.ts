@@ -18,6 +18,7 @@
  * employee. The key is the contract; the table enforces it.
  */
 
+import { pausedByThem } from "./paused";
 import { v } from "convex/values";
 import { markActionsSeen } from "./act";
 import { markOffered } from "./unseen";
@@ -307,6 +308,11 @@ export const send = internalMutation({
       if (recent.some((m) => m.direction === "out" && m.proactive && m.kind === "partnership" && isSameDayInZone(m.ts, now, tz))) {
         return { messageId: null, sent: false, held: "one partnerships text a day" };
       }
+    }
+    // Their pause (STOP), held here for every proactive text so no path can forget it (2026-10-06).
+    if (args.proactive && args.surface !== "system" && args.surface !== "web") {
+      const c = (await ctx.db.get(args.creatorId)) as Doc<"creators"> | null;
+      if (c && pausedByThem(c)) return { messageId: null, sent: false, held: "they asked her to stop texting first" };
     }
     // Quiet hours, held here for every proactive text (2026-10-01): before, only the scout's rails checked
     // them, so a 1am signup's first plan would have gone at 1:20. A text into a conversation they're in

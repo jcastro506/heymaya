@@ -19,7 +19,7 @@ import { pairedRows } from "../core/schedule";
 export const STEPS = ["first_read", "first_plan", "first_scout", "first_calendar_or_worth_seeing", "invite_draft", "first_review"] as const;
 export type Step = (typeof STEPS)[number];
 
-export const INVITE_DRAFT = "one thing i haven't said yet: send me a draft before you post it, or a link after, and i'll tell you what i actually think. three fixes, a confidence in words, and i keep score on myself. no pressure, whenever you have one.";
+export const INVITE_DRAFT = "oh, and anytime you've got a draft, send it to me before you post (or the link after) and i'll tell you honestly what i think and what i'd change.";
 
 export const markStep = internalMutation({
   args: { creatorId: v.id("creators"), step: v.union(...STEPS.map((s) => v.literal(s))) },

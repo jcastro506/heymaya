@@ -14,7 +14,8 @@ import { dayKeyInZone } from "./cadence";
 import { localHourMinute } from "../scout/gate";
 import { pairedRows } from "./schedule";
 
-export const BEHIND = "behind today: my read on your lane didn't go through on my side. nothing you did. back on it, and i'll text when there's something worth it.";
+// Said like a person (2026-10-06: "my read on your lane didn't go through on my side" read as an error page).
+export const BEHIND = "slow day on my end, sorry. still on it, and i'll text you when i've got something good.";
 export const CANNOT_SEE = "heads up: i couldn't see tiktok properly today, so if i'm quiet that's why, not because nothing happened. trying again through the day.";
 
 export const dueStatus = internalQuery({

@@ -6,6 +6,7 @@
  * Adding a field a due-query needs: add it to the schema's `schedule` table and here. The
  * sibling test in core/__tests__/schedule.test.ts asserts every key here is in the schema.
  */
+import { pausedByThem } from "../core/paused";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { GenericDatabaseWriter } from "convex/server";
 import type { DataModel } from "../_generated/dataModel";
@@ -24,7 +25,8 @@ export function scheduleFields(c: Doc<"creators">): ScheduleFields {
     creatorId: c._id,
     paired: c.channel.paired,
     pairedAt: c.channel.pairedAt,
-    status: c.plan.status,
+    // Their own pause reads as paused here, so the fleet's hourly jobs skip them like any paused plan.
+    status: pausedByThem(c) ? "paused" : c.plan.status,
     timezone: c.timezone,
     quietHours: { start: c.quietHours.start, end: c.quietHours.end },
     hasDossier: Boolean(c.dossier),

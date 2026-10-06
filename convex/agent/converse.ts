@@ -174,11 +174,14 @@ export const run = internalAction({
         await ctx.runAction(internal.agent.commands.person, { creatorId: creator._id, messageId: target._id });
         return { ok: true };
       }
-      const { body } = await ctx.runMutation(internal.agent.commands.apply, { creatorId: creator._id, command: route.command, topic: route.topic });
+      const { body, resumed } = await ctx.runMutation(internal.agent.commands.apply, { creatorId: creator._id, command: route.command, topic: route.topic });
       if (body) {
         await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body, dedupeKey: `cmd:${target._id}`, proactive: false, kind: "reply" });
         await deliverNow(ctx as never);
       }
+      // Resume picks the week back up (2026-10-06: "resume" got "back on!" and then nothing). The plan
+      // skips itself when this week is already planned, and waits for morning at night.
+      if (resumed) await ctx.scheduler.runAfter(45_000, internal.calendar.weekPlan.draft, { creatorId: creator._id, horizon: "first" });
       return { ok: true };
     }
     if (route.route === "link") {

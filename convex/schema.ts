@@ -51,6 +51,8 @@ export default defineSchema({
     lastName: v.optional(v.string()),
     /** When they confirmed what Maya should call them (onboarding's first screen; required for new signups). */
     nameConfirmedAt: v.optional(v.number()),
+    /** They asked her to stop texting first (STOP); cleared by resume. Never the billing status. */
+    messagingPausedAt: v.optional(v.number()),
     growthPlan: v.optional(v.any()),
     /** When they said they usually film (2026-10-01): weekdays 0–6 (Sunday 0), an hour on their clock, their words. Beats habits from blocks. */
     /** The iPhone's calendar (calendar/device): their answer to the permission, and busy times only (no titles), next three weeks. */

@@ -7,6 +7,7 @@
  * model asked to restate five times gets one wrong. Her voice is in the framing line only.
  */
 
+import { pausedByThem } from "../core/paused";
 import { deviceBusyOf } from "./device";
 import { v } from "convex/values";
 import { HOURLY_SPREAD_MS, spreadDelays } from "../core/fanout";
@@ -146,7 +147,8 @@ export const draft = internalAction({
     if (!g) return { sent: false, reason: "creator not found" };
     // Paired and on a live plan; the daily cap does not apply to the week's one message.
     if (!g.creator.channel.paired) return { sent: false, reason: "not paired" };
-    if (["paused", "canceled", "deleting"].includes(g.creator.plan.status)) return { sent: false, reason: `plan is ${g.creator.plan.status}` };
+    if (pausedByThem(g.creator)) return { sent: false, reason: "they asked her to stop texting first" };
+    if (["canceled", "deleting"].includes(g.creator.plan.status)) return { sent: false, reason: `plan is ${g.creator.plan.status}` };
     // Night (2026-10-01): a plan held at send used to be written anyway and never sent. It waits for
     // morning whole; the first ideas are already in their app.
     const quiet = await ctx.runQuery(internal.core.messages.quietNow, { creatorId: a.creatorId, now });

@@ -4,6 +4,7 @@
  * here is a row Maya already writes; the console adds no state.
  */
 
+import { pausedByThem } from "./core/paused";
 import { v } from "convex/values";
 import { readRecent } from "./core/timedJobs";
 import { creatorCogs, isRealCreator, tierPriceUsd } from "./config/costs";
@@ -91,7 +92,7 @@ export const metrics = query({
         if (msgs.some((m) => m.direction === "in" && m.ts >= firstOut.ts && m.ts <= firstOut.ts + 48 * 3_600_000)) activated++;
       }
       if (msgs.some((m) => m.direction === "in" && m.ts >= week)) weeklyActive++;
-      if (c.plan.status === "paused") mutes++;
+      if (pausedByThem(c)) mutes++;
       const ideas = (await ctx.db.query("ideas").withIndex("by_creator_status", (q) => q.eq("creatorId", c._id).eq("status", "posted")).collect()) as Doc<"ideas">[];
       postedIdeas += ideas.filter((i) => (i.postedAt ?? 0) >= month && (i.matchConfidence === "certain" || i.matchConfidence === "likely")).length;
       const costs30 = (await ctx.db.query("costEvents").withIndex("by_creator_at", (q) => q.eq("creatorId", c._id).gte("at", month)).collect()) as Doc<"costEvents">[];
