@@ -38,6 +38,7 @@ export function scheduleFields(c: Doc<"creators">): ScheduleFields {
     handles: { tiktok: c.handles.tiktok, instagram: c.handles.instagram },
     tasteUpdatedAt: c.taste?.updatedAt,
     tasteEventsSeen: c.taste?.eventsSeen,
+    routineHours: c.routines?.length ? [...new Set(c.routines.map((r) => r.hour))].sort((x, y) => x - y) : undefined,
     isEval: /^eval(-run)?:/.test(c.clerkUserId),
   };
 }

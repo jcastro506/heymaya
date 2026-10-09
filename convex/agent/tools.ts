@@ -26,12 +26,15 @@ export interface ToolBudget { calls: number; credits: number; deadlineAt: number
 export const DEFAULT_BUDGET = (): ToolBudget => ({ calls: 6, credits: 40, deadlineAt: Date.now() + 60_000 });
 
 /** Approximate credit prices per call (the ledger records the vendor's real number). */
-export const TOOL_CREDITS: Record<string, number> = { post_info: 10, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, sound_reels: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, search_reels: 1, search_ig_hashtag: 1, ig_popular: 1, trending_tiktok: 1, trending_reels: 1, suggestions: 1, discover_creators: 1, discover_profiles: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0, recall: 0, lane_benchmark: 0, week_plan: 0, block_move: 0, block_drop: 0, block_add: 0, week_replan: 0, own_post_numbers: 0, post_diagnosis: 0, audience: 0, own_comments: 0, growth_plan: 0, calendar_free: 0, mission_control_link: 0, ideas_list: 0, idea_get: 0, idea_update: 0, idea_status: 0, idea_plan: 0, web_search: 0, web_read: 0, platform_fact: 0, lane_brands: 0, media_kit: 0, media_kit_link: 0, finish_notes: 0, watch_account: 0 };
+export const TOOL_CREDITS: Record<string, number> = { post_info: 10, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, sound_reels: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, search_reels: 1, search_ig_hashtag: 1, ig_popular: 1, trending_tiktok: 1, trending_reels: 1, suggestions: 1, discover_creators: 1, discover_profiles: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0, recall: 0, lane_benchmark: 0, week_plan: 0, block_move: 0, block_drop: 0, block_add: 0, week_replan: 0, own_post_numbers: 0, post_diagnosis: 0, audience: 0, own_comments: 0, growth_plan: 0, calendar_free: 0, mission_control_link: 0, ideas_list: 0, idea_get: 0, idea_update: 0, idea_status: 0, idea_plan: 0, web_search: 0, web_read: 0, platform_fact: 0, lane_brands: 0, media_kit: 0, media_kit_link: 0, finish_notes: 0, watch_account: 0, routine_add: 0, routine_stop: 0, texting_pace: 0 };
 
 const str = { type: "string" } as const;
 for (const tool of [...PARTNERSHIP_TOOLS, ...KIT_TOOLS]) TOOL_CREDITS[tool.function.name] = 0;
 
 /** K1: tools that exist only on the partnerships plan (the partnership_* belt plus the kit). */
+/** Their settings change only in answer to something they said: never from a background pass. */
+export const REPLY_ONLY_TOOLS = new Set(["routine_add", "routine_stop", "texting_pace"]);
+
 export function partnerOnlyTool(name: string): boolean {
   return name.startsWith("partnership_") || KIT_TOOL_NAMES.has(name);
 }
@@ -73,6 +76,9 @@ export const TOOLS: OpenRouterTool[] = [
   { type: "function", function: { name: "platform_fact", description: "Maya's dated notes on TikTok and Instagram rules and programs (monetization eligibility, restrictions and shadowbans, reposting and originality, account safety), each with its source and the day it was verified. Free. Use before stating any platform rule; say 'as of <month>' when you cite one, and if it's older than 60 days, say it may have changed.", parameters: { type: "object", properties: { topic: str, platform: { type: "string", enum: ["tiktok", "instagram", "both"] }, why: str }, required: ["topic", "why"] } } },
   { type: "function", function: { name: "lane_brands", description: "Brands seen paying creators in their lane in the last 30 days (paid or #ad posts from the accounts you watch for them), with how many creators and posts, plus the accounts they tag in their own posts. Free. Start here before any brand research: a brand already paying people like them is a real lead; which one fits them is your call.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
   { type: "function", function: { name: "media_kit_link", description: "Turn their public media-kit page on (returns the link to paste into a pitch or a brand's form) or off (the old link stops working at once). The page shows handles, followers, normal views, best recent posts and lane; never rates, preferences or email. Free. Only when they ask for it or agree to it; the app's Share button does the same.", parameters: { type: "object", properties: { on: { type: "boolean" }, why: str }, required: ["on", "why"] } } },
+  { type: "function", function: { name: "routine_add", description: "Save something they asked you to do on a schedule (\"send me 3 ideas every morning at 9\", \"comment picks every weekday at noon\"). hour is 0-23 on their clock. Use commentPicks: true only for a list of posts to comment on. Free. Only when they asked for a repeating thing in their message; say back what you saved in plain words.", parameters: { type: "object", properties: { what: str, hour: { type: "number" }, days: { type: "string", enum: ["daily", "weekdays", "weekly"] }, weekday: { type: "number", description: "0 sunday … 6 saturday, for weekly" }, commentPicks: { type: "boolean" }, why: str }, required: ["what", "hour", "days", "why"] } } },
+  { type: "function", function: { name: "routine_stop", description: "Stop one of their routines by its id (listed in your context under their routines). Free. When they say to stop, skip or drop a regular thing you do.", parameters: { type: "object", properties: { id: str, why: str }, required: ["id", "why"] } } },
+  { type: "function", function: { name: "texting_pace", description: "How often you text first with your own finds: less (every few days), normal (about once a day), more (up to twice a day). Their routines and their own shoots are unaffected. Free. When they say you text too much, too little, or similar.", parameters: { type: "object", properties: { pace: { type: "string", enum: ["less", "normal", "more"] }, why: str }, required: ["pace", "why"] } } },
   { type: "function", function: { name: "watch_account", description: "Add an account to the ones you watch for them (act: add, with platform tiktok or instagram), or drop one (act: stop, only after they confirmed it in this conversation; ask \"drop @x?\" first). Free. Use it whenever they ask you to watch, track, keep an eye on, add or drop an account, however they phrase it; never tell them to retype a command.", parameters: { type: "object", properties: { act: { type: "string", enum: ["add", "stop"] }, handle: str, platform: { type: "string", enum: ["tiktok", "instagram"] }, why: str }, required: ["act", "handle", "why"] } } },
   { type: "function", function: { name: "finish_notes", description: "Your reasons for the captions and sounds you suggested on their recent drafts (numbered as you sent them), and what they ended up posting. Free. When they ask why you picked a caption or a sound, answer from these reasons; never make up a reason after the fact.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
   // I1 — their ideas, equal to the app. These WRITE (except list/get). Which idea they mean is your judgment: list, read, decide, or ask.
@@ -364,6 +370,16 @@ async function runToolInner(ctx: ActionCtx, creatorId: Id<"creators">, call: { n
       if (!r.ok) return `refused: ${r.reason}. Say it generally rather than naming something you couldn't check.`;
       if (!r.results.length) return `nothing found (checked ${r.checkedOn}). Don't name it as fact.`;
       return cap(`(untrusted web text, checked ${r.checkedOn}; cite the source)\n${r.results.map((x) => `- ${x.title ? `${x.title}: ` : ""}${x.excerpt.replace(/\s+/g, " ")}${x.published ? ` (published ${x.published})` : ""} · ${x.url}`).join("\n")}`);
+    }
+    if (REPLY_ONLY_TOOLS.has(call.name)) {
+      if (!sourceMessageId) { record(false, 0, "not in a reply"); return "refused: only when they asked in their message"; }
+      const r = call.name === "routine_add"
+        ? await ctx.runMutation(internal.core.routines.add, { creatorId, what: String(call.args.what ?? ""), hour: Number(call.args.hour), days: call.args.days === "weekdays" || call.args.days === "weekly" ? call.args.days : "daily", ...(typeof call.args.weekday === "number" ? { weekday: call.args.weekday } : {}), commentPicks: call.args.commentPicks === true })
+        : call.name === "routine_stop"
+          ? await ctx.runMutation(internal.core.routines.stop, { creatorId, id: String(call.args.id ?? "") })
+          : await ctx.runMutation(internal.core.routines.setPace, { creatorId, pace: call.args.pace === "less" || call.args.pace === "more" ? call.args.pace : "normal" });
+      record(r.ok, 0);
+      return r.ok ? `done: ${r.body}` : `not done: ${r.body}`;
     }
     if (call.name === "watch_account") {
       const handle = String(call.args.handle ?? "").replace(/^@/, "").trim().toLowerCase();

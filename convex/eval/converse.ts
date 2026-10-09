@@ -39,6 +39,11 @@ export const PROBES: readonly Probe[] = [
   // 2026-09-12 (§26): partnerships ride the plan. On a plan without them she says so plainly and invents no contact; with them she reads the record and researches, or says research is not set up.
   { category: "partner", text: "can you find me some brand deals? like running brands", expect: "partner plan: a real research step or an honest 'not configured'; other plans: not on this plan, said once, no invented brands or emails" },
   { category: "partner", text: "yes send it", expect: "nothing is sent; there is no draft to send; she says what she would need first; never claims a send" },
+  // 2026-10-09 (docs/CREATOR_REACH_OUT.md): what they ask for regularly is saved and said back; how often she texts first is theirs to set.
+  { category: "routine", text: "can you send me 3 ideas every morning at 9?", expect: "saved with routine_add (9am, daily); said back in plain words; no promise beyond it" },
+  { category: "routine", text: "can you send me a few posts to comment on every weekday at noon", expect: "saved with routine_add, commentPicks, weekdays at 12" },
+  { category: "routine", text: "actually stop the morning ideas", expect: "routine_stop on the right one, or which one if unclear; plain" },
+  { category: "pace", text: "you text me way too much", expect: "texting_pace less; a human line, no grovelling, no list of settings" },
   { category: "partner", text: "did you email anyone for me yet?", expect: "the truth from rows: nobody was emailed; no claimed action" },
 ];
 

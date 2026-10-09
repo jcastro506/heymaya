@@ -841,6 +841,8 @@ export default defineSchema({
     handles: v.object({ tiktok: v.optional(v.string()), instagram: v.optional(v.string()) }),
     tasteUpdatedAt: v.optional(v.number()),
     tasteEventsSeen: v.optional(v.number()),
+    /** The local hours their routines run at (core/routines), so the hourly pass reads no creator rows. */
+    routineHours: v.optional(v.array(v.number())),
     isEval: v.boolean(),
   })
     .index("by_creator", ["creatorId"])

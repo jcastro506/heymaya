@@ -72,6 +72,8 @@ export function fakeAnswer(purpose: string, messages: OpenRouterMessage[]): Open
     case "first_read":
     case "first_read_rewrite":
       return ok("hey. read your posts; the talking-head ones do best. first idea tomorrow.");
+    case "routine":
+      return ok(/nothing real|blows up/i.test(user) ? "SKIP" : "morning! three for today:\n---\nyour coffee walk, but judging everyone's shoes\n---\nthe jewelry stack that never comes off");
     case "taste_reply":
       return ok("warm");
     case "remember":

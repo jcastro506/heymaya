@@ -4,24 +4,28 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { OPENING_QUESTION, openingQuestionFor } from "../conversation";
+import { saveContactLine } from "../conversation";
+
+const OPENING_QUESTION = "what do you most want out of this?";
 import { personalHistoryFor } from "../../agent/personalHistory";
 import { callModel } from "../../core/llm";
 
 vi.mock("../../core/llm", () => ({ callModel: vi.fn() }));
 
 describe("conversational onboarding", () => {
-  it.each(["imessage", "telegram"] as const)("still asks once on %s when the post read finished before pairing", async (surface) => {
+  it.each(["imessage", "telegram"] as const)("introduces her once on %s when the post read finished before pairing, asking nothing", async (surface) => {
     const t = convexTest(schema, modules);
     const creatorId = await t.run((ctx) => seedCreator(ctx, `early-${surface}`, { conversationalOnboardingAt: Date.now(), phone: "+15555550101", channel: { kind: surface, paired: false }, pairingToken: "early", pairingExpiresAt: Date.now() + 60_000 }));
     await t.run((ctx) => ctx.db.insert("messages", { creatorId, direction: "out", surface, body: "your trail running clip has a strong opening.", ts: Date.now(), dedupeKey: `first_read:${creatorId}`, kind: "first_read" }));
     if (surface === "imessage") await t.mutation(internal.core.pairing.claimPairingByPhone, { token: "early", phone: "+15555550101" });
     else await t.mutation(internal.core.pairing.claimPairing, { token: "early", chatId: "456" });
     const rows = await t.run((ctx) => ctx.db.query("messages").collect());
-    expect(rows.filter((r) => r.body === openingQuestionFor(false))).toHaveLength(1); // §26: no plan tier means no brand deals in the opening
+    expect(rows.filter((r) => r.kind === "hello")).toHaveLength(1);
+    expect(rows.find((r) => r.kind === "hello")?.body).toContain(saveContactLine(true));
+    expect(rows.filter((r) => r.awaitingAnswer)).toHaveLength(0);
     expect(rows.filter((r) => r.kind === "first_read")).toHaveLength(1);
   });
-  it.each(["imessage", "telegram"] as const)("pairs %s with a short hello and the goal question, once, while she reads", async (surface) => {
+  it.each(["imessage", "telegram"] as const)("pairs %s with her intro, once, while she reads, and no survey question", async (surface) => {
     const t = convexTest(schema, modules);
     const creatorId = await t.run((ctx) => seedCreator(ctx, surface, { phone: "+15555550100", channel: { kind: surface, paired: false }, pairingToken: "hello", pairingExpiresAt: Date.now() + 60_000 }));
     if (surface === "imessage") await t.mutation(internal.core.pairing.claimPairingByPhone, { token: "hello", phone: "+15555550100" });
@@ -31,9 +35,10 @@ describe("conversational onboarding", () => {
     const rows = await t.run((ctx) => ctx.db.query("messages").collect());
     expect(rows.every((m) => m.surface === surface)).toBe(true);
     expect(rows.map((m) => m.body).join("\n")).toMatch(/maya/i);
-    // 2026-10-01: the goal question rides the hello, so the minutes she spends reading become context.
-    expect(rows.map((m) => m.body).join("\n")).toContain(`while i do, ${openingQuestionFor(false)}`);
-    expect(rows.filter((m) => m.awaitingAnswer)).toHaveLength(1);
+    // 2026-10-09: her intro says what she does; nothing asks what they want out of this.
+    expect(rows.map((m) => m.body).join("\n")).toContain(saveContactLine(false));
+    expect(rows.map((m) => m.body).join("\n")).not.toMatch(/what do you most want/);
+    expect(rows.filter((m) => m.awaitingAnswer)).toHaveLength(0);
     expect((await t.run((ctx) => ctx.db.get(creatorId)))?.conversationalOnboardingAt).toBeTypeOf("number");
     if (surface === "imessage") {
       await t.mutation(internal.core.pairing.claimPairingByPhone, { phone: "+15555550100" });

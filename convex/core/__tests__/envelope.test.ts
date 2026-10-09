@@ -5,7 +5,7 @@ import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
 import { splitParts, unwrapModelEnvelope, MAX_PARTS } from "../envelope";
-import { HELLO, helloFor } from "../pairing";
+import { helloFor } from "../pairing";
 
 describe("a person never receives a JSON envelope (live 2026-09-06)", () => {
   it("unwraps a message field, leaves prose alone, refuses an envelope with nothing to say", () => {
@@ -27,7 +27,7 @@ describe("a person never receives a JSON envelope (live 2026-09-06)", () => {
 });
 
 describe("first contact", () => {
-  it("pairing before the first read orients once; pairing after it asks the goal once", async () => {
+  it("pairing introduces her once, before or after her read, and asks nothing (2026-10-09)", async () => {
     const t = convexTest(schema, modules);
     const a = await t.run((ctx) => seedCreator(ctx, "a", {}));
     const b = await t.run((ctx) => seedCreator(ctx, "b", {}));
@@ -39,17 +39,18 @@ describe("first contact", () => {
     expect((await t.mutation(internal.core.pairing.claimPairing, { token: "tok-a", chatId: "111" })).paired).toBe(true);
     expect((await t.mutation(internal.core.pairing.claimPairing, { token: "tok-b", chatId: "222" })).paired).toBe(true);
     const rows = await t.run(async (ctx) => await ctx.db.query("messages").collect());
-    expect(rows.filter((m) => m.creatorId === a && m.body === helloFor(false)).length).toBe(1);
-    expect(rows.filter((m) => m.creatorId === b && m.body === helloFor(false)).length).toBe(0);
-    expect(rows.filter((m) => m.creatorId === b && m.awaitingAnswer).length).toBe(1);
-    // 2026-10-01: two short texts. She's on it; then the one question worth asking while she reads.
-    const hello = helloFor(false);
-    expect(rows.filter((m) => m.creatorId === a && m.body === hello)[0]?.awaitingAnswer).toBe(true);
-    expect(HELLO).toMatch(/it's maya/);
-    expect(HELLO).toMatch(/going through your posts now/);
-    expect(hello.split("\n---\n")).toHaveLength(2);
-    expect(hello.split("\n---\n")[1]).toMatch(/^while i do, what do you most want out of this\?/);
-    for (const banned of ["—", ": ", "pick a sound", "content person"]) expect(hello, banned).not.toContain(banned);
+    const hello = (c: unknown) => rows.filter((m) => m.creatorId === c && m.kind === "hello");
+    expect(hello(a)).toHaveLength(1);
+    expect(hello(b)).toHaveLength(1);
+    expect(rows.filter((m) => m.awaitingAnswer), "no survey question").toHaveLength(0);
+    const parts = hello(a)[0].body.split("\n---\n");
+    expect(parts).toHaveLength(4);
+    expect(parts[1]).toMatch(/content person/);
+    expect(parts[2]).toMatch(/Maya app/);
+    expect(parts[3]).toMatch(/save this number as Maya/);
+    expect(parts[3]).toMatch(/going through your posts now/);
+    expect(hello(b)[0].body, "her read already happened").not.toMatch(/going through your posts now/);
+    for (const banned of ["—", "what do you most want", "AI", "assistant"]) expect(hello(a)[0].body, banned).not.toContain(banned);
   });
 });
 
