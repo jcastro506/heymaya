@@ -19,8 +19,6 @@ import { pairedRows } from "../core/schedule";
 export const STEPS = ["first_read", "first_plan", "first_scout", "first_calendar_or_worth_seeing", "invite_draft", "first_review"] as const;
 export type Step = (typeof STEPS)[number];
 
-export const INVITE_DRAFT = "oh, and anytime you've got a draft, send it to me before you post (or the link after) and i'll tell you honestly what i think and what i'd change.";
-
 export const markStep = internalMutation({
   args: { creatorId: v.id("creators"), step: v.union(...STEPS.map((s) => v.literal(s))) },
   handler: async (ctx, a): Promise<null> => {
@@ -67,8 +65,7 @@ export const runAll = internalAction({
 export const inviteOne = internalMutation({
   args: { creatorId: v.id("creators") },
   handler: async (ctx, a): Promise<{ invited: boolean }> => {
-    const { messageId } = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: INVITE_DRAFT, dedupeKey: `firstweek:invite:${a.creatorId}`, proactive: true, kind: "status" });
-    if (!messageId) return { invited: false };
+    // Said once in her intro now (onboarding/hello, 2026-10-09). The step is marked so the first week moves on; nothing is texted.
     await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: a.creatorId, step: "invite_draft" });
     return { invited: true };
   },

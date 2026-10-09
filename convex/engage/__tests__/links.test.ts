@@ -55,8 +55,8 @@ describe("the text carries our links", () => {
   it("each post goes out as a /go link to its own row; the raw post link isn't in the text", async () => {
     const t = convexTest(schema, modules);
     const c = await world(t, "l1");
-    expect(await t.action(internal.engage.round.sendText, { creatorId: c, now: NOW })).toEqual({ sent: true, reason: "sent" });
-    const msg = (await t.run((ctx) => ctx.db.query("messages").collect())).find((m) => m.creatorId === c && m.kind === "engage")!;
+    expect(await t.action(internal.engage.round.sendText, { asked: true, creatorId: c, now: NOW })).toEqual({ sent: true, reason: "sent" });
+    const msg = (await t.run((ctx) => ctx.db.query("messages").collect())).find((m) => m.creatorId === c && m.kind === "routine")!;
     const rows = await linksOf(t, c);
     expect(rows).toHaveLength(3);
     expect(msg.links).toEqual(rows.map((r) => goUrl(r.code)));
@@ -72,7 +72,7 @@ describe("the text carries our links", () => {
     const t = convexTest(schema, modules);
     const c = await world(t, "l2");
     await t.run((ctx) => ctx.db.patch(c, { channel: { paired: false } } as never));
-    expect((await t.action(internal.engage.round.sendText, { creatorId: c, now: NOW })).sent).toBe(false);
+    expect((await t.action(internal.engage.round.sendText, { asked: true, creatorId: c, now: NOW })).sent).toBe(false);
     expect(await linksOf(t, c)).toHaveLength(0);
   });
 });
@@ -82,8 +82,8 @@ describe("an open", () => {
     const t = convexTest(schema, modules);
     const c = await world(t, "o1");
     const other = await world(t, "o2");
-    await t.action(internal.engage.round.sendText, { creatorId: c, now: NOW });
-    await t.action(internal.engage.round.sendText, { creatorId: other, now: NOW });
+    await t.action(internal.engage.round.sendText, { asked: true, creatorId: c, now: NOW });
+    await t.action(internal.engage.round.sendText, { asked: true, creatorId: other, now: NOW });
     await aged(t, c);
     const [r] = await linksOf(t, c);
     expect(await t.mutation(api.engage.links.open, { code: r.code, userAgent: PHONE })).toEqual({ url: r.url, counted: true });
@@ -104,7 +104,7 @@ describe("an open", () => {
   it("previews, bots, HEAD requests and the first seconds after the send forward but never count", async () => {
     const t = convexTest(schema, modules);
     const c = await world(t, "o3");
-    await t.action(internal.engage.round.sendText, { creatorId: c, now: NOW });
+    await t.action(internal.engage.round.sendText, { asked: true, creatorId: c, now: NOW });
     const [r] = await linksOf(t, c);
     await t.run((ctx) => ctx.db.patch(r._id, { sentAt: Date.now() }));
     expect(await t.mutation(api.engage.links.open, { code: r.code, userAgent: PHONE }), "the phone fetching a preview right after the send").toEqual({ url: r.url, counted: false });
@@ -120,7 +120,7 @@ describe("an open", () => {
   it("an unknown, malformed or tampered link goes nowhere and records nothing", async () => {
     const t = convexTest(schema, modules);
     const c = await world(t, "o4");
-    await t.action(internal.engage.round.sendText, { creatorId: c, now: NOW });
+    await t.action(internal.engage.round.sendText, { asked: true, creatorId: c, now: NOW });
     await aged(t, c);
     for (const code of ["zzzzzzzzzz", "../../etc", "ABCDEFGHIJ", "", "a".repeat(500)]) expect(await t.mutation(api.engage.links.open, { code, userAgent: PHONE })).toEqual({ url: null, counted: false });
     const [r] = await linksOf(t, c);
