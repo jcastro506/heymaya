@@ -45,11 +45,10 @@ describe("first contact", () => {
     expect(rows.filter((m) => m.awaitingAnswer), "no survey question").toHaveLength(0);
     const parts = hello(a)[0].body.split("\n---\n");
     expect(parts).toHaveLength(4);
-    expect(parts[1]).toMatch(/content person/);
-    expect(parts[2]).toMatch(/Maya app/);
+    expect(parts[1]).toMatch(/going through your posts right now/);
+    expect(parts[2]).toMatch(/text me like you'd text a friend/);
     expect(parts[3]).toMatch(/save this number as Maya/);
-    expect(parts[3]).toMatch(/going through your posts now/);
-    expect(hello(b)[0].body, "her read already happened").not.toMatch(/going through your posts now/);
+    expect(hello(b)[0].body, "her read already happened").toMatch(/already been through your posts/);
     for (const banned of ["—", "what do you most want", "AI", "assistant"]) expect(hello(a)[0].body, banned).not.toContain(banned);
   });
 });

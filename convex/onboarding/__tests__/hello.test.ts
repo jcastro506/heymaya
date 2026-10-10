@@ -55,15 +55,17 @@ describe("the greeting (pure)", () => {
     for (const seed of ["a", "b", "c", "d", "e"]) { expect(greetingOk(fallbackGreeting("Adina", seed), "Adina")).toBe(true); expect(greetingOk(fallbackGreeting(null, seed), null)).toBe(true); }
     expect(new Set(["a", "b", "c", "d", "e", "f"].map((s) => fallbackGreeting(null, s))).size).toBeGreaterThan(1);
   });
-  it("her intro: the greeting, what she does, how to use her and the app, then save her as Maya; no question (2026-10-09)", () => {
+  it("her intro: the greeting, she's on their posts, how to talk to her, save her as Maya; no question (2026-10-09)", () => {
     const parts = helloParts("hey Adina, it's Maya! so glad you're here", false);
     expect(parts).toHaveLength(4);
     expect(parts.slice(1, 3)).toEqual(introBody(false));
-    expect(parts[3]).toBe(saveContactLine(false));
+    expect(parts[1]).toMatch(/going through your posts right now/);
+    expect(parts[2]).toMatch(/text me like you'd text a friend/);
+    expect(parts[3]).toBe(saveContactLine());
     expect(parts[3]).toMatch(/save this number as Maya/);
     expect(parts.join(" ")).not.toContain("?");
-    expect(parts[2]).toMatch(/only text you first when it's worth it/);
-    expect(helloParts("hi", false, true)[3]).not.toMatch(/going through your posts/);
+    for (const p of parts) expect(p.length, p).toBeLessThan(200);
+    expect(helloParts("hi", false, true)[1]).not.toMatch(/going through your posts right now/);
   });
   it("typing pauses fit the next bubble: quick for a short one, a few seconds for a long one, capped", () => {
     expect(partGapMs("ok")).toBe(1_100);
@@ -80,12 +82,12 @@ describe("on rows", () => {
   it("her greeting, when it's good, goes out with their name; once; asking nothing", async () => {
     const t = convexTest(schema, modules);
     const c = await paired(t, "h1", { firstName: "Adina" });
-    vi.mocked(callModel).mockResolvedValueOnce({ ok: true, content: "hey Adina, it's maya. so glad you're here" } as Awaited<ReturnType<typeof callModel>>);
+    vi.mocked(callModel).mockResolvedValueOnce({ ok: true, content: "hey Adina! it's maya 👋" } as Awaited<ReturnType<typeof callModel>>);
     expect(await t.action(internal.onboarding.hello.send, { creatorId: c })).toMatchObject({ sent: true, fromModel: true });
     expect(await t.action(internal.onboarding.hello.send, { creatorId: c })).toMatchObject({ sent: false, reason: "already said hello" });
     const [row] = await hellos(t, c);
-    expect(row.body.split("\n---\n")[0]).toBe("hey Adina, it's maya. so glad you're here");
-    expect(row.body).toContain(saveContactLine(false));
+    expect(row.body.split("\n---\n")[0]).toBe("hey Adina! it's maya 👋");
+    expect(row.body).toContain(saveContactLine());
     expect(row).toMatchObject({ awaitingAnswer: false, proactive: true, kind: "hello" });
   });
 

@@ -19,19 +19,19 @@ import { cleanNamePart } from "../lib/personName";
 export const HELLO_PACE = { baseMs: 11_000, jitterMs: 6_000, typingAfterMs: 1_500, pendingWindowMs: 3 * 60_000 } as const;
 
 
-export const GREETING_SKILL = `You are Maya, texting a content creator for the first time, seconds after they texted START. Write ONE short greeting line: hi, their first name if you know it, that it's you (Maya), and that you're glad they're here. Under 80 characters, one line, lowercase the way you text (names keep their capital), warm. At most one emoji. No question, no dash, don't say "excited", don't describe what you do (the next texts do). Output only the text.`;
+export const GREETING_SKILL = `You are Maya, texting a content creator for the first time, seconds after they texted START. Write ONE short greeting line: hi, their first name if you know it, and that it's you (Maya). Warm and simple, like a friend's first text ("hey Adina! it's Maya 👋"). Under 60 characters, one line, lowercase the way you text (names keep their capital), warm. At most one emoji. No question, no dash, don't say "excited", don't describe what you do (the next texts do). Output only the text.`;
 
 /** Pure: written lines for when she can't, rotated by person so two signups don't read identically. */
 export function fallbackGreeting(name: string | null, seed: string): string {
   const n = name ? ` ${name}` : "";
-  const variants = [`hey${n}, it's Maya! so glad you're here`, `hi${n}, Maya here. really glad you signed up`, `hey${n}! it's Maya, happy you're here`];
+  const variants = [`hey${n}! it's Maya 👋`, `hi${n}, it's Maya!`, `hey${n}, Maya here 👋`];
   return variants[[...seed].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7) % variants.length];
 }
 
 /** Pure: is her greeting fit to send? A name we know must be in it; nothing else may be invented. */
 export function greetingOk(text: string, name: string | null): boolean {
   const t = text.trim();
-  if (t.length < 10 || t.length > 100 || /\n/.test(t)) return false;
+  if (t.length < 8 || t.length > 90 || /\n/.test(t)) return false;
   if (/[?—–]/.test(t) || (t.match(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu) ?? []).length > 1) return false;
   if ((t.match(/!/g) ?? []).length > 1) return false;
   if (!/\bmaya\b/i.test(t)) return false;
@@ -43,9 +43,9 @@ export function greetingOk(text: string, name: string | null): boolean {
   return true;
 }
 
-/** Pure: her intro, four texts in order. `readDone` when her read already happened (they paired late). */
+/** Pure: her intro, four short texts in order. `readDone` when her read already happened (they paired late). */
 export function helloParts(greeting: string, partnerships: boolean, readDone = false): string[] {
-  return [greeting.trim(), ...introBody(partnerships), saveContactLine(readDone)];
+  return [greeting.trim(), ...introBody(partnerships, readDone), saveContactLine()];
 }
 
 export const inputs = internalQuery({

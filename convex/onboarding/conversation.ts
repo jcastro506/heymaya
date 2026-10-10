@@ -1,23 +1,28 @@
 /**
- * Her intro (operator, 2026-10-09): who she is, what she does, how to use her, that the app keeps
- * everything, and the one practical ask. No survey: "what do you want out of this?" and its follow-ups
- * read as a form. What they want comes out in conversation and from their posts.
+ * Her intro (operator, 2026-10-09, second pass). Written from the creator's side: they just signed up,
+ * a little skeptical, wondering whether this is a person-shaped thing or a bot, and what happens now.
+ * So: she's already on their stuff, they'll hear back in minutes with something real, and how to talk
+ * to her (by example, not a manual). No survey, no feature list, no "content person". The app gets its
+ * line when there's something in it to see: her first plan (calendar/weekPlan).
  */
 
-/** Pure: what she does and how to use her, two texts. Brand deals are named only when their plan has them (§26). */
-export function introBody(partnerships: boolean): string[] {
+/** Pure: the texts after her greeting. Brand deals are named only when their plan has them (§26). */
+export function introBody(partnerships: boolean, readDone = false): string[] {
   return [
-    `i'm your content person. i look at what's working for you and for creators like you, turn it into ideas you'd actually want to film, and help you plan when to shoot and post around your real week.${partnerships ? " when brands come up, i help with those too." : ""}`,
-    `text me anytime: a draft before you post, a link you saw, or just "i need an idea." i'll only text you first when it's worth it, and everything i make is saved in the Maya app too: your ideas, your week, and how your posts are doing.`,
+    readDone
+      ? "i've already been through your posts, the hits and the flops. what i noticed is coming right up."
+      : "i'm going through your posts right now, the hits and the flops. give me a few minutes and i'll tell you what's working and what i'd make next.",
+    `text me like you'd text a friend who's obsessed with your content: send a draft before you post, a tiktok you wish you'd made, or just "i have no idea what to post today."${partnerships ? " brand stuff too." : ""}`,
   ];
 }
 
-/** The last text of her intro: the practical ask, and what she's doing (or did) with their posts. */
-export function saveContactLine(readDone: boolean): string {
-  return readDone
-    ? "quick thing: save this number as Maya so i don't get lost in your texts."
-    : "quick thing: save this number as Maya so i don't get lost in your texts. i'm going through your posts now, i'll text you what i see in a few minutes.";
+/** The last text of her intro: the one practical ask. */
+export function saveContactLine(): string {
+  return "and save this number as Maya so i don't get lost in your texts 🙂";
 }
+
+/** Her first plan's last text adds where everything lives, once (the first week only). */
+export const APP_LINE = "all of this is in the Maya app too, your ideas and your week, so you never have to scroll back for it. and i'll only text you first when it's worth it.";
 
 export const CONVERSATIONAL_ONBOARDING = `# Getting to know them through conversation
 Follow their actual message; this is not a questionnaire. Never interview them: don't ask what they want out of this, what gets in the way, how they started or who they picture watching. Learn it from what they say and what they post, and use it when it changes your advice.
