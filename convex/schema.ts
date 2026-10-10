@@ -51,6 +51,21 @@ export default defineSchema({
     lastName: v.optional(v.string()),
     /** When they confirmed what Maya should call them (onboarding's first screen; required for new signups). */
     nameConfirmedAt: v.optional(v.number()),
+    /** They asked her to stop texting first (STOP); cleared by resume. Never the billing status. */
+    messagingPausedAt: v.optional(v.number()),
+    /** How often she may text first about her own finds (core/reachOut). Set by them in chat ("text me less"). */
+    textFirstPace: v.optional(v.union(v.literal("less"), v.literal("normal"), v.literal("more"))),
+    /** Things they asked her to do on a schedule ("3 ideas every morning"). Run by core/routines; never over budget. */
+    routines: v.optional(v.array(v.object({
+      id: v.string(),
+      what: v.string(),
+      hour: v.number(),
+      days: v.union(v.literal("daily"), v.literal("weekdays"), v.literal("weekly")),
+      weekday: v.optional(v.number()),
+      builtin: v.optional(v.literal("comment_picks")),
+      createdAt: v.number(),
+      lastRunDay: v.optional(v.string()),
+    }))),
     growthPlan: v.optional(v.any()),
     /** When they said they usually film (2026-10-01): weekdays 0–6 (Sunday 0), an hour on their clock, their words. Beats habits from blocks. */
     /** The iPhone's calendar (calendar/device): their answer to the permission, and busy times only (no titles), next three weeks. */
@@ -826,6 +841,8 @@ export default defineSchema({
     handles: v.object({ tiktok: v.optional(v.string()), instagram: v.optional(v.string()) }),
     tasteUpdatedAt: v.optional(v.number()),
     tasteEventsSeen: v.optional(v.number()),
+    /** The local hours their routines run at (core/routines), so the hourly pass reads no creator rows. */
+    routineHours: v.optional(v.array(v.number())),
     isEval: v.boolean(),
   })
     .index("by_creator", ["creatorId"])

@@ -137,7 +137,7 @@ describe("Linq on the rows, with the vendor's HTTP faked at fetch", () => {
   afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); delete process.env.LINQ_API_KEY; delete process.env.LINQ_WEBHOOK_SECRET; });
 
   async function paired(t: ReturnType<typeof convexTest>, key = "a", phone = PHONE, extra: Record<string, unknown> = {}) {
-    return await t.run((ctx) => seedCreator(ctx, key, { phone, channel: { paired: true, kind: "imessage", pairedAt: Date.now() - 24 * H, ...extra } }));
+    return await t.run((ctx) => seedCreator(ctx, key, { phone, channel: { paired: true, kind: "imessage", pairedAt: Date.now() - 10 * 24 * H, ...extra } }));
   }
 
   it("with a Linq key, Linq carries the channel; without one, Claw does, as before (sibling coherence)", () => {
@@ -245,6 +245,8 @@ describe("Linq on the rows, with the vendor's HTTP faked at fetch", () => {
   it("the silence ladder, on rows: after one unanswered idea the next waits; their reply resets it", async () => {
     const t = convexTest(schema, modules);
     const creatorId = await paired(t);
+    // Two of hers a day (core/reachOut), so the ladder is what holds idea 2, not the budget.
+    await t.run((ctx) => ctx.db.patch(creatorId, { textFirstPace: "more" }));
     await t.run((ctx) => ctx.db.insert("messages", { creatorId, direction: "in", surface: "imessage", body: "hi", ts: Date.now() - 3 * H } as never));
     expect((await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: "idea 1", dedupeKey: "i1", proactive: true, kind: "scout" })).sent).toBe(true);
     expect((await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: "idea 2", dedupeKey: "i2", proactive: true, kind: "scout" })).held).toMatch(/about a day/);
@@ -254,7 +256,7 @@ describe("Linq on the rows, with the vendor's HTTP faked at fetch", () => {
 
   it("a Telegram creator never meets the phone rail (sibling coherence)", async () => {
     const t = convexTest(schema, modules);
-    const creatorId = await t.run((ctx) => seedCreator(ctx, "tg", { channel: { paired: true, kind: "telegram" } }));
+    const creatorId = await t.run((ctx) => seedCreator(ctx, "tg", { channel: { paired: true, kind: "telegram" }, textFirstPace: "more" }));
     expect((await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: "idea 1", dedupeKey: "i1", proactive: true, kind: "scout" })).sent).toBe(true);
     expect((await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: "idea 2", dedupeKey: "i2", proactive: true, kind: "scout" })).sent).toBe(true);
   });

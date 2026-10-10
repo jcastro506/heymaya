@@ -5,6 +5,7 @@
  * fits). Every outcome writes `signals.verdict` and `signals.why`.
  */
 
+import { pausedByThem } from "../core/paused";
 import { v } from "convex/values";
 import { countsTowardCap } from "../core/messages";
 import { internalQuery } from "../_generated/server";
@@ -47,7 +48,8 @@ export const READ_SETTLE_MS = 30 * 60_000;
 export function checkRails(input: { creator: Doc<"creators">; sentToday: number; openQuestion: boolean; now: number; budget?: Pick<Doc<"budgets">, "spentUsd" | "watches" | "marginalCredits"> | null; firstReadAt?: number | null }): Rails {
   const { creator, now } = input;
   const { hour } = localHourMinute(now, creator.timezone);
-  if (creator.plan.status === "paused" || creator.plan.status === "canceled" || creator.plan.status === "deleting") return { ok: false, reason: `plan is ${creator.plan.status}`, localHour: hour, sentToday: input.sentToday };
+  if (pausedByThem(creator)) return { ok: false, reason: "they asked her to stop texting first", localHour: hour, sentToday: input.sentToday };
+  if (creator.plan.status === "canceled" || creator.plan.status === "deleting") return { ok: false, reason: `plan is ${creator.plan.status}`, localHour: hour, sentToday: input.sentToday };
   // §19.3: past due keeps proactive for three days of grace, then it pauses; nothing is deleted.
   if (creator.plan.status === "past_due" && creator.plan.pastDueSince && now - creator.plan.pastDueSince > 3 * 86_400_000) return { ok: false, reason: "plan is past due for more than three days", localHour: hour, sentToday: input.sentToday };
   if (!creator.channel.paired) return { ok: false, reason: "not paired", localHour: hour, sentToday: input.sentToday };

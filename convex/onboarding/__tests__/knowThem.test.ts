@@ -15,13 +15,14 @@ import { personalHistoryFor } from "../../agent/personalHistory";
 const NOW = Date.now();
 
 describe("the section (pure)", () => {
-  it("lists what they said, in their words, and only the questions still open", () => {
+  it("lists what they said, in their words; the only open question is when they film (no survey, 2026-10-09)", () => {
     const s = knowThemSection([{ kind: "goal", text: "brand deals", at: NOW }, { kind: "hesitation", text: "being on camera honestly", at: NOW - 86_400_000 }], NOW, true);
     expect(s).toContain('what gets in the way: "being on camera honestly" (1d ago');
     expect(s).toContain('what they want out of this: "brand deals"');
     expect(s).not.toMatch(/- what gets in the way, when/);
-    expect(s).toMatch(/- what they won't do on camera, when/);
-    expect(s).toMatch(/- how they started, when/);
+    expect(s).not.toMatch(/- what they won't do on camera, when/);
+    expect(s).not.toMatch(/- how they started, when/);
+    expect(s).toMatch(/- when they usually film, when/);
   });
   it("proactive paths get what's known, never the questions; with nothing known they get nothing", () => {
     expect(knowThemSection([{ kind: "boundary", text: "no face", at: NOW }], NOW, false)).toMatch(/no face[\s\S]*Never suggest anything a boundary rules out/);
@@ -52,7 +53,7 @@ describe("on rows", () => {
     const reply = await t.query(internal.agent.context.gather, { creatorId: c, messageId: msg });
     expect(reply!.history).toContain('what gets in the way: "being on camera, i freeze up"');
     expect(reply!.history).not.toMatch(/- how they started, when/); // the shrug closed it
-    expect(reply!.history).toMatch(/- what they won't do on camera, when/);
+    expect(reply!.history).not.toMatch(/- what they won't do on camera, when/);
     const scout = await t.query(internal.agent.context.gather, { creatorId: c });
     expect(scout!.history).toContain("being on camera, i freeze up");
     expect(scout!.history).not.toMatch(/Still worth asking/);

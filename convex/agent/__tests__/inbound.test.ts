@@ -48,18 +48,22 @@ describe("classifyInbound", () => {
 });
 
 describe("commands are rows", () => {
-  it("stop pauses the plan (the gate then refuses), resume restores it, and each answers in one line", async () => {
+  it("stop pauses her texting first (the gate then refuses), resume brings her back, billing untouched", async () => {
     const t = convexTest(schema, modules);
     const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { plan: { status: "active", founding: true }, channel: { paired: true }, timezone: "UTC" }));
     const stop = await t.mutation(internal.agent.commands.apply, { creatorId, command: "stop" });
-    expect(stop.body).toMatch(/paused/);
-    expect((await t.run((ctx) => ctx.db.get(creatorId)))?.plan.status).toBe("paused");
+    expect(stop.body).toMatch(/stop texting you first/);
+    const paused = await t.run((ctx) => ctx.db.get(creatorId));
+    expect(paused?.messagingPausedAt).toBeTypeOf("number");
+    expect(paused?.plan.status).toBe("active");
     const rails = await t.query(internal.scout.gate.railsFor, { creatorId, now: Date.UTC(2026, 8, 2, 13, 0) });
     expect(rails?.rails.ok).toBe(false);
-    expect(rails?.rails.reason).toMatch(/paused/);
+    expect(rails?.rails.reason).toMatch(/stop texting/);
     const resume = await t.mutation(internal.agent.commands.apply, { creatorId, command: "resume" });
-    expect(resume.body).toMatch(/back on/);
-    expect((await t.run((ctx) => ctx.db.get(creatorId)))?.plan.status).toBe("active");
+    expect(resume.resumed).toBe(true);
+    const back = await t.run((ctx) => ctx.db.get(creatorId));
+    expect(back?.messagingPausedAt).toBeUndefined();
+    expect(back?.plan.status).toBe("active");
   });
 
   it("forget tombstones the most recent live note and says which", async () => {

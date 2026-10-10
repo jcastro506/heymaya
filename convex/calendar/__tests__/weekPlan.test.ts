@@ -301,3 +301,13 @@ describe("the plan answers their choice (2026-09-07)", () => {
     expect(plan?.body.startsWith("travel it is.\n---\nnext week")).toBe(true);
   });
 });
+
+describe("where everything lives (2026-10-09)", () => {
+  it("the first plan says the app has it, once; later weeks don't", async () => {
+    const { composeWeek } = await import("../weekPlan");
+    const { APP_LINE } = await import("../../onboarding/conversation");
+    const slot = { film: { start: Date.UTC(2026, 9, 16, 17), end: Date.UTC(2026, 9, 16, 18) }, post: { at: Date.UTC(2026, 9, 16, 19) }, hook: "the shoe rack list" } as never;
+    expect(composeWeek([slot], "UTC", true, "this week", undefined, true)).toContain(APP_LINE);
+    expect(composeWeek([slot], "UTC", true, "next week")).not.toContain(APP_LINE);
+  });
+});

@@ -47,7 +47,7 @@ export const CLASSIFY_PROMPT = `You label one message a content creator sent to 
 - "opinion_ask": they are asking for her judgment on a plan or a hook in words (no link, no file), e.g. "should i post at 7", "is this hook good: …".
 - "calendar_answer": they are answering a question she asked about a filming block or a date.
 - "manage": they are telling her how to run things. Give "action" and its fields:
-  - "quiet_hours": when NOT to text them; give "start" and "end" as 24h HH:MM on their clock ("nothing before 9" → start "22:00" end "09:00" if they only gave one edge, keep the other from the current quiet hours you were given).
+  - "quiet_hours": ONLY when they say when NOT to text them ("no texts before 9", "don't message me after 10pm"); give "start" and "end" as 24h HH:MM on their clock ("nothing before 9" → start "22:00" end "09:00" if they only gave one edge, keep the other from the current quiet hours you were given). Asking her to SEND something at a time ("send me 3 ideas every morning at 9", "comment picks at noon"), to stop or change something she sends regularly ("stop the morning ideas"), or how often she texts ("you text too much") is NOT quiet_hours: that's chat, and she handles it herself.
   - "tone": "coach" | "friend" | "blunt" (be blunter → blunt; be nicer/softer → friend; push me → coach).
   - "add_admired": watch an account: "handle" without @, "platform".
   - "stop_watching": stop watching an account: "handle".

@@ -19,13 +19,14 @@
  * id is where every future message goes.
  */
 
+import { cleanNamePart } from "../lib/personName";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { type MutationCtx } from "../_generated/server";
 import { internalMutation, mutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
 import { pairingSmsLink } from "./imessage";
-import { openingQuestionFor } from "../onboarding/conversation";
+import { helloParts, fallbackGreeting } from "../onboarding/hello";
 import { HELLO_PACE } from "../onboarding/hello";
 import { partnershipsOpen } from "../partnerships/store";
 
@@ -41,7 +42,6 @@ export const PAIRING_TTL_MS = 15 * 60_000;
  * question worth asking while she reads. The old hello was three pitch texts with colons and a promise
  * to "pick a sound"; the operator, reading it on his own phone: "the grammar and symbols are weird".
  */
-export const HELLO = "hey, it's maya. i'm going through your posts now to see what's landing for you, give me a few minutes";
 /**
  * Her first read may be written before they ever text (they skipped "Text Maya", or the line wasn't set
  * up yet). Its delivery waits a day for pairing and then gives up, so pairing later hands it over again:
@@ -52,9 +52,9 @@ async function redeliverFirstRead(ctx: MutationCtx, firstRead: Doc<"messages"> |
   await ctx.runMutation(internal.core.jobs.enqueue, { kind: "deliver_message", idempotencyKey: `redeliver:${firstRead._id}`, creatorId: firstRead.creatorId, payloadJson: JSON.stringify({ messageId: firstRead._id }) });
 }
 
-/** The first hello, with the opening for their plan (§26). Pure. */
-export function helloFor(partnerships: boolean): string {
-  return `${HELLO}\n---\nwhile i do, ${openingQuestionFor(partnerships)}`;
+/** Her intro where she can't write a greeting first (Telegram, or a read that already happened). Pure. */
+export function helloFor(partnerships: boolean, readDone = false, name: string | null = null, seed = "maya"): string {
+  return helloParts(fallbackGreeting(name, seed), partnerships, readDone).join("\n---\n");
 }
 
 function mintToken(): string {
@@ -161,9 +161,10 @@ export const claimPairingByPhone = internalMutation({
     await ctx.db.patch(creator._id, { phone: args.phone, phoneVerifiedAt: now, channel: { paired: true, pairedAt: now, kind: "imessage" }, pairingToken: undefined, pairingExpiresAt: undefined, updatedAt: now });
     const firstRead = await ctx.db.query("messages").withIndex("by_creator_and_dedupe", (q) => q.eq("creatorId", creator._id).eq("dedupeKey", `first_read:${creator._id}`)).first();
     await ctx.db.patch(creator._id, { conversationalOnboardingAt: creator.conversationalOnboardingAt ?? now });
-    await redeliverFirstRead(ctx, firstRead);
     if (firstRead) {
-      await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "imessage", body: openingQuestionFor(partnershipsOpen(creator)), dedupeKey: `onboarding_goal:${creator._id}`, proactive: true, kind: "status", awaitingAnswer: true });
+      // Her read already happened: the intro (no survey) goes first, then the read is redelivered.
+      await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "imessage", body: helloFor(partnershipsOpen(creator), true, cleanNamePart(creator.firstName), creator._id), dedupeKey: `hello:${creator._id}`, proactive: true, kind: "hello", awaitingAnswer: false });
+      await redeliverFirstRead(ctx, firstRead);
     } else {
       // Not the instant they hit send (operator, 2026-10-02: "it came a bit abruptly"): the typing dots, a
       // pause, then a greeting written for them (onboarding/hello). Her read waits for it.
@@ -241,10 +242,10 @@ export const claimPairing = internalMutation({
     // what she is doing, so pairing is never followed by silence. Once, ever.
     const firstRead = await ctx.db.query("messages").withIndex("by_creator_and_dedupe", (q) => q.eq("creatorId", creator._id).eq("dedupeKey", `first_read:${creator._id}`)).first();
     await ctx.db.patch(creator._id, { conversationalOnboardingAt: creator.conversationalOnboardingAt ?? now });
-    await redeliverFirstRead(ctx, firstRead);
     await ctx.runMutation(internal.core.messages.send, firstRead
-      ? { creatorId: creator._id, surface: "telegram", body: openingQuestionFor(partnershipsOpen(creator)), dedupeKey: `onboarding_goal:${creator._id}`, proactive: true, kind: "status", awaitingAnswer: true }
-      : { creatorId: creator._id, surface: "telegram", body: helloFor(partnershipsOpen(creator)), dedupeKey: `hello:${creator._id}`, proactive: true, kind: "status", awaitingAnswer: true });
+      ? { creatorId: creator._id, surface: "telegram", body: helloFor(partnershipsOpen(creator), true, cleanNamePart(creator.firstName), creator._id), dedupeKey: `hello:${creator._id}`, proactive: true, kind: "hello", awaitingAnswer: false }
+      : { creatorId: creator._id, surface: "telegram", body: helloFor(partnershipsOpen(creator), false, cleanNamePart(creator.firstName), creator._id), dedupeKey: `hello:${creator._id}`, proactive: true, kind: "hello", awaitingAnswer: false });
+    await redeliverFirstRead(ctx, firstRead);
     // Everything written while unpaired (the first read, at least) goes out now, not at the
     // next minute tick, and not behind whatever long job the drain is on.
     await ctx.runMutation(internal.core.jobs.wakeDeliveries, { creatorId: creator._id });

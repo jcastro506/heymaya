@@ -1,11 +1,9 @@
 /**
- * Her first texts (2026-10-02). It used to land the instant they sent START, the same three fixed
- * lines for everyone. Now: a human pause with the typing dots, then a greeting she writes for THIS person
- * (their first name, once, if we know it), then the one practical ask (save her number as Maya, since
- * the contact card isn't something every line can share), then the goal question. Code keeps the
- * promises: the greeting is checked (a short single line, says who she is and that she's reading, no
- * question, no dash, the name right) and falls back to a written line when it isn't; the save-contact
- * line and the question are fixed, so the answer to the goal question is always understood.
+ * Her first texts. A human pause with the typing dots (2026-10-02), then her intro (operator, 2026-10-09):
+ * a greeting she writes for THIS person (their first name if we know it), who she is and what she does,
+ * how to use her and that the app keeps everything, then the one practical ask (save her number as Maya)
+ * and what she's doing with their posts. No survey question. Code keeps the promises: the greeting is
+ * checked and falls back to a written line; the rest is fixed copy (onboarding/conversation).
  */
 import { v } from "convex/values";
 import { internalAction, internalQuery } from "../_generated/server";
@@ -13,35 +11,30 @@ import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
-import { openingQuestionFor } from "./conversation";
+import { introBody, saveContactLine } from "./conversation";
 import { partnershipsOpen } from "../partnerships/store";
 import { cleanNamePart } from "../lib/personName";
 
 /** The pause before her first text: long enough to feel typed, short enough to keep them. */
 export const HELLO_PACE = { baseMs: 11_000, jitterMs: 6_000, typingAfterMs: 1_500, pendingWindowMs: 3 * 60_000 } as const;
 
-export const SAVE_CONTACT = "quick thing: save this number as Maya in your contacts so i don't get lost in your texts";
 
-export const GREETING_SKILL = `You are Maya, a content creator's personal assistant, texting them for the first time, seconds after they texted START. Write ONE greeting text: at most two short sentences, under 170 characters, lowercase the way you text (names keep their capital), warm and a little playful, like someone in the industry who's genuinely glad they're here. Say who you are and that you're going through their posts now and need a few minutes. No question, no emoji, no dash, no exclamation mark more than once, don't say "excited", don't mention apps or tools. Output only the text.`;
+export const GREETING_SKILL = `You are Maya, texting a content creator for the first time, seconds after they texted START. Write ONE short greeting line: hi, their first name if you know it, and that it's you (Maya). Warm and simple, like a friend's first text ("hey Adina! it's Maya 👋"). Under 60 characters, one line, lowercase the way you text (names keep their capital), warm. At most one emoji. No question, no dash, don't say "excited", don't describe what you do (the next texts do). Output only the text.`;
 
 /** Pure: written lines for when she can't, rotated by person so two signups don't read identically. */
 export function fallbackGreeting(name: string | null, seed: string): string {
   const n = name ? ` ${name}` : "";
-  const variants = [
-    `hey${n}, it's maya. really glad you signed up. i'm going through your posts now, give me a few minutes`,
-    `hi${n}, maya here. so glad you're here. i'm reading through your posts now, back in a few minutes`,
-    `hey${n}! it's maya. i'm going through your posts now to see what's landing for you, give me a few minutes`,
-  ];
+  const variants = [`hey${n}! it's Maya 👋`, `hi${n}, it's Maya!`, `hey${n}, Maya here 👋`];
   return variants[[...seed].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7) % variants.length];
 }
 
 /** Pure: is her greeting fit to send? A name we know must be in it; nothing else may be invented. */
 export function greetingOk(text: string, name: string | null): boolean {
   const t = text.trim();
-  if (t.length < 25 || t.length > 200 || /\n/.test(t)) return false;
-  if (/[?—–]/.test(t) || /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(t)) return false;
+  if (t.length < 8 || t.length > 90 || /\n/.test(t)) return false;
+  if (/[?—–]/.test(t) || (t.match(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu) ?? []).length > 1) return false;
   if ((t.match(/!/g) ?? []).length > 1) return false;
-  if (!/\bmaya\b/i.test(t) || !/\b(posts?|page|feed|content)\b/i.test(t)) return false;
+  if (!/\bmaya\b/i.test(t)) return false;
   if (/\b(ai|assistant|bot|app|tiktok|instagram|openrouter|gemini)\b/i.test(t)) return false;
   if (/https?:|@|\d/.test(t)) return false;
   if (name && !new RegExp(`\\b${name}\\b`, "i").test(t)) return false;
@@ -50,9 +43,9 @@ export function greetingOk(text: string, name: string | null): boolean {
   return true;
 }
 
-/** Pure: the three texts, in order. */
-export function helloParts(greeting: string, partnerships: boolean): string[] {
-  return [greeting.trim(), SAVE_CONTACT, `while i do, ${openingQuestionFor(partnerships)}`];
+/** Pure: her intro, four short texts in order. `readDone` when her read already happened (they paired late). */
+export function helloParts(greeting: string, partnerships: boolean, readDone = false): string[] {
+  return [greeting.trim(), ...introBody(partnerships, readDone), saveContactLine()];
 }
 
 export const inputs = internalQuery({
@@ -101,7 +94,7 @@ export const send = internalAction({
     }
     const text = r?.ok ? r.content.trim().replace(/^["“]|["”]$/g, "") : "";
     if (text && greetingOk(text, i.name)) { greeting = text; fromModel = true; }
-    const res = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "imessage", body: helloParts(greeting, i.partnerships).join("\n---\n"), dedupeKey: `hello:${a.creatorId}`, proactive: true, kind: "status", awaitingAnswer: true });
+    const res = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "imessage", body: helloParts(greeting, i.partnerships).join("\n---\n"), dedupeKey: `hello:${a.creatorId}`, proactive: true, kind: "hello", awaitingAnswer: false });
     return { sent: res.sent, reason: res.sent ? "sent" : res.held ?? "already said hello", greeting, fromModel };
   },
 });

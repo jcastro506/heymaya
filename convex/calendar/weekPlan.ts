@@ -7,6 +7,8 @@
  * model asked to restate five times gets one wrong. Her voice is in the framing line only.
  */
 
+import { APP_LINE } from "../onboarding/conversation";
+import { pausedByThem } from "../core/paused";
 import { deviceBusyOf } from "./device";
 import { v } from "convex/values";
 import { HOURLY_SPREAD_MS, spreadDelays } from "../core/fanout";
@@ -113,7 +115,7 @@ export function weekLabel(slots: Slot[], now: number, tz: string, restOfWeek: bo
   return daysOut <= (7 - weekday) % 7 ? "this week" : "next week";
 }
 
-export function composeWeek(slots: Slot[], tz: string, fromHistory: boolean, label = "next week", opener?: string): string {
+export function composeWeek(slots: Slot[], tz: string, fromHistory: boolean, label = "next week", opener?: string, first = false): string {
   const lines = slots.map((s) => {
     const day = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(s.film.start).toLowerCase();
     const t = (e: number) => new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(e).toLowerCase().replace(":00", "");
@@ -128,7 +130,7 @@ export function composeWeek(slots: Slot[], tz: string, fromHistory: boolean, lab
   return [
     ...(opener ? [opener] : []),
     `${label}, ${slots.length} post${slots.length === 1 ? "" : "s"}:\n\n${lines.join("\n\n")}`,
-    `${basis} say the word and i'll put them on your calendar and check in before each one. tell me if any should move.`,
+    `${basis} say the word and i'll put them on your calendar and check in before each one. tell me if any should move.${first ? ` ${APP_LINE}` : ""}`,
   ].join("\n---\n");
 }
 
@@ -146,7 +148,8 @@ export const draft = internalAction({
     if (!g) return { sent: false, reason: "creator not found" };
     // Paired and on a live plan; the daily cap does not apply to the week's one message.
     if (!g.creator.channel.paired) return { sent: false, reason: "not paired" };
-    if (["paused", "canceled", "deleting"].includes(g.creator.plan.status)) return { sent: false, reason: `plan is ${g.creator.plan.status}` };
+    if (pausedByThem(g.creator)) return { sent: false, reason: "they asked her to stop texting first" };
+    if (["canceled", "deleting"].includes(g.creator.plan.status)) return { sent: false, reason: `plan is ${g.creator.plan.status}` };
     // Night (2026-10-01): a plan held at send used to be written anyway and never sent. It waits for
     // morning whole; the first ideas are already in their app.
     const quiet = await ctx.runQuery(internal.core.messages.quietNow, { creatorId: a.creatorId, now });
@@ -176,7 +179,7 @@ export const draft = internalAction({
     if (slots.length === 0) return { sent: false, reason: "no free time found in the week" };
     const planKey = planKeyFor(now, inp.timezone);
     await ctx.runMutation(internal.calendar.weekPlan.write, { creatorId: a.creatorId, planKey, slots });
-    const body = composeWeek(slots, inp.timezone, inp.model.hours.length > 0, weekLabel(slots, now, inp.timezone, restOfWeek), a.opener);
+    const body = composeWeek(slots, inp.timezone, inp.model.hours.length > 0, weekLabel(slots, now, inp.timezone, restOfWeek), a.opener, a.horizon === "first");
     if (a.horizon === "first") await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: a.creatorId, step: "first_plan" });
     // One question for the whole week: this IS the open question, and it supersedes any other.
     await ctx.runMutation(internal.core.messages.closeOpen, { creatorId: a.creatorId });

@@ -19,7 +19,6 @@ import { deliverNow } from "../core/scheduler";
 import { critique, tooLong } from "../agent/critic";
 import { laneQuestion, proposeLane, readLane } from "./lane";
 import { READ_SETTLE_MS } from "../scout/gate";
-import { openingQuestionFor } from "./conversation";
 import { partnershipsOpen } from "../partnerships/store";
 
 /** The rest-of-week plan follows first contact by this much: long enough to tap the lane, short enough to feel like the same conversation. */
@@ -226,18 +225,7 @@ export const run = internalAction({
         : {}),
       produced: producedStamp(spec.primary),
     });
-    // Orientation comes first, then proof, then one clear goal question. Keeping the
-    // question in its own deduped message prevents it from being buried in a long read.
-    // The hello asks it already (2026-10-01) whenever she said hello before the read.
-    if (!saidHello) await ctx.runMutation(internal.core.messages.send, {
-      creatorId: creator._id,
-      surface: creator.channel.kind ?? "imessage",
-      body: openingQuestionFor(partnershipsOpen(creator)),
-      dedupeKey: `onboarding_goal:${creator._id}`,
-      proactive: true,
-      kind: "status",
-      awaitingAnswer: true,
-    });
+    // No goal question after the read any more (operator, 2026-10-09): her intro says what she does; what they want comes out in conversation.
     await deliverNow(ctx as never);
       await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: args.creatorId, step: "first_read" });
       // Day one is a working day (plan 4f addendum): the rest of this week follows the read,

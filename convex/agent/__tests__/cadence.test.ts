@@ -130,13 +130,14 @@ describe("the human cadence: rows and rails, on the fake model", () => {
     // Quiet hours on their clock.
     expect((await t.action(internal.agent.cadence.morning, { creatorId, now: Date.UTC(2026, 8, 8, 5) })).reason).toMatch(/quiet/);
     // The cap: three proactive already today.
-    for (let i = 0; i < THRESHOLDS.dailyMessageCap; i++) await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: `idea ${i}`, dedupeKey: `d:${i}`, proactive: true, kind: "scout", ts: NOW - 60_000 });
+    // Rows written directly: send itself now holds a second idea in a day (core/reachOut).
+    for (let i = 0; i < THRESHOLDS.dailyMessageCap; i++) await t.run((ctx) => ctx.db.insert("messages", { creatorId, direction: "out", surface: "telegram", body: `idea ${i}`, dedupeKey: `d:${i}`, proactive: true, kind: "scout", ts: NOW - 60_000 } as never));
     expect((await t.action(internal.agent.cadence.morning, { creatorId, now: NOW })).reason).toMatch(/cap/);
     expect((await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.kind === "morning").length).toBe(0);
     // A paused plan.
     const paused = await t.run((ctx) => seedCreator(ctx, "p", { timezone: "UTC", channel: { paired: true }, plan: { status: "paused", founding: true } }));
     await block(t, paused, { start: NOW + 9 * H, end: NOW + 10 * H });
-    expect((await t.action(internal.agent.cadence.morning, { creatorId: paused, now: NOW })).reason).toMatch(/paused/);
+    expect((await t.action(internal.agent.cadence.morning, { creatorId: paused, now: NOW })).reason).toMatch(/stop texting first/);
   });
 
   it("B's block never produces A's line (cross-tenant)", async () => {
@@ -210,14 +211,14 @@ describe("the human cadence: rows and rails, on the fake model", () => {
     const t = convexTest(schema, modules);
     const creatorId = await seed(t);
     for (let i = 1; i <= 3; i++) {
-      const r = await t.action(internal.agent.cadence.forYou, { creatorId, postId: `fy${i}`, url: `https://www.tiktok.com/@x/video/${i}`, line: `saw this and thought of you, ${i}`, now: NOW + i * 60_000 });
+      const r = await t.action(internal.agent.cadence.forYou, { creatorId, postId: `fy${i}`, url: `https://www.tiktok.com/@x/video/${i}`, line: `saw this and thought of you, ${i}`, now: NOW + i * D });
       expect(r.sent, `share ${i}: ${r.reason}`).toBe(i <= THRESHOLDS.forYouPerWeek);
     }
     const shares = (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.kind === "for_you");
     expect(shares.length).toBe(2);
     expect(shares[0].body).toContain("https://www.tiktok.com/@x/video/1");
     expect(shares[0].awaitingAnswer).toBeFalsy();
-    expect((await t.action(internal.agent.cadence.forYou, { creatorId, postId: "fy1", url: "https://t/1", line: "again", now: NOW + 8 * D })).reason, "the same post is never shared twice").toBe("already shared");
+    expect((await t.action(internal.agent.cadence.forYou, { creatorId, postId: "fy1", url: "https://t/1", line: "again", now: NOW + 12 * D })).reason, "the same post is never shared twice").toBe("already shared");
   });
 
   it("the hourly finds who is at 8 and who is at 18 on their own clock", async () => {

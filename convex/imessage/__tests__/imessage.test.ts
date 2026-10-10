@@ -167,7 +167,7 @@ describe("her number: rows and doors, on the fake vendor", () => {
 
   it("a phone belongs to one creator: pairing it to B moves it off A and marks A broken (cross-tenant)", async () => {
     const t = convexTest(schema, modules);
-    const a = await t.run((ctx) => seedCreator(ctx, "a", { phone: PHONE, channel: { paired: true, kind: "imessage", pairedAt: NOW } }));
+    const a = await t.run((ctx) => seedCreator(ctx, "a", { phone: PHONE, channel: { paired: true, kind: "imessage", pairedAt: NOW - 10 * 86_400_000 } }));
     const b = await t.run((ctx) => seedCreator(ctx, "b", { channel: { paired: false, kind: "imessage" } }));
     const rowB = await t.run((ctx) => ctx.db.get(b));
     const minted = await t.run(async (ctx) => { const { mintPairing } = await import("../../core/pairing"); return await mintPairing(ctx, rowB!); });
@@ -189,7 +189,7 @@ describe("her number: rows and doors, on the fake vendor", () => {
 
   it("a text is a turn; a number is a tap when there is a live menu and text when there is not; a replay is dropped", async () => {
     const t = convexTest(schema, modules);
-    const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { phone: PHONE, channel: { paired: true, kind: "imessage", pairedAt: NOW } }));
+    const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { phone: PHONE, channel: { paired: true, kind: "imessage", pairedAt: NOW - 10 * 86_400_000 } }));
     const one = await t.action(internal.core.imessage.handleText, { from: PHONE, text: "1", channelMessageId: "v6" });
     expect(one.ok).toBe(true);
     let rows = await t.run((ctx) => ctx.db.query("messages").collect());
@@ -216,7 +216,7 @@ describe("her number: rows and doors, on the fake vendor", () => {
   it("a tapback on an idea is a taste event; an unknown tapback, or one on a message we cannot find, breaks nothing", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const t = convexTest(schema, modules);
-    const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { phone: PHONE, channel: { paired: true, kind: "imessage", pairedAt: NOW } }));
+    const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { phone: PHONE, channel: { paired: true, kind: "imessage", pairedAt: NOW - 10 * 86_400_000 } }));
     const ideaId = await t.run((ctx) => ctx.db.insert("ideas", { creatorId, evidenceLinks: [], fit: "yes", fitWhy: "x", version: { hook: "h" }, messageText: "m", produced: { skillVersion: "t", model: "m", thresholdsVersion: "t" }, sentAt: NOW, status: "sent", createdAt: NOW } as never));
     const { messageId: sentId } = await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: "an idea", dedupeKey: "idea:2", proactive: true, kind: "scout" });
     const messageId = sentId!;
@@ -244,7 +244,7 @@ describe("her number: rows and doors, on the fake vendor", () => {
 
   it("delivery: the menu line rides on the last text; no key is a named failure on the row (fail-closed)", async () => {
     const t = convexTest(schema, modules);
-    const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { phone: PHONE, channel: { paired: true, kind: "imessage", pairedAt: NOW } }));
+    const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { phone: PHONE, channel: { paired: true, kind: "imessage", pairedAt: NOW - 10 * 86_400_000 } }));
     const { messageId: sentId } = await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: "first\n---\nsecond", dedupeKey: "d:1", proactive: false, kind: "reply", buttons: [{ id: "idea:x:save", label: "save" }] });
     const messageId = sentId!;
     const r = await t.action(internal.core.telegram.deliverMessage, { messageId });
@@ -262,7 +262,7 @@ describe("her number: rows and doors, on the fake vendor", () => {
 
   it("a creator without a number still goes to Telegram: nothing existing changes", async () => {
     const t = convexTest(schema, modules);
-    const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { channel: { paired: true, pairedAt: NOW }, telegramChatId: "42" }));
+    const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { channel: { paired: true, pairedAt: NOW - 10 * 86_400_000 }, telegramChatId: "42" }));
     const { messageId: sentId } = await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: "hi", dedupeKey: "t:1", proactive: false, kind: "reply" });
     const messageId = sentId!;
     expect((await t.run((ctx) => ctx.db.get(messageId)))?.surface).toBe("telegram");

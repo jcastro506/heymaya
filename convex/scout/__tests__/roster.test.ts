@@ -97,26 +97,19 @@ describe("roster candidates", () => {
 });
 
 describe("the offer", () => {
-  it("asks once, with buttons, and never twice about the same account", async () => {
+  it("adds a recurring account quietly while the roster is short: no text, never twice (2026-10-09)", async () => {
     const { t, creatorId } = await laneWith([
       { handle: "leahruns", day: 1, views: 40_000 },
       { handle: "leahruns", day: 3, views: 60_000 },
     ]);
     const first = await t.action(internal.scout.roster.offer, { creatorId, now: NOW });
     expect(first.offered).toBe("leahruns");
-
-    const out = (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out");
-    expect(out).toHaveLength(1);
-    expect(out[0].buttons?.map((b) => b.id)).toEqual(["roster:tiktok:leahruns:yes", "roster:tiktok:leahruns:no"]);
-    // An optional offer must not hold the day's one open-question slot; an idea outranks it.
-    expect(out[0].awaitingAnswer).toBe(false);
-
-    // Never twice: the dedupe key writes nothing, and the offer must say so rather than
-    // reporting a send that did not happen.
+    expect((await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out"), "no text about it").toHaveLength(0);
+    const tracked = await t.run((ctx) => ctx.db.query("trackedAccounts").collect());
+    expect(tracked.filter((x) => x.creatorId === creatorId).map((x) => x.handle)).toEqual(["leahruns"]);
     const second = await t.action(internal.scout.roster.offer, { creatorId, now: NOW + 60_000 });
     expect(second.offered).toBeNull();
-    expect(second.reason).toMatch(/already asked/);
-    expect((await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out")).toHaveLength(1);
+    expect((await t.run((ctx) => ctx.db.query("trackedAccounts").collect())).filter((x) => x.creatorId === creatorId)).toHaveLength(1);
   });
 
   it("their yes puts the account on the list", async () => {

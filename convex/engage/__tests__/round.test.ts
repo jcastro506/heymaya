@@ -123,7 +123,7 @@ describe("her text, and never the same post twice", () => {
     if (wroteAt !== null) await t.run((ctx) => ctx.db.insert("messages", { creatorId: c, direction: "in", surface: "imessage", kind: "inbound", body: "ok", ts: wroteAt } as never));
     return c;
   }
-  const texts = async (t: ReturnType<typeof convexTest>, c: Id<"creators">) => (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.creatorId === c && m.kind === "engage");
+  const texts = async (t: ReturnType<typeof convexTest>, c: Id<"creators">) => (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.creatorId === c && m.kind === "routine");
 
   it("the text is an opener and each post with its link; the opener rotates by day; code writes it", () => {
     const items = pickRound([post("one", "1", 2, 4, { caption: "my honest taper week, day by day and why i hate it" }), post("two", "2", 3, 5, { caption: null })], NOW);
@@ -137,14 +137,14 @@ describe("her text, and never the same post twice", () => {
     expect(new Set(["2026-09-30", "2026-10-01", "2026-10-02"].map((d) => engageText(items, d).body.split("\n---\n")[0])).size).toBeGreaterThan(1);
   });
 
-  it("sends up to three, once a day, counted toward the daily cap; tomorrow's text has none of today's posts", async () => {
+  it("sends up to three, once a day, as the routine they asked for; tomorrow's text has none of today's posts", async () => {
     const t = convexTest(schema, modules);
     const c = await paired(t, "t1");
     for (const [h, id] of [["one", "a"], ["two", "b"], ["three", "c"], ["four", "d"]] as const) await produced(t, h, id, NOW);
-    expect(await t.action(internal.engage.round.sendText, { creatorId: c, now: NOW })).toEqual({ sent: true, reason: "sent" });
-    expect((await t.action(internal.engage.round.sendText, { creatorId: c, now: NOW + H })).sent, "once a day").toBe(false);
+    expect(await t.action(internal.engage.round.sendText, { asked: true, creatorId: c, now: NOW })).toEqual({ sent: true, reason: "sent" });
+    expect((await t.action(internal.engage.round.sendText, { asked: true, creatorId: c, now: NOW + H })).sent, "once a day").toBe(false);
     const [first] = await texts(t, c);
-    expect(first).toMatchObject({ kind: "engage", proactive: true, criticSkipped: true });
+    expect(first).toMatchObject({ kind: "routine", proactive: true, criticSkipped: true });
     expect(first.links).toHaveLength(ENGAGE.textShow);
     const state = (await t.run((ctx) => ctx.db.get(c)))!.engage!;
     expect(state.sent).toHaveLength(3);
@@ -152,36 +152,36 @@ describe("her text, and never the same post twice", () => {
     // The next day (they wrote again): one left over from yesterday plus one new post is two, and none of the three already sent.
     await t.run((ctx) => ctx.db.insert("messages", { creatorId: c, direction: "in", surface: "imessage", kind: "inbound", body: "thanks", ts: NOW + D - 2 * H } as never));
     await produced(t, "one", "e", NOW + D);
-    expect(await t.action(internal.engage.round.sendText, { creatorId: c, now: NOW + D })).toEqual({ sent: true, reason: "sent" });
+    expect(await t.action(internal.engage.round.sendText, { asked: true, creatorId: c, now: NOW + D })).toEqual({ sent: true, reason: "sent" });
     const second = (await texts(t, c)).sort((x, y) => x.ts - y.ts)[1];
     for (const url of first.links ?? []) expect(second.body).not.toContain(url);
     expect(second.links).toHaveLength(2);
     // And then there is nothing she hasn't sent: she says nothing.
     await t.run((ctx) => ctx.db.insert("messages", { creatorId: c, direction: "in", surface: "imessage", kind: "inbound", body: "k", ts: NOW + 2 * D - 2 * H } as never));
-    expect(await t.action(internal.engage.round.sendText, { creatorId: c, now: NOW + 2 * D })).toEqual({ sent: false, reason: "fewer than two fresh posts she hasn't sent" });
+    expect(await t.action(internal.engage.round.sendText, { asked: true, creatorId: c, now: NOW + 2 * D })).toEqual({ sent: false, reason: "fewer than two fresh posts she hasn't sent" });
   });
 
-  it("holds: unpaired, already on it today, quiet hours, the weekly cap", async () => {
+  it("holds: unpaired, already on it today, quiet hours, not asked for", async () => {
     const t = convexTest(schema, modules);
     const lone = await paired(t, "t2", { channel: { paired: false } });
     for (const [h, id] of [["one", "a"], ["two", "b"], ["three", "c"]] as const) await produced(t, h, id, NOW);
-    expect((await t.action(internal.engage.round.sendText, { creatorId: lone, now: NOW })).reason).toBe("not paired");
+    expect((await t.action(internal.engage.round.sendText, { asked: true, creatorId: lone, now: NOW })).reason).toBe("not paired");
 
     const busy = await paired(t, "t3");
     const me = t.withIdentity({ subject: (await t.run((ctx) => ctx.db.get(busy)))!.clerkUserId });
     await me.mutation(api.engage.round.markDone, { platform: "tiktok", postId: "a", handle: "one" });
     // markDone stamps the real day; ask at the real now so "today" matches.
-    expect((await t.action(internal.engage.round.sendText, { creatorId: busy })).reason).toMatch(/already on it today|quiet|fewer than two/);
+    expect((await t.action(internal.engage.round.sendText, { asked: true, creatorId: busy })).reason).toMatch(/already on it today|quiet|fewer than two/);
 
     const night = await paired(t, "t4");
     const at3am = Date.UTC(2026, 8, 30, 3, 0);
     for (const [h, id] of [["one", "n1"], ["two", "n2"]] as const) await produced(t, h, id, at3am);
-    const r = await t.action(internal.engage.round.sendText, { creatorId: night, now: at3am });
+    const r = await t.action(internal.engage.round.sendText, { asked: true, creatorId: night, now: at3am });
     expect(r.sent, `quiet hours hold it: ${r.reason}`).toBe(false);
 
-    const weekly = await paired(t, "t5");
-    await t.run(async (ctx) => { for (let i = 1; i <= ENGAGE.textsPerWeek; i++) await ctx.db.insert("messages", { creatorId: weekly, direction: "out", surface: "imessage", kind: "engage", body: "x", proactive: true, ts: NOW - i * D + H } as never); });
-    expect((await t.action(internal.engage.round.sendText, { creatorId: weekly, now: NOW })).reason).toMatch(/this week already/);
+    // Never unasked (2026-10-09): without a routine they turned on, the round waits in the app.
+    const unasked = await paired(t, "t5");
+    expect((await t.action(internal.engage.round.sendText, { creatorId: unasked, now: NOW })).reason).toMatch(/only as a routine/);
   });
 
   it("a post they commented on never comes back, in the app or in a text", async () => {
@@ -199,69 +199,21 @@ describe("her text, and never the same post twice", () => {
     expect(f!.items.map((i) => i.postId)).not.toContain("a");
   });
 
-  it("is on the hourly cadence at midday their time, and its kind counts toward the daily cap", async () => {
+  it("is not an hourly touch any more: it goes out only as a routine (2026-10-09)", async () => {
     const src = readFileSync(new URL("../../agent/cadence.ts", import.meta.url), "utf8");
-    expect(src).toMatch(/hour === ENGAGE\.textHourLocal\) out\.push\(\{ creatorId: c\.creatorId, touch: "engage" \}\)/);
-    expect(src).toMatch(/d\.touch === "engage" \? internal\.engage\.round\.sendText/);
-    const { countsTowardCap } = await import("../../core/messages");
-    expect(countsTowardCap({ direction: "out", proactive: true, kind: "engage" } as never)).toBe(true);
+    expect(src).not.toMatch(/touch: "engage" \}\)/);
+    const { laneFor } = await import("../../core/reachOut");
+    expect(laneFor("routine", null)).toBe("asked");
   });
 });
 
-describe("the back-off: the text only goes into a live conversation", () => {
+describe("asked for means it goes (2026-10-09)", () => {
   const D = 24 * H;
-  it("someone who hasn't written in two days gets the round in the app, not a text; writing again brings it back", async () => {
+  it("someone who asked for the picks gets them even on a day they haven't written", async () => {
     const t = convexTest(schema, modules);
     const c = await t.run((ctx) => seedCreator(ctx, "bo1", { timezone: "UTC", channel: { paired: true, pairedAt: NOW - 30 * D, kind: "imessage" }, plan: { status: "active", founding: true } }));
     await t.run(async (ctx) => { for (const h of ["one", "two"]) await addTracked(ctx as never, c, "tiktok", h, [], { addedBy: "creator" }); });
     for (const [h, id] of [["one", "a"], ["two", "b"]] as const) await t.run((ctx) => ctx.db.insert("observations", { platform: "tiktok", postId: id, authorHandle: h, url: `https://www.tiktok.com/@${h}/video/${id}`, createTime: NOW - 2 * H, sampledAt: NOW, ageHours: 2, views: 900, likes: 1, comments: 1, shares: 0, keywords: [], source: "account.posts" } as never));
-    expect(await t.action(internal.engage.round.sendText, { creatorId: c, now: NOW })).toEqual({ sent: false, reason: "they haven't written lately; the round waits in the app" });
-    await t.run((ctx) => ctx.db.insert("messages", { creatorId: c, direction: "in", surface: "imessage", kind: "inbound", body: "old", ts: NOW - 3 * D } as never));
-    expect((await t.action(internal.engage.round.sendText, { creatorId: c, now: NOW })).reason).toMatch(/haven't written lately/);
-    await t.run((ctx) => ctx.db.insert("messages", { creatorId: c, direction: "in", surface: "imessage", kind: "inbound", body: "hey", ts: NOW - 5 * H } as never));
-    expect(await t.action(internal.engage.round.sendText, { creatorId: c, now: NOW })).toEqual({ sent: true, reason: "sent" });
-  });
-});
-
-describe("new to you, from her lane sweep", () => {
-  const lanePost = (handle: string, id: string, hoursAgo: number, comments = 3): RoundPost => ({ ...post(handle, id, hoursAgo, comments), fromLane: true });
-  it("mixes: their accounts first, at most the lane quota, more lane only when theirs run short", () => {
-    const watched = [post("a", "1", 2, 1), post("b", "2", 3, 1), post("c", "3", 4, 1), post("d", "4", 5, 1)];
-    const lane = [lanePost("x", "10", 1), lanePost("y", "11", 2), lanePost("z", "12", 3)];
-    const full = mixRound(watched, lane, NOW, new Set(), 5, 2);
-    expect(full.map((i) => i.postId)).toEqual(["1", "2", "3", "10", "11"]);
-    expect(full.filter((i) => i.fromLane).length).toBe(2);
-    expect(full.find((i) => i.fromLane)!.why).toMatch(/^new to you, in your lane: /);
-    const short = mixRound([post("a", "1", 2, 1)], lane, NOW, new Set(), 5, 2);
-    expect(short.map((i) => i.postId), "one of theirs, lane fills the rest").toEqual(["1", "10", "11", "12"]);
-    expect(mixRound(watched, lane, NOW, new Set(), 3, 1).filter((i) => i.fromLane)).toHaveLength(1);
-    expect(mixRound(watched, [], NOW, new Set(), 5, 2).map((i) => i.postId)).toEqual(["1", "2", "3", "4"]);
-    expect(mixRound([], lane, NOW, new Set(["tiktok:10"]), 5, 2).map((i) => i.postId), "the never-again memory applies to lane finds too").toEqual(["11", "12"]);
-  });
-  it("repost and meme pages are nobody to build a relationship with", () => {
-    for (const h of ["dailymemes", "fyp.clips", "runningreposts", "viralrunning", "funnyvideos"]) expect(looksLikeAggregator(h), h).toBe(true);
-    for (const h of ["hillsforbreakfast", "slowmilesclub", "cam.luyckx"]) expect(looksLikeAggregator(h), h).toBe(false);
-  });
-  it("on rows: only sweep posts for THEIR keywords, not from accounts they watch or from them, labelled in the text", async () => {
-    const t = convexTest(schema, modules);
-    const c = await t.run((ctx) => seedCreator(ctx, "ln1", { timezone: "UTC", handles: { tiktok: "me_runs" }, dossier: { keywords: ["marathon training", "running tips"] } }));
-    await t.run((ctx) => addTracked(ctx as never, c, "tiktok", "one", [], { addedBy: "creator" }));
-    const obs = (handle: string, id: string, keyword: string, source = "search.tiktok") => t.run((ctx) => ctx.db.insert("observations", { platform: "tiktok", postId: id, authorHandle: handle, url: `https://www.tiktok.com/@${handle}/video/${id}`, createTime: Date.now() - 3 * H, sampledAt: Date.now(), ageHours: 3, views: 40000, likes: 1, comments: 5, shares: 0, keywords: [keyword], source, caption: `${keyword} post` } as never));
-    await obs("newrunner", "L1", "marathon training");
-    await obs("otherlane", "L2", "sourdough");            // not their lane
-    await obs("one", "L3", "marathon training");          // they already watch this account
-    await obs("me_runs", "L4", "running tips");           // it's them
-    await obs("runningmemes", "L5", "running tips");      // an aggregator
-    await obs("one", "W1", "", "account.posts");          // their watched account's own post
-    const me = t.withIdentity({ subject: (await t.run((ctx) => ctx.db.get(c)))!.clerkUserId });
-    const r = (await me.query(api.engage.round.today, {}))!;
-    // L3 is by an account they already watch (the sweep found it too): it's theirs, not "new to you".
-    expect(r.items.map((i) => [i.postId, i.fromLane ?? false])).toEqual([["W1", false], ["L3", false], ["L1", true]]);
-    expect(engageText(r.items, "2026-09-30").body).toMatch(/@newrunner \(new to you\): marathon training post/);
-    // Someone with no profile keywords gets no lane finds.
-    const bare = await t.run((ctx) => seedCreator(ctx, "ln2", { timezone: "UTC" }));
-    await t.run((ctx) => addTracked(ctx as never, bare, "tiktok", "one", [], { addedBy: "creator" }));
-    const r2 = (await t.withIdentity({ subject: (await t.run((ctx) => ctx.db.get(bare)))!.clerkUserId }).query(api.engage.round.today, {}))!;
-    expect(r2.items.every((i) => !i.fromLane)).toBe(true);
+    expect(await t.action(internal.engage.round.sendText, { asked: true, creatorId: c, now: NOW })).toEqual({ sent: true, reason: "sent" });
   });
 });

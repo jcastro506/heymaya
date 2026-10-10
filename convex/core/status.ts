@@ -1,9 +1,8 @@
 /**
- * Creator-facing status (plan §7 S3 "Status" messages, §6 Sprint 3 edge cases): when
- * her own machinery let them down, she says so once, plainly, and never blames them.
- * "behind today" when her proactive work died and nothing reached them for hours;
- * "couldn't see TikTok today" when every read for their lane failed. One per kind per
- * day; status messages do not count against the daily cap (the gate ignores `status`).
+ * Her own machinery's bad days (plan §7 S3): "behind" when her proactive work died and nothing reached
+ * them for hours; "cannot_see" when every read for their lane failed. Found once per kind per day and
+ * logged for the operator. Never texted since 2026-10-09 (docs/CREATOR_REACH_OUT.md): a friend doesn't
+ * announce a slow day.
  */
 
 import { v } from "convex/values";
@@ -13,9 +12,6 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { dayKeyInZone } from "./cadence";
 import { localHourMinute } from "../scout/gate";
 import { pairedRows } from "./schedule";
-
-export const BEHIND = "behind today: my read on your lane didn't go through on my side. nothing you did. back on it, and i'll text when there's something worth it.";
-export const CANNOT_SEE = "heads up: i couldn't see tiktok properly today, so if i'm quiet that's why, not because nothing happened. trying again through the day.";
 
 export const dueStatus = internalQuery({
   args: { now: v.number() },
@@ -53,9 +49,11 @@ export const run = internalAction({
   handler: async (ctx): Promise<{ sent: number }> => {
     const due = await ctx.runQuery(internal.core.status.dueStatus, { now: Date.now() });
     let sent = 0;
+    // Never texted (2026-10-09, docs/CREATOR_REACH_OUT.md): a friend doesn't announce a slow day, and this
+    // went out as a non-proactive text past every rail. The operator sees it; the creator sees her next good text.
     for (const d of due) {
-      const { messageId } = await ctx.runMutation(internal.core.messages.send, { creatorId: d.creatorId, surface: "telegram", body: d.kind === "behind" ? BEHIND : CANNOT_SEE, dedupeKey: `status:${d.kind}:${d.day}`, proactive: false, kind: "status" });
-      if (messageId) sent++;
+      console.warn(`[status] ${d.kind} for ${d.creatorId} on ${d.day} (not texted)`);
+      sent++;
     }
     return { sent };
   },

@@ -128,7 +128,7 @@ export function roughViews(n: number): string {
   return `around ${Math.max(10, Math.round(n / 10) * 10)} views`;
 }
 
-/** Offer one account, to one creator, with a button. Silent when there is nothing worth asking. */
+/** One account onto a short roster, quietly (no text since 2026-10-09). Nothing when the roster is healthy. */
 export const offer = internalAction({
   args: { creatorId: v.id("creators"), now: v.optional(v.number()) },
   handler: async (ctx, a): Promise<{ offered: string | null; reason: string }> => {
@@ -145,31 +145,12 @@ export const offer = internalAction({
     const pick = tracked < ROSTER.thin ? candidates[0] : candidates.find((c) => c.days >= 3) ?? null;
     if (!pick) return { offered: null, reason: `roster is healthy (${tracked}) and nobody stands out` };
 
-    const sent = await ctx.runMutation(internal.core.messages.send, {
-      creatorId: a.creatorId,
-      surface: "telegram",
-      body: `@${pick.handle} keeps showing up in the stuff like yours on ${pick.platform === "instagram" ? "Instagram" : "TikTok"}, ${roughViews(pick.medianViews)} a post. want me to keep an eye on them for ideas?`,
-      // One ask per account, ever. §27: per platform, since the same handle elsewhere is someone else.
-      dedupeKey: `roster:${pick.platform}:${pick.handle}`,
-      proactive: true,
-      kind: "status",
-      /**
-       * ⚠️ NOT an open question. "At most one open question" exists so the creator is never
-       * holding two pending decisions, and an optional offer is not a pending decision: if
-       * they never tap it, nothing is lost, and the dedupe key means it is asked once. It
-       * held the slot until 2026-09-04, which blocked the next offer behind an unanswered
-       * idea and inverted the priority — the idea matters, this does not.
-       */
-      awaitingAnswer: false,
-      buttons: [{ id: `roster:${pick.platform}:${pick.handle}:yes`, label: "watch them" }, { id: `roster:${pick.platform}:${pick.handle}:no`, label: "no" }],
-    });
-    /**
-     * The dedupe key means asking twice writes nothing, so trust `sent` rather than the
-     * fact that we called send. Reporting an offer that was silently deduped made the
-     * caller's count a lie.
-     */
-    if (!sent.sent) return { offered: null, reason: `already asked about @${pick.handle}` };
-    return { offered: pick.handle, reason: `seen on ${pick.days} days` };
+    // Added quietly while their list is short (2026-10-09, docs/CREATOR_REACH_OUT.md): "want me to watch
+    // @x?" was a text about her plumbing. They see who she watches in the app and can drop anyone.
+    if (tracked >= ROSTER.thin) return { offered: null, reason: `roster is healthy (${tracked}); not adding on her own` };
+    const r = await ctx.runMutation(internal.scout.roster.accept, { creatorId: a.creatorId, handle: pick.handle, platform: pick.platform });
+    if (!r.ok) return { offered: null, reason: r.error ?? `couldn't add @${pick.handle}` };
+    return { offered: pick.handle, reason: `added quietly, seen on ${pick.days} days` };
   },
 });
 

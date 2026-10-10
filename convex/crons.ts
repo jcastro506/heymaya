@@ -81,6 +81,8 @@ crons.daily("zernio followers", { hourUTC: 4, minuteUTC: 40 }, internal.connecti
 // pass over the stalest creators not read in 20 h, bounded, so each connected account is read ~daily.
 crons.hourly("account insights", { minuteUTC: 45 }, internal.core.timedJobs.run, { job: "account insights" });
 // §24 the human cadence: the morning line and the quiet line on their clock, the evening question in its window. Every hour.
+// What they asked for on a schedule (core/routines, 2026-10-09): never over her budget, still inside quiet hours and pause.
+crons.hourly("routines", { minuteUTC: 2 }, internal.core.routines.runAll, {});
 crons.hourly("human cadence", { minuteUTC: 55 }, internal.core.timedJobs.run, { job: "human cadence" });
 
 crons.daily("cost reconcile", { hourUTC: 23, minuteUTC: 30 }, internal.core.reconcile.run, {});

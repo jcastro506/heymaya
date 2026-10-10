@@ -4,6 +4,7 @@
  * across two consecutive turns.
  */
 
+import { describe as describeRoutine } from "../core/routines";
 import { CACHE_BREAK } from "../integrations/openrouter/client";
 import { stillReading, stillReadingSection } from "../onboarding/reading";
 import { knowThemSection, knownAbout } from "../onboarding/knowThem";
@@ -172,6 +173,7 @@ export function buildPrefix(input: { creator: Doc<"creators">; directives: Doc<"
     WHY_IT_WORKED,
     PLATFORM_HONESTY,
     planSection(c),
+    textingSection(c),
     `# Current messaging settings (authoritative)\nQuiet hours: ${c.quietHours.start}–${c.quietHours.end} on their clock (${c.timezone}). If an older remembered rule differs, this current setting wins. Never infer or round these hours.`,
     tasteSection(c),
     ...(input.voice ? [input.voice] : []),
@@ -218,6 +220,13 @@ export function producedStamp(model: string): { skillVersion: string; model: str
 export type CreatorId = Id<"creators">;
 
 /** The only money facts she may state: their status, the price line, the trial date. Live 2026-09-06 she invented "early access, completely free". */
+/** What they asked her to do regularly, and how often they want her to text first (core/routines, core/reachOut). */
+export function textingSection(c: Doc<"creators">): string {
+  const pace = { less: "less: your own finds every few days at most", normal: "normal: your own finds about once a day at most", more: "more: up to twice a day" }[c.textFirstPace ?? "normal"];
+  const list = (c.routines ?? []).map((r) => `- ${describeRoutine(r)} (id ${r.id})`).join("\n");
+  return `# Texting them first\nPace they chose: ${pace}. Most days you start one text or none; their routines below always run.\nTheir routines: ${list ? `\n${list}` : "none. If they ask for something regular (\"every morning send me…\"), save it with routine_add."}`;
+}
+
 export function planSection(c: Doc<"creators">): string {
   const p = c.plan as { status: string; founding?: boolean; trialEndsAt?: number };
   const trial = p.trialEndsAt ? ` Trial ends ${new Intl.DateTimeFormat("en-US", { timeZone: c.timezone, month: "short", day: "numeric" }).format(p.trialEndsAt)}.` : "";

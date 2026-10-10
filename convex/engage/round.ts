@@ -208,17 +208,18 @@ export const markSent = internalMutation({
  * cap, quiet hours, pause, and the back-off when they aren't replying, inside messages.send).
  */
 export const sendText = internalAction({
-  args: { creatorId: v.id("creators"), now: v.optional(v.number()) },
+  args: { creatorId: v.id("creators"), now: v.optional(v.number()), asked: v.optional(v.boolean()) },
   handler: async (ctx, a): Promise<{ sent: boolean; reason: string }> => {
     const now = a.now ?? Date.now();
+    // Only when they asked for it, as a routine (2026-10-09, docs/CREATOR_REACH_OUT.md): an unasked list of
+    // strangers' posts was the text that got the first tester to say stop. Otherwise the round waits in the app.
+    if (!a.asked) return { sent: false, reason: "comment picks go out only as a routine they asked for" };
     const f = await ctx.runQuery(internal.engage.round.textInputs, { creatorId: a.creatorId, now });
     if (!f) return { sent: false, reason: "no creator" };
     if (!f.paired) return { sent: false, reason: "not paired" };
     if (f.doneToday > 0) return { sent: false, reason: "they're already on it today" };
     // The back-off (core/phoneRail) counts every proactive text since their last reply. Nobody replies to a
     // list of links, so this text only goes into a live conversation; otherwise the round waits in the app.
-    if (f.lastInboundAt === null || now - f.lastInboundAt > ENGAGE.textOnlyIfWroteWithinMs) return { sent: false, reason: "they haven't written lately; the round waits in the app" };
-    if (f.textsThisWeek >= ENGAGE.textsPerWeek) return { sent: false, reason: `${f.textsThisWeek} this week already (cap ${ENGAGE.textsPerWeek})` };
     if (f.items.length < ENGAGE.textMin) return { sent: false, reason: "fewer than two fresh posts she hasn't sent" };
     const rails = await ctx.runQuery(internal.scout.gate.railsOnly, { creatorId: a.creatorId, now });
     if (!rails) return { sent: false, reason: "no creator" };
@@ -226,7 +227,7 @@ export const sendText = internalAction({
     // Each post goes out as our short link, so she learns which ones they opened (engage/links).
     const tracked = f.items.map((i) => ({ code: newCode(), key: `${i.platform}:${i.postId}`, handle: i.handle, url: i.url, fromLane: i.fromLane }));
     const { body, links } = engageText(f.items, f.day, tracked.map((l) => goUrl(l.code)));
-    const sent = (await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body, dedupeKey: `engage:${f.day}`, ts: now, proactive: true, capped: true, kind: "engage", links, criticSkipped: true, awaitingAnswer: false })) as { sent: boolean; held?: string };
+    const sent = (await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body, dedupeKey: `engage:${f.day}`, ts: now, proactive: true, kind: "routine", links, criticSkipped: true, awaitingAnswer: false })) as { sent: boolean; held?: string };
     if (!sent.sent) return { sent: false, reason: sent.held ?? "already sent today" };
     await ctx.runMutation(internal.engage.round.markSent, { creatorId: a.creatorId as Id<"creators">, keys: tracked.map((l) => l.key), now, links: tracked });
     return { sent: true, reason: "sent" };

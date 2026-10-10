@@ -38,7 +38,7 @@ export const CRITIC_TIMEOUT_MS = 15_000;
 /** Catch the distinctive self-description example even when the model swaps its noun. */
 export const reusesVoiceExample = (text: string): boolean => /\byep[,.] software\b[\s\S]{0,120}\bstill watched\b/i.test(text);
 export const assertsUnprovenCause = (text: string): boolean => /\b(worked|performed|took off) because\b|\bwhich is why\b.{0,100}\b(views|reach|followers)\b|\bthat'?s (really )?how people (find|follow)\b|\bwhat actually pulls? people in\b|\bbrands will notice\b|\bwill (do well|perform|take off)\b/i.test(text);
-const MUTATING_TOOLS = new Set(["block_move", "block_drop", "block_add", "idea_update", "idea_status", "idea_plan", "week_replan", "partnership_draft", "partnership_update", "partnership_send", "watch_account", "media_kit_link", "media_kit_edit", "kit_for_brand"]);
+const MUTATING_TOOLS = new Set(["routine_add", "routine_stop", "texting_pace", "block_move", "block_drop", "block_add", "idea_update", "idea_status", "idea_plan", "week_replan", "partnership_draft", "partnership_update", "partnership_send", "watch_account", "media_kit_link", "media_kit_edit", "kit_for_brand"]);
 /** Pure: actions that failed this turn and never succeeded later in it (the critic's failedActions). */
 export function failedActions(trace: Array<{ tool?: string; ok?: boolean; result?: unknown }>): Array<{ tool: string; error: string }> {
   return trace.flatMap((t, i) => (t.tool && t.ok === false && MUTATING_TOOLS.has(t.tool) && !trace.slice(i + 1).some((l) => l.tool === t.tool && l.ok))

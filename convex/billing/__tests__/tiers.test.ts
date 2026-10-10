@@ -15,7 +15,7 @@ import { tierFor } from "../plan";
 import { partnershipAllowance, partnershipsOpen } from "../../partnerships/store";
 import { NO_PARTNERSHIPS_LINE, PARTNER_CAN_LINE, converseSkillFor } from "../../agent/converse";
 import { helloFor } from "../../core/pairing";
-import { openingQuestionFor } from "../../onboarding/conversation";
+import { introBody } from "../../onboarding/conversation";
 import { PARTNERSHIP_SKILL } from "../../partnerships/contracts";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -89,12 +89,12 @@ describe("the tiers", () => {
     expect(converseSkillFor(true)).toContain(PARTNER_CAN_LINE);
     expect(converseSkillFor(false)).not.toContain(PARTNER_CAN_LINE);
     expect(converseSkillFor(false)).toContain("When: any message");
-    expect(openingQuestionFor(true)).toMatch(/partnerships/);
-    expect(openingQuestionFor(false)).not.toMatch(/brand/);
+    // Deals are named in her intro only for a plan that can act on them (§26).
+    expect(introBody(true).join(" ")).toMatch(/brand/);
+    expect(introBody(false).join(" ")).not.toMatch(/brand|partnership/);
     expect(helloFor(false)).not.toMatch(/brand/);
-    expect(helloFor(true)).toMatch(/partnerships/); // the hello asks the goal; deals are named only for a plan that can act on them
-    expect(helloFor(false)).not.toMatch(/partnership/);
-    expect(helloFor(false)).toMatch(/it's maya/);
+    expect(helloFor(true)).toMatch(/brand stuff/);
+    expect(helloFor(false)).toMatch(/it's Maya|Maya here/);
   });
 
   it("the belt: a duo creator never sees partnership tools; the investigate loop filters them unless told the plan allows", () => {

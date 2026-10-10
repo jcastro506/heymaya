@@ -196,11 +196,11 @@ export const followMoves = internalAction({
     let said = 0;
     for (const m of a.moved) {
       await ctx.runAction(internal.calendar.reminders.scheduleFor, { blockId: m.blockId });
-      const { sent } = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: `saw you moved ${m.title.replace(/^film: /, "filming ")} to ${when(m.to)} on your calendar. i'll follow; the check-in moves with it.`, dedupeKey: `evmove:${m.blockId}:${m.to}`, proactive: true, kind: "status" });
+      const { sent } = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: `saw you moved ${m.title.replace(/^film: /, "filming ")} to ${when(m.to)} on your calendar. i'll follow; the check-in moves with it.`, dedupeKey: `evmove:${m.blockId}:${m.to}`, proactive: true, kind: "calendar" });
       if (sent) said++;
     }
     for (const d of a.dropped) {
-      const { sent } = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: `you took ${d.title.replace(/^film: /, "filming ")} off your calendar, so it's off the plan here too. say the word if you want a new slot for it.`, dedupeKey: `evdrop:${d.blockId}`, proactive: true, kind: "status" });
+      const { sent } = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: `you took ${d.title.replace(/^film: /, "filming ")} off your calendar, so it's off the plan here too. say the word if you want a new slot for it.`, dedupeKey: `evdrop:${d.blockId}`, proactive: true, kind: "calendar" });
       if (sent) said++;
     }
     return { said };

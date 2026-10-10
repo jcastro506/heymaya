@@ -252,7 +252,7 @@ describe("re-engagement on rows", () => {
     const capped = await creator(t, "c");
     for (const c of [optedOut, paused, unpaired, night, capped]) { await inbound(t, c as never, T0); await idea(t, c as never, "a hook worth a text", T0 + 0.5 * D); }
     expect(await runAt(t, optedOut as never, 15)).toMatchObject({ sent: false, reason: expect.stringMatching(/opted out/) });
-    expect(await runAt(t, paused as never, 15)).toMatchObject({ sent: false, reason: "plan is paused" });
+    expect(await runAt(t, paused as never, 15)).toMatchObject({ sent: false, reason: "they asked her to stop texting first" });
     expect(await runAt(t, unpaired as never, 15)).toMatchObject({ sent: false, reason: "not paired" });
     // 03:00 UTC on day 16 (after the easy-out is due): inside their 22:00-07:00 quiet hours.
     expect((await t.action(internal.agent.cadence.quiet, { creatorId: night as never, now: Date.UTC(2026, 8, 24, 3, 0) })).reason).toBe("quiet hours");

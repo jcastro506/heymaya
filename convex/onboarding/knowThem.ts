@@ -14,7 +14,7 @@ export type Topic = "goal" | "hesitation" | "origin" | "boundary" | "audience" |
 
 /** In the order they usually come up. `when` is the moment it fits; `ask` is the gist, never a script. */
 export const TOPICS: Array<{ kind: Topic; label: string; when: string; ask: string; use: string }> = [
-  { kind: "goal", label: "what they want out of this", when: "her hello asks it", ask: "what do you most want out of this?", use: "points every suggestion at it" },
+  { kind: "goal", label: "what they want out of this", when: "they say it on their own; never asked", ask: "what do you most want out of this?", use: "points every suggestion at it" },
   { kind: "hesitation", label: "what gets in the way", when: "right after your read, or the first time they mention falling off, being busy or nerves", ask: "what usually gets in the way of posting more?", use: "shapes ideas around it: no face if they're camera-shy, quick to film if time is short, private if they worry who sees it" },
   { kind: "filmTime", label: "when they usually film", when: "right after they react to the month plan, or when booking a week", ask: "when do you usually have time to film? i'll put your sessions there", use: "every week's sessions land in those slots" },
   { kind: "origin", label: "how they started", when: "a relaxed moment, or when they share a win", ask: "what got you posting in the first place?", use: "the reason they care; bring it back when they're discouraged" },
@@ -30,7 +30,9 @@ export function knowThemSection(known: Known[], now: number, asking: boolean): s
   const byKind = new Map<Topic, Known>();
   for (const k of known) if (!byKind.has(k.kind) || byKind.get(k.kind)!.at < k.at) byKind.set(k.kind, k);
   const knownLines = TOPICS.filter((t) => byKind.has(t.kind)).map((t) => `- ${t.label}: "${clip(byKind.get(t.kind)!.text, 160)}" (${Math.max(0, Math.round((now - byKind.get(t.kind)!.at) / 86_400_000))}d ago; ${t.use})`);
-  const open = TOPICS.filter((t) => asking && !byKind.has(t.kind) && t.kind !== "goal").map((t) => `- ${t.label}, when ${t.when} (e.g. "${t.ask}")`);
+  // No survey (operator, 2026-10-09): she remembers what they tell her, and asks only the one question that
+  // changes their week, when she's booking it. The rest come up on their own or not at all.
+  const open = TOPICS.filter((t) => asking && !byKind.has(t.kind) && t.kind === "filmTime").map((t) => `- ${t.label}, when ${t.when} (e.g. "${t.ask}")`);
   if (!knownLines.length && !open.length) return "";
   if (!knownLines.length && !asking) return "";
   return `# Getting to know them

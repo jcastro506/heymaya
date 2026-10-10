@@ -18,6 +18,8 @@
  * employee. The key is the contract; the table enforces it.
  */
 
+import { reachOutHold } from "./reachOut";
+import { pausedByThem } from "./paused";
 import { v } from "convex/values";
 import { markActionsSeen } from "./act";
 import { markOffered } from "./unseen";
@@ -308,6 +310,11 @@ export const send = internalMutation({
         return { messageId: null, sent: false, held: "one partnerships text a day" };
       }
     }
+    // Their pause (STOP), held here for every proactive text so no path can forget it (2026-10-06).
+    if (args.proactive && args.surface !== "system" && args.surface !== "web") {
+      const c = (await ctx.db.get(args.creatorId)) as Doc<"creators"> | null;
+      if (c && pausedByThem(c)) return { messageId: null, sent: false, held: "they asked her to stop texting first" };
+    }
     // Quiet hours, held here for every proactive text (2026-10-01): before, only the scout's rails checked
     // them, so a 1am signup's first plan would have gone at 1:20. A text into a conversation they're in
     // right now (they wrote in the last half hour) still goes: they're up, and it's what they asked for.
@@ -321,6 +328,22 @@ export const send = internalMutation({
       if (held) {
         console.warn(`[messages] held ${args.kind ?? "message"} for ${args.creatorId} (phone rail): ${held}`);
         return { messageId: null, sent: false, held: `phone rail: ${held}` };
+      }
+    }
+    // Last of the holds, so a hard reason (opted out, quiet hours) is the one reported.
+    // When she texts first (core/reachOut, 2026-10-09): every proactive text has a lane and each lane a
+    // budget, held here so no path can skip it. What they asked for is never held by this.
+    if (args.proactive && args.surface !== "system" && args.surface !== "web") {
+      const now = args.ts ?? Date.now();
+      const c = (await ctx.db.get(args.creatorId)) as Doc<"creators"> | null;
+      if (c) {
+        const recent = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", args.creatorId).gte("ts", now - 3 * 86_400_000)).collect()) as Doc<"messages">[];
+        const sent = recent.filter((m) => m.direction === "out" && m.proactive === true).map((m) => ({ ts: m.ts, kind: m.kind }));
+        const held = reachOutHold({ kind: args.kind, now, timezone: c.timezone, pairedAt: c.channel.pairedAt, pace: c.textFirstPace, sent });
+        if (held) {
+          console.log(`[messages] held ${args.kind ?? "message"} for ${args.creatorId}: ${held}`);
+          return { messageId: null, sent: false, held };
+        }
       }
     }
     // A person never receives a JSON envelope. Unwrapped here, or refused loudly.

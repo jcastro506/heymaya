@@ -25,11 +25,12 @@ describe("the daily cap is enforced inside send (fail-closed)", () => {
     const [a, b] = await t.run(async (ctx) => [await seedCreator(ctx, "a", { clerkUserId: "user_a", channel: { paired: true } }), await seedCreator(ctx, "b", { clerkUserId: "user_b", channel: { paired: true } })]);
     const results = [];
     for (let i = 0; i < THRESHOLDS.dailyMessageCap + 2; i++) results.push(await t.mutation(internal.core.messages.send, { creatorId: a, surface: "telegram", body: `idea ${i}`, dedupeKey: `s:${i}`, proactive: true, capped: true, kind: "scout" }));
-    expect(results.filter((r) => r.sent)).toHaveLength(THRESHOLDS.dailyMessageCap);
-    expect(results.filter((r) => r.held)).toHaveLength(2);
+    // 2026-10-09 (core/reachOut): an idea of hers is one a day at their normal pace, inside the cap of 3.
+    expect(results.filter((r) => r.sent)).toHaveLength(1);
+    expect(results.filter((r) => r.held)).toHaveLength(THRESHOLDS.dailyMessageCap + 1);
     expect(results.find((r) => r.held)?.messageId).toBeNull();
     const rows = await t.run((ctx) => ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a)).collect());
-    expect(rows.filter((r) => r.direction === "out")).toHaveLength(THRESHOLDS.dailyMessageCap);
+    expect(rows.filter((r) => r.direction === "out")).toHaveLength(1);
     // cross-tenant: A's spent day doesn't hold B
     expect((await t.mutation(internal.core.messages.send, { creatorId: b, surface: "telegram", body: "hi", dedupeKey: "s:0", proactive: true, capped: true, kind: "scout" })).sent).toBe(true);
   });
