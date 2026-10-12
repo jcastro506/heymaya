@@ -93,18 +93,21 @@ describe("what she's allowed to put on it (adversarial)", () => {
 });
 
 describe("one question at a time, each once", () => {
-  it("audience first (when there is one), then the one line, then a weak photo", () => {
-    expect(nextKitQuestion({}, true)).toBe("audience");
-    expect(nextKitQuestion({ asked: { audience: 1 } }, true)).toBe("oneLine");
-    expect(nextKitQuestion({}, false)).toBe("oneLine");
-    expect(nextKitQuestion({ asked: { oneLine: 1 }, photoCheck: { weak: true } }, false)).toBe("photo");
-    expect(nextKitQuestion({ asked: { oneLine: 1 }, photoCheck: { weak: true, offeredAt: 5 } }, false)).toBeNull();
-    expect(nextKitQuestion({ oneLine: { status: "approved" }, photoCheck: { weak: true }, photoSource: "upload" }, false)).toBeNull();
+  it("contact first (a brand can't reach them without it), then audience, the one line, a weak photo", () => {
+    const has = { contactEmail: "me@x.com" };
+    expect(nextKitQuestion({}, true)).toBe("contact");
+    expect(nextKitQuestion({ asked: { contact: 1 } }, true), "asked once").toBe("audience");
+    expect(nextKitQuestion({ ...has }, true)).toBe("audience");
+    expect(nextKitQuestion({ ...has, asked: { audience: 1 } }, true)).toBe("oneLine");
+    expect(nextKitQuestion({ ...has }, false)).toBe("oneLine");
+    expect(nextKitQuestion({ ...has, asked: { oneLine: 1 }, photoCheck: { weak: true } }, false)).toBe("photo");
+    expect(nextKitQuestion({ ...has, asked: { oneLine: 1 }, photoCheck: { weak: true, offeredAt: 5 } }, false)).toBeNull();
+    expect(nextKitQuestion({ ...has, oneLine: { status: "approved" }, photoCheck: { weak: true }, photoSource: "upload" }, false)).toBeNull();
   });
 });
 
 const kit = (over: Partial<KitV2> = {}): KitV2 => ({
-  name: "sam", lane: "running", asOf: NOW, photo: { url: "https://x/p.jpg", source: "instagram" }, photoSetting: "auto", photoCheck: null, oneLine: { text: "Honest early-morning running", approved: false }, showAudience: null, services: ["Sponsored posts"], region: "US", contactEmail: "sam@x.com", brandWork: [{ brand: "@hoka", source: "their_post", url: "u", at: 1 }],
+  name: "sam", lane: "running", asOf: NOW, photo: { url: "https://x/p.jpg", source: "instagram" }, photoSetting: "auto", photoCheck: null, oneLine: { text: "Honest early-morning running", approved: false }, showAudience: null, styles: [], services: ["Sponsored posts"], region: "US", contactEmail: "sam@x.com", brandWork: [{ brand: "@hoka", source: "their_post", url: "u", at: 1 }],
   platforms: [{ platform: "instagram", handle: "sam", followers: 8050, followersAsOf: NOW, normalViews: 9000, posts: 20, engagement: { perView: 0.06, perFollower: 0.02, posts: 12 }, growth30d: { net: 214, gained: null, lost: null }, audience: { source: "connected", asOf: NOW, age: [{ label: "25-34", share: 0.41 }], gender: [{ label: "Women", share: 0.71 }], countries: [], cities: [] }, best: [{ url: "a", platform: "instagram", views: 30000, multiple: 3.1, caption: "hill @trailfuel", createTime: NOW, cover: null }, { url: "b", platform: "instagram", views: 12000, multiple: 1.3, caption: "track", createTime: NOW, cover: null }] }],
   ...over,
 });

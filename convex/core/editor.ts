@@ -28,7 +28,7 @@ import { critique, tooLong } from "../agent/critic";
 import { clip } from "../lib/clip";
 
 export type Noticed = NonNullable<Doc<"creators">["noticed"]>[number];
-export type CandidateKind = "idea" | "for_you" | "comment";
+export type CandidateKind = "idea" | "for_you" | "comment" | "deal";
 
 export const EDITOR = {
   /** Below this nothing is worth a text today. */
@@ -51,7 +51,7 @@ export const EDITOR = {
 } as const;
 
 /** What the message row is sent as: its lane is "hers" (core/reachOut). */
-export const SEND_KIND: Record<CandidateKind, string> = { idea: "scout", for_you: "for_you", comment: "comment" };
+export const SEND_KIND: Record<CandidateKind, string> = { idea: "scout", for_you: "for_you", comment: "comment", deal: "deal" };
 
 /* ------------------------------------------------------------------ pure */
 

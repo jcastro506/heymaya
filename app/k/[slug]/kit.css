@@ -19,7 +19,9 @@
 .kit-platform { margin-top: 24px; padding: 20px; border: 1px solid var(--line); border-radius: 20px; background: #fff; display: grid; gap: 16px; break-inside: avoid; }
 .kit-platform h2 { font-size: 18px; }
 .kit-platform h2 span { color: var(--muted); font-weight: 400; }
-.kit-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.kit-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.kit-stats:empty { display: none; }
+.kit-styles { margin-top: 24px; display: grid; gap: 8px; }
 .kit-stats div { display: grid; gap: 2px; padding: 12px; border-radius: 14px; background: var(--ground); }
 .kit-stats b { font-size: 22px; font-variant-numeric: tabular-nums; }
 .kit-stats small { color: var(--muted); font-size: 12px; line-height: 1.3; }

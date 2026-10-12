@@ -27,6 +27,8 @@ const DAY = 86_400_000;
 
 function fakesOn() {
   vi.stubEnv("EVAL_FAKES", "1");
+  vi.stubEnv("MODEL_FAKE", "1");
+  vi.stubEnv("OPENROUTER_API_KEY", "fake");
   vi.stubEnv("ENVIRONMENT_NAME", "local");
   vi.stubEnv("CONVEX_SITE_URL", SITE);
   vi.stubEnv("GMAIL_BASE_URL", `${SITE}/fake/gmail`);
@@ -378,10 +380,12 @@ describe("the fixture's vendors are the fakes, and nothing else changes", () => 
     await w.t.mutation(internal.eval.partnershipGauntlet.setPlan, { creatorId: w.creatorId, status: "comped", tier: "solo", paired: true });
     expect(await w.t.action(internal.partnerships.kit.offerOne, { creatorId: w.creatorId })).toMatchObject({ sent: false, reason: expect.stringMatching(/not on their plan/) });
     await w.t.mutation(internal.eval.partnershipGauntlet.setPlan, { creatorId: w.creatorId, status: "comped", tier: "partner", paired: true });
-    expect((await w.t.action(internal.partnerships.kit.offerOne, { creatorId: w.creatorId })).sent).toBe(true);
-    expect((await w.t.action(internal.partnerships.kit.offerOne, { creatorId: w.creatorId })).sent).toBe(false);
-    const offer = (await w.t.query(internal.eval.dealsWorld.messagesSince, { creatorId: w.creatorId, since: 0 })).find((m) => m.dedupeKey?.startsWith("partner-week:"))!;
-    expect(offer.body).toMatch(/@northlinerunning \(paid 2 creators/);
+    // 2026-10-12: noticed once a week for the editor; the daily pick sends it.
+    expect((await w.t.action(internal.partnerships.kit.offerOne, { creatorId: w.creatorId })).reason).toBe("noticed for the daily pick");
+    expect((await w.t.action(internal.partnerships.kit.offerOne, { creatorId: w.creatorId })).reason).toBe("already scouted this week");
+    expect((await w.t.action(internal.core.editor.pick, { creatorId: w.creatorId })).sent).toBe(true);
+    const offer = (await w.t.query(internal.eval.dealsWorld.messagesSince, { creatorId: w.creatorId, since: 0 })).find((m) => m.kind === "deal")!;
+    expect(offer.body).toMatch(/northlinerunning/);
     expect(offer.body).not.toMatch(/verdant|trailfuel/);
     // the kit page: public numbers only, and a revoked link is dead
     const on = await w.t.mutation(internal.partnerships.kitPage.kitLinkFor, { creatorId: w.creatorId, on: true });

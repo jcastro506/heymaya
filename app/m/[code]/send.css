@@ -1,0 +1,29 @@
+/* The one-tap send page: phone first, the email and three ways to send it. */
+.send {
+  --ink: #29233f; --muted: #756e84; --line: #e4dfea; --wash: #f3eff9; --purple: #7661b4; --ground: #fcfbf8;
+  max-width: 640px; margin: 0 auto; padding: 36px 16px 56px; color: var(--ink); background: var(--ground);
+  font-family: var(--font-instrument), system-ui, -apple-system, sans-serif; line-height: 1.45;
+}
+:root:has(.send) body { background: #fcfbf8; }
+.send h1 { font: 800 clamp(26px, 6vw, 34px)/1.1 var(--font-bricolage), system-ui, sans-serif; letter-spacing: -0.02em; margin: 4px 0 8px; }
+.send-kicker { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--purple); }
+.send-help { margin: 0 0 20px; color: var(--muted); font-size: 16px; }
+.send-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+.send-primary, .send-secondary { display: block; text-align: center; padding: 15px 12px; border-radius: 16px; font-weight: 700; font-size: 16px; text-decoration: none; }
+.send-primary { background: var(--purple); color: #fff; }
+.send-secondary { background: #fff; color: var(--purple); border: 1px solid var(--line); }
+.send-card { background: #fff; border: 1px solid var(--line); border-radius: 20px; padding: 16px; display: grid; gap: 12px; }
+.send-row { display: grid; grid-template-columns: 64px 1fr auto; gap: 10px; align-items: center; font-size: 15px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.send-row span, .send-answer span { color: var(--muted); font-size: 13px; }
+.send-row b { font-weight: 600; overflow-wrap: anywhere; }
+.send-row a { color: var(--purple); overflow-wrap: anywhere; }
+.send-body { margin: 0; white-space: pre-wrap; font: inherit; font-size: 15px; overflow-wrap: anywhere; }
+.send-answer { display: grid; gap: 6px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.send-copy { justify-self: end; border: 1px solid var(--line); background: var(--wash); color: var(--purple); border-radius: 99px; padding: 6px 12px; font-weight: 600; font-size: 13px; cursor: pointer; }
+.send-copy-wide { justify-self: stretch; padding: 12px; border-radius: 14px; font-size: 15px; }
+.send-foot { margin-top: 18px; color: var(--muted); font-size: 14px; }
+@media (prefers-color-scheme: dark) {
+  .send { --ink: #f3f0fa; --muted: #b3abc4; --line: #3a3450; --wash: #2a2540; --ground: #17142a; }
+  :root:has(.send) body { background: #17142a; }
+  .send-card, .send-secondary { background: #201c35; }
+}

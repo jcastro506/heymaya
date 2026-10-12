@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { z } from "zod";
-import { internalQuery } from "../_generated/server";
+import { internalQuery, query } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -75,20 +75,36 @@ export const prepare = internalMutation({
     }
     const code = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, "0")).join("");
     const data = Draft.parse({ sourceMessageId: a.sourceMessageId, revision: drafts.length + 1, channel: o.route, subject: input.subject, body: input.body, ...(input.answers?.length ? { answers: input.answers } : {}), recipient, sender: mailbox?.email, mailboxGeneration: mailbox?.generation, threadId: o.threadId, inReplyTo: o.lastMessageId, status: "draft", approvalCode: code, approvalExpiresAt: now + 86400000, createdAt: now });
-    const id = await ctx.db.insert("partnershipDrafts", { creatorId: a.creatorId, opportunityId: row._id, data, updatedAt: now });
+    const shareCode = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, "0")).join("");
+    const id = await ctx.db.insert("partnershipDrafts", { creatorId: a.creatorId, opportunityId: row._id, data, updatedAt: now, shareCode });
     // §8.3: an application handed off gets one "did you get to submit it?" two days later.
     if (o.route === "application" && !o.appliedAt) await ctx.db.patch(row._id, { data: OpportunitySchema.parse({ ...o, applicationCheckInAt: now + APPLICATION_CHECK_IN_DAYS.beforeSubmit * 86_400_000 }), updatedAt: now });
     await event(ctx, a.creatorId, row._id, `draft:${id}`, "draft_created", `Revision ${data.revision}; ${data.channel}; ${recipient}`);
     const command = `SEND ${code}`;
-    const body = o.route === "email"
-      ? `here’s the email to review.\n\nFrom: ${mailbox?.email ?? "Connect your email first"}\nTo: ${recipient}\nSubject: ${data.subject}\n\n${data.body}\n\n${mailbox ? `To send exactly this email, reply ${command}. This expires in 24 hours. Changes need a new review.` : "This is a draft only. Connect your Gmail account before approving a new draft."}`
-      : `${o.route === "application" ? "here are your draft application answers. review and submit them yourself" : "here’s a DM you can send"}:\n${recipient}\n\n${data.body}\n\nlet me know once you’ve sent it so i can keep track.`;
+    // One tap to send (2026-10-12): without their Gmail connected, the pitch goes as a link to a page that opens it
+    // in Gmail or Mail with everything filled in. With Gmail connected, the exact review and SEND code, as before.
+    const page = sendPageUrl(shareCode);
+    const body = o.route === "email" && mailbox
+      ? `here’s the email to review.\n\nFrom: ${mailbox.email}\nTo: ${recipient}\nSubject: ${data.subject}\n\n${data.body}\n\nTo send exactly this email, reply ${command}. This expires in 24 hours. Changes need a new review.`
+      : sendPageText(o.route, o.brand, recipient, page);
     if (!checkPlainLanguage(body).ok) throw new Error("The review would be altered by the chat formatter. Rephrase the draft before requesting approval.");
     // Exact approval display is authored by code, never rephrased by the model.
     await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, body, surface: c.channel.paired ? "telegram" : "web", dedupeKey: `partner-review:${id}`, proactive: false, kind: "reply" });
     return { draftId: id, revision: data.revision, status: "draft", reviewQueued: true, instruction: "The exact review is queued separately. Do not repeat it or say it was sent to the brand." };
   },
 });
+
+/** The send page for a draft (web /m/<code>). */
+export function sendPageUrl(code: string, env: Record<string, string | undefined> = process.env): string {
+  return `${(env.APP_URL ?? "https://hey-maya.ai").replace(/\/$/, "")}/m/${code}`;
+}
+
+/** Pure: her text for a pitch they send themselves, one link to a page that has it all. */
+export function sendPageText(route: "email" | "dm" | "application" | "unknown", brand: string, recipient: string, page: string): string {
+  if (route === "email") return `here’s your pitch to ${brand}, ready to go. tap to open it in your email, give it a read, and hit send:\n${page}\n---\nit goes to ${recipient}, with your media kit linked. tell me once it’s sent, and send me anything they write back.`;
+  if (route === "application") return `your ${brand} application answers are ready. open them here, copy each one into their form, and submit:\n${page}\n---\ntell me once you’ve submitted it so i can keep track.`;
+  return `here’s a DM for ${brand}. open it here to copy it, then send it from your account:\n${page}\n---\ntell me once it’s sent so i can keep track.`;
+}
 
 export const approve = internalMutation({ args: { creatorId: v.id("creators"), sourceMessageId: v.id("messages") }, handler: async (ctx, a): Promise<{ handled: boolean; text?: string; draftId?: Id<"partnershipDrafts"> }> => {
   const source = await ctx.db.get(a.sourceMessageId) as Doc<"messages"> | null;
@@ -125,3 +141,19 @@ export const get = internalQuery({ args: { creatorId: v.id("creators"), draftId:
   if (!row || row.creatorId !== a.creatorId) throw new Error("Draft unavailable");
   return { row, opportunity: (await ownedOpportunity(ctx, a.creatorId, row.opportunityId)).row };
 } });
+
+/** What the send page shows, by its code: only the pitch itself, only while it's the live draft (14 days). */
+export interface PublicDraft { brand: string; channel: "email" | "dm" | "application"; to: string; subject: string; body: string; answers: Array<{ label: string; answer: string }> }
+export const publicDraft = query({
+  args: { code: v.string() },
+  handler: async (ctx, a): Promise<PublicDraft | null> => {
+    if (!/^[a-f0-9]{24}$/.test(a.code)) return null;
+    const row = await ctx.db.query("partnershipDrafts").withIndex("by_share_code", (q) => q.eq("shareCode", a.code)).unique();
+    if (!row) return null;
+    const d = Draft.safeParse(row.data);
+    if (!d.success || !["draft", "sent", "approved"].includes(d.data.status) || Date.now() - d.data.createdAt > 14 * 86_400_000) return null;
+    const opp = (await ctx.db.get(row.opportunityId)) as Doc<"partnershipOpportunities"> | null;
+    const o = opp ? OpportunitySchema.safeParse(opp.data) : null;
+    return { brand: o?.success ? o.data.brand : "", channel: d.data.channel, to: d.data.recipient, subject: d.data.subject, body: d.data.body, answers: d.data.answers ?? [] };
+  },
+});

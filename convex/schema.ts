@@ -933,7 +933,7 @@ export default defineSchema({
   // Partnership state is validated by partnerships/contracts at every write boundary.
   partnershipProfiles: defineTable({ creatorId: v.id("creators"), data: v.any(), updatedAt: v.number() }).index("by_creator", ["creatorId"]),
   partnershipOpportunities: defineTable({ creatorId: v.id("creators"), brandDomain: v.string(), data: v.any(), updatedAt: v.number() }).index("by_creator", ["creatorId"]).index("by_brand", ["creatorId", "brandDomain"]),
-  partnershipDrafts: defineTable({ creatorId: v.id("creators"), opportunityId: v.id("partnershipOpportunities"), data: v.any(), updatedAt: v.number() }).index("by_creator", ["creatorId"]).index("by_opportunity", ["opportunityId"]),
+  partnershipDrafts: defineTable({ creatorId: v.id("creators"), opportunityId: v.id("partnershipOpportunities"), data: v.any(), updatedAt: v.number(), /** The send page's code (/m/<code>): unguessable, the draft's only public handle. */ shareCode: v.optional(v.string()) }).index("by_creator", ["creatorId"]).index("by_opportunity", ["opportunityId"]).index("by_share_code", ["shareCode"]),
   partnershipEvents: defineTable({ creatorId: v.id("creators"), opportunityId: v.id("partnershipOpportunities"), key: v.string(), kind: v.string(), text: v.string(), at: v.number() }).index("by_creator", ["creatorId"]).index("by_opportunity", ["opportunityId"]).index("by_key", ["creatorId", "key"]),
   partnershipResearch: defineTable({ creatorId: v.id("creators"), month: v.string(), calls: v.number(), data: v.any(), queries: v.optional(v.array(v.object({ q: v.string(), at: v.number() }))), updatedAt: v.number() }).index("by_creator", ["creatorId"]).index("by_month", ["creatorId", "month"]),
   // K1: the media kit's settings (partner tier). Kept apart from partnershipProfiles on purpose: a
@@ -944,6 +944,8 @@ export default defineSchema({
     oneLine: v.optional(v.object({ text: v.string(), status: v.union(v.literal("proposed"), v.literal("approved")), at: v.number() })),
     /** Audience on the PUBLIC page: undefined = not asked yet, then their answer. */
     showAudience: v.optional(v.boolean()),
+    /** Where brands reach them, as they said it (2026-10-12): the kit had none unless Gmail was connected, which nobody could. */
+    contactEmail: v.optional(v.string()),
     /** "auto" = their profile picture; "upload" = one they sent (its own stored copy); "none" = no photo. */
     photo: v.optional(v.object({ source: v.union(v.literal("auto"), v.literal("upload"), v.literal("none")), storageId: v.optional(v.id("_storage")), at: v.number() })),
     /** Her one look at the default photo; offered at most once. */

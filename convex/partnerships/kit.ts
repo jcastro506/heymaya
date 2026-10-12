@@ -92,19 +92,12 @@ export const offerInputs = internalQuery({
   },
 });
 
-/** One creator's weekly offer: partner tier, something new to offer, the rails, once a week. */
+/** One creator's weekly look for who could pay them (partnerships/dealScout): a candidate for the editor's daily pick, not a text. */
 export const offerOne = internalAction({
   args: { creatorId: v.id("creators") },
   handler: async (ctx, a): Promise<{ sent: boolean; reason: string }> => {
-    const inp = await ctx.runQuery(internal.partnerships.kit.offerInputs, { creatorId: a.creatorId });
-    if (!inp?.open) return { sent: false, reason: "partnerships not on their plan" };
-    const brands = offerable(await ctx.runQuery(internal.partnerships.signals.laneBrands, { creatorId: a.creatorId }), inp.known, inp.excluded);
-    if (!brands.length) return { sent: false, reason: "nothing new paying their lane" };
-    const rails = await ctx.runQuery(internal.scout.gate.railsOnly, { creatorId: a.creatorId, now: Date.now() });
-    if (!rails?.ok) return { sent: false, reason: rails?.reason ?? "rails" };
-    const week = weekKey(Date.now(), inp.timezone);
-    const r = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: offerText(brands), dedupeKey: `partner-week:${week}`, proactive: true, capped: true, kind: "partnership" });
-    return { sent: r.sent, reason: r.held ?? (r.sent ? "offered" : "already offered this week") };
+    const r = await ctx.runAction(internal.partnerships.dealScout.run, { creatorId: a.creatorId });
+    return { sent: false, reason: r.reason };
   },
 });
 
