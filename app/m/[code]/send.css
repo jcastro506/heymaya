@@ -9,7 +9,7 @@
 .send-kicker { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--purple); }
 .send-help { margin: 0 0 20px; color: var(--muted); font-size: 16px; }
 .send-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
-.send-primary, .send-secondary { display: block; text-align: center; padding: 15px 12px; border-radius: 16px; font-weight: 700; font-size: 16px; text-decoration: none; }
+.send-primary, .send-secondary { display: block; width: 100%; border: 0; cursor: pointer; text-align: center; padding: 15px 12px; border-radius: 16px; font-weight: 700; font-size: 16px; text-decoration: none; }
 .send-primary { background: var(--purple); color: #fff; }
 .send-secondary { background: #fff; color: var(--purple); border: 1px solid var(--line); }
 .send-card { background: #fff; border: 1px solid var(--line); border-radius: 20px; padding: 16px; display: grid; gap: 12px; }

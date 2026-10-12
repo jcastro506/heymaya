@@ -1,5 +1,5 @@
 import type { ActionCtx } from "../_generated/server";
-import { gatherLeads, stageOf } from "./dealScout";
+import { gatherLeads, HOW_DEALS_SCALE, lastRead, whereTheyAre } from "./dealScout";
 import type { Id } from "../_generated/dataModel";
 import { internal } from "../_generated/api";
 import type { OpenRouterTool } from "../integrations/openrouter/client";
@@ -26,8 +26,10 @@ export async function runPartnershipTool(ctx: ActionCtx, creatorId: Id<"creators
     const leads = await gatherLeads(ctx as never, creatorId, i);
     const kit = await ctx.runQuery(internal.partnerships.kitTools.kitFor, { creatorId });
     const plat = kit?.kit.platforms ?? [];
-    const st = stageOf({ followers: plat.reduce((m, p) => Math.max(m, p.followers ?? 0), 0) || null, normalViews: plat.reduce((m, p) => Math.max(m, p.normalViews ?? 0), 0) || null });
-    return `stage: ${st.stage}. ${st.guidance}\nwhat they make: ${kit?.kit.styles.join("; ") || "unknown"}\nleads (money moving in their lane; judge fit, never promise a deal):\n${leads.map((l) => `- ${l.brand}: ${l.signals.join("; ")}${l.url ? ` · ${l.url}` : ""}`).join("\n") || "- none this week"}`;
+    const followers = plat.reduce((m, p) => Math.max(m, p.followers ?? 0), 0) || null;
+    const top = plat.slice().sort((x, y) => (y.followers ?? 0) - (x.followers ?? 0))[0];
+    const numbers = whereTheyAre({ followers, normalViews: top?.normalViews ?? null, engagementPerView: top?.engagement?.perView ?? null, growth30d: top?.growth30d?.net ?? null });
+    return `their numbers today: ${numbers}\n${lastRead(i.lastStage) ?? ""}\n${HOW_DEALS_SCALE}\nwhat they make: ${kit?.kit.styles.join("; ") || "unknown"}\nleads (money moving in their lane; judge fit for where THEY are, never promise a deal):\n${leads.map((l) => `- ${l.brand}: ${l.signals.join("; ")}${l.url ? ` · ${l.url}` : ""}`).join("\n") || "- none this week"}`;
   }
   if (name === "partnership_read") result = await ctx.runQuery(internal.partnerships.store.read, { creatorId, brandDomain: typeof args.brandDomain === "string" ? args.brandDomain : undefined, cursor: typeof args.cursor === "string" ? args.cursor : undefined, ...(args.opportunityId ? { opportunityId: String(args.opportunityId) as Id<"partnershipOpportunities"> } : {}) });
   else {

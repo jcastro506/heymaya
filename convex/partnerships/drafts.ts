@@ -86,7 +86,7 @@ export const prepare = internalMutation({
     const page = sendPageUrl(shareCode);
     const body = o.route === "email" && mailbox
       ? `here’s the email to review.\n\nFrom: ${mailbox.email}\nTo: ${recipient}\nSubject: ${data.subject}\n\n${data.body}\n\nTo send exactly this email, reply ${command}. This expires in 24 hours. Changes need a new review.`
-      : sendPageText(o.route, o.brand, recipient, page);
+      : sendPageText(o.route, o.brand, recipient, page, data.body);
     if (!checkPlainLanguage(body).ok) throw new Error("The review would be altered by the chat formatter. Rephrase the draft before requesting approval.");
     // Exact approval display is authored by code, never rephrased by the model.
     await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, body, surface: c.channel.paired ? "telegram" : "web", dedupeKey: `partner-review:${id}`, proactive: false, kind: "reply" });
@@ -99,11 +99,21 @@ export function sendPageUrl(code: string, env: Record<string, string | undefined
   return `${(env.APP_URL ?? "https://hey-maya.ai").replace(/\/$/, "")}/m/${code}`;
 }
 
-/** Pure: her text for a pitch they send themselves, one link to a page that has it all. */
-export function sendPageText(route: "email" | "dm" | "application" | "unknown", brand: string, recipient: string, page: string): string {
-  if (route === "email") return `here’s your pitch to ${brand}, ready to go. tap to open it in your email, give it a read, and hit send:\n${page}\n---\nit goes to ${recipient}, with your media kit linked. tell me once it’s sent, and send me anything they write back.`;
-  if (route === "application") return `your ${brand} application answers are ready. open them here, copy each one into their form, and submit:\n${page}\n---\ntell me once you’ve submitted it so i can keep track.`;
-  return `here’s a DM for ${brand}. open it here to copy it, then send it from your account:\n${page}\n---\ntell me once it’s sent so i can keep track.`;
+/** Pure: a profile link as "@handle on Instagram" (or TikTok), else the link itself. */
+export function handleOf(url: string): string {
+  const m = url.match(/(instagram|tiktok)\.com\/@?([A-Za-z0-9._]{2,30})/i);
+  return m ? `@${m[2]} on ${m[1].toLowerCase() === "tiktok" ? "TikTok" : "Instagram"}` : url;
+}
+
+/**
+ * Pure: her text for a pitch they send themselves (2026-10-12). Email: one link that opens it in Gmail, filled in.
+ * DM: the handle and the message right in the texts, the message alone in its bubble so it copies clean.
+ * Application: a link to the answers to paste into their form.
+ */
+export function sendPageText(route: "email" | "dm" | "application" | "unknown", brand: string, recipient: string, page: string, body = ""): string {
+  if (route === "email") return `here’s your pitch to ${brand}, ready to go. tap and it opens in your Gmail with everything filled in, to ${recipient}, your media kit linked. just read it and hit send:\n${page}\n---\ntell me once it’s sent, and send me anything they write back.`;
+  if (route === "application") return `your ${brand} application answers are ready. open them here and paste each one into their form:\n${page}\n---\ntell me once you’ve submitted it so i can keep track.`;
+  return `this one’s better as a DM. send it to ${handleOf(recipient)}:\n${recipient}\n---\n${body}\n---\nhold that message to copy it, paste it in their DMs, and tell me once it’s sent.`;
 }
 
 export const approve = internalMutation({ args: { creatorId: v.id("creators"), sourceMessageId: v.id("messages") }, handler: async (ctx, a): Promise<{ handled: boolean; text?: string; draftId?: Id<"partnershipDrafts"> }> => {

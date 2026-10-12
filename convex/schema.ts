@@ -70,6 +70,8 @@ export default defineSchema({
       status: v.union(v.literal("open"), v.literal("sent"), v.literal("folded"), v.literal("dropped")),
       decidedAt: v.optional(v.number()),
     }))),
+    /** Where they were the last time she looked for deals (partnerships/dealScout), so she notices when they grow. */
+    dealStage: v.optional(v.object({ stage: v.string(), followers: v.optional(v.number()), at: v.number() })),
     /** The day (their clock) the editor last decided: a pick, a fold, or a quiet day. */
     pickedDay: v.optional(v.string()),
     /** Things they asked her to do on a schedule ("3 ideas every morning"). Run by core/routines; never over budget. */

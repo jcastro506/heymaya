@@ -10,7 +10,7 @@ import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
 import fixtures from "./commerce.fixtures.json";
 import { metaAds, shopProducts, tiktokAds } from "../../integrations/scrapeCreators/platforms/commerce";
-import { leadsFrom, parseDeals, stageOf } from "../dealScout";
+import { HOW_DEALS_SCALE, lastRead, leadsFrom, parseDeals, whereTheyAre } from "../dealScout";
 import { sendPageText, sendPageUrl } from "../drafts";
 import { stylesOf } from "../kitData";
 
@@ -32,13 +32,16 @@ describe("where the money is (pure, on the vendor's documented answers)", () => 
 });
 
 describe("the deal scout (pure)", () => {
-  it("stage from their own numbers: small accounts get UGC and affiliate, never sponsorship first", () => {
-    expect(stageOf({ followers: 120, normalViews: 300 })).toMatchObject({ stage: "starter", focus: ["ugc", "affiliate", "gifting"] });
-    expect(stageOf({ followers: 4_000, normalViews: null }).stage).toBe("nano");
-    expect(stageOf({ followers: 40_000, normalViews: null }).focus[0]).toBe("sponsorship");
-    expect(stageOf({ followers: 450_000, normalViews: null }).stage).toBe("mid");
-    expect(stageOf({ followers: null, normalViews: 200 }).stage, "unknown followers: views stand in").toBe("starter");
-    expect(stageOf({ followers: 120, normalViews: null }).guidance).toMatch(/UGC/);
+  it("where they are is HER judgment from today's numbers, never a band in code; she sees her own last read to notice growth", () => {
+    expect(whereTheyAre({ followers: 6_200, normalViews: 9_000, engagementPerView: 0.081, growth30d: 1_400 })).toBe("6,200 followers, about 9,000 views on a normal post, engagement 8.1% of views, +1,400 followers in the last 30 days");
+    expect(whereTheyAre({ followers: null, normalViews: null, engagementPerView: null, growth30d: null })).toBe("followers unknown");
+    expect(lastRead(undefined)).toBeNull();
+    const r = lastRead({ stage: "small, UGC and affiliate", followers: 800, at: Date.UTC(2026, 9, 12) })!;
+    expect(r).toContain('"small, UGC and affiliate" at 800 followers');
+    expect(r).toMatch(/grown/);
+    // The patterns are knowledge with room for judgment, not cutoffs.
+    expect(HOW_DEALS_SCALE).toMatch(/not rules/);
+    expect(HOW_DEALS_SCALE).toMatch(/engagement/);
   });
   it("leads: merged across sources by brand, strongest first; known and excluded brands drop out", () => {
     const leads = leadsFrom({
@@ -55,6 +58,7 @@ describe("the deal scout (pure)", () => {
     const leads = leadsFrom({ products: [], ads: [{ advertiser: "Hoka", text: null, firstShown: null, lastShown: null, active: true, url: null, platform: "meta" }], laneBrands: [], known: [], excluded: [] });
     const out = parseDeals(JSON.stringify({ picks: [{ brand: "hoka", type: "ugc", why: "x" }, { brand: "Made Up Co", type: "ugc", why: "y" }, { brand: "Hoka", type: "lottery", why: "z" }], message: "hi" }), leads);
     expect(out.picks).toEqual([{ brand: "Hoka", type: "ugc", why: "x" }]);
+    expect(parseDeals(JSON.stringify({ stage: "established, paid posts realistic", picks: [{ brand: "Hoka", type: "sponsorship", why: "x" }], message: "hi" }), leads).stage).toBe("established, paid posts realistic");
     expect(parseDeals(JSON.stringify({ picks: [{ brand: "Made Up Co", type: "ugc" }], message: "hi" }), leads).message, "no real pick, no message").toBe("");
     expect(parseDeals("not json", leads).picks).toEqual([]);
   });
@@ -67,7 +71,10 @@ describe("one tap to send (pure and on rows)", () => {
     expect(t).toContain("creators@tracksmith.com");
     expect(t).not.toMatch(/\bsent it\b|i sent|connect.*gmail/i);
     expect(sendPageText("application", "Glossier", "https://x/form", "u")).toMatch(/submit/);
-    expect(sendPageText("dm", "Glossier", "https://instagram.com/glossier", "u")).toMatch(/copy it/);
+    const dm = sendPageText("dm", "Glossier", "https://www.instagram.com/glossier/", "u", "hey Glossier team, i make…");
+    expect(dm).toContain("@glossier on Instagram");
+    expect(dm.split("\n---\n")[1], "the message alone in its bubble, so it copies clean").toBe("hey Glossier team, i make…");
+    expect(dm).not.toContain("/m/");
   });
   it("the send page shows only the live draft, by its code; unknown, canceled or old ones are gone", async () => {
     const t = convexTest(schema, modules);

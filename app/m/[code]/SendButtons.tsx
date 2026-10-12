@@ -1,31 +1,33 @@
 "use client";
-import { useState } from "react";
+import { useEffect } from "react";
 
 const q = (s: string) => encodeURIComponent(s);
 
-/** Gmail's app on an iPhone, Gmail on the web on a computer (Android opens Gmail from a mail link), and the default mail app. Picked at the tap. */
-export function SendButtons({ to, subject, body }: { to: string; subject: string; body: string }) {
-  const mail = `mailto:${to}?subject=${q(subject)}&body=${q(body)}`;
-  const web = `https://mail.google.com/mail/?view=cm&fs=1&to=${q(to)}&su=${q(subject)}&body=${q(body)}`;
-  const ios = `googlegmail:///co?to=${q(to)}&subject=${q(subject)}&body=${q(body)}`;
-  const openGmail = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    const ua = navigator.userAgent;
-    if (/iPhone|iPad|iPod/i.test(ua)) { e.preventDefault(); window.location.href = ios; }
-    else if (/Android/i.test(ua)) { e.preventDefault(); window.location.href = mail; }
+/** Pure: Gmail's compose for this email, per device: the app on iPhone, Gmail via a mail link on Android, Gmail on the web elsewhere. */
+export function gmailLinks(to: string, subject: string, body: string) {
+  return {
+    ios: `googlegmail:///co?to=${q(to)}&subject=${q(subject)}&body=${q(body)}`,
+    android: `mailto:${to}?subject=${q(subject)}&body=${q(body)}`,
+    web: `https://mail.google.com/mail/?view=cm&fs=1&to=${q(to)}&su=${q(subject)}&body=${q(body)}`,
   };
-  return (
-    <div className="send-buttons">
-      <a className="send-primary" href={web} target="_blank" rel="noreferrer" onClick={openGmail}>Open in Gmail</a>
-      <a className="send-secondary" href={mail}>Open in Mail</a>
-    </div>
-  );
 }
 
-export function CopyButton({ text, label, wide }: { text: string; label: string; wide?: boolean }) {
-  const [done, setDone] = useState(false);
-  return (
-    <button type="button" className={wide ? "send-copy send-copy-wide" : "send-copy"} onClick={async () => { try { await navigator.clipboard.writeText(text); setDone(true); setTimeout(() => setDone(false), 1500); } catch { /* the text is on the page to select by hand */ } }}>
-      {done ? "Copied" : label}
-    </button>
-  );
+/**
+ * Opens the email in Gmail the moment the page loads (operator, 2026-10-12: "it should just open up with the full
+ * email loaded in their Gmail"). On an iPhone without the Gmail app, it falls through to Gmail on the web. The one
+ * button is there only if the phone asks first or blocks the jump.
+ */
+export function OpenInGmail({ to, subject, body }: { to: string; subject: string; body: string }) {
+  const links = gmailLinks(to, subject, body);
+  const go = () => {
+    const ua = navigator.userAgent;
+    if (/iPhone|iPad|iPod/i.test(ua)) {
+      window.location.href = links.ios;
+      // No Gmail app: the page is still showing a moment later, so open Gmail on the web instead.
+      setTimeout(() => { if (!document.hidden) window.location.href = links.web; }, 1500);
+    } else if (/Android/i.test(ua)) window.location.href = links.android;
+    else window.location.href = links.web;
+  };
+  useEffect(() => { go(); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- once, on arrival: the whole point of the link
+  return <button type="button" className="send-primary" onClick={go}>Open in Gmail</button>;
 }

@@ -115,3 +115,14 @@ describe("the public media-kit page", () => {
     for (const bad of ["", "x", "../../etc", "A".repeat(500), "' OR 1=1"]) expect(await s.t.query(api.partnerships.kitPage.publicKit, { slug: bad })).toBeNull();
   });
 });
+
+describe("she grows with them (2026-10-12)", () => {
+  it("her read is saved each week and handed back next time, with the numbers she read it at", async () => {
+    const s = await setup("partner");
+    await s.t.action(internal.partnerships.kit.offerOne, { creatorId: s.a });
+    const c = (await s.t.run((ctx) => ctx.db.get(s.a)))!;
+    expect(c.dealStage).toMatchObject({ stage: "small but engaged", followers: 12345 });
+    const i = await s.t.query(internal.partnerships.dealScout.inputs, { creatorId: s.a });
+    expect(i?.lastStage).toMatchObject({ stage: "small but engaged", followers: 12345 });
+  });
+});

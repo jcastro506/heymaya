@@ -74,8 +74,8 @@ export function fakeAnswer(purpose: string, messages: OpenRouterMessage[]): Open
       return ok("hey. read your posts; the talking-head ones do best. first idea tomorrow.");
     case "deal_scout": {
       // Test-only stand-in: the first brand in the leads, as UGC.
-      const brand = user.match(/^- ([^:\n]+):/m)?.[1];
-      return ok(brand ? JSON.stringify({ picks: [{ brand, type: "ugc", why: "they pay creators in your lane" }], message: `brands that could pay you for content: ${brand}\n---\nwant me to look into them?` }) : JSON.stringify({ picks: [], message: "" }));
+      const brand = (user.split("Brands with money moving in their lane:")[1] ?? "").match(/^- ([^:\n]+):/m)?.[1];
+      return ok(brand ? JSON.stringify({ stage: "small but engaged", picks: [{ brand, type: "ugc", why: "they pay creators in your lane" }], message: `brands that could pay you for content: ${brand}\n---\nwant me to look into them?` }) : JSON.stringify({ picks: [], message: "" }));
     }
     case "editor": {
       // Test-only stand-in for her pick: the first candidate, written when it needs text; "quiet" in the list means none.
