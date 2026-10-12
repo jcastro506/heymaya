@@ -21,7 +21,7 @@ describe("a person never receives a JSON envelope (live 2026-09-06)", () => {
     const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { channel: { paired: true } }));
     const r = await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: '{"message": "hello there", "rungOverride": null}', dedupeKey: "env:1", proactive: true, kind: "review" });
     const row = await t.run(async (ctx) => await ctx.db.get(r.messageId!));
-    expect(row?.body).toBe("hello there");
+    expect(row?.body).toBe("Hello there");
     await expect(t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: '{"verdict": "x"}', dedupeKey: "env:2", proactive: true })).rejects.toThrow(/no message field/);
   });
 });
@@ -46,7 +46,7 @@ describe("first contact", () => {
     const parts = hello(a)[0].body.split("\n---\n");
     expect(parts).toHaveLength(4);
     expect(parts[1]).toMatch(/going through your posts right now/);
-    expect(parts[2]).toMatch(/text me like you'd text a friend/);
+    expect(parts[2]).toMatch(/text me like you'd text a friend/i);
     expect(parts[3]).toMatch(/save this number as Maya/);
     expect(hello(b)[0].body, "her read already happened").toMatch(/already been through your posts/);
     for (const banned of ["—", "what do you most want", "AI", "assistant"]) expect(hello(a)[0].body, banned).not.toContain(banned);

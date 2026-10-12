@@ -154,6 +154,26 @@ export function plainDashes(body: string): string {
   return body.replace(/\s*—\s*(?=\S)/g, ", ").replace(/\s*—\s*$/gm, "").replace(/^, /gm, "");
 }
 
+/**
+ * Normal capitalization (operator, 2026-10-12: "she could write normally"): each line and each sentence starts with
+ * a capital, and "i" is "I". Links, emails, @handles and #hashtags are never touched. Applied here, in the one
+ * writer, so a fixed line in code and a model's line read the same. Pure.
+ */
+export function normalCase(body: string): string {
+  const untouchable = (word: string) => /:\/\/|@|^www\.|^[a-z0-9-]+(\.[a-z0-9-]+)+(\/|$)/i.test(word);
+  const capAt = (s: string, i: number) => {
+    const word = s.slice(i).split(/\s/)[0];
+    return untouchable(word) ? s : s.slice(0, i) + s[i].toUpperCase() + s.slice(i + 1);
+  };
+  return body.split("\n").map((line) => {
+    let out = line.replace(/(^|\s)i(?=('|’)(m|ll|ve|d)\b|\s|[,.!?]|$)/g, "$1I");
+    const first = out.search(/[A-Za-z]/);
+    if (first >= 0 && /^[^A-Za-z@#]*$/.test(out.slice(0, first)) && !/["“(]/.test(out.slice(0, first))) out = capAt(out, first);
+    // After a sentence end: ". x" → ". X". A dot inside a link or a domain has no space after it, so it never matches.
+    return out.replace(/([.!?]["”)]?\s+)([a-z][^\s]*)/g, (all, gap: string, word: string) => (untouchable(word) ? all : gap + word[0].toUpperCase() + word.slice(1)));
+  }).join("\n");
+}
+
 async function writeOutbound(
   ctx: MutationCtx,
   row: {
@@ -208,7 +228,8 @@ async function writeOutbound(
     creatorId: row.creatorId,
     direction: "out",
     surface: row.surface,
-    body: plainDashes(plain.clean),
+    // A pitch review stays exactly as drafted: its approval is checked word for word against the draft.
+    body: row.dedupeKey.startsWith("partner-review:") ? plainDashes(plain.clean) : normalCase(plainDashes(plain.clean)),
     kind: row.kind,
     produced: row.produced,
     buttons: row.buttons,

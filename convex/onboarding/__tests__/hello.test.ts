@@ -2,6 +2,7 @@
  * Her first texts (2026-10-02): a pause with the typing dots, a greeting written for this person, the
  * save-her-number ask, then the goal question; their name handled with care; her read never beats it.
  */
+import { normalCase } from "../../core/messages";
 import { convexTest } from "convex-test";
 import { describe, expect, it, vi } from "vitest";
 import schema from "../../schema";
@@ -86,8 +87,8 @@ describe("on rows", () => {
     expect(await t.action(internal.onboarding.hello.send, { creatorId: c })).toMatchObject({ sent: true, fromModel: true });
     expect(await t.action(internal.onboarding.hello.send, { creatorId: c })).toMatchObject({ sent: false, reason: "already said hello" });
     const [row] = await hellos(t, c);
-    expect(row.body.split("\n---\n")[0]).toBe("hey Adina! it's maya 👋");
-    expect(row.body).toContain(saveContactLine());
+    expect(row.body.split("\n---\n")[0]).toBe("Hey Adina! It's maya 👋");
+    expect(row.body).toContain(normalCase(saveContactLine()));
     expect(row).toMatchObject({ awaitingAnswer: false, proactive: true, kind: "hello" });
   });
 

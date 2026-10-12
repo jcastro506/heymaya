@@ -244,7 +244,7 @@ describe("day one is a working day (2026-09-06)", () => {
     const r = await t.action(internal.calendar.weekPlan.draft, { creatorId: wed, now: WEDNESDAY_3PM, horizon: "first" });
     expect(r.sent).toBe(true);
     const msg = (await t.run((ctx) => ctx.db.query("messages").collect())).find((m) => m.kind === "plan");
-    expect(msg?.body.startsWith("the rest of this week")).toBe(true);
+    expect(msg?.body.startsWith("The rest of this week")).toBe(true);
     const blocks = await t.run((ctx) => ctx.db.query("calendarBlocks").collect());
     const nextMonday = atLocalHour(Date.UTC(2026, 8, 14, 12, 0), 0, TZ);
     expect(blocks.every((b) => b.start < nextMonday), "nothing planned past sunday").toBe(true);
@@ -256,7 +256,7 @@ describe("day one is a working day (2026-09-06)", () => {
     const first = await t2.action(internal.calendar.weekPlan.draft, { creatorId: sun, now: SUNDAY_6PM - 4 * 3_600_000, horizon: "first" });
     expect(first.sent).toBe(true);
     const body = (await t2.run((ctx) => ctx.db.query("messages").collect())).find((m) => m.kind === "plan")?.body ?? "";
-    expect(body.startsWith("next week")).toBe(true);
+    expect(body.startsWith("Next week")).toBe(true);
     const cron = await t2.action(internal.calendar.weekPlan.draft, { creatorId: sun, now: SUNDAY_6PM });
     expect(cron.sent, "the sunday cron sees the week as planned").toBe(false);
   });
@@ -298,7 +298,7 @@ describe("the plan answers their choice (2026-09-07)", () => {
     expect(r.sent).toBe(true);
     const plan = (await t.run((ctx) => ctx.db.query("messages").collect())).find((m) => m.kind === "plan");
     // Its own text, then the week (2026-10-02: one long text was too much to read).
-    expect(plan?.body.startsWith("travel it is.\n---\nnext week")).toBe(true);
+    expect(plan?.body.startsWith("Travel it is.\n---\nNext week")).toBe(true);
   });
 });
 

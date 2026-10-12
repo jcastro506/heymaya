@@ -4,6 +4,7 @@
  * is the exit: Linq's guidance is to halt after a last message that gives an easy way out, so it must
  * never depend on a model; if the writer or the critic can't give a clean one, the fixed line goes.
  */
+import { normalCase } from "../../core/messages";
 import { convexTest } from "convex-test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import schema from "../../schema";
@@ -69,7 +70,7 @@ describe("re-engagement fails closed", () => {
       const r = await t.action(internal.agent.cadence.quiet, { creatorId: c as never, now: T0 + 16 * D });
       expect(r, `${critic}/${writer}`).toMatchObject({ sent: true, reason: "easy_out" });
       const [m] = await out(t, c as never);
-      expect(m).toMatchObject({ kind: "quiet", body: EASY_OUT_FALLBACK, criticSkipped: true, proactive: true });
+      expect(m).toMatchObject({ kind: "quiet", body: normalCase(EASY_OUT_FALLBACK), criticSkipped: true, proactive: true });
       // and it is still once per spell
       expect((await t.action(internal.agent.cadence.quiet, { creatorId: c as never, now: T0 + 30 * D })).reason).toBe("dormant: the easy-out has gone; nothing until they write");
     }
@@ -80,7 +81,7 @@ describe("re-engagement fails closed", () => {
     const c = await world(t, "k6");
     expect(await t.action(internal.agent.cadence.quiet, { creatorId: c as never, now: T0 + 4 * D })).toMatchObject({ sent: true, reason: "nudge" });
     const [m] = await out(t, c as never);
-    expect(m.body).toBe("new one for you: the shoe rack list. want it?");
+    expect(m.body).toBe("New one for you: the shoe rack list. Want it?");
     const row = await t.run((ctx) => ctx.db.get(c as never)) as { milestonesSaid?: string[] } | null;
     expect(row?.milestonesSaid?.some((k) => k.startsWith("reason:ideas:"))).toBe(true);
     const again = await t.query(internal.agent.reengage.inputs, { creatorId: c as never, now: T0 + 10 * D });
