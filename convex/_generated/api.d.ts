@@ -174,6 +174,7 @@ import type * as integrations_scrapeCreators_client from "../integrations/scrape
 import type * as integrations_scrapeCreators_deps from "../integrations/scrapeCreators/deps.js";
 import type * as integrations_scrapeCreators_fixtureClient from "../integrations/scrapeCreators/fixtureClient.js";
 import type * as integrations_scrapeCreators_normalize from "../integrations/scrapeCreators/normalize.js";
+import type * as integrations_scrapeCreators_platforms_commerce from "../integrations/scrapeCreators/platforms/commerce.js";
 import type * as integrations_scrapeCreators_platforms_cross from "../integrations/scrapeCreators/platforms/cross.js";
 import type * as integrations_scrapeCreators_platforms_instagram from "../integrations/scrapeCreators/platforms/instagram.js";
 import type * as integrations_scrapeCreators_platforms_tiktok from "../integrations/scrapeCreators/platforms/tiktok.js";
@@ -204,6 +205,7 @@ import type * as onboarding_suggest from "../onboarding/suggest.js";
 import type * as onboarding_watch from "../onboarding/watch.js";
 import type * as ops from "../ops.js";
 import type * as partnerships_contracts from "../partnerships/contracts.js";
+import type * as partnerships_dealScout from "../partnerships/dealScout.js";
 import type * as partnerships_delivery from "../partnerships/delivery.js";
 import type * as partnerships_drafts from "../partnerships/drafts.js";
 import type * as partnerships_kit from "../partnerships/kit.js";
@@ -423,6 +425,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/scrapeCreators/deps": typeof integrations_scrapeCreators_deps;
   "integrations/scrapeCreators/fixtureClient": typeof integrations_scrapeCreators_fixtureClient;
   "integrations/scrapeCreators/normalize": typeof integrations_scrapeCreators_normalize;
+  "integrations/scrapeCreators/platforms/commerce": typeof integrations_scrapeCreators_platforms_commerce;
   "integrations/scrapeCreators/platforms/cross": typeof integrations_scrapeCreators_platforms_cross;
   "integrations/scrapeCreators/platforms/instagram": typeof integrations_scrapeCreators_platforms_instagram;
   "integrations/scrapeCreators/platforms/tiktok": typeof integrations_scrapeCreators_platforms_tiktok;
@@ -453,6 +456,7 @@ declare const fullApi: ApiFromModules<{
   "onboarding/watch": typeof onboarding_watch;
   ops: typeof ops;
   "partnerships/contracts": typeof partnerships_contracts;
+  "partnerships/dealScout": typeof partnerships_dealScout;
   "partnerships/delivery": typeof partnerships_delivery;
   "partnerships/drafts": typeof partnerships_drafts;
   "partnerships/kit": typeof partnerships_kit;

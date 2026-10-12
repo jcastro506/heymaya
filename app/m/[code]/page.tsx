@@ -62,7 +62,7 @@ export default async function SendPage({ params }: { params: Promise<{ code: str
           <CopyButton text={d.body} label="Copy the DM" wide />
         </section>
       )}
-      <p className="send-foot">It sends from your own account. Tell Maya once it's out, and forward her anything they write back.</p>
+      <p className="send-foot">It sends from your own account. Tell Maya once it&apos;s out, and forward her anything they write back.</p>
     </main>
   );
 }

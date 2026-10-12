@@ -1,18 +1,21 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 const q = (s: string) => encodeURIComponent(s);
 
-/** Gmail's app on an iPhone, Gmail on the web on a computer (Android opens Gmail from a mail link), and the default mail app. */
+/** Gmail's app on an iPhone, Gmail on the web on a computer (Android opens Gmail from a mail link), and the default mail app. Picked at the tap. */
 export function SendButtons({ to, subject, body }: { to: string; subject: string; body: string }) {
-  const [device, setDevice] = useState<"ios" | "android" | "desktop">("desktop");
-  useEffect(() => { const ua = navigator.userAgent; setDevice(/iPhone|iPad|iPod/i.test(ua) ? "ios" : /Android/i.test(ua) ? "android" : "desktop"); }, []);
   const mail = `mailto:${to}?subject=${q(subject)}&body=${q(body)}`;
-  const gmail = device === "ios" ? `googlegmail:///co?to=${q(to)}&subject=${q(subject)}&body=${q(body)}` : device === "android" ? mail : `https://mail.google.com/mail/?view=cm&fs=1&to=${q(to)}&su=${q(subject)}&body=${q(body)}`;
-  const phone = device !== "desktop";
+  const web = `https://mail.google.com/mail/?view=cm&fs=1&to=${q(to)}&su=${q(subject)}&body=${q(body)}`;
+  const ios = `googlegmail:///co?to=${q(to)}&subject=${q(subject)}&body=${q(body)}`;
+  const openGmail = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    const ua = navigator.userAgent;
+    if (/iPhone|iPad|iPod/i.test(ua)) { e.preventDefault(); window.location.href = ios; }
+    else if (/Android/i.test(ua)) { e.preventDefault(); window.location.href = mail; }
+  };
   return (
     <div className="send-buttons">
-      <a className="send-primary" href={gmail} target={phone ? undefined : "_blank"} rel="noreferrer">Open in Gmail</a>
+      <a className="send-primary" href={web} target="_blank" rel="noreferrer" onClick={openGmail}>Open in Gmail</a>
       <a className="send-secondary" href={mail}>Open in Mail</a>
     </div>
   );

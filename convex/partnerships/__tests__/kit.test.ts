@@ -4,12 +4,15 @@
  * excluded brands are never offered; the kit's numbers are the rows' numbers), cross-tenant.
  */
 import { convexTest } from "convex-test";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import schema from "../../schema";
 import { api, internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
 import { offerable, offerText, weekKey } from "../kit";
+
+beforeEach(() => { vi.stubEnv("MODEL_FAKE", "1"); vi.stubEnv("OPENROUTER_API_KEY", "fake"); });
+afterEach(() => { vi.unstubAllEnvs(); });
 
 const brand = (handle: string, creators = 1) => ({ handle, platform: "tiktok", posts: creators, creators: Array.from({ length: creators }, (_, i) => `c${i}`), lastSeen: 1 });
 
@@ -42,15 +45,17 @@ async function setup(tier: "solo" | "partner") {
 }
 
 describe("the weekly offer", () => {
-  it("partner tier: one text naming the lane's brand, then nothing more that week", async () => {
+  it("partner tier: a candidate for the daily pick naming the lane's brand, once a week, never a text on its own (2026-10-12)", async () => {
     const s = await setup("partner");
-    expect(await s.t.action(internal.partnerships.kit.offerOne, { creatorId: s.a })).toMatchObject({ sent: true });
-    expect(await s.t.action(internal.partnerships.kit.offerOne, { creatorId: s.a })).toMatchObject({ sent: false });
-    const texts = await s.t.run((ctx) => ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", s.a)).collect());
-    expect(texts.filter((m) => m.kind === "partnership")).toHaveLength(1);
-    expect(texts[0].body).toContain("@hoka");
-    // B watches nobody: nothing to offer B, and nothing of A's lane leaks
-    expect(await s.t.action(internal.partnerships.kit.offerOne, { creatorId: s.b })).toMatchObject({ sent: false, reason: "nothing new paying their lane" });
+    expect(await s.t.action(internal.partnerships.kit.offerOne, { creatorId: s.a })).toMatchObject({ reason: "noticed for the daily pick" });
+    expect(await s.t.action(internal.partnerships.kit.offerOne, { creatorId: s.a })).toMatchObject({ reason: "already scouted this week" });
+    const c = (await s.t.run((ctx) => ctx.db.get(s.a)))!;
+    const deal = c.noticed!.find((n) => n.kind === "deal")!;
+    expect(deal.summary).toContain("hoka");
+    expect((await s.t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out"), "not a text on its own").toHaveLength(0);
+    // B: nothing to offer, and nothing of A's lane leaks.
+    expect((await s.t.action(internal.partnerships.kit.offerOne, { creatorId: s.b })).reason).toMatch(/no brands|no lane keywords/);
+    expect((await s.t.run((ctx) => ctx.db.get(s.b)))!.noticed ?? []).toHaveLength(0);
   });
   it("fails closed below the partner tier", async () => {
     const s = await setup("solo");
@@ -80,8 +85,8 @@ describe("signal 2 and one nudge a day", () => {
   it("after a partnerships text today, the follow-up pass waits for tomorrow", async () => {
     const s = await setup("partner");
     expect(await s.t.query(internal.partnerships.delivery.nudgedToday, { creatorId: s.a })).toBe(false);
-    await s.t.action(internal.partnerships.kit.offerOne, { creatorId: s.a });
-    expect(await s.t.query(internal.partnerships.delivery.nudgedToday, { creatorId: s.a })).toBe(true);
+    await s.t.run((ctx) => ctx.db.insert("messages", { creatorId: s.a, direction: "out", surface: "imessage", kind: "deal", body: "brands that could pay you", proactive: true, dedupeKey: "pick:x", ts: Date.now() } as never));
+    expect(await s.t.query(internal.partnerships.delivery.nudgedToday, { creatorId: s.a }), "the editor's deal text counts").toBe(true);
     expect(await s.t.query(internal.partnerships.delivery.nudgedToday, { creatorId: s.b })).toBe(false);
   });
 });

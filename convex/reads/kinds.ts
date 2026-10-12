@@ -9,6 +9,7 @@ import { instagramReelsPosts } from "./reels";
 import { instagramSearchProfiles, profilesResult, tiktokFollowingProfiles, tiktokPopularProfiles } from "./profiles";
 import { instagram } from "../integrations/scrapeCreators/platforms/instagram";
 import { cross } from "../integrations/scrapeCreators/platforms/cross";
+import { commerce } from "../integrations/scrapeCreators/platforms/commerce";
 import type { EndpointDeps } from "../integrations/scrapeCreators/deps";
 import { normalizeHandle } from "./key";
 
@@ -117,6 +118,29 @@ export const KINDS = {
     path: "/v1/reddit/search",
     normalize: (p) => ({ keyword: p.keyword.trim().toLowerCase() }),
     call: (p, deps) => cross.redditSearch(p.keyword, { ...deps, filter: "posts", sort: "top", timeframe: "week" }),
+  }),
+
+  // ---- where the money is (deals, 2026-10-12): shared by keyword, a few days fresh
+  "shop.search": spec<{ query: string }>({
+    ttlMs: 3 * D,
+    shared: true,
+    path: "/v1/tiktok/shop/search",
+    normalize: (p) => ({ query: p.query.trim().toLowerCase() }),
+    call: (p, deps) => commerce.shopSearch(p.query, deps),
+  }),
+  "ads.tiktok": spec<{ query: string }>({
+    ttlMs: 3 * D,
+    shared: true,
+    path: "/v1/tiktok/ad-library/search",
+    normalize: (p) => ({ query: p.query.trim().toLowerCase() }),
+    call: (p, deps) => commerce.tiktokAdLibrary(p.query, deps),
+  }),
+  "ads.meta": spec<{ query: string }>({
+    ttlMs: 3 * D,
+    shared: true,
+    path: "/v1/facebook/adLibrary/search/ads",
+    normalize: (p) => ({ query: p.query.trim().toLowerCase() }),
+    call: (p, deps) => commerce.metaAdLibrary(p.query, deps),
   }),
 
   // ---- accounts, shared by handle

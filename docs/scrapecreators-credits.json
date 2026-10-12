@@ -40,6 +40,9 @@
     "/v1/tiktok/song": 1,
     "/v1/tiktok/song/videos": 1,
     "/v1/instagram/audio/reels": 1,
-    "/v1/tiktok/user/audience": 26
+    "/v1/tiktok/user/audience": 26,
+    "/v1/tiktok/shop/search": 1,
+    "/v1/tiktok/ad-library/search": 1,
+    "/v1/facebook/adLibrary/search/ads": 1
   }
 }

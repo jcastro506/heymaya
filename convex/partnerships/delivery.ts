@@ -260,5 +260,6 @@ export const nudgedToday = internalQuery({ args: { creatorId: v.id("creators") }
   if (!c) return true;
   const today = dayKeyInZone(Date.now(), c.timezone);
   const rows = await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId).gte("ts", Date.now() - 36 * 3_600_000)).collect() as Doc<"messages">[];
-  return rows.some((m) => m.direction === "out" && m.kind === "partnership" && m.proactive && dayKeyInZone(m.ts, c.timezone) === today);
+  // The weekly deal suggestion (kind "deal", sent by the editor) counts as today's partnerships text too.
+  return rows.some((m) => m.direction === "out" && (m.kind === "partnership" || m.kind === "deal") && m.proactive && dayKeyInZone(m.ts, c.timezone) === today);
 } });

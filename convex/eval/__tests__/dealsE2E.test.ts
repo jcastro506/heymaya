@@ -54,6 +54,8 @@ describe("the personas' world (sibling coherence)", () => {
 
 function fakesOn() {
   vi.stubEnv("EVAL_FAKES", "1");
+  vi.stubEnv("MODEL_FAKE", "1");
+  vi.stubEnv("OPENROUTER_API_KEY", "fake");
   vi.stubEnv("ENVIRONMENT_NAME", "local");
   vi.stubEnv("CONVEX_SITE_URL", SITE);
   vi.stubEnv("GMAIL_BASE_URL", `${SITE}/fake/gmail`);
@@ -79,10 +81,12 @@ async function story(key: "sam" | "priya" | "leo") {
   await t.mutation(internal.eval.dealsE2E.seedPersona, { creatorId, persona: key, lane: true });
   await t.action(internal.eval.partnershipGauntlet.connectFakeMailbox, { creatorId });
   await t.mutation(internal.eval.partnershipGauntlet.setPlan, { creatorId, status: "comped", tier: "partner", paired: true });
-  const offer = await t.action(internal.partnerships.kit.offerOne, { creatorId });
+  // 2026-10-12: the weekly look is a candidate; the editor's daily pick sends it.
+  await t.action(internal.partnerships.kit.offerOne, { creatorId });
+  const offer = await t.action(internal.core.editor.pick, { creatorId });
   await t.mutation(internal.eval.partnershipGauntlet.setPlan, { creatorId, status: "comped", tier: "partner", paired: false });
   const rows = () => t.query(internal.eval.dealsE2E.rows, { creatorId });
-  const offerText = (await rows()).messages.find((m) => (m.dedupeKey ?? "").startsWith("partner-week:"))?.body ?? "";
+  const offerText = (await rows()).messages.find((m) => (m.dedupeKey ?? "").startsWith("pick:"))?.body ?? "";
   const source = (await t.mutation(internal.core.messages.recordInbound, { creatorId, surface: "telegram", body: p.script.yes })).messageId;
   const ctx = { runQuery: t.query, runMutation: t.mutation, runAction: t.action, scheduler: { runAfter: async () => undefined } } as never;
   const tool = (name: string, args: Record<string, unknown>) => runTool(ctx, creatorId, { name, args: { why: "the story", ...args } }, DEFAULT_BUDGET(), [] as ToolCallRecord[], source as Id<"messages">);
@@ -109,7 +113,7 @@ describe("the story for each persona, through her tools (nothing sent)", () => {
     it(`${key}: the lane's brand is offered, researched, saved, given a per-brand kit link and a draft that waits for the code`, async () => {
       const s = await story(key);
       expect(s.offer.sent).toBe(true);
-      expect(s.offerText).toContain(`@${s.p.brandHandle}`);
+      expect(s.offerText).toContain(s.p.brandHandle);
       expect(s.kitText).toMatch(/followers/);
       expect(s.kitLink).toMatch(/\/k\/[a-z0-9]{8,40}$/);
       if (s.p.expectRoute === "email") {

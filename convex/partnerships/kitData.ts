@@ -242,7 +242,12 @@ export async function readKitV2(ctx: QueryCtx, c: Doc<"creators">, now = Date.no
 
 /** Pure: what they make, short and public-safe (no numbers, no handles), at most five. */
 export function stylesOf(c: Pick<Doc<"creators">, "growthPlan" | "dossier">): string[] {
-  const formats = ((c.growthPlan as { formats?: unknown } | undefined)?.formats ?? []) as unknown[];
+  // The month plan keeps formats to 40 characters, so one at the cap was cut mid-phrase: back to its last joining word.
+  const formats = (((c.growthPlan as { formats?: unknown } | undefined)?.formats ?? []) as unknown[]).map((f) => {
+    if (typeof f !== "string" || f.length < 38) return f;
+    const m = f.match(/^(.{8,}?)\s+(?:with|and|of|for|to|in|on|that)\b(?!.*\s(?:with|and|of|for|to|in|on|that)\b)/i);
+    return m ? m[1] : f;
+  });
   const strengths = (((c.dossier as { strengths?: unknown } | undefined)?.strengths ?? []) as Array<{ skill?: unknown }>).map((s) => s.skill);
   return Array.from(new Set([...formats, ...strengths].filter((x): x is string => typeof x === "string").map((x) => x.replace(/\s+/g, " ").trim().replace(/[\s,]+(with|and|or|of|the|a|an|to|for|in|on|that|your|their)$/i, "").replace(/[\s,.&]+$/, "")).filter((x) => x.length >= 3 && x.length <= 70 && !/\d|@|#|https?:/.test(x)))).slice(0, 5);
 }

@@ -133,6 +133,10 @@ export const CREDITS_BY_PATH: Record<string, number> = {
   "/v1/instagram/user/highlight/detail": 1,
   "/v1/find-social-profiles": 10, // per the vendor spec; 0 on a cache_max_age hit
   "/v1/reddit/search": 1,
+  // Deals (2026-10-12): where money is moving in a lane.
+  "/v1/tiktok/shop/search": 1,
+  "/v1/tiktok/ad-library/search": 1,
+  "/v1/facebook/adLibrary/search/ads": 1,
   "/v1/credit-balance": 0,
   "/v1/account/get-daily-usage-count": 0,
   "/v1/account/get-most-used-routes": 0,
