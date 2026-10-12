@@ -207,18 +207,20 @@ describe("the human cadence: rows and rails, on the fake model", () => {
     expect((await t.action(internal.agent.cadence.sawIt, { creatorId: other, ownPostId: post, now: NOW })).reason).toBe("not their post");
   });
 
-  it("for you: no ask, with the link, twice a week and not a third time", async () => {
+  it("for you: noticed for the editor, sent as the day's pick with its link and no ask, never twice (2026-10-12)", async () => {
     const t = convexTest(schema, modules);
     const creatorId = await seed(t);
-    for (let i = 1; i <= 3; i++) {
-      const r = await t.action(internal.agent.cadence.forYou, { creatorId, postId: `fy${i}`, url: `https://www.tiktok.com/@x/video/${i}`, line: `saw this and thought of you, ${i}`, now: NOW + i * D });
-      expect(r.sent, `share ${i}: ${r.reason}`).toBe(i <= THRESHOLDS.forYouPerWeek);
-    }
+    const r = await t.action(internal.agent.cadence.forYou, { creatorId, postId: "fy1", url: "https://www.tiktok.com/@x/video/1", line: "saw this and thought of you", now: NOW });
+    expect(r.reason).toBe("noticed for today's pick");
+    expect((await t.action(internal.agent.cadence.forYou, { creatorId, postId: "fy1", url: "https://www.tiktok.com/@x/video/1", line: "again", now: NOW })).reason).toBe("already noticed");
+    expect((await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out"), "not a text on its own").toHaveLength(0);
+    const pick = await t.action(internal.core.editor.pick, { creatorId, now: NOW + 60_000 });
+    expect(pick.sent, pick.reason).toBe(true);
     const shares = (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.kind === "for_you");
-    expect(shares.length).toBe(2);
+    expect(shares).toHaveLength(1);
     expect(shares[0].body).toContain("https://www.tiktok.com/@x/video/1");
     expect(shares[0].awaitingAnswer).toBeFalsy();
-    expect((await t.action(internal.agent.cadence.forYou, { creatorId, postId: "fy1", url: "https://t/1", line: "again", now: NOW + 12 * D })).reason, "the same post is never shared twice").toBe("already shared");
+    expect((await t.action(internal.core.editor.pick, { creatorId, now: NOW + 2 * 60_000 })).reason).toBe("today is decided");
   });
 
   it("the hourly finds who is at 8 and who is at 18 on their own clock", async () => {

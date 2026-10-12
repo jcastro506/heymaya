@@ -192,7 +192,10 @@ export const run = internalAction({
     const ev = (["held", "failed", "unknown", "none"] as const).includes(out.experimentVerdict as never) ? (out.experimentVerdict as "held" | "failed" | "unknown" | "none") : "none";
     await ctx.runMutation(internal.review.weekly.finish, { creatorId: a.creatorId, experimentVerdict: ev, newExperiment: out.newExperiment ?? "", rungOverride: out.rungOverride && out.rungOverride.rung !== inp.rung.rung ? { rung: String(out.rungOverride.rung), why: String(out.rungOverride.why ?? "").slice(0, 120) } : undefined, rung: inp.rung.rung });
     const weekKey = new Date(now).toISOString().slice(0, 10);
-    await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: text, dedupeKey: `review:${weekKey}`, proactive: true, kind: "review", links: inp.week.slice(0, 3).map((p) => p.url), produced, criticSkipped });
+    // One Sunday text, not two (2026-10-12): the review opens next week's plan. If the week can't be planned
+    // (nothing to plan with, no free time), the review goes on its own, as before.
+    const plan = await ctx.runAction(internal.calendar.weekPlan.draft, { creatorId: a.creatorId, now, horizon: "next_week", opener: text });
+    if (!plan.sent) await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: text, dedupeKey: `review:${weekKey}`, proactive: true, kind: "review", links: inp.week.slice(0, 3).map((p) => p.url), produced, criticSkipped });
     await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: a.creatorId, step: "first_review" });
     // learn-creator: the weekly dossier rewrite, after the review, with the week's corrections in front of it (§15.7).
     await ctx.scheduler.runAfter(60_000, internal.onboarding.ingest.synthesize, { creatorId: a.creatorId, reason: "weekly" });

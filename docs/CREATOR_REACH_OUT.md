@@ -38,3 +38,15 @@ A day never has more than 3 texts she started, outside what they asked for.
 ## The intro
 
 No survey. She says who she is, what she does, how to use her, that the app keeps everything, and asks them to save her number. Then her read.
+
+## The editor: one pick a day (2026-10-12, `core/editor.ts`)
+
+Her own finds no longer race each other. The paths that find things write **candidates** to `creators.noticed` (the scout's drafted ideas, including their own post doing well and creators they watch; "thought of you"), and comments on their posts (questions, or liked ones) are read at pick time.
+
+- **Score (code):** base by kind × freshness × how often this person answers that kind (answered = a reply within 8 h) × variety (the same kind as last time loses).
+- **Pick (her):** the top 4, with what she sent this week and whether it landed, go to her. She picks one or none ("a quiet day is a good answer"). Comments are written by her and checked; a failed check is a quiet day.
+- **When:** from the hour they actually reply (learned nightly, `preferredSendHour`) until 8pm. Not within 3 h of their last message: mid-conversation it rides along in her reply as one "oh also" bubble, which decides the day with no extra text.
+- **Backing off:** three of hers unanswered → only a strong one, or one good one a week, never two days running.
+- **Sunday is one text:** the review opens next week's plan (alone only when the week can't be planned).
+
+Simulated month (`core/__tests__/editor.test.ts`): someone who answers comments gets comments and quiet days; someone who answers ideas learns to get ideas; someone who answers nothing gets about one a week.

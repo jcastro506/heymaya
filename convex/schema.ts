@@ -55,6 +55,23 @@ export default defineSchema({
     messagingPausedAt: v.optional(v.number()),
     /** How often she may text first about her own finds (core/reachOut). Set by them in chat ("text me less"). */
     textFirstPace: v.optional(v.union(v.literal("less"), v.literal("normal"), v.literal("more"))),
+    /** What she noticed and might text them about (core/editor): one pick a day, or none. */
+    noticed: v.optional(v.array(v.object({
+      id: v.string(),
+      kind: v.string(),
+      sourceKey: v.string(),
+      summary: v.string(),
+      link: v.optional(v.string()),
+      base: v.number(),
+      draft: v.optional(v.any()),
+      onSent: v.optional(v.any()),
+      createdAt: v.number(),
+      expiresAt: v.number(),
+      status: v.union(v.literal("open"), v.literal("sent"), v.literal("folded"), v.literal("dropped")),
+      decidedAt: v.optional(v.number()),
+    }))),
+    /** The day (their clock) the editor last decided: a pick, a fold, or a quiet day. */
+    pickedDay: v.optional(v.string()),
     /** Things they asked her to do on a schedule ("3 ideas every morning"). Run by core/routines; never over budget. */
     routines: v.optional(v.array(v.object({
       id: v.string(),
