@@ -6,24 +6,16 @@
  */
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { ConvexHttpClient } from "convex/browser";
-import { api } from "@/convex/_generated/api";
-import type { PublicDraft } from "@/convex/partnerships/drafts";
+import { readPublicDraft } from "@/lib/publicDraft";
 import { SendButtons, CopyButton } from "./SendButtons";
 import "./send.css";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Your pitch, ready to send", robots: { index: false, follow: false } };
 
-async function read(code: string): Promise<PublicDraft | null> {
-  const url = process.env.NEXT_PUBLIC_CONVEX_URL;
-  if (!url) return null;
-  return await new ConvexHttpClient(url).query(api.partnerships.drafts.publicDraft, { code }).catch(() => null);
-}
-
 export default async function SendPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
-  const d = await read(code);
+  const d = await readPublicDraft(code);
   if (!d) notFound();
   const title = d.channel === "email" ? `Your pitch to ${d.brand}` : d.channel === "application" ? `Your ${d.brand} application` : `Your DM to ${d.brand}`;
   return (
