@@ -328,7 +328,7 @@ export const quiet = internalAction({
   handler: async (ctx, a): Promise<{ sent: boolean; reason: string }> => await ctx.runAction(internal.agent.reengage.run, { creatorId: a.creatorId, now: a.now }),
 });
 
-/** "saw this, thought of you": the scout names it on a day it has no idea; this holds the weekly count. */
+/** "saw this, thought of you": the scout names it on a day it has no idea; this holds the weekly count. A candidate for the editor's daily pick (core/editor), never a text on its own. */
 export const forYou = internalAction({
   args: { creatorId: v.id("creators"), postId: v.string(), url: v.string(), line: v.string(), now: v.optional(v.number()) },
   handler: async (ctx, a): Promise<{ sent: boolean; reason: string }> => {
@@ -337,13 +337,9 @@ export const forYou = internalAction({
     if (!line) return { sent: false, reason: "no line" };
     const count = await ctx.runQuery(internal.agent.cadence.forYouCountThisWeek, { creatorId: a.creatorId, now });
     if (count >= THRESHOLDS.forYouPerWeek) return { sent: false, reason: `${count} this week already (cap ${THRESHOLDS.forYouPerWeek})` };
-    const rails = await railsOk(ctx as never, a.creatorId, now);
-    if (!rails.ok) return { sent: false, reason: rails.reason ?? "rails" };
     const body = line.includes(a.url) ? line : `${line}\n\n${a.url}`;
-    const sent = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body, dedupeKey: `foryou:${a.postId}`, ts: now, proactive: true, capped: true, kind: "for_you", links: [a.url] });
-    if (!sent.sent) return { sent: false, reason: sent.held ?? "already shared" };
-    await deliverNow(ctx as never);
-    return { sent: true, reason: "shared" };
+    const r = await ctx.runMutation(internal.core.editor.notice, { creatorId: a.creatorId, now, c: { id: `foryou:${a.postId}`, kind: "for_you", sourceKey: `foryou:${a.postId}`, base: 1.5, ttlMs: 48 * 3_600_000, summary: `saw this, thought of you: ${line}`, link: a.url, draft: { body, links: [a.url] } } });
+    return { sent: false, reason: r.added ? "noticed for today's pick" : "already noticed" };
   },
 });
 

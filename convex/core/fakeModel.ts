@@ -72,6 +72,13 @@ export function fakeAnswer(purpose: string, messages: OpenRouterMessage[]): Open
     case "first_read":
     case "first_read_rewrite":
       return ok("hey. read your posts; the talking-head ones do best. first idea tomorrow.");
+    case "editor": {
+      // Test-only stand-in for her pick: the first candidate, written when it needs text; "quiet" in the list means none.
+      const id = user.match(/- id: (\S+)/)?.[1];
+      if (!id || /QUIET_DAY/.test(user)) return ok(JSON.stringify({ pick: null, why: "nothing worth it", text: "" }));
+      const needs = new RegExp(`id: ${id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} · \\S+ · needs_text`).test(user);
+      return ok(JSON.stringify({ pick: id, why: "the best one today", text: needs ? "someone in your comments asked where the rings are from\n---\nthat's a whole video honestly" : "" }));
+    }
     case "routine":
       return ok(/nothing real|blows up/i.test(user) ? "SKIP" : "morning! three for today:\n---\nyour coffee walk, but judging everyone's shoes\n---\nthe jewelry stack that never comes off");
     case "taste_reply":

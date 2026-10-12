@@ -36,7 +36,10 @@ describe("a simulated fortnight", () => {
       const now = START + day * DAY;
       vi.setSystemTime(now);
       await t.run((ctx) => ctx.db.insert("signals", { creatorId, kind: "breakout", sourcePostIds: [`73959656766298882${(70 + day).toString()}`], trackedAccountId: trackedId, score: 5 + day * 0.1, corroboration: { accounts: 2, soundRising: false }, verdict: "pending", why: `${(5 + day * 0.1).toFixed(1)}x their normal after 9h; https://www.tiktok.com/@runwithcarly/video/73959656766298882${70 + day}`, thresholdsVersion: "t", createdAt: now - 3_600_000 }));
-      const r = await t.action(internal.scout.scout.run, { creatorId });
+      const sc = await t.action(internal.scout.scout.run, { creatorId });
+      expect(sc.sent, `scout on day ${day}: ${sc.reason}`).toBe(true);
+      // 2026-10-12: the scout drafts; the editor's daily pick sends (core/editor).
+      const r = await t.action(internal.core.editor.pick, { creatorId, now });
       if (r.sent) sentDays.push(day);
       await t.finishAllScheduledFunctions(vi.runAllTimers);
       // One text from them a day, through the classifier and converse: a reply, never a proactive row.
@@ -52,6 +55,8 @@ describe("a simulated fortnight", () => {
         const rv = await t.action(internal.review.weekly.run, { creatorId });
         expect(rv.sent, `review on day ${day}`).toBe(true);
         await t.finishAllScheduledFunctions(vi.runAllTimers);
+        // The hourly sweep (production) clears Sunday's "book it?" when their day ends.
+        await t.mutation(internal.core.messages.expireStaleQuestionsAll, { now: now + 20 * 3_600_000 });
       }
     }
 
@@ -77,11 +82,14 @@ describe("a simulated fortnight", () => {
     expect(out.filter((m) => m.awaitingAnswer).length).toBeLessThanOrEqual(1);
 
     // Two Sunday reviews, each with an experiment on the ledger; ideas one per sent day, verdicts on the signals.
-    expect(out.filter((m) => m.kind === "review")).toHaveLength(2);
+    // 2026-10-12: each Sunday is one text: the review alone, or opening the week plan.
+    const sundays = out.filter((m) => m.kind === "review" || (m.kind === "plan" && new Date(m.ts).getUTCDay() === 0));
+    expect(sundays).toHaveLength(2);
     const c = await t.run((ctx) => ctx.db.get(creatorId));
     expect(c?.experiments.length).toBeGreaterThanOrEqual(2);
     const ideas = await t.run((ctx) => ctx.db.query("ideas").collect());
-    expect(ideas.length).toBe(sentDays.length);
+    // Every day's idea is drafted; the ones sent are the editor's picks (a day can also carry it in a reply).
+    expect(ideas.length).toBeGreaterThanOrEqual(sentDays.length);
     const signals = await t.run((ctx) => ctx.db.query("signals").collect());
     expect(signals.filter((s) => s.verdict === "pending")).toHaveLength(0);
 

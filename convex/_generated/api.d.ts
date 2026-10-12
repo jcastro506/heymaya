@@ -91,6 +91,7 @@ import type * as core_cadence from "../core/cadence.js";
 import type * as core_costs from "../core/costs.js";
 import type * as core_delivery from "../core/delivery.js";
 import type * as core_directives from "../core/directives.js";
+import type * as core_editor from "../core/editor.js";
 import type * as core_embeddings from "../core/embeddings.js";
 import type * as core_envelope from "../core/envelope.js";
 import type * as core_evidencePack from "../core/evidencePack.js";
@@ -338,6 +339,7 @@ declare const fullApi: ApiFromModules<{
   "core/costs": typeof core_costs;
   "core/delivery": typeof core_delivery;
   "core/directives": typeof core_directives;
+  "core/editor": typeof core_editor;
   "core/embeddings": typeof core_embeddings;
   "core/envelope": typeof core_envelope;
   "core/evidencePack": typeof core_evidencePack;

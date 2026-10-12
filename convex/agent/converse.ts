@@ -5,6 +5,7 @@
  * skill-choice arrive with Sprint 3; the shape they plug into is this file.
  */
 
+import { carried } from "../core/editor";
 import { obviousCadence } from "./classify";
 import { v } from "convex/values";
 import { internalAction } from "../_generated/server";
@@ -613,7 +614,11 @@ export const run = internalAction({
       if (r.ok) paceNote = `\n\n(Already done by code this turn: their month plan is now ${pace} posts a week, agreed. Say so in a few words and what it changes; don't call growth_plan for it.)`;
     }
     const proposedPlan = !paceNote && gp?.status === "proposed" ? "\n\nYour month plan is proposed, not agreed. If this message agrees with it or changes it (posts a week, formats, the test), call growth_plan set with the change first, then say what changed." : "";
-    const suffix = buildSuffix({ recent: recent.filter((m) => m._id !== target._id), target }) + `\n\nCurrent user-message evidence ID (internal, do not display): ${target._id}` + partnershipEvidence + recalled + greetingRule + unclearRule + deleteRule + readingNow + proposedPlan + paceNote + (args.handledNote ? `\n\n(Already done by code this turn, and already said to them: "${args.handledNote.slice(0, 200)}". Answer the REST of their message now; do not repeat the done part.)` : "");
+    // The editor's ride-along (core/editor, 2026-10-12): mid-conversation, today's best find can be one "oh also"
+    // at the end of her reply instead of a separate text later. Read back from the reply by its link.
+    const ride = !args.handledNote ? await ctx.runQuery(internal.core.editor.rideAlong, { creatorId: creator._id, now: Date.now() }) : null;
+    const rideNote = ride ? `\n\nSomething you noticed today and haven't told them: ${ride.summary}\nLink: ${ride.link}\nIf it fits after you've fully answered them, add it as one short "oh also" bubble at the end, with the link on its own line. If their message is serious, a complaint, or a different topic that needs your full attention, leave it out.` : "";
+    const suffix = buildSuffix({ recent: recent.filter((m) => m._id !== target._id), target }) + `\n\nCurrent user-message evidence ID (internal, do not display): ${target._id}` + partnershipEvidence + recalled + greetingRule + unclearRule + deleteRule + readingNow + proposedPlan + paceNote + rideNote + (args.handledNote ? `\n\n(Already done by code this turn, and already said to them: "${args.handledNote.slice(0, 200)}". Answer the REST of their message now; do not repeat the done part.)` : "");
     const apiKey = process.env.OPENROUTER_API_KEY ?? "";
     const spec = REGISTRY.writer;
 
@@ -732,6 +737,8 @@ export const run = internalAction({
       produced: producedStamp(spec.primary),
       criticSkipped,
     });
+    // It rode along: today's pick is made, by conversation, with no extra text (core/editor).
+    if (ride && carried(text, ride.link)) await ctx.runMutation(internal.core.editor.decide, { creatorId: creator._id, day: ride.day, id: ride.id, status: "folded", candidate: ride.candidate, now: Date.now() });
     await deliverNow(ctx as never);
     // remember (§15.7 layer 2): what they said in passing becomes a note or a rule, after the reply is on its way.
     await ctx.scheduler.runAfter(0, internal.agent.remember.afterTurn, { creatorId: creator._id, messageId: target._id });

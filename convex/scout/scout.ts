@@ -302,34 +302,27 @@ export const run = internalAction({
     const others = args.dryRun ? [] : await ctx.runQuery(internal.core.unseen.listUnseen, { creatorId: args.creatorId, except: ideaId, now });
     const ride = rideAlongLine(others.length, missionControlUrl(process.env.APP_URL, "ideas"));
     const body = ride ? `${withLink}\n\n${ride}` : withLink;
-    const { messageId, held } = await ctx.runMutation(internal.core.messages.send, {
+    // The editor sends it (core/editor, 2026-10-12): this is a candidate for today's one pick, not a text.
+    // Their own post doing well and a booked-session idea outrank a creator they watch; everything keeps a while.
+    const base = signal.kind === "win" ? 3.5 : signal.kind === "calendar" ? 3 : signal.kind === "breakout" ? 2.5 : 2;
+    const ttlMs = (signal.kind === "breakout" ? 24 : signal.kind === "win" ? 48 : 72) * 3_600_000;
+    const steps: Array<"first_scout" | "first_calendar_or_worth_seeing"> = ["first_scout", ...(signal.kind === "calendar" || signal.kind === "worth_seeing" ? ["first_calendar_or_worth_seeing" as const] : [])];
+    await ctx.runMutation(internal.core.editor.notice, {
       creatorId: args.creatorId,
-      surface: "telegram",
-      body,
-      dedupeKey: `scout:${signal._id}`,
-      proactive: true,
-      capped: true,
-      awaitingAnswer: /\?\s*$/.test(pick.message),
-      kind: "scout",
-      links,
-      buttons,
-      produced,
-      criticSkipped,
+      now,
+      c: {
+        id: `idea:${ideaId}`, kind: "idea", sourceKey: `scout:${signal._id}`, base, ttlMs,
+        summary: `an idea (${signal.kind}): ${(pick.version as { hook?: string } | undefined)?.hook ?? clip(pick.message, 160)} · why it's for them: ${pick.fitWhy}`,
+        ...(links[0] ? { link: cleanLink(links[0]) } : {}),
+        draft: { body, buttons, links, awaitingAnswer: /\?\s*$/.test(pick.message), criticSkipped },
+        onSent: { ideaId, unseen: others, steps },
+      },
     });
-    // S0: held by the cap inside send (another job texted first this hour). The idea stays in their app.
-    if (held) return { sent: false, reason: held };
-    if (messageId) await ctx.runMutation(internal.scout.scout.linkIdeaMessage, { ideaId, messageId, sentAt: now });
-    if (messageId && others.length) await ctx.runMutation(internal.core.unseen.markSurfaced, { creatorId: args.creatorId, ids: others, now });
-    // §22: a pick that lives in how it looks gets drawn, within the week's sketches; the album follows the idea by a minute.
-    if (shouldDrawProactively({ visual: Boolean(pick.visual), weekCount: await ctx.runQuery(internal.agent.frames.weekCount, { creatorId: args.creatorId, now }), sent: Boolean(messageId) })) await enqueueRender(ctx as never, { creatorId: args.creatorId, ideaId, requestedBy: "scout", requestId: "scout" });
     await ctx.scheduler.runAfter(0, internal.agent.memory.index, { creatorId: args.creatorId, kind: "idea", refId: String(ideaId), text: `${(pick.version as { hook?: string } | undefined)?.hook ?? ""}\n${pick.message}` });
-    verdicts.push({ signalId: signal._id, verdict: "sent", why: `sent: ${pick.fitWhy}` });
-    await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: args.creatorId, step: "first_scout" });
-    if (signal.kind === "calendar" || signal.kind === "worth_seeing") await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: args.creatorId, step: "first_calendar_or_worth_seeing" });
+    verdicts.push({ signalId: signal._id, verdict: "sent", why: `drafted for today's pick: ${pick.fitWhy}` });
 if (milestoneKey) await ctx.runMutation(internal.agent.history.markSaid, { creatorId: args.creatorId, key: milestoneKey });
         await ctx.runMutation(internal.scout.gate.setVerdicts, { verdicts });
-    await deliverNow(ctx as never);
-    return { sent: true, reason: pick.fitWhy };
+    return { sent: true, reason: `drafted for today's pick: ${pick.fitWhy}` };
   },
 });
 

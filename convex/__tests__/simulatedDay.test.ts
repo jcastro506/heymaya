@@ -33,6 +33,9 @@ describe("a simulated day", () => {
     const { t, creatorId, signalId } = await scenario();
     const r = await t.action(internal.scout.scout.run, { creatorId });
     expect(r.sent).toBe(true);
+    // 2026-10-12: the scout drafts; the editor's daily pick sends it (core/editor).
+    expect((await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out"), "drafted, not sent").toHaveLength(0);
+    expect((await t.action(internal.core.editor.pick, { creatorId })).sent).toBe(true);
     await t.finishAllScheduledFunctions(vi.runAllTimers);
 
     const ideas = await t.run((ctx) => ctx.db.query("ideas").collect());
@@ -106,8 +109,11 @@ describe("a simulated day", () => {
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     const c = await t.run((ctx) => ctx.db.get(creatorId));
     expect(c?.experiments[0]?.text).toContain("opens on an object");
-    const review = (await t.run((ctx) => ctx.db.query("messages").collect())).find((m) => m.kind === "review");
-    expect(review?.proactive).toBe(true);
+    // 2026-10-12: one Sunday text: the review opens next week's plan (or goes alone when the week can't be planned).
+    const out = (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out" && (m.kind === "review" || m.kind === "plan"));
+    expect(out).toHaveLength(1);
+    expect(out[0].proactive).toBe(true);
+    if (out[0].kind === "plan") expect(out[0].body.split("\n---\n")[0]).toContain("opens on an object");
     // No survey follows the review (Josh's rule).
     expect((await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.kind === "checkin")).toHaveLength(0);
   });
