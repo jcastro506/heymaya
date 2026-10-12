@@ -20,7 +20,7 @@ const str = { type: "string" } as const;
 
 export const KIT_TOOLS: OpenRouterTool[] = [
   { type: "function", function: { name: "media_kit", description: "Their media kit (partnerships plan): photo, one line, per platform followers, typical views, engagement, 30-day growth, audience (Instagram when connected; TikTok only from a TikTok Studio screenshot they sent), best posts of the last 6 months with links, services, brand work, contact, and their PRIVATE deal preferences (never shown to a brand). Ends with `next:`, the one kit question to ask now, if any. Free. Every number in a pitch, a kit or a rate conversation comes from here; nothing else.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
-  { type: "function", function: { name: "media_kit_edit", description: "Change their kit through the same function the app uses. op: propose_one_line (text: your one line about them, words only, no numbers or links; it waits for their yes) · approve_one_line (after they said yes to it) · their_one_line (text: words THEY gave you, goes on as is) · audience_on / audience_off (their answer about showing their audience on the public kit) · photo_profile (use their profile picture) · photo_none (no photo) · ask_photo (you asked them for a photo: their next image goes to the kit) · ask_tiktok_audience (you asked for their TikTok Studio audience screenshot). Free. Only on their word, except propose_one_line and the two asks.", parameters: { type: "object", properties: { op: { type: "string", enum: ["propose_one_line", "approve_one_line", "their_one_line", "audience_on", "audience_off", "photo_profile", "photo_none", "ask_photo", "ask_tiktok_audience"] }, text: str, why: str }, required: ["op", "why"] } } },
+  { type: "function", function: { name: "media_kit_edit", description: "Change their kit through the same function the app uses. op: propose_one_line (text: your one line about them, words only, no numbers or links; it waits for their yes) · approve_one_line (after they said yes to it) · their_one_line (text: words THEY gave you, goes on as is) · audience_on / audience_off (their answer about showing their audience on the public kit) · contact_email (email: where brands should reach them, as they gave it) · photo_profile (use their profile picture) · photo_none (no photo) · ask_photo (you asked them for a photo: their next image goes to the kit) · ask_tiktok_audience (you asked for their TikTok Studio audience screenshot). Free. Only on their word, except propose_one_line and the two asks.", parameters: { type: "object", properties: { op: { type: "string", enum: ["propose_one_line", "approve_one_line", "their_one_line", "contact_email", "audience_on", "audience_off", "photo_profile", "photo_none", "ask_photo", "ask_tiktok_audience"] }, text: str, email: str, why: str }, required: ["op", "why"] } } },
   { type: "function", function: { name: "kit_for_brand", description: "Make (or update) the per-brand link to their kit for one saved opportunity: the same kit, leading with 1 to 3 of THEIR posts you pick as most relevant to that brand (URLs from media_kit), plus one concrete idea for them (the same idea as the pitch). Returns the link to put in a first email pitch. The link dies when that relationship closes. Free.", parameters: { type: "object", properties: { opportunityId: str, postUrls: { type: "array", items: str }, idea: str, why: str }, required: ["opportunityId", "postUrls", "idea", "why"] } } },
 ];
 export const KIT_TOOL_NAMES = new Set(KIT_TOOLS.map((t) => t.function.name).concat(["media_kit_link"]));
@@ -47,7 +47,7 @@ export function renderKit(k: KitV2, link: string | null, prefs: { paidOnly: bool
   lines.push(`photo: ${k.photoSetting === "none" ? "none (their choice)" : k.photo ? (k.photo.source === "upload" ? "the one they sent" : `their ${k.photo.source} profile picture`) : "none available"}${k.photoCheck?.weak && k.photoSetting === "auto" ? (k.photoCheck.offered ? " (you already offered to use a photo of them; don't bring it up again unless they do)" : ` (weak: ${k.photoCheck.reason})`) : ""}`);
   lines.push(`one line: ${k.oneLine ? `${k.oneLine.approved ? "approved" : "proposed, waiting on their yes"}: "${k.oneLine.text}"` : "none yet"} · lane: ${k.lane ?? "not confirmed"}`);
   lines.push(`audience on the public kit: ${k.showAudience === null ? "not asked yet" : k.showAudience ? "yes" : "no (their choice)"}`);
-  lines.push(`services: ${k.services.join(", ") || "none listed (deal types not set)"} · region: ${k.region ?? "unknown"} · contact: ${k.contactEmail ?? "none (no mailbox connected)"}`);
+  lines.push(`services: ${k.services.join(", ") || "none listed (deal types not set)"} · region: ${k.region ?? "unknown"} · contact: ${k.contactEmail ?? "none yet: ask them for one"}`);
   for (const p of k.platforms) {
     const bits = [`${p.platform}${p.handle ? ` @${p.handle}` : ""}: ${p.followers !== null ? `${n(p.followers)} followers${p.followersAsOf ? ` (as of ${day(p.followersAsOf)})` : ""}` : "followers unknown"}`];
     if (p.growth30d) bits.push(`${p.growth30d.net >= 0 ? "+" : ""}${n(p.growth30d.net)} in 30 days`);
@@ -69,6 +69,7 @@ export function renderKit(k: KitV2, link: string | null, prefs: { paidOnly: bool
 }
 
 const NEXT_WORDS: Record<string, string> = {
+  contact: "ask ONCE what email brands should reach them at (it goes on their kit and is where replies land), then media_kit_edit contact_email with it.",
   audience: "ask ONCE whether their audience (age, gender, places) can show on the public kit; brands check it first. Then media_kit_edit audience_on or audience_off with their answer.",
   oneLine: "offer ONE line about them for the top of the kit (media_kit_edit propose_one_line: words only, no numbers), and ask if it sounds like them.",
   photo: "their profile picture is weak for a kit; offer ONCE to use a photo of them instead (they can text one), then media_kit_edit ask_photo. Never offer to make or edit one.",
@@ -80,7 +81,7 @@ export async function runKitTool(ctx: ActionCtx, creatorId: Id<"creators">, name
     if (!r) return "refused: media kits are on the partnerships plan";
     const s = r.settings;
     if (!s?.photoCheck && (s?.photo?.source ?? "auto") === "auto") await ctx.scheduler.runAfter(0, internal.partnerships.kitImage.checkDefaultPhoto, { creatorId });
-    const next = nextKitQuestion({ asked: s?.asked, showAudience: s?.showAudience, oneLine: s?.oneLine ?? null, photoCheck: s?.photoCheck ?? null, photoSource: s?.photo?.source }, r.kit.platforms.some((p) => p.audience));
+    const next = nextKitQuestion({ asked: s?.asked, contactEmail: s?.contactEmail ?? null, showAudience: s?.showAudience, oneLine: s?.oneLine ?? null, photoCheck: s?.photoCheck ?? null, photoSource: s?.photo?.source }, r.kit.platforms.some((p) => p.audience));
     // Asked once: surfacing the question in a conversation IS asking it (code marks it, not the model).
     if (next && sourceMessageId) {
       if (next === "photo") await ctx.runMutation(internal.partnerships.kitSettings.photoOffered, { creatorId });
@@ -94,6 +95,7 @@ export async function runKitTool(ctx: ActionCtx, creatorId: Id<"creators">, name
     const change = op === "propose_one_line" ? { op, text }
       : op === "approve_one_line" ? { op }
       : op === "their_one_line" ? { op: "edit_one_line", text }
+      : op === "contact_email" ? { op, email: typeof args.email === "string" ? args.email : text }
       : op === "audience_on" || op === "audience_off" ? { op: "audience", on: op === "audience_on" }
       : op === "photo_profile" || op === "photo_none" ? { op: "photo", source: op === "photo_none" ? "none" : "auto" }
       : op === "ask_photo" || op === "ask_tiktok_audience" ? { op: "ask", kind: op === "ask_photo" ? "photo" : "tiktok_audience" }

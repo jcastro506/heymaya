@@ -60,6 +60,8 @@ export interface KitV2 {
   oneLine: { text: string; approved: boolean } | null;
   showAudience: boolean | null;
   services: string[];
+  /** What they make, in plain words (their month plan's formats, else what they're good at): what a UGC buyer looks for. */
+  styles: string[];
   region: string | null;
   contactEmail: string | null;
   brandWork: Array<{ brand: string; source: "their_post" | "deal"; url: string | null; at: number }>;
@@ -230,11 +232,19 @@ export async function readKitV2(ctx: QueryCtx, c: Doc<"creators">, now = Date.no
     oneLine: settings?.oneLine ? { text: settings.oneLine.text, approved: settings.oneLine.status === "approved" } : null,
     showAudience: settings?.showAudience ?? null,
     services: servicesFrom(prefs.dealTypes, prefs.paidOnly),
+    styles: stylesOf(c),
     region: prefs.region && prefs.region !== "unknown" ? prefs.region : null,
-    contactEmail: mailbox?.email ?? null,
+    contactEmail: settings?.contactEmail ?? mailbox?.email ?? null,
     brandWork: [...fromDeals, ...fromPosts].slice(0, 8),
     platforms,
   };
+}
+
+/** Pure: what they make, short and public-safe (no numbers, no handles), at most five. */
+export function stylesOf(c: Pick<Doc<"creators">, "growthPlan" | "dossier">): string[] {
+  const formats = ((c.growthPlan as { formats?: unknown } | undefined)?.formats ?? []) as unknown[];
+  const strengths = (((c.dossier as { strengths?: unknown } | undefined)?.strengths ?? []) as Array<{ skill?: unknown }>).map((s) => s.skill);
+  return Array.from(new Set([...formats, ...strengths].filter((x): x is string => typeof x === "string").map((x) => x.replace(/\s+/g, " ").trim().replace(/[\s,]+(with|and|or|of|the|a|an|to|for|in|on|that|your|their)$/i, "").replace(/[\s,.&]+$/, "")).filter((x) => x.length >= 3 && x.length <= 70 && !/\d|@|#|https?:/.test(x)))).slice(0, 5);
 }
 
 /** The same kit, as it may be shown to a brand: no rates, no preferences, audience only with their yes. Pure. */
@@ -245,6 +255,7 @@ export interface PublicKitV2 {
   asOf: string;
   photo: string | null;
   services: string[];
+  styles: string[];
   region: string | null;
   contactEmail: string | null;
   brandWork: string[];
@@ -281,6 +292,7 @@ export function publicView(k: KitV2, variant?: { brand: string; idea: string; po
     asOf: new Date(k.asOf).toISOString().slice(0, 10),
     photo: k.photo?.url ?? null,
     services: k.services,
+    styles: k.styles,
     region: k.region,
     contactEmail: k.contactEmail,
     brandWork: [...new Set(k.brandWork.map((b) => b.brand))],

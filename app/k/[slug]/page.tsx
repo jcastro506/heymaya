@@ -46,7 +46,8 @@ export default async function MediaKit({ params }: { params: Promise<{ slug: str
         <div>
           <p className="kit-kicker">Media kit{kit.forBrand ? ` · for ${kit.forBrand.brand}` : ""}</p>
           <h1>@{kit.name}</h1>
-          {kit.oneLine ? <p className="kit-line">{kit.oneLine}</p> : kit.lane ? <p className="kit-line">{kit.lane}</p> : null}
+          {/* Only the line they approved: the lane is her working note, not a bio (2026-10-12). */}
+          {kit.oneLine ? <p className="kit-line">{kit.oneLine}</p> : null}
           <p className="kit-meta">
             {handles.map((h) => `${PLATFORM[h.platform]} @${h.handle}`).join(" · ")}
             {kit.region ? ` · ${kit.region}` : ""}
@@ -66,11 +67,12 @@ export default async function MediaKit({ params }: { params: Promise<{ slug: str
       {kit.platforms.map((p) => (
         <section key={p.platform} className="kit-platform">
           <h2>{PLATFORM[p.platform] ?? p.platform}{p.handle ? <span> @{p.handle}</span> : null}</h2>
+          {/* Only what we know: an unknown number is left out, never a dash a brand reads as broken. */}
           <div className="kit-stats">
-            <div><b>{p.followers !== null ? fmt(p.followers) : "—"}</b><small>followers</small></div>
-            <div><b>{p.normalViews !== null ? fmt(p.normalViews) : "—"}</b><small>typical views per post</small></div>
-            <div><b>{p.engagement ? pct(p.engagement.perView) : "—"}</b><small>engagement (of views)</small></div>
-            <div><b>{p.growth30d ? `${p.growth30d.net >= 0 ? "+" : ""}${fmt(p.growth30d.net)}` : "—"}</b><small>followers, last 30 days</small></div>
+            {p.followers !== null ? <div><b>{fmt(p.followers)}</b><small>followers</small></div> : null}
+            {p.normalViews !== null ? <div><b>{fmt(p.normalViews)}</b><small>typical views per post</small></div> : null}
+            {p.engagement ? <div><b>{pct(p.engagement.perView)}</b><small>engagement (of views)</small></div> : null}
+            {p.growth30d && p.growth30d.net > 0 ? <div><b>+{fmt(p.growth30d.net)}</b><small>followers, last 30 days</small></div> : null}
           </div>
           {p.audience ? (
             <div className="kit-audience">
@@ -97,7 +99,7 @@ export default async function MediaKit({ params }: { params: Promise<{ slug: str
                     ) : <span className="kit-cover-none" aria-hidden="true" />}
                     <span className="kit-post-meta">
                       <b>{fmt(b.views)} views</b>
-                      {b.multiple && b.multiple >= 1.5 ? <em>{b.multiple.toFixed(1)}× usual</em> : null}
+                      {b.multiple && b.multiple >= 1.5 && b.multiple < 20 ? <em>{b.multiple < 3 ? b.multiple.toFixed(1) : Math.round(b.multiple)}× usual</em> : null}
                     </span>
                     {b.caption ? <span className="kit-caption">{b.caption}</span> : null}
                   </a>
@@ -107,6 +109,13 @@ export default async function MediaKit({ params }: { params: Promise<{ slug: str
           ) : null}
         </section>
       ))}
+
+      {kit.styles.length ? (
+        <section className="kit-styles">
+          <p className="kit-kicker">What I make</p>
+          <ul className="kit-chips">{kit.styles.map((s) => <li key={s}>{s}</li>)}</ul>
+        </section>
+      ) : null}
 
       {kit.services.length || kit.brandWork.length ? (
         <section className="kit-work">
@@ -127,6 +136,7 @@ export default async function MediaKit({ params }: { params: Promise<{ slug: str
 
       {kit.contactEmail ? (
         <section className="kit-contact">
+          <p className="kit-kicker">Work with me</p>
           <a href={`mailto:${kit.contactEmail}`}>{kit.contactEmail}</a>
         </section>
       ) : null}

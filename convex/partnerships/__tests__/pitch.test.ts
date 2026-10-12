@@ -9,7 +9,7 @@ import { backed, disclosureLine, kitNumbers, nextSendAt, performanceNumbers, pit
 import type { KitV2 } from "../kitData";
 
 const KIT: KitV2 = {
-  name: "sam", lane: "running", asOf: 0, photo: null, photoSetting: "auto", photoCheck: null, oneLine: null, showAudience: true, services: [], region: null, contactEmail: null, brandWork: [],
+  name: "sam", lane: "running", asOf: 0, photo: null, photoSetting: "auto", photoCheck: null, oneLine: null, showAudience: true, services: [], styles: [], region: null, contactEmail: null, brandWork: [],
   platforms: [
     { platform: "instagram", handle: "sam", followers: 8050, followersAsOf: 0, normalViews: 9800, posts: 20, engagement: { perView: 0.061, perFollower: 0.021, posts: 12 }, growth30d: { net: 214, gained: null, lost: null }, audience: { source: "connected", asOf: 0, age: [{ label: "25-34", share: 0.41 }], gender: [{ label: "Women", share: 0.71 }], countries: [], cities: [] }, best: [{ url: "https://www.instagram.com/reel/a/", platform: "instagram", views: 31200, multiple: 3.1, caption: "", createTime: 0, cover: null }] },
     { platform: "tiktok", handle: "sam", followers: 2140, followersAsOf: 0, normalViews: 5100, posts: 10, engagement: null, growth30d: null, audience: null, best: [] },

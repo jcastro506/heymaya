@@ -29,11 +29,12 @@ export const KitChange = z.discriminatedUnion("op", [
   z.object({ op: z.literal("approve_one_line") }),
   z.object({ op: z.literal("edit_one_line"), text: z.string() }),
   z.object({ op: z.literal("audience"), on: z.boolean() }),
+  z.object({ op: z.literal("contact_email"), email: z.string().trim().toLowerCase().email().max(254) }),
   z.object({ op: z.literal("photo"), source: z.enum(["auto", "none"]) }),
   z.object({ op: z.literal("photo_upload"), storageId: z.string() }),
   z.object({ op: z.literal("tiktok_audience"), age: z.array(Share).max(10), gender: z.array(Share).max(4), countries: z.array(Share).max(10) }),
   z.object({ op: z.literal("ask"), kind: z.enum(["photo", "tiktok_audience"]) }),
-  z.object({ op: z.literal("asked"), key: z.enum(["audience", "oneLine", "photo"]) }),
+  z.object({ op: z.literal("asked"), key: z.enum(["audience", "oneLine", "photo", "contact"]) }),
   z.object({ op: z.literal("photo_check"), weak: z.boolean(), reason: z.string().max(200) }),
 ]);
 export type KitChangeT = z.infer<typeof KitChange>;
@@ -88,6 +89,10 @@ export async function applyKitChange(ctx: MutationCtx, creatorId: Id<"creators">
       note = "approved; on the kit";
       break;
     }
+    case "contact_email":
+      patch.contactEmail = change.email;
+      note = `contact email on the kit: ${change.email}`;
+      break;
     case "audience":
       patch.showAudience = change.on;
       patch.asked = { ...(cur.asked ?? {}), audience: cur.asked?.audience ?? now };
@@ -132,7 +137,9 @@ export async function applyKitChange(ctx: MutationCtx, creatorId: Id<"creators">
 }
 
 /** Pure: which one kit question is next, if any (the rule: one question at a time, each asked once). */
-export function nextKitQuestion(s: { asked?: Record<string, number>; showAudience?: boolean; oneLine?: { status: string } | null; photoCheck?: { weak: boolean; offeredAt?: number } | null; photoSource?: string }, hasAudience: boolean): "audience" | "oneLine" | "photo" | null {
+export function nextKitQuestion(s: { asked?: Record<string, number>; contactEmail?: string | null; showAudience?: boolean; oneLine?: { status: string } | null; photoCheck?: { weak: boolean; offeredAt?: number } | null; photoSource?: string }, hasAudience: boolean): "contact" | "audience" | "oneLine" | "photo" | null {
+  // Without a contact a brand can't reach them: asked first (2026-10-12).
+  if (!s.contactEmail && !s.asked?.contact) return "contact";
   if (hasAudience && s.showAudience === undefined && !s.asked?.audience) return "audience";
   if ((!s.oneLine || s.oneLine.status === "proposed") && !s.asked?.oneLine) return "oneLine";
   if ((s.photoSource ?? "auto") === "auto" && s.photoCheck?.weak && !s.photoCheck.offeredAt && !s.asked?.photo) return "photo";

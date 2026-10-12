@@ -944,6 +944,8 @@ export default defineSchema({
     oneLine: v.optional(v.object({ text: v.string(), status: v.union(v.literal("proposed"), v.literal("approved")), at: v.number() })),
     /** Audience on the PUBLIC page: undefined = not asked yet, then their answer. */
     showAudience: v.optional(v.boolean()),
+    /** Where brands reach them, as they said it (2026-10-12): the kit had none unless Gmail was connected, which nobody could. */
+    contactEmail: v.optional(v.string()),
     /** "auto" = their profile picture; "upload" = one they sent (its own stored copy); "none" = no photo. */
     photo: v.optional(v.object({ source: v.union(v.literal("auto"), v.literal("upload"), v.literal("none")), storageId: v.optional(v.id("_storage")), at: v.number() })),
     /** Her one look at the default photo; offered at most once. */
