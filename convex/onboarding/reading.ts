@@ -5,7 +5,7 @@
 import type { QueryCtx } from "../_generated/server";
 import type { Doc } from "../_generated/dataModel";
 
-export type Reading = { stage: "waiting" | "reading" | "read"; posts: number; watched: number; toWatch: number; lastWatched: string | null; summary: string | null; topFormat: string | null; readAt: number | null };
+export type Reading = { stage: "waiting" | "reading" | "failed" | "read"; posts: number; watched: number; toWatch: number; lastWatched: string | null; summary: string | null; topFormat: string | null; readAt: number | null };
 
 /** One definition of "how far is her read": the Today card and her replies both read this. */
 export async function readingOf(ctx: QueryCtx, c: Doc<"creators">): Promise<Reading> {
@@ -15,10 +15,14 @@ export async function readingOf(ctx: QueryCtx, c: Doc<"creators">): Promise<Read
   const last = watchedReads.sort((x, y) => y._creationTime - x._creationTime)[0];
   const lastPost = last ? posts.find((p) => p._id === last.ownPostId) : undefined;
   const d = c.dossier as { persona?: { summary?: string }; formatsUsed?: Array<{ label: string; count: number }>; rewrittenAt?: string } | undefined;
+  const jobs = (await ctx.db.query("jobs").withIndex("by_creator_and_createdAt", (q) => q.eq("creatorId", c._id)).order("desc").take(30)) as Doc<"jobs">[];
+  const ingest = jobs.find((j) => j.kind === "ingest_catalogue" && j.status !== "succeeded");
+  const firstRead = jobs.find((j) => j.kind === "first_read" && j.status !== "succeeded");
+  const failed = !d && Boolean(ingest && (ingest.status === "dead" || ingest.status === "failed") || firstRead && (firstRead.status === "dead" || firstRead.status === "failed"));
   const top = [...(d?.formatsUsed ?? [])].sort((x, y) => y.count - x.count)[0];
   const toWatch = posts.filter((p) => (p.sample ?? []).length > 0 && p.contentType === "video").length;
   return {
-    stage: d ? "read" : posts.length ? "reading" : "waiting",
+    stage: d ? "read" : failed ? "failed" : posts.length ? "reading" : "waiting",
     posts: posts.length,
     watched: watchedReads.length,
     toWatch: Math.max(toWatch, watchedReads.length),

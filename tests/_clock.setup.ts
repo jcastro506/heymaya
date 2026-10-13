@@ -1,3 +1,5 @@
+// Instagram on in tests by default (config/platforms), so its paths stay covered; off-mode tests stub it to "0".
+process.env.INSTAGRAM_ENABLED ??= "1";
 /**
  * Every test file starts at the same daytime moment, whatever time CI runs (2026-10-01). Quiet hours
  * are now held inside `messages.send`, and tests that never set a time used to pass only because the

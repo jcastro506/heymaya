@@ -8,7 +8,8 @@ import { v } from "convex/values";
 import { setupAdvice } from "./account/setup";
 import { applyIdeaAct } from "./core/ideaActs";
 import { isUnseen } from "./core/unseen";
-import { TIERS, TIER_NAMES, entitlementsFor, price } from "./billing/tiers";
+import { TIERS, entitlementsFor, offeredTiers, price, tierCopy } from "./billing/tiers";
+import { enabledPlatforms, instagramOn } from "./config/platforms";
 import { partnershipsOpen } from "./partnerships/store";
 import { readKitV2 } from "./partnerships/kitData";
 import { kitUrl } from "./partnerships/kitPage";
@@ -130,7 +131,12 @@ export const settings = query({
       plan: c.plan.status,
       founding: c.plan.founding,
       tier: entitlementsFor(c.plan).tier,
+      /** What to call their plan (the tier id is internal). */
+      tierLabel: tierCopy(entitlementsFor(c.plan).tier).label,
       accountCap: entitlementsFor(c.plan).accounts,
+      /** Which platforms are on (config/platforms): the app hides Instagram when false. */
+      instagramEnabled: instagramOn(),
+      platforms: enabledPlatforms(),
       trialEndsAt: c.plan.trialEndsAt ?? null,
       currentPeriodEnd: c.plan.currentPeriodEnd ?? null,
       knows: d ? { summary: d.persona?.summary ?? null, register: d.persona?.register ?? null, works: (d.works ?? []).map((w) => w.claim), doesNot: (d.doesNot ?? []).map((w) => w.claim), keywords: d.keywords ?? [], mode: d.mode ?? c.mode } : null,
@@ -317,7 +323,8 @@ export const plans = query({
     const mine = entitlementsFor(c.plan);
     return {
       current: { tier: mine.tier, status: c.plan.status, trialEndsAt: c.plan.trialEndsAt ?? null, renewsAt: c.plan.currentPeriodEnd ?? null, subscribed: Boolean(c.plan.stripeSubscriptionId), partnershipsOpen: partnershipsOpen(c) }, // the same door Deals and her tools read
-      tiers: TIER_NAMES.map((t) => ({ tier: t, label: TIERS[t].label, blurb: TIERS[t].blurb, monthly: price(TIERS[t].priceUsd), annual: price(TIERS[t].annualUsd), accounts: TIERS[t].accounts, partnerships: TIERS[t].partnerships.researchPerMonth > 0 })),
+      // Only the plans on offer now (TikTok only: Maya and Maya + Deals), in their current words.
+      tiers: offeredTiers().map((t) => ({ tier: t, label: tierCopy(t).label, blurb: tierCopy(t).blurb, monthly: price(TIERS[t].priceUsd), annual: price(TIERS[t].annualUsd), accounts: TIERS[t].accounts, partnerships: TIERS[t].partnerships.researchPerMonth > 0 })),
     };
   },
 });
