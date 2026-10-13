@@ -217,7 +217,8 @@
 
 /* ——— Pricing ——— */
 .pricing { padding: 90px 0; border-top: 1px solid var(--line); }
-.prices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.prices { display: grid; grid-template-columns: repeat(var(--n, 3), 1fr); gap: 18px; }
+.prices-2 { max-width: 760px; margin-inline: auto; }
 .price { position: relative; display: grid; align-content: start; gap: 12px; padding: 28px; border: 1px solid var(--line); border-radius: 28px; background: var(--panel); }
 .price-feat { background: var(--ink); color: #fff; border-color: var(--ink); box-shadow: 0 30px 60px -30px #29233fcc; }
 .price-tag { position: absolute; top: -13px; left: 28px; background: var(--coral); color: #fff; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 5px 12px; border-radius: 999px; }
@@ -382,6 +383,7 @@
 
 /* Numbers */
 .s-accts { display: grid; grid-template-columns: 1fr 1fr; gap: 3cqw; }
+.s-accts-one { grid-template-columns: 1fr; }
 .s-acct { position: relative; display: grid; gap: .6cqw; padding: 3.6cqw 4cqw; border-radius: 5cqw; background: var(--panel); border: 1px solid var(--line); }
 .s-acct .plat { position: static; margin-bottom: .6cqw; }
 .s-acct b { font: 700 6.6cqw/1 var(--ios); font-variant-numeric: tabular-nums; }

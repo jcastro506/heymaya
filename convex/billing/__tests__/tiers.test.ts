@@ -10,13 +10,14 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { TIERS, TIER_NAMES, accountsWithinPlan, entitlementsFor, planLineFor, price, priceEnvKey, tierFromPriceId } from "../tiers";
+import { TIERS, TIER_NAMES, accountsWithinPlan, offeredTiers, entitlementsFor, planLineFor, price, priceEnvKey, tierFromPriceId } from "../tiers";
 import { tierFor } from "../plan";
 import { partnershipAllowance, partnershipsOpen } from "../../partnerships/store";
 import { NO_PARTNERSHIPS_LINE, PARTNER_CAN_LINE, converseSkillFor } from "../../agent/converse";
 import { helloFor } from "../../core/pairing";
 import { introBody } from "../../onboarding/conversation";
 import { PARTNERSHIP_SKILL } from "../../partnerships/contracts";
+import { paymentLine } from "../../../app/landing/platformCopy";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -33,7 +34,18 @@ describe("the tiers", () => {
     expect(TIERS.duo.partnerships.opportunitiesPerMonth).toBe(0);
     for (const f of ["app/landing/Landing.tsx", "app/app/settings/page.tsx"]) expect(readFileSync(new URL(`../../../${f}`, import.meta.url), "utf8"), `${f} reads prices from tiers.ts`).toMatch(/from "@\/convex\/billing\/tiers"/);
     const terms = readFileSync(new URL("../../../app/terms/page.tsx", import.meta.url), "utf8");
-    for (const t of TIER_NAMES) expect(terms).toContain(price(TIERS[t].priceUsd));
+    // The terms render the payment line from tiers.ts, so they always list exactly what is offered.
+    expect(terms).toMatch(/\{paymentLine\(\)\}/);
+    expect(terms, "no hardcoded price in the terms").not.toMatch(/\$\d/);
+    for (const igOn of [false, true]) {
+      const line = paymentLine(igOn);
+      for (const t of offeredTiers(igOn)) {
+        expect(line, `${t} monthly, instagram ${igOn}`).toContain(price(TIERS[t].priceUsd));
+        expect(line, `${t} annual, instagram ${igOn}`).toContain(price(TIERS[t].annualUsd));
+      }
+      for (const t of TIER_NAMES.filter((x) => !offeredTiers(igOn).includes(x))) expect(line, `${t} not offered`).not.toContain(price(TIERS[t].priceUsd));
+    }
+    expect(paymentLine(false)).not.toContain(price(TIERS.duo.priceUsd));
     expect(readFileSync(new URL("../../../app/landing/Landing.tsx", import.meta.url), "utf8")).not.toMatch(/\$19|\$29|founding price/i);
     expect(readFileSync(new URL("../../../app/app/settings/page.tsx", import.meta.url), "utf8")).not.toMatch(/\$19|\$180/);
   });

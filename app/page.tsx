@@ -2,12 +2,11 @@ import type { Metadata } from "next";
 import { LandingAnalytics } from "./analytics";
 import Landing from "./landing/Landing";
 import { appLink } from "@/lib/appLink";
-
-const description =
-  "Maya is a TikTok and Instagram expert who watches your niche, turns what's working into ideas, plans your shoots, writes your captions, reads your numbers, and finds you brand deals. All over text.";
+import { platformCopy } from "./landing/platformCopy";
 
 export function generateMetadata(): Metadata {
   const link = appLink();
+  const description = platformCopy().lede;
   return {
     title: "Maya: your whole content team, in one text thread",
     description,

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { OnboardShell } from "../onboarding/Shell";
+import { instagramOn } from "@/convex/config/platforms";
 
 const people = [
   { initial: "A", name: "Arielle Vey", handle: "@ariellevey", platform: "Instagram", why: "A strong peer with polished ideas that still feel possible to make." },
@@ -9,7 +10,8 @@ const people = [
 ];
 
 export default async function OnboardingPreview({ searchParams }: { searchParams: Promise<{ step?: string }> }) {
-  if (process.env.NODE_ENV === "production") notFound();
+  // A static mockup of the three-plan, two-platform setup: gone while Instagram is off.
+  if (process.env.NODE_ENV === "production" || !instagramOn()) notFound();
   const requested = Number((await searchParams).step ?? "1");
   const step = Math.min(5, Math.max(1, Number.isFinite(requested) ? requested : 1));
   return (
