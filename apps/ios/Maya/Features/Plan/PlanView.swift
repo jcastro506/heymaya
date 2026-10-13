@@ -109,4 +109,11 @@ struct Plans: Decodable, Equatable {
   struct Tier: Decodable, Identifiable, Equatable { let tier: String; let label: String; let blurb: String; let monthly: String; let annual: String; let accounts: Int; let partnerships: Bool; var id: String { tier } }
   let current: Current
   let tiers: [Tier]
+
+  /// The plan picked when they first see the list: what they chose if it's still offered, else
+  /// the first one the server offers (it sends only what's on offer now). Pure.
+  static func chosen(_ picked: String?, from tiers: [Tier]) -> String {
+    if let picked, tiers.contains(where: { $0.tier == picked }) { return picked }
+    return tiers.first?.tier ?? "solo"
+  }
 }

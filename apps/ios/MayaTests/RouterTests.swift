@@ -31,12 +31,21 @@ final class RouterTests: XCTestCase {
 /// M5: the share extension finds the post link inside what TikTok and Instagram actually share.
 final class ShareLinkTests: XCTestCase {
   func testFindsPostLinkInSharedText() {
-    let tt = ShareLink.postLink(in: ["Check out Noah's video! #TikTok https://vm.tiktok.com/ZMabc123/ "])
+    let tt = ShareLink.postLink(in: ["Check out Noah's video! #TikTok https://vm.tiktok.com/ZMabc123/ "], instagram: true)
     XCTAssertEqual(tt?.platform, "TikTok")
     XCTAssertEqual(tt?.url, "https://vm.tiktok.com/ZMabc123/")
-    let ig = ShareLink.postLink(in: ["https://www.instagram.com/reel/DcRIKq6xDpQ/?igsh=abc"])
+    let ig = ShareLink.postLink(in: ["https://www.instagram.com/reel/DcRIKq6xDpQ/?igsh=abc"], instagram: true)
     XCTAssertEqual(ig?.platform, "Instagram")
-    XCTAssertNil(ShareLink.postLink(in: ["https://youtube.com/watch?v=1", "no link here"]))
+    XCTAssertNil(ShareLink.postLink(in: ["https://youtube.com/watch?v=1", "no link here"], instagram: true))
+  }
+
+  /// Instagram off: an Instagram link isn't a post she can read, and the sheet says TikTok only.
+  func testInstagramOffReadsTikTokOnly() {
+    XCTAssertNil(ShareLink.postLink(in: ["https://www.instagram.com/reel/DcRIKq6xDpQ/?igsh=abc"], instagram: false))
+    let tt = ShareLink.postLink(in: ["https://www.instagram.com/reel/x", "https://www.tiktok.com/@a/video/1"], instagram: false)
+    XCTAssertEqual(tt?.platform, "TikTok")
+    XCTAssertEqual(ShareLink.notAPost(instagram: false), "Maya reads TikTok posts right now. This doesn't look like one.")
+    XCTAssertTrue(ShareLink.notAPost(instagram: true).contains("Instagram"))
   }
 
   func testShareEndpointIsTheSiteTwin() {

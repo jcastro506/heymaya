@@ -57,6 +57,8 @@ struct OnboardingProgress: Decodable, Equatable {
   /// From sign-in, or what they typed on the first screen.
   var firstName: String? = nil
   var nameConfirmed: Bool? = nil
+  /// Whether Instagram is on (config/platforms). Older servers don't send it; they had it on.
+  var instagramEnabled: Bool? = nil
 }
 
 struct SocialStatus: Decodable, Equatable {
@@ -101,13 +103,17 @@ final class OnboardingModel {
       connectSeen = ![.name, .plan, .connect].contains(start)
       watchSeen = [.calendar, .meet, .done].contains(start)
       calendarSeen = [.meet, .done].contains(start)
-      progress = OnboardingProgress(paired: start == .done, planStatus: [.name, .plan].contains(start) ? "onboarding" : "trialing", phone: nil, posts: 24, firstName: "Riley", nameConfirmed: start != .name)
-      social = SocialStatus(status: "connected", accounts: [.name, .plan, .connect].contains(start) ? [] : [.init(platform: "instagram", username: "riverloop.runs", needsReconnect: false)])
+      progress = OnboardingProgress(paired: start == .done, planStatus: [.name, .plan].contains(start) ? "onboarding" : "trialing", phone: nil, posts: 24, firstName: "Riley", nameConfirmed: start != .name, instagramEnabled: false)
+      social = SocialStatus(status: "connected", accounts: [.name, .plan, .connect].contains(start) ? [] : [.init(platform: "tiktok", username: "riverloopruns", needsReconnect: false)])
       loaded = true
     }
   }
 
   private static func key(_ name: String) -> String { "onboarding.\(name)" }
+
+  /// Whether Instagram is on. Until the server answers, or from a server that predates the
+  /// switch, it is (that is how those servers behave).
+  var instagramEnabled: Bool { progress?.instagramEnabled ?? true }
 
   var facts: OnboardingStep.Facts {
     .init(planStatus: progress?.planStatus, connectedAccounts: social?.accounts.filter { !$0.needsReconnect }.count ?? 0, connectSeen: connectSeen, paired: progress?.paired ?? false, watchSeen: watchSeen, nameConfirmed: progress?.nameConfirmed ?? true, calendarSeen: calendarSeen, watching: watched.count)
@@ -140,7 +146,7 @@ final class OnboardingModel {
     struct Ensured: Decodable { let ok: Bool }
     _ = try? await convex.mutation("onboarding/start:ensureCreator", with: ["timezone": TimeZone.current.identifier]) as Ensured
     await withTaskGroup(of: Void.self) { group in
-      group.addTask { await self.follow("onboarding/start:progress", OnboardingProgress?.self) { self.progress = $0; self.loaded = true } }
+      group.addTask { await self.follow("onboarding/start:progress", OnboardingProgress?.self) { self.progress = $0; self.loaded = true; Platforms.remember($0?.instagramEnabled) } }
       group.addTask { await self.follow("connections/zernio:status", SocialStatus?.self) { self.social = $0 } }
       group.addTask { await self.follow("onboarding/admired:list", [Watched]?.self) { self.watched = $0 ?? [] } }
     }
@@ -161,7 +167,7 @@ final class OnboardingModel {
   struct UrlResult: Decodable { let ok: Bool; let url: String?; let reason: String? }
 
   func checkout(tier: String, interval: String) async -> String? {
-    if preview { progress = OnboardingProgress(paired: false, planStatus: "trialing", phone: nil, posts: 24); return nil }
+    if preview { progress = OnboardingProgress(paired: false, planStatus: "trialing", phone: nil, posts: 24, instagramEnabled: false); return nil }
     do {
       let r: UrlResult = try await convex.action("billing/checkout:createCheckout", with: ["tier": tier, "interval": interval, "returnTo": "app_onboarding"])
       guard r.ok, let url = r.url.flatMap(URL.init(string:)) else { return Self.plain(r.reason) }
@@ -177,7 +183,7 @@ final class OnboardingModel {
   func saveName(_ name: String) async -> String? {
     let clean = name.trimmingCharacters(in: .whitespaces)
     guard !clean.isEmpty else { return "What should she call you?" }
-    if preview { progress = OnboardingProgress(paired: false, planStatus: "onboarding", phone: nil, posts: 24, firstName: clean, nameConfirmed: true); return nil }
+    if preview { progress = OnboardingProgress(paired: false, planStatus: "onboarding", phone: nil, posts: 24, firstName: clean, nameConfirmed: true, instagramEnabled: false); return nil }
     struct R: Decodable { let ok: Bool; let firstName: String?; let error: String? }
     do {
       let r: R = try await convex.mutation("onboarding/start:setName", with: ["firstName": clean])
