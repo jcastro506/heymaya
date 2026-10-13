@@ -60,7 +60,11 @@ export const write = internalMutation({
     const ideaIds: Id<"ideas">[] = [];
     const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(300)) as Doc<"ownPosts">[];
     const normals = normalsByPlatform(posts, now);
+    // Never the same idea twice (2026-10-13): a raced second seeding skips hooks they already have.
+    const have = new Set(((await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(200)) as Doc<"ideas">[]).map((x) => String((x.version as { hook?: string } | undefined)?.hook ?? "").trim().toLowerCase()).filter(Boolean));
     for (const raw of a.ideas) {
+      if (have.has(raw.hook.trim().toLowerCase())) continue;
+      have.add(raw.hook.trim().toLowerCase());
       // Grounded by construction: a why whose multiple isn't its cited post's is rewritten by code from that post.
       const ev = raw.evidencePostIds.map((id) => posts.find((p) => p.postId === id || p.url.includes(`/${id}`))).filter((p): p is Doc<"ownPosts"> => Boolean(p));
       const mults = ev.map((p) => multipleFor(p, normals)).filter((m): m is number => m !== undefined);

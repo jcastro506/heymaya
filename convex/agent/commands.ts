@@ -13,7 +13,7 @@ import { deliverNow } from "../core/scheduler";
 import { resolveTelegramBotIdentity, sendTelegramMessage } from "../integrations/telegram/client";
 import { forgetEvidence, recordVisible } from "./personalHistory";
 import { Draft, Opportunity } from "../partnerships/contracts";
-import { MISSION_CONTROL_TABS, missionControlUrl, type MissionControlTab } from "./missionControl";
+import { MISSION_CONTROL_TABS, type MissionControlTab } from "./missionControl";
 import { clip } from "../lib/clip";
 import { statusAfterLegacyPause } from "../core/paused";
 
@@ -25,7 +25,9 @@ export const apply = internalMutation({
     const now = Date.now();
     if (a.command === "mission_control") {
       const tab = MISSION_CONTROL_TABS.includes(a.topic as MissionControlTab) ? a.topic as MissionControlTab : "today";
-      return { body: `here's your Mission Control: ${missionControlUrl(process.env.APP_URL, tab)}` };
+      // The web dashboard is retired (2026-10-13): everything lives in their app now.
+
+      return { body: `It's all in your Maya app${tab === "ideas" ? ", under Ideas" : tab === "today" ? ", on Today" : ""}.` };
     }
     // Their pause is its own field (core/paused): billing events can't undo it, and resume can't turn a
     // trial into "active". STOP is honored every time (it's the opt-out word); the reply says it like a

@@ -311,3 +311,24 @@ describe("where everything lives (2026-10-09)", () => {
     expect(composeWeek([slot], "UTC", true, "next week")).not.toContain(APP_LINE);
   });
 });
+
+describe("one week per plan, even when two drafts race (2026-10-13)", () => {
+  it("a second write for the same week writes nothing and says so", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await t.run((ctx) => seedCreator(ctx, "race", {}));
+    const slot = { film: { start: SUNDAY_6PM + 86_400_000, end: SUNDAY_6PM + 90_000_000 }, post: { at: SUNDAY_6PM + 95_000_000 }, hook: "the shoe rack list" };
+    const first = await t.mutation(internal.calendar.weekPlan.write, { creatorId, planKey: "wk", slots: [slot] });
+    const second = await t.mutation(internal.calendar.weekPlan.write, { creatorId, planKey: "wk", slots: [slot] });
+    expect(first.blockIds.length).toBeGreaterThan(0);
+    expect(second).toEqual({ blockIds: [], duplicate: true });
+    expect((await t.run((ctx) => ctx.db.query("calendarBlocks").collect())).length).toBe(first.blockIds.length);
+  });
+  it("the same first idea is never written twice", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await t.run((ctx) => seedCreator(ctx, "seed2", {}));
+    const ideas = [{ hook: "Coffee walk fit check", why: "your best", evidencePostIds: [] }];
+    await t.mutation(internal.calendar.firstIdeas.write, { creatorId, ideas, model: "m" });
+    await t.mutation(internal.calendar.firstIdeas.write, { creatorId, ideas: [{ ...ideas[0], hook: "coffee walk fit check " }], model: "m" });
+    expect(await t.run((ctx) => ctx.db.query("ideas").collect())).toHaveLength(1);
+  });
+});

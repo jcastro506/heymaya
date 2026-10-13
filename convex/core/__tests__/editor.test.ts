@@ -213,3 +213,18 @@ describe("a simulated month for three creators", () => {
     expect(/(scout)(,\1){4}/.test(log.mia.join(","))).toBe(false);
   });
 });
+
+describe("ideas she gives in chat are saved to the app (2026-10-13)", () => {
+  it("saved once, with the source post only when it's a real post link", async () => {
+    const t = convexTest(schema, modules);
+    const a = await seed(t, "chatidea");
+    const one = await t.mutation(internal.agent.moment.writeChatIdea, { creatorId: a, hook: "Coffee walk fit check", why: "your talking-to-camera walks are your best", link: "https://www.tiktok.com/@x/video/1" });
+    expect(one.ok).toBe(true);
+    expect((await t.mutation(internal.agent.moment.writeChatIdea, { creatorId: a, hook: "coffee walk fit check", why: "again" })).body).toMatch(/already/);
+    await t.mutation(internal.agent.moment.writeChatIdea, { creatorId: a, hook: "Jewelry stack that never comes off", why: "x", link: "https://evil.example/phish" });
+    const rows = await t.run((ctx) => ctx.db.query("ideas").collect());
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.evidenceLinks[0] === "https://www.tiktok.com/@x/video/1")).toBeTruthy();
+    expect(rows.some((r) => r.evidenceLinks.includes("https://evil.example/phish")), "never a made-up or unsafe link").toBe(false);
+  });
+});

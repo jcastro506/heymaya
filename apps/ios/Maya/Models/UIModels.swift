@@ -162,6 +162,35 @@ struct Plan: Decodable, Equatable {
   let bestHours: [Double]
 }
 
+/// An idea's sessions this week as one row: the hook, then "Film Fri 5 PM · Post 7 PM".
+struct IdeaSessions: Identifiable, Equatable {
+  let id: String
+  let title: String
+  let firstStart: Double
+  let when: String
+  let waiting: Bool
+
+  /// Pure: blocks grouped by their idea (or, without one, by the hook in their title), soonest first.
+  static func group(_ blocks: [PlanBlock], time: (Double) -> String = { Format.time($0) }) -> [IdeaSessions] {
+    func hook(_ title: String) -> String {
+      for prefix in ["film: ", "edit: ", "post: "] where title.lowercased().hasPrefix(prefix) { return String(title.dropFirst(prefix.count)) }
+      return title
+    }
+    var order: [String] = []
+    var byKey: [String: [PlanBlock]] = [:]
+    for b in blocks.sorted(by: { $0.start < $1.start }) {
+      let key = b.ideaId ?? hook(b.title).lowercased()
+      if byKey[key] == nil { order.append(key) }
+      byKey[key, default: []].append(b)
+    }
+    return order.map { key in
+      let bs = byKey[key]!
+      let parts = ["film", "edit", "post"].compactMap { kind in bs.first(where: { $0.kind == kind }).map { "\(kind.capitalized) \(time($0.start))" } }
+      return IdeaSessions(id: key, title: hook(bs[0].title), firstStart: bs[0].start, when: parts.isEmpty ? time(bs[0].start) : parts.joined(separator: " · "), waiting: bs.contains { $0.status == "proposed" })
+    }
+  }
+}
+
 struct PlanBlock: Decodable, Equatable, Identifiable {
   let id: String
   let kind: String
