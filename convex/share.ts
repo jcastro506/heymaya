@@ -18,6 +18,7 @@ import { internalMutation, mutation } from "./lib/functions";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { creatorForIdentity } from "./core/identity";
+import { configuredLines, herLine } from "./core/imessage";
 import { recordAction } from "./core/act";
 import { writeInbound } from "./core/messages";
 import { parseLink } from "./agent/inbound";
@@ -152,7 +153,9 @@ export const askMaya = mutation({
     }
     await recordAction(ctx, { creatorId: c._id, kind: "ask", objectId: `${a.kind}:${a.id}`, summary: `tapped Ask Maya on ${label}; if their next message says "this" or "it", they mean that` });
     const draft = `about ${label.replace(/^your /, "my ")}: `;
-    const url = conversationLink(c.channel.kind === "imessage" ? "imessage" : "telegram", draft, { lineNumber: c.channel.line ?? process.env.LINQ_LINE_NUMBER ?? process.env.CLAW_LINE_NUMBER, botUsername: process.env.TELEGRAM_BOT_USERNAME });
+    const { line, stale } = herLine(c.channel.line, configuredLines());
+    if (stale && line) await ctx.db.patch(c._id, { channel: { ...c.channel, line }, updatedAt: Date.now() });
+    const url = conversationLink(c.channel.kind === "imessage" ? "imessage" : "telegram", draft, { lineNumber: line ?? undefined, botUsername: process.env.TELEGRAM_BOT_USERNAME });
     return { ok: true, url, draft };
   },
 });

@@ -25,7 +25,7 @@ import { internal } from "../_generated/api";
 import { type MutationCtx } from "../_generated/server";
 import { internalMutation, mutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
-import { pairingSmsLink } from "./imessage";
+import { configuredLines, herLine, pairingSmsLink } from "./imessage";
 import { helloParts, fallbackGreeting } from "../onboarding/hello";
 import { HELLO_PACE } from "../onboarding/hello";
 import { partnershipsOpen } from "../partnerships/store";
@@ -107,9 +107,10 @@ export async function mintPairing(ctx: MutationCtx, creator: Doc<"creators">): P
   const now0 = Date.now();
   // §23: a creator who gave a phone number pairs by texting the line; the token rides in the first text.
   if (creator.channel.kind === "imessage") {
-    // X1: the line Linq picked for them at signup, else the deployment's configured line.
-    const lineNumber = creator.channel.line ?? process.env.LINQ_LINE_NUMBER ?? process.env.CLAW_LINE_NUMBER;
+    // X1: the line Linq picked for them at signup while it's still ours, else the deployment's line (and it's saved).
+    const { line: lineNumber, stale } = herLine(creator.channel.line, configuredLines());
     if (!lineNumber) return { ok: false, error: "the phone channel isn't configured on this deployment" };
+    if (stale) await ctx.db.patch(creator._id, { channel: { ...creator.channel, line: lineNumber }, updatedAt: now0 });
     const live = creator.pairingToken && creator.pairingExpiresAt && creator.pairingExpiresAt > now0;
     const token = live ? creator.pairingToken! : mintToken();
     const expiresAt = live ? creator.pairingExpiresAt! : now0 + PAIRING_TTL_MS;
