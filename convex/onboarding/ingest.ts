@@ -5,6 +5,7 @@
  * validated by Zod before it is written. The job enqueues `first_read` at the end.
  */
 
+import { enabledPlatforms } from "../config/platforms";
 import { v } from "convex/values";
 import { coverKey, rememberMedia } from "../media";
 import { appendHistory, normalsByPlatform, multipleFor } from "../core/normal";
@@ -206,7 +207,7 @@ export const run = internalAction({
     const transcriptCap = Math.max(0, Math.min(TRANSCRIPT_CAP, args.transcriptCap ?? TRANSCRIPT_CAP));
     if (!creator) return { ok: false, reason: "creator not found" };
     const now = Date.now();
-    const platforms = (["tiktok", "instagram"] as const).filter((p) => creator.handles[p]);
+    const platforms = enabledPlatforms().filter((p) => creator.handles[p]);
     if (platforms.length === 0) return { ok: false, reason: "no handles to read" };
 
     // Pass one: the catalogue. Popular first so the all-time top posts are in the set, then latest.

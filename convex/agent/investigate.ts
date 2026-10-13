@@ -12,7 +12,7 @@ import type { Id } from "../_generated/dataModel";
 import type { OpenRouterMessage } from "../integrations/openrouter/client";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "./registry";
-import { DEFAULT_BUDGET, partnerOnlyTool, REPLY_ONLY_TOOLS, runTool, TOOLS, type ToolBudget, type ToolCallRecord } from "./tools";
+import { DEFAULT_BUDGET, partnerOnlyTool, platformBelt, REPLY_ONLY_TOOLS, runTool, TOOLS, type ToolBudget, type ToolCallRecord } from "./tools";
 
 export interface InvestigateResult { content: string; trace: ToolCallRecord[]; ended: "answer" | "budget" | "model_error" | "no_answer"; turns: number }
 
@@ -35,7 +35,7 @@ export async function investigate(ctx: ActionCtx, input: { creatorId: Id<"creato
   ];
   const maxTurns = budget.calls + 2;
   // K1: the kit tools ride with the partnership belt; below the partnerships plan neither exists.
-  const belt = input.partnerships && input.sourceMessageId ? TOOLS : TOOLS.filter(t => !partnerOnlyTool(t.function.name));
+  const belt = platformBelt(input.partnerships && input.sourceMessageId ? TOOLS : TOOLS.filter(t => !partnerOnlyTool(t.function.name)));
   // Their settings (routines, pace) only in answer to their own message.
   const availableTools = input.sourceMessageId ? belt : belt.filter((t) => !REPLY_ONLY_TOOLS.has(t.function.name));
   for (let turn = 1; turn <= maxTurns; turn++) {

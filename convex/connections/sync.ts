@@ -15,6 +15,7 @@ import { clip } from "../lib/clip";
  * A failure is a `vendorHealth` row, never a silence.
  */
 
+import { platformOn } from "../config/platforms";
 import { v } from "convex/values";
 import { appendHistory } from "../core/normal";
 import { entitlementsFor, accountsWithinPlan } from "../billing/tiers";
@@ -288,6 +289,34 @@ export const writeSnapshot = internalMutation({
   },
 });
 
+/**
+ * Their follower count, live, right before something a brand will see (2026-10-13: a kit said 134 when she had
+ * 140). The daily snapshot can trail by a day or more; this reads their public TikTok profile now and records
+ * today's number on the same row the daily job uses (their connected account), so the kit shows it.
+ */
+export const refreshFollowers = internalAction({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ ok: boolean; followers?: number; reason?: string }> => {
+    const h = await ctx.runQuery(internal.onboarding.ingest.creatorHandles, { creatorId: a.creatorId });
+    const handle = h?.handles.tiktok;
+    if (!handle) return { ok: false, reason: "no TikTok handle" };
+    let followers: number | null = null;
+    try {
+      const r = await ctx.runAction(internal.reads.read.read, { kind: "profile", params: { platform: "tiktok", handle }, creatorId: a.creatorId, force: true });
+      const n = (r.value as { followerCount?: unknown } | null)?.followerCount;
+      followers = typeof n === "number" && n > 0 ? n : null;
+    } catch (e) {
+      return { ok: false, reason: e instanceof Error ? clip(e.message, 120) : "read failed" };
+    }
+    if (followers === null) return { ok: false, reason: "no follower count" };
+    const conn = await ctx.runQuery(internal.connections.zernio.connection, { creatorId: a.creatorId });
+    const acct = (conn?.zernioAccounts ?? []).find((x: { platform: string }) => x.platform === "tiktok") as { accountId: string } | undefined;
+    const day = new Date().toISOString().slice(0, 10);
+    await ctx.runMutation(internal.connections.sync.writeSnapshot, { creatorId: a.creatorId, platform: "tiktok", accountId: acct?.accountId ?? `public:tiktok:${handle}`, day, followers });
+    return { ok: true, followers };
+  },
+});
+
 type ConnectedCreator = { creatorId: Id<"creators">; accounts: Array<{ accountId: string; platform: string }> };
 
 /** One page of connected Zernio creators (index on provider + status; S0: no silent thousand-row cap). */
@@ -296,7 +325,7 @@ export const connectedCreators = internalQuery({
   handler: async (ctx, a): Promise<{ page: ConnectedCreator[]; isDone: boolean; continueCursor: string }> => {
     const res = await ctx.db.query("connections").withIndex("by_provider", (q) => q.eq("provider", "zernio").eq("status", "connected")).paginate({ cursor: a.cursor ?? null, numItems: OWNERS_PAGE });
     return {
-      page: (res.page as Doc<"connections">[]).map((c) => ({ creatorId: c.creatorId, accounts: (c.zernioAccounts ?? []).filter((x) => x.canFetchAnalytics).map((x) => ({ accountId: x.accountId, platform: x.platform })) })),
+      page: (res.page as Doc<"connections">[]).map((c) => ({ creatorId: c.creatorId, accounts: (c.zernioAccounts ?? []).filter((x) => x.canFetchAnalytics && platformOn(x.platform)).map((x) => ({ accountId: x.accountId, platform: x.platform })) })),
       isDone: res.isDone,
       continueCursor: res.continueCursor,
     };

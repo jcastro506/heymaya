@@ -7,6 +7,7 @@
  * not a full read of each page. Spot-check at the B5 sign-off; update `verifiedOn` when re-checked.
  * Facts here are rules and programs, never growth advice: advice is her judgment.
  */
+import { instagramOn } from "../config/platforms";
 
 export interface PlatformFact {
   id: string;
@@ -121,7 +122,7 @@ export function factsFor(topic: string, platform: "tiktok" | "instagram" | "both
   const t = topic.toLowerCase();
   const words = t.split(/\W+/).filter((w) => w.length > 2);
   return PLATFORM_FACTS
-    .filter((f) => platform === "both" || f.platform === platform)
+    .filter((f) => (platform === "both" ? (instagramOn() || f.platform !== "instagram") : f.platform === platform))
     .map((f) => ({ f, score: f.tags.reduce((s, tag) => s + (t.includes(tag) ? 3 : words.some((w) => tag.split(" ").includes(w)) ? 1 : 0), 0) }))
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score)

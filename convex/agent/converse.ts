@@ -5,6 +5,7 @@
  * skill-choice arrive with Sprint 3; the shape they plug into is this file.
  */
 
+import { platformOn, TIKTOK_ONLY_LINE } from "../config/platforms";
 import { carried } from "../core/editor";
 import { obviousCadence } from "./classify";
 import { v } from "convex/values";
@@ -184,6 +185,11 @@ export const run = internalAction({
       // skips itself when this week is already planned, and waits for morning at night.
       if (resumed) await ctx.scheduler.runAfter(45_000, internal.calendar.weekPlan.draft, { creatorId: creator._id, horizon: "first" });
       return { ok: true };
+    }
+    if (route.route === "link" && !platformOn(route.link.platform)) {
+      await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: TIKTOK_ONLY_LINE, dedupeKey: `reply:${target._id}`, proactive: false, kind: "reply" });
+      await deliverNow(ctx as never);
+      return { ok: true, reason: "instagram link while instagram is off" };
     }
     if (route.route === "link") {
       // Theirs if it's one of THEIR posts, whatever the URL looks like: Instagram /p/ links and
@@ -577,6 +583,11 @@ export const run = internalAction({
       await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body, dedupeKey: `edit:${target._id}`, proactive: false, kind: "reply" });
       await deliverNow(ctx as never);
       return { ok: true };
+    }
+    if (intent.intent === "profile_ask" && !platformOn(intent.platform)) {
+      await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: TIKTOK_ONLY_LINE, dedupeKey: `reply:${target._id}`, proactive: false, kind: "reply" });
+      await deliverNow(ctx as never);
+      return { ok: true, reason: "instagram profile while instagram is off" };
     }
     if (intent.intent === "profile_ask") {
       const r = await ctx.runAction(internal.agent.profile.run, { creatorId: creator._id, messageId: target._id, platform: intent.platform, handle: intent.handle });

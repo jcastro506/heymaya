@@ -5,6 +5,7 @@
  * (§13.5, the `match-post` skill) attaches here next.
  */
 
+import { enabledPlatforms } from "../config/platforms";
 import { v } from "convex/values";
 import { internalAction, internalQuery } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
@@ -67,7 +68,7 @@ export const run = internalAction({
     let wins = 0, failed = 0;
     for (const c of creators) {
       try {
-        for (const platform of ["tiktok", "instagram"] as const) {
+        for (const platform of enabledPlatforms()) {
           const handle = c.handles[platform];
           if (!handle) continue;
           const r = await ctx.runAction(internal.reads.read.read, { kind: "account.posts", params: { platform, handle, sort: "latest", slot: `readback-${bucket}` }, creatorId: c.id });

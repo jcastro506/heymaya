@@ -527,7 +527,7 @@ export const analytics = query({
     const conn = (await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", c._id).eq("provider", "zernio")).first()) as Doc<"connections"> | null;
     const snaps = (await ctx.db.query("followerSnapshots").withIndex("by_creator_day", (q) => q.eq("creatorId", c._id)).order("desc").take(400)) as Doc<"followerSnapshots">[];
     const insightRows = (await ctx.db.query("accountInsights").withIndex("by_creator_kind", (q) => q.eq("creatorId", c._id)).take(40)) as Doc<"accountInsights">[];
-    const platforms = (["tiktok", "instagram"] as const).filter((pl) => c.handles[pl] || posts.some((p) => p.platform === pl));
+    const platforms = enabledPlatforms().filter((pl) => c.handles[pl] || posts.some((p) => p.platform === pl));
     const monthAgo = now - 30 * 86_400_000;
     return {
       accounts: platforms.map((pl) => {

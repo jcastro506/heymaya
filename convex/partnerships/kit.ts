@@ -7,6 +7,7 @@
  * that aren't already in their record and aren't excluded. It only OFFERS; research (which spends
  * credits) starts when they say yes. At most one a week, inside the texting rails.
  */
+import { enabledPlatforms } from "../config/platforms";
 import { v } from "convex/values";
 import { internalAction, internalQuery, type QueryCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
@@ -42,7 +43,7 @@ export async function readKit(ctx: QueryCtx, c: Doc<"creators">): Promise<MediaK
     const snaps = (await ctx.db.query("followerSnapshots").withIndex("by_creator_day", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(20)) as Doc<"followerSnapshots">[];
     const prof = (await ctx.db.query("partnershipProfiles").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).unique()) as Doc<"partnershipProfiles"> | null;
     const p = Profile.parse(prof?.data ?? {});
-    const platforms = (["tiktok", "instagram"] as const).flatMap((platform) => {
+    const platforms = enabledPlatforms().flatMap((platform) => {
       const mine = posts.filter((x) => x.platform === platform);
       const handle = c.handles[platform] ?? null;
       if (!mine.length && !handle) return [];

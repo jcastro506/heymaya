@@ -4,6 +4,7 @@
  * and explain, in one grounded sentence each. Code bounds the reads, the ids, the numbers and the
  * words; the model judges fit. About thirteen credits and one writer call per signup.
  */
+import { enabledPlatforms } from "../config/platforms";
 import { v } from "convex/values";
 import { internalAction, internalQuery } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
@@ -230,7 +231,7 @@ export const suggestFor = internalAction({
     }
     if (!g) return { suggestions: [], trace: { reason: "no creator" } };
     const gg = g;
-    const platforms = (["tiktok", "instagram"] as const).filter((p) => gg.handles[p]);
+    const platforms = enabledPlatforms().filter((p) => gg.handles[p]);
     if (!platforms.length) return { suggestions: [], trace: { reason: "no connected account" } };
 
     const read = async (kind: string, params: Record<string, unknown>, force = false): Promise<unknown> => {

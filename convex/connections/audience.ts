@@ -5,6 +5,7 @@
  * The per-post equivalent is `numbers.ts`.
  */
 
+import { enabledPlatforms } from "../config/platforms";
 import { v } from "convex/values";
 import { internalQuery, type QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -159,7 +160,7 @@ export async function accountFactsFor(ctx: Pick<QueryCtx, "db">, creatorId: Id<"
   const tiktokCountries = await tiktokViewerCountries(ctx, creatorId, now);
   const since = new Date(now - 95 * 86_400_000).toISOString().slice(0, 10);
   const snaps = (await ctx.db.query("followerSnapshots").withIndex("by_creator_day", (q) => q.eq("creatorId", creatorId).gte("day", since)).take(400)) as Doc<"followerSnapshots">[];
-  const platforms = (["tiktok", "instagram"] as const).filter((p) => creator.handles[p] || (conn?.zernioAccounts ?? []).some((x) => x.platform === p));
+  const platforms = enabledPlatforms().filter((p) => creator.handles[p] || (conn?.zernioAccounts ?? []).some((x) => x.platform === p));
   return platforms.map((p) => {
     const acct = (conn?.zernioAccounts ?? []).find((x) => x.platform === p);
     const connected = Boolean(conn && conn.status !== "disconnected" && acct && acct.canFetchAnalytics && !acct.needsReconnect);

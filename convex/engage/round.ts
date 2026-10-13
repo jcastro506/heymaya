@@ -5,6 +5,7 @@
  * the accounts she already watches for them (no extra reads), why each is a good one to comment on,
  * one tap to open it, and a streak for the days they hit the goal. Only rows; nothing is invented.
  */
+import { platformOn } from "../config/platforms";
 import { v } from "convex/values";
 import { internalAction, internalQuery, query, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { internalMutation, mutation } from "../lib/functions";
@@ -84,7 +85,7 @@ export function afterDone(prev: Doc<"creators">["engage"], postKey: string, toda
 
 async function gather(ctx: QueryCtx, creator: Doc<"creators">, now: number): Promise<{ watched: RoundPost[]; lane: RoundPost[] }> {
   const allTracked = ((await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).collect()) as Doc<"trackedAccounts">[]).filter((t) => t.status === "active");
-  const tracked = allTracked.slice(0, 12);
+  const tracked = allTracked.filter((t) => platformOn(t.platform)).slice(0, 12);
   const posts: RoundPost[] = [];
   for (const t of tracked) {
     const obs = (await ctx.db.query("observations").withIndex("by_author", (q) => q.eq("platform", t.platform).eq("authorHandle", t.handle)).order("desc").take(24)) as Doc<"observations">[];

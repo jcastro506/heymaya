@@ -6,6 +6,7 @@
  * first; the rest apply immediately and say so, because undo is one more sentence.
  */
 
+import { platformOn } from "../config/platforms";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { internalMutation } from "../lib/functions";
@@ -61,6 +62,8 @@ export const setNiche = internalMutation({
 /** The same rules as the web control: lowercase handle, revive a removed one, ten at most. */
 export async function addTracked(ctx: { db: { query: (t: "trackedAccounts") => unknown; patch: (id: Id<"trackedAccounts">, v: Partial<Doc<"trackedAccounts">>) => Promise<void>; insert: (t: "trackedAccounts", v: Omit<Doc<"trackedAccounts">, "_id" | "_creationTime">) => Promise<Id<"trackedAccounts">> } }, creatorId: Id<"creators">, platform: "tiktok" | "instagram", rawHandle: string, existing: Doc<"trackedAccounts">[], opts: { addedBy?: "creator" | "suggested" | "maya"; why?: string } = {}): Promise<{ ok: boolean; error?: string; id?: Id<"trackedAccounts"> }> {
   const handle = rawHandle.trim().replace(/^@/, "").toLowerCase();
+  // The one watch-list rule (web, chat, roster, her tool): TikTok only while Instagram is off.
+  if (!platformOn(platform)) return { ok: false, error: "I only watch TikTok accounts right now" };
   if (!/^[a-z0-9_.]{2,30}$/.test(handle)) return { ok: false, error: "that doesn't look like a handle" };
   const dup = existing.find((r) => r.platform === platform && r.handle === handle);
   if (dup) {

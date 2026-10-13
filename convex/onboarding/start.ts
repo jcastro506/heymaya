@@ -85,8 +85,8 @@ export const start = mutation({
 export async function startCreator(ctx: MutationCtx, args: { subject: string; email: string; handles: { tiktok?: string; instagram?: string }; timezone?: string; /** First-week simulation only: a smaller catalogue read (see onboarding/ingest.ts run). */ ingestCaps?: { watchCap?: number; transcriptCap?: number } }): Promise<{ ok: boolean; creatorId?: string; error?: string }> {
   {
     const identity = { subject: args.subject, email: args.email };
-    const handles = { tiktok: cleanHandle(args.handles.tiktok), instagram: cleanHandle(args.handles.instagram) };
-    if (!handles.tiktok && !handles.instagram) return { ok: false, error: "one handle is required" };
+    const handles = { tiktok: cleanHandle(args.handles.tiktok), instagram: instagramOn() ? cleanHandle(args.handles.instagram) : undefined };
+    if (!handles.tiktok && !handles.instagram) return { ok: false, error: instagramOn() ? "one handle is required" : "your TikTok handle is required" };
 
     // One creator per handle: a second signup with the same handle is a merge prompt, never a second row.
     for (const platform of ["tiktok", "instagram"] as const) {
@@ -105,7 +105,8 @@ export async function startCreator(ctx: MutationCtx, args: { subject: string; em
       .first()) as Doc<"creators"> | null;
     const now = Date.now();
     if (existing) {
-      await ctx.db.patch(existing._id, { handles, timezone: args.timezone ?? existing.timezone, updatedAt: now });
+      // With Instagram off a stored Instagram handle is kept, so turning it back on restores it.
+      await ctx.db.patch(existing._id, { handles: instagramOn() ? handles : { ...handles, instagram: existing.handles.instagram }, timezone: args.timezone ?? existing.timezone, updatedAt: now });
       return { ok: true, creatorId: existing._id };
     }
     const creatorId = await ctx.db.insert("creators", {

@@ -11,6 +11,7 @@ import { clip } from "../lib/clip";
  * samples (§13.2) replaces this once observations accumulate.
  */
 
+import { platformOn } from "../config/platforms";
 import { v } from "convex/values";
 import { coverKey, rememberMedia } from "../media";
 import { internalAction, internalQuery } from "../_generated/server";
@@ -61,7 +62,8 @@ export const distinctTracked = internalQuery({
     const all = (await ctx.db.query("trackedAccounts").collect()) as Doc<"trackedAccounts">[];
     const map = new Map<string, { platform: "tiktok" | "instagram"; handle: string; rows: Array<{ id: Id<"trackedAccounts">; creatorId: Id<"creators"> }> }>();
     for (const r of all) {
-      if (r.status !== "active") continue;
+      // Instagram off: not sampled, and not retired either (it comes back when the switch does).
+      if (r.status !== "active" || !platformOn(r.platform)) continue;
       const k = `${r.platform}:${r.handle}`;
       const e = map.get(k) ?? { platform: r.platform, handle: r.handle, rows: [] };
       e.rows.push({ id: r._id, creatorId: r.creatorId });

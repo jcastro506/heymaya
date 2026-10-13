@@ -9,6 +9,7 @@ import { clip } from "../lib/clip";
  * product code depends on their shape. Publishing does not exist here.
  */
 
+import { instagramOn, platformOn } from "../config/platforms";
 import { v } from "convex/values";
 import { entitlementsFor } from "../billing/tiers";
 import { action, httpAction, internalAction, internalQuery, query, type ActionCtx } from "../_generated/server";
@@ -43,7 +44,7 @@ export const meForConnect = internalQuery({
     const c = await creatorForIdentity(ctx);
     if (!c) return null;
     const conn = (await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", c._id).eq("provider", "zernio")).first()) as Doc<"connections"> | null;
-    return { creatorId: c._id, plan: c.plan.status, label: c.handles.tiktok ?? c.handles.instagram ?? c.email, accountCap: entitlementsFor(c.plan).accounts, connectedAccounts: (conn?.zernioAccounts ?? []).length };
+    return { creatorId: c._id, plan: c.plan.status, label: c.handles.tiktok ?? c.handles.instagram ?? c.email, accountCap: entitlementsFor(c.plan).accounts, connectedAccounts: (conn?.zernioAccounts ?? []).filter((x) => platformOn(x.platform)).length };
   },
 });
 
@@ -120,9 +121,11 @@ export const startConnect = action({
   handler: async (ctx, a): Promise<{ ok: true; url: string } | { ok: false; reason: string }> => {
     const me = await ctx.runQuery(internal.connections.zernio.meForConnect, {});
     if (!me) return { ok: false, reason: "no account" };
+    // TikTok only (config/platforms): an Instagram connect is refused, never half-made.
+    if (!platformOn(a.platform)) return { ok: false, reason: "Maya works with TikTok only right now" };
     if (me.plan !== "active" && me.plan !== "trialing" && me.plan !== "comped") return { ok: false, reason: "choose a plan before connecting an account" };
     // §26: the plan's account cap is the door. Budgets, never booleans: solo is a cap of one.
-    if (me.connectedAccounts >= me.accountCap) return { ok: false, reason: me.accountCap === 1 ? "your plan includes one connected account. switch to both accounts in Settings to add the other" : `your plan includes ${me.accountCap} connected accounts` };
+    if (me.connectedAccounts >= me.accountCap) return { ok: false, reason: me.accountCap === 1 ? (instagramOn() ? "your plan includes one connected account. switch to both accounts in Settings to add the other" : "your TikTok is already connected") : `your plan includes ${me.accountCap} connected accounts` };
     if (!process.env.ZERNIO_API_KEY) return { ok: false, reason: "not configured" };
     const c = client();
     let conn = await ctx.runQuery(internal.connections.zernio.connection, { creatorId: me.creatorId });

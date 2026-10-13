@@ -6,6 +6,7 @@
  * a limited music library). TikTok stays personal: a business account loses trending sounds and
  * the Creator Rewards Program, which costs more than the analytics it adds.
  */
+import { enabledPlatforms, instagramOn } from "../config/platforms";
 import { v } from "convex/values";
 import { internalAction, internalQuery, query } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
@@ -17,6 +18,7 @@ export interface SetupAdvice { needed: boolean; title: string; why: string; step
 
 /** Pure: what (if anything) to ask them to change, per platform and account type. */
 export function setupAdvice(platform: "tiktok" | "instagram", type: AccountType | null): SetupAdvice | null {
+  if (platform === "instagram" && !instagramOn()) return null;
   if (platform === "instagram") {
     if (type === "personal") return { needed: true, title: "Switch Instagram to a Creator account", why: "Instagram only lets a Creator or Business account connect, and without it Maya can't see your reach, saves or watch time. It's free and takes a minute. Creator keeps the full music library.", steps: ["Open Instagram and go to your profile", "Tap the menu (☰), then Settings and privacy", "Tap Account type and tools", "Tap Switch to professional account", "Choose Creator, pick a category, and tap Done"] };
     if (type === "business") return { needed: false, title: "Creator works better than Business for you", why: "Business accounts get a limited music library. A Creator account connects the same way and keeps every sound. Optional.", steps: ["Settings and privacy", "Account type and tools", "Switch to creator account"] };
@@ -59,7 +61,7 @@ export const check = internalAction({
   handler: async (ctx, a): Promise<{ tiktok: AccountType | null; instagram: AccountType | null }> => {
     const h = await ctx.runQuery(internal.account.setup.handlesFor, a);
     const out: { tiktok: AccountType | null; instagram: AccountType | null } = { tiktok: null, instagram: null };
-    for (const platform of ["tiktok", "instagram"] as const) {
+    for (const platform of enabledPlatforms()) {
       const handle = h?.[platform];
       if (!handle) continue;
       try {

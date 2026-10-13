@@ -9,6 +9,7 @@
  * The routing decision is code (`kitImageIntent`): an image goes to the kit only when they said so
  * or she asked for one in the last 48 h. Everything else keeps its old path (moment, screenshot read).
  */
+import { instagramOn } from "../config/platforms";
 import { v } from "convex/values";
 import { internalAction, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
@@ -149,7 +150,7 @@ export const avatarFile = internalQuery({
     if (process.env.EVAL_FAKES === "1" && process.env.ENVIRONMENT_NAME === "local" && c.clerkUserId.startsWith("eval:partnership:")) {
       fake = ((await ctx.db.query("syncState").withIndex("by_key", (q) => q.eq("key", `eval:fake_vision:avatar:${a.creatorId}`)).unique()) as Doc<"syncState"> | null)?.value ?? null;
     }
-    for (const p of ["instagram", "tiktok"] as const) {
+    for (const p of (instagramOn() ? ["instagram", "tiktok"] as const : ["tiktok"] as const)) {
       const h = c.handles[p];
       if (!h) continue;
       const r = (await ctx.db.query("media").withIndex("by_key", (q) => q.eq("platform", p).eq("kind", "avatar").eq("key", avatarKey(h))).first()) as Doc<"media"> | null;
