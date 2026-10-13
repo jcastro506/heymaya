@@ -82,6 +82,22 @@ export function reactionEmoji(reactionType: ClawReactionType | "unknown", emoji:
   }
 }
 
+/** The lines this deployment texts from (`LINQ_LINE_NUMBER`, one or a comma list). The first is where new people go. */
+export function configuredLines(env: Record<string, string | undefined> = process.env): string[] {
+  return (env.LINQ_LINE_NUMBER ?? env.CLAW_LINE_NUMBER ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+}
+
+/**
+ * Pure: Maya's number for this person. The line saved at signup wins only while it's still one of ours: a line
+ * we've retired (2026-10: the old sandbox line) is never handed out again, so a tester isn't sent to a dead
+ * number. `stale` says the saved line should be replaced on their account.
+ */
+export function herLine(saved: string | undefined, lines: string[]): { line: string | null; stale: boolean } {
+  if (!lines.length) return { line: saved ?? null, stale: false }; // nothing configured to check against
+  if (saved && lines.includes(saved)) return { line: saved, stale: false };
+  return { line: lines[0], stale: Boolean(saved) };
+}
+
 /** The `sms:` link that opens Messages with the pairing text prefilled. iOS wants `&body=`, Android `?body=`; both read the other. Pure. */
 export function pairingSmsLink(lineNumber: string, token: string, platform: "ios" | "android" | "unknown" = "unknown"): string {
   const body = encodeURIComponent(`START ${token}`);
