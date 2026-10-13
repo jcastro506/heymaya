@@ -24,6 +24,15 @@ final class ContractTests: XCTestCase {
     XCTAssertTrue(ideas.allSatisfy { !$0.id.isEmpty && !$0.fitWhy.isEmpty })
   }
 
+  /// Trending: ui:trends decodes, and a null optional (no saved idea, no on-screen text) stays optional.
+  func testTrends() throws {
+    let trends = try load("trends", as: [Trend].self)
+    XCTAssertFalse(trends.isEmpty)
+    XCTAssertTrue(trends.allSatisfy { $0.verdict == "hop_on" || $0.verdict == "borrow" })
+    XCTAssertEqual(trends.first?.verdictLabel, "Hop on")
+    XCTAssertNil(trends.first?.ideaId)
+  }
+
   func testSettings() throws {
     let s = try load("settings", as: CreatorSettings.self)
     XCTAssertNotNil(s.knows)

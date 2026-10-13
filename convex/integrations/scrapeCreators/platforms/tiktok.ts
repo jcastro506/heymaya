@@ -1093,6 +1093,21 @@ export function soundFacts(raw: unknown): SoundFacts | null {
   return { clipId: str(m.id_str), title: str(m.title), author: str(m.author), videosUsingIt: num(m.user_count), original: bool(m.is_original_sound), licensedForBusiness: bool(m.is_commerce_music), durationSec: num(m.duration) };
 }
 
+/** The sound on one post, as far as the post says. `uses` is how many videos use it (TikTok's own count). */
+export interface PostSound { clipId: string; title: string | null; author: string | null; uses: number | null; original: boolean | null }
+
+/**
+ * Pure: the sound off a raw post. Only an UNTRIMMED post carries `music` (2026-10-13: `trim=true` drops it,
+ * which is why lane searches never had a sound and the niche sound signal never fired). Null when absent.
+ */
+export function postSound(rawPost: unknown): PostSound | null {
+  const clipId = extractClipId(rawPost);
+  if (!clipId) return null;
+  const m = (rawPost as { music?: Record<string, unknown> }).music ?? {};
+  const str = (x: unknown) => (typeof x === "string" && x.trim() ? x.trim() : null);
+  return { clipId, title: str(m.title), author: str(m.author) ?? str(m.owner_nickname), uses: typeof m.user_count === "number" && m.user_count > 0 ? m.user_count : null, original: typeof m.is_original_sound === "boolean" ? m.is_original_sound : null };
+}
+
 /**
  * Read a sound's clip id off a raw post object as a STRING. Prefers `id_str`;
  * falls back to a string-typed `id`; refuses a numeric `id` above

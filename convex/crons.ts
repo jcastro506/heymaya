@@ -58,8 +58,9 @@ crons.hourly("first week", { minuteUTC: 50 }, internal.core.timedJobs.run, { job
 // Sprint 3c: last night's real outbound through the checks and the judge, every night.
 crons.daily("eval recent outbound", { hourUTC: 4, minuteUTC: 0 }, internal.eval.run.recent, {});
 
-// The format watch (§13.12): the platform's trending feeds once a day, fleet-wide; formats travel, topics don't.
-crons.daily("format watch", { hourUTC: 12, minuteUTC: 0 }, internal.scout.formats.run, {});
+// Trends (scout/trends, 2026-10-13): after the lane sweep and the sound signals, so today's lane sounds are in.
+// Replaced the format watch, which read TikTok's trending feed: tested live, a random For You batch weeks old.
+crons.daily("trends", { hourUTC: 13, minuteUTC: 0 }, internal.scout.trends.run, {});
 
 // Sound signals (§13.8): a sound two or more lane accounts used this week, once a day, after the sweep.
 crons.daily("sound signals", { hourUTC: 12, minuteUTC: 30 }, internal.scout.sounds.run, {});

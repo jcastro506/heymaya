@@ -28,6 +28,7 @@ import { computeRung, engagement } from "./review/rung";
 import { laneBenchmarkFor } from "./scout/benchmarks";
 import { clip } from "./lib/clip";
 import { liveBlocks } from "./calendar/liveness";
+import { saveTrendIdea, trendsFor } from "./scout/trends";
 
 async function me(ctx: QueryCtx | MutationCtx): Promise<Doc<"creators"> | null> {
   const identity = await ctx.auth.getUserIdentity();
@@ -81,6 +82,32 @@ export const ideas = query({
       .filter((i) => !a.savedOnly || i.savedAt)
       .map((i) => ({ id: i._id, status: i.status, saved: Boolean(i.savedAt), unseen: isUnseen(i, Date.now()), reaction: i.reaction ?? null, newForYou: Boolean(i.newForYou), features: i.features ?? null, fitWhy: i.fitWhy, evidenceLinks: i.evidenceLinks, version: i.version as { hook?: string; onScreenText?: string; lengthSec?: number; sound?: string } | null, messageText: i.messageText, sentAt: i.sentAt ?? null, postedAt: i.postedAt ?? null, matchedPostId: i.matchedPostId ?? null }));
     return await Promise.all(mapped.map(async (m) => ({ ...m, evidenceCovers: await Promise.all(m.evidenceLinks.map((l) => coverForUrl(ctx, l))) })));
+  },
+});
+
+/** Trending (scout/trends): the live trends she thinks fit them, with what each is and their version. */
+export const trends = query({
+  args: {},
+  handler: async (ctx) => {
+    const c = await me(ctx);
+    if (!c) return null;
+    const rows = await trendsFor(ctx, c, Date.now());
+    return await Promise.all(rows.map(async (r) => ({
+      id: r.trendId, verdict: r.verdict, why: r.why, hook: r.hook, onScreenText: r.onScreenText, lengthSec: r.lengthSec, ideaId: r.ideaId,
+      sound: r.title, kind: r.kind, what: r.what, beats: r.beats, trendText: r.trendText || null, difficulty: r.difficulty, solo: r.solo, momentum: r.momentum, inYourLane: r.niche,
+      examples: await Promise.all(r.examples.map(async (e) => ({ url: e.url, handle: e.handle, cover: await coverForUrl(ctx, e.url) }))),
+    })));
+  },
+});
+
+/** "Save it" on a trend: it becomes one of their ideas, like saving in chat. */
+export const saveTrend = mutation({
+  args: { id: v.id("trends") },
+  handler: async (ctx, a): Promise<{ ok: boolean; ideaId?: string }> => {
+    const c = await me(ctx);
+    if (!c) return { ok: false };
+    const r = await saveTrendIdea(ctx, { creatorId: c._id, trendId: a.id, now: Date.now() });
+    return { ok: r.ok, ...(r.ideaId ? { ideaId: String(r.ideaId) } : {}) };
   },
 });
 

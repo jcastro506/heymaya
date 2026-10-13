@@ -35,7 +35,7 @@ describe("a signal keeps its link", () => {
 
   it("every signal writer records the url, so none of them can lose it", async () => {
     const { readFileSync } = await import("node:fs");
-    const writers = ["sampler", "sweep", "formats", "sounds", "readback"];
+    const writers = ["sampler", "sweep", "sounds", "readback"]; // formats retired 2026-10-13 (scout/trends writes no signals)
     for (const w of writers) {
       const src = readFileSync(new URL(`../${w}.ts`, import.meta.url), "utf8");
       const insert = src.slice(src.indexOf('insert("signals"'));

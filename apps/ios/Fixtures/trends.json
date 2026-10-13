@@ -1,0 +1,113 @@
+[
+ {
+  "id": "t1",
+  "verdict": "hop_on",
+  "why": "Your trail clips already have the calm-then-burst energy this one runs on.",
+  "hook": "Cruising the switchback like it's nothing, then the drop hits and you sprint the hill",
+  "onScreenText": "\"you don't even sweat?\"",
+  "lengthSec": 10,
+  "ideaId": null,
+  "sound": "Zany Emote Fortnite",
+  "kind": "meme",
+  "what": "Start calm and composed, then do something big exactly when the beat drops. Often a reply to a comment.",
+  "beats": [
+   "0\u20133s: something easy and casual, looking unbothered",
+   "3s, the drop: one big move (a sprint, a splash, a jump)",
+   "3\u201310s: keep the energy up to the end"
+  ],
+  "trendText": "a comment you're answering",
+  "difficulty": "easy",
+  "solo": true,
+  "momentum": "still picking up fast",
+  "inYourLane": false,
+  "examples": [
+   {
+    "url": "https://www.tiktok.com/@sisa_solymosyova/video/7694336493057215766",
+    "handle": "@sisa_solymosyova",
+    "cover": null
+   },
+   {
+    "url": "https://www.tiktok.com/@leonrevir/video/7691432040897449247",
+    "handle": "@leonrevir",
+    "cover": null
+   },
+   {
+    "url": "https://www.tiktok.com/@kellyisdancing/video/7688351989905886496",
+    "handle": "@kellyisdancing",
+    "cover": null
+   }
+  ]
+ },
+ {
+  "id": "t2",
+  "verdict": "borrow",
+  "why": "You already rank your gear; this gives that a format people are playing along with.",
+  "hook": "Where are you running in my run club? A map of every type of runner",
+  "onScreenText": "where are you running?",
+  "lengthSec": 14,
+  "ideaId": null,
+  "sound": "original sound - kayleabond",
+  "kind": "format",
+  "what": "A still picture of a seating chart or map with labelled spots, asking viewers which one they are. The audio cuts right at the first lyric.",
+  "beats": [
+   "0\u201313s: hold on your chart while the humming builds",
+   "13s: cut as the lyric starts"
+  ],
+  "trendText": "where are you sitting?",
+  "difficulty": "easy",
+  "solo": true,
+  "momentum": "just starting to take off",
+  "inYourLane": false,
+  "examples": [
+   {
+    "url": "https://www.tiktok.com/@classroomseatchart/video/7694008909412961550",
+    "handle": "@classroomseatchart",
+    "cover": null
+   },
+   {
+    "url": "https://www.tiktok.com/@yilianyisb/video/7694447766977744136",
+    "handle": "@yilianyisb",
+    "cover": null
+   },
+   {
+    "url": "https://www.tiktok.com/@madrechelsea/video/7694403166254812430",
+    "handle": "@madrechelsea",
+    "cover": null
+   }
+  ]
+ },
+ {
+  "id": "t3",
+  "verdict": "hop_on",
+  "why": "Runners in your lane are posting to this right now, and it's a feel-good one.",
+  "hook": "Take a chance: go for the run you've been putting off",
+  "onScreenText": "take a chance (go for a run)",
+  "lengthSec": 12,
+  "ideaId": null,
+  "sound": "What You Waiting For?",
+  "kind": "format",
+  "what": "Runners lip-sync the 'take a chance' line, then cut to them heading out the door and running.",
+  "beats": [
+   "0\u20134s: on the couch or at the door, mouthing the line",
+   "4s: cut to you out on the run",
+   "4\u201312s: quick run clips to the beat"
+  ],
+  "trendText": "take a chance (go for a run)",
+  "difficulty": "easy",
+  "solo": true,
+  "momentum": "steady this week",
+  "inYourLane": true,
+  "examples": [
+   {
+    "url": "https://www.tiktok.com/@babyfangs__/video/7574865889493847327",
+    "handle": "@babyfangs__",
+    "cover": null
+   },
+   {
+    "url": "https://www.tiktok.com/@imroiii/video/7292872679084887301",
+    "handle": "@imroiii",
+    "cover": null
+   }
+  ]
+ }
+]

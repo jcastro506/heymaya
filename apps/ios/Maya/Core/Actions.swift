@@ -67,6 +67,11 @@ enum Actions {
     await ok("ui:saveIdea", ["id": ideaId, "saved": saved])
   }
 
+  /// A trend into their ideas (the same row "save that one" makes in Messages).
+  static func saveTrend(trendId: String) async -> Bool {
+    await ok("ui:saveTrend", ["id": trendId])
+  }
+
   /// K1: a change to their media kit (the one line, the audience switch, the photo), the same function a text uses.
   static func kitUpdate(_ args: [String: ConvexEncodable?]) async -> Bool {
     await ok("partnerships/kitSettings:appUpdate", args)

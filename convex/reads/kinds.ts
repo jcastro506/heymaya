@@ -4,7 +4,7 @@
  * a wrapper; an import-boundary test asserts it.
  */
 
-import { tiktok, extractClipId, soundFacts } from "../integrations/scrapeCreators/platforms/tiktok";
+import { tiktok, extractClipId, soundFacts, postSound } from "../integrations/scrapeCreators/platforms/tiktok";
 import { instagramReelsPosts } from "./reels";
 import { instagramSearchProfiles, profilesResult, tiktokFollowingProfiles, tiktokPopularProfiles } from "./profiles";
 import { instagram } from "../integrations/scrapeCreators/platforms/instagram";
@@ -29,6 +29,11 @@ export interface KindSpec<P extends Record<string, unknown> = Record<string, unk
   call: (p: P, deps: EndpointDeps) => Promise<unknown>;
 }
 
+/** Each post keeps its sound outside `raw` (the cache slims `raw`): `clipId` for the sound signals, `sound` for trends. */
+function withSounds<R extends { posts: Array<{ raw?: unknown }> }>(r: R): R {
+  return { ...r, posts: r.posts.map((post) => { const sound = postSound(post.raw); return { ...post, clipId: sound?.clipId ?? null, sound }; }) };
+}
+
 function spec<P extends Record<string, unknown>>(s: KindSpec<P>): KindSpec<P> {
   return s;
 }
@@ -51,19 +56,20 @@ export const KINDS = {
   }),
 
   // ---- lane searches, shared by keyword
-  "search.keyword": spec<{ keyword: string; window: "yesterday" | "this-week" | "this-month"; sort: "most-liked" | "date-posted"; region?: string }>({
+  "search.keyword": spec<{ keyword: string; window: "yesterday" | "this-week" | "this-month"; sort: "most-liked" | "date-posted" | "relevance"; region?: string }>({
     ttlMs: 24 * H,
     shared: true,
     path: "/v1/tiktok/search/keyword",
     normalize: (p) => ({ keyword: p.keyword.trim().toLowerCase(), window: p.window, sort: p.sort, region: (p.region ?? "US").toUpperCase() }),
-    call: (p, deps) => tiktok.searchKeyword(p.keyword, { ...deps, datePosted: p.window, sortBy: p.sort, region: p.region, trim: true }),
+    // Untrimmed: a trimmed post has no sound, and the sound is the trend (2026-10-13). Same credit; the cache slims it.
+    call: async (p, deps) => withSounds(await tiktok.searchKeyword(p.keyword, { ...deps, datePosted: p.window, sortBy: p.sort, region: p.region })),
   }),
   "search.hashtag": spec<{ hashtag: string; region?: string }>({
     ttlMs: 24 * H,
     shared: true,
     path: "/v1/tiktok/search/hashtag",
     normalize: (p) => ({ hashtag: p.hashtag.replace(/^#/, "").toLowerCase(), region: (p.region ?? "US").toUpperCase() }),
-    call: (p, deps) => tiktok.searchHashtag(p.hashtag, { ...deps, region: p.region, trim: true }),
+    call: async (p, deps) => withSounds(await tiktok.searchHashtag(p.hashtag, { ...deps, region: p.region })),
   }),
   "search.top": spec<{ keyword: string; window: "yesterday" | "this-week" | "this-month"; sort: "most-liked" | "date-posted"; region?: string }>({
     ttlMs: 24 * H,
@@ -282,7 +288,7 @@ export const KINDS = {
     shared: true,
     path: "/v1/tiktok/song/videos",
     normalize: (p) => ({ clipId: String(p.clipId) }),
-    call: (p, deps) => tiktok.songVideos(p.clipId, deps),
+    call: async (p, deps) => withSounds(await tiktok.songVideos(p.clipId, deps)),
   }),
   "sound.reels": spec<{ audioId: string }>({
     ttlMs: 24 * H,
