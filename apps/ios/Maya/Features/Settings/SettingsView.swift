@@ -19,7 +19,7 @@ struct SettingsView: View {
       }
       Section("Your accounts") {
         if let tiktok = settings.handles.tiktok { row("TikTok", "@\(tiktok)") }
-        if let ig = settings.handles.instagram { row("Instagram", "@\(ig)") }
+        if let ig = settings.shownInstagram { row("Instagram", "@\(ig)") }
       }
       Section {
         CalendarRow()
@@ -29,7 +29,7 @@ struct SettingsView: View {
         Text("She puts the sessions you book on your iPhone's calendar, plans around your week, and suggests content for things worth filming, like a trip or a race. Anything personal stays private.")
       }
       Section("Plan") {
-        NavigationLink { PlanView() } label: { LabeledContent("Your plan", value: settings.tier.capitalized) }
+        NavigationLink { PlanView() } label: { LabeledContent("Your plan", value: settings.planName) }
       }
       Section {
         if Fixtures.enabled {

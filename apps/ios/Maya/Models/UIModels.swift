@@ -98,6 +98,16 @@ struct CreatorSettings: Decodable, Equatable {
   let notes: [Note]
   let rules: [Rule]
   let taste: Taste
+  /// What to call their plan ("Maya", "Maya + Deals"); older servers don't send it.
+  var tierLabel: String? = nil
+  /// Whether Instagram is on (config/platforms); older servers don't send it and had it on.
+  var instagramEnabled: Bool? = nil
+  var platforms: [String]? = nil
+
+  var planName: String { tierLabel ?? tier.capitalized }
+  var instagramOn: Bool { instagramEnabled ?? true }
+  /// Their Instagram handle, only while Instagram is on.
+  var shownInstagram: String? { instagramOn ? handles.instagram : nil }
 }
 
 struct Handles: Decodable, Equatable {

@@ -35,7 +35,7 @@ struct LockedDealsView: View {
         FlowerMark(size: 44)
         VStack(alignment: .leading, spacing: 2) {
           Text("Maya finds you money").font(MayaFont.title).foregroundStyle(Palette.ink)
-          Text("On the Partner plan").font(MayaFont.callout).foregroundStyle(Palette.muted)
+          Text("On the \(planName) plan").font(MayaFont.callout).foregroundStyle(Palette.muted)
         }
       }
 
@@ -57,7 +57,7 @@ struct LockedDealsView: View {
       }
 
       VStack(alignment: .leading, spacing: 14) {
-        ladderRow("bag", "Affiliate products that fit what you already make", "TikTok Shop and brands' own affiliate programs, for Reels and TikToks alike. Commission on things you'd post about anyway.")
+        ladderRow("bag", "Affiliate products that fit what you already make", affiliateDetail)
         ladderRow("camera.aperture", "UGC gigs", "Brands pay for content on their own channels. Your work matters more than your follower count.")
         ladderRow("gift", "Gifting and brand programs", "Official creator programs, with what they ask for and how to apply.")
         ladderRow("envelope", "Pitches, when you're ready", "She drafts it from your real posts. You send it.")
@@ -69,7 +69,7 @@ struct LockedDealsView: View {
       } label: {
         HStack {
           if busy { ProgressView().tint(.white) }
-          Text("Unlock with Partner · \(price)/mo").font(MayaFont.headline)
+          Text("Unlock with \(planName) · \(price)/mo").font(MayaFont.headline)
         }
         .frame(maxWidth: .infinity, minHeight: 54)
       }
@@ -90,6 +90,15 @@ struct LockedDealsView: View {
     let postWord = posts == 1 ? "paid partnership post" : "paid partnership posts"
     let accountWord = accounts == 1 ? "account" : "accounts"
     return "\(posts) \(postWord) from \(accounts) \(accountWord) she watches, in the last \(Int(o.teaser.days)) days"
+  }
+
+  /// The plan that opens Deals, by the name the server gives it (billing/tiers.ts tierCopy).
+  private var planName: String { Platforms.instagramEnabled ? "Partner" : "Maya + Deals" }
+
+  private var affiliateDetail: String {
+    Platforms.instagramEnabled
+      ? "TikTok Shop and brands' own affiliate programs, for Reels and TikToks alike. Commission on things you'd post about anyway."
+      : "TikTok Shop and brands' own affiliate programs. Commission on things you'd post about anyway."
   }
 
   private var price: String {

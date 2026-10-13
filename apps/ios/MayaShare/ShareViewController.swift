@@ -39,7 +39,7 @@ final class ShareModel {
     if let found = ShareLink.postLink(in: candidates) {
       phase = .ready(url: found.url, platform: found.platform)
     } else {
-      phase = .failed("Maya can read TikTok and Instagram posts. This doesn't look like one.")
+      phase = .failed(ShareLink.notAPost())
     }
   }
 

@@ -80,4 +80,34 @@ final class OnboardingTests: XCTestCase {
     XCTAssertEqual(OnboardingModel.plain("no account"), "We couldn't confirm your sign-in. Close the app and open it again.")
     XCTAssertEqual(OnboardingModel.plain(nil), "Something went wrong. Try again in a moment.")
   }
+
+  /// Instagram off: the Connect step lists TikTok alone and says so; on, both as before.
+  func testConnectListsOnlyTikTokWhenInstagramIsOff() {
+    XCTAssertEqual(Platforms.connectable(instagram: false), ["tiktok"])
+    XCTAssertEqual(Platforms.connectable(instagram: true), ["instagram", "tiktok"])
+    XCTAssertEqual(ConnectWords.title(instagram: false), "Connect your TikTok.")
+    XCTAssertEqual(ConnectWords.button(instagram: false, connected: false), "Connect TikTok to continue")
+    XCTAssertEqual(ConnectWords.button(instagram: false, connected: true), "Continue")
+    XCTAssertEqual(ConnectWords.title(instagram: true), "Connect your accounts.")
+  }
+
+  /// The flag comes from the server; a server that predates it had Instagram on.
+  @MainActor
+  func testInstagramFlagFromProgress() throws {
+    let off = try JSONDecoder().decode(OnboardingProgress.self, from: Data(#"{"paired":false,"planStatus":"trialing","phone":null,"posts":0,"instagramEnabled":false}"#.utf8))
+    XCTAssertEqual(off.instagramEnabled, false)
+    let old = try JSONDecoder().decode(OnboardingProgress.self, from: Data(#"{"paired":false,"planStatus":"trialing","phone":null,"posts":0}"#.utf8))
+    XCTAssertNil(old.instagramEnabled)
+    XCTAssertFalse(OnboardingModel(preview: .connect).instagramEnabled, "the preview runs TikTok only")
+  }
+
+  /// The plan step starts on the first plan the server offers, never a hardcoded "duo".
+  func testPlanDefaultIsTheFirstOffered() throws {
+    let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "plans", withExtension: "json"))
+    let tiers = try JSONDecoder().decode(Plans.self, from: Data(contentsOf: url)).tiers
+    XCTAssertEqual(Plans.chosen(nil, from: tiers), "solo")
+    XCTAssertEqual(Plans.chosen("duo", from: tiers), "solo", "a plan no longer offered isn't kept")
+    XCTAssertEqual(Plans.chosen("partner", from: tiers), "partner")
+    XCTAssertEqual(Plans.chosen(nil, from: []), "solo")
+  }
 }

@@ -21,7 +21,7 @@ enum WidgetSamples {
                       fitWhy: "Your early-run posts beat your normal three times this month.", isNew: true),
       lastPosts: [
         .init(id: "p1", platform: "tiktok", createTime: ms - 20 * hour, views: 4_200, multiple: 0.8, settled: false, cover: nil),
-        .init(id: "p2", platform: "instagram", createTime: ms - 3 * 24 * hour, views: 18_400, multiple: 2.4, settled: true, cover: nil),
+        .init(id: "p2", platform: "tiktok", createTime: ms - 3 * 24 * hour, views: 18_400, multiple: 2.4, settled: true, cover: nil),
         .init(id: "p3", platform: "tiktok", createTime: ms - 5 * 24 * hour, views: 6_900, multiple: 1.3, settled: true, cover: nil),
       ],
       newIdeas: 3, asOf: ms)

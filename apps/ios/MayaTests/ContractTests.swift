@@ -29,6 +29,22 @@ final class ContractTests: XCTestCase {
     XCTAssertNotNil(s.knows)
     XCTAssertEqual(s.tier, "solo")
     XCTAssertNotNil(s.avatars?.tiktok, "their own avatar is stored")
+    XCTAssertEqual(s.planName, "Maya", "the plan shows by the server's name, not the tier id")
+    XCTAssertEqual(s.instagramEnabled, false)
+    XCTAssertEqual(s.platforms, ["tiktok"])
+  }
+
+  /// Instagram off hides their Instagram handle; an older server (no flag) still shows it.
+  func testSettingsHidesInstagramWhenOff() throws {
+    let h = Handles(tiktok: "a", instagram: "b")
+    let base = try load("settings", as: CreatorSettings.self)
+    var s = CreatorSettings(handles: h, niche: base.niche, timezone: base.timezone, quietHours: base.quietHours, tone: base.tone, paired: base.paired, plan: base.plan, tier: "partner", accountCap: 1, trialEndsAt: nil, currentPeriodEnd: nil, knows: nil, notes: base.notes, rules: base.rules, taste: base.taste)
+    XCTAssertEqual(s.shownInstagram, "b")
+    XCTAssertEqual(s.planName, "Partner")
+    s.instagramEnabled = false
+    s.tierLabel = "Maya + Deals"
+    XCTAssertNil(s.shownInstagram)
+    XCTAssertEqual(s.planName, "Maya + Deals")
   }
 
   func testPlan() throws { _ = try load("plan", as: Plan.self) }
@@ -36,9 +52,11 @@ final class ContractTests: XCTestCase {
   /// P1: the plans screen decodes the real query output; prices are strings from the server.
   func testPlans() throws {
     let p = try load("plans", as: Plans.self)
-    XCTAssertEqual(p.tiers.map(\.tier), ["solo", "duo", "partner"])
+    // TikTok only (config/platforms): two plans on offer, in their current words.
+    XCTAssertEqual(p.tiers.map(\.tier), ["solo", "partner"])
+    XCTAssertEqual(p.tiers.map(\.label), ["Maya", "Maya + Deals"])
     XCTAssertTrue(p.tiers.allSatisfy { $0.monthly.hasPrefix("$") })
-    XCTAssertEqual(p.current.tier, "duo")
+    XCTAssertEqual(p.current.tier, "solo")
   }
 
   func testResults() throws {

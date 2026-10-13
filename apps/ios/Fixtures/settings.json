@@ -96,7 +96,12 @@
     "note": "Not enough history yet to see what they'll take.",
     "updatedAt": 1789203636143
   },
+  "instagramEnabled": false,
+  "platforms": [
+    "tiktok"
+  ],
   "tier": "solo",
+  "tierLabel": "Maya",
   "timezone": "America/New_York",
   "tone": "friend",
   "trialEndsAt": null

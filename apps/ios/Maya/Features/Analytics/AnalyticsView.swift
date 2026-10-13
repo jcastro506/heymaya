@@ -29,20 +29,22 @@ struct AnalyticsView: View {
 
   @ViewBuilder
   private func content(_ a: Analytics) -> some View {
+    // With Instagram off, an old Instagram connection shows nothing here (no Instagram cards or prompts).
+    let accounts = a.accounts.filter { Platforms.instagramEnabled || $0.platform != "instagram" }
     VStack(spacing: 12) {
-      ForEach(a.accounts) { AccountCard(account: $0) }
+      ForEach(accounts) { AccountCard(account: $0) }
     }
 
-    if a.accounts.count > 1 {
+    if accounts.count > 1 {
       Picker("Platform", selection: $platform) {
         Text("All").tag("all")
-        ForEach(a.accounts) { Text($0.platform == "instagram" ? "Instagram" : "TikTok").tag($0.platform) }
+        ForEach(accounts) { Text($0.platform == "instagram" ? "Instagram" : "TikTok").tag($0.platform) }
       }
       .pickerStyle(.segmented)
     }
 
     // A1: account-level cards for the chosen platform(s): growth everywhere; profile and audience on Instagram.
-    let shown = a.accounts.filter { platform == "all" || $0.platform == platform }
+    let shown = accounts.filter { platform == "all" || $0.platform == platform }
     VStack(spacing: 12) {
       ForEach(shown) { FollowerGrowthCard(account: $0) }
       if let ig = shown.first(where: { $0.platform == "instagram" }) {
@@ -51,7 +53,7 @@ struct AnalyticsView: View {
       }
     }
 
-    let posts = a.posts.filter { platform == "all" || $0.platform == platform }
+    let posts = a.posts.filter { (platform == "all" || $0.platform == platform) && (Platforms.instagramEnabled || $0.platform != "instagram") }
     if posts.isEmpty {
       EmptyNote(text: "No posts read yet. They show up here after her next read of your account.")
     } else {
