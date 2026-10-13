@@ -9,6 +9,7 @@
  * is CSS, and stops under prefers-reduced-motion.
  */
 import type { CSSProperties, ReactNode } from "react";
+import { instagramOn } from "@/convex/config/platforms";
 
 export function Flower({ className = "", size }: { className?: string; size?: number }) {
   return (
@@ -133,7 +134,7 @@ const WEEK = [
 /** Views of the last posts against their normal (≈10K): the bars above it are filled. */
 const BARS = [0.62, 0.9, 1.05, 0.7, 1.12, 0.68, 1.6, 3.1];
 
-export function PostsBlock({ compact = false }: { compact?: boolean }) {
+export function PostsBlock({ compact = false, igOn = instagramOn() }: { compact?: boolean; igOn?: boolean }) {
   return (
     <div className="s-sec">
       <div className="s-sec-head">
@@ -155,7 +156,7 @@ export function PostsBlock({ compact = false }: { compact?: boolean }) {
         {WEEK.map((w) => (
           <div key={w.day} className="s-post">
             <Cover kind={w.kind} />
-            <Platform p={w.p} />
+            <Platform p={igOn ? w.p : "tiktok"} />
             <span className="s-post-meta">
               <em className={w.up ? "good" : ""}>{w.multiple}</em>
               <b>{w.views}</b>
@@ -168,7 +169,7 @@ export function PostsBlock({ compact = false }: { compact?: boolean }) {
   );
 }
 
-export function TodayScreen() {
+export function TodayScreen({ igOn = instagramOn() }: { igOn?: boolean } = {}) {
   return (
     <div className="app">
       <div className="app-scroll">
@@ -186,7 +187,7 @@ export function TodayScreen() {
             </div>
           </div>
         </div>
-        <PostsBlock compact />
+        <PostsBlock compact igOn={igOn} />
         <div className="s-sec">
           <span className="s-kicker">Coming up</span>
           <div className="s-up">
@@ -241,28 +242,30 @@ export function IdeasScreen() {
   );
 }
 
-/* ——— Your numbers: TikTok and Instagram side by side (AnalyticsView) ——— */
+/* ——— Your numbers: TikTok and Instagram side by side (AnalyticsView); TikTok alone while Instagram is off ——— */
 
-export function NumbersScreen() {
+export function NumbersScreen({ igOn = instagramOn() }: { igOn?: boolean } = {}) {
   return (
     <div className="app">
       <div className="app-scroll">
         <h3 className="app-title">Your numbers</h3>
-        <div className="s-accts">
+        <div className={`s-accts${igOn ? "" : " s-accts-one"}`}>
           <div className="s-acct">
             <Platform p="tiktok" />
             <b>2,140</b>
             <small>followers</small>
             <em className="good">+96 in 30 days</em>
           </div>
-          <div className="s-acct">
-            <Platform p="instagram" />
-            <b>8,050</b>
-            <small>followers</small>
-            <em className="good">+214 in 30 days</em>
-          </div>
+          {igOn ? (
+            <div className="s-acct">
+              <Platform p="instagram" />
+              <b>8,050</b>
+              <small>followers</small>
+              <em className="good">+214 in 30 days</em>
+            </div>
+          ) : null}
         </div>
-        <PostsBlock compact />
+        <PostsBlock compact igOn={igOn} />
         <div className="s-note">
           <Flower size={20} />
           <p>the hill one did 3.1× your normal. that’s the thing to do again.</p>
