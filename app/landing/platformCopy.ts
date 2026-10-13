@@ -4,8 +4,8 @@
  * metadata, the pricing cards and the legal pages never disagree. The Instagram wording stays here
  * so turning the switch back on restores it.
  */
-import { instagramOn } from "@/convex/config/platforms";
-import { TIERS, offeredTiers, price, tierCopy, type Tier } from "@/convex/billing/tiers";
+import { instagramOn } from "../../convex/config/platforms";
+import { TIERS, offeredTiers, price, tierCopy, type Tier } from "../../convex/billing/tiers";
 
 export function platformCopy(igOn: boolean = instagramOn()) {
   const partner = tierCopy("partner", igOn).label;
