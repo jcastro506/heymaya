@@ -49,4 +49,6 @@ Her own finds no longer race each other. The paths that find things write **cand
 - **Backing off:** three of hers unanswered → only a strong one, or one good one a week, never two days running.
 - **Sunday is one text:** the review opens next week's plan (alone only when the week can't be planned).
 
+- **Trends (2026-10-13, `scout/trends.ts`):** a trend she judged right for them becomes a candidate only while it's early (first seen under 4 days ago, not slowing), scored above an idea when people in their own lane are on it. It competes for the same one text; everything else waits in the app's Trending tab. Asked in Messages ("any trends?"), she answers from `trends_now` and never names a trend a tool didn't give her.
+
 Simulated month (`core/__tests__/editor.test.ts`): someone who answers comments gets comments and quiet days; someone who answers ideas learns to get ideas; someone who answers nothing gets about one a week.

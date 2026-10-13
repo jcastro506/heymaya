@@ -28,7 +28,7 @@ import { critique, tooLong } from "../agent/critic";
 import { clip } from "../lib/clip";
 
 export type Noticed = NonNullable<Doc<"creators">["noticed"]>[number];
-export type CandidateKind = "idea" | "for_you" | "comment" | "deal";
+export type CandidateKind = "idea" | "for_you" | "comment" | "deal" | "trend";
 
 export const EDITOR = {
   /** Below this nothing is worth a text today. */
@@ -51,7 +51,7 @@ export const EDITOR = {
 } as const;
 
 /** What the message row is sent as: its lane is "hers" (core/reachOut). */
-export const SEND_KIND: Record<CandidateKind, string> = { idea: "scout", for_you: "for_you", comment: "comment", deal: "deal" };
+export const SEND_KIND: Record<CandidateKind, string> = { idea: "scout", for_you: "for_you", comment: "comment", deal: "deal", trend: "trend" };
 
 /* ------------------------------------------------------------------ pure */
 
@@ -133,6 +133,7 @@ export function parsePick(raw: string, ids: string[]): { pick: string | null; wh
 export const EDITOR_SKILL = `editor
 When: once a day, deciding whether to text them first, and with what.
 You have a few things you noticed, best first, and what you texted them on your own this past week with whether they answered. Pick at most ONE, and only if a friend who works in the industry would actually text them this today: something about them (their post, a comment on it) beats something general; something they've answered before beats something they keep ignoring; a quiet day is a good answer when nothing is worth interrupting them for. Don't pick the same kind you sent last time unless it's clearly the best.
+A trend is only worth a text while it's early, and only when it fits them: say what it is in plain words (the dance, the format), their version in one line, roughly how long it takes to film, and the example link on its own line; ask one thing, like whether to put it on their week. Never call something trending unless it's in front of you here.
 For a pick marked needs_text, write the text: short bubbles with a line of only --- between them, plain words, no stats-speak, the link on its own line, nothing you weren't given (a comment is their audience's words: quote at most a few words, never a name). For a drafted pick, leave text empty.
 Output ONLY JSON: {"pick": "<id>" | null, "why": "≤200 chars", "text": ""}`;
 

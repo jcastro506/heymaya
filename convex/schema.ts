@@ -70,6 +70,17 @@ export default defineSchema({
       status: v.union(v.literal("open"), v.literal("sent"), v.literal("folded"), v.literal("dropped")),
       decidedAt: v.optional(v.number()),
     }))),
+    /** Her read of each live trend for them (scout/trends): hop on, borrow the format, or skip, and their version. */
+    trendPicks: v.optional(v.array(v.object({
+      trendId: v.id("trends"),
+      verdict: v.union(v.literal("hop_on"), v.literal("borrow"), v.literal("skip")),
+      why: v.string(),
+      hook: v.string(),
+      onScreenText: v.optional(v.string()),
+      lengthSec: v.optional(v.number()),
+      at: v.number(),
+      ideaId: v.optional(v.id("ideas")),
+    }))),
     /** Where they were the last time she looked for deals (partnerships/dealScout), so she notices when they grow. */
     dealStage: v.optional(v.object({ stage: v.string(), followers: v.optional(v.number()), at: v.number() })),
     /** The day (their clock) the editor last decided: a pick, a fold, or a quiet day. */
@@ -213,6 +224,36 @@ export default defineSchema({
 
   // -------------------------------------------------------------- observations
   // Other people's posts with metrics, one row per sample (velocity is computed from repeats).
+  /**
+   * Trends (scout/trends, 2026-10-13), one row per sound, shared by everyone. A trend is a sound many
+   * accounts are posting to right now: found in what we read, checked for whether it's new or an old
+   * song, counted day over day, and watched once so she can say what it is and how to film it.
+   */
+  trends: defineTable({
+    clipId: v.string(),
+    title: v.string(),
+    author: v.optional(v.string()),
+    status: v.union(v.literal("live"), v.literal("evergreen"), v.literal("faded")),
+    /** Lane keywords it came from; empty when it's platform-wide. */
+    niche: v.array(v.string()),
+    sources: v.array(v.string()),
+    accounts: v.array(v.string()),
+    /** TikTok's count of videos using the sound, one per check. */
+    uses: v.array(v.object({ at: v.number(), n: v.number() })),
+    /** Median age of the sound's top videos when checked: a new sound's are days old, an old song's are years. */
+    topAgeDays: v.optional(v.number()),
+    examples: v.array(v.object({ url: v.string(), handle: v.string(), views: v.number(), postedAt: v.number(), cover: v.optional(v.string()) })),
+    /** What watching two examples found: what it is and how to film it. Absent until watched. */
+    recipe: v.optional(v.object({ kind: v.string(), what: v.string(), beats: v.array(v.string()), onScreenText: v.string(), difficulty: v.string(), solo: v.boolean() })),
+    watchedAt: v.optional(v.number()),
+    watchFailed: v.optional(v.string()),
+    firstSeenAt: v.number(),
+    lastSeenAt: v.number(),
+    checkedAt: v.number(),
+  })
+    .index("by_clip", ["clipId"])
+    .index("by_status", ["status", "lastSeenAt"]),
+
   observations: defineTable({
     platform,
     postId: v.string(),

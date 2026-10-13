@@ -77,6 +77,11 @@ export function fakeAnswer(purpose: string, messages: OpenRouterMessage[]): Open
       const brand = (user.split("Brands with money moving in their lane:")[1] ?? "").match(/^- ([^:\n]+):/m)?.[1];
       return ok(brand ? JSON.stringify({ stage: "small but engaged", picks: [{ brand, type: "ugc", why: "they pay creators in your lane" }], message: `brands that could pay you for content: ${brand}\n---\nwant me to look into them?` }) : JSON.stringify({ picks: [], message: "" }));
     }
+    case "trend_judge": {
+      // Test-only stand-in for her read of the trends: the first one is a hop-on, the rest are skips.
+      const ids = [...user.matchAll(/- id: (\S+)/g)].map((m) => m[1]);
+      return ok(JSON.stringify({ picks: ids.map((id, i) => (i === 0 ? { id, verdict: "hop_on", why: "your trail clips already move like this", hook: "the trail switchback, timed to the drop", onScreenText: "pov: mile 9", lengthSec: 12 } : { id, verdict: "skip", why: "", hook: "" })) }));
+    }
     case "editor": {
       // Test-only stand-in for her pick: the first candidate, written when it needs text; "quiet" in the list means none.
       const id = user.match(/- id: (\S+)/)?.[1];

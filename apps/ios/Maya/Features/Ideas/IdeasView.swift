@@ -3,6 +3,8 @@ import SwiftUI
 /// The swipe file. New ideas are a stack you swipe through; everything else is a cover grid.
 struct IdeasView: View {
   @State private var ideas = Live<[Idea]?>("ui:ideas", args: ["unpostedOnly": false, "savedOnly": false])
+  @State private var trends = Live<[Trend]?>("ui:trends")
+  @State private var trend: Trend?
   @State private var filter: IdeaFilter = .new
   @State private var handled: Set<String> = []
   @State private var selected: Idea?
@@ -20,7 +22,16 @@ struct IdeasView: View {
         IdeaDetailView(idea: idea).navigationTransition(.zoom(sourceID: idea.id, in: zoom))
       }
       .navigationDestination(item: $linked) { IdeaByIdView(id: $0.id) }
+      .navigationDestination(item: $trend) { TrendDetailView(trend: $0) }
 
+      if filter == .trending {
+        switch trends.state {
+        case .loading: SkeletonRows(count: 3)
+        case .failed(let message): ErrorNote(message: message)
+        case .value(nil): NoAccountNote()
+        case .value(let all?): TrendingList(trends: all, open: { trend = $0 })
+        }
+      } else {
       switch ideas.state {
       case .loading:
         SkeletonRows(count: 3)
@@ -48,8 +59,10 @@ struct IdeasView: View {
           }
         }
       }
+      }
     }
     .task { await ideas.run() }
+    .task { await trends.run() }
     .onChange(of: router.pendingIdea, initial: true) { _, id in
       guard let id else { return }
       linked = LinkedID(id: id)
@@ -62,13 +75,14 @@ struct IdeasView: View {
 struct LinkedID: Identifiable, Hashable { let id: String }
 
 enum IdeaFilter: String, CaseIterable, Identifiable {
-  case new, saved, posted, passed
+  case new, trending, saved, posted, passed
   var id: String { rawValue }
   var label: String { rawValue.capitalized }
 
   func includes(_ i: Idea) -> Bool {
     switch self {
     case .new: (i.status == "sent" || i.status == "hearted") && !i.saved
+    case .trending: false // its own list (ui:trends), not ideas
     case .saved: i.saved
     case .posted: i.status == "posted"
     case .passed: i.status == "passed" || i.status == "expired"
@@ -78,6 +92,7 @@ enum IdeaFilter: String, CaseIterable, Identifiable {
   var empty: String {
     switch self {
     case .new: "You're all caught up. New ideas land here, with their proof, the moment she texts one."
+    case .trending: ""
     case .saved: "Nothing saved yet. Swipe right on an idea to keep it."
     case .posted: "Nothing posted from her ideas yet. Tap \"I posted it\" on one and she learns from how it does."
     case .passed: "Nothing here. Ideas you pass on, or that go stale, collect here."

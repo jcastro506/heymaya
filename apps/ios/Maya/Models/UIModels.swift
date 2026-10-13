@@ -64,6 +64,39 @@ struct Idea: Decodable, Equatable, Identifiable {
   var firstCover: String? { evidenceCovers?.first ?? nil }
 }
 
+/// A live TikTok trend she thinks fits them (ui:trends): what it is, how to film it, and their version.
+struct Trend: Decodable, Equatable, Identifiable, Hashable {
+  let id: String
+  /// "hop_on" (do it as is) or "borrow" (the sound or structure, their subject).
+  let verdict: String
+  let why: String
+  let hook: String
+  let onScreenText: String?
+  let lengthSec: Double?
+  let ideaId: String?
+  let sound: String
+  let kind: String
+  let what: String
+  let beats: [String]
+  let trendText: String?
+  let difficulty: String
+  let solo: Bool
+  let momentum: String
+  let inYourLane: Bool
+  let examples: [TrendExample]
+
+  var verdictLabel: String { verdict == "hop_on" ? "Hop on" : "Borrow the format" }
+  var firstLink: String { examples.first?.url ?? "" }
+  var firstCover: String? { examples.first?.cover ?? nil }
+  func hash(into hasher: inout Hasher) { hasher.combine(id) }
+}
+
+struct TrendExample: Decodable, Equatable {
+  let url: String
+  let handle: String
+  let cover: String?
+}
+
 struct IdeaFeatures: Decodable, Equatable {
   let format: String?
   let topics: [String]?
