@@ -1,19 +1,21 @@
 import Link from "next/link";
+import { instagramOn } from "@/convex/config/platforms";
 
 /** Privacy (plan §7 S1 legal, §16.5). Names the vendors, states the posture, gives the deletion path. Reviewed by a person before launch. */
 export default function Privacy() {
+  const ig = instagramOn();
   return (
     <main className="max-w-2xl mx-auto px-6 py-12 flex flex-col gap-6 text-sm leading-relaxed">
       <h1 className="text-2xl font-semibold">Privacy</h1>
       <p className="opacity-60">Last updated 2 September 2026. This page describes the pilot. It changes when the product does, and the date changes with it.</p>
 
       <h2 className="font-semibold text-base">What Maya is</h2>
-      <p>Maya is a creator&apos;s assistant for TikTok and Instagram. She reads public posts, watches short videos, reads a calendar you connect, and texts you on Telegram. She is software. Where she uses language and video models, those are named below.</p>
+      <p>Maya is a creator&apos;s assistant for {ig ? "TikTok and Instagram" : "TikTok"}. She reads public posts, watches short videos, reads a calendar you connect, and texts you on Telegram. She is software. Where she uses language and video models, those are named below.</p>
 
       <h2 className="font-semibold text-base">What we collect from you</h2>
       <ul className="list-disc pl-5 flex flex-col gap-1">
         <li>Your email and sign-in, held by Clerk.</li>
-        <li>Your TikTok and Instagram handles, and the handles of accounts you tell us you admire. We never ask for, hold, or use your platform passwords. Ownership of a handle is not verified during the pilot; you are telling us it is yours.</li>
+        <li>Your {ig ? "TikTok and Instagram handles" : "TikTok handle"}, and the handles of accounts you tell us you admire. We never ask for, hold, or use your platform passwords. Ownership of a handle is not verified during the pilot; you are telling us it is yours.</li>
         <li>Your messages with Maya on Telegram, including files, screenshots and voice notes you send her, and her replies.</li>
         <li>What you do with her ideas: reactions, taps, replies, and which ideas you posted. This is how she learns your taste.</li>
         <li>If you connect Google Calendar: event titles, start and end times, the all-day flag and the calendar id, for the next fourteen days, kept for ninety days rolling. Never descriptions, attendees, locations or attachments. Events that look private (health, legal, money, work reviews, relationships) keep no title and are never referenced.</li>

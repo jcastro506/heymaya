@@ -183,7 +183,9 @@ private struct NameStep: View {
 private struct PlanStep: View {
   let model: OnboardingModel
   @State private var plans = Live<Plans?>("ui:plans")
-  @State private var chosen = "duo"
+  /// Nil until they tap one; the server's first offered plan until then.
+  @State private var picked: String?
+  private var chosen: String { Plans.chosen(picked, from: tiers) }
   @State private var annual = false
   @State private var busy = false
   @State private var problem: String?
@@ -207,7 +209,7 @@ private struct PlanStep: View {
       } else {
         VStack(spacing: 12) {
           ForEach(tiers) { t in
-            TierCard(tier: t, annual: annual, selected: chosen == t.tier) { chosen = t.tier }
+            TierCard(tier: t, annual: annual, selected: chosen == t.tier) { picked = t.tier }
           }
         }
       }
@@ -261,6 +263,15 @@ private struct TierCard: View {
 
 // MARK: - 2. Connect
 
+/// The Connect step's words, for one platform or both. Pure.
+enum ConnectWords {
+  static func title(instagram: Bool) -> String { instagram ? "Connect your accounts." : "Connect your TikTok." }
+  static let subtitle = "So she can see your posts and what your followers love, and her ideas sound like you. She never posts for you."
+  static func button(instagram: Bool, connected: Bool) -> String {
+    connected ? "Continue" : instagram ? "Connect one to continue" : "Connect TikTok to continue"
+  }
+}
+
 private struct ConnectStep: View {
   let model: OnboardingModel
   @State private var busy: String?
@@ -270,12 +281,17 @@ private struct ConnectStep: View {
   @State private var igSetup = Live<AccountSetup?>("account/setup:advice", args: ["platform": "instagram", "accountType": "personal"])
   @State private var showIGSetup = false
 
-  private var accounts: [SocialStatus.Account] { model.social?.accounts.filter { !$0.needsReconnect } ?? [] }
+  private var instagram: Bool { model.instagramEnabled }
+  /// With Instagram off, only TikTok counts toward moving on.
+  private var accounts: [SocialStatus.Account] {
+    let on = Platforms.connectable(instagram: instagram)
+    return model.social?.accounts.filter { !$0.needsReconnect && on.contains($0.platform) } ?? []
+  }
 
   var body: some View {
-    StepFrame(step: .connect, kicker: "Your accounts", title: "Connect your accounts.", subtitle: "So she can see your posts and what your followers love, and her ideas sound like you. She never posts for you.") {
+    StepFrame(step: .connect, kicker: instagram ? "Your accounts" : "Your account", title: ConnectWords.title(instagram: instagram), subtitle: ConnectWords.subtitle) {
       VStack(spacing: 12) {
-        ForEach(["instagram", "tiktok"], id: \.self) { platform in
+        ForEach(Platforms.connectable(instagram: instagram), id: \.self) { platform in
           let account = accounts.first { $0.platform == platform }
           HStack(spacing: 14) {
             Image(systemName: platform == "instagram" ? "camera" : "music.note")
@@ -339,12 +355,12 @@ private struct ConnectStep: View {
         .disabled(busy != nil)
       }
     } footer: {
-      PrimaryButton(title: accounts.isEmpty ? "Connect one to continue" : "Continue", disabled: accounts.isEmpty) {
+      PrimaryButton(title: ConnectWords.button(instagram: instagram, connected: !accounts.isEmpty), disabled: accounts.isEmpty) {
         model.connectSeen = true
       }
       .disabled(accounts.isEmpty)
     }
-    .task { await igSetup.run() }
+    .task(id: instagram) { if instagram { await igSetup.run() } }
     // An Instagram error is wrong the moment Instagram shows up connected (it can arrive after the check).
     .onChange(of: accounts.contains { $0.platform == "instagram" }) { _, connected in
       if connected, problem?.hasPrefix("Instagram") == true { problem = nil }
@@ -401,7 +417,7 @@ private struct MeetStep: View {
 
 private struct WatchStep: View {
   let model: OnboardingModel
-  @State private var platform = "instagram"
+  @State private var platform = "tiktok"
   @State private var handle = ""
   @State private var busy = false
   @State private var problem: String?
@@ -410,16 +426,15 @@ private struct WatchStep: View {
     StepFrame(step: .watch, kicker: "Your favorites", title: "Who do you love watching?", subtitle: "Add a few creators you like. She'll keep an eye on them for ideas.") {
       VStack(alignment: .leading, spacing: 10) {
         HStack(spacing: 8) {
-          Menu {
-            Button("Instagram") { platform = "instagram" }
-            Button("TikTok") { platform = "tiktok" }
-          } label: {
-            Image(systemName: platform == "instagram" ? "camera" : "music.note")
-              .frame(width: 44, height: 44)
-              .background(RoundedRectangle(cornerRadius: 12).fill(Palette.wash))
-              .foregroundStyle(Palette.purple)
+          if model.instagramEnabled {
+            Menu {
+              Button("Instagram") { platform = "instagram" }
+              Button("TikTok") { platform = "tiktok" }
+            } label: { platformIcon }
+            .accessibilityLabel(platform == "instagram" ? "Instagram" : "TikTok")
+          } else {
+            platformIcon.accessibilityLabel("TikTok")
           }
-          .accessibilityLabel(platform == "instagram" ? "Instagram" : "TikTok")
           TextField("@handle", text: $handle)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
@@ -454,7 +469,15 @@ private struct WatchStep: View {
     }
   }
 
+  private var platformIcon: some View {
+    Image(systemName: platform == "instagram" ? "camera" : "music.note")
+      .frame(width: 44, height: 44)
+      .background(RoundedRectangle(cornerRadius: 12).fill(Palette.wash))
+      .foregroundStyle(Palette.purple)
+  }
+
   private func add() {
+    let platform = model.instagramEnabled ? platform : "tiktok"
     Task { busy = true; problem = await model.addOwn(platform: platform, handle: handle); if problem == nil { handle = "" }; busy = false }
   }
 }

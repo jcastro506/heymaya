@@ -31,6 +31,8 @@ export async function runPartnershipTool(ctx: ActionCtx, creatorId: Id<"creators
     const numbers = whereTheyAre({ followers, normalViews: top?.normalViews ?? null, engagementPerView: top?.engagement?.perView ?? null, growth30d: top?.growth30d?.net ?? null });
     return `their numbers today: ${numbers}\n${lastRead(i.lastStage) ?? ""}\n${HOW_DEALS_SCALE}\nwhat they make: ${kit?.kit.styles.join("; ") || "unknown"}\nleads (money moving in their lane; judge fit for where THEY are, never promise a deal):\n${leads.map((l) => `- ${l.brand}: ${l.signals.join("; ")}${l.url ? ` · ${l.url}` : ""}`).join("\n") || "- none this week"}`;
   }
+  // A pitch carries their kit: today's follower count before it's drafted.
+  if (name === "partnership_draft") await ctx.runAction(internal.connections.sync.refreshFollowers, { creatorId }).catch(() => undefined);
   if (name === "partnership_read") result = await ctx.runQuery(internal.partnerships.store.read, { creatorId, brandDomain: typeof args.brandDomain === "string" ? args.brandDomain : undefined, cursor: typeof args.cursor === "string" ? args.cursor : undefined, ...(args.opportunityId ? { opportunityId: String(args.opportunityId) as Id<"partnershipOpportunities"> } : {}) });
   else {
     if (!sourceMessageId) return "refused: this partnership action needs a current user conversation";

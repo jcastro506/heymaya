@@ -4,6 +4,7 @@
  * across two consecutive turns.
  */
 
+import { instagramOn, platformOn } from "../config/platforms";
 import { describe as describeRoutine } from "../core/routines";
 import { CACHE_BREAK } from "../integrations/openrouter/client";
 import { stillReading, stillReadingSection } from "../onboarding/reading";
@@ -141,7 +142,7 @@ export async function personalFor(ctx: QueryCtx, creator: Doc<"creators">): Prom
   const avail = await availabilityFor(ctx, creator, now);
   // Their normal on each platform, side by side (the one definition, core/normal): "tiktok or instagram?" gets answered from these, not from generalities.
   const recent = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).order("desc").take(80)) as Doc<"ownPosts">[];
-  const normals = [...normalsByPlatform(recent, now).entries()].filter(([, n]) => n).map(([pl, n]) => `${pl === "instagram" ? "Instagram" : "TikTok"} ${n!.value.toLocaleString()} views (median of their last ${n!.n} settled posts)`);
+  const normals = [...normalsByPlatform(recent, now).entries()].filter(([pl, n]) => n && platformOn(pl)).map(([pl, n]) => `${pl === "instagram" ? "Instagram" : "TikTok"} ${n!.value.toLocaleString()} views (median of their last ${n!.n} settled posts)`);
   const normalsLine = normals.length ? `\n\n# Their normal on each platform\n${normals.join(" · ")}` : "";
   return `# Their recent posts (newest first; the numbers you may cite about them)\n${week.join("\n") || "- none read yet"}${normalsLine}\n\n# Their week's plan (film / edit / post blocks; the ids are for the block tools)\nNow on their clock: ${nowLocal} (${creator.timezone}).\n${plan.join("\n") || "- no plan yet this week; you can lay one out with week_replan, or they can ask for one"}\n\n# Their next few days (titles only; never private events)\n${life.join("\n") || "- nothing on the calendar, or no calendar connected"}\n\n${availabilitySection(avail.windows, avail.bestHours)}`;
 }
@@ -158,6 +159,10 @@ Their "strengths" and the "skill" works are what you build plans and ideas on: t
 People often follow a person, not a topic. When their comments or their best posts show people come for THEM (their humor, their look, how they talk, a relationship, their reactions), that is a strength too, as real as the topic: build on both, and say which one a hit leaned on. With few comments or posts, say the evidence is thin and lean on what their posts show.
 Size everything to where they are, from their own numbers, never from a bucket: their normal views, how often they post, what they've told you. A plan is their pace or one step more; one shoot can be several posts. Paid work at a small normal starts with proof (a clear lane, consistency, a first gifted or small paid collab, a one-page kit); at a large normal it's specific (the brand categories that fit their world, a media kit, pricing from their own normal views and what they've been paid before). Never quote a market rate as fact.`;
 
+/** TikTok only (config/platforms): said once, in the part every message shares, so no path suggests Instagram. */
+export const PLATFORM_SCOPE = `# Platforms
+You work with TikTok only right now. Never suggest Instagram, Reels, cross-posting or reposting to Instagram, connecting or switching an Instagram account, or Instagram features (trial reels, the paid partnership label, Reels audio). If they bring up Instagram, say plainly you only work with TikTok for now and help with the TikTok side. A brand's Instagram is fine to mention as a way to reach the brand.`;
+
 /** Build the stable prefix: soul → register → skill → dossier → directives → live notes. */
 export function buildPrefix(input: { creator: Doc<"creators">; directives: Doc<"directives">[]; skill: string; personal?: string; voice?: string; history?: string }): string {
   const c = input.creator;
@@ -169,9 +174,10 @@ export function buildPrefix(input: { creator: Doc<"creators">; directives: Doc<"
   const stable = [
     SOUL,
     REGISTER_ADDENDA[c.tone ?? "friend"],
-    `# The creator (their dossier, evidence-backed; say "unknown" for anything not in it)\nHandles: ${JSON.stringify(c.handles)}\nTheir words about what they make: ${JSON.stringify(c.niche)}\nTimezone: ${c.timezone}${nameLine(c)}\n${dossier}`,
+    `# The creator (their dossier, evidence-backed; say "unknown" for anything not in it)\nHandles: ${JSON.stringify(instagramOn() ? c.handles : { tiktok: c.handles.tiktok })}\nTheir words about what they make: ${JSON.stringify(c.niche)}\nTimezone: ${c.timezone}${nameLine(c)}\n${dossier}`,
     WHY_IT_WORKED,
     PLATFORM_HONESTY,
+    ...(instagramOn() ? [] : [PLATFORM_SCOPE]),
     planSection(c),
     textingSection(c),
     `# Current messaging settings (authoritative)\nQuiet hours: ${c.quietHours.start}–${c.quietHours.end} on their clock (${c.timezone}). If an older remembered rule differs, this current setting wins. Never infer or round these hours.`,

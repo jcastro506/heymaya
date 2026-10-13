@@ -4,6 +4,7 @@
  * so nothing waits on the Telegram step.
  */
 
+import { instagramOn } from "../config/platforms";
 import { v } from "convex/values";
 import { normalizePhone } from "../integrations/claw/client";
 import { internalQuery, query, type MutationCtx } from "../_generated/server";
@@ -84,8 +85,8 @@ export const start = mutation({
 export async function startCreator(ctx: MutationCtx, args: { subject: string; email: string; handles: { tiktok?: string; instagram?: string }; timezone?: string; /** First-week simulation only: a smaller catalogue read (see onboarding/ingest.ts run). */ ingestCaps?: { watchCap?: number; transcriptCap?: number } }): Promise<{ ok: boolean; creatorId?: string; error?: string }> {
   {
     const identity = { subject: args.subject, email: args.email };
-    const handles = { tiktok: cleanHandle(args.handles.tiktok), instagram: cleanHandle(args.handles.instagram) };
-    if (!handles.tiktok && !handles.instagram) return { ok: false, error: "one handle is required" };
+    const handles = { tiktok: cleanHandle(args.handles.tiktok), instagram: instagramOn() ? cleanHandle(args.handles.instagram) : undefined };
+    if (!handles.tiktok && !handles.instagram) return { ok: false, error: instagramOn() ? "one handle is required" : "your TikTok handle is required" };
 
     // One creator per handle: a second signup with the same handle is a merge prompt, never a second row.
     for (const platform of ["tiktok", "instagram"] as const) {
@@ -104,7 +105,8 @@ export async function startCreator(ctx: MutationCtx, args: { subject: string; em
       .first()) as Doc<"creators"> | null;
     const now = Date.now();
     if (existing) {
-      await ctx.db.patch(existing._id, { handles, timezone: args.timezone ?? existing.timezone, updatedAt: now });
+      // With Instagram off a stored Instagram handle is kept, so turning it back on restores it.
+      await ctx.db.patch(existing._id, { handles: instagramOn() ? handles : { ...handles, instagram: existing.handles.instagram }, timezone: args.timezone ?? existing.timezone, updatedAt: now });
       return { ok: true, creatorId: existing._id };
     }
     const creatorId = await ctx.db.insert("creators", {
@@ -255,7 +257,7 @@ export const setName = mutation({
 
 export const progress = query({
   args: {},
-  handler: async (ctx): Promise<{ state: "none" | "reading" | "read" | "paired"; posts: number; transcripts: number; dossier: boolean; paired: boolean; ingest: string | null; firstRead: string | null; timezone: string; quietHours: { start: string; end: string }; channelKind: "telegram" | "imessage"; phone: string | null; planStatus: string; tier: "solo" | "duo" | "partner" | null; firstName: string | null; nameConfirmed: boolean } | null> => {
+  handler: async (ctx): Promise<{ state: "none" | "reading" | "read" | "paired"; posts: number; transcripts: number; dossier: boolean; paired: boolean; ingest: string | null; firstRead: string | null; timezone: string; quietHours: { start: string; end: string }; channelKind: "telegram" | "imessage"; phone: string | null; planStatus: string; tier: "solo" | "duo" | "partner" | null; firstName: string | null; nameConfirmed: boolean; instagramEnabled: boolean } | null> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
     const creator = (await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject)).first()) as Doc<"creators"> | null;
@@ -267,7 +269,7 @@ export const progress = query({
     const jobs = (await ctx.db.query("jobs").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).collect()) as Doc<"jobs">[];
     const ingest = jobs.filter((j) => j.kind === "ingest_catalogue").sort((x, y) => y.createdAt - x.createdAt)[0];
     const firstRead = jobs.filter((j) => j.kind === "first_read").sort((x, y) => y.createdAt - x.createdAt)[0];
-    return { state: paired ? "paired" : dossier ? "read" : posts.length ? "reading" : "none", posts: posts.length, transcripts, dossier, paired, ingest: ingest?.status ?? null, firstRead: firstRead?.status ?? null, timezone: creator.timezone, quietHours: creator.quietHours, channelKind: creator.channel.kind ?? "imessage", phone: creator.phone ?? null, planStatus: creator.plan.status, tier: creator.plan.tier ?? null, firstName: creator.firstName ?? null, nameConfirmed: Boolean(creator.nameConfirmedAt) };
+    return { state: paired ? "paired" : dossier ? "read" : posts.length ? "reading" : "none", posts: posts.length, transcripts, dossier, paired, ingest: ingest?.status ?? null, firstRead: firstRead?.status ?? null, timezone: creator.timezone, quietHours: creator.quietHours, channelKind: creator.channel.kind ?? "imessage", phone: creator.phone ?? null, planStatus: creator.plan.status, tier: creator.plan.tier ?? null, firstName: creator.firstName ?? null, nameConfirmed: Boolean(creator.nameConfirmedAt), instagramEnabled: instagramOn() };
   },
 });
 
@@ -286,6 +288,25 @@ export const reading = query({
   },
 });
 
+/** Retry a failed first catalogue read from Today. A terminal prior job can be re-enqueued with the same idempotency key. */
+export const retryReading = mutation({
+  args: {},
+  handler: async (ctx): Promise<{ ok: boolean; error?: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { ok: false, error: "sign in first" };
+    const c = (await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject)).first()) as Doc<"creators"> | null;
+    if (!c || c.plan.status === "deleting") return { ok: false, error: "account unavailable" };
+    if (!c.handles.tiktok && !c.handles.instagram) return { ok: false, error: "connect an account first" };
+    await ctx.runMutation(internal.core.jobs.enqueue, {
+      kind: "ingest_catalogue",
+      idempotencyKey: `ingest:${c._id}:v${c.dossierVersion}`,
+      creatorId: c._id,
+      payloadJson: JSON.stringify({ reason: "user_retry" }),
+    });
+    return { ok: true };
+  },
+});
+
 /**
  * For her replies (2026-10-01): is her first read of their posts still running? Until her first-read
  * text exists, it is. Live on staging she summed up their posts from the half she'd seen and asked
@@ -298,5 +319,4 @@ export const readStillRunning = internalQuery({
     return c ? await stillReading(ctx, c) : null;
   },
 });
-
 

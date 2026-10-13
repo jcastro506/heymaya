@@ -9,6 +9,7 @@
  * the watcher runs on the lane.
  */
 
+import { enabledPlatforms } from "../config/platforms";
 import { clip } from "../lib/clip";
 import { v } from "convex/values";
 import { coverKey, rememberMedia } from "../media";
@@ -128,7 +129,7 @@ export const run = internalAction({
     let signals = 0, failed = 0;
     let firstError = "";
     for (const { keyword, creatorIds } of keywords) {
-      for (const platform of ["tiktok", "instagram"] as const) {
+      for (const platform of enabledPlatforms()) {
         try {
           const r = await ctx.runAction(internal.reads.read.read, {
             kind: platform === "tiktok" ? "search.keyword" : "search.reels",

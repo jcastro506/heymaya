@@ -18,6 +18,7 @@
  * not a creator worth following.
  */
 
+import { platformOn } from "../config/platforms";
 import { v } from "convex/values";
 import { internalAction, internalQuery } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
@@ -73,7 +74,7 @@ export const candidatesFor = internalQuery({
     const byAuthor = new Map<string, { platform: "tiktok" | "instagram"; handle: string; views: number[]; days: Set<string>; posts: Set<string> }>();
     for (const r of rows) {
       const handle = (r.authorHandle ?? "").toLowerCase().replace(/^@/, "");
-      if (!handle || known.has(`${r.platform}:${handle}`)) continue;
+      if (!handle || known.has(`${r.platform}:${handle}`) || !platformOn(r.platform)) continue;
       // Their lane, not the whole platform: the post must carry one of their keywords.
       if (keywords.length && !r.keywords.some((k) => keywords.includes(k.toLowerCase()))) continue;
       const e = byAuthor.get(`${r.platform}:${handle}`) ?? { platform: r.platform, handle, views: [], days: new Set<string>(), posts: new Set<string>() };

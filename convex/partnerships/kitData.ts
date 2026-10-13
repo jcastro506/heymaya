@@ -9,6 +9,7 @@
  * Pure helpers are exported for the tests; `readKitV2` is shared by the tool, the app and the page
  * (a query can't call a query).
  */
+import { instagramOn } from "../config/platforms";
 import type { QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { normalViews } from "../core/normal";
@@ -152,12 +153,12 @@ export async function readKitV2(ctx: QueryCtx, c: Doc<"creators">, now = Date.no
   const opps = (await ctx.db.query("partnershipOpportunities").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).take(200)) as Doc<"partnershipOpportunities">[];
 
   const platforms: KitPlatform[] = [];
-  for (const platform of ["instagram", "tiktok"] as const) {
+  for (const platform of (instagramOn() ? ["instagram", "tiktok"] as const : ["tiktok"] as const)) {
     const mine = posts.filter((x) => x.platform === platform);
     const handle = c.handles[platform] ?? null;
     if (!mine.length && !handle) continue;
     const pSnaps = snaps.filter((s) => s.platform === platform);
-    const latestSnap = [...pSnaps].sort((a, b) => b.day.localeCompare(a.day))[0] ?? null;
+    const latestSnap = [...pSnaps].sort((a, b) => b.day.localeCompare(a.day) || (b.at ?? 0) - (a.at ?? 0))[0] ?? null;
     const followers = latestSnap?.followers ?? null;
     let audience: KitAudience | null = null;
     let audienceStale = false;
@@ -207,7 +208,7 @@ export async function readKitV2(ctx: QueryCtx, c: Doc<"creators">, now = Date.no
     const url = await ctx.storage.getUrl(settings.photo.storageId);
     if (url) photo = { url, source: "upload" };
   } else if (setting === "auto") {
-    for (const p of ["instagram", "tiktok"] as const) {
+    for (const p of (instagramOn() ? ["instagram", "tiktok"] as const : ["tiktok"] as const)) {
       const h = c.handles[p];
       const url = h ? await mediaUrl(ctx, p, "avatar", avatarKey(h)) : null;
       if (url) { photo = { url, source: p }; break; }
@@ -223,7 +224,7 @@ export async function readKitV2(ctx: QueryCtx, c: Doc<"creators">, now = Date.no
   const lane = typeof (c.dossier as { lane?: unknown } | undefined)?.lane === "string" ? String((c.dossier as { lane: string }).lane) : c.niche || null;
 
   return {
-    name: c.handles.instagram ?? c.handles.tiktok ?? "creator",
+    name: (instagramOn() ? c.handles.instagram ?? c.handles.tiktok : c.handles.tiktok) ?? "creator",
     lane,
     asOf: now,
     photo,

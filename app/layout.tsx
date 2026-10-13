@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Bricolage_Grotesque, Geist, Geist_Mono, Instrument_Sans } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
+import { platformCopy } from "./landing/platformCopy";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,10 +17,9 @@ const geistMono = Geist_Mono({
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"], weight: ["400", "600", "800"], variable: "--font-bricolage", display: "swap" });
 const instrument = Instrument_Sans({ subsets: ["latin"], weight: ["400", "500", "600"], style: ["normal", "italic"], variable: "--font-instrument", display: "swap" });
 
-export const metadata: Metadata = {
-  title: "Maya",
-  description: "A creator's assistant for TikTok and Instagram.",
-};
+export function generateMetadata(): Metadata {
+  return { title: "Maya", description: platformCopy().siteDescription };
+}
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

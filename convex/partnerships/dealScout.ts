@@ -148,6 +148,7 @@ export const run = internalAction({
     if (!i) return { noticed: false, reason: "creator not found" };
     if (i.already && !a.preview) return { noticed: false, reason: "already scouted this week" };
     // No lane keywords yet: the shop and ad searches wait, but brands paying the creators they watch still count.
+    if (!a.preview) await ctx.runAction(internal.connections.sync.refreshFollowers, { creatorId: a.creatorId }).catch(() => undefined);
     const leads = await gatherLeads(ctx, a.creatorId, i);
     if (!leads.length) return { noticed: false, reason: "no brands with money moving in their lane this week" };
     const kit = await ctx.runQuery(internal.partnerships.kitTools.kitFor, { creatorId: a.creatorId });

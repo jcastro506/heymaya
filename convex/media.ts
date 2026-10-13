@@ -6,6 +6,7 @@
  * fetched: the URLs come from scraped data, and an open fetch would be an SSRF door.
  */
 
+import { enabledPlatforms, platformOn } from "./config/platforms";
 import { v } from "convex/values";
 import { internalAction, internalQuery, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { internalMutation } from "./lib/functions";
@@ -138,9 +139,9 @@ export const missingAvatars = internalQuery({
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c) return [];
     const want: Array<{ platform: "tiktok" | "instagram"; handle: string }> = [];
-    for (const pl of ["tiktok", "instagram"] as const) if (c.handles[pl]) want.push({ platform: pl, handle: c.handles[pl]! });
+    for (const pl of enabledPlatforms()) if (c.handles[pl]) want.push({ platform: pl, handle: c.handles[pl]! });
     const tracked = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"trackedAccounts">[];
-    for (const t of tracked) if (t.status === "active") want.push({ platform: t.platform, handle: t.handle });
+    for (const t of tracked) if (t.status === "active" && platformOn(t.platform)) want.push({ platform: t.platform, handle: t.handle });
     const out: typeof want = [];
     for (const w of want) {
       const r = await ctx.db.query("media").withIndex("by_key", (q) => q.eq("platform", w.platform).eq("kind", "avatar").eq("key", avatarKey(w.handle))).first();
@@ -179,7 +180,7 @@ export const backfillCreator = internalAction({
   handler: async (ctx, a): Promise<{ covers: number; avatars: number }> => {
     const creator = await ctx.runQuery(internal.onboarding.ingest.creatorHandles, { creatorId: a.creatorId });
     const items: MediaItem[] = [];
-    for (const platform of ["tiktok", "instagram"] as const) {
+    for (const platform of enabledPlatforms()) {
       const handle = creator?.handles[platform];
       if (!handle) continue;
       const r = await ctx.runAction(internal.reads.read.read, { kind: "account.posts", params: { platform, handle, sort: "latest" }, creatorId: a.creatorId });

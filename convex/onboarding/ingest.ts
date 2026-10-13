@@ -5,6 +5,7 @@
  * validated by Zod before it is written. The job enqueues `first_read` at the end.
  */
 
+import { enabledPlatforms } from "../config/platforms";
 import { v } from "convex/values";
 import { coverKey, rememberMedia } from "../media";
 import { appendHistory, normalsByPlatform, multipleFor } from "../core/normal";
@@ -206,14 +207,18 @@ export const run = internalAction({
     const transcriptCap = Math.max(0, Math.min(TRANSCRIPT_CAP, args.transcriptCap ?? TRANSCRIPT_CAP));
     if (!creator) return { ok: false, reason: "creator not found" };
     const now = Date.now();
-    const platforms = (["tiktok", "instagram"] as const).filter((p) => creator.handles[p]);
+    const platforms = enabledPlatforms().filter((p) => creator.handles[p]);
     if (platforms.length === 0) return { ok: false, reason: "no handles to read" };
 
     // Pass one: the catalogue. Popular first so the all-time top posts are in the set, then latest.
     const readFrom = { tiktokPosts: 0, instagramPosts: 0, transcripts: 0, watched: 0, sampledFromHistory: false };
     for (const platform of platforms) {
+      const current: Doc<"creators"> | null = await ctx.runQuery(internal.onboarding.ingest.creatorHandles, { creatorId: creator._id });
+      if (!current || (current.plan as { status: string }).status === "deleting") return { ok: false, reason: "creator is deleting" };
       const handle = creator.handles[platform]!;
       for (const sort of ["popular", "latest"] as const) {
+        const beforeRead: Doc<"creators"> | null = await ctx.runQuery(internal.onboarding.ingest.creatorHandles, { creatorId: creator._id });
+        if (!beforeRead || (beforeRead.plan as { status: string }).status === "deleting") return { ok: false, reason: "creator is deleting" };
         try {
           const r = await ctx.runAction(internal.reads.read.read, {
             kind: "account.posts",
@@ -238,6 +243,8 @@ export const run = internalAction({
     readFrom.sampledFromHistory = [...sample.values()].some((t) => t.includes("history"));
     let transcribed = 0;
     for (const row of rows) {
+      const beforeTranscript = await ctx.runQuery(internal.onboarding.ingest.creatorHandles, { creatorId: creator._id });
+      if (!beforeTranscript || (beforeTranscript.plan as { status: string }).status === "deleting") return { ok: false, reason: "creator is deleting" };
       const tags = sample.get(row._id);
       if (!tags || transcribed >= transcriptCap || row.contentType !== "video" || !row.url) continue;
       try {
@@ -258,6 +265,8 @@ export const run = internalAction({
     // Pass three: watch the sample (Gemini, one post per call). Degrades per post, never blocks.
     let cards: Array<{ postId: string; depth: string; card: unknown }> = [];
     try {
+      const beforeWatch = await ctx.runQuery(internal.onboarding.ingest.creatorHandles, { creatorId: creator._id });
+      if (!beforeWatch || (beforeWatch.plan as { status: string }).status === "deleting") return { ok: false, reason: "creator is deleting" };
       const w = await ctx.runAction(internal.onboarding.watch.run, { creatorId: creator._id, ...(args.watchCap !== undefined ? { max: args.watchCap } : {}) });
       readFrom.watched = w.watched;
       const reads = await ctx.runQuery(internal.onboarding.watch.readsFor, { creatorId: creator._id });

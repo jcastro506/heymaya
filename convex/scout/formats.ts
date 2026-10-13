@@ -6,6 +6,7 @@
  * with the fingerprint the gate requires. Topic is irrelevant here on purpose.
  */
 
+import { instagramOn } from "../config/platforms";
 import { v } from "convex/values";
 import { internalAction, internalQuery } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
@@ -88,7 +89,7 @@ export const run = internalAction({
   handler: async (ctx): Promise<{ posts: number; kept: number; written: number }> => {
     const now = Date.now();
     const posts: Post[] = [];
-    for (const [kind, params] of [["trending.tiktok", { region: "US" }], ["trending.reels", { batch: 1 }]] as const) {
+    for (const [kind, params] of ([["trending.tiktok", { region: "US" }], ["trending.reels", { batch: 1 }]] as const).filter(([k]) => k !== "trending.reels" || instagramOn())) {
       try {
         const r = await ctx.runAction(internal.reads.read.read, { kind, params });
         const rows = (Array.isArray(r.value) ? r.value : ((r.value as { posts?: unknown[] } | null)?.posts ?? [])) as Post[];

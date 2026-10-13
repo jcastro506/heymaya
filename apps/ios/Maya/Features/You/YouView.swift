@@ -29,6 +29,10 @@ struct YouView: View {
       }
     }
     .task { await settings.run() }
+    // The share extension can't ask the server which platforms are on; it reads the last answer.
+    .onChange(of: settings.state) { _, state in
+      if !Fixtures.enabled, case .value(let s?) = state { Platforms.remember(s.instagramEnabled) }
+    }
     .task { await lane.run() }
   }
 
@@ -117,15 +121,15 @@ struct YouView: View {
 struct ProfileHeader: View {
   let settings: CreatorSettings
   var body: some View {
-    let name = settings.handles.tiktok ?? settings.handles.instagram ?? "you"
+    let name = settings.handles.tiktok ?? settings.shownInstagram ?? "you"
     HStack(spacing: 16) {
-      Avatar(text: name, size: 72, image: settings.avatars?.tiktok ?? settings.avatars?.instagram)
+      Avatar(text: name, size: 72, image: settings.avatars?.tiktok ?? (settings.instagramOn ? settings.avatars?.instagram : nil))
       VStack(alignment: .leading, spacing: 6) {
         Text("@\(name)").font(MayaFont.title).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
         HStack(spacing: 6) {
           if settings.handles.tiktok != nil { PlatformBadge(platform: "tiktok") }
-          if settings.handles.instagram != nil { PlatformBadge(platform: "instagram") }
-          Chip(text: settings.tier.capitalized, color: Palette.purple)
+          if settings.shownInstagram != nil { PlatformBadge(platform: "instagram") }
+          Chip(text: settings.planName, color: Palette.purple)
         }
       }
       Spacer()

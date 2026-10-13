@@ -8,14 +8,17 @@
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import QRCode from "qrcode";
-import { TIERS, TIER_NAMES, price } from "@/convex/billing/tiers";
+import { TIERS, offeredTiers, price, tierCopy } from "@/convex/billing/tiers";
+import { instagramOn } from "@/convex/config/platforms";
 import { appLink, ctaLabel, type AppLink } from "@/lib/appLink";
 import { CtaLink } from "../cta";
+import { platformCopy } from "./platformCopy";
 import { DealsScreen, Flower, IdeasScreen, MessagesScreen, NumbersScreen, Phone, ReviewScreen, TodayScreen, type Line } from "./Screens";
 import "./landing.css";
 
 const SITE = (process.env.NEXT_PUBLIC_SITE_URL || "https://hey-maya.ai").replace(/\/$/, "");
 const PARTNER = TIERS.partner;
+type Copy = ReturnType<typeof platformCopy>;
 
 /** One thread, three of her jobs: the researcher, the copywriter, the analyst. */
 const HERO_THREAD: Line[] = [
@@ -41,21 +44,21 @@ const ASKS = [
   "pause",
 ];
 
-const TEAM: Array<{ role: string; line: string; proof: string; plan?: string }> = [
-  { role: "Trend researcher", line: "Watches the creators you admire and your whole niche on TikTok and Instagram. When a post is beating that creator's usual, you hear about it.", proof: "“a runner you follow is at 8.5× her normal”" },
+const team = (c: Copy): Array<{ role: string; line: string; proof: string; plan?: string }> => [
+  { role: "Trend researcher", line: `Watches the creators you admire and your whole niche on ${c.platforms}. When a post is beating that creator's usual, you hear about it.`, proof: "“a runner you follow is at 8.5× her normal”" },
   { role: "Strategist", line: "Turns what's working into ideas for you, with the post that inspired each one and why it fits. Send her a photo of where you are and she'll give you angles and a shot list.", proof: "“your version: the river loop, 15 seconds”" },
   { role: "Producer", line: "Books filming time around your real calendar, sends the shot list that morning, checks in after, and moves it when life happens. She plans around races, trips and launches weeks out.", proof: "“filming today at 5. start at the bottom of the hill”" },
   { role: "Copywriter", line: "Send her the video you already filmed. She watches it, then writes three captions in your voice and finds a sound to put under it. She learns how you like to edit them.", proof: "“1. the hill always wins (it's 7am)”" },
   { role: "Analyst", line: "Measures every post against your own normal, tells you why it did or didn't work, and texts you while one is taking off. Send a screenshot of your analytics and she'll read it with you.", proof: "“31K, that's 3.1× your normal”" },
-  { role: "Brand deals manager", line: "Finds brands already paying creators like you, builds your media kit, and writes the outreach for you to approve. Then she tracks the replies.", proof: "“pacefern paid two runners you watch this month”", plan: "Partnerships plan" },
+  { role: "Brand deals manager", line: "Finds brands already paying creators like you, builds your media kit, and writes the outreach for you to approve. Then she tracks the replies.", proof: "“pacefern paid two runners you watch this month”", plan: `${c.partnerLabel} plan` },
 ];
 
-const SCHEDULE: Array<{ when: string; what: string[] }> = [
+const schedule = (c: Copy): Array<{ when: string; what: string[] }> => [
   { when: "Every few hours", what: ["Checks the creators you admire for posts beating their usual", "Checks your own posts. If one takes off, you hear about it while it's still climbing"] },
-  { when: "Every day", what: ["Searches your niche on TikTok and Instagram", "Spots formats and sounds catching on with creators like you", "Finds new accounts worth watching", "A morning text, only when something's worth saying"] },
+  { when: "Every day", what: [`Searches your niche on ${c.platforms}`, "Spots formats and sounds catching on with creators like you", "Finds new accounts worth watching", "A morning text, only when something's worth saying"] },
   { when: "Around your shoots", what: ["The shot list that morning", "“how'd it go?” that evening", "Missed one? She offers to put it back the next day. No guilt"] },
   { when: "Every Sunday", what: ["An honest read of your week: what worked, what didn't, one thing to try", "Next week's plan, built around your calendar"] },
-  { when: "Every week, on the partnerships plan", what: ["New brands paying creators in your niche", "Follow-ups on pitches that haven't heard back, twice at most"] },
+  { when: `Every week, on the ${c.partnerPlan} plan`, what: ["New brands paying creators in your niche", "Follow-ups on pitches that haven't heard back, twice at most"] },
   { when: "All the time", what: ["Learns from what you save, pass on and post", "Learns how you write captions", "Keeps up with your calendar"] },
 ];
 
@@ -78,13 +81,13 @@ const VOICE = [
   "YES. you posted the scary one.",
 ];
 
-const FAQ: Array<[string, string]> = [
-  ["What does Maya actually do?", "The work of a content team. She watches your niche and the creators you admire, turns what's working into ideas for you, plans your shoots around your calendar, writes your captions, reads your numbers against your own normal, and on the partnerships plan, finds brand deals and writes the outreach. You stay the creator: she doesn't film, edit or post for you."],
+const faq = (c: Copy): Array<[string, string]> => [
+  ["What does Maya actually do?", `The work of a content team. She watches your niche and the creators you admire, turns what's working into ideas for you, plans your shoots around your calendar, writes your captions, reads your numbers against your own normal, and on the ${c.partnerPlan} plan, finds brand deals and writes the outreach. You stay the creator: she doesn't film, edit or post for you.`],
   ["Where do I talk to her?", "In your texts, over iMessage or SMS. Anything the app can do, you can ask her for by text. There's no chat inside the app on purpose."],
   ["Then what's the app for?", "Seeing her work. Every idea she's sent with the post that inspired it, your numbers, your week, your brand deals, and widgets for your home screen."],
   ["Will she text me too much?", "She texts first only when something's worth it, never during your quiet hours, and there's a daily limit on how often. Text her \"pause\" any time, and \"resume\" when you want her back."],
-  ["How do brand deals work?", `On the ${PARTNER.label.toLowerCase()} plan, she finds brands already paying creators in your niche, finds a real contact, builds your media kit, and writes the email, DM or application for you. Nothing is sent until you approve it, emails go from your own inbox, and she follows up twice at most. The deal is yours to make.`],
-  ["What can she see?", "Your public posts from the start. Connect your accounts in the app and she can read more, like followers over time, and on Instagram reach, saves and Reels watch time. TikTok doesn't share watch time, so she says so instead of guessing. She never makes up a number."],
+  ["How do brand deals work?", `On the ${c.partnerPlan} plan, she finds brands already paying creators in your niche, finds a real contact, builds your media kit, and writes the email, DM or application for you. Nothing is sent until you approve it, emails go from your own inbox, and she follows up twice at most. The deal is yours to make.`],
+  ["What can she see?", c.whatSheSees],
   ["Is it on Android?", "iPhone first. Android is planned."],
   ["How does the free trial work?", "Seven days free with a card on file, then the plan you picked. Cancel in one tap in Settings. Delete everything by typing DELETE."],
 ];
@@ -131,7 +134,8 @@ async function qrSvg(): Promise<string> {
   });
 }
 
-export default async function Landing() {
+export default async function Landing({ igOn = instagramOn() }: { igOn?: boolean } = {}) {
+  const c = platformCopy(igOn);
   const link = appLink();
   const qr = await qrSvg();
   return (
@@ -152,10 +156,10 @@ export default async function Landing() {
         {/* ——— 1. Hero ——— */}
         <section className="hero wrap" aria-labelledby="hero-title">
           <div className="hero-copy">
-            <span className="eyebrow"><i className="dot" />For TikTok and Instagram creators</span>
+            <span className="eyebrow"><i className="dot" />{c.eyebrow}</span>
             <h1 id="hero-title">Your whole content team. <em>In one text thread.</em></h1>
             <p className="lede">
-              Maya is a TikTok and Instagram expert who watches your niche, turns what&apos;s working into ideas, plans your shoots, writes your captions, reads your numbers, and finds you brand deals. All over text.
+              {c.lede}
             </p>
             <div className="hero-cta">
               <GetApp link={link} where="hero" />
@@ -165,7 +169,7 @@ export default async function Landing() {
           </div>
           <div className="hero-stage">
             <Phone className="ph-back" label="The Maya app's Today screen: her latest idea, your numbers against your normal, and what's coming up">
-              <TodayScreen />
+              <TodayScreen igOn={igOn} />
             </Phone>
             <Phone className="ph-front" label="A text thread with Maya: a trend from a creator you follow, three captions for the video you filmed, then your post taking off">
               <MessagesScreen lines={HERO_THREAD} />
@@ -201,7 +205,7 @@ export default async function Landing() {
               <p>Text her for talking. The app is for seeing her work.</p>
               <ul className="ticks">
                 <li>Every idea she&apos;s sent, with the post that inspired it. Swipe to save or pass</li>
-                <li>Your TikTok and Instagram numbers, against your own normal</li>
+                <li>Your {c.platforms} numbers, against your own normal</li>
                 <li>Your week, your shoots, her Sunday review</li>
                 <li>Your brand deals and media kit</li>
                 <li>Home-screen widgets, and “Send to Maya” from any app&apos;s share button</li>
@@ -211,8 +215,8 @@ export default async function Landing() {
               <Phone className="ph-small" label="The Ideas screen: a swipeable card with a hook, the post that inspired it and why it fits">
                 <IdeasScreen />
               </Phone>
-              <Phone className="ph-small ph-offset" label="Your numbers: TikTok and Instagram followers and every post against your normal">
-                <NumbersScreen />
+              <Phone className="ph-small ph-offset" label={`Your numbers: ${c.platforms} followers and every post against your normal`}>
+                <NumbersScreen igOn={igOn} />
               </Phone>
             </div>
           </div>
@@ -225,7 +229,7 @@ export default async function Landing() {
             <h2 id="team-title">Meet your team. <span>It&apos;s all Maya.</span></h2>
           </div>
           <div className="team-grid">
-            {TEAM.map((t, i) => (
+            {team(c).map((t, i) => (
               <article key={t.role} className={`role role-${i + 1}`}>
                 <span className="role-head">
                   <b>{t.role}</b>
@@ -249,7 +253,7 @@ export default async function Landing() {
               </Phone>
             </div>
             <ol className="sched-list">
-              {SCHEDULE.map((s) => (
+              {schedule(c).map((s) => (
                 <li key={s.when}>
                   <b>{s.when}</b>
                   <ul>{s.what.map((w) => <li key={w}>{w}</li>)}</ul>
@@ -262,7 +266,7 @@ export default async function Landing() {
         {/* ——— 6. Brand deals ——— */}
         <section id="deals" className="deals wrap" aria-labelledby="deals-title">
           <div className="deals-copy">
-            <span className="eyebrow">Brand deals · {PARTNER.label} plan</span>
+            <span className="eyebrow">Brand deals · {c.partnerLabel} plan</span>
             <h2 id="deals-title">She goes looking <span>for brand deals.</span></h2>
             <p>Maya doesn&apos;t wait for brands to find you. She finds the ones already paying creators in your niche, does the homework, and writes the outreach. You just say yes.</p>
             <ol className="deal-steps">
@@ -270,7 +274,7 @@ export default async function Landing() {
                 <li key={h}><b>{h}</b><span>{d}</span></li>
               ))}
             </ol>
-            <p className="fine">On the {PARTNER.label.toLowerCase()} plan, {price(PARTNER.priceUsd)}/month.</p>
+            <p className="fine">On the {c.partnerPlan} plan, {price(PARTNER.priceUsd)}/month.</p>
           </div>
           <div className="deals-stage">
             <Phone label="The Deals screen: your media kit, brands ready for you, and a brand that replied">
@@ -323,7 +327,7 @@ export default async function Landing() {
           </div>
           <ol className="steps">
             <li><b>Get the app</b><span>Download it and sign in. It takes a tap.</span></li>
-            <li><b>Tell her where you post</b><span>Your TikTok, your Instagram, or both, and a few creators you love.</span></li>
+            <li><b>Tell her where you post</b><span>{c.whereYouPost}</span></li>
             <li><b>Text her START</b><span>She reads your posts and your niche, then sends her first text within minutes.</span></li>
           </ol>
         </section>
@@ -334,15 +338,15 @@ export default async function Landing() {
             <span className="eyebrow">Pricing</span>
             <h2 id="pricing-title">Seven days free. <span>Then one small monthly.</span></h2>
           </div>
-          <div className="prices">
-            {TIER_NAMES.map((tier) => (
-              <div className={`price${tier === "duo" ? " price-feat" : ""}`} key={tier}>
-                {tier === "duo" ? <span className="price-tag">Most creators</span> : null}
-                <span className="price-name">{TIERS[tier].label}</span>
+          <div className={`prices prices-${offeredTiers(igOn).length}`} style={{ "--n": offeredTiers(igOn).length } as CSSProperties}>
+            {offeredTiers(igOn).map((tier) => (
+              <div className={`price${tier === c.featured.tier ? " price-feat" : ""}`} key={tier}>
+                {tier === c.featured.tier ? <span className="price-tag">{c.featured.tag}</span> : null}
+                <span className="price-name">{tierCopy(tier, igOn).label}</span>
                 <div className="price-amt">{price(TIERS[tier].priceUsd)}<small>/month</small></div>
-                <p>{TIERS[tier].blurb}</p>
+                <p>{tierCopy(tier, igOn).blurb}</p>
                 <ul>
-                  <li>{tier === "solo" ? "One TikTok or Instagram account" : "Your TikTok and your Instagram"}</li>
+                  <li>{c.accountLine(tier)}</li>
                   <li>Trends, ideas and captions, texted to you</li>
                   <li>Your numbers against your normal</li>
                   <li>Shoots planned, reminders, a Sunday review</li>
@@ -365,7 +369,7 @@ export default async function Landing() {
             <h2 id="faq-title">Good questions.</h2>
           </div>
           <div className="faq-list">
-            {FAQ.map(([q, a]) => (
+            {faq(c).map(([q, a]) => (
               <details key={q}>
                 <summary>{q}<span aria-hidden="true">+</span></summary>
                 <p>{a}</p>

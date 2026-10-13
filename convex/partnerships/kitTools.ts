@@ -76,6 +76,8 @@ const NEXT_WORDS: Record<string, string> = {
 };
 
 export async function runKitTool(ctx: ActionCtx, creatorId: Id<"creators">, name: string, args: Record<string, unknown>, sourceMessageId?: Id<"messages">): Promise<string> {
+  // A brand will see these numbers: today's follower count first (connections/sync.refreshFollowers).
+  if (name === "media_kit" || name === "kit_for_brand") await ctx.runAction(internal.connections.sync.refreshFollowers, { creatorId }).catch(() => undefined);
   if (name === "media_kit") {
     const r = await ctx.runQuery(internal.partnerships.kitTools.kitFor, { creatorId });
     if (!r) return "refused: media kits are on the partnerships plan";

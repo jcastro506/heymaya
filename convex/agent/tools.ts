@@ -7,6 +7,7 @@
  * are ours, not the vendor's: the creator's own rhyming posts and their taste.
  */
 
+import { instagramOn } from "../config/platforms";
 import type { OpenRouterTool } from "../integrations/openrouter/client";
 import { WEB_CALLS_PER_TURN } from "./web";
 import { factsFor, staleDays } from "../knowledge/platforms";
@@ -32,6 +33,20 @@ const str = { type: "string" } as const;
 for (const tool of [...PARTNERSHIP_TOOLS, ...KIT_TOOLS]) TOOL_CREDITS[tool.function.name] = 0;
 
 /** K1: tools that exist only on the partnerships plan (the partnership_* belt plus the kit). */
+/** Tools that only read Instagram (config/platforms): off the belt while Instagram is off. */
+export const INSTAGRAM_TOOLS = new Set(["search_reels", "search_ig_hashtag", "ig_popular", "sound_reels", "trending_reels", "discover_profiles"]);
+
+/** The belt for the platforms that are on: no Instagram-only tools, and "platform" choices narrowed to what's on. */
+export function platformBelt(tools: OpenRouterTool[]): OpenRouterTool[] {
+  if (instagramOn()) return tools;
+  return tools.filter((t) => !INSTAGRAM_TOOLS.has(t.function.name)).map((t) => {
+    const params = t.function.parameters as { properties?: Record<string, { enum?: unknown[] }> } | undefined;
+    const pl = params?.properties?.platform;
+    if (!pl?.enum?.includes("instagram")) return t;
+    return { ...t, function: { ...t.function, parameters: { ...params, properties: { ...params!.properties, platform: { ...pl, enum: pl.enum.filter((x) => x !== "instagram") } } } } };
+  });
+}
+
 /** Their settings change only in answer to something they said: never from a background pass. */
 export const REPLY_ONLY_TOOLS = new Set(["routine_add", "routine_stop", "texting_pace"]);
 
@@ -213,6 +228,12 @@ function summarize(tool: string, value: unknown): string {
 async function runToolInner(ctx: ActionCtx, creatorId: Id<"creators">, call: { name: string; args: Record<string, unknown> }, budget: ToolBudget, trace: ToolCallRecord[], sourceMessageId?: Id<"messages">): Promise<string> {
   const why = clip(String(call.args.why ?? ""), 160);
   const started = Date.now();
+  // TikTok only (config/platforms): a model that reaches for Instagram anyway is told, not obeyed.
+  const igUrl = [call.args.url, call.args.link].some((u) => typeof u === "string" && /instagram\.com/i.test(u));
+  if (!instagramOn() && (INSTAGRAM_TOOLS.has(call.name) || call.args.platform === "instagram" || igUrl)) {
+    trace.push({ tool: call.name, params: {}, ok: false, result: "instagram is off", at: Date.now() } as never);
+    return "refused: Maya works with TikTok only right now. Use TikTok, or say plainly you only do TikTok for now.";
+  }
   const record = (ok: boolean, credits?: number, detail?: string) => trace.push({ tool: call.name, params: Object.fromEntries(Object.entries(call.args).filter(([k]) => k !== "why")), why, credits, ms: Date.now() - started, ok, ...(detail ? { detail } : {}) });
   if (trace.length >= budget.calls) {
     record(false, 0, "call budget spent");
