@@ -28,7 +28,7 @@ export const TIERS: Record<Tier, { label: string; priceUsd: number; annualUsd: n
 const TIKTOK_ONLY_COPY: Record<Tier, { label: string; blurb: string }> = {
   solo: { label: "Maya", blurb: "Your content assistant: ideas worth making, your week planned around your life, and what's working, by text." },
   duo: { label: "Maya", blurb: "Your content assistant: ideas worth making, your week planned around your life, and what's working, by text." },
-  partner: { label: "Maya + Deals", blurb: "Everything in Maya, plus she finds brands and UGC work that fit you, drafts the pitch, and tracks the replies." },
+  partner: { label: "Maya + Deals", blurb: "Everything in Maya, plus she finds brands that pay creators like you, drafts the pitch, and tracks the replies." },
 };
 
 /** What a tier is called and promises, for the platforms that are on. Pure. */
