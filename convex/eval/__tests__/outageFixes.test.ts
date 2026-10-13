@@ -2,6 +2,7 @@
  * What the outage drill found, each fixed, each held here on rows (never on generated prose; the
  * copy compared below is code's own fixed text, exported as constants).
  */
+import { normalCase } from "../../core/messages";
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import schema from "../../schema";
@@ -52,7 +53,7 @@ describe("a vendor outage is said as ours, in plain words, never blamed on their
     const r = await t.action(internal.agent.converse.run, { creatorId, messageId });
     expect(r.ok).toBe(true);
     const out = await outbound(t, creatorId);
-    expect(out.map((m) => m.body)).toEqual([LINK_OUR_SIDE]);
+    expect(out.map((m) => m.body)).toEqual([normalCase(LINK_OUR_SIDE)]);
     expect(out[0].body).not.toBe(LINK_UNOPENABLE);
     expect(await t.run((ctx) => ctx.db.query("predictions").collect())).toHaveLength(0);
     // The failed reads left named errors and no cached value.
@@ -67,7 +68,7 @@ describe("a vendor outage is said as ours, in plain words, never blamed on their
     const fileId = await t.run((ctx) => ctx.storage.store(new Blob([new Uint8Array(64)], { type: "video/mp4" })));
     const messageId = await t.run((ctx) => ctx.db.insert("messages", { creatorId, direction: "in", surface: "telegram", body: "caption for this?", kind: "file", fileId, fileMime: "video/mp4", ts: Date.now() } as never));
     await t.action(internal.agent.converse.run, { creatorId, messageId });
-    expect((await outbound(t, creatorId)).map((m) => m.body)).toEqual([WATCH_OUR_SIDE]);
+    expect((await outbound(t, creatorId)).map((m) => m.body)).toEqual([normalCase(WATCH_OUR_SIDE)]);
     expect(await t.run((ctx) => ctx.db.query("finishes").collect())).toHaveLength(0);
     const hits = await t.query(internal.eval.faults.current, {});
     expect(hits.hits.counts["gemini_overload:watch_finish"]).toBe(1); // both models asked through one guarded call
@@ -101,7 +102,7 @@ describe("a dead turn is answered", () => {
     await deadTurn(t, creatorId, messageId);
     const out = await outbound(t, creatorId);
     expect(out).toHaveLength(1);
-    expect(out[0]).toMatchObject({ body: TURN_DEAD_TEXT, kind: "status", dedupeKey: `turn-dead:${messageId}` });
+    expect(out[0]).toMatchObject({ body: normalCase(TURN_DEAD_TEXT), kind: "status", dedupeKey: `turn-dead:${messageId}` });
   });
 
   it("a turn that already answered and then died says nothing more", async () => {
@@ -120,7 +121,7 @@ describe("a dead turn is answered", () => {
     const claimed = await t.mutation(internal.core.jobs.claimNext, { kinds: ["converse"] });
     await t.action(internal.core.scheduler.runJob, { jobId: claimed!._id, attempt: claimed!.attempts });
     expect((await t.query(internal.core.jobs.byId, { jobId }))?.status).toBe("dead");
-    expect((await outbound(t, creatorId)).map((m) => m.body)).toEqual([TURN_DEAD_TEXT]);
+    expect((await outbound(t, creatorId)).map((m) => m.body)).toEqual([normalCase(TURN_DEAD_TEXT)]);
   });
 });
 

@@ -3,6 +3,7 @@
  * categories: cross-tenant, budget × action fail-closed, adversarial input, sibling
  * coherence (the job kind, the button, the tool, the weights), and no TODOs.
  */
+import { normalCase } from "../../core/messages";
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
@@ -188,7 +189,7 @@ describe("frames: the three doors, on the fake model (with the cap raised for th
     expect(idea?.frames).toBeUndefined();
     const out = await t.run((ctx) => ctx.db.query("messages").collect());
     expect(out.length).toBe(1);
-    expect(out[0].body).toBe(outOfSketchesLine());
+    expect(out[0].body).toBe(normalCase(outOfSketchesLine()));
     expect((await t.run((ctx) => ctx.db.query("costEvents").collect())).length).toBe(0);
     // The scout asked on its own: the creator hears nothing about a limit they never hit.
     const quiet = await t.action(internal.agent.frames.render, { creatorId, ideaId, requestedBy: "scout", requestId: "scout" });
@@ -216,7 +217,7 @@ describe("frames: the three doors, on the fake model (with the cap raised for th
     expect(r.ok).toBe(false);
     expect(r.reason).toMatch(/0 of 3 frames/);
     const out = await t.run((ctx) => ctx.db.query("messages").collect());
-    expect(out.map((m) => m.body)).toEqual([FAILED_LINE]);
+    expect(out.map((m) => m.body)).toEqual([normalCase(FAILED_LINE)]);
     expect((await t.run((ctx) => ctx.db.get(ideaId)))?.frames).toBeUndefined();
     // The attempts still cost: one row per frame, primary and fallback both refused.
     expect((await t.run((ctx) => ctx.db.query("costEvents").collect())).length).toBe(3);
@@ -237,7 +238,7 @@ describe("frames: the three doors, on the fake model (with the cap raised for th
     expect(JSON.parse(render!.payloadJson ?? "{}")).toMatchObject({ ideaId, requestedBy: "tap" });
     const replies = (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out");
     expect(replies.length).toBeGreaterThanOrEqual(1);
-    expect(replies[0].body).toMatch(/drawing it/);
+    expect(replies[0].body).toMatch(/drawing it/i);
   });
 
   it.skip("door two, in words: the tool is off her belt (kept for the day it returns)", async () => {

@@ -36,7 +36,7 @@ describe("parsing (pure)", () => {
     expect(MONTH_PLAN_SKILL).toMatch(/never on the setting of a one-off/);
     expect(MONTH_PLAN_SKILL).toMatch(/Open with their goal in their words/);
     expect(MONTH_PLAN_SKILL).toMatch(/how it gets them to that goal/);
-    expect(MONTH_PLAN_SKILL).toMatch(/i'm guessing you mainly want/);
+    expect(MONTH_PLAN_SKILL).toMatch(/I'm guessing you mainly want/);
   });
 });
 

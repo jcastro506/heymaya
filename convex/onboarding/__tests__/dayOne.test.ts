@@ -59,7 +59,7 @@ describe("sending the first glance", () => {
     const glances = (await outOf(t, c)).filter((m) => m.dedupeKey === `first_glance:${c}`);
     expect(glances).toHaveLength(1);
     expect(glances[0]).toMatchObject({ kind: "status", proactive: true });
-    expect(glances[0].body).toMatch(/^first look: your best one lately is "matcha review", at 3\.4x your normal/);
+    expect(glances[0].body).toMatch(/^First look: your best one lately is "matcha review", at 3\.4x your normal/);
 
     const late = await world(t, "g2");
     await addPosts(t, late, [3.4, 1, 1, 1, 1]);

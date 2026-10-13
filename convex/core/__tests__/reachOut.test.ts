@@ -190,7 +190,7 @@ describe("routines on rows", () => {
     const out = (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out" && m.kind === "routine");
     expect(out).toHaveLength(1);
     expect(out[0].creatorId).toBe(a);
-    expect(out[0].body).toMatch(/three for today/);
+    expect(out[0].body).toMatch(/three for today/i);
   });
 
   it("her settings change only in answer to their own message", async () => {

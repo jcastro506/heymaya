@@ -37,7 +37,7 @@ describe("script 1: the calendar moves under her", () => {
     await t.action(internal.calendar.sync.followMoves, { creatorId, moved: r.moved, dropped: r.dropped });
     const out = (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out");
     expect(out.length, "once, not twice").toBe(1);
-    expect(out[0].body).toMatch(/saw you moved filming running clip to thursday 7 pm/);
+    expect(out[0].body).toMatch(/saw you moved filming running clip to thursday 7 pm/i);
     expect(out[0].body).toMatch(/check-in moves with it/);
     // An unchanged sync says nothing.
     const again = await t.mutation(internal.calendar.sync.upsertEvents, { creatorId, rows: [{ calendarId: "primary", externalId: "ev1", title: "film: running clip", start: THU_6PM + 3_600_000, end: THU_6PM + 3_600_000 + 45 * 60_000, allDay: false, recurring: false, cancelled: false }] });

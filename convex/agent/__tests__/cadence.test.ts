@@ -161,7 +161,7 @@ describe("the human cadence: rows and rails, on the fake model", () => {
     const r = await t.action(internal.agent.cadence.howDidItGo, { creatorId, now: NOW });
     expect(r).toMatchObject({ sent: true });
     const q = (await t.run((ctx) => ctx.db.query("messages").collect())).find((m) => m.kind === "checkin");
-    expect(q?.body).toBe("how'd the shoe rack list shoot go?");
+    expect(q?.body).toBe("How'd the shoe rack list shoot go?");
     expect(q?.buttons?.map((b) => b.id)).toEqual([`shot:${ended}:yes`, `shot:${ended}:no`]);
     expect(q?.awaitingAnswer).toBe(true);
     expect((await t.action(internal.agent.cadence.howDidItGo, { creatorId, now: NOW + 30 * 60_000 })).sent, "asked once").toBe(false);
@@ -184,7 +184,7 @@ describe("the human cadence: rows and rails, on the fake model", () => {
     await t.action(internal.agent.converse.run, { creatorId, messageId: no });
     expect(typeof (await t.run((ctx) => ctx.db.get(b2)))?.missedAt).toBe("number");
     const offer = (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out").pop();
-    expect(offer?.body).toMatch(/want it back/);
+    expect(offer?.body).toMatch(/want it back/i);
     expect(offer?.buttons?.some((x) => x.id.startsWith(`push:${b2}:`))).toBe(true);
     // The morning after: both blocks are handled, so nothing about them.
     await t.run((ctx) => ctx.db.patch(offer!._id, { awaitingAnswer: false }));

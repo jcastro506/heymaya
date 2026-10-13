@@ -83,7 +83,7 @@ describe("no em dashes", () => {
     const c = await t.run((ctx) => seedCreator(ctx, "dash"));
     await t.mutation(internal.core.messages.send, { creatorId: c, surface: "telegram", body: "your pans—easily your best", dedupeKey: "dash1", proactive: false, kind: "reply" });
     const row = (await t.run((ctx) => ctx.db.query("messages").collect())).find((m) => m.dedupeKey === "dash1");
-    expect(row?.body).toBe("your pans, easily your best");
+    expect(row?.body).toBe("Your pans, easily your best");
   });
 });
 
