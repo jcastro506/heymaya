@@ -86,7 +86,11 @@ export function planKeyFor(now: number, tz: string): string {
 
 export const write = internalMutation({
   args: { creatorId: v.id("creators"), planKey: v.string(), slots: v.any() },
-  handler: async (ctx, a): Promise<{ blockIds: Id<"calendarBlocks">[] }> => {
+  handler: async (ctx, a): Promise<{ blockIds: Id<"calendarBlocks">[]; duplicate?: boolean }> => {
+    // One week per plan key, even when two drafts race (2026-10-13: a creator whose first read ran twice could
+    // get two first weeks). Inside the mutation, so the second writer always sees the first.
+    const already = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"calendarBlocks">[];
+    if (already.some((b) => b.planKey === a.planKey && b.status !== "deleted")) return { blockIds: [], duplicate: true };
     const now = Date.now();
     const ids: Id<"calendarBlocks">[] = [];
     for (const s of a.slots as Slot[]) {
@@ -178,7 +182,8 @@ export const draft = internalAction({
     const slots = draftWeek({ now, timeZone: inp.timezone, postsPerWeek: inp.postsPerWeek, filmDays: inp.filmDays, filmHour: inp.filmHour, editMinutes: inp.editMinutes, busy: inp.busy, model: inp.model, ideas: picked, days });
     if (slots.length === 0) return { sent: false, reason: "no free time found in the week" };
     const planKey = planKeyFor(now, inp.timezone);
-    await ctx.runMutation(internal.calendar.weekPlan.write, { creatorId: a.creatorId, planKey, slots });
+    const written = await ctx.runMutation(internal.calendar.weekPlan.write, { creatorId: a.creatorId, planKey, slots });
+    if (written.duplicate) return { sent: false, reason: "this week is already planned" };
     const body = composeWeek(slots, inp.timezone, inp.model.hours.length > 0, weekLabel(slots, now, inp.timezone, restOfWeek), a.opener, a.horizon === "first");
     if (a.horizon === "first") await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: a.creatorId, step: "first_plan" });
     // One question for the whole week: this IS the open question, and it supersedes any other.

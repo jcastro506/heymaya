@@ -197,7 +197,7 @@ describe("routines on rows", () => {
     const { REPLY_ONLY_TOOLS, runTool, DEFAULT_BUDGET } = await import("../../agent/tools");
     const t = convexTest(schema, modules);
     const a = await t.run((ctx) => seedCreator(ctx, "tool", { timezone: "UTC", channel: { paired: true, pairedAt: PAIRED_LONG_AGO } }));
-    expect([...REPLY_ONLY_TOOLS].sort()).toEqual(["routine_add", "routine_stop", "texting_pace"]);
+    expect([...REPLY_ONLY_TOOLS].sort()).toEqual(["idea_add", "routine_add", "routine_stop", "texting_pace"]);
     const out = await t.action(async (ctx) => runTool(ctx as never, a, { name: "texting_pace", args: { pace: "less", why: "x" } }, DEFAULT_BUDGET(), [], undefined));
     expect(out).toMatch(/refused/);
     expect((await t.run((ctx) => ctx.db.get(a)))!.textFirstPace).toBeUndefined();

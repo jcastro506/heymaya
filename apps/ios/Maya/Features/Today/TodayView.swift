@@ -121,15 +121,17 @@ struct TodayView: View {
             ? "Nothing planned. She'll propose a filming block when something's worth filming around."
             : "Nothing planned yet. Connect your calendar and she'll plan around your real week.")
         } else {
-          ForEach(upcoming.prefix(4)) { b in
+          // One row per idea (2026-10-13): an idea's film, edit and post sessions used to show as three
+          // rows with the same hook, which read as the same idea three times.
+          ForEach(IdeaSessions.group(upcoming).prefix(3)) { g in
             HStack(spacing: 14) {
-              DateTile(ms: b.start)
+              DateTile(ms: g.firstStart)
               VStack(alignment: .leading, spacing: 3) {
-                Text(b.title).font(MayaFont.headline).foregroundStyle(Palette.ink)
-                Text(Format.time(b.start)).font(MayaFont.callout).foregroundStyle(Palette.muted)
+                Text(g.title).font(MayaFont.headline).foregroundStyle(Palette.ink)
+                Text(g.when).font(MayaFont.callout).foregroundStyle(Palette.muted)
               }
               Spacer()
-              Chip(text: b.status == "proposed" ? "waiting for you" : "booked", color: b.status == "proposed" ? Palette.warn : Palette.ok)
+              Chip(text: g.waiting ? "waiting for you" : "booked", color: g.waiting ? Palette.warn : Palette.ok)
             }
           }
           if p.deviceCalendar == nil, !p.connected, upcoming.contains(where: { $0.status != "proposed" }) {

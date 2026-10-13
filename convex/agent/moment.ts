@@ -59,6 +59,35 @@ export const messageFile = internalQuery({
   },
 });
 
+/** An idea she gave them in chat, saved to their ideas so it's in the app too (2026-10-13). Never the same hook twice. */
+export const writeChatIdea = internalMutation({
+  args: { creatorId: v.id("creators"), hook: v.string(), why: v.string(), link: v.optional(v.string()), messageId: v.optional(v.id("messages")) },
+  handler: async (ctx, a): Promise<{ ok: boolean; id?: Id<"ideas">; body: string }> => {
+    const hook = a.hook.replace(/\s+/g, " ").trim().slice(0, 120);
+    if (hook.length < 6) return { ok: false, body: "say the idea in a few words" };
+    const have = ((await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(200)) as Doc<"ideas">[])
+      .find((x) => String((x.version as { hook?: string } | undefined)?.hook ?? "").trim().toLowerCase() === hook.toLowerCase());
+    if (have) return { ok: true, id: have._id, body: "already in their ideas" };
+    const link = a.link && /^https:\/\/(www\.|vm\.)?(tiktok|instagram)\.com\//i.test(a.link) ? a.link : undefined;
+    const now = Date.now();
+    const id = await ctx.db.insert("ideas", {
+      creatorId: a.creatorId,
+      evidenceLinks: link ? [link] : [],
+      fit: "yes",
+      fitWhy: a.why.replace(/\s+/g, " ").trim().slice(0, 160) || "from your chat with Maya",
+      version: { hook, why: a.why.slice(0, 200) },
+      messageText: hook,
+      status: "sent",
+      newForYou: false,
+      produced: { skillVersion: "chat-idea/1", model: "chat", thresholdsVersion: "n/a" },
+      createdAt: now,
+      sentAt: now,
+      ...(a.messageId ? { messageId: a.messageId } : {}),
+    } as never);
+    return { ok: true, id, body: "saved to their ideas in the app" };
+  },
+});
+
 export const writeMomentIdea = internalMutation({
   args: { creatorId: v.id("creators"), messageId: v.id("messages"), idea: v.object({ hook: v.string(), shots: v.array(v.string()), lengthSec: v.number(), onScreenText: v.string() }), messageText: v.string(), features: v.optional(v.any()), produced: v.object({ skillVersion: v.string(), model: v.string(), thresholdsVersion: v.string() }) },
   handler: async (ctx, a): Promise<Id<"ideas">> => {

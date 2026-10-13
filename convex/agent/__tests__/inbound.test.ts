@@ -84,14 +84,15 @@ describe("commands are rows", () => {
     expect((await t.run((ctx) => ctx.db.get(creatorId)))?.plan.status).not.toBe("deleting");
   });
 
-  it("returns an account-protected Mission Control tab without putting a creator id or token in the URL", async () => {
+  it("asking for the old dashboard points them at the app, with no link to a retired page (2026-10-13)", async () => {
     const previous = process.env.APP_URL;
     process.env.APP_URL = "https://staging.hey-maya.ai";
     try {
       const t = convexTest(schema, modules);
       const creatorId = await t.run((ctx) => seedCreator(ctx, "a"));
       const r = await t.mutation(internal.agent.commands.apply, { creatorId, command: "mission_control", topic: "ideas" });
-      expect(r.body).toContain("https://staging.hey-maya.ai/app/ideas");
+      expect(r.body).toMatch(/Maya app, under Ideas/);
+      expect(r.body).not.toContain("/app/");
       expect(r.body).not.toContain(String(creatorId));
       expect(r.body).not.toMatch(/token=/i);
     } finally {
