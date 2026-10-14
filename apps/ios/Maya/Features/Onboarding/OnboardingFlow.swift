@@ -386,9 +386,18 @@ private struct MeetStep: View {
   @State private var problem: String?
 
   var body: some View {
-    StepFrame(step: .meet, kicker: "Meet Maya", title: "Maya works over text.", subtitle: "She texts you ideas and your plan for the week. Send her START to say hi. Everything she sends is saved in this app.") {
+    StepFrame(step: .meet, kicker: "Meet Maya", title: "Maya lives in your text.", subtitle: "Text her like a friend. Say hey, tell her what you're working on, or ask for an idea.") {
       VStack(alignment: .leading, spacing: 14) {
-        MayaBubble(text: "hey, i'm maya. send me START and i'll get to work.")
+        HStack {
+          Spacer(minLength: 36)
+          Text("Hey")
+            .font(MayaFont.body)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Palette.purple, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .accessibilityLabel("Example text message: Hey")
         if waiting {
           HStack(spacing: 10) {
             ProgressView()
@@ -407,7 +416,7 @@ private struct MeetStep: View {
           if let link = r.link { waiting = true; openURL(link) } else if model.preview { waiting = true }
         }
       }
-      Text("By texting, you agree to get texts from Maya. Msg & data rates may apply. Reply STOP anytime.")
+      Text("By texting Maya you agree to get texts from her. Message and data rates may apply. Reply STOP anytime.")
         .font(MayaFont.caption).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
     }
   }
@@ -447,10 +456,7 @@ private struct WatchStep: View {
             .buttonStyle(.bordered)
             .disabled(handle.trimmingCharacters(in: .whitespaces).isEmpty || busy)
         }
-        if model.watched.isEmpty {
-          Text("No one in mind? Skip it. Once she's read your posts she'll text you a few she thinks you'd love.")
-            .font(MayaFont.caption).foregroundStyle(Palette.muted)
-        } else {
+        if !model.watched.isEmpty {
           ForEach(model.watched) { w in
             HStack(spacing: 10) {
               Image(systemName: w.platform == "tiktok" ? "music.note" : "camera").foregroundStyle(Palette.purple).frame(width: 20)

@@ -15,7 +15,7 @@ struct WelcomeView: View {
         Text("Meet Maya")
           .font(MayaFont.display)
           .foregroundStyle(Palette.ink)
-        Text("Your personal content assistant.\nShe finds what's working, plans your week,\nand texts you the idea worth making.")
+        Text("Your TikTok assistant.")
           .font(MayaFont.body)
           .foregroundStyle(Palette.muted)
           .multilineTextAlignment(.center)
@@ -33,13 +33,7 @@ struct WelcomeView: View {
         .buttonStyle(.borderedProminent)
         .buttonBorderShape(.roundedRectangle(radius: 16))
         .padding(.horizontal, 24)
-        Text("You'll talk to her in Messages. This app is where her work lives.")
-          .font(MayaFont.caption)
-          .foregroundStyle(Palette.muted)
-          .multilineTextAlignment(.center)
-          .padding(.top, 14)
-          .padding(.horizontal, 32)
-          .padding(.bottom, 28)
+        Spacer().frame(height: 28)
       }
     }
     .sheet(isPresented: $showAuth) {
