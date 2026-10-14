@@ -15,12 +15,6 @@ struct WelcomeView: View {
         Text("Meet Maya")
           .font(MayaFont.display)
           .foregroundStyle(Palette.ink)
-        Text("Your TikTok assistant.")
-          .font(MayaFont.body)
-          .foregroundStyle(Palette.muted)
-          .multilineTextAlignment(.center)
-          .padding(.top, 10)
-          .padding(.horizontal, 32)
         Spacer()
         Button {
           Haptics.tap()
