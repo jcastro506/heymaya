@@ -480,9 +480,26 @@ struct ReadingState: Decodable, Equatable {
 struct ReadingCard: View {
   let state: ReadingState
   static let showReadForDays = 3.0
+  @State private var retrying = false
 
   var body: some View {
-    if state.stage != "read" {
+    if state.stage == "failed" {
+      Card {
+        VStack(alignment: .leading, spacing: 8) {
+          Text("We couldn't finish reading your posts").font(MayaFont.headline).foregroundStyle(Palette.ink)
+          Text("Maya can try again. Your account is still connected.").font(MayaFont.callout).foregroundStyle(Palette.muted)
+          Button(retrying ? "Trying again…" : "Try again") {
+            Task {
+              retrying = true
+              _ = try? await convex.mutation("onboarding/start:retryReading", with: [:]) as RetryResult
+              retrying = false
+            }
+          }
+            .font(MayaFont.callout.weight(.semibold)).foregroundStyle(Palette.purple)
+            .disabled(retrying)
+        }
+      }
+    } else if state.stage != "read" {
       Card {
         HStack(alignment: .top, spacing: 12) {
           ProgressView().padding(.top, 2)
@@ -512,6 +529,8 @@ struct ReadingCard: View {
     return state.toWatch > 0 ? "\(read), watched \(Int(state.watched)) of \(Int(state.toWatch))." : "\(read), watching them now."
   }
 }
+
+private struct RetryResult: Decodable { let ok: Bool }
 
 /// The engagement round: up to five fresh posts from accounts she watches for them. They open one,
 /// comment themselves (she never comments for them), and tick it off; three a day keeps the streak.
