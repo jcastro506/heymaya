@@ -9,7 +9,6 @@ import { clip, clipWords } from "../lib/clip";
 import { v } from "convex/values";
 import { HOURLY_SPREAD_MS, spreadDelays } from "../core/fanout";
 import { rideAlongLine } from "../core/unseen";
-import { missionControlUrl } from "../agent/missionControl";
 import { enqueueRender, shouldDrawProactively } from "../agent/frames";
 import { internalAction } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
@@ -300,7 +299,7 @@ export const run = internalAction({
     const withLink = links.length && !hasLink(pick.message, links[0]) ? `${pick.message}\n\n${cleanLink(links[0])}` : pick.message;
     // N1: the best idea travels; the rest ride along as one exact line (same count as the app's "new").
     const others = args.dryRun ? [] : await ctx.runQuery(internal.core.unseen.listUnseen, { creatorId: args.creatorId, except: ideaId, now });
-    const ride = rideAlongLine(others.length, missionControlUrl(process.env.APP_URL, "ideas"));
+    const ride = rideAlongLine(others.length);
     const body = ride ? `${withLink}\n\n${ride}` : withLink;
     // The editor sends it (core/editor, 2026-10-12): this is a candidate for today's one pick, not a text.
     // Their own post doing well and a booked-session idea outrank a creator they watch; everything keeps a while.

@@ -31,7 +31,9 @@ describe("statusFromStripe / messageFor", () => {
     expect(statusFromStripe({ status: "unpaid" })).toBe("past_due");
     expect(statusFromStripe({ status: "incomplete" })).toBeNull();
     expect(messageFor("active", "active", "")).toBeNull();
-    expect(messageFor("trialing", "active", "")).toMatch(/official/);
+    expect(messageFor("trialing", "active", "")).toMatch(/all set/);
+    expect(messageFor("trialing", "active", "")).not.toMatch(/sunday review/);
+    expect(messageFor("active", "past_due", "https://x")).not.toMatch(/https?:/);
     expect(messageFor("active", "canceled", "https://x")).toContain("https://x/api/account/export");
   });
 });

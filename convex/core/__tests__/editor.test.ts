@@ -9,7 +9,7 @@ import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
 import type { Id } from "../../_generated/dataModel";
-import { backingOff, carried, commentCandidates, EDITOR, holdToday, kindWeight, outcomes, parsePick, rank, type Noticed } from "../editor";
+import { backingOff, carried, commentCandidates, EDITOR, holdToday, ideasWaitingCandidate, kindWeight, outcomes, parsePick, rank, type Noticed } from "../editor";
 
 const H = 3_600_000, D = 24 * H;
 const T0 = Date.UTC(2026, 9, 13, 12, 0); // Tuesday noon UTC
@@ -129,7 +129,7 @@ describe("the editor on rows", () => {
     expect((await t.action(internal.core.editor.pick, { creatorId: chat, now: T0 + 3 * H })).sent).toBe(true);
   });
 
-  it("cross-tenant: one person's finds never reach another; the first three days stay quiet", async () => {
+  it("cross-tenant: one person's finds never reach another; a new person hears from her on day one", async () => {
     const t = convexTest(schema, modules);
     const a = await seed(t, "a");
     const b = await seed(t, "b");
@@ -137,8 +137,8 @@ describe("the editor on rows", () => {
     expect((await t.action(internal.core.editor.pick, { creatorId: b, now: T0 })).reason).toMatch(/nothing worth/);
     const fresh = await seed(t, "fresh", { channel: { paired: true, pairedAt: T0 - D } });
     await noticeIdea(t, fresh, "1", T0 - H, 3);
-    expect((await t.action(internal.core.editor.pick, { creatorId: fresh, now: T0 })).sent, "held by the first three days inside send").toBe(false);
-    expect(await t.query(internal.core.editor.rideAlong, { creatorId: fresh, now: T0 })).toBeNull();
+    expect(await t.query(internal.core.editor.rideAlong, { creatorId: fresh, now: T0 }), "day one, mid-conversation it can ride along").not.toBeNull();
+    expect((await t.action(internal.core.editor.pick, { creatorId: fresh, now: T0 })).sent, "no quiet start (2026-10-21)").toBe(true);
   });
 
   it("notice keeps one per source and at most twenty", async () => {
@@ -226,5 +226,44 @@ describe("ideas she gives in chat are saved to the app (2026-10-13)", () => {
     expect(rows).toHaveLength(2);
     expect(rows.find((r) => r.evidenceLinks[0] === "https://www.tiktok.com/@x/video/1")).toBeTruthy();
     expect(rows.some((r) => r.evidenceLinks.includes("https://evil.example/phish")), "never a made-up or unsafe link").toBe(false);
+  });
+});
+
+const idea = (t: ReturnType<typeof convexTest>, creatorId: Id<"creators">, n: string, at: number, over: Record<string, unknown> = {}) =>
+  t.run((ctx) => ctx.db.insert("ideas", { creatorId, evidenceLinks: [`https://www.tiktok.com/@x/video/${n}`], fit: n === "2" ? "yes" : "maybe", fitWhy: "your walk-and-talks", version: { hook: `idea ${n}` }, messageText: `idea ${n}`, status: "sent", produced: { skillVersion: "t", model: "t", thresholdsVersion: "t" }, createdAt: at, ...over } as never));
+
+describe("ideas waiting in the app (2026-10-21)", () => {
+  it("three or more unseen and nothing opened in three days: one text naming her favorite, then they count as offered", async () => {
+    const t = convexTest(schema, modules);
+    const a = await seed(t, "a");
+    for (const n of ["1", "2", "3", "4"]) await idea(t, a, n, T0 - Number(n) * H);
+    const r = await t.action(internal.core.editor.pick, { creatorId: a, now: T0 });
+    expect(r).toMatchObject({ sent: true });
+    expect(r.picked).toMatch(/^ideas_waiting:/);
+    const out = (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out");
+    expect(out[0]).toMatchObject({ kind: "ideas_waiting", proactive: true });
+    expect(out[0].body, "the favorite's source post rides along").toContain("https://www.tiktok.com/@x/video/2");
+    const ideas = await t.run((ctx) => ctx.db.query("ideas").collect());
+    expect(ideas.every((i) => i.surfacedAt), "offered once; it never repeats").toBe(true);
+  });
+
+  it("not when they've looked at an idea lately, or with fewer than three", async () => {
+    const t = convexTest(schema, modules);
+    const a = await seed(t, "a");
+    for (const n of ["1", "2", "3"]) await idea(t, a, n, T0 - Number(n) * H);
+    await idea(t, a, "9", T0 - 5 * D, { seenAt: T0 - D });
+    expect((await t.action(internal.core.editor.pick, { creatorId: a, now: T0 })).reason).toMatch(/nothing worth/);
+    const b = await seed(t, "b");
+    for (const n of ["1", "2"]) await idea(t, b, n, T0 - Number(n) * H);
+    expect((await t.action(internal.core.editor.pick, { creatorId: b, now: T0 })).reason).toMatch(/nothing worth/);
+  });
+
+  it("pure: favorite is a strong fit, the count is exact", () => {
+    const rows = ["1", "2", "3"].map((n) => ({ _id: n as never, version: { hook: `idea ${n}` }, messageText: "", fit: (n === "3" ? "yes" : "maybe") as "yes" | "maybe", fitWhy: "w", evidenceLinks: [`https://t/${n}`], createdAt: T0 }));
+    const c = ideasWaitingCandidate(rows, null, T0)!;
+    expect(c.summary).toMatch(/^3 new ideas/);
+    expect(c.summary).toContain('"idea 3"');
+    expect(c.link).toBe("https://t/3");
+    expect(ideasWaitingCandidate(rows, T0 - D, T0)).toBeNull();
   });
 });

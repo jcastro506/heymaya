@@ -75,7 +75,7 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
     const creator = await ctx.runQuery(internal.billing.plan.byStripeCustomer, { stripeCustomerId: customerId });
     if (creator && creator.plan.status === "trialing") {
       const ends = creator.plan.trialEndsAt ? new Date(creator.plan.trialEndsAt).toLocaleDateString("en-US", { weekday: "long", timeZone: creator.timezone }) : "in three days";
-      await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: `your trial ends ${ends}; the card gets charged then, nothing changes on my side. if you want out before that, it's one tap in settings: ${appUrl}/app/settings`, dedupeKey: `billing:trial_will_end:${creator.plan.stripeSubscriptionId ?? event.id}`, proactive: false, kind: "status" });
+      await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: `your trial ends ${ends}; your card gets charged then and nothing changes on my side. if you'd rather stop, it's in your Maya app under You.`, dedupeKey: `billing:trial_will_end:${creator.plan.stripeSubscriptionId ?? event.id}`, proactive: false, kind: "status" });
     }
   }
   return new Response(JSON.stringify({ ok: true, detail: r.detail }), { status: 200, headers: { "content-type": "application/json" } });

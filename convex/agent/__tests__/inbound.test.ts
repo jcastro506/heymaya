@@ -76,11 +76,12 @@ describe("commands are rows", () => {
     expect(c?.notes.find((n) => n.id === "n1")?.tombstonedAt).toBeUndefined();
   });
 
-  it("delete never happens from a text; it points at Settings", async () => {
+  it("delete never happens from a text; it points at the app, with no dead link", async () => {
     const t = convexTest(schema, modules);
     const creatorId = await t.run((ctx) => seedCreator(ctx, "a"));
     const r = await t.mutation(internal.agent.commands.apply, { creatorId, command: "delete" });
-    expect(r.body).toMatch(/Settings/);
+    expect(r.body).toMatch(/Maya app, under You/);
+    expect(r.body).not.toMatch(/https?:/);
     expect((await t.run((ctx) => ctx.db.get(creatorId)))?.plan.status).not.toBe("deleting");
   });
 

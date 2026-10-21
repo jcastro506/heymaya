@@ -48,9 +48,9 @@ export function messageFor(prev: PlanStatus, next: PlanStatus, appUrl: string): 
   if (prev === next) return null;
   switch (next) {
     case "active":
-      return prev === "trialing" ? "we're official. same me, same cadence; you'll get the sunday review as usual." : prev === "past_due" ? "payment went through, all good. carrying on." : null;
+      return prev === "trialing" ? "you're all set. nothing changes on my side." : prev === "past_due" ? "payment went through, all good. carrying on." : null;
     case "past_due":
-      return `your card didn't go through. stripe will retry on its own; update it here when you get a minute: ${appUrl}/app/settings — i'll keep going for a few days either way.`;
+      return "your card didn't go through. it'll try again on its own; you can update it in your Maya app under You when you get a minute. i'll keep going for a few days either way.";
     case "paused":
       return "paused, no charge. say resume when you want me back; i'll still answer if you write.";
     case "canceled":
