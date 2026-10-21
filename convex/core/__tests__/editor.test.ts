@@ -243,8 +243,17 @@ describe("ideas waiting in the app (2026-10-21)", () => {
     const out = (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out");
     expect(out[0]).toMatchObject({ kind: "ideas_waiting", proactive: true });
     expect(out[0].body, "the favorite's source post rides along").toContain("https://www.tiktok.com/@x/video/2");
-    const ideas = await t.run((ctx) => ctx.db.query("ideas").collect());
-    expect(ideas.every((i) => i.surfacedAt), "offered once; it never repeats").toBe(true);
+    const again = await t.action(internal.core.editor.pick, { creatorId: a, now: T0 + D });
+    expect(again.picked ?? "", "at most one every three days").not.toMatch(/^ideas_waiting/);
+  });
+
+  it("counts ideas offered in a text but never opened in the app (a tester's '+1 more' hid them)", async () => {
+    const t = convexTest(schema, modules);
+    const a = await seed(t, "a");
+    for (const n of ["1", "2", "3"]) await idea(t, a, n, T0 - Number(n) * H, { surfacedAt: T0 - H });
+    await idea(t, a, "4", T0 - 4 * H, { sentAt: T0 - 4 * H });
+    const r = await t.action(internal.core.editor.pick, { creatorId: a, now: T0 });
+    expect(r.picked).toMatch(/^ideas_waiting:/);
   });
 
   it("not when they've looked at an idea lately, or with fewer than three", async () => {

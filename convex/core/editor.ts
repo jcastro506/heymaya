@@ -13,7 +13,6 @@
  */
 import { v } from "convex/values";
 import { internalAction, internalQuery, type MutationCtx, type QueryCtx } from "../_generated/server";
-import { unseenIdeas } from "./unseen";
 import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -121,8 +120,8 @@ export function commentCandidates(rows: Array<Pick<Doc<"postComments">, "comment
 }
 
 /**
- * Pure (2026-10-21): their app is piling up, three or more new ideas they haven't seen and nothing opened in three
- * days, so one text that says so and names her favorite. Those ideas count as offered once it goes, so it never repeats.
+ * Pure (2026-10-21): their app is piling up, three or more ideas they haven't opened and nothing opened in three
+ * days, so one text that says so and names her favorite.
  */
 export function ideasWaitingCandidate(unseen: Array<Pick<Doc<"ideas">, "_id" | "version" | "messageText" | "fit" | "fitWhy" | "evidenceLinks" | "createdAt">>, lastSeenAt: number | null, now: number): Noticed | null {
   if (unseen.length < 3 || (lastSeenAt !== null && now - lastSeenAt < 3 * 86_400_000)) return null;
@@ -159,14 +158,18 @@ Output ONLY JSON: {"pick": "<id>" | null, "why": "≤200 chars", "text": ""}`;
 
 /* ------------------------------------------------------------------ rows */
 
-/** Their unseen ideas as a candidate, when the app is piling up (core/unseen is the one definition of unseen). */
-async function waiting(ctx: QueryCtx, creatorId: Id<"creators">, now: number, seen: Set<string>): Promise<Noticed[]> {
-  const unseen = await unseenIdeas(ctx, creatorId, now);
-  if (unseen.length < 3) return [];
-  const recent = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", creatorId)).order("desc").take(100)) as Doc<"ideas">[];
+/**
+ * Ideas they've never opened in the app, as a candidate when it's piling up (2026-10-21). Not core/unseen's
+ * "new": a tester's ideas counted as offered after one "+1 more" line, yet she'd never opened one. At most one
+ * of these every three days.
+ */
+async function waiting(ctx: QueryCtx, c: Doc<"creators">, now: number, seen: Set<string>): Promise<Noticed[]> {
+  if ((c.noticed ?? []).some((n) => n.kind === "ideas_waiting" && n.status === "sent" && now - (n.decidedAt ?? n.createdAt) < 3 * 86_400_000)) return [];
+  const recent = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").take(100)) as Doc<"ideas">[];
+  const unopened = recent.filter((i) => (i.status === "sent" || i.status === "hearted") && !i.seenAt && !i.sentAt && now - i.createdAt <= 7 * 86_400_000);
   const lastSeen = recent.reduce<number | null>((m, i) => (i.seenAt && (m === null || i.seenAt > m) ? i.seenAt : m), null);
-  const c = ideasWaitingCandidate(unseen, lastSeen, now);
-  return c && !seen.has(c.sourceKey) ? [c] : [];
+  const cand = ideasWaitingCandidate(unopened, lastSeen, now);
+  return cand && !seen.has(cand.sourceKey) ? [cand] : [];
 }
 
 /** Shared by every path that finds something: add it (once per source), keep the list short. */
@@ -200,7 +203,7 @@ export const inputs = internalQuery({
     const comments = (await ctx.db.query("postComments").withIndex("by_creator", (q) => q.eq("creatorId", c._id).gte("createdAt", a.now - 36 * 3_600_000)).collect()) as Doc<"postComments">[];
     const stored = c.noticed ?? [];
     const seen = new Set(stored.map((n) => n.sourceKey));
-    const cands = [...stored, ...commentCandidates(comments, a.now).filter((n) => !seen.has(n.sourceKey)), ...(await waiting(ctx, c._id, a.now, seen))];
+    const cands = [...stored, ...commentCandidates(comments, a.now).filter((n) => !seen.has(n.sourceKey)), ...(await waiting(ctx, c, a.now, seen))];
     const inbound = msgs.filter((m) => m.direction === "in").map((m) => m.ts);
     const hersToday = msgs.some((m) => m.direction === "out" && m.proactive === true && laneFor(m.kind, null) === "hers" && dayKeyInZone(m.ts, c.timezone) === day);
     return { c, day, history: outcomes(msgs, a.now), cands, lastInboundAt: inbound.length ? Math.max(...inbound) : null, hersToday };
@@ -326,7 +329,7 @@ export const rideAlong = internalQuery({
     const comments = (await ctx.db.query("postComments").withIndex("by_creator", (q) => q.eq("creatorId", c._id).gte("createdAt", a.now - 36 * 3_600_000)).collect()) as Doc<"postComments">[];
     const stored = c.noticed ?? [];
     const seen = new Set(stored.map((n) => n.sourceKey));
-    const top = rank([...stored, ...commentCandidates(comments, a.now).filter((n) => !seen.has(n.sourceKey)), ...(await waiting(ctx, c._id, a.now, seen))], outcomes(msgs, a.now), a.now).find((s) => s.score >= EDITOR.bar && s.c.link);
+    const top = rank([...stored, ...commentCandidates(comments, a.now).filter((n) => !seen.has(n.sourceKey)), ...(await waiting(ctx, c, a.now, seen))], outcomes(msgs, a.now), a.now).find((s) => s.score >= EDITOR.bar && s.c.link);
     return top ? { id: top.c.id, summary: top.c.summary, link: top.c.link!, candidate: top.c, day } : null;
   },
 });
