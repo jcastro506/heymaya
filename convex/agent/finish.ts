@@ -183,7 +183,8 @@ export function finishText(o: { reaction: string; read?: string; captions: Out["
   const parts: string[] = [];
   parts.push([o.reaction.trim(), (o.read ?? "").trim()].filter(Boolean).join(" "));
   parts.push(`captions:\n${o.captions.map((c, i) => `${i + 1}. ${c.text.trim()}`).join("\n")}`);
-  parts.push(o.sounds.length ? soundBlock(o.sounds, o.platformNote) : `${o.soundAsk ?? SOUND_QUESTION}${o.platformNote?.trim() ? `\n${o.platformNote.trim()}` : ""}`);
+  // One sound in the text, her best (2026-10-21: three captions plus two sounds read as homework); the rest are a "another sound?" away.
+  parts.push(o.sounds.length ? soundBlock(o.sounds.slice(0, 1), o.platformNote) : `${o.soundAsk ?? SOUND_QUESTION}${o.platformNote?.trim() ? `\n${o.platformNote.trim()}` : ""}`);
   return parts.join("\n---\n");
 }
 
@@ -193,7 +194,7 @@ export function soundBlock(sounds: Array<Out["sounds"][number] & { licensedForBu
   const lower = (t: string) => (t ? t[0].toLowerCase() + t.slice(1) : t);
   // A looked-up TikTok sound carries its page, so they can tap straight into "use this sound".
   const lines = sounds.map((s) => `${bare(s.name)}: ${lower(bare(s.why))}${s.howToUse?.trim() ? `. ${lower(bare(s.howToUse))}` : ""}${s.licensedForBusiness === false ? " (fine on a personal account, not on a business account or a paid post)" : ""}${s.clipId ? `\nhttps://www.tiktok.com/music/sound-${s.clipId}` : ""}`);
-  return `${lines.length > 1 ? "sounds" : "sound"}:\n${lines.join("\n")}${platformNote?.trim() ? `\n${platformNote.trim()}` : ""}\n\nask me why on any of them.`;
+  return `${lines.length > 1 ? "sounds" : "sound"}:\n${lines.join("\n")}${platformNote?.trim() ? `\n${platformNote.trim()}` : ""}`;
 }
 
 export const record = internalMutation({

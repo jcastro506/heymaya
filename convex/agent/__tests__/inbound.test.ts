@@ -21,6 +21,9 @@ describe("classifyInbound", () => {
     expect(classifyInbound({ text: "forget that", kind: "inbound", handles })).toEqual({ route: "command", command: "forget" });
     expect(classifyInbound({ text: "can i talk to a real person", kind: "inbound", handles })).toEqual({ route: "command", command: "person" });
     expect(classifyInbound({ text: "delete my account", kind: "inbound", handles })).toEqual({ route: "command", command: "delete" });
+    // Live 2026-10-21: this one reached the crisis path. Leaving an app is a command, never distress.
+    for (const t of ["i want to delete my account", "I wanna delete my account.", "how do i delete my account?", "can you close my account please"]) expect(classifyInbound({ text: t, kind: "inbound", handles }), t).toEqual({ route: "command", command: "delete" });
+    expect(classifyInbound({ text: "i want to delete my old video", kind: "inbound", handles }).route).not.toBe("command");
     expect(classifyInbound({ text: "send me my mission control link", kind: "inbound", handles })).toEqual({ route: "command", command: "mission_control", topic: "today" });
     expect(classifyInbound({ text: "show me my Mission Control for this week's plan", kind: "inbound", handles })).toEqual({ route: "command", command: "mission_control", topic: "plan" });
     expect(classifyInbound({ text: "should i stop doing skits?", kind: "inbound", handles }).route).toBe("text");

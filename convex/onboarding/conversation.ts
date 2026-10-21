@@ -22,7 +22,7 @@ export function saveContactLine(): string {
 }
 
 /** Her first plan's last text adds where everything lives, once (the first week only). */
-export const APP_LINE = "all of this is in the Maya app too, your ideas and your week, so you never have to scroll back for it. and i'll only text you first when it's worth it.";
+export const APP_LINE = "it's all in your Maya app too.";
 
 export const CONVERSATIONAL_ONBOARDING = `# Getting to know them through conversation
 Follow their actual message; this is not a questionnaire. Never interview them: don't ask what they want out of this, what gets in the way, how they started or who they picture watching. Learn it from what they say and what they post, and use it when it changes your advice.

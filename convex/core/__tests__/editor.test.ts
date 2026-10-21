@@ -9,7 +9,7 @@ import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
 import type { Id } from "../../_generated/dataModel";
-import { backingOff, carried, commentCandidates, EDITOR, holdToday, ideasWaitingCandidate, kindWeight, outcomes, parsePick, rank, type Noticed } from "../editor";
+import { backingOff, carried, commentCandidates, EDITOR, holdToday, ideasWaitingCandidate, looksLikeDmBait, kindWeight, outcomes, parsePick, rank, type Noticed } from "../editor";
 
 const H = 3_600_000, D = 24 * H;
 const T0 = Date.UTC(2026, 9, 13, 12, 0); // Tuesday noon UTC
@@ -275,5 +275,24 @@ describe("ideas waiting in the app (2026-10-21)", () => {
     expect(c.summary).toContain('"idea 3"');
     expect(c.link).toBe("https://t/3");
     expect(ideasWaitingCandidate(rows, T0 - D, T0)).toBeNull();
+  });
+});
+
+describe("user-ready (2026-10-21)", () => {
+  it("a comment fishing for a DM is never news; a real question still is", () => {
+    expect(looksLikeDmBait("Hi! I have something exciting to discuss with you! Could you please message me? 🌷")).toBe(true);
+    expect(looksLikeDmBait("collab? check your dms")).toBe(true);
+    expect(looksLikeDmBait("where are your rings from??")).toBe(false);
+    const rows = [
+      { commentId: "spam", text: "Hi! I have something exciting to discuss with you! Could you please message me?", question: true, likeCount: 0, isOwner: false, postUrl: "https://t/1", createdAt: T0 - H },
+      { commentId: "real", text: "where are your rings from??", question: true, likeCount: 0, isOwner: false, postUrl: "https://t/1", createdAt: T0 - H },
+    ];
+    expect(commentCandidates(rows as never, T0).map((c) => c.id)).toEqual(["comment:real"]);
+  });
+
+  it("a day she's already started twice is full: no pick on top", () => {
+    const top = { c: cand({}), score: 3 };
+    expect(holdToday({ history: [], top, now: T0, lastInboundAt: null, startedToday: 2 })).toMatch(/twice today/);
+    expect(holdToday({ history: [], top, now: T0, lastInboundAt: null, startedToday: 1 })).toBeNull();
   });
 });

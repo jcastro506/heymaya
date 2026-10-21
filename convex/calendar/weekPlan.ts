@@ -127,15 +127,17 @@ export function composeWeek(slots: Slot[], tz: string, fromHistory: boolean, lab
     // carrying a stat stays in the app and on the calendar event (2026-10-02: "(hit 1.77x on the panic
     // order)" in a text read as a spreadsheet).
     // One written about them ("combines her strongest format…", live 2026-10-13) is a note, not a text: it stays in the app.
-    const why = s.why && !/\d/.test(s.why) && !/\b(she|her|hers|he|his|they|their|the creator)\b/i.test(s.why) ? ` (${s.why})` : "";
-    return `${day}: ${s.hook}${why}${s.experiment ? " (this week's experiment)" : ""}. film around ${t(s.film.start)}, post at ${t(s.post.at)}`;
+    // One line a post (2026-10-21: long reasons made a wall). A short why, written to them, still rides the line
+    // (2026-09-07: no why felt generic); a long one, one with a stat, or one written about them stays in the app.
+    const why = s.why && s.why.length <= 70 && !/\d/.test(s.why) && !/\b(she|her|hers|he|his|they|their|the creator)\b/i.test(s.why) ? ` (${s.why})` : "";
+    return `${day}: ${s.hook}${why}${s.experiment ? " (this week's experiment)" : ""}. film ${t(s.film.start)}, post ${t(s.post.at)}`;
   });
-  const basis = fromHistory ? "those post times are when your people are usually on." : "post times are a guess until i've seen more of your posts.";
+  const basis = fromHistory ? "post times are when your people are on." : "post times are a guess until i've seen more of your posts.";
   // Separate texts, the way a person would send it: the month (if any), the week, the ask.
   return [
     ...(opener ? [opener] : []),
-    `${label}, ${slots.length} post${slots.length === 1 ? "" : "s"}:\n\n${lines.join("\n\n")}`,
-    `${basis} say the word and i'll put them on your calendar and check in before each one. tell me if any should move.${first ? ` ${APP_LINE}` : ""}`,
+    `${label}, ${slots.length} post${slots.length === 1 ? "" : "s"}:\n${lines.join("\n")}`,
+    `${basis}${first ? ` ${APP_LINE}` : ""} want them on your calendar?`,
   ].join("\n---\n");
 }
 

@@ -96,8 +96,10 @@ export function rank(cands: Noticed[], history: Outcome[], now: number): Scored[
 }
 
 /** Pure: why not today, or null to go ahead and ask her. */
-export function holdToday(input: { history: Outcome[]; top: Scored | undefined; now: number; lastInboundAt: number | null }): string | null {
+export function holdToday(input: { history: Outcome[]; top: Scored | undefined; now: number; lastInboundAt: number | null; startedToday?: number }): string | null {
   if (!input.top || input.top.score < EDITOR.bar) return "nothing worth a text today";
+  // A day she's already started two conversations (their hello and first read, a plan, a reminder) is full (2026-10-21).
+  if ((input.startedToday ?? 0) >= 2) return "she's already texted them twice today";
   if (input.lastInboundAt !== null && input.now - input.lastInboundAt < EDITOR.restAfterChatMs) return "they're mid-conversation; it rides along in her reply instead";
   if (backingOff(input.history)) {
     // Her last three went unanswered: a strong one, or one good one a week, never two days running.
@@ -108,10 +110,15 @@ export function holdToday(input: { history: Outcome[]; top: Scored | undefined; 
   return null;
 }
 
+/** Pure: a comment fishing for a DM ("I have something exciting to discuss, message me 🌷") is spam, never news. */
+export function looksLikeDmBait(text: string): boolean {
+  return /\b(message me|dm me|check (your|my) dms?|send (me )?a dm|collab(oration)?\b|promot(e|ion)|exciting to discuss|work with you|business (inquiry|proposal)|whats ?app|telegram|ambassador)\b/i.test(text);
+}
+
 /** Pure: comments on their own posts worth a text: questions, or ones people liked. Untrusted text, clipped. */
 export function commentCandidates(rows: Array<Pick<Doc<"postComments">, "commentId" | "text" | "question" | "likeCount" | "isOwner" | "postUrl" | "createdAt">>, now: number): Noticed[] {
   return rows
-    .filter((r) => !r.isOwner && r.postUrl && now - r.createdAt < 36 * 3_600_000 && (r.question || (r.likeCount ?? 0) >= 5))
+    .filter((r) => !r.isOwner && r.postUrl && now - r.createdAt < 36 * 3_600_000 && (r.question || (r.likeCount ?? 0) >= 5) && !looksLikeDmBait(r.text))
     .map((r) => ({
       id: `comment:${r.commentId}`, kind: "comment", sourceKey: `comment:${r.commentId}`,
       summary: clip(`a comment on their post${r.question ? " (a question)" : ""}${r.likeCount ? `, ${r.likeCount} likes` : ""}: "${r.text.replace(/\s+/g, " ")}"`, 240),
@@ -195,7 +202,7 @@ export const notice = internalMutation({
 
 export const inputs = internalQuery({
   args: { creatorId: v.id("creators"), now: v.number() },
-  handler: async (ctx, a): Promise<{ c: Doc<"creators">; day: string; history: Outcome[]; cands: Noticed[]; lastInboundAt: number | null; hersToday: boolean } | null> => {
+  handler: async (ctx, a): Promise<{ c: Doc<"creators">; day: string; history: Outcome[]; cands: Noticed[]; lastInboundAt: number | null; hersToday: boolean; startedToday: number } | null> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c) return null;
     const msgs = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", c._id).gte("ts", a.now - 30 * 86_400_000)).collect()) as Doc<"messages">[];
@@ -206,7 +213,9 @@ export const inputs = internalQuery({
     const cands = [...stored, ...commentCandidates(comments, a.now).filter((n) => !seen.has(n.sourceKey)), ...(await waiting(ctx, c, a.now, seen))];
     const inbound = msgs.filter((m) => m.direction === "in").map((m) => m.ts);
     const hersToday = msgs.some((m) => m.direction === "out" && m.proactive === true && laneFor(m.kind, null) === "hers" && dayKeyInZone(m.ts, c.timezone) === day);
-    return { c, day, history: outcomes(msgs, a.now), cands, lastInboundAt: inbound.length ? Math.max(...inbound) : null, hersToday };
+    // Every text she started today, any lane (setup, a plan, a reminder): what their phone actually showed.
+    const startedToday = msgs.filter((m) => m.direction === "out" && m.proactive === true && dayKeyInZone(m.ts, c.timezone) === day).length;
+    return { c, day, history: outcomes(msgs, a.now), cands, lastInboundAt: inbound.length ? Math.max(...inbound) : null, hersToday, startedToday };
   },
 });
 
@@ -259,7 +268,7 @@ export const pick = internalAction({
     if (!a.preview && i.c.pickedDay === i.day) return { sent: false, reason: "today is decided" };
     if (i.hersToday) { await ctx.runMutation(internal.core.editor.decide, { creatorId: a.creatorId, day: i.day, now }); return { sent: false, reason: "she already texted something of hers today" }; }
     const ranked = rank(i.cands, i.history, now);
-    const held = holdToday({ history: i.history, top: ranked[0], now, lastInboundAt: i.lastInboundAt });
+    const held = holdToday({ history: i.history, top: ranked[0], now, lastInboundAt: i.lastInboundAt, startedToday: i.startedToday });
     if (held) {
       // Mid-conversation isn't a decision: the next hour (or her reply) may still use it.
       if (!held.startsWith("they're mid-conversation") && !a.preview) await ctx.runMutation(internal.core.editor.decide, { creatorId: a.creatorId, day: i.day, now });
