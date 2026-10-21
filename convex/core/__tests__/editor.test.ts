@@ -230,7 +230,7 @@ describe("ideas she gives in chat are saved to the app (2026-10-13)", () => {
 });
 
 const idea = (t: ReturnType<typeof convexTest>, creatorId: Id<"creators">, n: string, at: number, over: Record<string, unknown> = {}) =>
-  t.run((ctx) => ctx.db.insert("ideas", { creatorId, evidenceLinks: [`https://www.tiktok.com/@x/video/${n}`], fit: n === "2" ? "yes" : "maybe", fitWhy: "your walk-and-talks", version: { hook: `idea ${n}` }, messageText: `idea ${n}`, status: "sent", produced: { skillVersion: "t", model: "t", thresholdsVersion: "t" }, createdAt: at, ...over } as never));
+  t.run((ctx) => ctx.db.insert("ideas", { creatorId, evidenceLinks: [`https://www.tiktok.com/@x/video/${n}?_r=1&u_code=abc`], fit: n === "2" ? "yes" : "maybe", fitWhy: "your walk-and-talks", version: { hook: `idea ${n}` }, messageText: `idea ${n}`, status: "sent", produced: { skillVersion: "t", model: "t", thresholdsVersion: "t" }, createdAt: at, ...over } as never));
 
 describe("ideas waiting in the app (2026-10-21)", () => {
   it("three or more unseen and nothing opened in three days: one text naming her favorite, then they count as offered", async () => {
@@ -243,6 +243,7 @@ describe("ideas waiting in the app (2026-10-21)", () => {
     const out = (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out");
     expect(out[0]).toMatchObject({ kind: "ideas_waiting", proactive: true });
     expect(out[0].body, "the favorite's source post rides along").toContain("https://www.tiktok.com/@x/video/2");
+    expect(out[0].body, "without the share tracking").not.toContain("u_code");
     const again = await t.action(internal.core.editor.pick, { creatorId: a, now: T0 + D });
     expect(again.picked ?? "", "at most one every three days").not.toMatch(/^ideas_waiting/);
   });
