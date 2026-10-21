@@ -139,6 +139,8 @@ export const sync = internalAction({ args: { creatorId: v.id("creators"), opport
   if (!o.threadId) return { added: 0, reason: "No tracked email thread; manual handoff status is unknown until the user reports it." };
   const mailbox = await ctx.runQuery(internal.partnerships.mailbox.get, { creatorId: a.creatorId });
   if (!mailbox || mailbox.generation !== o.mailboxGeneration) throw new Error("Reconnect the original mailbox before checking this conversation");
+  // Send-only (2026-10-21): no reading their mail; replies are theirs to tell her or forward.
+  if (mailbox.canRead === false) return { added: 0, reason: "send-only connection: replies come from them" };
   const response = await gmail(await access(ctx, mailbox), `threads/${encodeURIComponent(o.threadId)}?format=full`);
   await ctx.runMutation(internal.partnerships.mailbox.attention, { creatorId: a.creatorId, generation: mailbox.generation, failed: false });
   const messages = (response.messages ?? []) as Array<{ id: string; internalDate: string; labelIds?: string[]; snippet?: string; payload?: Part & { headers?: Array<{ name: string; value: string }> } }>;
@@ -207,13 +209,14 @@ export const reconcile = internalAction({ args: { creatorId: v.id("creators"), o
   const r = await ctx.runQuery(internal.partnerships.store.read, a);
   const mailbox = await ctx.runQuery(internal.partnerships.mailbox.get, { creatorId: a.creatorId });
   if (!mailbox || !r.drafts) return;
+  const canSearch = mailbox.canRead !== false; // send-only can't search Sent: an ambiguous send stays "unknown" for them to confirm
   for (const row of r.drafts) {
     const d = Draft.parse(row.data);
     if (d.status === "approved" && d.approvalExpiresAt > Date.now() && d.mailboxGeneration === mailbox.generation) {
       await ctx.scheduler.runAfter(0, internal.partnerships.delivery.send, { creatorId: a.creatorId, draftId: row._id });
       continue;
     }
-    if (!["unknown", "sending"].includes(d.status) || row.updatedAt > Date.now() - 60000 || d.mailboxGeneration !== mailbox.generation) continue;
+    if (!canSearch || !["unknown", "sending"].includes(d.status) || row.updatedAt > Date.now() - 60000 || d.mailboxGeneration !== mailbox.generation) continue;
     const token = await access(ctx, mailbox);
     const query = `in:sent rfc822msgid:maya-${row._id}@${email.parse(d.sender).split("@")[1]}`;
     const found = await gmail(token, `messages?maxResults=2&q=${encodeURIComponent(query)}`);

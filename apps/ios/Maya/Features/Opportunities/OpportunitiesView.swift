@@ -22,6 +22,41 @@ struct OpportunitiesView: View {
   }
 }
 
+/// Where pitches send from (2026-10-21): their Gmail once connected, or one tap to connect (the same link Maya texts).
+struct GmailCard: View {
+  struct Status: Decodable, Equatable { let connected: Bool; let email: String?; let available: Bool }
+  @State private var status = Live<Status?>("partnerships/mailbox:status")
+  @State private var busy = false
+  @Environment(\.openURL) private var openURL
+
+  var body: some View {
+    Group {
+      if case .value(let s?) = status.state, s.available {
+        Card {
+          if s.connected, let email = s.email {
+            Label("Pitches send from \(email)", systemImage: "envelope.badge.fill")
+              .font(MayaFont.callout).foregroundStyle(Palette.ink)
+          } else {
+            Label("Send pitches from your Gmail", systemImage: "envelope").font(MayaFont.headline).foregroundStyle(Palette.ink)
+            Text("Connect once and Maya sends the pitches you approve straight from your inbox.")
+              .font(MayaFont.callout).foregroundStyle(Palette.muted)
+            Button(busy ? "Opening…" : "Connect Gmail") {
+              Task {
+                busy = true
+                if let url = await Actions.gmailConnectLink() { openURL(url) }
+                busy = false
+              }
+            }
+            .font(MayaFont.callout.weight(.semibold)).foregroundStyle(Palette.purple)
+            .disabled(busy)
+          }
+        }
+      }
+    }
+    .task { await status.run() }
+  }
+}
+
 /// The locked screen: what she'd do, one real number from their lane, one button.
 struct LockedDealsView: View {
   let o: Opportunities
@@ -134,6 +169,7 @@ struct PipelineView: View {
 
   var body: some View {
     MediaKitCard()
+    GmailCard()
     if items.isEmpty {
       EmptyNote(text: "Nothing yet. Text her \"find me brands\" and she'll start with the ones already paying creators in your lane.")
     } else {

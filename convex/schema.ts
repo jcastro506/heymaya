@@ -81,6 +81,8 @@ export default defineSchema({
       at: v.number(),
       ideaId: v.optional(v.id("ideas")),
     }))),
+    /** The last time she offered to connect their Gmail with a pitch (partnerships/drafts): at most once a week. */
+    gmailOfferedAt: v.optional(v.number()),
     /** Where they were the last time she looked for deals (partnerships/dealScout), so she notices when they grow. */
     dealStage: v.optional(v.object({ stage: v.string(), followers: v.optional(v.number()), at: v.number() })),
     /** The day (their clock) the editor last decided: a pick, a fold, or a quiet day. */
@@ -1033,7 +1035,7 @@ export default defineSchema({
     openedAt: v.optional(v.number()),
     opens: v.number(),
   }).index("by_code", ["code"]).index("by_creator", ["creatorId"]),
-  partnershipMailboxes: defineTable({ creatorId: v.id("creators"), email: v.string(), tokenRef: v.string(), generation: v.string(), attention: v.optional(v.string()), updatedAt: v.number() }).index("by_creator", ["creatorId"]),
+  partnershipMailboxes: defineTable({ creatorId: v.id("creators"), email: v.string(), tokenRef: v.string(), generation: v.string(), attention: v.optional(v.string()), updatedAt: v.number(), /** false: send-only (2026-10-21); absent on older rows, which had read. */ canRead: v.optional(v.boolean()) }).index("by_creator", ["creatorId"]),
 
   // -------------------------------------------------------------- vendorHealth
   vendorHealth: defineTable({

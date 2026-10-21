@@ -37,6 +37,19 @@ enum Actions {
   }
 
   /// B6: their public media-kit page. On returns the link (the same one each time); off kills it.
+  /// A one-time Gmail connect link (2026-10-21), the same one Maya texts. Opens in Safari, not the app.
+  static func gmailConnectLink() async -> URL? {
+    if Fixtures.enabled { return nil }
+    do {
+      let s: String = try await convex.mutation("partnerships/mailbox:connect", with: [:])
+      return URL(string: s)
+    } catch {
+      print("[Actions] gmail connect: \(error)")
+      Haptics.warning()
+      return nil
+    }
+  }
+
   static func mediaKitLink(on: Bool) async -> URL? {
     struct R: Decodable { let url: String? }
     if Fixtures.enabled { return on ? URL(string: "https://hey-maya.ai/k/fixturekit01") : nil }

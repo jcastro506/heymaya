@@ -396,9 +396,13 @@ describe("approval and delivery races", () => {
     const f = await fixture();
     await f.t.run(ctx => ctx.db.insert("oauthStates", { creatorId: f.a, provider: "gmail", token: "state", createdAt: Date.now(), expiresAt: Date.now() + 1000 }));
     expect(await f.t.mutation(internal.calendar.oauth.claimState, { token: "state" })).toBeNull();
-    await expect(f.t.mutation(internal.partnerships.mailbox.claim, { state: "state", subject: "u_partner-b" })).rejects.toThrow("another session");
-    expect(await f.t.mutation(internal.partnerships.mailbox.claim, { state: "state", subject: "u_partner-a" })).toBe(f.a);
-    await expect(f.t.mutation(internal.partnerships.mailbox.claim, { state: "state", subject: "u_partner-a" })).rejects.toThrow("Invalid");
+    // A Gmail link token (2026-10-21) is the credential: it names one creator, works once, and expires.
+    expect(await f.t.mutation(internal.partnerships.mailbox.claimLink, { state: "state" })).toBe(f.a);
+    await expect(f.t.mutation(internal.partnerships.mailbox.claimLink, { state: "state" })).rejects.toThrow("Invalid");
+    await f.t.run(ctx => ctx.db.insert("oauthStates", { creatorId: f.a, provider: "gmail", token: "old", createdAt: Date.now() - 2000, expiresAt: Date.now() - 1000 }));
+    await expect(f.t.mutation(internal.partnerships.mailbox.claimLink, { state: "old" })).rejects.toThrow("Invalid");
+    await f.t.run(ctx => ctx.db.insert("oauthStates", { creatorId: f.a, provider: "google", token: "cal", createdAt: Date.now(), expiresAt: Date.now() + 1000 }));
+    await expect(f.t.mutation(internal.partnerships.mailbox.claimLink, { state: "cal" }), "a calendar state is never a mail link").rejects.toThrow("Invalid");
   });
   it("exports relationship history without mailbox credentials", async () => {
     const f = await fixture();
@@ -601,5 +605,89 @@ describe("deals sim findings (2026-09-24)", () => {
     expect(r.opportunities[0].latestReply?.trust).toMatch(/UNTRUSTED/);
     const other = await f.t.query(internal.partnerships.store.read, { creatorId: f.b }).catch(() => ({ opportunities: [] })) as { opportunities: unknown[] };
     expect(other.opportunities).toHaveLength(0);
+  });
+});
+
+describe("Gmail by a link in a text (2026-10-21)", () => {
+  beforeEach(() => { vi.stubEnv("GOOGLE_CLIENT_ID", "cid"); vi.stubEnv("GOOGLE_CLIENT_SECRET", "secret"); vi.stubEnv("APP_URL", "https://staging.hey-maya.ai"); vi.stubEnv("GMAIL_REDIRECT_URI", ""); });
+
+  it("not connected: the pitch is a working link now, plus a one-time connect link, at most once a week", async () => {
+    const f = await fixture();
+    await f.t.mutation(internal.partnerships.mailbox.forget, { creatorId: f.a });
+    await f.draft();
+    const texts = (await f.t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out" && m.creatorId === f.a).map((m) => m.body);
+    const pitch = texts.find((b) => b.includes("/m/"))!;
+    expect(pitch, "the pitch works now").toMatch(/opens in your Gmail/);
+    const link = pitch.match(/https:\/\/staging\.hey-maya\.ai\/g\/[a-f0-9]{36}/)?.[0];
+    expect(link, "the offer carries a one-time link").toBeTruthy();
+    // Twice in a week: the second pitch carries no offer.
+    await f.draft("A second idea for a paid running content collaboration.");
+    const after = (await f.t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out" && m.creatorId === f.a && m.body.includes("/m/"));
+    expect(after.filter((m) => /\/g\//.test(m.body))).toHaveLength(1);
+    const target = await f.t.query(api.partnerships.mailbox.linkTarget, { token: link!.split("/g/")[1] });
+    expect(target.ok).toBe(true);
+    const url = new URL((target as { url: string }).url);
+    expect(url.searchParams.get("redirect_uri")).toBe("https://staging.hey-maya.ai/g/callback");
+    expect(url.searchParams.get("scope")!.split(" "), "send only, plus their address: never reading mail").toEqual(["openid", "email", "https://www.googleapis.com/auth/gmail.send"]);
+  });
+
+  it("connected: the review is the email in its own text and a plain SEND sends exactly that", async () => {
+    const f = await fixture();
+    const d = await f.draft();
+    const review = (await f.t.run((ctx) => ctx.db.query("messages").collect())).find((m) => m.dedupeKey === `partner-review:${d.id}`)!;
+    expect(review.body).toMatch(/reply SEND/i);
+    expect(review.body).not.toMatch(/[a-f0-9]{24}/);
+    for (const part of review.body.split(/\n---\n/)) expect(part.length < 900, "no rules wall around the email").toBe(true);
+    const m = await f.t.mutation(internal.core.messages.recordInbound, { creatorId: f.a, surface: "web", body: "send it now" });
+    expect(await f.t.mutation(internal.partnerships.drafts.approve, { creatorId: f.a, sourceMessageId: m.messageId })).toMatchObject({ handled: true });
+    expect(Draft.parse((await f.t.query(internal.partnerships.drafts.get, { creatorId: f.a, draftId: d.id })).row.data).status).toBe("approved");
+    // With no live review, "send" is just a word.
+    const later = await f.t.mutation(internal.core.messages.recordInbound, { creatorId: f.b, surface: "web", body: "send" });
+    expect(await f.t.mutation(internal.partnerships.drafts.approve, { creatorId: f.b, sourceMessageId: later.messageId })).toEqual({ handled: false });
+  });
+
+  it("the link: one creator, once, 24 hours; Google's answer stores a send-only mailbox and texts them", async () => {
+    const f = await fixture();
+    vi.stubEnv("ENCRYPTION_KEY", btoa("k".repeat(32))); _resetEncryptionKeyCache();
+    await f.t.mutation(internal.partnerships.mailbox.forget, { creatorId: f.a });
+    const url = await f.t.withIdentity({ subject: "u_partner-a" }).mutation(api.partnerships.mailbox.connect, {});
+    const token = url.split("/g/")[1];
+    expect(await f.t.query(api.partnerships.mailbox.linkTarget, { token: "nope" })).toEqual({ ok: false, reason: "unknown" });
+    const fetcher = vi.fn(async (u: string) => {
+      if (u.includes("oauth2.googleapis.com/token")) return new Response(JSON.stringify({ access_token: "acc", refresh_token: "ref", expires_in: 3600, scope: "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/gmail.send" }));
+      if (u.includes("openidconnect.googleapis.com/v1/userinfo")) return new Response(JSON.stringify({ email: "Adina@Gmail.com", email_verified: true }));
+      throw new Error(`Unexpected external request: ${u}`);
+    });
+    vi.stubGlobal("fetch", fetcher);
+    expect(await f.t.action(api.partnerships.mailbox.finishLink, { state: token, code: "c" })).toEqual({ email: "adina@gmail.com" });
+    const box = await f.t.query(internal.partnerships.mailbox.get, { creatorId: f.a });
+    expect(box).toMatchObject({ email: "adina@gmail.com", canRead: false });
+    expect(await f.t.query(api.partnerships.mailbox.linkTarget, { token })).toEqual({ ok: false, reason: "used" });
+    await expect(f.t.action(api.partnerships.mailbox.finishLink, { state: token, code: "c" }), "never twice").rejects.toThrow();
+    const said = (await f.t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out" && m.creatorId === f.a).map((m) => m.body).join("\n");
+    expect(said).toMatch(/connected: adina@gmail\.com/i);
+    // A reply check never reads a send-only mailbox.
+    expect(await f.t.action(internal.partnerships.delivery.sync, { creatorId: f.a, opportunityId: f.opportunityId })).toMatchObject({ added: 0 });
+  });
+
+  it("in chat: who it's connected as, or a fresh one-time link", async () => {
+    const f = await fixture();
+    expect(await f.t.mutation(internal.partnerships.mailbox.chatLink, { creatorId: f.a })).toMatch(/already connected: creator@example\.com/);
+    await f.t.mutation(internal.partnerships.mailbox.forget, { creatorId: f.a });
+    expect(await f.t.mutation(internal.partnerships.mailbox.chatLink, { creatorId: f.a })).toMatch(/https:\/\/staging\.hey-maya\.ai\/g\/[a-f0-9]{36}/);
+  });
+
+  it("refuses a Google answer without permission to send, and revokes it", async () => {
+    const f = await fixture();
+    vi.stubEnv("ENCRYPTION_KEY", btoa("k".repeat(32))); _resetEncryptionKeyCache();
+    const url = await f.t.withIdentity({ subject: "u_partner-a" }).mutation(api.partnerships.mailbox.connect, {});
+    const fetcher = vi.fn(async (u: string) => {
+      if (u.includes("oauth2.googleapis.com/token")) return new Response(JSON.stringify({ access_token: "acc", refresh_token: "ref", scope: "openid email" }));
+      if (u.includes("revoke")) return new Response("{}");
+      throw new Error(`Unexpected external request: ${u}`);
+    });
+    vi.stubGlobal("fetch", fetcher);
+    await expect(f.t.action(api.partnerships.mailbox.finishLink, { state: url.split("/g/")[1], code: "c" })).rejects.toThrow(/send email/);
+    expect(fetcher.mock.calls.some(([u]) => String(u).includes("revoke"))).toBe(true);
   });
 });
