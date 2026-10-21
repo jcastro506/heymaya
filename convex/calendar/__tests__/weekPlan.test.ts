@@ -54,7 +54,7 @@ describe("the Sunday plan", () => {
     expect(out[0].kind).toBe("plan");
     expect(out[0].awaitingAnswer).toBe(true);
     expect(out[0].buttons?.map((b) => b.id.split(":").pop())).toEqual(["book", "skip"]);
-    expect(out[0].body).toMatch(/post times are when your people are usually on/);
+    expect(out[0].body).toMatch(/post times are when your people are on/i);
     // Not twice for the same week.
     const again = await t.action(internal.calendar.weekPlan.draft, { creatorId, now: SUNDAY_6PM + 60_000 });
     expect(again.sent).toBe(false);

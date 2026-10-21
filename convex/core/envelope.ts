@@ -23,8 +23,28 @@ export function unwrapModelEnvelope(body: string): { text: string; unwrapped: bo
   throw new Error("refusing to send a JSON envelope with no message field to a person");
 }
 
-/** At most this many texts from one message row. */
-export const MAX_PARTS = 4;
+/** At most this many texts from one message row. Several short texts in a row are fine; a wall isn't (operator, 2026-10-21). */
+export const MAX_PARTS = 5;
+
+/** No single text longer than this: a longer one is cut at its sentences into more texts. */
+export const BUBBLE_CHARS = 300;
+
+/**
+ * Pure: one bubble that's too long, cut at sentence ends (or line breaks, for a list) into texts of at most
+ * about BUBBLE_CHARS. Never mid-sentence: a sentence longer than that stays whole. Links stay on their line.
+ */
+export function shortBubbles(part: string): string[] {
+  if (part.length <= BUBBLE_CHARS) return [part];
+  const pieces = /\n/.test(part) ? part.split(/\n+/) : part.split(/(?<=[.!?])\s+(?=[A-Z0-9"“'(])/);
+  const out: string[] = [];
+  for (const p of pieces.map((x) => x.trim()).filter(Boolean)) {
+    const last = out[out.length - 1];
+    // A fragment ("ok.") always travels with its neighbour rather than becoming a bubble of its own.
+    if (last !== undefined && (last.length + p.length + 1 <= BUBBLE_CHARS || p.length < 40)) out[out.length - 1] = `${last}${/\n/.test(part) ? "\n" : " "}${p}`;
+    else out.push(p);
+  }
+  return out;
+}
 
 /** A text this long with no `---` reads as a wall; under it, one text is fine. */
 export const WALL_CHARS = 320;
@@ -52,7 +72,9 @@ export function paragraphs(body: string): string[] {
 export function splitParts(body: string): string[] {
   let parts = body.split(/\n[ \t]*---[ \t]*\n/).map((p) => p.trim()).filter(Boolean);
   if (parts.length <= 1) parts = paragraphs(body.trim());
-  if (parts.length <= 1) return [body.trim()];
+  if (parts.length === 0) return [body.trim()];
+  parts = parts.flatMap(shortBubbles);
   if (parts.length <= MAX_PARTS) return parts;
-  return [...parts.slice(0, MAX_PARTS - 1), parts.slice(MAX_PARTS - 1).join("\n\n")];
+  // Over the count, the tail shares the last text, a line apart: rare, since every skill writes short.
+  return [...parts.slice(0, MAX_PARTS - 1), parts.slice(MAX_PARTS - 1).join("\n")];
 }

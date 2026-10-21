@@ -70,5 +70,12 @@ describe("several short texts from one row", () => {
     const many = Array.from({ length: 7 }, (_, i) => `t${i}`).join("\n---\n");
     expect(splitParts(many).length).toBe(MAX_PARTS);
     expect(splitParts(many)[MAX_PARTS - 1]).toContain("t6");
+    // No massive blocks (operator, 2026-10-21): one long bubble becomes several, cut at sentence ends.
+    const long = Array.from({ length: 8 }, (_, i) => `Sentence number ${i} is here and it carries a bit of weight to it.`).join(" ");
+    const cut = splitParts(long);
+    expect(cut.length).toBeGreaterThan(1);
+    expect(cut.every((p) => p.length <= 300)).toBe(true);
+    expect(cut.join(" ")).toBe(long);
+    expect(cut.every((p) => /\.$/.test(p)), "never mid-sentence").toBe(true);
   });
 });

@@ -23,7 +23,8 @@ const COMMANDS: Array<{ command: CommandName; re: RegExp }> = [
   { command: "resume", re: /^\s*(resume|unpause|i'?m back|start again|come back|unmute)\s*[.!]*\s*$/i },
   { command: "forget", re: /^\s*(forget (that|it|this)|never mind that|scratch that)\s*[.!]*\s*$/i },
   { command: "person", re: /\b(talk to a (real )?(person|human)|real person|human please|is this a bot)\b/i },
-  { command: "delete", re: /^\s*(delete my account|delete everything|cancel my account)\s*[.!]*\s*$/i },
+  // Live 2026-10-21: "i want to delete my account" missed the exact phrase and the classifier read it as distress (a 988 reply).
+  { command: "delete", re: /^\s*(i\s+(want to|wanna|would like to|'?d like to|need to)\s+|i'?d like to\s+|can you\s+|how do i\s+|please\s+)?(delete|close|cancel)\s+(my\s+)?(maya\s+)?(account|everything)\s*(please)?\s*[.!?]*\s*$/i },
 ];
 
 const TIKTOK_RE = /https?:\/\/(?:www\.|m\.|vm\.|vt\.)?tiktok\.com\/(?:@([\w.-]+)\/video\/(\d+)|t\/[\w-]+|[\w-]+)\/?/i;
