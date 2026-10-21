@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { action, internalQuery, query, type ActionCtx } from "../_generated/server";
+import { action, internalQuery, query, type ActionCtx, type MutationCtx } from "../_generated/server";
 import { internalMutation, mutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -11,39 +11,117 @@ import { providerBase } from "./providerConfig";
 import { email, Draft, Opportunity } from "./contracts";
 
 type Tokens = { access: string; refresh: string; expiresAt: number };
-const SCOPES = ["https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly"];
+/**
+ * Connecting Gmail by a link in a text (2026-10-21). On the deals plan, when she has a pitch ready and their Gmail
+ * isn't connected, her text carries a one-time link: tap, pick the Google account, done. No website sign-in (the
+ * link IS the credential: one use, 24 hours, one creator), so it works from Messages on a phone.
+ *
+ * Send only, plus their address: `gmail.send` is a sensitive scope (Google review, no security audit), where
+ * reading mail is restricted (a paid audit). Replies are theirs to tell her or forward until reading is added.
+ */
+export const SCOPES = ["openid", "email", "https://www.googleapis.com/auth/gmail.send"];
+export const READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+export const LINK_TTL_MS = 24 * 3_600_000;
+
+function appBase(): string {
+  return (process.env.APP_URL ?? "https://hey-maya.ai").replace(/\/+$/, "");
+}
+
+/** The redirect Google sends them back to: the website's public /g/callback on this deployment's site. */
+export function gmailRedirectUri(env: Record<string, string | undefined> = process.env): string {
+  return env.GMAIL_REDIRECT_URI || `${(env.APP_URL || "https://hey-maya.ai").replace(/\/+$/, "")}/g/callback`;
+}
+
+/** Pure: Google's consent page for one link token. */
+export function consentUrl(token: string, env: Record<string, string | undefined> = process.env): string {
+  const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+  url.search = new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID ?? "", redirect_uri: gmailRedirectUri(env), response_type: "code", scope: SCOPES.join(" "), state: token, access_type: "offline", prompt: "consent", include_granted_scopes: "false" }).toString();
+  return url.toString();
+}
+
+/** One link, one creator, 24 hours: what she puts in a text and what the app's button opens. */
+export async function mintConnectLink(ctx: MutationCtx, creatorId: Id<"creators">, now = Date.now()): Promise<string> {
+  const token = Array.from(crypto.getRandomValues(new Uint8Array(18)), (b) => b.toString(16).padStart(2, "0")).join("");
+  await ctx.db.insert("oauthStates", { creatorId, provider: "gmail", token, createdAt: now, expiresAt: now + LINK_TTL_MS });
+  return `${appBase()}/g/${token}`;
+}
+
+/** The app's "Connect Gmail": the same link, for the signed-in creator. */
 export const connect = mutation({ args: {}, handler: async (ctx): Promise<string> => {
   const c = await creatorForIdentity(ctx);
   if (!c) throw new Error("Sign in first");
   await active(ctx, c._id);
-  if (!process.env.GMAIL_REDIRECT_URI || !process.env.GOOGLE_CLIENT_ID) throw new Error("Email connection is not configured");
-  const token = crypto.randomUUID();
-  await ctx.db.insert("oauthStates", { creatorId: c._id, provider: "gmail", token, createdAt: Date.now(), expiresAt: Date.now() + 900000 });
-  const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-  url.search = new URLSearchParams({ client_id: process.env.GOOGLE_CLIENT_ID, redirect_uri: process.env.GMAIL_REDIRECT_URI, response_type: "code", scope: SCOPES.join(" "), state: token, access_type: "offline", prompt: "consent" }).toString();
-  return url.toString();
+  if (!process.env.GOOGLE_CLIENT_ID) throw new Error("Email connection is not configured");
+  return await mintConnectLink(ctx, c._id);
 } });
-export const claim = internalMutation({ args: { state: v.string(), subject: v.string() }, handler: async (ctx, a) => {
-  const row = await ctx.db.query("oauthStates").withIndex("by_token", q => q.eq("token", a.state)).unique();
+
+/** In chat ("connect my gmail"): who it's connected as, or a fresh one-time link. */
+export const chatLink = internalMutation({ args: { creatorId: v.id("creators") }, handler: async (ctx, a): Promise<string> => {
+  await active(ctx, a.creatorId);
+  const row = await ctx.db.query("partnershipMailboxes").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).unique();
+  if (row) return `already connected: ${row.email}. pitches send from there after they approve each one.`;
+  if (!process.env.GOOGLE_CLIENT_ID) return "connecting Gmail isn't available yet; their pitches still go as a link that opens in their Gmail.";
+  return `a one-time link for them to connect Gmail (works once, for 24 hours; send-only, you never read their mail, so replies are theirs to tell you or forward): ${await mintConnectLink(ctx, a.creatorId)}\nput the link on its own line, exactly as written.`;
+} });
+
+/** The website's /g/<token>: where to send them, or why not. Reads only; the token is spent at the callback. */
+export const linkTarget = query({ args: { token: v.string() }, handler: async (ctx, a): Promise<{ ok: true; url: string } | { ok: false; reason: "expired" | "used" | "unknown" | "unavailable" }> => {
+  const row = await ctx.db.query("oauthStates").withIndex("by_token", (q) => q.eq("token", a.token)).unique();
+  if (!row || row.provider !== "gmail") return { ok: false, reason: "unknown" };
+  if (row.claimedAt) return { ok: false, reason: "used" };
+  if (row.expiresAt <= Date.now()) return { ok: false, reason: "expired" };
+  if (!process.env.GOOGLE_CLIENT_ID) return { ok: false, reason: "unavailable" };
+  return { ok: true, url: consentUrl(a.token) };
+} });
+
+/** Spend a link token once: whose it is. */
+export const claimLink = internalMutation({ args: { state: v.string() }, handler: async (ctx, a): Promise<Id<"creators">> => {
+  const row = await ctx.db.query("oauthStates").withIndex("by_token", (q) => q.eq("token", a.state)).unique();
   if (!row || row.provider !== "gmail" || row.claimedAt || row.expiresAt <= Date.now()) throw new Error("Invalid email connection request");
-  const c = await active(ctx, row.creatorId);
-  if (c.clerkUserId !== a.subject) throw new Error("Email connection belongs to another session");
+  await active(ctx, row.creatorId);
   await ctx.db.patch(row._id, { claimedAt: Date.now() });
-  return c._id;
+  return row.creatorId;
 } });
-export const exchange = action({ args: { state: v.string(), code: v.string() }, handler: async (ctx, a): Promise<{ email: string }> => {
-  const auth = await ctx.auth.getUserIdentity();
-  if (!auth) throw new Error("Sign in first");
-  const creatorId = await ctx.runMutation(internal.partnerships.mailbox.claim, { state: a.state, subject: auth.subject });
-  const t = await exchangeCode({ code: a.code, redirectUri: process.env.GMAIL_REDIRECT_URI!, clientId: process.env.GOOGLE_CLIENT_ID!, clientSecret: process.env.GOOGLE_CLIENT_SECRET! });
-  if (!t.refresh_token || !SCOPES.every(s => t.scope?.split(" ").includes(s))) { await revokeToken(t.access_token).catch(() => undefined); throw new Error("Email read and send permissions are both required"); }
-  const result = await gmail(t.access_token, "profile");
-  const address = email.parse(result.emailAddress);
+
+/** Their address, from Google's own answer (gmail.send alone can't read the profile). */
+async function addressOf(accessToken: string, fetchImpl: typeof fetch = fetch): Promise<string> {
+  const r = await fetchImpl("https://openidconnect.googleapis.com/v1/userinfo", { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!r.ok) throw new Error(`Couldn't read the account's address (${r.status})`);
+  const j = (await r.json()) as { email?: string; email_verified?: boolean };
+  if (!j.email || j.email_verified === false) throw new Error("Google didn't confirm the address");
+  return email.parse(j.email.toLowerCase());
+}
+
+/** The website's /g/callback: Google's answer for a link token. Public by design; the token is the credential. */
+export const finishLink = action({ args: { state: v.string(), code: v.string() }, handler: async (ctx, a): Promise<{ email: string }> => {
+  const creatorId = await ctx.runMutation(internal.partnerships.mailbox.claimLink, { state: a.state });
+  const t = await exchangeCode({ code: a.code, redirectUri: gmailRedirectUri(), clientId: process.env.GOOGLE_CLIENT_ID!, clientSecret: process.env.GOOGLE_CLIENT_SECRET! });
+  const granted = t.scope?.split(" ") ?? [];
+  if (!t.refresh_token || !granted.includes("https://www.googleapis.com/auth/gmail.send")) {
+    await revokeToken(t.access_token).catch(() => undefined);
+    throw new Error("Permission to send email is required");
+  }
+  const address = await addressOf(t.access_token);
   const tokenRef = await encrypt(JSON.stringify({ access: t.access_token, refresh: t.refresh_token, expiresAt: Date.now() + (t.expires_in ?? 3600) * 1000 }));
-  await ctx.runMutation(internal.partnerships.mailbox.store, { creatorId, email: address, tokenRef });
+  await ctx.runMutation(internal.partnerships.mailbox.store, { creatorId, email: address, tokenRef, canRead: granted.includes(READ_SCOPE) });
+  await ctx.runMutation(internal.partnerships.mailbox.connectedText, { creatorId, email: address });
   return { email: address };
 } });
-export const store = internalMutation({ args: { creatorId: v.id("creators"), email: v.string(), tokenRef: v.string() }, handler: async (ctx, a) => {
+
+/** Their text back, the moment it's connected: which address, and what happens to a pitch already waiting. */
+export const connectedText = internalMutation({ args: { creatorId: v.id("creators"), email: v.string() }, handler: async (ctx, a): Promise<null> => {
+  const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+  if (!c) return null;
+  // A pitch drafted before they connected (handed off as a link, not yet sent): offer to send it from here.
+  const drafts = (await ctx.db.query("partnershipDrafts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(10)) as Doc<"partnershipDrafts">[];
+  const pending = drafts.find((r) => { const d = Draft.parse(r.data); return d.channel === "email" && d.status === "draft" && !d.sender && Date.now() - r.updatedAt < 7 * 86_400_000; });
+  const opp = pending ? ((await ctx.db.get(pending.opportunityId)) as Doc<"partnershipOpportunities"> | null) : null;
+  const brand = opp ? Opportunity.parse(opp.data).brand : null;
+  const body = `connected: ${a.email}. pitches go straight from there now, and i'll always show you the email before anything sends.${brand ? `\n---\nwant me to send the ${brand} pitch from it? say "send the ${brand} pitch" and i'll show it to you first.` : ""}`;
+  await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: c.channel.paired ? "telegram" : "web", body, dedupeKey: `gmail-connected:${a.email}:${Math.floor(Date.now() / 60_000)}`, proactive: false, kind: "status" });
+  return null;
+} });
+export const store = internalMutation({ args: { creatorId: v.id("creators"), email: v.string(), tokenRef: v.string(), canRead: v.optional(v.boolean()) }, handler: async (ctx, a) => {
   await active(ctx, a.creatorId);
   const old = await ctx.db.query("partnershipMailboxes").withIndex("by_creator", q => q.eq("creatorId", a.creatorId)).unique();
   const value = { ...a, email: email.parse(a.email), generation: crypto.randomUUID(), updatedAt: Date.now() };

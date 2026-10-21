@@ -810,7 +810,7 @@ const STEPS: Array<{ name: string; proves: string; run: StepFn }> = [
       const d = draftsOf(await snap(w), "northline").filter((x) => x.channel === "email" && x.status === "draft").at(-1);
       if (d) { w.memo.northlineCode = d.approvalCode; w.memo.northlineDraft = d.id; }
       const invented = d ? inventedNumbers(d.body, await allowedNumbers(w)) : [];
-      const review = new RegExp(`SEND ${d?.approvalCode ?? "x"}`).test(said) && said.includes(byKey("northline").email!);
+      const review = /reply SEND/i.test(said) && said.includes(byKey("northline").email!); // the plain-SEND review (2026-10-21)
       // K1: the per-brand kit link, leading with Sam's own posts, is in the pitch, and the pitch keeps every code promise.
       const o = oppOf(await snap(w), "northline");
       const variant = (await kitRowsOf(w)).variants.find((x) => x.opportunityId === o?.id);

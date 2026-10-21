@@ -9,6 +9,7 @@ import { CLOSED, Draft, MAX_FOLLOW_UPS, email, line } from "./contracts";
 import { APPLICATION_CHECK_IN_DAYS, Opportunity as OpportunitySchema } from "./contracts";
 import { checkPlainLanguage } from "../core/plainLanguage";
 import { emailSendEnabled } from "./providerConfig";
+import { mintConnectLink } from "./mailbox";
 import { readKitV2 } from "./kitData";
 import { kitUrl } from "./kitPage";
 import { nextSendAt, pitchProblems, placeholders, sendWhen } from "./pitch";
@@ -80,19 +81,35 @@ export const prepare = internalMutation({
     // §8.3: an application handed off gets one "did you get to submit it?" two days later.
     if (o.route === "application" && !o.appliedAt) await ctx.db.patch(row._id, { data: OpportunitySchema.parse({ ...o, applicationCheckInAt: now + APPLICATION_CHECK_IN_DAYS.beforeSubmit * 86_400_000 }), updatedAt: now });
     await event(ctx, a.creatorId, row._id, `draft:${id}`, "draft_created", `Revision ${data.revision}; ${data.channel}; ${recipient}`);
-    const command = `SEND ${code}`;
     // One tap to send (2026-10-12): without their Gmail connected, the pitch goes as a link to a page that opens it
     // in Gmail or Mail with everything filled in. With Gmail connected, the exact review and SEND code, as before.
     const page = sendPageUrl(shareCode);
+    // Not connected yet (2026-10-21): the pitch works now as a link, and once a week at most she offers to send from
+    // their Gmail next time, with a one-time connect link. Never in the way of this pitch.
+    const offerGmail = o.route === "email" && !mailbox && emailSendEnabled(c) && Boolean(process.env.GOOGLE_CLIENT_ID) && (!c.gmailOfferedAt || now - c.gmailOfferedAt > 7 * 86_400_000);
+    const offer = offerGmail ? `\n---\nwant me to send these from your Gmail next time? connect it once here, it takes ten seconds:\n${await mintConnectLink(ctx, c._id, now)}` : "";
+    if (offerGmail) await ctx.db.patch(c._id, { gmailOfferedAt: now });
     const body = o.route === "email" && mailbox
-      ? `here’s the email to review.\n\nFrom: ${mailbox.email}\nTo: ${recipient}\nSubject: ${data.subject}\n\n${data.body}\n\nTo send exactly this email, reply ${command}. This expires in 24 hours. Changes need a new review.`
-      : sendPageText(o.route, o.brand, recipient, page, data.body);
+      ? connectedReview({ brand: o.brand, from: mailbox.email, to: recipient, subject: data.subject ?? "", body: data.body, firstTouch: !o.threadId })
+      : sendPageText(o.route, o.brand, recipient, page, data.body) + offer;
     if (!checkPlainLanguage(body).ok) throw new Error("The review would be altered by the chat formatter. Rephrase the draft before requesting approval.");
     // Exact approval display is authored by code, never rephrased by the model.
     await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, body, surface: c.channel.paired ? "telegram" : "web", dedupeKey: `partner-review:${id}`, proactive: false, kind: "reply" });
     return { draftId: id, revision: data.revision, status: "draft", reviewQueued: true, instruction: "The exact review is queued separately. Do not repeat it or say it was sent to the brand." };
   },
 });
+
+/**
+ * Pure (2026-10-21): the review when their Gmail is connected. The exact email, in its own texts, then one
+ * plain ask: "send" sends exactly this (the code still works). Short bubbles around it, never a wall of rules.
+ */
+export function connectedReview(r: { brand: string; from: string; to: string; subject: string; body: string; firstTouch: boolean }): string {
+  return [
+    `here’s your pitch to ${r.brand}, from ${r.from} to ${r.to}:`,
+    `subject: ${r.subject}\n\n${r.body}`,
+    `reply SEND and it goes out exactly like this${r.firstTouch ? ", on the next weekday morning when inboxes get read (SEND NOW if it can’t wait)" : ""}. or tell me what to change.`,
+  ].join("\n---\n");
+}
 
 /** The send page for a draft (web /m/<code>). */
 export function sendPageUrl(code: string, env: Record<string, string | undefined> = process.env): string {
@@ -119,12 +136,16 @@ export function sendPageText(route: "email" | "dm" | "application" | "unknown", 
 export const approve = internalMutation({ args: { creatorId: v.id("creators"), sourceMessageId: v.id("messages") }, handler: async (ctx, a): Promise<{ handled: boolean; text?: string; draftId?: Id<"partnershipDrafts"> }> => {
   const source = await ctx.db.get(a.sourceMessageId) as Doc<"messages"> | null;
   if (!source || source.creatorId !== a.creatorId || source.direction !== "in" || source.memoryExcludedAt || source.fileId || source.fileMime || (source.kind && source.kind !== "inbound")) return { handled: false };
-  const match = /^SEND ([a-f0-9]{24})( NOW)?$/i.exec(source.body.trim());
+  // "SEND <code>" names one review exactly; a plain "send" / "send it" (2026-10-21) means the latest review, while it's live.
+  const said = source.body.trim();
+  const plain = /^(?:ok(?:ay)?,?\s+|yes,?\s+|yeah,?\s+)?send(?: it)?( now)?[.!]*$/i.exec(said);
+  const match = /^SEND ([a-f0-9]{24})( NOW)?$/i.exec(said) ?? (plain ? ["", "", plain[1] ? " NOW" : undefined] as unknown as RegExpExecArray : null);
   if (!match) return { handled: false };
   const creator = await active(ctx, a.creatorId);
   if ((await profile(ctx, a.creatorId)).data.paused) return { handled: true, text: "partnerships are paused. nothing was sent." };
   const rows = await ctx.db.query("partnershipDrafts").withIndex("by_creator", q => q.eq("creatorId", a.creatorId)).order("desc").take(100);
-  const row = rows.find(d => Draft.parse(d.data).approvalCode === match[1].toLowerCase());
+  const row = match[1] ? rows.find(d => Draft.parse(d.data).approvalCode === match[1].toLowerCase()) : rows.find(d => { const x = Draft.parse(d.data); return x.channel === "email" && x.status === "draft" && x.approvalExpiresAt > Date.now(); });
+  if (!row && !match[1]) return { handled: false }; // "send" with no live review is just a word: the conversation answers
   if (!row) return { handled: true, text: "i couldn’t find that review. ask me for a fresh draft." };
   const d = Draft.parse(row.data);
   const review = await ctx.db.query("messages").withIndex("by_creator_and_dedupe", q => q.eq("creatorId", a.creatorId).eq("dedupeKey", `partner-review:${row._id}`)).unique();
