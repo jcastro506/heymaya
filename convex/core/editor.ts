@@ -130,7 +130,7 @@ export function ideasWaitingCandidate(unseen: Array<Pick<Doc<"ideas">, "_id" | "
   return {
     id: `ideas_waiting:${fav._id}`, kind: "ideas_waiting", sourceKey: `ideas_waiting:${fav._id}:${unseen.length}`,
     summary: clip(`${unseen.length} new ideas are waiting in their Maya app that they haven't looked at yet; your favorite of them: "${hook}" (why it's them: ${fav.fitWhy})`, 240),
-    ...(fav.evidenceLinks[0] ? { link: fav.evidenceLinks[0] } : {}),
+    ...(fav.evidenceLinks[0] ? { link: fav.evidenceLinks[0].split(/[?#]/)[0] } : {}), // share links carry tracking
     base: 2.2, createdAt: now, expiresAt: now + 86_400_000, status: "open" as const, onSent: { unseen: unseen.map((i) => i._id) },
   };
 }
@@ -283,7 +283,9 @@ export const pick = internalAction({
     let body = draft?.body ?? out.text;
     if (!body) return { sent: false, reason: "picked, but nothing was written" };
     if (!draft) {
-      if (chosen.link && !body.includes(chosen.link)) body = `${body}\n\n${chosen.link}`;
+      // A TikTok share link's tracking (?_r=1&u_code=…) never reaches them, whatever the candidate carried.
+      body = body.replace(/(https:\/\/(?:www\.)?tiktok\.com\/@[^\s?#]+\/(?:video|photo)\/\d+)\?[^\s]*/g, "$1");
+      if (chosen.link && !body.includes(chosen.link.split("?")[0])) body = `${body}\n\n${chosen.link.split("?")[0]}`;
       // Her own words about someone else's words: checked, and a failed check is a quiet day, not a guess.
       const verdict = tooLong(body) ? { pass: false, problems: ["too_long"], note: "over the cap" } : await critique(ctx, { creatorId: a.creatorId, kind: "reply", text: body, evidence: { noticed: chosen.summary, link: chosen.link }, voice: {}, directives: g.directives.map((x) => x.verbatim) });
       if (!verdict.pass) { if (!a.preview) await ctx.runMutation(internal.core.editor.decide, { creatorId: a.creatorId, day: i.day, now }); return { sent: false, reason: `held by the critic: ${verdict.problems.join(", ")}` }; }
