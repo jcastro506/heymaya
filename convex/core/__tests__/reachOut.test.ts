@@ -30,12 +30,12 @@ describe("lanes (pure)", () => {
     for (const k of ["scout", "for_you", "milestone", "nudge", "engage", undefined, "something_new"]) expect(laneFor(k, 10 * D), String(k)).toBe("hers");
   });
 
-  it("budgets: one of hers a day at normal, none in the first three days, two about their day, three in all", () => {
+  it("budgets: one of hers a day at normal from day one, two about their day, three in all", () => {
     const base = { timezone: "UTC", pairedAt: PAIRED_LONG_AGO };
     expect(reachOutHold({ ...base, kind: "scout", now: T0, sent: [] })).toBeNull();
     expect(reachOutHold({ ...base, kind: "scout", now: T0, sent: [{ ts: T0 - H, kind: "for_you" }] })).toMatch(/something of hers today/);
     expect(reachOutHold({ ...base, kind: "scout", now: T0, sent: [{ ts: T0 - 20 * H, kind: "scout" }] }), "yesterday's doesn't count today").toBeNull();
-    expect(reachOutHold({ ...base, kind: "scout", now: T0, pairedAt: T0 - 2 * D, sent: [] })).toMatch(/first days/);
+    expect(reachOutHold({ ...base, kind: "scout", now: T0, pairedAt: T0 - 2 * D, sent: [] }), "no quiet start (2026-10-21)").toBeNull();
     expect(reachOutHold({ ...base, kind: "shoot_today", now: T0, pairedAt: T0 - 2 * D, sent: [] }), "their own shoot goes in the first days").toBeNull();
     const two = [{ ts: T0 - H, kind: "morning" }, { ts: T0 - 2 * H, kind: "checkin" }];
     expect(reachOutHold({ ...base, kind: "missed", now: T0, sent: two })).toMatch(/about their day/);
@@ -86,11 +86,11 @@ describe("held inside send", () => {
     expect(await send(t, b, "scout", "s1")).toMatchObject({ sent: true });
   });
 
-  it("the first three days are about their first post: no finds of hers, but their shoot and their plan go", async () => {
+  it("from day one (2026-10-21, no quiet start): one find of hers, and their shoot and their plan go", async () => {
     const t = convexTest(schema, modules);
     const fresh = await seed(t, "new", { channel: { paired: true, pairedAt: T0 - D } });
-    expect(await send(t, fresh, "scout", "s1")).toMatchObject({ sent: false, held: expect.stringMatching(/first days/) });
-    expect(await send(t, fresh, "engage", "e1")).toMatchObject({ sent: false });
+    expect(await send(t, fresh, "scout", "s1")).toMatchObject({ sent: true });
+    expect(await send(t, fresh, "engage", "e1"), "still one of hers a day").toMatchObject({ sent: false });
     expect(await send(t, fresh, "shoot_today", "m1")).toMatchObject({ sent: true });
     expect(await send(t, fresh, "plan", "p1")).toMatchObject({ sent: true });
   });

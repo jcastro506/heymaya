@@ -6,7 +6,7 @@
  *   asked   what they asked for (routines, booked-session reminders, the Sunday plan, the review): no budget
  *   setup   her hello, first read and onboarding notices, in the first days: no budget
  *   theirs  their own stuff today (a shoot, a missed one, how'd it go, their post popping, a brand reply): 2 a day
- *   hers    what she thought of (an idea, a callback, a milestone, a nudge): their pace, none in the first 3 days
+ *   hers    what she thought of (an idea, a callback, a milestone, a nudge): their pace, from day one
  *
  * Quiet hours, their pause and the phone rail still apply to every lane. Pure; one definition.
  */
@@ -20,15 +20,13 @@ export const REACH_OUT = {
   theirsPerDay: 2,
   /** What she starts outside what they asked for, a day, all lanes. */
   startedPerDay: 3,
-  /** The first days are about their first post: nothing she merely thought of. */
-  quietStartMs: 3 * 86_400_000,
   /** Onboarding notices (hello, the first glance, the favorites offer) count as setup this long after pairing. */
   setupMs: 3 * 86_400_000,
 } as const;
 
 const ASKED = new Set(["routine", "reminder", "plan", "review"]);
 const SETUP = new Set(["hello", "first_read", "cover", "status"]);
-const THEIRS = new Set(["morning", "shoot_today", "missed", "checkin", "saw_it", "event_today", "partnership", "calendar"]);
+const THEIRS = new Set(["morning", "shoot_today", "missed", "checkin", "saw_it", "post_read", "event_today", "partnership", "calendar"]);
 
 /** Pure: the lane a text is in. `status` and `cover` are setup only in the first days; after that they are hers. */
 export function laneFor(kind: string | undefined, sinceSetupMs: number | null): Lane {
@@ -59,7 +57,7 @@ export function reachOutHold(input: { kind: string | undefined; now: number; tim
     const n = todays.filter((m) => m.lane === "theirs").length;
     return n >= REACH_OUT.theirsPerDay ? `${n} texts about their day already` : null;
   }
-  if (pairedAt && now - pairedAt < REACH_OUT.quietStartMs) return "their first days are about their first post";
+  // No quiet start (2026-10-21, operator): the first days are when someone's most curious; three silent days lost a tester.
   const hers = counted.filter((m) => m.lane === "hers");
   const pace = input.pace ?? "normal";
   if (pace === "less") return hers.some((m) => now - m.ts < 3 * 86_400_000) ? "they asked for fewer texts (one every few days)" : null;

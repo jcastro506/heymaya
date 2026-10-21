@@ -91,7 +91,7 @@ export const apply = internalMutation({
       return { body: `forgotten: "${clip(last.text, 80)}".` };
     }
     // delete: the nine-step procedure (§16.5) runs from Settings after a confirm; never from a text alone.
-    return { body: `deleting everything is a one-tap in Settings, so it can't happen by accident from a text. ${process.env.APP_URL ?? ""}/app/settings` };
+    return { body: "deleting everything is one tap in your Maya app, under You, so it can't happen by accident from a text." };
   },
 });
 

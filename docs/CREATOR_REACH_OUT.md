@@ -19,7 +19,7 @@ Everything else goes to the app quietly. New ideas are never announced one by on
 | asked | routine, reminder, plan, review | none (still quiet hours and pause) |
 | setup | hello, first read, onboarding notices in the first 24 h | none |
 | theirs | morning, shoot_today, missed, checkin, saw_it, event_today, partnership | 2 a day |
-| hers | scout, idea, for_you, milestone, streak, nudge, quiet, breakout, engage, status | their pace: less = 1 in 3 days, normal = 1 a day, more = 2 a day; none in the first 3 days |
+| hers | scout, idea, for_you, ideas_waiting, milestone, streak, nudge, quiet, breakout, engage, status | their pace: less = 1 in 3 days, normal = 1 a day, more = 2 a day; from day one (no quiet start since 2026-10-21) |
 
 A day never has more than 3 texts she started, outside what they asked for.
 
@@ -50,5 +50,10 @@ Her own finds no longer race each other. The paths that find things write **cand
 - **Sunday is one text:** the review opens next week's plan (alone only when the week can't be planned).
 
 - **Trends (2026-10-13, `scout/trends.ts`):** a trend she judged right for them becomes a candidate only while it's early (first seen under 4 days ago, not slowing), scored above an idea when people in their own lane are on it. It competes for the same one text; everything else waits in the app's Trending tab. Asked in Messages ("any trends?"), she answers from `trends_now` and never names a trend a tool didn't give her.
+
+- **2026-10-21, after a tester's first week** (3 silent days, 0 of 3 texts answered, 6 ideas never opened, a deal that expired unsent):
+  - **No quiet start.** Her finds go from day one, still one a day at normal pace.
+  - **Ideas waiting:** 3+ new ideas they haven't seen and nothing opened in 3 days becomes one candidate that names her favorite. Those ideas then count as offered, so it never repeats.
+  - **Post read:** 18–48 h after they post (any post that isn't a win) she gives an honest read in the `theirs` lane: what worked, and the one thing to try if it's below their usual.
 
 Simulated month (`core/__tests__/editor.test.ts`): someone who answers comments gets comments and quiet days; someone who answers ideas learns to get ideas; someone who answers nothing gets about one a week.

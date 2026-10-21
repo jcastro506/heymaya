@@ -53,9 +53,8 @@ export const setNiche = internalMutation({
     // Refused with no body: the turn falls through to a normal reply, and the remember pass keeps the rule.
     if (readsAsInstruction(a.text)) return { ok: false, body: "" };
     await ctx.db.patch(c._id, { niche: a.text.trim().slice(0, 300), updatedAt: Date.now() });
-    // Their words, whole or not at all: a quote cut mid-word reads as a glitch, and "pass" is plumbing (live 2026-09-08).
-    const words = a.text.trim().replace(/[.!?]+$/, ""); // their sentence, without a period inside the quote and another after it (live 2026-09-09)
-    return { ok: true, body: words.length <= 140 ? `noted, "${words}". that's how i'll read your lane now.` : "noted. that's how i'll read your lane now." };
+    // 2026-10-21: quoting their words back ("noted, '…'. that's how i'll read your lane now.") read as a robot.
+    return { ok: true, body: "got it, i'll work that into what i look for." };
   },
 });
 

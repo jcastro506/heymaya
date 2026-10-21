@@ -126,7 +126,8 @@ export function composeWeek(slots: Slot[], tz: string, fromHistory: boolean, lab
     // The why rides the line when it's in plain words (2026-09-07: a line with no why felt generic). One
     // carrying a stat stays in the app and on the calendar event (2026-10-02: "(hit 1.77x on the panic
     // order)" in a text read as a spreadsheet).
-    const why = s.why && !/\d/.test(s.why) ? ` (${s.why})` : "";
+    // One written about them ("combines her strongest format…", live 2026-10-13) is a note, not a text: it stays in the app.
+    const why = s.why && !/\d/.test(s.why) && !/\b(she|her|hers|he|his|they|their|the creator)\b/i.test(s.why) ? ` (${s.why})` : "";
     return `${day}: ${s.hook}${why}${s.experiment ? " (this week's experiment)" : ""}. film around ${t(s.film.start)}, post at ${t(s.post.at)}`;
   });
   const basis = fromHistory ? "those post times are when your people are usually on." : "post times are a guess until i've seen more of your posts.";

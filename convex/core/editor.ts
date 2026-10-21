@@ -12,7 +12,8 @@
  * Budgets stay in `messages.send` (core/reachOut): this decides WHAT, never whether the rails allow it.
  */
 import { v } from "convex/values";
-import { internalAction, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery, type MutationCtx, type QueryCtx } from "../_generated/server";
+import { unseenIdeas } from "./unseen";
 import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -28,7 +29,7 @@ import { critique, tooLong } from "../agent/critic";
 import { clip } from "../lib/clip";
 
 export type Noticed = NonNullable<Doc<"creators">["noticed"]>[number];
-export type CandidateKind = "idea" | "for_you" | "comment" | "deal" | "trend";
+export type CandidateKind = "idea" | "for_you" | "comment" | "deal" | "trend" | "ideas_waiting" | "post_read";
 
 export const EDITOR = {
   /** Below this nothing is worth a text today. */
@@ -51,7 +52,7 @@ export const EDITOR = {
 } as const;
 
 /** What the message row is sent as: its lane is "hers" (core/reachOut). */
-export const SEND_KIND: Record<CandidateKind, string> = { idea: "scout", for_you: "for_you", comment: "comment", deal: "deal", trend: "trend" };
+export const SEND_KIND: Record<CandidateKind, string> = { idea: "scout", for_you: "for_you", comment: "comment", deal: "deal", trend: "trend", ideas_waiting: "ideas_waiting", post_read: "post_read" };
 
 /* ------------------------------------------------------------------ pure */
 
@@ -119,6 +120,22 @@ export function commentCandidates(rows: Array<Pick<Doc<"postComments">, "comment
     }));
 }
 
+/**
+ * Pure (2026-10-21): their app is piling up, three or more new ideas they haven't seen and nothing opened in three
+ * days, so one text that says so and names her favorite. Those ideas count as offered once it goes, so it never repeats.
+ */
+export function ideasWaitingCandidate(unseen: Array<Pick<Doc<"ideas">, "_id" | "version" | "messageText" | "fit" | "fitWhy" | "evidenceLinks" | "createdAt">>, lastSeenAt: number | null, now: number): Noticed | null {
+  if (unseen.length < 3 || (lastSeenAt !== null && now - lastSeenAt < 3 * 86_400_000)) return null;
+  const fav = unseen.find((i) => i.fit === "yes") ?? unseen[0];
+  const hook = clip((fav.version as { hook?: string } | undefined)?.hook ?? fav.messageText, 90);
+  return {
+    id: `ideas_waiting:${fav._id}`, kind: "ideas_waiting", sourceKey: `ideas_waiting:${fav._id}:${unseen.length}`,
+    summary: clip(`${unseen.length} new ideas are waiting in their Maya app that they haven't looked at yet; your favorite of them: "${hook}" (why it's them: ${fav.fitWhy})`, 240),
+    ...(fav.evidenceLinks[0] ? { link: fav.evidenceLinks[0] } : {}),
+    base: 2.2, createdAt: now, expiresAt: now + 86_400_000, status: "open" as const, onSent: { unseen: unseen.map((i) => i._id) },
+  };
+}
+
 /** Pure: the editor's answer, held to what code can promise. */
 export function parsePick(raw: string, ids: string[]): { pick: string | null; why: string; text: string } {
   try {
@@ -134,26 +151,43 @@ export const EDITOR_SKILL = `editor
 When: once a day, deciding whether to text them first, and with what.
 You have a few things you noticed, best first, and what you texted them on your own this past week with whether they answered. Pick at most ONE, and only if a friend who works in the industry would actually text them this today: something about them (their post, a comment on it) beats something general; something they've answered before beats something they keep ignoring; a quiet day is a good answer when nothing is worth interrupting them for. Don't pick the same kind you sent last time unless it's clearly the best.
 A trend is only worth a text while it's early, and only when it fits them: say what it is in plain words (the dance, the format), their version in one line, roughly how long it takes to film, and the example link on its own line; ask one thing, like whether to put it on their week. Never call something trending unless it's in front of you here.
+Ideas waiting: one light line that you put a few new ideas in their Maya app, then the favorite in plain words and why it's them, the link on its own line. Never a guilt trip, never "you haven't opened the app".
+Their post from yesterday (post_read): what a friend who knows TikTok would say: the moment that worked, and if it did below their usual, say so kindly with the one thing to try next time, from what you're given here; never invent a reason. No stats-speak.
+A deal: name the brands, say why they'd pay someone like them, and offer to write the pitch.
 For a pick marked needs_text, write the text: short bubbles with a line of only --- between them, plain words, no stats-speak, the link on its own line, nothing you weren't given (a comment is their audience's words: quote at most a few words, never a name). For a drafted pick, leave text empty.
 Output ONLY JSON: {"pick": "<id>" | null, "why": "≤200 chars", "text": ""}`;
 
 /* ------------------------------------------------------------------ rows */
 
+/** Their unseen ideas as a candidate, when the app is piling up (core/unseen is the one definition of unseen). */
+async function waiting(ctx: QueryCtx, creatorId: Id<"creators">, now: number, seen: Set<string>): Promise<Noticed[]> {
+  const unseen = await unseenIdeas(ctx, creatorId, now);
+  if (unseen.length < 3) return [];
+  const recent = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", creatorId)).order("desc").take(100)) as Doc<"ideas">[];
+  const lastSeen = recent.reduce<number | null>((m, i) => (i.seenAt && (m === null || i.seenAt > m) ? i.seenAt : m), null);
+  const c = ideasWaitingCandidate(unseen, lastSeen, now);
+  return c && !seen.has(c.sourceKey) ? [c] : [];
+}
+
 /** Shared by every path that finds something: add it (once per source), keep the list short. */
+export type NewCandidate = { id: string; kind: string; sourceKey: string; summary: string; link?: string; base: number; ttlMs: number; draft?: unknown; onSent?: unknown };
+
+/** The one writer of candidates, for mutations that find something themselves (the readback). */
+export async function addNoticed(ctx: MutationCtx, creatorId: Id<"creators">, cand: NewCandidate, now: number): Promise<{ added: boolean }> {
+  const c = (await ctx.db.get(creatorId)) as Doc<"creators"> | null;
+  if (!c) return { added: false };
+  const list = (c.noticed ?? []).filter((n) => n.expiresAt > now - 7 * 86_400_000);
+  if (list.some((n) => n.sourceKey === cand.sourceKey)) return { added: false };
+  const { ttlMs, ...rest } = cand;
+  const row = { ...rest, summary: clip(rest.summary, 240), createdAt: now, expiresAt: now + ttlMs, status: "open" } as Noticed;
+  const next = [...list, row].sort((x, y) => y.createdAt - x.createdAt).slice(0, EDITOR.max);
+  await ctx.db.patch(c._id, { noticed: next });
+  return { added: true };
+}
+
 export const notice = internalMutation({
   args: { creatorId: v.id("creators"), c: v.object({ id: v.string(), kind: v.string(), sourceKey: v.string(), summary: v.string(), link: v.optional(v.string()), base: v.number(), ttlMs: v.number(), draft: v.optional(v.any()), onSent: v.optional(v.any()) }), now: v.optional(v.number()) },
-  handler: async (ctx, a): Promise<{ added: boolean }> => {
-    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
-    if (!c) return { added: false };
-    const now = a.now ?? Date.now();
-    const list = (c.noticed ?? []).filter((n) => n.expiresAt > now - 7 * 86_400_000);
-    if (list.some((n) => n.sourceKey === a.c.sourceKey)) return { added: false };
-    const { ttlMs, ...rest } = a.c;
-    const row: Noticed = { ...rest, summary: clip(rest.summary, 240), createdAt: now, expiresAt: now + ttlMs, status: "open" };
-    const next = [...list, row].sort((x, y) => y.createdAt - x.createdAt).slice(0, EDITOR.max);
-    await ctx.db.patch(c._id, { noticed: next });
-    return { added: true };
-  },
+  handler: async (ctx, a): Promise<{ added: boolean }> => await addNoticed(ctx, a.creatorId, a.c, a.now ?? Date.now()),
 });
 
 export const inputs = internalQuery({
@@ -166,7 +200,7 @@ export const inputs = internalQuery({
     const comments = (await ctx.db.query("postComments").withIndex("by_creator", (q) => q.eq("creatorId", c._id).gte("createdAt", a.now - 36 * 3_600_000)).collect()) as Doc<"postComments">[];
     const stored = c.noticed ?? [];
     const seen = new Set(stored.map((n) => n.sourceKey));
-    const cands = [...stored, ...commentCandidates(comments, a.now).filter((n) => !seen.has(n.sourceKey))];
+    const cands = [...stored, ...commentCandidates(comments, a.now).filter((n) => !seen.has(n.sourceKey)), ...(await waiting(ctx, c._id, a.now, seen))];
     const inbound = msgs.filter((m) => m.direction === "in").map((m) => m.ts);
     const hersToday = msgs.some((m) => m.direction === "out" && m.proactive === true && laneFor(m.kind, null) === "hers" && dayKeyInZone(m.ts, c.timezone) === day);
     return { c, day, history: outcomes(msgs, a.now), cands, lastInboundAt: inbound.length ? Math.max(...inbound) : null, hersToday };
@@ -284,7 +318,7 @@ export const rideAlong = internalQuery({
   args: { creatorId: v.id("creators"), now: v.number() },
   handler: async (ctx, a): Promise<{ id: string; summary: string; link: string; candidate: Noticed; day: string } | null> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
-    if (!c || !c.channel.paired || (c.channel.pairedAt && a.now - c.channel.pairedAt < 3 * 86_400_000)) return null;
+    if (!c || !c.channel.paired) return null; // from day one (2026-10-21: no quiet start)
     const day = dayKeyInZone(a.now, c.timezone);
     if (c.pickedDay === day) return null;
     const msgs = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", c._id).gte("ts", a.now - 30 * 86_400_000)).collect()) as Doc<"messages">[];
@@ -292,7 +326,7 @@ export const rideAlong = internalQuery({
     const comments = (await ctx.db.query("postComments").withIndex("by_creator", (q) => q.eq("creatorId", c._id).gte("createdAt", a.now - 36 * 3_600_000)).collect()) as Doc<"postComments">[];
     const stored = c.noticed ?? [];
     const seen = new Set(stored.map((n) => n.sourceKey));
-    const top = rank([...stored, ...commentCandidates(comments, a.now).filter((n) => !seen.has(n.sourceKey))], outcomes(msgs, a.now), a.now).find((s) => s.score >= EDITOR.bar && s.c.link);
+    const top = rank([...stored, ...commentCandidates(comments, a.now).filter((n) => !seen.has(n.sourceKey)), ...(await waiting(ctx, c._id, a.now, seen))], outcomes(msgs, a.now), a.now).find((s) => s.score >= EDITOR.bar && s.c.link);
     return top ? { id: top.c.id, summary: top.c.summary, link: top.c.link!, candidate: top.c, day } : null;
   },
 });

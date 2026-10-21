@@ -18,7 +18,7 @@ import { parseLink } from "./inbound";
 import { DIAGNOSIS_WORDS } from "../connections/numbers";
 import { PARTNERSHIP_TOOLS, runPartnershipTool } from "../partnerships/tools";
 import { KIT_TOOLS, KIT_TOOL_NAMES, runKitTool } from "../partnerships/kitTools";
-import { appObjectUrl, MISSION_CONTROL_TABS, missionControlUrl, type MissionControlTab } from "./missionControl";
+import { appObjectUrl, MISSION_CONTROL_TABS, type MissionControlTab } from "./missionControl";
 import { clip } from "../lib/clip";
 
 export const SUMMARY_CAP = 1800; // characters of tool result the model sees, per call
@@ -91,7 +91,7 @@ export const TOOLS: OpenRouterTool[] = [
   { type: "function", function: { name: "platform_fact", description: "Maya's dated notes on TikTok and Instagram rules and programs (monetization eligibility, restrictions and shadowbans, reposting and originality, account safety), each with its source and the day it was verified. Free. Use before stating any platform rule; say 'as of <month>' when you cite one, and if it's older than 60 days, say it may have changed.", parameters: { type: "object", properties: { topic: str, platform: { type: "string", enum: ["tiktok", "instagram", "both"] }, why: str }, required: ["topic", "why"] } } },
   { type: "function", function: { name: "lane_brands", description: "Brands seen paying creators in their lane in the last 30 days (paid or #ad posts from the accounts you watch for them), with how many creators and posts, plus the accounts they tag in their own posts. Free. Start here before any brand research: a brand already paying people like them is a real lead; which one fits them is your call.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
   { type: "function", function: { name: "media_kit_link", description: "Turn their public media-kit page on (returns the link to paste into a pitch or a brand's form) or off (the old link stops working at once). The page shows handles, followers, normal views, best recent posts and lane; never rates, preferences or email. Free. Only when they ask for it or agree to it; the app's Share button does the same.", parameters: { type: "object", properties: { on: { type: "boolean" }, why: str }, required: ["on", "why"] } } },
-  { type: "function", function: { name: "idea_add", description: "Save an idea you're giving them in this reply to their ideas, so it's in their app too. hook: the idea in a few plain words; why: one line on why it's them; link: the post that inspired it, ONLY if a lookup this turn returned it (never invented). Free. Call it for each idea you give when they ask for ideas.", parameters: { type: "object", properties: { hook: str, why: str, link: str }, required: ["hook", "why"] } } },
+  { type: "function", function: { name: "idea_add", description: "Save an idea you're giving them in this reply to their ideas, so it's in their app too. hook: the idea in a few plain words; why: one line on why it's them, written TO them (your walk-and-talks…, never her or their), since they read it in the app; link: the post that inspired it, ONLY if a lookup this turn returned it (never invented). Free. Call it for each idea you give when they ask for ideas.", parameters: { type: "object", properties: { hook: str, why: str, link: str }, required: ["hook", "why"] } } },
   { type: "function", function: { name: "routine_add", description: "Save something they asked you to do on a schedule (\"send me 3 ideas every morning at 9\", \"comment picks every weekday at noon\"). hour is 0-23 on their clock. Use commentPicks: true only for a list of posts to comment on. Free. Only when they asked for a repeating thing in their message; say back what you saved in plain words.", parameters: { type: "object", properties: { what: str, hour: { type: "number" }, days: { type: "string", enum: ["daily", "weekdays", "weekly"] }, weekday: { type: "number", description: "0 sunday … 6 saturday, for weekly" }, commentPicks: { type: "boolean" }, why: str }, required: ["what", "hour", "days", "why"] } } },
   { type: "function", function: { name: "routine_stop", description: "Stop one of their routines by its id (listed in your context under their routines). Free. When they say to stop, skip or drop a regular thing you do.", parameters: { type: "object", properties: { id: str, why: str }, required: ["id", "why"] } } },
   { type: "function", function: { name: "texting_pace", description: "How often you text first with your own finds: less (every few days), normal (about once a day), more (up to twice a day). Their routines and their own shoots are unaffected. Free. When they say you text too much, too little, or similar.", parameters: { type: "object", properties: { pace: { type: "string", enum: ["less", "normal", "more"] }, why: str }, required: ["pace", "why"] } } },
@@ -282,10 +282,10 @@ async function runToolInner(ctx: ActionCtx, creatorId: Id<"creators">, call: { n
         if (!owned) return `refused: that ${kind} is not one of theirs. Link a tab instead, or read the ${kind} first.`;
         return `Use this exact link: ${appObjectUrl(process.env.APP_URL, kind, id)}. It opens that ${kind} in their app. Do not alter the URL.`;
       }
+      // A whole tab has no link (the web app is retired, 2026-10-21): name where it is in their Maya app.
       const tab = MISSION_CONTROL_TABS.includes(call.args.tab as MissionControlTab) ? call.args.tab as MissionControlTab : "today";
-      const url = missionControlUrl(process.env.APP_URL, tab);
       record(true, 0);
-      return `Use this exact secure link: ${url}. It opens ${tab}. Do not alter the URL or claim the link signs them in.`;
+      return `No link for a tab. Tell them it's in their Maya app: ${({ today: "Today", ideas: "Ideas", lane: "Today", results: "Today, under their numbers", plan: "Today, under Coming up", settings: "You" } as const)[tab]}.`;
     }
     if (KIT_TOOL_NAMES.has(call.name) && call.name !== "media_kit_link") {
       const result = await runKitTool(ctx, creatorId, call.name, call.args, sourceMessageId);
