@@ -490,6 +490,8 @@ export const defer = internalMutation({
       return null;
     }
     await ctx.db.patch(args.jobId, { status: "queued", attempts: Math.max(0, job.attempts - 1), lastError: `deferred: ${args.reason}`, runAfter: now + args.delayMs, updatedAt: now });
+    // A turn waiting a few seconds for the rest of a burst (core/burst) runs when it's due, not on the next cron tick.
+    if (SERIAL_KINDS.has(job.kind) && args.delayMs < 60_000) await ctx.scheduler.runAfter(args.delayMs, internal.core.scheduler.drainJobs, { kinds: [job.kind] });
     return null;
   },
 });

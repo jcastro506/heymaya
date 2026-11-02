@@ -53,6 +53,9 @@ export default defineSchema({
     nameConfirmedAt: v.optional(v.number()),
     /** They asked her to stop texting first (STOP); cleared by resume. Never the billing status. */
     messagingPausedAt: v.optional(v.number()),
+    /** They said "hold on" mid-burst (core/burst): her undelivered texts were withdrawn and she starts nothing until they write. */
+    hushedAt: v.optional(v.number()),
+    hushMessageId: v.optional(v.id("messages")),
     /** How often she may text first about her own finds (core/reachOut). Set by them in chat ("text me less"). */
     textFirstPace: v.optional(v.union(v.literal("less"), v.literal("normal"), v.literal("more"))),
     /** What she noticed and might text them about (core/editor): one pick a day, or none. */
@@ -864,6 +867,8 @@ export default defineSchema({
     ideaId: v.optional(v.id("ideas")),
     reaction: v.optional(v.string()),
     criticSkipped: v.optional(v.boolean()),
+    /** Never delivered: they said "hold on" first (core/burst). Out of her context and never sent. */
+    withdrawnAt: v.optional(v.number()),
     produced: v.optional(produced),
     ts: v.number(),
   })

@@ -30,11 +30,11 @@ describe("lanes (pure)", () => {
     for (const k of ["scout", "for_you", "milestone", "nudge", "engage", undefined, "something_new"]) expect(laneFor(k, 10 * D), String(k)).toBe("hers");
   });
 
-  it("budgets: one of hers a day at normal from day one, two about their day, three in all", () => {
-    const base = { timezone: "UTC", pairedAt: PAIRED_LONG_AGO };
+  it("budgets while they're talking to her: one of hers a day, two about their day, three in all", () => {
+    const base = { timezone: "UTC", pairedAt: PAIRED_LONG_AGO, lastInboundAt: T0 - 30 * 60_000 };
     expect(reachOutHold({ ...base, kind: "scout", now: T0, sent: [] })).toBeNull();
     expect(reachOutHold({ ...base, kind: "scout", now: T0, sent: [{ ts: T0 - H, kind: "for_you" }] })).toMatch(/something of hers today/);
-    expect(reachOutHold({ ...base, kind: "scout", now: T0, sent: [{ ts: T0 - 20 * H, kind: "scout" }] }), "yesterday's doesn't count today").toBeNull();
+    expect(reachOutHold({ ...base, kind: "scout", now: T0, sent: [{ ts: T0 - 20 * H, kind: "scout" }] }), "yesterday's doesn't count today, and they've written since").toBeNull();
     expect(reachOutHold({ ...base, kind: "scout", now: T0, pairedAt: T0 - 2 * D, sent: [] }), "no quiet start (2026-10-21)").toBeNull();
     expect(reachOutHold({ ...base, kind: "shoot_today", now: T0, pairedAt: T0 - 2 * D, sent: [] }), "their own shoot goes in the first days").toBeNull();
     const two = [{ ts: T0 - H, kind: "morning" }, { ts: T0 - 2 * H, kind: "checkin" }];
@@ -45,7 +45,7 @@ describe("lanes (pure)", () => {
   });
 
   it("their pace: less is one every few days, more is two a day", () => {
-    const base = { timezone: "UTC", pairedAt: PAIRED_LONG_AGO, kind: "scout" };
+    const base = { timezone: "UTC", pairedAt: PAIRED_LONG_AGO, kind: "scout", lastInboundAt: T0 - 30 * 60_000 };
     expect(reachOutHold({ ...base, now: T0, pace: "less", sent: [{ ts: T0 - 2 * D, kind: "scout" }] })).toMatch(/fewer texts/);
     expect(reachOutHold({ ...base, now: T0, pace: "less", sent: [{ ts: T0 - 3 * D - H, kind: "scout" }] })).toBeNull();
     expect(reachOutHold({ ...base, now: T0, pace: "more", sent: [{ ts: T0 - H, kind: "scout" }] })).toBeNull();
@@ -56,7 +56,36 @@ describe("lanes (pure)", () => {
     const la = "America/Los_Angeles";
     const elevenPm = Date.UTC(2026, 9, 14, 6, 0); // Oct 13, 23:00 PDT
     const oneAm = Date.UTC(2026, 9, 14, 8, 0); // Oct 14, 01:00 PDT
-    expect(reachOutHold({ kind: "scout", now: oneAm, timezone: la, pairedAt: PAIRED_LONG_AGO, sent: [{ ts: elevenPm, kind: "scout" }] })).toBeNull();
+    expect(reachOutHold({ kind: "scout", now: oneAm, timezone: la, pairedAt: PAIRED_LONG_AGO, lastInboundAt: elevenPm + 30 * 60_000, sent: [{ ts: elevenPm, kind: "scout" }] })).toBeNull();
+  });
+});
+
+describe("the back-off into silence (2026-11-02): never zero", () => {
+  const base = { timezone: "UTC", pairedAt: PAIRED_LONG_AGO, kind: "scout" };
+  const lastIn = T0 - 20 * D;
+  const at = (...days: number[]) => days.map((d) => ({ ts: T0 - d * D, kind: "scout" }));
+  it("one unanswered: the next waits about a day", () => {
+    expect(reachOutHold({ ...base, now: T0, lastInboundAt: lastIn, sent: at(0.5) })).toMatch(/about a day/);
+    expect(reachOutHold({ ...base, now: T0, lastInboundAt: lastIn, sent: at(1) })).toBeNull();
+  });
+  it("two or three unanswered: one every few days", () => {
+    expect(reachOutHold({ ...base, now: T0, lastInboundAt: lastIn, sent: at(4, 2) })).toMatch(/every few days/);
+    expect(reachOutHold({ ...base, now: T0, lastInboundAt: lastIn, sent: at(7, 5, 3) })).toBeNull();
+  });
+  it("four or more: one a week, and never 'quiet until they write'", () => {
+    expect(reachOutHold({ ...base, now: T0, lastInboundAt: lastIn, sent: at(17, 13, 10, 4) })).toMatch(/one a week/);
+    expect(reachOutHold({ ...base, now: T0, lastInboundAt: lastIn, sent: at(19, 16, 13, 7) })).toBeNull();
+    expect(reachOutHold({ ...base, kind: "partnership", now: T0, lastInboundAt: lastIn, sent: at(19, 16, 13, 7) }), "a deal is her weekly text").toBeNull();
+  });
+  it("Adina's week: plan, idea, nudge unanswered, then a deal and the Sunday plan still reach her", () => {
+    const lastHers = Date.UTC(2026, 9, 18, 22, 7);
+    const sent = [{ ts: Date.UTC(2026, 9, 18, 23), kind: "plan" }, { ts: Date.UTC(2026, 9, 20, 15), kind: "scout" }, { ts: Date.UTC(2026, 9, 23, 16, 15), kind: "ideas_waiting" }];
+    expect(reachOutHold({ kind: "plan", now: Date.UTC(2026, 9, 25, 22), timezone: "America/New_York", pairedAt: Date.UTC(2026, 9, 13), sent, lastInboundAt: lastHers }), "the plan they asked for").toBeNull();
+    expect(reachOutHold({ kind: "partnership", now: Date.UTC(2026, 9, 26, 18), timezone: "America/New_York", pairedAt: Date.UTC(2026, 9, 13), sent, lastInboundAt: lastHers }), "two unanswered, three days on: a deal goes").toBeNull();
+  });
+  it("their own stuff counts like hers once they've gone quiet", () => {
+    expect(reachOutHold({ ...base, kind: "saw_it", now: T0, lastInboundAt: lastIn, sent: at(0.2) })).toMatch(/about a day/);
+    expect(reachOutHold({ ...base, kind: "saw_it", now: T0, lastInboundAt: T0 - H, sent: [{ ts: T0 - 0.5 * H, kind: "scout" }] }), "while they're talking, it rides on top").toBeNull();
   });
 });
 
@@ -71,7 +100,7 @@ describe("held inside send", () => {
     const t = convexTest(schema, modules);
     const a = await seed(t, "a");
     expect(await send(t, a, "scout", "s1")).toMatchObject({ sent: true });
-    expect(await send(t, a, "for_you", "s2", T0 + H)).toMatchObject({ sent: false, messageId: null, held: expect.stringMatching(/something of hers/) });
+    expect(await send(t, a, "for_you", "s2", T0 + H)).toMatchObject({ sent: false, messageId: null, held: expect.stringMatching(/something of hers|about a day/) });
     expect(await send(t, a, "routine", "r1", T0 + 2 * H)).toMatchObject({ sent: true });
     expect(await send(t, a, "reply", "x1", T0 + 2 * H, false)).toMatchObject({ sent: true });
     const out = (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.direction === "out");
@@ -86,13 +115,13 @@ describe("held inside send", () => {
     expect(await send(t, b, "scout", "s1")).toMatchObject({ sent: true });
   });
 
-  it("from day one (2026-10-21, no quiet start): one find of hers, and their shoot and their plan go", async () => {
+  it("day one (no quiet start): two finds of hers, a third waits; the plan goes", async () => {
     const t = convexTest(schema, modules);
-    const fresh = await seed(t, "new", { channel: { paired: true, pairedAt: T0 - D } });
+    const fresh = await seed(t, "new", { channel: { paired: true, pairedAt: T0 - 2 * H } });
     expect(await send(t, fresh, "scout", "s1")).toMatchObject({ sent: true });
-    expect(await send(t, fresh, "engage", "e1"), "still one of hers a day").toMatchObject({ sent: false });
-    expect(await send(t, fresh, "shoot_today", "m1")).toMatchObject({ sent: true });
-    expect(await send(t, fresh, "plan", "p1")).toMatchObject({ sent: true });
+    expect(await send(t, fresh, "engage", "e1", T0 + 4 * H), "the later one that day").toMatchObject({ sent: true });
+    expect(await send(t, fresh, "for_you", "f1", T0 + 6 * H), "not a third").toMatchObject({ sent: false, held: expect.stringMatching(/day one/) });
+    expect(await send(t, fresh, "plan", "p1", T0 + 6 * H)).toMatchObject({ sent: true });
   });
 
   it("adversarial: an unknown or missing kind is treated as hers and budgeted, never as asked", async () => {
@@ -201,5 +230,15 @@ describe("routines on rows", () => {
     const out = await t.action(async (ctx) => runTool(ctx as never, a, { name: "texting_pace", args: { pace: "less", why: "x" } }, DEFAULT_BUDGET(), [], undefined));
     expect(out).toMatch(/refused/);
     expect((await t.run((ctx) => ctx.db.get(a)))!.textFirstPace).toBeUndefined();
+  });
+});
+
+describe("drafting for someone who isn't reading (2026-11-02)", () => {
+  it("a new idea every few days, not daily, once ideas go unopened and texts unanswered", async () => {
+    const { notReadingHold } = await import("../../scout/scout");
+    expect(notReadingHold({ lastSeenAt: null, unanswered: 3, lastDraftAt: T0 - D, now: T0 })).toMatch(/every few days/);
+    expect(notReadingHold({ lastSeenAt: null, unanswered: 3, lastDraftAt: T0 - 3 * D, now: T0 })).toBeNull();
+    expect(notReadingHold({ lastSeenAt: T0 - 2 * D, unanswered: 3, lastDraftAt: T0 - D, now: T0 }), "they opened one this week").toBeNull();
+    expect(notReadingHold({ lastSeenAt: null, unanswered: 1, lastDraftAt: T0 - D, now: T0 }), "still answering").toBeNull();
   });
 });

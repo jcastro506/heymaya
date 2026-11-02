@@ -14,6 +14,7 @@ import { internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { THRESHOLDS } from "../config/thresholds";
+import type { TurnDecision } from "./burst";
 
 export const HANDLED_KINDS = new Set<string>([
   "deliver_message",
@@ -50,6 +51,10 @@ const handlers: Record<string, Handler> = {
   async converse(ctx, job) {
     const p = payloadOf<{ messageId?: Id<"messages">; chatId?: string; kind?: string }>(job);
     if (!p?.messageId || !job.creatorId) return { ok: false, error: "converse job has no message or creator" };
+    // One burst, one reply (core/burst): wait for the rest of it, or leave it to the newer turn that answers it all.
+    const d = await (ctx as unknown as { runQuery: (ref: typeof internal.core.burst.decide, a: { messageId: Id<"messages">; now: number }) => Promise<TurnDecision> }).runQuery(internal.core.burst.decide, { messageId: p.messageId, now: Date.now() });
+    if (d.act === "skip") return { ok: true };
+    if (d.act === "wait") return { ok: false, error: "waiting for the rest of their burst", defer: d.ms };
     const r = (await (ctx as unknown as { runAction: (ref: typeof internal.agent.converse.run, a: { creatorId: Id<"creators">; messageId: Id<"messages"> }) => Promise<{ ok: boolean; reason?: string }> })
       .runAction(internal.agent.converse.run, { creatorId: job.creatorId, messageId: p.messageId }));
     return r.ok ? { ok: true } : { ok: false, error: r.reason ?? "turn failed" };

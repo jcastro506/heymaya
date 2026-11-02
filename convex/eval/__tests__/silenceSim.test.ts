@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { decideReengage, COMMITMENT_KINDS, type ReengageInput, type SpellSend } from "../../agent/reengage";
-import { phoneRailHold } from "../../core/phoneRail";
+import { reachOutHold } from "../../core/reachOut";
 import { EXPECTED, eventsFor, judgeRole, ROLES, SL_PREFIX, type Role } from "../silenceSim";
 
 const D = 86_400_000;
@@ -42,11 +42,10 @@ function replay(role: Role, days = 22): Array<[number, string]> {
     const input: ReengageInput = { now, paired: true, optedOutAt: optedOut, lastInboundAt: T0 + since * D, pairedAt: T0, spellId: inboundId, sends: mine, reasons, capability: null };
     const dec = decideReengage(input);
     if (paused || !dec.send) continue; // a paused plan holds every proactive text (checkRails)
-    if (phone) {
-      const unanswered = mine.filter((s) => !(COMMITMENT_KINDS as readonly string[]).includes(s.kind ?? "")).map((s) => ({ ts: s.ts, kind: s.kind }));
-      const held = phoneRailHold({ now, kind: dec.kind, health: undefined, lineState: null, optedOutAt: optedOut, lastInboundAt: T0 + since * D, unanswered, proactiveToday: 0 });
-      if (held) continue;
-    }
+    // The one attention budget (core/reachOut) holds every channel now; an opt-out still ends everything.
+    if (phone && optedOut !== undefined) continue;
+    const held = reachOutHold({ kind: dec.kind, now, timezone: "UTC", pairedAt: T0, sent: sends.filter((s) => !(COMMITMENT_KINDS as readonly string[]).includes(s.kind ?? "")).map((s) => ({ ts: s.ts, kind: s.kind })), lastInboundAt: inboundDay === null ? null : T0 + since * D });
+    if (held) continue;
     sends.push({ day: d, ts: now, kind: dec.kind, dedupeKey: dec.dedupeKey });
     for (const r of dec.reasons) said.add(r.key);
     out.push([d, dec.rung]);
@@ -55,7 +54,7 @@ function replay(role: Role, days = 22): Array<[number, string]> {
 }
 
 describe("the silence simulation: expectations", () => {
-  it("its table is exactly what the policy and the phone rail do for each scripted person", () => {
+  it("its table is exactly what the policy and the attention budget do for each scripted person", () => {
     for (const role of ROLES) expect(replay(role), role).toEqual(EXPECTED[role]);
   });
 
@@ -64,7 +63,7 @@ describe("the silence simulation: expectations", () => {
     expect(EXPECTED.stops_d5, "nothing after STOP, not even the easy-out").toEqual([[3, "nudge"]]);
     expect(EXPECTED.paused_d2).toEqual([]);
     expect(EXPECTED.no_reasons, "the exit goes even with nothing to say").toEqual([[15, "easy_out"]]);
-    expect(EXPECTED.phone_scout3.map(([, r]) => r), "behind three unanswered texts only the exit is left").toEqual(["easy_out"]);
+    expect(EXPECTED.phone_scout3.map(([, r]) => r), "behind three unanswered texts no second nudge, only the exit").toEqual(["nudge", "easy_out"]);
   });
 });
 
@@ -89,10 +88,10 @@ describe("the verdict catches every way a run goes wrong", () => {
     nopause[2].body = "still here, hope training is going well";
     expect(fails("phone_silent", nopause)).toContain("the easy-out says how to pause");
   });
-  it("a text after STOP, a text after pausing, or a rail that never fired fails", () => {
+  it("a text after STOP, a text after pausing, or a second nudge behind three unanswered fails", () => {
     expect(fails("stops_d5", [ok(3, "nudge"), ok(15, "easy_out", "say pause", [])])).toEqual(expect.arrayContaining(["nothing after they said STOP"]));
     expect(fails("paused_d2", [ok(3, "nudge")])).toContain("nothing after they paused");
-    expect(fails("phone_scout3", [{ d: 15, sent: true, rung: "easy_out", body: "say pause or send anything", reasons: [], judge: { pass: true, note: "" } }] as never)).toContain("Linq's rail actually held the nudge behind two unanswered texts");
+    expect(fails("phone_scout3", [ok(3, "nudge"), ok(9, "nudge2"), ok(15, "easy_out", "say pause or send anything", [])])).toContain("behind three unanswered texts, no second nudge (the budget backs off)");
   });
   it("a welcome-back that guilts, or a turn that failed, fails; a judge that wouldn't send it fails (advisory)", () => {
     const base = [ok(3, "nudge"), ok(9, "nudge2"), ok(16, "nudge"), ok(22, "nudge2")] as never[];

@@ -7,7 +7,8 @@
  *
  *   0 phone_silent    on iMessage, never answers        → nudge d3, nudge d9, easy-out d15, then nothing
  *   1 tg_silent       the same on Telegram              → the same (the policy is channel-agnostic)
- *   2 phone_scout3    three scout texts go unanswered   → Linq's rail holds the d3 nudge; only the easy-out (d15)
+ *   2 phone_scout3    three scout texts go unanswered   → one nudge (d3, one unanswered after day one), then the
+ *                                                         budget's back-off: no nudge2 behind three unanswered; the easy-out (d15)
  *   3 replies_d4      answers after the first nudge     → a new spell: nudges at d7 (+ a post doing 4x), d13, easy-out d19
  *   4 stops_d5        opts out on day 5                 → one nudge (d3), then nothing, not even the easy-out
  *   5 no_reasons      nothing true to say, ever         → only the easy-out, d15
@@ -44,7 +45,7 @@ export const ROLES: Role[] = ["phone_silent", "tg_silent", "phone_scout3", "repl
 export const EXPECTED: Record<Role, Array<[number, string]>> = {
   phone_silent: [[3, "nudge"], [9, "nudge2"], [15, "easy_out"]],
   tg_silent: [[3, "nudge"], [9, "nudge2"], [15, "easy_out"]],
-  phone_scout3: [[15, "easy_out"]],
+  phone_scout3: [[3, "nudge"], [15, "easy_out"]],
   replies_d4: [[3, "nudge"], [7, "nudge"], [13, "nudge2"], [19, "easy_out"]],
   stops_d5: [[3, "nudge"]],
   no_reasons: [[15, "easy_out"]],
@@ -305,8 +306,7 @@ export function judgeRole(role: Role, log: LogEntry[]): Array<{ check: string; o
   const nudges = bodies.filter((e) => e.rung === "nudge" || e.rung === "nudge2");
   const ungrounded = nudges.filter((e) => { const have = content(e.body!); return !(e.reasons ?? []).some((r) => [...content(r)].filter((w) => have.has(w)).length >= 2); });
   out.push({ check: "a nudge names the true thing it was given", ok: ungrounded.length === 0, detail: ungrounded.map((e) => `d${e.d}: ${clip(e.body!, 90)}`).join(" | ") || "grounded" });
-  const rail = log.filter((e) => e.result?.includes("phone rail"));
-  if (role === "phone_scout3") out.push({ check: "Linq's rail actually held the nudge behind two unanswered texts", ok: rail.length > 0, detail: rail.map((e) => `d${e.d}: ${e.result}`).join(" | ") || "the rail never fired" });
+  if (role === "phone_scout3") out.push({ check: "behind three unanswered texts, no second nudge (the budget backs off)", ok: !sends.some(([, r]) => r === "nudge2"), detail: `sent ${JSON.stringify(sends)}` });
   if (role === "stops_d5") out.push({ check: "nothing after they said STOP", ok: sends.every(([d]) => d < 5), detail: `sent on ${JSON.stringify(sends.map(([d]) => d))}` });
   if (role === "paused_d2") out.push({ check: "nothing after they paused", ok: sends.length === 0, detail: `${sends.length} sent; held with ${[...new Set(log.filter((e) => !e.sent && e.d >= 3).map((e) => e.result))].slice(0, 2).join(" / ")}` });
   if (role === "returns_d12" || role === "returns_busy") {

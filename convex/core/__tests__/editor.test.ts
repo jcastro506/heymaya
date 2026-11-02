@@ -49,17 +49,22 @@ describe("the editor (pure)", () => {
     expect(rank([cand({ status: "sent" }), cand({ id: "old", expiresAt: T0 - 1 })], [], T0)).toHaveLength(0);
   });
 
-  it("holds: nothing good enough, mid-conversation, and backing off after three ignored", () => {
+  it("holds: nothing good enough, or mid-conversation; backing off is the one budget's, not the editor's", () => {
     const top = { c: cand({}), score: 2 };
     expect(holdToday({ history: [], top: undefined, now: T0, lastInboundAt: null })).toMatch(/nothing worth/);
     expect(holdToday({ history: [], top: { ...top, score: EDITOR.bar - 0.1 }, now: T0, lastInboundAt: null })).toMatch(/nothing worth/);
     expect(holdToday({ history: [], top, now: T0, lastInboundAt: T0 - H })).toMatch(/mid-conversation/);
     expect(holdToday({ history: [], top, now: T0, lastInboundAt: T0 - 4 * H })).toBeNull();
     const ignored = [3, 2, 1].map((n) => ({ kind: "scout", ts: T0 - n * 2 * D, landed: false }));
-    expect(holdToday({ history: ignored, top, now: T0, lastInboundAt: null })).toMatch(/backing off/);
-    expect(holdToday({ history: ignored.map((h) => ({ ...h, ts: h.ts - 8 * D })), top, now: T0, lastInboundAt: null }), "one good one a week").toBeNull();
-    expect(holdToday({ history: ignored, top: { ...top, score: EDITOR.strong }, now: T0, lastInboundAt: null })).toBeNull();
-    expect(holdToday({ history: [...ignored, { kind: "scout", ts: T0 - D, landed: false }], top: { ...top, score: 4 }, now: T0, lastInboundAt: null })).toMatch(/two days running/);
+    expect(backingOff(ignored), "still read for the weekly note").toBe(true);
+    expect(holdToday({ history: ignored, top, now: T0, lastInboundAt: null }), "the budget in send paces it (core/reachOut)").toBeNull();
+  });
+
+  it("deals first for someone who pays for them", () => {
+    const idea = cand({ id: "idea", kind: "idea", base: 3 });
+    const deal = cand({ id: "deal", kind: "deal", base: 2.5 });
+    expect(rank([idea, deal], [], T0)[0].c.id).toBe("idea");
+    expect(rank([idea, deal], [], T0, { dealsPlan: true })[0].c.id).toBe("deal");
   });
 
   it("comments: questions and liked ones on their posts, never their own, never without a post link, never old", () => {

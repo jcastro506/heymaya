@@ -76,7 +76,8 @@ export const deliveryTarget = internalQuery({
       paired: Boolean(creator?.channel.paired),
       // Idempotency: the queue retries, and a retry must not re-send a message
       // that already landed. People notice being told the same thing twice.
-      alreadyDelivered: message.deliveredAt !== undefined,
+      // Withdrawn (they said "hold on" before it went, core/burst): done, never sent.
+      alreadyDelivered: message.deliveredAt !== undefined || message.withdrawnAt !== undefined,
     };
   },
 });
@@ -142,6 +143,7 @@ export const deliverMessage = internalAction({
       }
       lastId = String(result.result.message_id);
       if (!last) await new Promise((r) => setTimeout(r, 900));
+      if (!last && (await ctx.runQuery(internal.core.burst.isWithdrawn, { messageId: args.messageId }))) break;
     }
 
     // §22: the album after the text. Its failure is recorded as partial, never retried: the text already landed.
@@ -316,6 +318,7 @@ export const handleInbound = internalAction({
   handler: async (ctx, args): Promise<{ recorded: boolean; reason?: string }> => {
     const recorded = await ctx.runMutation(internal.core.telegram.receiveInbound, args);
     if (!recorded.recorded || !recorded.messageId || !recorded.creatorId) return recorded;
+    if ((args.kind ?? "inbound") === "inbound") await ctx.scheduler.runAfter(0, internal.core.burst.checkHush, { creatorId: recorded.creatorId, messageId: recorded.messageId, text: args.text });
 
     try {
       await ctx.runMutation(internal.core.jobs.enqueue, {

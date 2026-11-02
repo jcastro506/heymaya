@@ -26,6 +26,7 @@ import { REGISTRY } from "../agent/registry";
 import { buildPrefix } from "../agent/context";
 import { critique, tooLong } from "../agent/critic";
 import { clip } from "../lib/clip";
+import { partnershipsOpen } from "../partnerships/store";
 
 export type Noticed = NonNullable<Doc<"creators">["noticed"]>[number];
 export type CandidateKind = "idea" | "for_you" | "comment" | "deal" | "trend" | "ideas_waiting" | "post_read";
@@ -81,7 +82,10 @@ export function backingOff(history: Outcome[]): boolean {
 export interface Scored { c: Noticed; score: number }
 
 /** Pure: rank what she noticed. Fresh beats stale, kinds they answer beat kinds they ignore, and the same kind twice running loses. */
-export function rank(cands: Noticed[], history: Outcome[], now: number): Scored[] {
+/** A deal for someone who pays for deals (Maya + Deals) is worth this much more: it's what they bought. */
+export const DEAL_BOOST = 1.5;
+
+export function rank(cands: Noticed[], history: Outcome[], now: number, opts: { dealsPlan?: boolean } = {}): Scored[] {
   const lastKinds = history.slice(-3).map((h) => h.kind);
   return cands
     .filter((c) => c.status === "open" && c.expiresAt > now)
@@ -90,7 +94,8 @@ export function rank(cands: Noticed[], history: Outcome[], now: number): Scored[
       const fresh = 1 - 0.5 * Math.min(1, Math.max(0, now - c.createdAt) / life);
       const kind = SEND_KIND[c.kind as CandidateKind] ?? c.kind;
       const variety = lastKinds.at(-1) === kind ? 0.6 : lastKinds.includes(kind) ? 0.85 : 1;
-      return { c, score: Math.round(c.base * fresh * kindWeight(history, kind) * variety * 100) / 100 };
+      const deal = opts.dealsPlan && c.kind === "deal" ? DEAL_BOOST : 1;
+      return { c, score: Math.round(c.base * fresh * kindWeight(history, kind) * variety * deal * 100) / 100 };
     })
     .sort((a, b) => b.score - a.score);
 }
@@ -101,12 +106,8 @@ export function holdToday(input: { history: Outcome[]; top: Scored | undefined; 
   // A day she's already started two conversations (their hello and first read, a plan, a reminder) is full (2026-10-21).
   if ((input.startedToday ?? 0) >= 2) return "she's already texted them twice today";
   if (input.lastInboundAt !== null && input.now - input.lastInboundAt < EDITOR.restAfterChatMs) return "they're mid-conversation; it rides along in her reply instead";
-  if (backingOff(input.history)) {
-    // Her last three went unanswered: a strong one, or one good one a week, never two days running.
-    const last = input.history.at(-1);
-    if (last && input.now - last.ts < 48 * 3_600_000) return "backing off: not two days running";
-    if (input.top.score < EDITOR.strong && last && input.now - last.ts < EDITOR.backOffEveryMs) return "backing off: her last three went unanswered";
-  }
+  // Backing off into silence is the one budget's (core/reachOut, 2026-11-02): two rules for one promise left
+  // a tester with nothing for eight days. When it lets a text through, this sends the best one.
   return null;
 }
 
@@ -267,7 +268,10 @@ export const pick = internalAction({
     if (!i) return { sent: false, reason: "creator not found" };
     if (!a.preview && i.c.pickedDay === i.day) return { sent: false, reason: "today is decided" };
     if (i.hersToday) { await ctx.runMutation(internal.core.editor.decide, { creatorId: a.creatorId, day: i.day, now }); return { sent: false, reason: "she already texted something of hers today" }; }
-    const ranked = rank(i.cands, i.history, now);
+    // Would the budget hold a text of hers right now? Then no model call this hour (the next hour may be free).
+    const gate = await ctx.runQuery(internal.core.messages.startHeld, { creatorId: a.creatorId, kind: "scout", now });
+    if (gate && !a.preview) return { sent: false, reason: `held: ${gate}` };
+    const ranked = rank(i.cands, i.history, now, { dealsPlan: partnershipsOpen(i.c) });
     const held = holdToday({ history: i.history, top: ranked[0], now, lastInboundAt: i.lastInboundAt, startedToday: i.startedToday });
     if (held) {
       // Mid-conversation isn't a decision: the next hour (or her reply) may still use it.

@@ -70,12 +70,22 @@ Sounds: one to three, each with why it fits THIS video (the mood, the pace, the 
 - If a sound is NOT cleared for business accounts, say: fine on a personal account, but not on a business account or a paid post.
 - Instagram: you can't always check Instagram audio. Name the track to search in Reels audio and say to check it's there.
 
+Answer what they asked (evidence.theirWords is everything they sent, in order; [video N] marks each video). Set "answering":
+- "sound": they asked about the sound or audio. Code sends only your sound, so it has to stand on its own.
+- "caption": they asked for a caption. Code sends your three captions.
+- "which": they sent more than one and asked which (or which to post). Code sends your pickLine, plus the read if they asked what you think.
+- "read": they asked what you think, or whether it'll do well. Code sends the reaction and the read.
+- "full": no question at all (just the video, or only context like "this is for halloween"). Code sends the reaction, your best caption and your best sound.
+Several videos: work out from their words which ones they mean (they may say an earlier one was the wrong video; ignore that one). If they're choosing between them, "pick" is the video number you'd post and "pickLine" says so in their terms in one line ("the second one, the reveal lands harder"); everything else (captions, sounds) is for that one. One video: pick 1, pickLine ''.
+Their latest words win: context they add later ("this is for halloween") changes everything, the captions and hashtags included.
+evidence.conversation is what was already said. If you already told them a sound for this video, stay with it unless something they said since changes it, and then say why in a few words. Never flip-flop.
 Their words on the draft may say the platform ("for insta"); write for that platform. Otherwise, for where they post.
 If it's a paid or gifted post (their words say sponsored, paid, #ad, a brand deal), the platformNote reminds them to turn on the label: TikTok's content disclosure toggle, Instagram's paid partnership label.
 platformNote is only for practical things: that disclosure label, where to find a sound, a licensing warning. Never a claim about what the algorithm rewards; you haven't checked that.
 One "keep your own audio" line at most; don't list the same advice twice under two names.
+Never comment on how they look (tired, hunched, their body or face); react to the video, not to them.
 Output ONLY JSON:
-{"reaction": "≤200: one line as a viewer, the moment that got you, named from the card", "read": "≤240 or ''", "captions": [{"text": "≤300, exactly as they'd paste it", "shape": "their-usual|question|search", "why": "≤160: why this one, for them (kept for when they ask)"}], "sounds": [{"name": "≤80: 'title by author', or 'your own audio'", "clipId": "the TikTok clip id you looked up, or ''", "platform": "tiktok|instagram|both", "source": "their-own-audio|already-in-the-clip|watched-accounts|their-past-post|trending", "why": "≤120", "howToUse": "≤100"}], "platformNote": "≤160 or ''"}`;
+{"answering": "sound|caption|which|read|full", "pick": 1, "pickLine": "≤160 or ''", "reaction": "≤200: one line as a viewer, the moment that got you, named from the card", "read": "≤240 or ''", "captions": [{"text": "≤300, exactly as they'd paste it", "shape": "their-usual|question|search", "why": "≤160: why this one, for them (kept for when they ask)"}], "sounds": [{"name": "≤80: 'title by author', or 'your own audio'", "clipId": "the TikTok clip id you looked up, or ''", "platform": "tiktok|instagram|both", "source": "their-own-audio|already-in-the-clip|watched-accounts|their-past-post|trending", "why": "≤120", "howToUse": "≤100"}], "platformNote": "≤160 or ''"}`;
 
 /**
  * Pure: what kind of sound they want. "over": a song over the video with their own audio muted (they
@@ -149,7 +159,8 @@ export const soundCandidates = internalQuery({
   handler: async (ctx, a): Promise<SoundCandidates> => await readSoundCandidates(ctx, a.creatorId, a.now),
 });
 
-type Out = { reaction: string; read?: string; captions: Array<{ text: string; shape: string; why: string }>; sounds: Array<{ name: string; clipId?: string; platform: string; source: string; why: string; howToUse: string }>; platformNote?: string };
+export type Answering = "sound" | "caption" | "which" | "read" | "full";
+type Out = { answering?: string; pick?: number; pickLine?: string; reaction: string; read?: string; captions: Array<{ text: string; shape: string; why: string }>; sounds: Array<{ name: string; clipId?: string; platform: string; source: string; why: string; howToUse: string }>; platformNote?: string };
 
 /** Pure: a named sound survives only if a lookup this turn backs it, or it's their own audio. */
 export function backedSounds(sounds: Out["sounds"], trace: Array<Pick<ToolCallRecord, "tool" | "ok" | "params" | "result">>): { kept: Array<Out["sounds"][number] & { licensedForBusiness?: boolean }>; dropped: string[] } {
@@ -178,14 +189,49 @@ export function oneOwnAudio<T extends { name: string; source: string }>(sounds: 
   return sounds.filter((x) => (own(x) ? (seen ? false : (seen = true)) : true));
 }
 
-/** Pure: the text she sends. Captions as they'd paste them; sounds with their few-word reason. */
-export function finishText(o: { reaction: string; read?: string; captions: Out["captions"]; sounds: Array<Out["sounds"][number] & { licensedForBusiness?: boolean }>; platformNote?: string; soundAsk?: string }): string {
+/** Pure: two of her lines as one text, with the full stop a model sometimes leaves off between them ("incredible The pacing"). */
+export function joinLines(...lines: Array<string | undefined>): string {
+  const xs = lines.map((l) => (l ?? "").trim()).filter(Boolean);
+  return xs.map((l, i) => (i < xs.length - 1 && !/[.!?…)"”:]$|\p{Extended_Pictographic}$/u.test(l) ? `${l}.` : l)).join(" ");
+}
+
+/** Pure: what the model said it was answering, or "full" when it didn't say. */
+export function answeringOf(x: unknown): Answering {
+  return x === "sound" || x === "caption" || x === "which" || x === "read" ? x : "full";
+}
+
+/**
+ * Pure: the text she sends, shaped by what they asked (2026-11-02: "which sound?" got a reaction, three captions
+ * and a sound, four times). A sound question gets the sound; a caption question the captions; "which one" the pick.
+ * Nothing asked: the reaction, one caption and one sound. Short either way: the bubble caps still apply.
+ */
+export function finishText(o: { answering?: Answering; pickLine?: string; reaction: string; read?: string; captions: Out["captions"]; sounds: Array<Out["sounds"][number] & { licensedForBusiness?: boolean }>; platformNote?: string; soundAsk?: string }): string {
+  const a = o.answering ?? "full";
+  const pick = (o.pickLine ?? "").trim();
+  // One sound in the text, her best (2026-10-21); a note about a sound she didn't show is left out with it.
+  const shown = o.sounds.slice(0, 1);
+  const note = noteFor(o.platformNote, shown, o.sounds);
+  const sound = shown.length ? soundBlock(shown, note) : `${o.soundAsk ?? SOUND_QUESTION}${note ? `\n${note}` : ""}`;
   const parts: string[] = [];
-  parts.push([o.reaction.trim(), (o.read ?? "").trim()].filter(Boolean).join(" "));
-  parts.push(`captions:\n${o.captions.map((c, i) => `${i + 1}. ${c.text.trim()}`).join("\n")}`);
-  // One sound in the text, her best (2026-10-21: three captions plus two sounds read as homework); the rest are a "another sound?" away.
-  parts.push(o.sounds.length ? soundBlock(o.sounds.slice(0, 1), o.platformNote) : `${o.soundAsk ?? SOUND_QUESTION}${o.platformNote?.trim() ? `\n${o.platformNote.trim()}` : ""}`);
-  return parts.join("\n---\n");
+  if (a === "sound") parts.push(...[pick, sound].filter(Boolean));
+  else if (a === "caption") parts.push(...[pick, `captions:\n${o.captions.map((c, i) => `${i + 1}. ${c.text.trim()}`).join("\n")}`].filter(Boolean));
+  else if (a === "which") parts.push(joinLines(pick || o.reaction, o.read));
+  else if (a === "read") parts.push(joinLines(pick, o.reaction, o.read));
+  else {
+    parts.push(joinLines(pick, o.reaction, o.read));
+    if (o.captions[0]?.text.trim()) parts.push(`caption: ${o.captions[0].text.trim()}`);
+    parts.push(sound);
+  }
+  return parts.filter(Boolean).join("\n---\n");
+}
+
+/** Pure: the platform note, unless it's about a sound that isn't in the text (it would name something they never saw). */
+export function noteFor(platformNote: string | undefined, shown: Array<{ name: string }>, all: Array<{ name: string }>): string {
+  const n = (platformNote ?? "").trim();
+  if (!n) return "";
+  const title = (s: { name: string }) => s.name.split(/ by /i)[0].replace(/^["“]|["”]$/g, "").trim().toLowerCase();
+  const hidden = all.filter((s) => !shown.includes(s)).map(title).filter((t) => t.length > 2 && !/own audio/.test(t));
+  return hidden.some((t) => n.toLowerCase().includes(t)) ? "" : n;
 }
 
 /** Pure: the sound lines, each with its few-word reason, how to use it, a licensing note and its page. */
@@ -211,44 +257,72 @@ export const recent = internalQuery({
   },
 });
 
+/** At most this many of a burst's videos are watched (the latest ones). */
+export const MAX_VIDEOS = 4;
+
 export const run = internalAction({
-  args: { creatorId: v.id("creators"), messageId: v.id("messages") },
+  args: {
+    creatorId: v.id("creators"),
+    messageId: v.id("messages"),
+    /** The burst's videos, oldest first (core/burst); absent means just this message's video. */
+    videoIds: v.optional(v.array(v.id("messages"))),
+    /** Everything they sent in the burst, in order, videos marked [video N]. */
+    transcript: v.optional(v.string()),
+  },
   handler: async (ctx, a): Promise<{ ok: boolean; reason?: string }> => {
     const g = await ctx.runQuery(internal.agent.context.gather, { creatorId: a.creatorId, messageId: a.messageId });
     if (!g || !g.target) return { ok: false, reason: "message not found" };
     const { creator, directives, target } = g;
     const reply = async (body: string, extra: { produced?: ReturnType<typeof producedStamp>; criticSkipped?: boolean } = {}) => {
-      await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body, dedupeKey: `finish:${a.messageId}`, proactive: false, kind: "opinion", ...extra });
+      await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body, dedupeKey: `finish:${a.messageId}`, proactive: false, kind: "opinion", answering: a.messageId, ...extra });
       await deliverNow(ctx as never);
     };
-    const file = target.fileId ? await storedMedia(ctx, target.fileId, target.fileMime ?? "video/mp4") : null;
-    if (!file) return { ok: false, reason: "no file bytes" };
-    await ctx.runAction(internal.core.telegram.react, { creatorId: creator._id, messageId: target._id, emoji: "👀" }).catch(() => undefined);
-    // Talky videos write long notes: room for them, so the JSON isn't cut off mid-sentence.
-    const w = await watchBytes(ctx, creator._id, "watch_finish", file, target.fileMime ?? "video/mp4", FINISH_WATCH_PROMPT, 2500);
-    const card = w.text ? parseJson<Record<string, unknown>>(w.text) : null;
-    if (!card) {
-      const why = w.text ? "my notes on it came out garbled" : (w.reason ?? "the file didn't open");
+    // Every video in the burst, watched side by side (2026-11-02: two videos, "wrong ones", two more → one answer).
+    const all = a.videoIds?.length ? a.videoIds : [a.messageId];
+    const ids = all.slice(-MAX_VIDEOS);
+    // Numbered as in the burst transcript ([video N]), so her pick means the video they mean.
+    const offset = all.length - ids.length;
+    const watched = await Promise.all(ids.map(async (id, j) => {
+      const i = offset + j;
+      const m = id === target._id ? target : await ctx.runQuery(internal.agent.converse.messageById, { creatorId: creator._id, messageId: id });
+      if (!m?.fileId) return { n: i + 1, card: null as Record<string, unknown> | null, reason: "no file bytes" };
+      const file = await storedMedia(ctx, m.fileId, m.fileMime ?? "video/mp4");
+      if (!file) return { n: i + 1, card: null, reason: "no file bytes" };
+      await ctx.runAction(internal.core.telegram.react, { creatorId: creator._id, messageId: m._id, emoji: "👀" }).catch(() => undefined);
+      // Talky videos write long notes: room for them, so the JSON isn't cut off mid-sentence.
+      const w = await watchBytes(ctx, creator._id, "watch_finish", file, m.fileMime ?? "video/mp4", FINISH_WATCH_PROMPT, 2500);
+      return { n: i + 1, card: w.text ? parseJson<Record<string, unknown>>(w.text) : null, reason: w.text ? "my notes on it came out garbled" : (w.reason ?? "the file didn't open"), ourSide: !w.text && isOurSide(w.reason) };
+    }));
+    const cards = watched.filter((x) => x.card);
+    if (!cards.length) {
+      if (!ids.length || watched.every((x) => x.reason === "no file bytes")) return { ok: false, reason: "no file bytes" };
+      const w0 = watched[watched.length - 1];
       // A vendor's words ("The model is overloaded…") never reach them; an outage is said as ours.
-      await reply(!w.text && isOurSide(w.reason) ? WATCH_OUR_SIDE : `couldn't watch that one properly (${why}). send it again?`);
-      return { ok: true, reason: `watch failed: ${w.text ? `unparsed: ${clip(w.text, 160)}` : w.reason}` };
+      await reply("ourSide" in w0 && w0.ourSide ? WATCH_OUR_SIDE : `couldn't watch ${ids.length > 1 ? "those" : "that one"} properly (${w0.reason}). send it again?`);
+      return { ok: true, reason: `watch failed: ${w0.reason}` };
     }
+    const card = cards[cards.length - 1].card!;
+    const theirWords = a.transcript ?? target.body;
     const candidates = await ctx.runQuery(internal.agent.finish.soundCandidates, { creatorId: creator._id, now: Date.now() });
     const prefix = buildPrefix({ creator, directives, skill: FINISH_SKILL, personal: g.personal, voice: g.voice, history: g.history });
     // Their audio kept, a song over it, or ask: their words first, then what's audible in the clip.
-    const plan = soundPlan(target.body, card);
-    const evidence = { theirWords: clip(target.body, 400), card, soundPlan: plan, soundCandidates: candidates, platforms: Object.keys(creator.handles).filter((k) => (creator.handles as Record<string, unknown>)[k]) };
+    const plan = soundPlan(theirWords, card);
+    const burstIds = new Set<string>([...ids, a.messageId].map(String));
+    const conversation = g.recent.filter((m) => !burstIds.has(String(m._id))).slice(-10).map((m) => `${m.direction === "in" ? "them" : "you"}: ${clip(m.body, 300)}`);
+    const evidence = { theirWords: clip(theirWords, 900), ...(cards.length > 1 ? { videos: cards.map((x) => ({ video: x.n, card: x.card })) } : { card }), soundPlan: plan, conversation, soundCandidates: candidates, platforms: Object.keys(creator.handles).filter((k) => (creator.handles as Record<string, unknown>)[k]) };
     const user = `Evidence (everything you may cite is here or in a lookup you make):\n${JSON.stringify(evidence)}`;
     const inv = await investigate(ctx, { creatorId: creator._id, sourceMessageId: a.messageId, purpose: "finish", prefix, user, budget: { calls: 5, credits: 12, deadlineAt: Date.now() + 60_000 }, temperature: 0.6, maxTokens: 1800 });
     let out = inv.content ? parseJson<Out>(inv.content) : null;
-    if (!out || !Array.isArray(out.captions) || out.captions.length < 2 || !Array.isArray(out.sounds)) {
+    const answering = answeringOf(out?.answering);
+    const needsCaptions = answering === "full" || answering === "caption";
+    if (!out || !Array.isArray(out.captions) || (needsCaptions && out.captions.length < 2) || !Array.isArray(out.sounds)) {
       // A writer outage is ours to own; "came out wrong" was only true when the model answered badly.
       await reply(inv.ended === "model_error" ? FINISH_WRITER_DOWN : "i watched it but my caption ideas came out wrong. send it again in a minute?");
       return { ok: true, reason: `no usable finish: ${inv.ended}` };
     }
     // The critic reads the captions against their own lines (generic or cheesy gets one rewrite),
     // and the sound notes + platform note for claims nobody checked.
-    const verdict = await critique(ctx, { creatorId: creator._id, kind: "captions (numbered caption options and sound lines are the requested format, not a list to fault)", text: `${out.captions.map((c, i) => `${i + 1}. ${c.text}`).join("\n")}\n\nsounds: ${(out.sounds ?? []).map((s0) => `${s0.name}: ${s0.why}`).join(" / ")}\n${out.platformNote ?? ""}`, evidence: { card, theirVoice: g.voice.slice(0, 4000) }, voice: (creator.dossier as { voice?: unknown } | undefined)?.voice ?? {}, directives: directives.map((d) => d.verbatim) });
+    const verdict = !needsCaptions ? { pass: true, problems: [] as string[], note: "", skipped: false } : await critique(ctx, { creatorId: creator._id, kind: "captions (numbered caption options and sound lines are the requested format, not a list to fault)", text: `${out.captions.map((c, i) => `${i + 1}. ${c.text}`).join("\n")}\n\nsounds: ${(out.sounds ?? []).map((s0) => `${s0.name}: ${s0.why}`).join(" / ")}\n${out.platformNote ?? ""}`, evidence: { card, theirVoice: g.voice.slice(0, 4000) }, voice: (creator.dossier as { voice?: unknown } | undefined)?.voice ?? {}, directives: directives.map((d) => d.verbatim) });
     let criticSkipped = verdict.skipped === true;
     if (!verdict.pass) {
       await ctx.runMutation(internal.eval.expertBench.saveTrace, { creatorId: creator._id, trace: [{ tool: "critic", ok: false, result: `captions: ${verdict.problems.join(", ")} (${verdict.note}) | ${clip(out.captions.map((c) => c.text).join(" / "), 600)}` }] }).catch(() => undefined);
@@ -266,14 +340,14 @@ export const run = internalAction({
     const sounds = kept.length || plan !== "voice" ? kept : [{ name: "your own audio", platform: "both", source: "their-own-audio", why: card.voiceCarriesIt ? "your words are the point here" : "nothing i checked fit this one better", howToUse: "" }];
     const waiting = sounds.length === 0;
     await ctx.runMutation(internal.agent.finish.record, {
-      creatorId: creator._id, messageId: a.messageId, fileId: target.fileId ?? undefined, card,
+      creatorId: creator._id, messageId: a.messageId, fileId: target.fileId ?? undefined, card: cards.find((x) => x.n === out!.pick)?.card ?? card,
       captions,
       sounds: sounds.map((s) => ({ name: clip(s.name, 120), clipId: s.clipId, platform: String(s.platform ?? "both"), source: String(s.source ?? ""), why: clip(String(s.why ?? ""), 200), howToUse: clip(String(s.howToUse ?? ""), 160), ...("licensedForBusiness" in s && typeof s.licensedForBusiness === "boolean" ? { licensedForBusiness: s.licensedForBusiness } : {}) })),
       dropped, lookups: inv.trace.filter((t) => t.ok).map((t) => t.tool),
       soundPlan: plan, ...(waiting ? { soundAskAt: Date.now() } : {}),
     });
-    await reply(finishText({ reaction: out.reaction ?? "", read: out.read, captions, sounds, platformNote: out.platformNote, soundAsk: plan === "over" ? SOUND_NONE_OVER : SOUND_QUESTION }), { produced: producedStamp(REGISTRY.writer.primary), criticSkipped });
-    return { ok: true, reason: `finish: ${captions.length} captions, ${sounds.length} sounds${dropped.length ? `, dropped ${dropped.length} unbacked` : ""}` };
+    await reply(finishText({ answering, pickLine: cards.length > 1 ? out.pickLine : "", reaction: out.reaction ?? "", read: out.read, captions, sounds, platformNote: out.platformNote, soundAsk: plan === "over" ? SOUND_NONE_OVER : SOUND_QUESTION }), { produced: producedStamp(REGISTRY.writer.primary), criticSkipped });
+    return { ok: true, reason: `finish (${answering}, ${cards.length} video${cards.length === 1 ? "" : "s"}): ${captions.length} captions, ${sounds.length} sounds${dropped.length ? `, dropped ${dropped.length} unbacked` : ""}` };
   },
 });
 

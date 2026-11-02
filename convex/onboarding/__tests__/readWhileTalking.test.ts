@@ -103,18 +103,16 @@ describe("no second 'reading your posts' after the hello", () => {
 describe("day one and quiet hours, at send", () => {
   const H = 3_600_000;
   const DAY = Date.UTC(2026, 9, 1, 14, 0);
-  it("day one: nothing waits on the silence ladder, and day one's texts never count toward it after", async () => {
-    const { phoneRailHold, PHONE_RAIL } = await import("../../core/phoneRail");
-    const base = { kind: "idea", health: "HEALTHY", lineState: null, optedOutAt: undefined, proactiveToday: 1 };
+  it("day one: her first texts don't wait on the back-off, and day one's texts never count toward it after", async () => {
+    const { reachOutHold, REACH_OUT } = await import("../../core/reachOut");
     const pairedAt = DAY;
-    // The read went out unanswered: inside day one the plan still goes.
-    expect(phoneRailHold({ ...base, now: DAY + 20 * 60_000, pairedAt, lastInboundAt: DAY, unanswered: [{ ts: DAY + 4 * 60_000, kind: "first_read" }] })).toBeNull();
-    // Day two: the read and the plan don't count, so the next idea isn't held for "two unanswered".
-    expect(phoneRailHold({ ...base, now: pairedAt + PHONE_RAIL.dayOneMs + H, pairedAt, lastInboundAt: DAY, unanswered: [{ ts: DAY + 4 * 60_000, kind: "first_read" }, { ts: DAY + 20 * 60_000, kind: "plan" }] })).toBeNull();
-    // A day-two text that goes unanswered still starts the ladder.
-    expect(phoneRailHold({ ...base, now: pairedAt + PHONE_RAIL.dayOneMs + 3 * H, pairedAt, lastInboundAt: DAY, unanswered: [{ ts: pairedAt + PHONE_RAIL.dayOneMs + H, kind: "idea" }] })).toMatch(/waits about a day/);
-    // Without a pairing time the ladder works as before.
-    expect(phoneRailHold({ ...base, now: DAY + 20 * 60_000, pairedAt: null, lastInboundAt: DAY, unanswered: [{ ts: DAY + 4 * 60_000, kind: "first_read" }] })).toMatch(/waits about a day/);
+    const base = { kind: "idea", timezone: "UTC", pairedAt, lastInboundAt: DAY };
+    // The read went out unanswered: inside day one her first idea still goes.
+    expect(reachOutHold({ ...base, now: DAY + 20 * 60_000, sent: [{ ts: DAY + 4 * 60_000, kind: "first_read" }] })).toBeNull();
+    // Day two: the read and the day-one idea don't count, so the next idea isn't held as "unanswered".
+    expect(reachOutHold({ ...base, now: pairedAt + REACH_OUT.dayOneMs + H, sent: [{ ts: DAY + 4 * 60_000, kind: "first_read" }, { ts: DAY + 20 * 60_000, kind: "idea" }] })).toBeNull();
+    // A day-two text that goes unanswered starts the back-off.
+    expect(reachOutHold({ ...base, now: pairedAt + REACH_OUT.dayOneMs + 3 * H, sent: [{ ts: pairedAt + REACH_OUT.dayOneMs + H, kind: "idea" }] })).toMatch(/waits about a day/);
   });
 
   it("a proactive text in quiet hours is held, unless they're texting right now; a reply always goes", async () => {

@@ -34,7 +34,7 @@ describe("a named sound needs a lookup this turn", () => {
     expect(r.kept).toHaveLength(3);
     const text = finishText({ reaction: "the sizzle at the start got me", captions: [{ text: "one", shape: "their-usual", why: "" }, { text: "two", shape: "question", why: "" }, { text: "three", shape: "search", why: "" }], sounds: [{ ...s("Espresso by Sabrina Carpenter"), licensedForBusiness: false }] });
     expect(text.split("\n---\n")).toHaveLength(3);
-    expect(text).toContain("1. one");
+    expect(text).toContain("caption: one");
     expect(text).toContain("not on a business account");
     expect(text).not.toMatch(/\bAI\b/);
     const linked = finishText({ reaction: "x", captions: [{ text: "a", shape: "", why: "" }], sounds: [{ ...s("Espresso", "7679774266925124384") }] });

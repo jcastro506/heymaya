@@ -40,6 +40,7 @@ import { THRESHOLDS } from "../config/thresholds";
 import { clip } from "../lib/clip";
 import { phoneRailHold } from "./phoneRail";
 import { inQuietHours } from "../scout/gate";
+import { hushed, replySuperseded } from "./burst";
 
 /** A proactive text may go in quiet hours only into a conversation this live (they wrote this recently). */
 export const QUIET_LIVE_MS = 30 * 60_000;
@@ -294,6 +295,11 @@ export const send = internalMutation({
      * and both send. A held message returns `held` with the reason; nothing is written.
      */
     capped: v.optional(v.boolean()),
+    /**
+     * The inbound this reply answers. If they've written again since (a fresh burst), the reply is held:
+     * the newer turn answers everything (core/burst). Passed by every turn's main reply.
+     */
+    answering: v.optional(v.id("messages")),
   },
   handler: async (
     ctx,
@@ -310,6 +316,10 @@ export const send = internalMutation({
       )
       .first();
     if (existing) return { messageId: existing._id, sent: false };
+    if (args.answering && !args.proactive && (await replySuperseded(ctx, args.answering, args.ts ?? Date.now()))) {
+      console.log(`[messages] held ${args.kind ?? "reply"} for ${args.creatorId}: they wrote again; the newer turn answers the burst`);
+      return { messageId: null, sent: false, held: "superseded by their newer message" };
+    }
     if (args.capped && args.proactive) {
       const now = args.ts ?? Date.now();
       const tz = ((await ctx.db.get(args.creatorId)) as Doc<"creators"> | null)?.timezone ?? "UTC";
@@ -335,6 +345,11 @@ export const send = internalMutation({
     if (args.proactive && args.surface !== "system" && args.surface !== "web") {
       const c = (await ctx.db.get(args.creatorId)) as Doc<"creators"> | null;
       if (c && pausedByThem(c)) return { messageId: null, sent: false, held: "they asked her to stop texting first" };
+      // "hold on" (core/burst): nothing of hers starts until they write again.
+      if (c?.hushedAt) {
+        const lastIn = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", args.creatorId).gt("ts", c.hushedAt!)).filter((q) => q.eq(q.field("direction"), "in")).first()) as Doc<"messages"> | null;
+        if (hushed(c, lastIn?.ts ?? null, args.ts ?? Date.now())) return { messageId: null, sent: false, held: "they said hold on" };
+      }
     }
     // Quiet hours, held here for every proactive text (2026-10-01): before, only the scout's rails checked
     // them, so a 1am signup's first plan would have gone at 1:20. A text into a conversation they're in
@@ -358,9 +373,11 @@ export const send = internalMutation({
       const now = args.ts ?? Date.now();
       const c = (await ctx.db.get(args.creatorId)) as Doc<"creators"> | null;
       if (c) {
-        const recent = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", args.creatorId).gte("ts", now - 3 * 86_400_000)).collect()) as Doc<"messages">[];
-        const sent = recent.filter((m) => m.direction === "out" && m.proactive === true).map((m) => ({ ts: m.ts, kind: m.kind }));
-        const held = reachOutHold({ kind: args.kind, now, timezone: c.timezone, pairedAt: c.channel.pairedAt, pace: c.textFirstPace, sent });
+        // Three weeks: enough to see a weekly rhythm into silence (core/reachOut).
+        const recent = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", args.creatorId).gte("ts", now - 21 * 86_400_000)).collect()) as Doc<"messages">[];
+        const sent = recent.filter((m) => m.direction === "out" && m.proactive === true && !m.withdrawnAt).map((m) => ({ ts: m.ts, kind: m.kind }));
+        const lastIn = recent.filter((m) => m.direction === "in" && m.kind !== "optout").reduce<number | null>((x, m) => (x === null || m.ts > x ? m.ts : x), null);
+        const held = reachOutHold({ kind: args.kind, now, timezone: c.timezone, pairedAt: c.channel.pairedAt, pace: c.textFirstPace, sent, lastInboundAt: lastIn });
         if (held) {
           console.log(`[messages] held ${args.kind ?? "message"} for ${args.creatorId}: ${held}`);
           return { messageId: null, sent: false, held };
@@ -422,6 +439,25 @@ export const send = internalMutation({
   },
 });
 
+/**
+ * Would a text she starts be held right now, and why (null: it would go)? The same holds `send` applies, read
+ * without writing, so a job can skip its model call when nothing could go out anyway (core/editor).
+ */
+export const startHeld = internalQuery({
+  args: { creatorId: v.id("creators"), kind: v.string(), now: v.number() },
+  handler: async (ctx, a): Promise<string | null> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!c) return "creator not found";
+    if (pausedByThem(c)) return "they asked her to stop texting first";
+    const recent = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId).gte("ts", a.now - 21 * 86_400_000)).collect()) as Doc<"messages">[];
+    const lastIn = recent.filter((m) => m.direction === "in" && m.kind !== "optout").reduce<number | null>((x, m) => (x === null || m.ts > x ? m.ts : x), null);
+    if (c.hushedAt && hushed(c, lastIn, a.now)) return "they said hold on";
+    if ((await quietFor(ctx, a.creatorId, a.now)).quiet) return "quiet hours";
+    const sent = recent.filter((m) => m.direction === "out" && m.proactive === true && !m.withdrawnAt).map((m) => ({ ts: m.ts, kind: m.kind }));
+    return reachOutHold({ kind: a.kind, now: a.now, timezone: c.timezone, pairedAt: c.channel.pairedAt, pace: c.textFirstPace, sent, lastInboundAt: lastIn });
+  },
+});
+
 /** The phone rail's inputs, from rows (bounded: two weeks of their messages). Null means send. */
 /** Is it their quiet hours, with no live conversation? And when do they end. One definition, used by send and by callers that must wait for morning. */
 export async function quietFor(ctx: QueryCtx | MutationCtx, creatorId: Id<"creators">, now: number): Promise<{ quiet: boolean; endsAt: number }> {
@@ -443,14 +479,11 @@ export const quietNow = internalQuery({
 async function phoneHold(ctx: MutationCtx, creatorId: Id<"creators">, kind: string | undefined, now: number): Promise<string | null> {
   const c = (await ctx.db.get(creatorId)) as Doc<"creators"> | null;
   if (!c || c.channel.kind !== "imessage") return null;
-  const rows = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", creatorId).gte("ts", now - 14 * 86_400_000)).collect()) as Doc<"messages">[];
-  const inbound = rows.filter((m) => m.direction === "in").sort((a, b) => b.ts - a.ts)[0] ?? null;
-  const lastInboundAt = inbound?.ts ?? (c.channel.pairedAt ?? null);
-  const unanswered = rows.filter((m) => m.direction === "out" && m.proactive && m.ts > (lastInboundAt ?? 0)).sort((a, b) => a.ts - b.ts).map((m) => ({ ts: m.ts, kind: m.kind }));
+  const rows = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", creatorId).gte("ts", dayScanFloor(now))).collect()) as Doc<"messages">[];
   const proactiveToday = rows.filter((m) => m.direction === "out" && m.proactive && isSameDayInZone(m.ts, now, c.timezone)).length;
   const lineRow = c.channel.line ? await ctx.db.query("syncState").withIndex("by_key", (q) => q.eq("key", `linq:line:${c.channel.line}`)).unique() : null;
   const lineState = lineRow ? (JSON.parse(lineRow.value) as { status: string | null; reputation: string | null }) : null;
-  return phoneRailHold({ now, kind, health: c.channel.health, lineState, optedOutAt: c.channel.optedOutAt, lastInboundAt, unanswered, proactiveToday, pairedAt: c.channel.pairedAt ?? null });
+  return phoneRailHold({ now, kind, health: c.channel.health, lineState, optedOutAt: c.channel.optedOutAt, proactiveToday });
 }
 
 /**

@@ -105,6 +105,29 @@ export const linkIdeaMessage = internalMutation({
   },
 });
 
+/** How often she drafts a new idea for someone who isn't reading (no idea opened in a week, texts unanswered). */
+export const NOT_READING_EVERY_MS = 3 * 86_400_000;
+
+/** Pure: why to skip today's draft, or null. */
+export function notReadingHold(i: { lastSeenAt: number | null; unanswered: number; lastDraftAt: number | null; now: number }): string | null {
+  const reading = i.lastSeenAt !== null && i.now - i.lastSeenAt < 7 * 86_400_000;
+  if (reading || i.unanswered < 2) return null;
+  return i.lastDraftAt !== null && i.now - i.lastDraftAt < NOT_READING_EVERY_MS ? "not reading lately: a new idea every few days, not daily" : null;
+}
+
+export const notReading = internalQuery({
+  args: { creatorId: v.id("creators"), now: v.number() },
+  handler: async (ctx, a): Promise<string | null> => {
+    const ideas = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(60)) as Doc<"ideas">[];
+    const lastSeenAt = ideas.reduce<number | null>((m, i) => (i.seenAt && (m === null || i.seenAt > m) ? i.seenAt : m), null);
+    const lastDraftAt = ideas[0]?.createdAt ?? null;
+    const msgs = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId).gte("ts", a.now - 21 * 86_400_000)).collect()) as Doc<"messages">[];
+    const lastIn = msgs.filter((m) => m.direction === "in").reduce((x, m) => Math.max(x, m.ts), 0);
+    const unanswered = msgs.filter((m) => m.direction === "out" && m.proactive === true && m.ts > lastIn).length;
+    return notReadingHold({ lastSeenAt, unanswered, lastDraftAt, now: a.now });
+  },
+});
+
 /** One creator's scout pass. Rails → candidates → the skill → at most one message. */
 export const run = internalAction({
   args: { creatorId: v.id("creators"), dryRun: v.optional(v.boolean()), ignoreRails: v.optional(v.boolean()) },
@@ -121,6 +144,13 @@ export const run = internalAction({
      */
     const skipRails = args.ignoreRails === true && args.dryRun === true;
     if (!g.rails.ok && !skipRails) return { sent: false, reason: g.rails.reason ?? "rails" };
+    // Not reading (2026-11-02): no ideas opened in a week and her texts going unanswered. Drafting a new idea
+    // every day only piles up an inbox nobody opens (a tester had 14 unread) and spends on every one. One every
+    // few days, so the weekly text still has something fresh.
+    if (!skipRails) {
+      const slow = await ctx.runQuery(internal.scout.scout.notReading, { creatorId: args.creatorId, now });
+      if (slow) return { sent: false, reason: slow };
+    }
     if (g.tasteDropped.length && !args.dryRun) await ctx.runMutation(internal.scout.gate.setVerdicts, { verdicts: g.tasteDropped.map((d) => ({ signalId: d.signalId, verdict: "dropped" as const, why: d.why })) });
     // §13.9 / §13.10 (5): after three passes on one account she asks once whether to stop watching it.
     for (const ask of args.dryRun ? [] : g.askStop) {
