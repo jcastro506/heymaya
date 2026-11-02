@@ -11,7 +11,7 @@ import { api, internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
 import { cleanBusy, DEVICE } from "../device";
-import { bookedNoGoogle } from "../../agent/converse";
+import { blockedNoGoogle, bookedNoGoogle } from "../../agent/converse";
 import type { Id } from "../../_generated/dataModel";
 
 const H = 3_600_000;
@@ -78,6 +78,12 @@ describe("after 'book it'", () => {
     expect(bookedNoGoogle("granted")).toMatch(/go on your calendar from the app/);
     expect(bookedNoGoogle("denied")).toBe("booked, and i'll remind you before each one.");
     expect(bookedNoGoogle(null)).not.toMatch(/Settings/);
+  });
+  it("one block's 'block it' with no Google says it's booked, never 'couldn't write' or 'reconnect'", () => {
+    expect(blockedNoGoogle("Tue Nov 4, 5:00 PM", "granted")).toMatch(/^blocked Tue Nov 4, 5:00 PM\. it goes on your calendar from the app/);
+    expect(blockedNoGoogle("Tue Nov 4, 5:00 PM", "denied")).toBe("blocked Tue Nov 4, 5:00 PM, and i'll remind you before.");
+    expect(blockedNoGoogle("Tue Nov 4, 5:00 PM", null, "https://staging.hey-maya.ai")).toMatch(/tap here: https:\/\/staging\.hey-maya\.ai\/app\/calendar$/);
+    for (const d of ["granted", "denied", null] as const) expect(blockedNoGoogle("x", d)).not.toMatch(/couldn't|reconnect|Settings|not connected/);
   });
 });
 

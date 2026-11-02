@@ -159,6 +159,17 @@ export function bookedNoGoogle(device: "granted" | "denied" | null, appUrl = pro
   return `booked, and i'll remind you before each one. want them on your calendar too? tap here: ${(appUrl ?? "https://hey-maya.ai").replace(/\/$/, "")}/app/calendar`;
 }
 
+/**
+ * One block's "block it" when no Google calendar took it (2026-11-02): it IS booked (consent row, reminders,
+ * the app writes it to the iPhone's calendar). It used to say "couldn't write to your calendar just now
+ * (calendar not connected)… reconnect in Settings": wrong for everyone on the iPhone path. Pure.
+ */
+export function blockedNoGoogle(when: string, device: "granted" | "denied" | null, appUrl = process.env.APP_URL): string {
+  if (device === "granted") return `blocked ${when}. it goes on your calendar from the app, and i'll remind you before.`;
+  if (device === "denied") return `blocked ${when}, and i'll remind you before.`;
+  return `blocked ${when}, and i'll remind you before. want it on your calendar too? tap here: ${(appUrl ?? "https://hey-maya.ai").replace(/\/$/, "")}/app/calendar`;
+}
+
 /** Critic problems that are about truth, not style: these get a second rewrite. */
 const FACT_PROBLEMS = new Set(["invented_number", "unsupported_claim", "unchecked_world_fact", "contradicts_tools", "false_action", "invented_sound", "mixed_basis"]);
 
@@ -440,7 +451,10 @@ export const run = internalAction({
         if (blk?.ideaId) await ctx.runMutation(internal.taste.events.record, { creatorId: creator._id, kind: b[2] === "yes" ? "blocked" : "idea_only", ideaId: blk.ideaId, messageId: target._id, extraKeys: [`blockhour:${hourBucket(blk.start, creator.timezone)}`] });
         if (b[2] === "yes") {
           const r = await ctx.runAction(internal.calendar.blocks.confirm, { blockId });
-          body = r.ok ? `blocked ${r.when}. it's on your calendar; move it and i'll follow.${r.htmlLink ? `\n${r.htmlLink}` : ""}` : `couldn't write to your calendar just now (${r.reason}). it's saved here as a plan for ${r.when}; reconnect in Settings and tap again.`;
+          body = r.ok
+            ? `blocked ${r.when}. it's on your calendar; move it and i'll follow.${r.htmlLink ? `\n${r.htmlLink}` : ""}`
+            : r.reason === "calendar not connected" ? blockedNoGoogle(r.when, creator.deviceCalendar?.status ?? null)
+            : `blocked ${r.when}, and i'll remind you before. your Google calendar didn't take it just now.`;
         } else {
           await ctx.runMutation(internal.calendar.blocks.decline, { blockId });
           body = "idea only. it's in Ideas whenever you want it.";
