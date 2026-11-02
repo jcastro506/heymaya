@@ -310,12 +310,14 @@ describe("re-engagement on rows", () => {
     expect((await t.query(internal.agent.context.gather, { creatorId: brandNew as never, messageId: first as never }))?.history).not.toMatch(/back after/);
   });
 
-  it("sibling coherence: the cron still reaches it, the kinds are known to the rails, no TODOs", () => {
+  it("sibling coherence: the cron still reaches it, the kinds are known to the rails, no TODOs", async () => {
     const cadence = readFileSync(new URL("../cadence.ts", import.meta.url), "utf8");
     expect(cadence).toMatch(/internal\.agent\.reengage\.run/);
     expect(cadence).not.toMatch(/QUIET_SKILL/);
-    const rail = readFileSync(new URL("../../core/phoneRail.ts", import.meta.url), "utf8");
-    expect(rail, "the phone rail lets the easy-out (kind quiet) through once").toMatch(/r\.kind === "quiet"/);
+    // Into silence, the easy-out is paced by the one budget like any text of hers (core/reachOut, 2026-11-02): never "asked".
+    const { laneFor } = await import("../../core/reachOut");
+    expect(laneFor("quiet", null)).toBe("hers");
+    expect(laneFor("nudge", null)).toBe("hers");
     const src = readFileSync(new URL("../reengage.ts", import.meta.url), "utf8") + readFileSync(new URL("../returnFacts.ts", import.meta.url), "utf8");
     expect(src).not.toMatch(/TODO|FIXME/);
   });

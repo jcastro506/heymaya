@@ -56,7 +56,7 @@ export const gather = internalQuery({
       .query("messages")
       .withIndex("by_creator_and_ts", (q) => q.eq("creatorId", args.creatorId))
       .order("desc")
-      .take(RECENT_MESSAGES)) as Doc<"messages">[];
+      .take(RECENT_MESSAGES + 10)).filter((m) => !(m as Doc<"messages">).withdrawnAt).slice(0, RECENT_MESSAGES) as Doc<"messages">[];
     const target = args.messageId ? ((await ctx.db.get(args.messageId)) as Doc<"messages"> | null) : null;
     if (target && target.creatorId !== creator._id) return null;
     const personal = await personalFor(ctx, creator);
@@ -212,10 +212,13 @@ function tasteSection(c: Doc<"creators">): string {
 }
 
 /** The variable suffix: the recent conversation, oldest first, then the message being answered. */
-export function buildSuffix(input: { recent: Doc<"messages">[]; target: Doc<"messages"> | null }): string {
+export function buildSuffix(input: { recent: Doc<"messages">[]; target: Doc<"messages"> | null; burst?: string }): string {
   const lines = input.recent.map((m) => `${m.direction === "in" ? "them" : "you"}: ${m.body}`);
   const t = input.target;
-  const targetLine = t ? `\n\nAnswer this one:\nthem${t.kind && t.kind !== "inbound" ? ` (${t.kind})` : ""}: ${t.body}` : "";
+  // A burst (core/burst) is answered as one: one short reply, never a longer one, the newest word winning.
+  const targetLine = input.burst
+    ? `\n\nThey sent these back to back, oldest first. Answer them together in ONE short reply (1 to 3 short texts, under 80 words unless they asked for detail); where they conflict, the newest wins:\n${input.burst}`
+    : t ? `\n\nAnswer this one:\nthem${t.kind && t.kind !== "inbound" ? ` (${t.kind})` : ""}: ${t.body}` : "";
   return `# Recent conversation (oldest first)\n${lines.join("\n") || "(none)"}${targetLine}`;
 }
 

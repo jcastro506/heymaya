@@ -42,9 +42,10 @@ describe("what sound they want (adversarial)", () => {
 
 describe("what she sends (sibling coherence)", () => {
   const caps = [{ text: "one", shape: "their-usual", why: "" }, { text: "two", shape: "question", why: "" }];
-  it("no sounds yet: the captions, then ONE question", () => {
+  it("no sounds yet: her best caption, then ONE question", () => {
     const t = finishText({ reaction: "the sizzle got me", captions: caps, sounds: [], soundAsk: SOUND_QUESTION });
-    expect(t).toContain("captions:\n1. one\n2. two");
+    expect(t).toContain("caption: one");
+    expect(t).not.toContain("two");
     expect(t.split("---").at(-1)?.trim()).toBe(SOUND_QUESTION);
     expect((t.match(/\?/g) ?? []).length).toBe(1);
   });

@@ -27,6 +27,7 @@ import { CONVERSATIONAL_ONBOARDING } from "../onboarding/conversation";
 import { PARTNERSHIP_SKILL } from "../partnerships/contracts";
 import { PITCH_PLAYBOOK } from "../partnerships/pitch";
 import { soundPlan } from "./finish";
+import { burstTranscript, HUSH_REPLY, isVideo } from "../core/burst";
 
 /** K1: the kit, in one line of her skill. The tool result says what (if anything) to ask next. */
 const KIT_LINE = "Media kit: when they ask about theirs, or a pitch or a brand needs it, read media_kit and follow its `next:` (one question, asked once). A photo for it or their TikTok Studio audience screenshot can simply be texted to you. Turn the public link on only on their yes (media_kit_link). Never offer to make, generate or edit a photo of them.";
@@ -77,6 +78,15 @@ export const markIdea = internalMutation({
   },
 });
 
+/** One of their messages (a video in a burst), only if it's theirs. */
+export const messageById = internalQuery({
+  args: { creatorId: v.id("creators"), messageId: v.id("messages") },
+  handler: async (ctx, a): Promise<Doc<"messages"> | null> => {
+    const m = (await ctx.db.get(a.messageId)) as Doc<"messages"> | null;
+    return m && m.creatorId === a.creatorId ? m : null;
+  },
+});
+
 export const ideaById = internalQuery({
   args: { ideaId: v.id("ideas") },
   handler: async (ctx, a) => await ctx.db.get(a.ideaId),
@@ -98,7 +108,7 @@ The judgment: answer the thing they actually asked, in their register, with what
 What you can do from here, when they ask: give an opinion on a plan or a hook in words; explain what an account is doing; recall an idea or a note; and the management moves (quiet hours, tone, watch or drop an account, what they make) and edits to the latest idea happen when their message is routed to those tools, not inside this reply.
 Their Maya app keeps everything you make: ideas, their week, their numbers, deals. When they ask where to see something, say which part of the app (Ideas, Today, You, Deals); for one exact idea or post, mission_control_link gives a link that opens it in the app. Sparingly, never as a routine ending.
 Forgetting: her memory is only deleted when their message is routed to the forget command. If you are answering here, NOTHING was deleted: never say "wiped", "forgotten" or "scrubbed"; say what to text ("say: forget the thing about my sister").
-Hard rules: never invent a metric, a post, or a trend. Never promise a post will do well. Under 120 words unless they asked for detail. You cannot change settings, watch or drop an account, or edit their list from inside a reply: those happen only when the message is routed to the tool that does them. If you are answering a request like that here, it means it was NOT done; never say "added", "done" or "tracking" — say what to text so it lands ("say: add @handle" / "say: stop watching @handle" / "say: no messages before 9am") or that it's in Settings.`;
+Hard rules: never invent a metric, a post, or a trend. Never promise a post will do well. Under 80 words unless they asked for detail: one to three short texts, the way a friend texts back, never a block. Answer the question they asked, not the questions next to it. You cannot change settings, watch or drop an account, or edit their list from inside a reply: those happen only when the message is routed to the tool that does them. If you are answering a request like that here, it means it was NOT done; never say "added", "done" or "tracking" — say what to text so it lands ("say: add @handle" / "say: stop watching @handle" / "say: no messages before 9am") or that it's in Settings.`;
 
 function hourBucket(epoch: number, timeZone: string): string {
   const h = Number(new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", hourCycle: "h23" }).format(epoch));
@@ -166,6 +176,15 @@ export const run = internalAction({
       return { ok: true };
     }
 
+    // "hold on" mid-burst (core/burst): her undelivered texts are already withdrawn. One short line, nothing else.
+    if (!args.rerouted && (await ctx.runQuery(internal.core.burst.isHushMessage, { creatorId: creator._id, messageId: target._id }))) {
+      await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: HUSH_REPLY, dedupeKey: `hush:${target._id}`, proactive: false, kind: "reply", answering: target._id });
+      await deliverNow(ctx as never);
+      return { ok: true, reason: "hush" };
+    }
+    // One burst, one reply (core/burst): everything they sent since her last text, answered together.
+    const burst = args.rerouted ? [] : await ctx.runQuery(internal.core.burst.burstFor, { messageId: target._id });
+
     // §15.3: code decides the route. Commands never reach a model; links and files go
     // to the opinion path; a voice note or screenshot is read first and then answered here.
     const route: Route = args.rerouted ? { route: "text" } : classifyInbound({ text: target.body, kind: target.kind ?? "inbound", mime: target.fileMime, handles: creator.handles });
@@ -198,6 +217,18 @@ export const run = internalAction({
       const mine = route.own || (route.link.postId ? Boolean(await ctx.runQuery(internal.agent.opinion.ownPostByUrl, { creatorId: creator._id, postId: route.link.postId })) : false);
       const r = await ctx.runAction(internal.agent.opinion.run, { creatorId: creator._id, messageId: target._id, mode: mine ? "own" : "link", link: route.link });
       return { ok: r.ok, reason: r.reason };
+    }
+    // Videos in the burst are drafts to finish together, and their words around them are the question
+    // ("which sound", "this is for halloween"). The videos are watched side by side and answered once.
+    const burstVideos = burst.filter(isVideo);
+    const targetIsVideo = route.route === "file" && route.media === "video";
+    if (burstVideos.length && (targetIsVideo || (route.route === "text" && target.kind === "inbound"))) {
+      const last = burstVideos[burstVideos.length - 1];
+      const kind = await ctx.runAction(internal.agent.moment.kindOfMedia, { messageId: last.id });
+      if (kind !== "scene") {
+        const r = await ctx.runAction(internal.agent.finish.run, { creatorId: creator._id, messageId: target._id, videoIds: burstVideos.map((b) => b.id), transcript: burstTranscript(burst) });
+        return { ok: r.ok, reason: r.reason };
+      }
     }
     if (route.route === "file") {
       // A photo of a place is a moment, a screenshot is numbers, an edited clip is a draft: Gemini says which (Sprint 3d).
@@ -525,7 +556,8 @@ export const run = internalAction({
 
     // §15.3: what do they want? The model decides (one cheap call); code has already taken commands, links and files.
     const lastOutbound = [...recent].reverse().find((m) => m.direction === "out")?.body;
-    const intent = target.kind === "inbound" && !args.rerouted ? await classifyText(ctx, { creatorId: creator._id, text: target.body, ownHandles: creator.handles, lastOutbound, quietHours: creator.quietHours }) : ({ intent: "text" } as const);
+    const burstText = burst.length > 1 ? burstTranscript(burst) : target.body;
+    const intent = target.kind === "inbound" && !args.rerouted ? await classifyText(ctx, { creatorId: creator._id, text: burstText, ownHandles: creator.handles, lastOutbound, quietHours: creator.quietHours }) : ({ intent: "text" } as const);
     // B4: someone who may not be okay gets care, not content. The classifier judged it; care.ts keeps the promises.
     if (intent.intent === "distress") {
       await ctx.runAction(internal.agent.care.respond, { creatorId: creator._id, messageId: target._id });
@@ -629,7 +661,8 @@ export const run = internalAction({
     // at the end of her reply instead of a separate text later. Read back from the reply by its link.
     const ride = !args.handledNote ? await ctx.runQuery(internal.core.editor.rideAlong, { creatorId: creator._id, now: Date.now() }) : null;
     const rideNote = ride ? `\n\nSomething you noticed today and haven't told them: ${ride.summary}\nLink: ${ride.link}\nIf it fits after you've fully answered them, add it as one short "oh also" bubble at the end, with the link on its own line. If their message is serious, a complaint, or a different topic that needs your full attention, leave it out.` : "";
-    const suffix = buildSuffix({ recent: recent.filter((m) => m._id !== target._id), target }) + `\n\nCurrent user-message evidence ID (internal, do not display): ${target._id}` + partnershipEvidence + recalled + greetingRule + unclearRule + deleteRule + readingNow + proposedPlan + paceNote + rideNote + (args.handledNote ? `\n\n(Already done by code this turn, and already said to them: "${args.handledNote.slice(0, 200)}". Answer the REST of their message now; do not repeat the done part.)` : "");
+    const inBurst = new Set(burst.map((b) => String(b.id)));
+    const suffix = buildSuffix({ recent: recent.filter((m) => m._id !== target._id && !(burst.length > 1 && inBurst.has(String(m._id)))), target, burst: burst.length > 1 ? burstTranscript(burst) : undefined }) + `\n\nCurrent user-message evidence ID (internal, do not display): ${target._id}` + partnershipEvidence + recalled + greetingRule + unclearRule + deleteRule + readingNow + proposedPlan + paceNote + rideNote + (args.handledNote ? `\n\n(Already done by code this turn, and already said to them: "${args.handledNote.slice(0, 200)}". Answer the REST of their message now; do not repeat the done part.)` : "");
     const apiKey = process.env.OPENROUTER_API_KEY ?? "";
     const spec = REGISTRY.writer;
 
@@ -747,6 +780,7 @@ export const run = internalAction({
       kind: "reply",
       produced: producedStamp(spec.primary),
       criticSkipped,
+      answering: target._id,
     });
     // It rode along: today's pick is made, by conversation, with no extra text (core/editor).
     if (ride && carried(text, ride.link)) await ctx.runMutation(internal.core.editor.decide, { creatorId: creator._id, day: ride.day, id: ride.id, status: "folded", candidate: ride.candidate, now: Date.now() });

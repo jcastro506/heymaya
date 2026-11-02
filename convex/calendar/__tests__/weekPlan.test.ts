@@ -98,6 +98,35 @@ describe("the Sunday plan", () => {
   });
 });
 
+describe("the Sunday plan goes to people who use plans (2026-11-02)", () => {
+  const PAIRED_LONG_AGO = SUNDAY_6PM - 30 * 86_400_000;
+  it("after two weeks with nothing booked, no plan; one booked block, and it goes; asking always works", async () => {
+    const t = convexTest(schema, modules);
+    vi.useFakeTimers({ now: SUNDAY_6PM, toFake: ["Date"] });
+    const creatorId = await creatorWithIdeas(t, { channel: { paired: true, pairedAt: PAIRED_LONG_AGO } });
+    await t.run((ctx) => ctx.db.insert("messages", { creatorId, direction: "in", surface: "telegram", body: "hi", kind: "inbound", ts: SUNDAY_6PM - 3_600_000 }));
+    const r = await t.action(internal.calendar.weekPlan.draft, { creatorId, now: SUNDAY_6PM });
+    expect(r).toMatchObject({ sent: false, reason: expect.stringMatching(/haven't booked a plan/) });
+    expect(await t.run((ctx) => ctx.db.query("calendarBlocks").collect()), "nothing written").toHaveLength(0);
+    const asked = await t.action(internal.calendar.weekPlan.draft, { creatorId, now: SUNDAY_6PM, force: true });
+    expect(asked.sent, asked.reason).toBe(true);
+    const b = await t.run((ctx) => seedCreator(ctx, "b", { timezone: TZ, channel: { paired: true, pairedAt: PAIRED_LONG_AGO } }));
+    await t.run((ctx) => ctx.db.insert("calendarBlocks", { creatorId: b, kind: "film", start: SUNDAY_6PM - 86_400_000, end: SUNDAY_6PM - 86_000_000, title: "film: x", status: "confirmed", createdAt: SUNDAY_6PM - 90_000_000 }));
+    expect(await t.query(internal.calendar.weekPlan.usesPlans, { creatorId: b, now: SUNDAY_6PM })).toBe(true);
+    expect(await t.query(internal.calendar.weekPlan.usesPlans, { creatorId, now: SUNDAY_6PM }), "cross-tenant: b's booking isn't a's").toBe(false);
+  });
+
+  it("a plan held at send leaves no shoots behind in their app", async () => {
+    const t = convexTest(schema, modules);
+    vi.useFakeTimers({ now: SUNDAY_6PM, toFake: ["Date"] });
+    const creatorId = await creatorWithIdeas(t, { messagingPausedAt: undefined, hushedAt: SUNDAY_6PM - 60_000 });
+    const r = await t.action(internal.calendar.weekPlan.draft, { creatorId, now: SUNDAY_6PM });
+    expect(r).toMatchObject({ sent: false, reason: expect.stringMatching(/held: they said hold on/) });
+    const blocks = await t.run((ctx) => ctx.db.query("calendarBlocks").collect());
+    expect(blocks.every((x) => x.status === "deleted"), "every block dropped").toBe(true);
+  });
+});
+
 describe("reminders around a booked block", () => {
   async function booked(t: ReturnType<typeof convexTest>, opts: { start: number; quiet?: { start: string; end: string } }) {
     const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { timezone: TZ, channel: { paired: true }, plan: { status: "active", founding: true }, ...(opts.quiet ? { quietHours: opts.quiet } : {}) }));

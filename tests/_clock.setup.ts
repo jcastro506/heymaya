@@ -15,3 +15,5 @@ vi.spyOn(Date, "now").mockImplementation(() => real() + offset);
 
 // No real typing pauses between her bubbles in tests (core/imessage partGapMs).
 process.env.PART_GAP_SCALE = "0";
+// Turns don't wait for the rest of a burst in tests; core/__tests__/burst.test.ts sets it back to 1 where it is the subject.
+process.env.BURST_SETTLE_SCALE = "0";

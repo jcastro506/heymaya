@@ -167,6 +167,12 @@ export const draft = internalAction({
     const inp = await ctx.runQuery(internal.calendar.weekPlan.inputsFor, { creatorId: a.creatorId, now });
     if (!inp) return { sent: false, reason: "creator not found" };
     if (inp.alreadyPlanned && !a.force) return { sent: false, reason: "this week is already planned" };
+    // A weekly plan goes to people who use plans (2026-11-02): Adina got three and booked none, and each one
+    // was a text into silence. The first one is part of meeting her; after two weeks, they need to have
+    // booked one, or ask ("plan my week" → force).
+    if (!a.force && a.horizon !== "first" && !(await ctx.runQuery(internal.calendar.weekPlan.usesPlans, { creatorId: a.creatorId, now }))) {
+      return { sent: false, reason: "they haven't booked a plan; the week waits until they ask" };
+    }
     let picked = pickIdeas(inp.ideas, Math.max(1, Math.min(5, Math.round(inp.postsPerWeek) || 1)), inp.experiment);
     if (picked.length === 0 && a.horizon === "first") {
       // Day one: nothing found yet, so the first plan is seeded from their own posts.
@@ -191,11 +197,32 @@ export const draft = internalAction({
     if (a.horizon === "first") await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: a.creatorId, step: "first_plan" });
     // One question for the whole week: this IS the open question, and it supersedes any other.
     await ctx.runMutation(internal.core.messages.closeOpen, { creatorId: a.creatorId });
-    await ctx.runMutation(internal.core.messages.send, {
+    const r = await ctx.runMutation(internal.core.messages.send, {
       creatorId: a.creatorId, surface: "telegram", body, dedupeKey: `plan:${planKey}`, proactive: true, kind: "plan", awaitingAnswer: true,
       buttons: [{ id: `plan:${planKey}:book`, label: "book it" }, { id: `plan:${planKey}:skip`, label: "not this week" }],
     });
+    // Held at send (2026-11-02): a plan nobody was told about must not sit in their app as shoots.
+    if (!r.sent && !r.messageId) {
+      await ctx.runMutation(internal.calendar.weekPlan.skip, { creatorId: a.creatorId, planKey });
+      return { sent: false, reason: `held: ${r.held ?? "not sent"}` };
+    }
     return { sent: true, reason: "planned", planKey, slots: slots.length };
+  },
+});
+
+/** How long after pairing a plan goes without their having booked one: the first weeks are when they try it. */
+export const PLAN_TRIAL_MS = 14 * 86_400_000;
+
+/** Do they use her plans: in their first two weeks, or they've booked (or moved) a block of one. */
+export const usesPlans = internalQuery({
+  args: { creatorId: v.id("creators"), now: v.number() },
+  handler: async (ctx, a): Promise<boolean> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!c) return false;
+    // No pairing time recorded (older rows): treated as still trying plans; the send budget still holds it.
+    if (!c.channel.pairedAt || a.now - c.channel.pairedAt < PLAN_TRIAL_MS) return true;
+    const blocks = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(200)) as Doc<"calendarBlocks">[];
+    return blocks.some((b) => b.status === "confirmed" || b.status === "moved");
   },
 });
 

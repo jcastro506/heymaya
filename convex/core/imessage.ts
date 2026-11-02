@@ -318,6 +318,7 @@ export const handleText = internalAction({
     if (pick) await ctx.runAction(internal.core.imessage.sendRaw, { to: phone, text: pick.endsWith(":no") ? "ok, noted" : "on it", idempotencyKey: `ack:${a.channelMessageId}` });
     // "…is typing" while her turn runs, like Telegram's; one start lasts ~90 s (Linq). Never blocks.
     await ctx.scheduler.runAfter(0, internal.core.imessage.typing, { creatorId: known.creatorId });
+    if (!pick) await ctx.scheduler.runAfter(0, internal.core.burst.checkHush, { creatorId: known.creatorId, messageId: r.messageId, text: a.text });
     await queueTurn(ctx as never, known.creatorId, r.messageId, kind);
     return { ok: true };
   },
@@ -461,6 +462,7 @@ export const deliver = internalAction({
       lastId = r.messageId;
       service = r.service ?? service;
       if (i < parts.length - 1) await new Promise((res) => setTimeout(res, 900));
+      if (i < parts.length - 1 && (await ctx.runQuery(internal.core.burst.isWithdrawn, { messageId: a.messageId }))) break;
     }
     if (a.frames?.length) {
       const album = await sendClawMessage(identity, { to: a.phone, text: a.frames.map((f) => f.caption).join(" · ").slice(0, 900), mediaUrls: a.frames.map((f) => f.url) });
@@ -521,6 +523,8 @@ async function deliverLinq(
       const gap = partGapMs(next && next.type === "text" ? next.value : "") * PART_GAP_SCALE();
       if (chatId && gap > 0) await startTyping(identity, chatId).catch(() => undefined);
       await new Promise((res) => setTimeout(res, gap));
+      // "hold on" between two of her texts: the rest of this row stays unsent (core/burst).
+      if (await ctx.runQuery(internal.core.burst.isWithdrawn, { messageId: a.messageId })) break;
     }
   }
   await ctx.runMutation(internal.core.telegram.markDelivered, { messageId: a.messageId, ...(lastId ? { telegramMessageId: lastId } : {}) });

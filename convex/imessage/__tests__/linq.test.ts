@@ -79,8 +79,8 @@ describe("Linq client (pure)", () => {
   });
 });
 
-describe("the phone rail (pure): Linq's chat health and back-off ladder", () => {
-  const base: RailInput = { now: 10 * 24 * H, kind: "scout", health: "HEALTHY", lineState: null, optedOutAt: undefined, lastInboundAt: 9 * 24 * H, unanswered: [], proactiveToday: 0 };
+describe("the phone rail (pure): Linq's chat health", () => {
+  const base: RailInput = { now: 10 * 24 * H, kind: "scout", health: "HEALTHY", lineState: null, optedOutAt: undefined, proactiveToday: 0 };
   it("opted out, critical chat or line, or a flagged line holds every proactive text", () => {
     expect(phoneRailHold({ ...base, optedOutAt: 1 })).toMatch(/opted out/);
     expect(phoneRailHold({ ...base, health: "OPTED_OUT" })).toMatch(/opted out/);
@@ -89,29 +89,10 @@ describe("the phone rail (pure): Linq's chat health and back-off ladder", () => 
   });
   it("at risk: one proactive text a day", () => {
     expect(phoneRailHold({ ...base, health: "AT_RISK", proactiveToday: 0 })).toBeNull();
-    expect(phoneRailHold({ ...base, health: "AT_RISK", proactiveToday: 1 })).toMatch(/at risk/);
+    expect(phoneRailHold({ ...base, health: "AT_RISK", proactiveToday: PHONE_RAIL.atRiskPerDay })).toMatch(/at risk/);
   });
-  it("silence: one follow-up after about a day, one more after a few days, one last quiet check-in, then nothing", () => {
-    const t0 = base.now;
-    expect(phoneRailHold({ ...base, unanswered: [] })).toBeNull();
-    expect(phoneRailHold({ ...base, unanswered: [{ ts: t0 - 2 * H, kind: "scout" }] })).toMatch(/about a day/);
-    expect(phoneRailHold({ ...base, kind: "reminder", unanswered: [{ ts: t0 - 2 * H, kind: "plan" }] }), "a reminder for a shoot they booked").toBeNull();
-    // The flaker on shoot day: prep and check-in unanswered, then "how'd it go" still goes, and the
-    // next morning's "didn't happen, put it back?" counts only the how'd-it-go.
-    const shootDay = [{ ts: t0 - 10 * H, kind: "reminder" }, { ts: t0 - 3 * H, kind: "reminder" }];
-    expect(phoneRailHold({ ...base, kind: "checkin", unanswered: shootDay })).toBeNull();
-    expect(phoneRailHold({ ...base, kind: "morning", unanswered: shootDay })).toBeNull();
-    // Silent for over three days: shoot texts count and wait like everything else.
-    const silent = { ...base, lastInboundAt: t0 - 4 * 24 * H };
-    expect(phoneRailHold({ ...silent, kind: "checkin", unanswered: [...shootDay, { ts: t0 - 2 * H, kind: "scout" }] })).toMatch(/quiet until they write/);
-    expect(phoneRailHold({ ...base, unanswered: [{ ts: t0 - PHONE_RAIL.firstFollowUpAfterMs, kind: "scout" }] })).toBeNull();
-    const two = [{ ts: t0 - 4 * 24 * H, kind: "scout" }, { ts: t0 - 2 * 24 * H, kind: "morning" }];
-    expect(phoneRailHold({ ...base, unanswered: two })).toMatch(/few days/);
-    expect(phoneRailHold({ ...base, unanswered: [two[0], { ts: t0 - PHONE_RAIL.secondFollowUpAfterMs, kind: "morning" }] })).toBeNull();
-    const three = [...two, { ts: t0 - 24 * H, kind: "scout" }];
-    expect(phoneRailHold({ ...base, unanswered: three })).toMatch(/quiet until they write/);
-    expect(phoneRailHold({ ...base, kind: "quiet", unanswered: three }), "the one last easy-out check-in").toBeNull();
-    expect(phoneRailHold({ ...base, kind: "quiet", unanswered: [...three, { ts: t0 - H, kind: "quiet" }] })).toMatch(/quiet until they write/);
+  it("silence is no longer this rail's: it backs off in the one budget (core/reachOut), on every channel", () => {
+    expect(phoneRailHold(base)).toBeNull();
   });
 });
 
@@ -214,8 +195,8 @@ describe("Linq on the rows, with the vendor's HTTP faked at fetch", () => {
     const headers = { "webhook-id": "ev-1", "webhook-timestamp": String(ts), "webhook-signature": await signWebhook(SECRET, "ev-1", ts, body) };
     expect((await t.fetch("/linq/webhook", { method: "POST", headers, body })).status).toBe(200);
     expect((await t.fetch("/linq/webhook", { method: "POST", headers, body })).status, "redelivery is acknowledged").toBe(200);
-    // The webhook schedules handleText, which schedules typing and queues her turn: a few rounds.
-    for (let i = 0; i < 4; i++) { vi.advanceTimersByTime(1); await t.finishInProgressScheduledFunctions(); }
+    // The webhook schedules handleText, which schedules typing, the hold-on check, and her turn: a few rounds.
+    for (let i = 0; i < 8; i++) { vi.advanceTimersByTime(1); await t.finishInProgressScheduledFunctions(); }
     const rows = await t.run((ctx) => ctx.db.query("messages").collect());
     expect(rows.filter((m) => m.direction === "in"), "one row, however many deliveries").toHaveLength(1);
     expect(rows.some((m) => m.direction === "out" && m.deliveredAt && m.surface === "imessage"), "her reply went out through Linq").toBe(true);
@@ -254,10 +235,11 @@ describe("Linq on the rows, with the vendor's HTTP faked at fetch", () => {
     expect((await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: "idea 3", dedupeKey: "i3", proactive: true, kind: "scout" })).sent).toBe(true);
   });
 
-  it("a Telegram creator never meets the phone rail (sibling coherence)", async () => {
+  it("a Telegram creator gets the same back-off as a phone one (sibling coherence: one budget, every channel)", async () => {
     const t = convexTest(schema, modules);
     const creatorId = await t.run((ctx) => seedCreator(ctx, "tg", { channel: { paired: true, kind: "telegram" }, textFirstPace: "more" }));
+    await t.run((ctx) => ctx.db.insert("messages", { creatorId, direction: "in", surface: "telegram", body: "hi", ts: Date.now() - 3 * H } as never));
     expect((await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: "idea 1", dedupeKey: "i1", proactive: true, kind: "scout" })).sent).toBe(true);
-    expect((await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: "idea 2", dedupeKey: "i2", proactive: true, kind: "scout" })).sent).toBe(true);
+    expect((await t.mutation(internal.core.messages.send, { creatorId, surface: "telegram", body: "idea 2", dedupeKey: "i2", proactive: true, kind: "scout" })).held).toMatch(/about a day/);
   });
 });

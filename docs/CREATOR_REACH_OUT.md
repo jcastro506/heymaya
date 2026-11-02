@@ -12,16 +12,33 @@ She texts first only when a friend who works in the industry would:
 
 Everything else goes to the app quietly. New ideas are never announced one by one.
 
-## Budgets (enforced in `messages.send`, one definition in `core/reachOut.ts`)
+## One attention budget (2026-11-02; enforced in `messages.send`, one definition in `core/reachOut.ts`)
+
+Before, four rules decided separately (these lanes, the editor's hold, the daily cap, the phone rail's silence ladder). Together they gave a paying tester eight days of nothing: three unanswered texts meant "quiet until they write", which held the Sunday plan and every deal. Now one function decides, on every channel.
 
 | lane | kinds | budget |
 |---|---|---|
-| asked | routine, reminder, plan, review | none (still quiet hours and pause) |
-| setup | hello, first read, onboarding notices in the first 24 h | none |
-| theirs | morning, shoot_today, missed, checkin, saw_it, event_today, partnership | 2 a day |
-| hers | scout, idea, for_you, ideas_waiting, milestone, streak, nudge, quiet, breakout, engage, status | their pace: less = 1 in 3 days, normal = 1 a day, more = 2 a day; from day one (no quiet start since 2026-10-21) |
+| asked | routine, reminder, plan, review | none (still quiet hours, pause, "hold on") |
+| setup | hello, first read, onboarding notices in the first days | none |
+| theirs | morning, shoot_today, missed, checkin, saw_it, post_read, event_today, partnership, calendar | 2 a day while they're talking to her (wrote in the last 3 days); after that, budgeted like hers |
+| hers | everything else | by how they've been answering, below |
 
-A day never has more than 3 texts she started, outside what they asked for.
+| their state | texts she starts |
+|---|---|
+| day one (first 24 h) | two of hers: the first idea, one later that day |
+| engaged (0–1 unanswered) | one a day at their pace (less = one in 3 days, more = two a day); never a second while the first is unanswered, until the next day |
+| cooling (2–3 unanswered) | one every 3 days |
+| quiet (4+ unanswered) | one a week. Never zero: someone paying hears her best thing weekly |
+
+Never more than 3 started in a day. The phone rail (`core/phoneRail.ts`) now only holds for the line's health (opted out, critical, at risk).
+
+What goes in that one text is the editor's pick (`core/editor.ts`): for Maya + Deals, a deal scores 1.5× (it's what they pay for). The editor skips its model call when the budget would hold the text anyway.
+
+The weekly plan goes only to people who use plans: in their first two weeks, or once they've booked a block of one; anyone can ask for one. A plan held at send drops its blocks, so the app never shows shoots nobody was told about. The scout drafts a new idea every few days instead of daily for someone who hasn't opened one in a week and isn't answering.
+
+## One burst, one reply (2026-11-02, `core/burst.ts`)
+
+People text in bursts. Her turn waits a few seconds after their last text (7 s, 10 s for a video); an older turn with a newer text behind it is skipped and the newest answers everything since her last reply (never past 3 minutes, so a long burst still gets answers). A reply being written when they text again is held in `messages.send`. Videos in a burst are watched side by side, and the draft review answers what they asked: a sound question gets a sound; captions only when asked, or one caption when there's no question. "hold on" / "stop texting for a minute" withdraws everything of hers not yet delivered, she says one short line, and she starts nothing until they write. The answer to a burst is still one to three short texts.
 
 ## Cut or folded
 
