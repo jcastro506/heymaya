@@ -14,7 +14,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { decrypt, encrypt } from "../lib/encryption";
 import { creatorForIdentity } from "../core/identity";
-import { buildAuthUrl, exchangeCode, listCalendars, refreshAccessToken, revokeToken, GoogleCalendarApiError } from "../integrations/google/calendar";
+import { buildAuthUrl, deleteEvent, exchangeCode, listCalendars, refreshAccessToken, revokeToken, GoogleCalendarApiError } from "../integrations/google/calendar";
 
 const STATE_TTL_MS = 15 * 60 * 1000;
 
@@ -42,6 +42,34 @@ export const issueState = mutation({
   },
 });
 
+/** Where Google sends them back: the website's public callback (Google Cloud's allow-list must hold it exactly). */
+export function calendarRedirectUri(env: Record<string, string | undefined> = process.env): string {
+  return env.GOOGLE_CALENDAR_REDIRECT_URI || `${(env.APP_URL || "https://hey-maya.ai").replace(/\/+$/, "")}/api/google-calendar/callback`;
+}
+
+/** The app's round trip ends on this page, which hands back to the app (`maya://`) and closes the sign-in sheet. */
+export const APP_RETURN = "/o/billing?state=calendar&auto=1";
+
+/**
+ * The app's "Connect Google Calendar" (2026-11-02): for people who live in Google Calendar, not the iPhone's. A
+ * one-use, 15-minute state bound to the signed-in creator, and Google's consent page for it; the app opens it in
+ * the system sign-in sheet. No website sign-in: the state is the credential, spent at the callback.
+ */
+export const connectApp = mutation({
+  args: {},
+  handler: async (ctx): Promise<{ ok: boolean; url?: string; reason?: string }> => {
+    const c = await creatorForIdentity(ctx);
+    if (!c) return { ok: false, reason: "Sign in first." };
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    if (!clientId) return { ok: false, reason: "Connecting Google Calendar isn't available right now." };
+    const now = Date.now();
+    const token = mintToken();
+    const redirectUri = calendarRedirectUri();
+    await ctx.db.insert("oauthStates", { creatorId: c._id, provider: "google", token, returnTo: APP_RETURN, redirectUri, expiresAt: now + STATE_TTL_MS, createdAt: now });
+    return { ok: true, url: buildAuthUrl({ clientId, redirectUri, state: token }) };
+  },
+});
+
 export const authUrl = query({
   args: { redirectUri: v.string(), state: v.string() },
   handler: async (_ctx, a): Promise<string> => {
@@ -53,12 +81,12 @@ export const authUrl = query({
 
 export const claimState = internalMutation({
   args: { token: v.string() },
-  handler: async (ctx, a): Promise<{ creatorId: Id<"creators">; returnTo: string | null } | null> => {
+  handler: async (ctx, a): Promise<{ creatorId: Id<"creators">; returnTo: string | null; redirectUri: string | null } | null> => {
     const row = (await ctx.db.query("oauthStates").withIndex("by_token", (q) => q.eq("token", a.token)).first()) as Doc<"oauthStates"> | null;
     const now = Date.now();
     if (!row || row.provider !== "google" || row.expiresAt <= now || row.claimedAt) return null;
     await ctx.db.patch(row._id, { claimedAt: now });
-    return { creatorId: row.creatorId, returnTo: row.returnTo ?? null };
+    return { creatorId: row.creatorId, returnTo: row.returnTo ?? null, redirectUri: row.redirectUri ?? null };
   },
 });
 
@@ -83,7 +111,8 @@ export const exchange = action({
     if (!clientId || !clientSecret) return { ok: false, reason: "not_configured" };
     let tokens;
     try {
-      tokens = await exchangeCode({ code: a.code, redirectUri: a.redirectUri, clientId, clientSecret });
+      // The redirect Google was given when the state was minted wins over the website's guess at its own address.
+      tokens = await exchangeCode({ code: a.code, redirectUri: claim.redirectUri ?? a.redirectUri, clientId, clientSecret });
     } catch (e) {
       return { ok: false, reason: e instanceof GoogleCalendarApiError ? `google_${e.status}` : "exchange_threw" };
     }
@@ -99,6 +128,8 @@ export const exchange = action({
     }
     await ctx.runMutation(internal.calendar.oauth.storeConnection, { creatorId, tokenRef: await encrypt(JSON.stringify(bundle)), calendars, keepRefresh: !tokens.refresh_token });
     await ctx.scheduler.runAfter(0, internal.calendar.sync.syncOne, { creatorId });
+    // Sessions booked before Google was connected (on the iPhone's calendar until now) move over to Google.
+    await ctx.scheduler.runAfter(0, internal.calendar.blocks.backfillGoogle, { creatorId });
     return { ok: true, returnTo };
   },
 });
@@ -214,6 +245,18 @@ export const meForAction = internalQuery({
 export async function disconnectFor(ctx: ActionCtx, creatorId: Id<"creators">): Promise<void> {
   const conn = await ctx.runQuery(internal.calendar.oauth.connection, { creatorId });
   if (!conn) return;
+  // Her upcoming sessions come off Google first (2026-11-02): from here the iPhone's calendar holds them, and
+  // leaving the Google copies would put every one on their calendar twice. Best effort: a dead grant can't.
+  const ahead = await ctx.runQuery(internal.calendar.oauth.onGoogleAhead, { creatorId, now: Date.now() });
+  if (ahead.length && conn.status === "connected") {
+    try {
+      const token = await ensureAccessToken(ctx, conn);
+      for (const b of ahead) await deleteEvent(token, { calendarId: b.calendarId ?? conn.calendarIds?.[0] ?? "primary", eventId: b.externalEventId }).catch(() => undefined);
+    } catch {
+      /* the grant is gone; their Google copies stay, ours are cleared below */
+    }
+  }
+  await ctx.runMutation(internal.calendar.oauth.clearExternal, { ids: ahead.map((b) => b.id) });
   if (conn.tokenRef) {
     try {
       const bundle = JSON.parse(await decrypt(conn.tokenRef)) as TokenBundle;
@@ -224,6 +267,24 @@ export async function disconnectFor(ctx: ActionCtx, creatorId: Id<"creators">): 
   }
   await ctx.runMutation(internal.calendar.oauth.forget, { creatorId });
 }
+
+/** Her sessions ahead that sit on Google. */
+export const onGoogleAhead = internalQuery({
+  args: { creatorId: v.id("creators"), now: v.number() },
+  handler: async (ctx, a): Promise<Array<{ id: Id<"calendarBlocks">; externalEventId: string; calendarId: string | null }>> => {
+    const rows = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("start", a.now)).take(300)) as Doc<"calendarBlocks">[];
+    return rows.filter((b) => b.externalEventId && b.status !== "deleted").map((b) => ({ id: b._id, externalEventId: b.externalEventId!, calendarId: b.calendarId ?? null }));
+  },
+});
+
+/** Off Google: the rows no longer point at an event there, so the iPhone's calendar takes them. */
+export const clearExternal = internalMutation({
+  args: { ids: v.array(v.id("calendarBlocks")) },
+  handler: async (ctx, a): Promise<null> => {
+    for (const id of a.ids) await ctx.db.patch(id, { externalEventId: undefined, calendarId: undefined });
+    return null;
+  },
+});
 
 export const forget = internalMutation({
   args: { creatorId: v.id("creators") },

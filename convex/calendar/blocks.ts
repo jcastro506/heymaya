@@ -81,6 +81,33 @@ export const refreshForIdea = internalAction({
   },
 });
 
+/** Booked sessions ahead that Google doesn't have yet: their yes is on the row, the event isn't. */
+export const unwritten = internalQuery({
+  args: { creatorId: v.id("creators"), now: v.number() },
+  handler: async (ctx, a): Promise<Id<"calendarBlocks">[]> => {
+    const rows = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("start", a.now).lte("start", a.now + 21 * 86_400_000)).take(200)) as Doc<"calendarBlocks">[];
+    const live = new Set((await liveBlocks(ctx, a.creatorId, rows)).map((b) => String(b._id)));
+    return rows.filter((b) => live.has(String(b._id)) && b.consentAt && !b.externalEventId && b.status !== "deleted" && b.end > a.now).map((b) => b._id);
+  },
+});
+
+/**
+ * Google just connected (2026-11-02): what they'd already booked goes onto it, so nothing they said yes to is
+ * missing there. The iPhone copies come off on the app's next sync (calendar/device: Google owns the writes).
+ */
+export const backfillGoogle = internalAction({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<{ written: number; failed: number }> => {
+    const ids = await ctx.runQuery(internal.calendar.blocks.unwritten, { creatorId: a.creatorId, now: Date.now() });
+    let written = 0, failed = 0;
+    for (const blockId of ids) {
+      const r = await ctx.runAction(internal.calendar.blocks.confirm, { blockId });
+      if (r.ok) written++; else failed++;
+    }
+    return { written, failed };
+  },
+});
+
 /** Their yes, as a row. Idempotent. */
 export const consent = internalMutation({
   args: { blockId: v.id("calendarBlocks") },
