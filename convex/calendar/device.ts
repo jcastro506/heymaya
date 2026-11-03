@@ -12,7 +12,7 @@ import { ingestRows } from "./sync";
 import { mutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
 import { creatorForIdentity } from "../core/identity";
-import { liveBlocks } from "./liveness";
+import { liveBlocks, retireMootFor } from "./liveness";
 import { eventDescription, eventSummary, ideaForEvent } from "./eventBody";
 
 export const DEVICE = { aheadDays: 21, maxBusy: 150, maxSpanMs: 14 * 3_600_000 } as const;
@@ -70,6 +70,51 @@ export const setStatus = mutation({
 });
 
 /** What the app wrote and removed. Only their own blocks; an unknown id is ignored. */
+/**
+ * They changed one of her sessions in their phone's Calendar app (2026-11-03): moved it, or deleted it. The
+ * app used to put it back on its next sync, so a drag in Apple Calendar never stuck. Now the app reports the
+ * change and the plan follows, the way it does for Google (sync.followMoves: reminders move, she says so once).
+ *
+ * `seen` is the start the app last wrote: a move counts only while the server still has that start, so a
+ * session she moved by text a moment ago isn't dragged back by the phone's stale copy. Only their own booked
+ * sessions that are on the phone; anything else is ignored.
+ */
+export const changed = mutation({
+  args: {
+    moved: v.array(v.object({ id: v.string(), s: v.number(), e: v.number(), seen: v.number() })),
+    gone: v.array(v.string()),
+  },
+  handler: async (ctx, a): Promise<{ ok: boolean; moved: number; gone: number }> => {
+    const c = await creatorForIdentity(ctx);
+    if (!c) return { ok: false, moved: 0, gone: 0 };
+    const now = Date.now();
+    const mine = async (raw: string): Promise<Doc<"calendarBlocks"> | null> => {
+      const id = ctx.db.normalizeId("calendarBlocks", raw);
+      const b = id ? ((await ctx.db.get(id)) as Doc<"calendarBlocks"> | null) : null;
+      return b && b.creatorId === c._id && b.consentAt && b.deviceEventId && b.status !== "deleted" ? b : null;
+    };
+    const moved: Array<{ blockId: Id<"calendarBlocks">; from: number; to: number; title: string }> = [];
+    const dropped: Array<{ blockId: Id<"calendarBlocks">; title: string; start: number }> = [];
+    for (const m of a.moved.slice(0, 50)) {
+      const b = await mine(m.id);
+      const sane = Number.isFinite(m.s) && Number.isFinite(m.e) && m.e > m.s && m.e - m.s <= DEVICE.maxSpanMs && m.s > now - 86_400_000 && m.s < now + DEVICE.aheadDays * 86_400_000;
+      if (!b || !sane || b.start !== m.seen || (m.s === b.start && m.e === b.end)) continue;
+      await ctx.db.patch(b._id, { start: m.s, end: m.e, status: "moved", rev: (b.rev ?? 0) + 1 });
+      moved.push({ blockId: b._id, from: b.start, to: m.s, title: b.title });
+    }
+    for (const g of a.gone.slice(0, 50)) {
+      const b = await mine(g);
+      if (!b || b.end <= now) continue;
+      await ctx.db.patch(b._id, { status: "deleted", deviceEventId: undefined, rev: (b.rev ?? 0) + 1 });
+      // A dropped film takes its edit and post with it when nothing else films that idea (liveness.ts).
+      if (b.kind === "film" && b.ideaId) await retireMootFor(ctx, c._id, b.ideaId);
+      dropped.push({ blockId: b._id, title: b.title, start: b.start });
+    }
+    if (moved.length || dropped.length) await ctx.scheduler.runAfter(0, internal.calendar.sync.followMoves, { creatorId: c._id, moved, dropped });
+    return { ok: true, moved: moved.length, gone: dropped.length };
+  },
+});
+
 export const synced = mutation({
   args: { written: v.array(v.object({ id: v.string(), eventId: v.string() })), removed: v.array(v.string()) },
   handler: async (ctx, a): Promise<{ ok: boolean; updated: number }> => {
