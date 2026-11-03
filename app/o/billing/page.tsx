@@ -9,12 +9,17 @@ const COPY: Record<string, { title: string; body: string }> = {
   canceled: { title: "Nothing changed", body: "No charge. Head back to Maya whenever you like." },
   done: { title: "All set", body: "Head back to Maya." },
   connected: { title: "Connected", body: "Head back to Maya. Your account shows up there in a few seconds." },
+  calendar: { title: "Google Calendar connected", body: "Head back to Maya. Your sessions go on Google Calendar from now on." },
+  calendar_failed: { title: "Google Calendar didn't connect", body: "Nothing changed. Head back to Maya and try again, or use your iPhone's calendar." },
 };
 
-export default async function BillingReturn({ searchParams }: { searchParams: Promise<{ state?: string; auto?: string }> }) {
-  const { state, auto } = await searchParams;
+export default async function BillingReturn({ searchParams }: { searchParams: Promise<{ state?: string; auto?: string; calendar_error?: string }> }) {
+  const q = await searchParams;
+  const auto = q.auto;
+  // The app's Google Calendar connect lands here too (calendar/oauth APP_RETURN); a refusal or failure says so.
+  const state = q.state === "calendar" && q.calendar_error ? "calendar_failed" : q.state;
   // Onboarding in the app opens these pages in a sign-in sheet that closes itself on maya://.
-  const back = `maya://onboarding/${state === "connected" ? "connected" : state === "canceled" ? "canceled" : "paid"}`;
+  const back = state === "calendar" || state === "calendar_failed" ? "maya://calendar/google" : `maya://onboarding/${state === "connected" ? "connected" : state === "canceled" ? "canceled" : "paid"}`;
   const c = COPY[state ?? "done"] ?? COPY.done;
   return (
     <>

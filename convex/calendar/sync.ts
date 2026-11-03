@@ -219,6 +219,11 @@ export const applyClasses = internalMutation({
   },
 });
 
+/** Pure: an event by what it is, not which calendar it came from. */
+export function eventKey(e: Pick<Doc<"calendarEvents">, "title" | "start">): string {
+  return `${(e.title ?? "").trim().toLowerCase().replace(/\s+/g, " ")}|${e.start}`;
+}
+
 /** One `calendar` signal per filmable event with two days of runway; never twice for the same event. */
 export const writeSignals = internalMutation({
   args: { creatorId: v.id("creators"), timezone: v.string(), now: v.number() },
@@ -228,9 +233,13 @@ export const writeSignals = internalMutation({
     if (filmable.length === 0) return 0;
     const existing = (await ctx.db.query("signals").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(300)) as Doc<"signals">[];
     const seen = new Set(existing.filter((s) => s.kind === "calendar" && s.calendarEventId).map((s) => s.calendarEventId as string));
+    // The same event on Google and on the phone (a Google account added to the iPhone) is one idea, not two.
+    const byId = new Map(events.map((e) => [e.externalId, e]));
+    const sameThing = new Set(existing.filter((s) => s.kind === "calendar" && s.calendarEventId).map((s) => byId.get(s.calendarEventId as string)).filter((e): e is Doc<"calendarEvents"> => Boolean(e)).map(eventKey));
     let n = 0;
     for (const e of filmable) {
-      if (seen.has(e.externalId)) continue;
+      if (seen.has(e.externalId) || sameThing.has(eventKey(e))) continue;
+      sameThing.add(eventKey(e));
       const daysOut = Math.round((e.start - a.now) / 86_400_000);
       await ctx.db.insert("signals", {
         creatorId: a.creatorId,

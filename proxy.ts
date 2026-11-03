@@ -8,7 +8,9 @@ import { NextResponse } from "next/server";
  * the Stripe webhook 404'd behind Clerk for months in the old product).
  */
 const isPublic = createRouteMatcher([
-  "/ops", "/ops/(.*)", "/", "/join", "/privacy", "/terms", "/sign-in(.*)", "/sign-up(.*)", "/api/health", "/onboarding-preview", "/mission-control-preview", "/o/(.*)", "/k/(.*)", "/m/(.*)", "/go/(.*)", "/g/(.*)"]);
+  "/ops", "/ops/(.*)", "/", "/join", "/privacy", "/terms", "/sign-in(.*)", "/sign-up(.*)", "/api/health", "/onboarding-preview", "/mission-control-preview", "/o/(.*)", "/k/(.*)", "/m/(.*)", "/go/(.*)", "/g/(.*)",
+  // Google's return from the app's calendar connect: no website session there; the one-use state is the credential.
+  "/api/google-calendar/callback"]);
 
 // Sign-up and onboarding live in the iPhone app now (app spec §5); the old web screens send people to it.
 const isRetired = createRouteMatcher(["/sign-up(.*)", "/start(.*)", "/app(.*)"]);

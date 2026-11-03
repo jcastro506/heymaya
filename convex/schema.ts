@@ -764,6 +764,7 @@ export default defineSchema({
     provider: v.union(v.literal("google"), v.literal("gmail")),
     token: v.string(),
     returnTo: v.optional(v.string()), // where to land after the round trip (onboarding step 5, or Settings)
+    redirectUri: v.optional(v.string()), // the redirect Google was given (the app's connect): the exchange must name the same one
     expiresAt: v.number(),
     claimedAt: v.optional(v.number()),
     createdAt: v.number(),

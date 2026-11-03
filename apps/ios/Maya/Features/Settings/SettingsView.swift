@@ -26,7 +26,7 @@ struct SettingsView: View {
       } header: {
         Text("Your calendar")
       } footer: {
-        Text("She puts the sessions you book on your iPhone's calendar, plans around your week, and suggests content for things worth filming, like a trip or a race. Anything personal stays private.")
+        Text("She puts the sessions you book on Google Calendar if it's connected, otherwise on your iPhone's calendar. She plans around your week and suggests content for things worth filming, like a trip or a race. Anything personal stays private.")
       }
       Section("Plan") {
         NavigationLink { PlanView() } label: { LabeledContent("Your plan", value: settings.planName) }
@@ -80,21 +80,54 @@ struct SettingsView: View {
   }
 }
 
-/// The iPhone calendar: on, off (in iPhone Settings), or not asked yet.
+/// Google Calendar (connected, needs a reconnect, or not) and the iPhone calendar (on, off in iPhone Settings,
+/// or not asked yet). With Google connected, sessions go there and the phone keeps no second copy.
 private struct CalendarRow: View {
   @State private var granted = CalendarSync.granted
   @State private var asked = EKEventStore.authorizationStatus(for: .event) != .notDetermined
+  @State private var google: GoogleCalendar.Status?
+  @State private var busy = false
+  @State private var problem: String?
+  @State private var confirmDisconnect = false
+  @State private var choices: [CalendarSync.Choice] = CalendarSync.writable()
+  @State private var chosen = CalendarSync.chosenId ?? CalendarSync.writable().first?.id ?? ""
   @Environment(\.openURL) private var openURL
 
   var body: some View {
-    if granted {
-      LabeledContent("Calendar", value: "On")
-    } else if asked {
-      Button("Turn on in iPhone Settings") { if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) } }
-    } else {
-      Button("Add my sessions to my calendar") {
-        Task { granted = await CalendarSync.connect(); asked = true }
+    Group {
+      if google?.connected == true {
+        LabeledContent("Google Calendar", value: "Connected")
+        Button("Disconnect Google Calendar", role: .destructive) { confirmDisconnect = true }.disabled(busy)
+      } else {
+        Button(google?.needsReconnect == true ? "Reconnect Google Calendar" : "Connect Google Calendar") {
+          Task { busy = true; problem = await GoogleCalendar.connect(); google = await GoogleCalendar.status(); busy = false }
+        }
+        .disabled(busy)
       }
+      if granted {
+        LabeledContent("iPhone calendar", value: "On")
+        if google?.connected != true, choices.count > 1 {
+          Picker(CalendarWords.pick, selection: $chosen) {
+            ForEach(choices) { c in Text("\(c.title) (\(c.account))").tag(c.id) }
+          }
+          .onChange(of: chosen) { _, id in if !id.isEmpty { Task { await CalendarSync.choose(id) } } }
+        }
+      } else if asked {
+        Button("Turn on iPhone calendar in Settings") { if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) } }
+      } else {
+        Button("Use my iPhone calendar") {
+          Task { granted = await CalendarSync.connect(); asked = true; choices = CalendarSync.writable(); chosen = CalendarSync.chosenId ?? choices.first?.id ?? "" }
+        }
+      }
+      if let problem { Text(problem).font(MayaFont.caption).foregroundStyle(Palette.err) }
+    }
+    .task { google = await GoogleCalendar.status() }
+    .confirmationDialog("Disconnect Google Calendar?", isPresented: $confirmDisconnect, titleVisibility: .visible) {
+      Button("Disconnect", role: .destructive) {
+        Task { busy = true; await GoogleCalendar.disconnect(); google = await GoogleCalendar.status(); await CalendarSync.sync(); busy = false }
+      }
+    } message: {
+      Text("Your upcoming sessions come off Google and go on your iPhone's calendar instead, if it's on.")
     }
   }
 }

@@ -490,26 +490,99 @@ private struct WatchStep: View {
 
 // MARK: - 5. Calendar (asked here so her first plan can go straight on it; Apple doesn't let it be required)
 
+/// The words, kept out of the view so the copy test can read them.
+enum CalendarWords {
+  static let title = "Maya plans your week for you."
+  static let subtitle = "She puts filming and posting times on your calendar, around the plans you already have. Pick the one you actually use."
+  static let phone = "iPhone calendar"
+  static let phoneHelp = "iCloud, or any account on this phone"
+  static let google = "Google Calendar"
+  static let googleHelp = "If you use the Google Calendar app"
+  static let pick = "Put sessions on"
+}
+
 private struct CalendarStep: View {
   let model: OnboardingModel
-  @State private var busy = false
+  @State private var busy: String?
+  @State private var problem: String?
+  @State private var phone = CalendarSync.granted
+  @State private var google = false
+  @State private var choices: [CalendarSync.Choice] = CalendarSync.writable()
+  @State private var chosen = CalendarSync.chosenId ?? ""
 
   var body: some View {
-    StepFrame(step: .calendar, kicker: "Your calendar", title: "Maya plans your week for you.", subtitle: "She puts filming and posting times on your calendar, around the plans you already have, so you don't have to.") {
-      VStack(alignment: .leading, spacing: 12) {
-        Label("Works with the calendars on your iPhone, Google included", systemImage: "calendar")
-        Label("She only adds the times you say yes to", systemImage: "checkmark.circle")
-        Label("She never shares your plans with anyone", systemImage: "lock")
+    StepFrame(step: .calendar, kicker: "Your calendar", title: CalendarWords.title, subtitle: CalendarWords.subtitle) {
+      VStack(spacing: 12) {
+        card(id: "phone", icon: "calendar", title: CalendarWords.phone, help: CalendarWords.phoneHelp, done: phone, doneLine: "On") {
+          busy = "phone"
+          phone = await CalendarSync.connect()
+          choices = CalendarSync.writable()
+          chosen = CalendarSync.chosenId ?? choices.first?.id ?? ""
+          if !phone { problem = "No problem. You can turn it on later in Settings." }
+          busy = nil
+        }
+        if phone, !google, choices.count > 1 {
+          Picker(CalendarWords.pick, selection: $chosen) {
+            ForEach(choices) { c in Text("\(c.title) (\(c.account))").tag(c.id) }
+          }
+          .pickerStyle(.menu)
+          .font(MayaFont.callout)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .onChange(of: chosen) { _, id in if !id.isEmpty { Task { await CalendarSync.choose(id) } } }
+        }
+        card(id: "google", icon: "g.circle", title: CalendarWords.google, help: CalendarWords.googleHelp, done: google, doneLine: "Connected. Sessions go here") {
+          busy = "google"
+          problem = model.preview ? nil : await GoogleCalendar.connect()
+          google = problem == nil
+          busy = nil
+        }
+        VStack(alignment: .leading, spacing: 8) {
+          Label("She only adds the times you say yes to", systemImage: "checkmark.circle")
+          Label("She never shares your plans with anyone", systemImage: "lock")
+        }
+        .font(MayaFont.caption)
+        .foregroundStyle(Palette.muted)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 4)
       }
-      .font(MayaFont.callout)
-      .foregroundStyle(Palette.ink)
+      Problem(text: problem)
     } footer: {
-      PrimaryButton(title: "Use my calendar", busy: busy) {
-        Task { busy = true; _ = await CalendarSync.connect(); busy = false; model.calendarSeen = true }
-      }
+      PrimaryButton(title: "Continue", disabled: !(phone || google)) { model.calendarSeen = true }
       Button("Not now") { model.calendarSeen = true }
         .font(MayaFont.callout).foregroundStyle(Palette.muted)
     }
+    .task { google = model.preview ? false : (await GoogleCalendar.status()?.connected ?? false) }
+  }
+
+  private func card(id: String, icon: String, title: String, help: String, done: Bool, doneLine: String, action: @escaping () async -> Void) -> some View {
+    HStack(spacing: 14) {
+      Image(systemName: icon)
+        .font(.title3)
+        .frame(width: 44, height: 44)
+        .background(Circle().fill(Palette.wash))
+        .foregroundStyle(Palette.purple)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(title).font(MayaFont.headline).foregroundStyle(Palette.ink)
+        Text(done ? doneLine : help).font(MayaFont.caption).foregroundStyle(done ? Palette.ok : Palette.muted)
+      }
+      Spacer()
+      if done {
+        Image(systemName: "checkmark.circle.fill").font(.title2).foregroundStyle(Palette.ok)
+      } else {
+        Button {
+          Haptics.tap()
+          problem = nil
+          Task { await action() }
+        } label: {
+          if busy == id { ProgressView() } else { Text(id == "google" ? "Connect" : "Use").font(MayaFont.headline) }
+        }
+        .buttonStyle(.bordered)
+        .disabled(busy != nil)
+      }
+    }
+    .padding(16)
+    .background(RoundedRectangle(cornerRadius: 18).fill(Palette.panel))
+    .overlay(RoundedRectangle(cornerRadius: 18).stroke(done ? Palette.ok.opacity(0.5) : Palette.line))
   }
 }
 
