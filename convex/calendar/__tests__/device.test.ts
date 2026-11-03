@@ -11,6 +11,7 @@ import { api, internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
 import { cleanBusy, DEVICE } from "../device";
+import { changesLine } from "../sync";
 import { blockedNoGoogle, bookedNoGoogle } from "../../agent/converse";
 import type { Id } from "../../_generated/dataModel";
 
@@ -159,5 +160,100 @@ describe("asking first: quiet hours and their own plans", () => {
     const src = readFileSync(new URL("../../agent/converse.ts", import.meta.url), "utf8");
     expect(src).toMatch(/claimsUnsupportedAction\(rewritten, inv\.trace\) && !unsupportedAction/);
     expect(src).toMatch(/Never say you changed, booked, moved or removed anything your tools didn't actually change/);
+  });
+});
+
+describe("they changed a session in their phone's Calendar app", () => {
+  const followUps = (t: ReturnType<typeof convexTest>) =>
+    t.run(async (ctx) => (await ctx.db.system.query("_scheduled_functions").collect()).filter((f) => f.name.includes("followMoves")).map((f) => f.args[0] as { moved: Array<{ to: number }>; dropped: unknown[] }));
+
+  it("a drag in Calendar moves the session here, and she follows up (reminders, one line)", async () => {
+    const t = convexTest(schema, modules);
+    const { as, block, now } = await world(t, "m1");
+    const s = now + 24 * H;
+    const b = await block({ status: "confirmed", consentAt: now, deviceEventId: "EV-1" });
+    const r = await as.mutation(api.calendar.device.changed, { moved: [{ id: String(b), s: s + 2 * H, e: s + 3 * H, seen: s }], gone: [] });
+    expect(r).toEqual({ ok: true, moved: 1, gone: 0 });
+    expect(await t.run((ctx) => ctx.db.get(b))).toMatchObject({ start: s + 2 * H, end: s + 3 * H, status: "moved" });
+    const f = await followUps(t);
+    expect(f).toHaveLength(1);
+    expect(f[0].moved[0].to).toBe(s + 2 * H);
+    // The phone's next plan carries the new time, so the app writes nothing back over their drag.
+    expect((await as.query(api.calendar.device.plan, {}))!.write[0]).toMatchObject({ id: String(b), start: s + 2 * H });
+  });
+
+  it("end to end: she says what she saw, once, in plain words, and the reminders move", async () => {
+    const t = convexTest(schema, modules);
+    const { c, as, block, now } = await world(t, "m6");
+    const s = now + 24 * H;
+    const moved = await block({ status: "confirmed", consentAt: now, deviceEventId: "EV-1", title: "film: night pan" });
+    const gone = await block({ status: "confirmed", consentAt: now, deviceEventId: "EV-2", title: "film: closet tour", start: s + 30 * H, end: s + 31 * H });
+    await as.mutation(api.calendar.device.changed, { moved: [{ id: String(moved), s: s + 2 * H, e: s + 3 * H, seen: s }], gone: [String(gone)] });
+    await t.finishAllScheduledFunctions(() => undefined);
+    const out = await t.run(async (ctx) => (await ctx.db.query("messages").collect()).filter((m) => m.creatorId === c && m.direction === "out" && m.kind === "calendar"));
+    const bodies = out.map((m) => m.body);
+    expect(bodies, "one text for one sync's changes").toHaveLength(1);
+    expect(bodies[0]).toMatch(/^saw you moved filming night pan to .+ and took filming closet tour off on your calendar/i);
+    expect(bodies.every((b) => !/EV-|calendarBlocks|device/.test(b)), "no plumbing").toBe(true);
+    // The same report again says nothing new.
+    await as.mutation(api.calendar.device.changed, { moved: [{ id: String(moved), s: s + 2 * H, e: s + 3 * H, seen: s + 2 * H }], gone: [String(gone)] });
+    await t.finishAllScheduledFunctions(() => undefined);
+    const again = await t.run(async (ctx) => (await ctx.db.query("messages").collect()).filter((m) => m.creatorId === c && m.direction === "out" && m.kind === "calendar"));
+    expect(again).toHaveLength(out.length);
+  });
+
+  it("one sync's changes are one line, each said plainly", () => {
+    const when = () => "friday 5 pm";
+    expect(changesLine([{ title: "film: a", to: 0 }], [], when)).toBe("saw you moved filming a to friday 5 pm on your calendar. i'll follow; the check-in moves with it.");
+    expect(changesLine([], [{ title: "film: b" }], when)).toMatch(/^you took filming b off your calendar/);
+    expect(changesLine([{ title: "film: a", to: 0 }, { title: "post: a", to: 0 }], [{ title: "edit: c" }], when)).toBe("saw you moved filming a to friday 5 pm, moved posting a to friday 5 pm, and took editing c off on your calendar. the plan here follows, and the check-ins move with it.");
+    expect(changesLine([], [], when)).toBeNull();
+  });
+
+  it("a stale phone copy never drags back a session she moved by text a moment ago", async () => {
+    const t = convexTest(schema, modules);
+    const { as, block, now } = await world(t, "m2");
+    const s = now + 24 * H;
+    const b = await block({ status: "moved", consentAt: now, deviceEventId: "EV-1", start: s + 5 * H, end: s + 6 * H });
+    expect(await as.mutation(api.calendar.device.changed, { moved: [{ id: String(b), s: s + 2 * H, e: s + 3 * H, seen: s }], gone: [] })).toMatchObject({ moved: 0 });
+    expect(await t.run((ctx) => ctx.db.get(b))).toMatchObject({ start: s + 5 * H });
+    expect(await followUps(t)).toEqual([]);
+  });
+
+  it("deleted in Calendar: off the plan here too, once", async () => {
+    const t = convexTest(schema, modules);
+    const { as, block, now } = await world(t, "m3");
+    const b = await block({ status: "confirmed", consentAt: now, deviceEventId: "EV-1" });
+    expect(await as.mutation(api.calendar.device.changed, { moved: [], gone: [String(b)] })).toMatchObject({ gone: 1 });
+    const row = await t.run((ctx) => ctx.db.get(b));
+    expect(row).toMatchObject({ status: "deleted" });
+    expect(row!.deviceEventId).toBeUndefined();
+    expect(await as.mutation(api.calendar.device.changed, { moved: [], gone: [String(b)] }), "a second report changes nothing").toMatchObject({ gone: 0 });
+    expect((await as.query(api.calendar.device.plan, {}))!.write).toEqual([]);
+  });
+
+  it("fail-closed: someone else's session, one never booked, one not on the phone, or a nonsense time is ignored", async () => {
+    const t = convexTest(schema, modules);
+    const a = await world(t, "m4");
+    const b = await world(t, "m5");
+    const s = a.now + 24 * H;
+    const theirs = await b.block({ status: "confirmed", consentAt: b.now, deviceEventId: "EV-9" });
+    const proposed = await a.block({ status: "proposed", deviceEventId: "EV-2" });
+    const notOnPhone = await a.block({ status: "confirmed", consentAt: a.now });
+    const mine = await a.block({ status: "confirmed", consentAt: a.now, deviceEventId: "EV-3" });
+    const r = await a.as.mutation(api.calendar.device.changed, {
+      moved: [
+        { id: String(theirs), s: s + H, e: s + 2 * H, seen: s },
+        { id: String(proposed), s: s + H, e: s + 2 * H, seen: s },
+        { id: String(notOnPhone), s: s + H, e: s + 2 * H, seen: s },
+        { id: String(mine), s: s + 2 * H, e: s + H, seen: s },
+        { id: String(mine), s: s + 400 * 24 * H, e: s + 400 * 24 * H + H, seen: s },
+        { id: "not-an-id", s: s + H, e: s + 2 * H, seen: s },
+      ],
+      gone: [String(theirs), String(proposed), String(notOnPhone), "not-an-id"],
+    });
+    expect(r).toEqual({ ok: true, moved: 0, gone: 0 });
+    expect(await t.run((ctx) => ctx.db.get(theirs))).toMatchObject({ status: "confirmed", start: b.now + 24 * H });
+    expect(await t.mutation(api.calendar.device.changed, { moved: [], gone: [String(mine)] }), "no sign-in").toMatchObject({ ok: false });
   });
 });

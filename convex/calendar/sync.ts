@@ -187,23 +187,30 @@ export const upsertEvents = internalMutation({
   },
 });
 
-/** After a sync: reminders follow a moved block, and she says what she saw, once per change. */
+/** Pure: what she says about one sync's calendar changes, as ONE text (2026-11-03: a move and a delete in the
+ * same sync were two texts, and the day's budget held the second, so they never heard about it). */
+export function changesLine(moved: Array<{ title: string; to: number }>, dropped: Array<{ title: string }>, when: (t: number) => string): string | null {
+  const name = (t: string) => t.replace(/^film: /, "filming ").replace(/^edit: /, "editing ").replace(/^post: /, "posting ");
+  if (moved.length === 1 && dropped.length === 0) return `saw you moved ${name(moved[0].title)} to ${when(moved[0].to)} on your calendar. i'll follow; the check-in moves with it.`;
+  if (moved.length === 0 && dropped.length === 1) return `you took ${name(dropped[0].title)} off your calendar, so it's off the plan here too. say the word if you want a new slot for it.`;
+  const parts = [...moved.map((m) => `moved ${name(m.title)} to ${when(m.to)}`), ...dropped.map((d) => `took ${name(d.title)} off`)];
+  if (parts.length === 0) return null;
+  const list = parts.length === 2 ? parts.join(" and ") : `${parts.slice(0, -1).join(", ")}, and ${parts.at(-1)}`;
+  return `saw you ${list} on your calendar. the plan here follows${moved.length ? ", and the check-ins move with it" : ""}.`;
+}
+
+/** After a sync: reminders follow a moved block, and she says what she saw, once per change, in one text. */
 export const followMoves = internalAction({
   args: { creatorId: v.id("creators"), moved: v.array(v.object({ blockId: v.id("calendarBlocks"), from: v.number(), to: v.number(), title: v.string() })), dropped: v.array(v.object({ blockId: v.id("calendarBlocks"), title: v.string(), start: v.number() })) },
   handler: async (ctx, a): Promise<{ said: number }> => {
     const tz = (await ctx.runQuery(internal.calendar.sync.creatorTz, { creatorId: a.creatorId }))?.timezone ?? "UTC";
     const when = (t: number) => new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "long", hour: "numeric", minute: "2-digit" }).format(t).toLowerCase().replace(":00", "");
-    let said = 0;
-    for (const m of a.moved) {
-      await ctx.runAction(internal.calendar.reminders.scheduleFor, { blockId: m.blockId });
-      const { sent } = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: `saw you moved ${m.title.replace(/^film: /, "filming ")} to ${when(m.to)} on your calendar. i'll follow; the check-in moves with it.`, dedupeKey: `evmove:${m.blockId}:${m.to}`, proactive: true, kind: "calendar" });
-      if (sent) said++;
-    }
-    for (const d of a.dropped) {
-      const { sent } = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body: `you took ${d.title.replace(/^film: /, "filming ")} off your calendar, so it's off the plan here too. say the word if you want a new slot for it.`, dedupeKey: `evdrop:${d.blockId}`, proactive: true, kind: "calendar" });
-      if (sent) said++;
-    }
-    return { said };
+    for (const m of a.moved) await ctx.runAction(internal.calendar.reminders.scheduleFor, { blockId: m.blockId });
+    const body = changesLine(a.moved, a.dropped, when);
+    if (!body) return { said: 0 };
+    const key = [...a.moved.map((m) => `m${m.blockId}:${m.to}`), ...a.dropped.map((d) => `d${d.blockId}`)].sort().join(",");
+    const { sent } = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "telegram", body, dedupeKey: a.moved.length + a.dropped.length === 1 ? (a.moved[0] ? `evmove:${a.moved[0].blockId}:${a.moved[0].to}` : `evdrop:${a.dropped[0].blockId}`) : `evchg:${key}`, proactive: true, kind: "calendar" });
+    return { said: sent ? 1 : 0 };
   },
 });
 
