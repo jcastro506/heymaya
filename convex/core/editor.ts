@@ -27,6 +27,7 @@ import { buildPrefix } from "../agent/context";
 import { critique, tooLong } from "../agent/critic";
 import { clip } from "../lib/clip";
 import { partnershipsOpen } from "../partnerships/store";
+import { lessonKey, momentLesson, withLesson } from "../onboarding/lessons";
 
 export type Noticed = NonNullable<Doc<"creators">["noticed"]>[number];
 export type CandidateKind = "idea" | "for_you" | "comment" | "deal" | "trend" | "ideas_waiting" | "post_read";
@@ -303,6 +304,9 @@ export const pick = internalAction({
       const verdict = tooLong(body) ? { pass: false, problems: ["too_long"], note: "over the cap" } : await critique(ctx, { creatorId: a.creatorId, kind: "reply", text: body, evidence: { noticed: chosen.summary, link: chosen.link }, voice: {}, directives: g.directives.map((x) => x.verbatim) });
       if (!verdict.pass) { if (!a.preview) await ctx.runMutation(internal.core.editor.decide, { creatorId: a.creatorId, day: i.day, now }); return { sent: false, reason: `held by the critic: ${verdict.problems.join(", ")}` }; }
     }
+    // Her first idea she found on her own says how often these come and that "less" works, once (onboarding/lessons).
+    const pace = ["idea", "for_you", "trend"].includes(chosen.kind) ? momentLesson("pace", { said: i.c.milestonesSaid ?? [], now, pairedAt: i.c.channel.pairedAt }) : null;
+    if (pace) body = withLesson(body, pace);
     if (a.preview) return { sent: false, reason: `preview: ${out.why}`, picked: chosen.id, text: body };
     const kind = SEND_KIND[chosen.kind as CandidateKind] ?? "scout";
     const res = await ctx.runMutation(internal.core.messages.send, {
@@ -311,6 +315,7 @@ export const pick = internalAction({
       ...(draft?.awaitingAnswer ? { awaitingAnswer: true } : {}), ...(draft?.criticSkipped ? { criticSkipped: true } : {}),
     });
     if (!res.sent) return { sent: false, reason: res.held ?? "already sent today" };
+    if (pace) await ctx.runMutation(internal.agent.history.markSaid, { creatorId: a.creatorId, key: lessonKey("pace", dayKeyInZone(now, i.c.timezone)) });
     await ctx.runMutation(internal.core.editor.decide, { creatorId: a.creatorId, day: i.day, id: chosen.id, status: "sent", candidate: chosen, now });
     if (res.messageId && chosen.onSent) await ctx.runMutation(internal.core.editor.afterSent, { creatorId: a.creatorId, messageId: res.messageId, onSent: chosen.onSent, now });
     return { sent: true, reason: out.why, picked: chosen.id };
