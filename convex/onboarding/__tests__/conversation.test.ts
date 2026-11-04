@@ -1,5 +1,4 @@
 import { convexTest } from "convex-test";
-import { normalCase } from "../../core/messages";
 import { describe, expect, it, vi } from "vitest";
 import schema from "../../schema";
 import { internal } from "../../_generated/api";
@@ -41,7 +40,7 @@ describe("conversational onboarding", () => {
     expect(rows.every((m) => m.surface === surface)).toBe(true);
     expect(rows.map((m) => m.body).join("\n")).toMatch(/maya/i);
     // 2026-10-09: her intro says what she does; nothing asks what they want out of this.
-    expect(rows.map((m) => m.body).join("\n")).toContain(normalCase(saveContactLine()));
+    expect(rows.map((m) => m.body).join("\n").toLowerCase()).toContain(saveContactLine().toLowerCase());
     expect(rows.map((m) => m.body).join("\n")).not.toMatch(/what do you most want/);
     expect(rows.filter((m) => m.awaitingAnswer)).toHaveLength(0);
     expect((await t.run((ctx) => ctx.db.get(creatorId)))?.conversationalOnboardingAt).toBeTypeOf("number");

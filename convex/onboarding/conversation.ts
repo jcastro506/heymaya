@@ -8,17 +8,15 @@
 
 /** Pure: the texts after her greeting. Brand deals are named only when their plan has them (§26). */
 export function introBody(partnerships: boolean, readDone = false): string[] {
-  return [
-    readDone
-      ? "i've already been through your posts, the hits and the flops. what i noticed is coming right up."
-      : "i'm going through your posts right now, the hits and the flops. give me a few minutes and i'll tell you what's working and what i'd make next.",
-    `text me like you'd text a friend who's obsessed with your content: send a draft before you post, a tiktok you wish you'd made, or just "i have no idea what to post today."${partnerships ? " brand stuff too." : ""}`,
-  ];
+  // 2026-11-03: two texts at pairing, not four. The read that follows shows what she does; "text me like
+  // you'd text a friend" fits after their first reply, not on top of the greeting.
+  if (readDone) return [];
+  return [`going through your posts now, give me a few minutes${partnerships ? ". i'll keep an eye out for brand deals too" : ""}`];
 }
 
-/** The last text of her intro: the one practical ask. */
+/** The one practical ask, said with the greeting (2026-11-03: its own text made the opening longer). */
 export function saveContactLine(): string {
-  return "and save this number as Maya so i don't get lost in your texts 🙂";
+  return "save this number so i don't get lost in your texts";
 }
 
 /** Her first plan's last text adds where everything lives, once (the first week only). */

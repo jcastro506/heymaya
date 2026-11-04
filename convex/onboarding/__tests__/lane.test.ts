@@ -204,18 +204,19 @@ describe("buttons and the question agree (live 2026-09-06)", () => {
 
 import { firstReadSkill } from "../firstRead";
 
-describe("first contact is warm and explains what this is (2026-09-07)", () => {
-  it("both shapes show they watched first, explain the arrangement, and ask one question; the hello-less one does not re-introduce", () => {
-    for (const said of [true, false]) {
-      const sk = firstReadSkill(said);
-      expect(sk).toMatch(/went through everything/);
-      expect(sk).toMatch(/whatever's happening that week/);
+describe("first contact proves she watched, brings one idea, asks one easy thing (2026-11-03)", () => {
+  it("every shape: the standout post with its numbers, one video this week, one no-thought question, no survey, no hedging", () => {
+    for (const [said, conv] of [[true, false], [false, false], [true, true]] as const) {
+      const sk = firstReadSkill(said, conv);
+      expect(sk).toMatch(/standout post/);
+      expect(sk).toMatch(/copied exactly/);
+      expect(sk).toMatch(/One video they could film this week/);
       expect(sk).toMatch(/Exactly one question/);
-      expect(sk).toMatch(/plain words/);
+      expect(sk).toMatch(/Never ask about their goal, their niche/);
+      expect(sk).toMatch(/hold me loosely/); // named as banned
+      expect(sk).not.toMatch(/whatever's happening that week|keep their content calendar/);
     }
-    expect(firstReadSkill(true)).toMatch(/No name, no re-introduction/);
-    expect(firstReadSkill(true)).not.toMatch(/keep their content calendar/);
-    expect(firstReadSkill(false)).toMatch(/keep their content calendar/);
-    expect(firstReadSkill(false)).toMatch(/Say your name once/);
+    expect(firstReadSkill(true)).toMatch(/No name, no introduction/);
+    expect(firstReadSkill(false)).toMatch(/Say hi and your name/);
   });
 });

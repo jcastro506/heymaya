@@ -60,7 +60,7 @@ async function redeliverFirstRead(ctx: MutationCtx, firstRead: Doc<"messages"> |
 async function openWithRead(ctx: MutationCtx, creator: Doc<"creators">, firstRead: Doc<"messages"> | null, surface: "imessage" | "telegram"): Promise<boolean> {
   if (!firstRead || firstRead.deliveredAt !== undefined || firstRead.withdrawnAt) return false;
   // START twice before it's delivered: it's already the opening; hand it over, don't greet twice.
-  if (firstRead.body.endsWith(saveContactLine())) { await redeliverFirstRead(ctx, firstRead); return true; }
+  if (firstRead.body.includes(saveContactLine())) { await redeliverFirstRead(ctx, firstRead); return true; }
   const body = openingWithRead(fallbackGreeting(cleanNamePart(creator.firstName), creator._id), firstRead.body);
   // Its buttons were about the read ("that's it / not quite"); the opening ends on her question instead.
   await ctx.db.patch(firstRead._id, { body, buttons: undefined, surface, ts: Date.now() });
