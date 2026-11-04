@@ -86,9 +86,18 @@ export async function createProfile(c: ZernioClient, name: string): Promise<{ id
   return { id };
 }
 
+/**
+ * What Maya asks TikTok for (operator, 2026-11-03: no posting for them, no DMs). Zernio's scope areas, verified
+ * against the live connect link: none of them asks for DMs or the business permissions (Spark Ads, brand
+ * insights, search words) we never used. Zernio adds TikTok's posting permission to every area and has no way
+ * to leave it out; TikTok lets them switch it off, and a missing posting permission is not a broken connection
+ * (see `onlyOptionalMissing`).
+ */
+export const CONNECT_SCOPES = "analytics,comments";
+
 /** OAuth kickoff. `x` maps to `twitter` on the wire (verified live in the old product); tiktok and instagram are themselves. */
 export async function connectUrl(c: ZernioClient, platform: ZernioPlatform, profileId: string, redirectUrl: string): Promise<{ authUrl: string; state: string }> {
-  const raw = await c.request<{ authUrl?: string; state?: string }>(`/api/v1/connect/${platform}`, { query: { profileId, redirect_url: redirectUrl } });
+  const raw = await c.request<{ authUrl?: string; state?: string }>(`/api/v1/connect/${platform}`, { query: { profileId, redirect_url: redirectUrl, scopes: CONNECT_SCOPES } });
   if (!raw?.authUrl) throw new ZernioError(200, `/api/v1/connect/${platform}`, "no authUrl in response");
   return { authUrl: raw.authUrl, state: raw.state ?? "" };
 }
@@ -103,6 +112,19 @@ export async function listAccounts(c: ZernioClient, profileId: string): Promise<
   const rows = Array.isArray(raw) ? raw : (raw?.accounts ?? []);
   const access = Array.isArray(raw) ? undefined : raw?.hasAnalyticsAccess;
   return rows.map((r) => normalizeAccount(r, access)).filter((x): x is ZernioAccount => x !== null);
+}
+
+/**
+ * Pure: Zernio's health flags an account "needs reconnect" for ANY missing permission, posting included
+ * (2026-11-03: A tester switched posting off on TikTok's screen; their reads worked, the app showed them stuck on
+ * "connect" because of `Missing posting permissions: video.publish`). Maya never posts or reads DMs, so a flag
+ * whose only issues are posting or messaging permissions, on a token that still reads, is not a reconnect.
+ */
+export function onlyOptionalMissing(raw: Record<string, unknown>): boolean {
+  const issues = Array.isArray(raw.issues) ? raw.issues.map(String) : [];
+  if (issues.length === 0) return false;
+  if (raw.tokenValid === false || raw.canFetchAnalytics === false || raw.disconnectReason) return false;
+  return issues.every((i) => /\b(posting|publish|upload|messag\w*|direct message|dm)\b/i.test(i) && /permission/i.test(i));
 }
 
 export async function accountsHealth(c: ZernioClient, profileId: string): Promise<{ summary: Record<string, number>; accounts: ZernioAccount[] }> {
