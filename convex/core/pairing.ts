@@ -26,7 +26,8 @@ import { type MutationCtx } from "../_generated/server";
 import { internalMutation, mutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
 import { configuredLines, herLine, pairingSmsLink } from "./imessage";
-import { helloParts, fallbackGreeting } from "../onboarding/hello";
+import { helloParts, fallbackGreeting, openingWithRead } from "../onboarding/hello";
+import { saveContactLine } from "../onboarding/conversation";
 import { HELLO_PACE } from "../onboarding/hello";
 import { partnershipsOpen } from "../partnerships/store";
 
@@ -50,6 +51,21 @@ export const PAIRING_TTL_MS = 15 * 60_000;
 async function redeliverFirstRead(ctx: MutationCtx, firstRead: Doc<"messages"> | null): Promise<void> {
   if (!firstRead || firstRead.deliveredAt !== undefined) return;
   await ctx.runMutation(internal.core.jobs.enqueue, { kind: "deliver_message", idempotencyKey: `redeliver:${firstRead._id}`, creatorId: firstRead.creatorId, payloadJson: JSON.stringify({ messageId: firstRead._id }) });
+}
+
+/**
+ * The read was written before they texted START: it becomes her opening, one message (onboarding/hello
+ * openingWithRead), and no separate hello goes. False when there's no waiting read (the hello goes as before).
+ */
+async function openWithRead(ctx: MutationCtx, creator: Doc<"creators">, firstRead: Doc<"messages"> | null, surface: "imessage" | "telegram"): Promise<boolean> {
+  if (!firstRead || firstRead.deliveredAt !== undefined || firstRead.withdrawnAt) return false;
+  // START twice before it's delivered: it's already the opening; hand it over, don't greet twice.
+  if (firstRead.body.endsWith(saveContactLine())) { await redeliverFirstRead(ctx, firstRead); return true; }
+  const body = openingWithRead(fallbackGreeting(cleanNamePart(creator.firstName), creator._id), firstRead.body);
+  // Its buttons were about the read ("that's it / not quite"); the opening ends on her question instead.
+  await ctx.db.patch(firstRead._id, { body, buttons: undefined, surface, ts: Date.now() });
+  await redeliverFirstRead(ctx, firstRead);
+  return true;
 }
 
 /** Her intro where she can't write a greeting first (Telegram, or a read that already happened). Pure. */
@@ -162,8 +178,10 @@ export const claimPairingByPhone = internalMutation({
     await ctx.db.patch(creator._id, { phone: args.phone, phoneVerifiedAt: now, channel: { paired: true, pairedAt: now, kind: "imessage" }, pairingToken: undefined, pairingExpiresAt: undefined, updatedAt: now });
     const firstRead = await ctx.db.query("messages").withIndex("by_creator_and_dedupe", (q) => q.eq("creatorId", creator._id).eq("dedupeKey", `first_read:${creator._id}`)).first();
     await ctx.db.patch(creator._id, { conversationalOnboardingAt: creator.conversationalOnboardingAt ?? now });
-    if (firstRead) {
-      // Her read already happened: the intro (no survey) goes first, then the read is redelivered.
+    if (await openWithRead(ctx, creator, firstRead, "imessage")) {
+      // Her read was waiting for them: it is the opening now, introduced once.
+    } else if (firstRead) {
+      // Her read already went out (they paired again): the intro goes, the read isn't repeated.
       await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "imessage", body: helloFor(partnershipsOpen(creator), true, cleanNamePart(creator.firstName), creator._id), dedupeKey: `hello:${creator._id}`, proactive: true, kind: "hello", awaitingAnswer: false });
       await redeliverFirstRead(ctx, firstRead);
     } else {
@@ -243,7 +261,7 @@ export const claimPairing = internalMutation({
     // what she is doing, so pairing is never followed by silence. Once, ever.
     const firstRead = await ctx.db.query("messages").withIndex("by_creator_and_dedupe", (q) => q.eq("creatorId", creator._id).eq("dedupeKey", `first_read:${creator._id}`)).first();
     await ctx.db.patch(creator._id, { conversationalOnboardingAt: creator.conversationalOnboardingAt ?? now });
-    await ctx.runMutation(internal.core.messages.send, firstRead
+    if (!(await openWithRead(ctx, creator, firstRead, "telegram"))) await ctx.runMutation(internal.core.messages.send, firstRead
       ? { creatorId: creator._id, surface: "telegram", body: helloFor(partnershipsOpen(creator), true, cleanNamePart(creator.firstName), creator._id), dedupeKey: `hello:${creator._id}`, proactive: true, kind: "hello", awaitingAnswer: false }
       : { creatorId: creator._id, surface: "telegram", body: helloFor(partnershipsOpen(creator), false, cleanNamePart(creator.firstName), creator._id), dedupeKey: `hello:${creator._id}`, proactive: true, kind: "hello", awaitingAnswer: false });
     await redeliverFirstRead(ctx, firstRead);

@@ -41,14 +41,18 @@ describe("first contact", () => {
     const rows = await t.run(async (ctx) => await ctx.db.query("messages").collect());
     const hello = (c: unknown) => rows.filter((m) => m.creatorId === c && m.kind === "hello");
     expect(hello(a)).toHaveLength(1);
-    expect(hello(b)).toHaveLength(1);
+    // b's read was waiting: it is the opening, so there's no second introduction (2026-11-03).
+    expect(hello(b)).toHaveLength(0);
     expect(rows.filter((m) => m.awaitingAnswer), "no survey question").toHaveLength(0);
     const parts = hello(a)[0].body.split("\n---\n");
     expect(parts).toHaveLength(4);
     expect(parts[1]).toMatch(/going through your posts right now/);
     expect(parts[2]).toMatch(/text me like you'd text a friend/i);
     expect(parts[3]).toMatch(/save this number as Maya/);
-    expect(hello(b)[0].body, "her read already happened").toMatch(/already been through your posts/);
+    const opening = rows.find((m) => m.creatorId === b && m.kind === "first_read")!.body.split("\n---\n");
+    expect(opening[0], "greets first").toMatch(/maya/i);
+    expect(opening[1]).toBe("the read");
+    expect(opening.at(-1)).toMatch(/save this number as Maya/);
     for (const banned of ["—", "what do you most want", "AI", "assistant"]) expect(hello(a)[0].body, banned).not.toContain(banned);
   });
 });

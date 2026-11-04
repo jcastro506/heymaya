@@ -103,7 +103,9 @@ export const run = internalAction({
     }
 
     // Live 2026-09-06: she introduced herself twice, once at pairing and again in the read.
-    const saidHello = await ctx.runQuery(internal.core.messages.exists, { creatorId: creator._id, dedupeKey: `hello:${creator._id}` });
+    // Written before they've texted START, it can only go out at pairing, where the greeting leads it
+    // (core/pairing openWithRead): it never introduces her either (2026-11-03: twice in eleven seconds).
+    const saidHello = !creator.channel.paired || (await ctx.runQuery(internal.core.messages.exists, { creatorId: creator._id, dedupeKey: `hello:${creator._id}` }));
 
     const conversational = Boolean(creator.conversationalOnboardingAt);
     // A question of hers they haven't answered yet (dev sim, 2026-10-01: the read asked "what gets in the

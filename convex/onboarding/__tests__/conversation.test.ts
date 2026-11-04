@@ -21,10 +21,14 @@ describe("conversational onboarding", () => {
     if (surface === "imessage") await t.mutation(internal.core.pairing.claimPairingByPhone, { token: "early", phone: "+15555550101" });
     else await t.mutation(internal.core.pairing.claimPairing, { token: "early", chatId: "456" });
     const rows = await t.run((ctx) => ctx.db.query("messages").collect());
-    expect(rows.filter((r) => r.kind === "hello")).toHaveLength(1);
-    expect(rows.find((r) => r.kind === "hello")?.body).toContain(normalCase(saveContactLine()));
-    expect(rows.filter((r) => r.awaitingAnswer)).toHaveLength(0);
+    // The waiting read is the opening (2026-11-03): one message, greeting first, no separate hello.
+    expect(rows.filter((r) => r.kind === "hello")).toHaveLength(0);
     expect(rows.filter((r) => r.kind === "first_read")).toHaveLength(1);
+    const opening = rows.find((r) => r.kind === "first_read")!.body;
+    expect(opening).toMatch(/^(hey|hi)\b.*maya/i);
+    expect(opening).toContain("your trail running clip has a strong opening.");
+    expect(opening).toContain(saveContactLine());
+    expect(rows.filter((r) => r.awaitingAnswer)).toHaveLength(0);
   });
   it.each(["imessage", "telegram"] as const)("pairs %s with her intro, once, while she reads, and no survey question", async (surface) => {
     const t = convexTest(schema, modules);
