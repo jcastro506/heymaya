@@ -14,9 +14,12 @@ export function introBody(partnerships: boolean, readDone = false): string[] {
   return [`going through your posts now, give me a few minutes${partnerships ? ". i'll keep an eye out for brand deals too" : ""}`];
 }
 
-/** The one practical ask, said with the greeting (2026-11-03: its own text made the opening longer). */
+/**
+ * The one practical ask, said with the greeting (2026-11-03: its own text made the opening longer). It carries
+ * what she does in the background, in one clause, so her first unprompted text isn't a surprise (2026-11-04).
+ */
 export function saveContactLine(): string {
-  return "save this number so i don't get lost in your texts";
+  return "save this number, i'll text you when i find something worth making";
 }
 
 /** Her first plan's last text adds where everything lives, once (the first week only). */
