@@ -72,13 +72,15 @@ export const since = internalQuery({
 });
 
 export const run = internalAction({
-  args: { creatorId: v.id("creators") },
-  handler: async (ctx, args): Promise<{ ok: boolean; reason?: string }> => {
+  // dryRun (evals, 2026-11-03): write the read and return it; nothing is sent, stashed or scheduled.
+  args: { creatorId: v.id("creators"), dryRun: v.optional(v.boolean()) },
+  handler: async (ctx, args): Promise<{ ok: boolean; reason?: string; text?: string }> => {
     const gathered = await ctx.runQuery(internal.agent.context.gather, { creatorId: args.creatorId });
     if (!gathered) return { ok: false, reason: "creator not found" };
     const { creator, directives } = gathered;
 
     if (!creator.dossier) {
+      if (args.dryRun) return { ok: false, reason: "no dossier" };
       await ctx.runMutation(internal.core.jobs.enqueue, {
         kind: "ingest_catalogue",
         idempotencyKey: `ingest:${creator._id}:v${creator.dossierVersion}`,
@@ -105,9 +107,10 @@ export const run = internalAction({
     // Live 2026-09-06: she introduced herself twice, once at pairing and again in the read.
     // Written before they've texted START, it can only go out at pairing, where the greeting leads it
     // (core/pairing openWithRead): it never introduces her either (2026-11-03: twice in eleven seconds).
-    const saidHello = !creator.channel.paired || (await ctx.runQuery(internal.core.messages.exists, { creatorId: creator._id, dedupeKey: `hello:${creator._id}` }));
+    const saidHello = args.dryRun || !creator.channel.paired || (await ctx.runQuery(internal.core.messages.exists, { creatorId: creator._id, dedupeKey: `hello:${creator._id}` }));
 
-    const conversational = Boolean(creator.conversationalOnboardingAt);
+    // A dry run writes the read as it goes to someone who finished onboarding before texting START (the usual path).
+    const conversational = !args.dryRun && Boolean(creator.conversationalOnboardingAt);
     // A question of hers they haven't answered yet (dev sim, 2026-10-01: the read asked "what gets in the
     // way?" on top of the unanswered goal question, twice). Code knows; it tells her plainly.
     const waiting = conversational ? await ctx.runQuery(internal.core.messages.openQuestion, { creatorId: creator._id }) : null;
@@ -130,11 +133,11 @@ export const run = internalAction({
       if (li && prop && prop.state === "scattered" && prop.recommendation && prop.question && li.laneQuestionsThisWeek < 2) {
         const candidates = prop.candidates.map((c) => ({ label: c.label, keywords: c.keywords }));
         laneAsk = { token: `pick-${candidates.map((c) => c.keywords[0] ?? c.label).join("-").replace(/[^a-z0-9-]/g, "").slice(0, 50)}`, keywords: prop.recommendation.keywords, candidates };
-        await ctx.runMutation(internal.onboarding.lane.stashRead, { creatorId: creator._id, token: laneAsk.token, keywords: prop.recommendation.keywords, candidates });
+        if (!args.dryRun) await ctx.runMutation(internal.onboarding.lane.stashRead, { creatorId: creator._id, token: laneAsk.token, keywords: prop.recommendation.keywords, candidates });
         laneLine = `${prop.read}. ${prop.candidates.map((c) => `${c.label}: ${c.evidence}`).join("; ")}. ${prop.question}`;
       } else if (read && read.confidence !== "none") {
         laneAsk = { token: read.keywords.slice(0, 5).join("-").replace(/[^a-z0-9-]/g, "").slice(0, 60), keywords: read.keywords, candidates: [] };
-        await ctx.runMutation(internal.onboarding.lane.stashRead, { creatorId: creator._id, token: laneAsk.token, keywords: read.keywords });
+        if (!args.dryRun) await ctx.runMutation(internal.onboarding.lane.stashRead, { creatorId: creator._id, token: laneAsk.token, keywords: read.keywords });
         laneLine = laneQuestion(read.keywords, li?.hooks ?? []);
       }
     }
@@ -204,6 +207,7 @@ export const run = internalAction({
       }
     }
 
+    if (args.dryRun) return { ok: true, text };
     await ctx.runMutation(internal.core.messages.send, {
       creatorId: creator._id,
       surface: creator.channel.kind ?? "imessage",
