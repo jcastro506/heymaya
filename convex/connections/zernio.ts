@@ -18,7 +18,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { creatorForIdentity } from "../core/identity";
 import { storeWebhookComment } from "./comments";
-import { accountsHealth, connectUrl, createProfile, deleteAccount, deleteProfile, listAccounts, postAnalytics, verifySignature, zernioClient, ZERNIO_SIGNATURE_HEADER, ZernioError, subscribeWebhook, listWebhooks, type ZernioAccount } from "../integrations/zernio";
+import { accountsHealth, connectUrl, onlyOptionalMissing, createProfile, deleteAccount, deleteProfile, listAccounts, postAnalytics, verifySignature, zernioClient, ZERNIO_SIGNATURE_HEADER, ZernioError, subscribeWebhook, listWebhooks, type ZernioAccount } from "../integrations/zernio";
 
 function client() {
   return zernioClient(process.env.ZERNIO_API_KEY ?? "");
@@ -161,7 +161,8 @@ export async function reconcileFor(ctx: ActionCtx, creatorId: Id<"creators">): P
     // Health is the authority on needsReconnect; the list is the authority on which accounts exist.
     const health = await accountsHealth(c, conn.zernioProfileId).catch(() => null);
     if (health) {
-      const bad = new Set(health.accounts.filter((h) => h.needsReconnect).map((h) => h.accountId));
+      // A missing posting or messaging permission isn't broken: Maya only reads (onlyOptionalMissing).
+      const bad = new Set(health.accounts.filter((h) => h.needsReconnect && !onlyOptionalMissing(h.raw)).map((h) => h.accountId));
       accounts = accounts.map((x) => ({ ...x, needsReconnect: x.needsReconnect || bad.has(x.accountId) }));
     }
   } catch (e) {
