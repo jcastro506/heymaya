@@ -17,9 +17,9 @@ import { REGISTRY } from "../agent/registry";
 import { buildPrefix, buildSuffix, producedStamp } from "../agent/context";
 import { deliverNow } from "../core/scheduler";
 import { critique, tooLong } from "../agent/critic";
-import { laneQuestion, proposeLane, readLane } from "./lane";
+import { proposeLane, readLane } from "./lane";
+import { citesStandout } from "./standout";
 import { READ_SETTLE_MS } from "../scout/gate";
-import { partnershipsOpen } from "../partnerships/store";
 
 /** The rest-of-week plan follows first contact by this much: long enough to tap the lane, short enough to feel like the same conversation. */
 export const FIRST_PLAN_DELAY_MS = 20 * 60_000;
@@ -27,24 +27,29 @@ export const FIRST_PLAN_DELAY_MS = 20 * 60_000;
 export const FIRST_SCOUT_DELAY_MS = READ_SETTLE_MS;
 
 /**
- * First contact, in two shapes. When the hello already went out at pairing, the read has no
- * introduction section at all: telling the model to "skip" a section it was handed does not
- * work (live 2026-09-06, she introduced herself twice again); not handing it the section does.
+ * First contact (rewritten 2026-11-03). The read used to open with what she liked, hedge ("only seen ten
+ * posts, so hold me loosely"), and end on a "which direction do you want?" survey, with no number and no idea.
+ * Now: proof she watched (the standout post code picked, with its real number), one video to film this week,
+ * one question that takes no thought to answer. When the hello already went out, the read has no introduction
+ * section at all (live 2026-09-06: telling the model to "skip" a section it was handed does not work).
  */
 export function firstReadSkill(saidHello: boolean, conversational = false): string {
+  const shape = `Shape, in this order, two or three short texts with a line containing only --- between them:
+1. Proof you watched: THE standout post you were given (not another one), named so they recognize it, with its numbers copied exactly as written there (never a multiple or figure of your own), and in a few words why it worked (the moment from the card or the transcript, never a detail you were not given). Real enthusiasm where you mean it.
+2. One video they could film this week, built from what made that post work: what it is, in one plain line, specific to them. Not a trend, not a list, not "post more".
+3. One easy question, last, on its own, that they can answer without thinking, like "got something in mind, or want me to pick one?". Never ask about their goal, their niche, what they want to be known for, or which direction to take.
+If you were given no standout post (too few posts to say), skip 1 and 2: name one specific thing you liked, then ask them to send the one they're proudest of so you can tell them what to make next.`;
+  const rules = `Hard rules: under 80 words. Every number copied exactly from the standout line; no other number, no decimals of your own. No compliment without a specific. Never hedge about how much you've seen ("hold me loosely", "only seen ten"), never describe what you do, no "basically". Exactly one question.`;
   if (conversational) return `first-read
-The opening conversation is already underway: they've been texting you while you read. Open as the natural next text (e.g. "ok, done going through your posts"), never as a fresh start. If they told you what they want, tie the read to it. Build on anything you already told them; never repeat or contradict it. Add a short useful observation from the posts you actually read, with one or two concrete examples. Use any goals or preferences already shared to explain why this matters to them; never assume they want growth or brand deals. If evidence is thin, say so briefly. No re-introduction, no survey, no lane buttons. At most ONE question, and only this one: if they've already told you what they want, nothing you asked them is still unanswered, and the getting-to-know-them section doesn't already have it, end with a light question about what usually gets in the way of them posting more, in your words and tied to what you just saw (it changes what you'll send). Otherwise ask nothing: the live conversation owns the next question. Do not say you went through everything when you only sampled posts. Under 100 words, two short texts at most, separated by a line containing only ---. No invented details or metrics. This read is a contribution, not a new conversation.`;
-  const arrangement = saidHello
-    ? `2. Nothing about what you do: the hello at pairing already said it. No name, no re-introduction.`
-    : `2. Then what this is, in your own voice, the way you'd text a friend who just agreed to let you help, two or three lines, no list, never a manual's opener ("here is how this works"): you scroll for them every day (their lane, what's blowing up in general, who's worth stealing from), you keep their content calendar, you bring ideas, and they can throw anything at you for a straight opinion. Say your name once, lightly.`;
+The opening conversation is already underway: they've been texting you while you read. Open as the natural next text ("ok, done going through your posts"), never as a fresh start. If they told you what they want, tie the read to it. Build on anything you already told them; never repeat or contradict it.
+${shape}
+If they asked you something you haven't answered, or a question of yours is still open, ask nothing: end on the idea.
+${rules}`;
   return `first-read
-When: once, the message they have been waiting ten minutes for. It decides whether they feel seen or processed. Warm, specific, glad to be here. Under 150 words, under 900 characters, two or three short texts with a line containing only --- between them.
-Shape, in this order:
-1. "ok, went through everything." Then show you watched: the one or two things of theirs you genuinely liked, named, with the moment that got you (from the card or the transcript, never a detail you were not given). This is a friend telling them their good thing is good, with real enthusiasm where you feel it.
-${arrangement}
-3. The clarifying question, the way a friend asks it, as the last text on its own. The lane line you were given tells you what you saw. If their posts pull in several directions, say what you see in plain words ("i see a lot of different stuff: travel, the app you're building, the dog") and ask whether there's one thing they'd want to be known for or they like posting whatever's happening that week; name the one you'd pick and why, in a few words. If one lane is obvious, say it and ask if that's right. Lane labels in plain words ("the travel stuff", "the running clips"), never a category name. Buttons will carry your candidates; free text is welcome too.
-If the data is thin, one clause, kind: "i've only seen ten so far, so hold me loosely."
-Hard rules: no compliments without a specific. No claim without evidence in the dossier or the lane line you were given; no share or percentage that is not in that line. Exactly one question. Your personality is allowed: an exclamation mark or one emoji where you mean it, never a row.`;
+When: once, the first real thing they read from you, right after "hey, it's Maya". It decides whether they feel seen or processed.
+${saidHello ? "No name, no introduction: the greeting already said it." : "Say hi and your name in a few words, then go straight in."}
+${shape}
+${rules}`;
 }
 
 /** The first-contact shape, for callers that only need the text. */
@@ -118,29 +123,19 @@ export const run = internalAction({
     const prefix = buildPrefix({ creator, directives, skill: firstReadSkill(saidHello, conversational), personal: gathered.personal, voice: gathered.voice, history: gathered.history });
     const spec = REGISTRY.writer;
     /**
-     * Sprint 4d: she states the lane she read from their posts, for one tap, rather than
-     * asking them to name a niche. A creator who cannot write that sentence otherwise gets a
-     * weak lane, and the sweep, the roster and the fit test all inherit it. Read before the
-     * model writes, so the lane check is the message's one question.
+     * The standout post and its number are code (onboarding/standout): grounded or silent. The lane she reads
+     * from their posts is context for the idea, no longer a question with buttons (2026-11-03: the "which
+     * direction?" survey was the least useful thing in her first text).
      */
-    let laneAsk: { token: string; keywords: string[]; candidates: Array<{ label: string; keywords: string[] }> } | null = null;
-    let laneLine = "";
-    if (!conversational && !creator.laneConfirmedAt) {
+    const best = await ctx.runQuery(internal.onboarding.standout.forCreator, { creatorId: creator._id });
+    let laneContext = "";
+    if (!creator.laneConfirmedAt) {
       const li = await ctx.runQuery(internal.onboarding.lane.inputsFor, { creatorId: creator._id });
       const read = li ? readLane(li.posts) : null;
-      // Sprint 4f: the scattered account. She leads with the truth and a recommendation, and asks one thing.
       const prop = li ? proposeLane({ lanes: li.lanes, laneKeywords: read?.keywords ?? [], admiredKeywords: li.admiredKeywords, stated: li.niche, laneConfidence: read?.confidence ?? "none" }) : null;
-      if (li && prop && prop.state === "scattered" && prop.recommendation && prop.question && li.laneQuestionsThisWeek < 2) {
-        const candidates = prop.candidates.map((c) => ({ label: c.label, keywords: c.keywords }));
-        laneAsk = { token: `pick-${candidates.map((c) => c.keywords[0] ?? c.label).join("-").replace(/[^a-z0-9-]/g, "").slice(0, 50)}`, keywords: prop.recommendation.keywords, candidates };
-        if (!args.dryRun) await ctx.runMutation(internal.onboarding.lane.stashRead, { creatorId: creator._id, token: laneAsk.token, keywords: prop.recommendation.keywords, candidates });
-        laneLine = `${prop.read}. ${prop.candidates.map((c) => `${c.label}: ${c.evidence}`).join("; ")}. ${prop.question}`;
-      } else if (read && read.confidence !== "none") {
-        laneAsk = { token: read.keywords.slice(0, 5).join("-").replace(/[^a-z0-9-]/g, "").slice(0, 60), keywords: read.keywords, candidates: [] };
-        if (!args.dryRun) await ctx.runMutation(internal.onboarding.lane.stashRead, { creatorId: creator._id, token: laneAsk.token, keywords: read.keywords });
-        laneLine = laneQuestion(read.keywords, li?.hooks ?? []);
-      }
+      laneContext = prop?.read ?? (read && read.confidence !== "none" ? `their posts are mostly ${read.keywords.slice(0, 3).join(", ")}` : "");
     }
+    const facts = `${best ? ` Their standout post: ${best.line}.` : " You were given no standout post: they have too few posts to say."}${laneContext ? ` What their posts are mostly about (context for the idea, not something to ask about): ${laneContext}.` : ""}`;
 
     const result = await callModel(ctx, {
       creatorId: creator._id,
@@ -149,7 +144,7 @@ export const run = internalAction({
       messages: [
         { role: "system", content: prefix },
         ...(conversational ? [{ role: "user" as const, content: buildSuffix({ recent: gathered.recent, target: null }) }] : []),
-        { role: "user", content: `${waitingLine}${saidHello ? "You already said hello when they paired (\"hey, it's maya. i'm going through your posts now…\"), so do NOT introduce yourself again: open straight with the read, and fold what you do for them into one short line at most." : "Write the first message. Address them directly. This is the first thing they will ever read from you."}${laneLine ? ` This is the lane read from their rows; say it in your own words, keep every number and name in it, and let its question be the ONLY question in the message: "${laneLine}"` : ""}` },
+        { role: "user", content: `${waitingLine}${saidHello ? "You already said hello, so do NOT introduce yourself or say what you do: open straight with the read." : "Write the first message. Address them directly. This is the first thing they will ever read from you."}${facts}` },
       ],
       temperature: 0.6,
       maxTokens: 900,
@@ -160,13 +155,15 @@ export const run = internalAction({
     if (!text) return { ok: false, reason: "empty completion" };
 
     const d = creator.dossier as { voice?: unknown; persona?: unknown; works?: unknown } | undefined;
-    let verdict = tooLong(text, true) ? { pass: false, problems: ["too_long" as const], note: "over the length cap" } : await critique(ctx, { creatorId: creator._id, kind: "first_read", text, evidence: d, voice: { voice: d?.voice, persona: d?.persona }, directives: directives.map((x) => x.verbatim) });
+    // The standout fact is code's, from their post rows: evidence, so the critic doesn't strip it as invented.
+    const critEvidence = best ? { ...(d ?? {}), standoutPost: best.line } : d;
+    let verdict = tooLong(text, true) ? { pass: false, problems: ["too_long" as const], note: "over the length cap" } : await critique(ctx, { creatorId: creator._id, kind: "first_read", text, evidence: critEvidence, voice: { voice: d?.voice, persona: d?.persona }, directives: directives.map((x) => x.verbatim) });
     let criticSkipped = Boolean(verdict.skipped);
     if (!verdict.pass) {
       const rewrite = await callModel(ctx, { creatorId: creator._id, purpose: "first_read_rewrite", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `Your previous first message was rejected by the critic for: ${verdict.problems.join(", ")} (${verdict.note}). Rewrite it, fixing exactly that. Message text only.` }], temperature: 0.5, maxTokens: 900, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
       if (rewrite.ok && rewrite.content.trim()) {
         text = rewrite.content.trim();
-        verdict = tooLong(text, true) ? { pass: false, problems: ["too_long" as const], note: "still over the length cap" } : await critique(ctx, { creatorId: creator._id, kind: "first_read", text, evidence: d, voice: { voice: d?.voice, persona: d?.persona }, directives: directives.map((x) => x.verbatim) });
+        verdict = tooLong(text, true) ? { pass: false, problems: ["too_long" as const], note: "still over the length cap" } : await critique(ctx, { creatorId: creator._id, kind: "first_read", text, evidence: critEvidence, voice: { voice: d?.voice, persona: d?.persona }, directives: directives.map((x) => x.verbatim) });
         criticSkipped = criticSkipped || Boolean(verdict.skipped);
       }
       // First contact carries an introduction AND the read, so it gets the character cap only
@@ -181,18 +178,11 @@ export const run = internalAction({
       }
     }
 
-    // Live 2026-09-05: appending the lane line after the model had already asked its own
-    // question gave them two questions in one message. The lane check is now the model's
-    // one question (told above); the line is appended only when the message carries none.
-    if (laneLine && !text.includes("?")) text = `${text}\n\n${laneLine}`;
-    // Live 2026-09-06: she kept the two candidate buttons and rewrote the question into one of
-    // her own, so a tap answered a question she never asked. Buttons and question must agree:
-    // one rewrite naming every candidate, then the proposal line itself.
-    if (laneAsk && laneAsk.candidates.length && !candidatesNamed(text, laneAsk.candidates.map((c) => c.label))) {
-      const labels = laneAsk.candidates.map((c) => `"${c.label}"`).join(" and ");
-      const rewrite = await callModel(ctx, { creatorId: creator._id, purpose: "first_read_rewrite", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `Your message will carry buttons labelled ${labels}. Rewrite it so its ONLY question is the one you were given, naming ${labels} exactly as written, and cite no share or percentage that is not in that line. Message text only.` }], temperature: 0.4, maxTokens: 900, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
-      if (rewrite.ok && rewrite.content.trim() && candidatesNamed(rewrite.content, laneAsk.candidates.map((c) => c.label))) text = rewrite.content.trim();
-      text = ensureCandidatesNamed(text, laneAsk.candidates.map((c) => c.label), laneLine);
+    // Proof she watched is the point (2026-11-03, dev runs: she opened on another post, or a critic rewrite
+    // dropped the number). Code checks the standout's figure is cited; one rewrite if not, then it goes.
+    if (best && !citesStandout(text, best)) {
+      const fix = await callModel(ctx, { creatorId: creator._id, purpose: "first_read_rewrite", model: spec.primary, messages: [{ role: "system", content: prefix }, { role: "user", content: `Your read:\n"""\n${text}\n"""\nIts first text must be about this post and cite its numbers exactly as written: ${best.line}. Keep the moment that got you first, then the numbers, then your idea and your one question as they are. Message text only.` }], temperature: 0.4, maxTokens: 900, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+      if (fix.ok && fix.content.trim() && citesStandout(fix.content, best) && !tooLong(fix.content.trim(), true)) text = fix.content.trim();
     }
 
     // The conversation is live while she reads (2026-10-01): never land over one of her replies, and if
@@ -223,12 +213,8 @@ export const run = internalAction({
       dedupeKey: `first_read:${creator._id}`,
       proactive: true,
       kind: "first_read",
-      awaitingAnswer: Boolean(laneAsk) || /\?\s*$/.test(text),
-      ...(laneAsk
-        ? laneAsk.candidates.length
-          ? { buttons: laneAsk.candidates.slice(0, 3).map((c, i) => ({ id: `lanepick:${laneAsk!.token}:${i}`, label: clip(c.label, 30) })) }
-          : { buttons: [{ id: `lane:${laneAsk.token}:yes`, label: "that's it" }, { id: `lane:${laneAsk.token}:no`, label: "not quite" }] }
-        : {}),
+      // No buttons: her question is open (a menu under it read as a survey).
+      awaitingAnswer: /\?\s*$/.test(text),
       produced: producedStamp(spec.primary),
     });
     // No goal question after the read any more (operator, 2026-10-09): her intro says what she does; what they want comes out in conversation.

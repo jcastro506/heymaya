@@ -22,17 +22,16 @@ const READ = [
 ].join("\n\n---\n\n");
 
 describe("the opening, pure", () => {
-  it("greets, drops her own introduction, keeps the read in order, ends on the one ask", () => {
+  it("greets with the one ask, drops her own introduction, keeps the read in order", () => {
     const parts = openingWithRead("hi Sam, it's Maya!", READ).split("\n---\n");
-    expect(parts[0]).toBe("hi Sam, it's Maya!");
+    expect(parts[0]).toBe(`hi Sam, it's Maya! ${saveContactLine()}`);
     expect(parts.some((p) => /^i'?m maya/i.test(p))).toBe(false);
     expect(parts[1]).toMatch(/^Ok, went through everything/);
     expect(parts[2]).toMatch(/lean into the food reviews/);
-    expect(parts.at(-1)).toBe(saveContactLine());
-    expect(parts).toHaveLength(4);
+    expect(parts).toHaveLength(3);
   });
   it("a read with no introduction loses nothing", () => {
-    expect(openingWithRead("hey, Maya here", "one.\n---\ntwo?").split("\n---\n")).toEqual(["hey, Maya here", "one.", "two?", saveContactLine()]);
+    expect(openingWithRead("hey, Maya here", "one.\n---\ntwo?").split("\n---\n")).toEqual([`hey, Maya here ${saveContactLine()}`, "one.", "two?"]);
   });
 });
 

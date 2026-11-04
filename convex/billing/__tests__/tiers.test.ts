@@ -105,7 +105,7 @@ describe("the tiers", () => {
     expect(introBody(true).join(" ")).toMatch(/brand/);
     expect(introBody(false).join(" ")).not.toMatch(/brand|partnership/);
     expect(helloFor(false)).not.toMatch(/brand/);
-    expect(helloFor(true)).toMatch(/brand stuff/);
+    expect(helloFor(true)).toMatch(/brand deals/);
     expect(helloFor(false)).toMatch(/it's Maya|Maya here/);
   });
 

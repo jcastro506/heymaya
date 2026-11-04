@@ -44,15 +44,15 @@ describe("first contact", () => {
     // b's read was waiting: it is the opening, so there's no second introduction (2026-11-03).
     expect(hello(b)).toHaveLength(0);
     expect(rows.filter((m) => m.awaitingAnswer), "no survey question").toHaveLength(0);
+    // Two texts (2026-11-03): the greeting with the save-the-number ask, then "going through your posts".
     const parts = hello(a)[0].body.split("\n---\n");
-    expect(parts).toHaveLength(4);
-    expect(parts[1]).toMatch(/going through your posts right now/);
-    expect(parts[2]).toMatch(/text me like you'd text a friend/i);
-    expect(parts[3]).toMatch(/save this number as Maya/);
+    expect(parts).toHaveLength(2);
+    expect(parts[0]).toMatch(/maya.*save this number/i);
+    expect(parts[1]).toMatch(/going through your posts now/i);
     const opening = rows.find((m) => m.creatorId === b && m.kind === "first_read")!.body.split("\n---\n");
     expect(opening[0], "greets first").toMatch(/maya/i);
     expect(opening[1]).toBe("the read");
-    expect(opening.at(-1)).toMatch(/save this number as Maya/);
+    expect(opening[0]).toMatch(/save this number/i);
     for (const banned of ["—", "what do you most want", "AI", "assistant"]) expect(hello(a)[0].body, banned).not.toContain(banned);
   });
 });

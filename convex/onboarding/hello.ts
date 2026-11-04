@@ -47,16 +47,21 @@ export function greetingOk(text: string, name: string | null): boolean {
 /**
  * Pure: her opening when the read was written before they texted START (2026-11-03). Pairing used to send the
  * four-text hello AND re-send the waiting read: eight texts in eleven seconds, her introduction twice, the
- * read first and "what i noticed is coming right up" after it. Now the read IS the opening: the greeting,
- * the read without any introduction of hers, and the one practical ask. One message, in order, once.
+ * read first and "what i noticed is coming right up" after it. Now the read IS the opening: the greeting with
+ * the one practical ask, then the read without any introduction of hers. One message, in order, once.
  */
 export function openingWithRead(greeting: string, readBody: string): string {
   const parts = readBody.split(/\n---\n/).map((p) => p.trim()).filter((p) => p && !/^(i'?m|i am) maya\b/i.test(p));
-  return [greeting.trim(), ...parts, saveContactLine()].join("\n---\n");
+  return [greetingWithSave(greeting), ...parts].join("\n---\n");
+}
+
+/** Pure: the greeting and the save-the-number ask, one text ("hey Adina! it's Maya 👋 save this number so…"). */
+export function greetingWithSave(greeting: string): string {
+  return `${greeting.trim()} ${saveContactLine()}`;
 }
 
 export function helloParts(greeting: string, partnerships: boolean, readDone = false): string[] {
-  return [greeting.trim(), ...introBody(partnerships, readDone), saveContactLine()];
+  return [greetingWithSave(greeting), ...introBody(partnerships, readDone)];
 }
 
 export const inputs = internalQuery({
