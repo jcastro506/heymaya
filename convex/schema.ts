@@ -780,6 +780,7 @@ export default defineSchema({
     watchChannels: v.optional(v.array(v.object({ channelId: v.string(), resourceId: v.string(), expiresAt: v.number() }))),
     syncToken: v.optional(v.string()),
     calendars: v.optional(v.array(v.object({ id: v.string(), name: v.string(), selected: v.boolean() }))),
+    historyRequestedAt: v.optional(v.number()), // zernio: the history backfill was asked for (connections/zernio applyAccounts)
     lastSyncedAt: v.optional(v.number()),
     detail: v.optional(v.string()), // plain-language reason for attention / needs_reconnect
     // zernio

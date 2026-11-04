@@ -54,7 +54,9 @@ export const setNiche = internalMutation({
     if (readsAsInstruction(a.text)) return { ok: false, body: "" };
     await ctx.db.patch(c._id, { niche: a.text.trim().slice(0, 300), updatedAt: Date.now() });
     // 2026-10-21: quoting their words back ("noted, '…'. that's how i'll read your lane now.") read as a robot.
-    return { ok: true, body: "got it, i'll work that into what i look for." };
+    // 2026-11-04: and "i'll work that into what i look for" promised nothing she then did. Now the plan is rebuilt
+    // around it (onboarding/redirect) and she says so.
+    return { ok: true, body: "got it. give me a minute to rethink your plan around that." };
   },
 });
 

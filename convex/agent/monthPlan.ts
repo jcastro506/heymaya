@@ -88,12 +88,18 @@ export const store = internalMutation({
  * text. Any failure still sends the week (the plan is a bonus on top of ideas, never a gate).
  */
 export const proposeThenWeek = internalAction({
-  args: { creatorId: v.id("creators") },
+  // held: it already waited once for their answer to her opening (onboarding/hold).
+  args: { creatorId: v.id("creators"), held: v.optional(v.boolean()) },
   handler: async (ctx, a): Promise<{ proposed: boolean; reason: string }> => {
+    const hold = await ctx.runQuery(internal.onboarding.hold.openingWaits, { creatorId: a.creatorId, now: Date.now() });
+    if (hold.wait && !a.held) {
+      await ctx.scheduler.runAt(hold.until, internal.agent.monthPlan.proposeThenWeek, { creatorId: a.creatorId, held: true });
+      return { proposed: false, reason: "her opening is still waiting for an answer; the plan comes when they reply or tomorrow morning" };
+    }
     const week = async (opener?: string) => { await ctx.runAction(internal.calendar.weekPlan.draft, { creatorId: a.creatorId, horizon: "first", opener }); };
     const quiet = await ctx.runQuery(internal.core.messages.quietNow, { creatorId: a.creatorId, now: Date.now() });
     if (quiet.quiet) {
-      await ctx.scheduler.runAt(quiet.endsAt + 15 * 60_000, internal.agent.monthPlan.proposeThenWeek, { creatorId: a.creatorId });
+      await ctx.scheduler.runAt(quiet.endsAt + 15 * 60_000, internal.agent.monthPlan.proposeThenWeek, { creatorId: a.creatorId, held: a.held });
       return { proposed: false, reason: "quiet hours; proposing in the morning" };
     }
     const inp = await ctx.runQuery(internal.agent.monthPlan.inputs, { creatorId: a.creatorId });

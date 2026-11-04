@@ -105,7 +105,11 @@ export const applyAccounts = internalMutation({
     // gets its ninety days pulled once, here, where "connected" is decided; the hourly delta
     // only carries what changes after that.
     const before = new Set((conn.zernioAccounts ?? []).filter((x) => x.canFetchAnalytics && !x.needsReconnect).map((x) => x.accountId));
-    const backfill = status === "connected" && accounts.some((x) => x.canFetchAnalytics && !x.needsReconnect && !before.has(x.accountId));
+    // Or connected and never backfilled (2026-11-04: a first connect flagged "needs reconnect", then a reconnect of
+    // the same account, left a tester with no history: the account was already "before").
+    const neverPulled = status === "connected" && !conn.historyRequestedAt && accounts.some((x) => x.canFetchAnalytics && !x.needsReconnect);
+    const backfill = status === "connected" && (neverPulled || accounts.some((x) => x.canFetchAnalytics && !x.needsReconnect && !before.has(x.accountId)));
+    if (backfill) await ctx.db.patch(conn._id, { historyRequestedAt: Date.now() });
     if (backfill) {
       await ctx.scheduler.runAfter(0, internal.connections.sync.bootstrap, { creatorId: a.creatorId });
       // A1: the account-level reads too, so follower growth and "who follows you" fill the same day.

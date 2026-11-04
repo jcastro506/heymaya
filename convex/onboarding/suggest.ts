@@ -394,7 +394,8 @@ export const offerFacts = internalQuery({
  * them by text, with a one-tap yes. Waits for pairing and for the first read to go out; never twice.
  */
 export const offerPicks = internalAction({
-  args: { creatorId: v.id("creators"), attempt: v.number() },
+  // held: it already waited once for their answer to her opening (onboarding/hold).
+  args: { creatorId: v.id("creators"), attempt: v.number(), held: v.optional(v.boolean()) },
   handler: async (ctx, a): Promise<{ offered: boolean; reason: string }> => {
     const f = await ctx.runQuery(internal.onboarding.suggest.offerFacts, { creatorId: a.creatorId });
     if (!f) return { offered: false, reason: "no creator" };
@@ -404,6 +405,11 @@ export const offerPicks = internalAction({
       if (a.attempt + 1 >= OFFER.maxAttempts) return { offered: false, reason: "never paired or no first read; stood down" };
       await ctx.scheduler.runAfter(OFFER.retryMs, internal.onboarding.suggest.offerPicks, { creatorId: a.creatorId, attempt: a.attempt + 1 });
       return { offered: false, reason: f.paired ? "waiting for her first read" : "waiting for pairing" };
+    }
+    const hold = await ctx.runQuery(internal.onboarding.hold.openingWaits, { creatorId: a.creatorId, now: Date.now() });
+    if (hold.wait && !a.held) {
+      await ctx.scheduler.runAt(hold.until, internal.onboarding.suggest.offerPicks, { creatorId: a.creatorId, attempt: a.attempt, held: true });
+      return { offered: false, reason: "her opening is still waiting for an answer" };
     }
     let picks = f.picks;
     if (!picks) {
