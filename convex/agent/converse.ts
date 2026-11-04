@@ -5,6 +5,8 @@
  * skill-choice arrive with Sprint 3; the shape they plug into is this file.
  */
 
+import { carriesLesson, lessonFits, lessonKey, momentLesson, withLesson } from "../onboarding/lessons";
+import { dayKeyInZone } from "../core/cadence";
 import { platformOn, TIKTOK_ONLY_LINE } from "../config/platforms";
 import { carried } from "../core/editor";
 import { obviousCadence } from "./classify";
@@ -525,7 +527,10 @@ export const run = internalAction({
           await ctx.runMutation(internal.agent.converse.markIdea, { ideaId, savedAt: Date.now() });
           const saved = await ctx.runQuery(internal.agent.converse.ideaById, { ideaId });
           if (saved) await ctx.scheduler.runAfter(0, internal.agent.memory.index, { creatorId: creator._id, kind: "swipe", refId: String(ideaId), text: `${(saved.version as { hook?: string } | undefined)?.hook ?? ""}\n${saved.messageText}` });
-          await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: "saved. it's in your swipe file.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
+          // Their first save is when the app has something of theirs in it (onboarding/lessons).
+          const appLine = momentLesson("app", { usage: await ctx.runQuery(internal.onboarding.lessons.usageFor, { creatorId: creator._id }), said: creator.milestonesSaid ?? [], now: Date.now(), pairedAt: creator.channel.pairedAt });
+          await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: appLine ? `saved. ${appLine}.` : "saved. it's in Ideas.", dedupeKey: `btn:${target._id}`, proactive: false, kind: "reply" });
+          if (appLine) await ctx.runMutation(internal.agent.history.markSaid, { creatorId: creator._id, key: lessonKey("app", dayKeyInZone(Date.now(), creator.timezone)) });
           await deliverNow(ctx as never);
           // A saved idea gets a time, or it is forgotten (2026-09-06).
           await ctx.runAction(internal.calendar.secure.offer, { creatorId: creator._id, ideaId });
@@ -783,6 +788,12 @@ export const run = internalAction({
     }
     text = respectEmojiHabit(text, gathered.voice);
 
+    // First week: one thing they haven't found yet, after the answer, when the moment has room (onboarding/lessons).
+    let taught = false;
+    if (gathered.lesson && !carriesLesson(text, gathered.lesson.text) && (await lessonFits(ctx, creator._id, burstText, text))) {
+      text = withLesson(text, gathered.lesson.text);
+      taught = true;
+    }
     // The rest of a multi-ask message is a second reply to the same inbound row; it must not collide with the first.
     const replyKey = args.handledNote ? `reply:${args.messageId}:rest` : `reply:${args.messageId}`;
     await ctx.runMutation(internal.core.messages.send, {
@@ -796,6 +807,8 @@ export const run = internalAction({
       criticSkipped,
       answering: target._id,
     });
+    // A first-week lesson she chose to include is taught; one she left out stays for another moment.
+    if (gathered.lesson && (taught || carriesLesson(text, gathered.lesson.text))) await ctx.runMutation(internal.agent.history.markSaid, { creatorId: creator._id, key: lessonKey(gathered.lesson.id, dayKeyInZone(Date.now(), creator.timezone)) });
     // It rode along: today's pick is made, by conversation, with no extra text (core/editor).
     if (ride && carried(text, ride.link)) await ctx.runMutation(internal.core.editor.decide, { creatorId: creator._id, day: ride.day, id: ride.id, status: "folded", candidate: ride.candidate, now: Date.now() });
     await deliverNow(ctx as never);

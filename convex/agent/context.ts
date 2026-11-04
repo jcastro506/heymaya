@@ -14,6 +14,7 @@ import { v } from "convex/values";
 import { appActionsSection, unseenActions } from "../core/act";
 import { unseenIdeas, unseenSection } from "../core/unseen";
 import { gapDaysBetween, returnFacts, welcomeBackSection, WELCOME_BACK_AFTER_DAYS } from "./returnFacts";
+import { lessonSection, lessonUsage, replyLesson, type LessonId } from "../onboarding/lessons";
 import { normalsByPlatform } from "../core/normal";
 import type { Doc, Id } from "../_generated/dataModel";
 import { SOUL, SOUL_VERSION, REGISTER_ADDENDA } from "./soul";
@@ -44,7 +45,7 @@ export interface AssembledContext {
 
 export const gather = internalQuery({
   args: { creatorId: v.id("creators"), messageId: v.optional(v.id("messages")) },
-  handler: async (ctx, args): Promise<{ creator: Doc<"creators">; directives: Doc<"directives">[]; recent: Doc<"messages">[]; target: Doc<"messages"> | null; personal: string; voice: string; history: string } | null> => {
+  handler: async (ctx, args): Promise<{ creator: Doc<"creators">; directives: Doc<"directives">[]; recent: Doc<"messages">[]; target: Doc<"messages"> | null; personal: string; voice: string; history: string; lesson: { id: LessonId; text: string } | null } | null> => {
     let creator = (await ctx.db.get(args.creatorId)) as Doc<"creators"> | null;
     if (!creator) return null;
     creator = await separatedCreator(ctx, creator);
@@ -86,8 +87,10 @@ export const gather = internalQuery({
     // What they've told her about themselves goes everywhere (ideas need "no face" most); what's still
     // worth asking only where she's answering them (onboarding/knowThem).
     const knowThem = knowThemSection(await knownAbout(ctx, creator._id), Date.now(), Boolean(args.messageId));
-    const historyNow = [history, knowThem, reading ? stillReadingSection(reading) : ""].filter(Boolean).join("\n\n");
-    return { creator, directives, recent: recent.filter((m) => !m.memoryExcludedAt).reverse(), target, personal, voice, history: historyNow };
+    // First week: one thing they haven't found yet, offered to a reply that has room for it (onboarding/lessons).
+    const lesson = args.messageId && !welcome ? replyLesson({ usage: await lessonUsage(ctx, creator._id), said: creator.milestonesSaid ?? [], now: Date.now(), pairedAt: creator.channel.pairedAt }) : null;
+    const historyNow = [history, knowThem, reading ? stillReadingSection(reading) : "", lessonSection(lesson)].filter(Boolean).join("\n\n");
+    return { creator, directives, recent: recent.filter((m) => !m.memoryExcludedAt).reverse(), target, personal, voice, history: historyNow, lesson: lesson as { id: LessonId; text: string } | null };
   },
 });
 
