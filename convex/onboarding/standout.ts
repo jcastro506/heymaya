@@ -8,8 +8,9 @@ import { v } from "convex/values";
 import { internalQuery } from "../_generated/server";
 import type { Doc } from "../_generated/dataModel";
 import { platformOn } from "../config/platforms";
+import { momentFor } from "./moments";
 
-export interface StandoutPost { caption: string; views: number; comments: number; multiple: number | null }
+export interface StandoutPost { caption: string; views: number; comments: number; multiple: number | null; /** The holiday it sat on (onboarding/moments), if any. */ moment?: string | null }
 export interface Standout { line: string; kind: "multiple" | "comments" | "views"; posts: number; /** The figure the read must cite, as written in `line`. */ cite: string }
 
 /** Fewer posts than this and there's no honest "best": she asks for the one they're proudest of instead. */
@@ -39,7 +40,9 @@ export function standout(posts: StandoutPost[]): Standout | null {
     // A viral outlier reads as a silly multiple ("610×", live 2026-11-03): past 10×, the two view counts say it plainly.
     const usual = compact(byMultiple.views / m);
     const how = m >= 10 ? `got ${compact(byMultiple.views)} views, against a usual ${usual}` : `did about ${m.toFixed(1).replace(/\.0$/, "")}× their usual views (${compact(byMultiple.views)}, against a usual ${usual})`;
-    return { kind: "multiple", posts: posts.length, line: `${named(byMultiple.caption)} ${how}`, cite: compact(byMultiple.views) };
+    // A holiday spike is a moment to plan for next time, not a direction (2026-11-04: a Halloween costume at 24×).
+    const moment = byMultiple.moment ? `; it was a ${byMultiple.moment} post, a moment to plan for next time rather than a direction` : "";
+    return { kind: "multiple", posts: posts.length, line: `${named(byMultiple.caption)} ${how}${moment}`, cite: compact(byMultiple.views) };
   }
   const comments = [...posts].map((p) => p.comments).sort((a, b) => a - b);
   const median = comments[Math.floor(comments.length / 2)];
@@ -60,7 +63,7 @@ export const forCreator = internalQuery({
   args: { creatorId: v.id("creators") },
   handler: async (ctx, a): Promise<Standout | null> => {
     const rows = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(40)) as Doc<"ownPosts">[];
-    const posts = rows.filter((p) => platformOn(p.platform) && p.contentType === "video").map((p) => ({ caption: p.caption, views: p.metrics.views, comments: p.metrics.comments, multiple: p.multiple ?? null }));
+    const posts = rows.filter((p) => platformOn(p.platform) && p.contentType === "video").map((p) => ({ caption: p.caption, views: p.metrics.views, comments: p.metrics.comments, multiple: p.multiple ?? null, moment: momentFor(p.createTime)?.name ?? null }));
     return standout(posts);
   },
 });

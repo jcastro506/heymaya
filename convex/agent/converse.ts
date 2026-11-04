@@ -592,6 +592,8 @@ export const run = internalAction({
       else out = await ctx.runMutation(internal.agent.manage.setNiche, { creatorId: creator._id, text: intent.text });
       if (out.body) {
         await ctx.runMutation(internal.core.messages.send, { creatorId: creator._id, surface: "telegram", body: out.body, dedupeKey: `manage:${target._id}`, proactive: false, kind: "reply", buttons: out.buttons });
+        // What they make (or don't) changed: the dossier, the ideas and the plan follow it, then she comes back with it.
+        if (intent.action === "niche" && out.ok) await ctx.scheduler.runAfter(0, internal.onboarding.redirect.run, { creatorId: creator._id, said: burstText });
         await deliverNow(ctx as never);
         // "three things": the action took one; the rest of the message gets a real turn, told what is already done.
         if (looksMultiPart(target.body)) return await ctx.runAction(internal.agent.converse.run, { creatorId: creator._id, messageId: target._id, rerouted: true, handledNote: out.body });

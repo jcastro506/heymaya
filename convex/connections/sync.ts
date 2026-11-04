@@ -143,6 +143,9 @@ export const bootstrap = internalAction({
         });
       }
       await ctx.runMutation(internal.connections.zernio.recordHealth, { check: "bootstrap", ok: true, detail: `${written} rows across ${accounts.length} accounts` });
+      // Posts the account brought in need their multiple of the creator's usual, or the standout pick, the lane
+      // read and the dossier never see them (2026-11-04: 17 of a tester's 27 posts had none).
+      if (created > 0) await ctx.runMutation(internal.onboarding.ingest.computeMultiples, { creatorId: a.creatorId });
       return { accounts: accounts.length, rows, written, created };
     } catch (e) {
       const detail = e instanceof Error ? clip(e.message, 200) : "bootstrap failed";

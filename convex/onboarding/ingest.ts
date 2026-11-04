@@ -5,6 +5,7 @@
  * validated by Zod before it is written. The job enqueues `first_read` at the end.
  */
 
+import { EXPERT_READ, evidenceOf } from "./evidence";
 import { enabledPlatforms } from "../config/platforms";
 import { v } from "convex/values";
 import { coverKey, rememberMedia } from "../media";
@@ -234,6 +235,10 @@ export const run = internalAction({
         }
       }
     }
+    // A connected account carries their whole recent history with saves and shares, at no read cost: pull it
+    // before she forms her view, so she reads months, not the last few weeks (2026-11-04: a tester's read saw
+    // ten posts, all from one Halloween-heavy month, and missed the series that never missed).
+    try { await ctx.runAction(internal.connections.sync.bootstrap, { creatorId: creator._id }); } catch (err) { console.error(`[ingest] connected history failed: ${String(err).slice(0, 160)}`); }
     const { baseline, posts } = await ctx.runMutation(internal.onboarding.ingest.computeMultiples, { creatorId: creator._id });
     const mode: "full" | "thin" | "newCreator" = posts <= 4 ? "newCreator" : posts <= 30 ? "thin" : "full";
 
@@ -308,7 +313,8 @@ export const run = internalAction({
  * changing. The previous dossier and the changed sections are stored beside the new one.
  */
 export const synthesize = internalAction({
-  args: { creatorId: v.id("creators"), mode: v.optional(v.union(v.literal("full"), v.literal("thin"), v.literal("newCreator"))), readFrom: v.optional(v.any()), reason: v.union(v.literal("onboarding"), v.literal("weekly"), v.literal("correction")) },
+  // `said`: their own words, when a correction is why this runs (onboarding/redirect).
+  args: { creatorId: v.id("creators"), mode: v.optional(v.union(v.literal("full"), v.literal("thin"), v.literal("newCreator"))), readFrom: v.optional(v.any()), reason: v.union(v.literal("onboarding"), v.literal("weekly"), v.literal("correction")), said: v.optional(v.string()) },
   handler: async (ctx, args): Promise<{ ok: boolean; reason?: string }> => {
     const creator = await ctx.runQuery(internal.onboarding.ingest.creatorHandles, { creatorId: args.creatorId });
     if (!creator) return { ok: false, reason: "creator not found" };
@@ -324,22 +330,13 @@ export const synthesize = internalAction({
     // The honesty rules judge what is stored, not the onboarding counters (which a rewrite inherits, and which read 0 for Instagram-only accounts, live 2026-09-29).
     const facts = { postsRead: posts, watched: cards.filter((c) => c.depth === "watch").length };
     const readFrom = (args.readFrom as Record<string, unknown> | undefined) ?? (learn.dossier as { readFrom?: Record<string, unknown> } | null)?.readFrom ?? { tiktokPosts: 0, instagramPosts: 0, transcripts: 0, watched: cards.filter((c) => c.depth === "watch").length, sampledFromHistory: false };
-    const digest = fresh.slice(0, 200).map((r) => ({
-      id: r.postId,
-      platform: r.platform,
-      when: new Date(r.createTime).toISOString().slice(0, 10),
-      type: r.contentType,
-      sec: r.durationSec ?? null,
-      views: r.metrics.views,
-      multiple: r.multiple ?? null,
-      caption: clip(r.caption, 200),
-      transcript: r.transcript ? clip(r.transcript, 600) : null,
-      sample: r.sample ?? null,
-    }));
-    const system = `${SOUL}\n\n# Skill: learn-creator\nYou are writing the creator's dossier from their own posts. Every claim must cite post ids from the data. Say "unknown" where the data is silent, never a 0. A "works"/"doesNot" claim needs at least two posts behind it, and a format\'s multiple needs at least three (null otherwise): a couple of runaway posts are luck, not a pattern. For every "works" claim, say WHY it worked as its driver, the way a sharp friend in the industry would: "skill" (something they do well that travels anywhere: how they talk to camera, comic timing, editing pace, storytelling, a format they own), "routine" (their real life on repeat: a city they live in, a sport they do every week; only when at least three of their posts show it) or "circumstance" (a one-off: a trip, a concert, a trend they rode, a collab, a lucky moment). A concert post that blew up is not "post concerts" unless they are at concerts all the time; London pans are not a plan unless London is their everyday. For each, "travels" is the part they can repeat on an ordinary day. Put standout posts driven by circumstance in "oneOffs" with why and what travels, never in "works". "strengths" are the two or three things they are genuinely good at wherever they are, each seen in at least two posts: that is what a plan is built on. A strength can be about them as a person (their humor, how they talk to camera, their look, a relationship people love seeing) when the cards' them blocks show people come for that, not only a topic or a format. Do not invent visuals: you may describe how a post looks ONLY from the watched cards; everything else is captions, transcripts and numbers. The person (persona.look, voice, humor, presence, world, cares) comes ONLY from the cards' "them" and "aFriendWouldNotice" blocks, summarised across posts the way a friend who watched everything would say it, never from a single post and never a guess about age, ethnicity, body or health; leave a field out when the cards are silent.${args.reason === "onboarding" ? "" : " This is a rewrite: the previous dossier, their house rules, their notes and their taste are below. A house rule or a note from them beats anything you inferred. Keep what still holds, change what the new posts contradict, and never keep a claim they corrected."}\nOutput ONLY JSON matching this shape:\n${DOSSIER_JSON_SHAPE}`;
+    // Every post with saves, shares and the holiday it sat on, and their usual to read it against (onboarding/evidence).
+    const { posts: digest, usual } = evidenceOf(fresh.slice(0, 200), Date.now(), clip);
+    const system = `${SOUL}\n\n# Skill: learn-creator\nYou are writing the creator's dossier from their own posts. Every claim must cite post ids from the data. Say "unknown" where the data is silent, never a 0. A "works"/"doesNot" claim needs at least two posts behind it, and a format\'s multiple needs at least three (null otherwise): a couple of runaway posts are luck, not a pattern. For every "works" claim, say WHY it worked as its driver, the way a sharp friend in the industry would: "skill" (something they do well that travels anywhere: how they talk to camera, comic timing, editing pace, storytelling, a format they own), "routine" (their real life on repeat: a city they live in, a sport they do every week; only when at least three of their posts show it) or "circumstance" (a one-off: a trip, a concert, a trend they rode, a collab, a lucky moment). A concert post that blew up is not "post concerts" unless they are at concerts all the time; London pans are not a plan unless London is their everyday. For each, "travels" is the part they can repeat on an ordinary day. Put standout posts driven by circumstance in "oneOffs" with why and what travels, never in "works".\n\n${EXPERT_READ}\n\n "strengths" are the two or three things they are genuinely good at wherever they are, each seen in at least two posts: that is what a plan is built on. A strength can be about them as a person (their humor, how they talk to camera, their look, a relationship people love seeing) when the cards' them blocks show people come for that, not only a topic or a format. Do not invent visuals: you may describe how a post looks ONLY from the watched cards; everything else is captions, transcripts and numbers. The person (persona.look, voice, humor, presence, world, cares) comes ONLY from the cards' "them" and "aFriendWouldNotice" blocks, summarised across posts the way a friend who watched everything would say it, never from a single post and never a guess about age, ethnicity, body or health; leave a field out when the cards are silent.${args.reason === "onboarding" ? "" : " This is a rewrite: the previous dossier, their house rules, their notes and their taste are below. A house rule or a note from them beats anything you inferred. Keep what still holds, change what the new posts contradict, and never keep a claim they corrected."}\nOutput ONLY JSON matching this shape:\n${DOSSIER_JSON_SHAPE}`;
     const watchedCards = cards.filter((c) => c.depth === "watch").slice(0, 40);
-    const context = args.reason === "onboarding" ? "" : `\n\nPrevious dossier (version ${learn.dossierVersion}):\n${JSON.stringify(learn.dossier)}\n\nHouse rules, verbatim:\n${JSON.stringify(learn.rules)}\n\nThings they told you:\n${JSON.stringify(learn.notes)}\n\nTheir taste (what they took / passed on):\n${JSON.stringify(learn.taste)}\n\nIdeas of yours they posted this month:\n${JSON.stringify(learn.postedIdeas)}`;
-    const user = `Creator handles: ${JSON.stringify(creator.handles)}\nTheir sentence about what they make: ${JSON.stringify(creator.niche)}\nMode: ${mode} (posts read: ${posts}, baseline median views of last 20: ${baseline ?? "unknown"})\n\nPosts (newest first):\n${JSON.stringify(digest)}\n\nWatched cards (${watchedCards.length}; these are the only posts you may describe visually):\n${JSON.stringify(watchedCards)}${context}`;
+    const theySaid = args.said ? `\n\nThey just told you, in their words: ${JSON.stringify(clip(args.said, 400))}. That beats anything you inferred: no "works", strength, keyword or lane may contradict it. If a format that works was about something they now don't want, keep the format and say what else it could carry.` : "";
+    const context = args.reason === "onboarding" ? theySaid : `${theySaid}\n\nPrevious dossier (version ${learn.dossierVersion}):\n${JSON.stringify(learn.dossier)}\n\nHouse rules, verbatim:\n${JSON.stringify(learn.rules)}\n\nThings they told you:\n${JSON.stringify(learn.notes)}\n\nTheir taste (what they took / passed on):\n${JSON.stringify(learn.taste)}\n\nIdeas of yours they posted this month:\n${JSON.stringify(learn.postedIdeas)}`;
+    const user = `Creator handles: ${JSON.stringify(creator.handles)}\nTheir sentence about what they make: ${JSON.stringify(creator.niche)}\nMode: ${mode} (posts read: ${posts}, baseline median views of last 20: ${baseline ?? "unknown"})\nTheir usual across these posts: ${JSON.stringify(usual)}\n\nPosts (newest first; savesPer1k, sharesPer1k and commentsPer1k are per 1,000 views; null means not reported):\n${JSON.stringify(digest)}\n\nWatched cards (${watchedCards.length}; these are the only posts you may describe visually):\n${JSON.stringify(watchedCards)}${context}`;
     const spec = REGISTRY.writer;
     let result = await callModel(ctx, { creatorId: creator._id, purpose: args.reason === "onboarding" ? "learn_creator" : "learn_creator_weekly", model: spec.primary, messages: [{ role: "system", content: system }, { role: "user", content: user }], temperature: 0.3, maxTokens: 3000, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
     if (!result.ok) result = await callModel(ctx, { creatorId: creator._id, purpose: "learn_creator_fallback", model: spec.fallback, messages: [{ role: "system", content: system }, { role: "user", content: user }], temperature: 0.3, maxTokens: 3000, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
@@ -369,7 +366,8 @@ export const synthesize = internalAction({
      * everything downstream reads these keywords. Asked ONCE per rewrite, and only when most
      * of the lane has actually moved; a keyword or two shifting is not a change of subject.
      */
-    if (args.reason !== "onboarding") {
+    // Not after a correction: they just told her what changed; asking "is that a phase?" is not listening.
+    if (args.reason === "weekly") {
       const before = ((creator.dossier as { keywords?: string[] } | undefined)?.keywords ?? []).map(String);
       const after = ((parsed.dossier as { keywords?: string[] } | undefined)?.keywords ?? []).map(String);
       if (before.length >= 3 && driftShare(before, after) >= LANE.driftShare) {
@@ -424,6 +422,14 @@ export function coerceDossier(o: Record<string, unknown>): Record<string, unknow
   if (tr) out.trajectory = { ...tr, postsPerWeekTrend: pick(tr.postsPerWeekTrend, ["up", "flat", "down"]), viewsTrend: pick(tr.viewsTrend, ["up", "flat", "down"]), breaks: Array.isArray(tr.breaks) ? tr.breaks : [] };
   const sources = ["follows", "sounds", "linkInBio", "admired", "collections", "highlights", "stated", "posts", "captions", "transcripts"];
   if (Array.isArray(o.interests)) out.interests = o.interests.filter((i) => sources.includes(String(obj(i)?.source)));
+  // A format's multiple written as text ("2.5×", live 2026-11-04) is a number; anything else is unknown (null),
+  // never a reason to throw the whole read away.
+  if (Array.isArray(o.formatsUsed)) out.formatsUsed = (o.formatsUsed as unknown[]).map((f) => {
+    const r = obj(f);
+    if (!r) return f;
+    const m = typeof r.medianMultiple === "number" ? r.medianMultiple : Number.parseFloat(String(r.medianMultiple ?? ""));
+    return { ...r, medianMultiple: Number.isFinite(m) ? m : null };
+  });
   for (const k of ["works", "doesNot"] as const) if (Array.isArray(o[k])) out[k] = (o[k] as unknown[]).filter((c) => typeof obj(c)?.claim === "string" && Array.isArray(obj(c)?.evidencePostIds) && (obj(c)!.evidencePostIds as unknown[]).length > 0);
   // Over-long text is trimmed, never a reason to reject the read (the same live day: an interest's evidence at 150 chars).
   const clipTo = (v: unknown, n: number) => (typeof v === "string" && v.length > n ? `${v.slice(0, n - 1)}…` : v);

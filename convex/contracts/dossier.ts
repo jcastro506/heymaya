@@ -78,7 +78,7 @@ export const DOSSIER_JSON_SHAPE = `{
   "themes": [{"label": "", "share": 0.0, "evidencePostIds": [""]}],
   "interests": [{"label": "", "source": "follows|sounds|linkInBio|admired|collections|highlights|stated", "evidence": "≤120 chars"}],
   "audience": {"whoComments": "≤200", "asks": ["≤5"], "arguesAbout": ["≤3"], "evidencePostIds": [""]},
-  "formatsUsed": [{"formatFingerprint": "", "label": "", "count": 0, "medianMultiple": "1.0, or null under 3 posts", "evidencePostIds": [""]}],
+  "formatsUsed": [{"formatFingerprint": "", "label": "", "count": 0, "medianMultiple": 1.0, "evidencePostIds": [""]}],
   "fingerprint": {"opening": "text-first|speech-first|visual-first|mixed|unknown", "medianCutSeconds": "a number of seconds from watched cards, or \"unknown\"", "textStyle": "≤120", "settings": ["≤5"], "energy": "≤80", "confidence": 0.0},
   "voice": {"sampleLines": ["≤5 real lines they said"], "avoid": ["≤5"]},
   "works": [{"claim": "≤200", "evidencePostIds": [">=2"], "driver": "skill|routine|circumstance", "travels": "≤160, the part they can repeat on an ordinary day"}],
