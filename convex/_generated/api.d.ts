@@ -155,6 +155,7 @@ import type * as eval_memoryGauntlet from "../eval/memoryGauntlet.js";
 import type * as eval_onboardingRead from "../eval/onboardingRead.js";
 import type * as eval_outageDrill from "../eval/outageDrill.js";
 import type * as eval_partnershipGauntlet from "../eval/partnershipGauntlet.js";
+import type * as eval_personas from "../eval/personas.js";
 import type * as eval_productScript from "../eval/productScript.js";
 import type * as eval_replay from "../eval/replay.js";
 import type * as eval_run from "../eval/run.js";
@@ -418,6 +419,7 @@ declare const fullApi: ApiFromModules<{
   "eval/onboardingRead": typeof eval_onboardingRead;
   "eval/outageDrill": typeof eval_outageDrill;
   "eval/partnershipGauntlet": typeof eval_partnershipGauntlet;
+  "eval/personas": typeof eval_personas;
   "eval/productScript": typeof eval_productScript;
   "eval/replay": typeof eval_replay;
   "eval/run": typeof eval_run;
