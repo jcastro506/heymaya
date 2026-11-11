@@ -5,8 +5,8 @@
  * who posts on TikTok and Instagram. Every number on a screen is one the app would show for
  * that creator; nothing claims to be a real person's account.
  *
- * Static and server-rendered. The motion (messages arriving, the card swiping, bars growing)
- * is CSS, and stops under prefers-reduced-motion.
+ * Static and server-rendered. The motion (her typing, messages arriving, the card swiping, bars
+ * growing) is CSS, and stops under prefers-reduced-motion.
  */
 import type { CSSProperties, ReactNode } from "react";
 import { instagramOn } from "@/convex/config/platforms";
@@ -110,6 +110,7 @@ export function MessagesScreen({ lines, footer = "Delivered", animate = true }: 
           <div key={i} className="msg-row" style={{ "--i": i } as CSSProperties}>
             {l.time ? <span className="msg-time">{l.time}</span> : null}
             <p className={`bub ${l.from === "maya" ? "bub-in" : "bub-out"}`}>{l.text}</p>
+            {animate && l.from === "maya" ? <span className="msg-typing" aria-hidden="true"><i /><i /><i /></span> : null}
           </div>
         ))}
         <span className="msg-read" style={{ "--i": lines.length } as CSSProperties}>{footer}</span>
