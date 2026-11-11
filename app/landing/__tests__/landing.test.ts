@@ -41,7 +41,7 @@ describe("the landing's copy", () => {
   });
 
   it("finds the copy (the reader isn't silently empty)", () => {
-    expect(copy).toMatch(/Your whole content team/);
+    expect(copy).toMatch(/Your TikTok assistant/);
     expect(copy).toMatch(/iMessage or SMS/);
   });
 });
@@ -52,7 +52,6 @@ describe("prices and CTAs (sibling coherence)", () => {
   it("brand deals always name the plan they come on, from tiers", () => {
     expect(landing).toMatch(/Brand deals · \{c\.partnerLabel\} plan/);
     expect(landing).toMatch(/const PARTNER = TIERS\.partner/);
-    expect(landing).toMatch(/plan: `\$\{c\.partnerLabel\} plan`/);
   });
 
   it("hardcodes no price: every dollar figure comes from billing/tiers", () => {
@@ -80,7 +79,7 @@ const cards = (html: string) => [...html.matchAll(/<span class="price-name">([^<
 describe("the landing with Instagram off (the default)", () => {
   it("never says Instagram, Reels or two accounts, anywhere on the page", async () => {
     const html = await render(false);
-    expect(html).toMatch(/Your whole content team/);
+    expect(html).toMatch(/Your TikTok assistant, <em>in your texts\.<\/em>/);
     expect(html).not.toMatch(/Instagram|Reels|plat-ig/i);
     expect(html).toMatch(/For TikTok creators/);
   });
@@ -106,10 +105,29 @@ describe("the landing with Instagram off (the default)", () => {
   });
 });
 
+describe("what the page promises is what she does today", () => {
+  it("claims nothing that's switched off: no storyboards, no sending from their inbox, no reply tracking, no posting", async () => {
+    const html = await render(false);
+    expect(html).not.toMatch(/show me what that would look like|from your own inbox|tracks (the )?repl|three captions|3 captions/i);
+    expect(html).toMatch(/She never posts for you/);
+  });
+
+  it("her texts arrive with typing dots, and the phones below the hero wait until they're on screen", async () => {
+    const html = await render(false);
+    expect(html.match(/class="msg-typing"/g)?.length).toBeGreaterThanOrEqual(6);
+    expect(html.match(/class="iv"/g)?.length).toBe(3);
+    const css = read("landing.css");
+    expect(css).toMatch(/\.iv:not\(\.iv-go\) \.msg-live \*[^}]*animation-play-state: paused/);
+    expect(html).toMatch(/<noscript><style>\.iv \.msg-live \*[^<]*running/);
+    expect(css).toMatch(/prefers-reduced-motion: reduce\) \{\s*\.mx \*[^}]*animation: none !important/);
+  });
+});
+
 describe("the landing with Instagram on", () => {
   it("names both platforms and shows the Instagram account", async () => {
     const html = await render(true);
     expect(html).toMatch(/For TikTok and Instagram creators/);
+    expect(html).toMatch(/Your content assistant,/);
     expect(html).toMatch(/plat-ig/);
     expect(html).toMatch(/Reels watch time/);
   });

@@ -6,11 +6,13 @@ import { platformCopy } from "./landing/platformCopy";
 
 export function generateMetadata(): Metadata {
   const link = appLink();
-  const description = platformCopy().lede;
+  const c = platformCopy();
+  const description = c.lede;
+  const title = `Maya: ${c.headline.toLowerCase().replace("tiktok", "TikTok")} in your texts`;
   return {
-    title: "Maya: your whole content team, in one text thread",
+    title,
     description,
-    openGraph: { title: "Maya: your whole content team, in one text thread", description, type: "website" },
+    openGraph: { title, description, type: "website" },
     // The smart app banner on iPhone Safari, once the App Store listing exists.
     ...(link.kind === "store" && link.appId ? { itunes: { appId: link.appId } } : {}),
   };

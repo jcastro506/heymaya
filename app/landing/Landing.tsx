@@ -1,9 +1,12 @@
 /**
- * The landing for an app (W1, docs/CREATOR_MASTER_PLAN.md). The promise is the whole team: she
- * researches, plans, writes, reads the numbers and finds brand deals, all over text. Messages is
- * where she lives; the app is where her work is kept. Every CTA is "Get the app" through `/join`
+ * The landing for an app (W1, docs/CREATOR_MASTER_PLAN.md). The promise is one person: a TikTok
+ * creator's assistant who texts. She helps decide what to make, plans when to film it, and keeps
+ * them posting every week (2026-11-11: the page used to sell "a whole content team" in twelve wordy
+ * sections; it now says one thing per section and lets the phones show the rest). Messages is where
+ * she lives; the app is where her work is kept. Every CTA is "Get the app" through `/join`
  * (attribution → App Store / TestFlight). Prices come from billing/tiers only.
- * Server-rendered; the only client code is the CTA's click tracking and the page analytics.
+ * Server-rendered; the only client code is the CTA's click tracking, the page analytics, and the
+ * wrapper that starts a phone's motion when it scrolls into view (InView).
  */
 import type { CSSProperties } from "react";
 import Link from "next/link";
@@ -12,6 +15,7 @@ import { TIERS, offeredTiers, price, tierCopy } from "@/convex/billing/tiers";
 import { instagramOn } from "@/convex/config/platforms";
 import { appLink, ctaLabel, type AppLink } from "@/lib/appLink";
 import { CtaLink } from "../cta";
+import { InView } from "./InView";
 import { platformCopy } from "./platformCopy";
 import { DealsScreen, Flower, IdeasScreen, MessagesScreen, NumbersScreen, Phone, ReviewScreen, TodayScreen, type Line } from "./Screens";
 import "./landing.css";
@@ -20,75 +24,53 @@ const SITE = (process.env.NEXT_PUBLIC_SITE_URL || "https://hey-maya.ai").replace
 const PARTNER = TIERS.partner;
 type Copy = ReturnType<typeof platformCopy>;
 
-/** One thread, three of her jobs: the researcher, the copywriter, the analyst. */
+/* The sample creator on every screen is one runner (Screens.tsx), so the threads tell her week too. */
+
+/** A week with her, in four texts: the shoot, the caption, the Sunday read. */
 const HERO_THREAD: Line[] = [
-  { from: "maya", time: "Today 7:12 AM", text: "a runner you follow posted a “i can't do this” → “i love running” hill video last night. it's at 8.5× her normal. you'd nail this on your river loop." },
+  { from: "maya", time: "Thu 7:12 AM", text: "filming today at 5: the hill monologue. start at the bottom, phone low. shot list is in the app" },
   { from: "me", text: "ok filmed it!! caption?" },
-  { from: "maya", text: "1. the hill always wins (it's 7am)\n2. my legs said no, my brain said content\n3. pov: you signed up for this" },
-  { from: "maya", time: "2:40 PM", text: "the hill one is at 31K. that's 3.1× your normal 🙌" },
+  { from: "maya", text: "“the hill always wins (it's 7am)”" },
+  { from: "maya", time: "Sun 6:00 PM", text: "3 of 4 posted this week, and the hill one did 3.1× your normal 🙌" },
 ];
 
-/** Things people actually text her. Every one maps to something she can do by text today. */
-const ASKS = [
-  "save the hill one",
-  "move thursday's shoot to 6",
-  "write me a caption for this",
-  "how'd my last post do?",
-  "what's working in my niche this week?",
-  "show me what that would look like",
-  "find me brands",
-  "send them my media kit",
-  "never pitch me dance trends",
-  "don't text me before 9",
-  "be more blunt",
-  "pause",
+/** Her first text: she read their posts before she said hello. */
+const FIRST_THREAD: Line[] = [
+  { from: "me", text: "START" },
+  { from: "maya", text: "hey Sam! it's Maya 👋 save this number, i'll text you when i find something worth making" },
+  { from: "maya", text: "your 5am alarm video got 24K, against a usual 10K. the comments are all about your deadpan face" },
+  { from: "maya", text: "want to do that again this week? i've got one for your river loop" },
 ];
 
-const team = (c: Copy): Array<{ role: string; line: string; proof: string; plan?: string }> => [
-  { role: "Trend researcher", line: `Watches the creators you admire and your whole niche on ${c.platforms}. When a post is beating that creator's usual, you hear about it.`, proof: "“a runner you follow is at 8.5× her normal”" },
-  { role: "Strategist", line: "Turns what's working into ideas for you, with the post that inspired each one and why it fits. Send her a photo of where you are and she'll give you angles and a shot list.", proof: "“your version: the river loop, 15 seconds”" },
-  { role: "Producer", line: "Books filming time around your real calendar, sends the shot list that morning, checks in after, and moves it when life happens. She plans around races, trips and launches weeks out.", proof: "“filming today at 5. start at the bottom of the hill”" },
-  { role: "Copywriter", line: "Send her the video you already filmed. She watches it, then writes three captions in your voice and finds a sound to put under it. She learns how you like to edit them.", proof: "“1. the hill always wins (it's 7am)”" },
-  { role: "Analyst", line: "Measures every post against your own normal, tells you why it did or didn't work, and texts you while one is taking off. Send a screenshot of your analytics and she'll read it with you.", proof: "“31K, that's 3.1× your normal”" },
-  { role: "Brand deals manager", line: "Finds brands already paying creators like you, builds your media kit, and writes the outreach for you to approve. Then she tracks the replies.", proof: "“pacefern paid two runners you watch this month”", plan: `${c.partnerLabel} plan` },
+/** Being told no, and what changes after. */
+const NO_THREAD: Line[] = [
+  { from: "me", text: "i don't want to do recipe videos anymore" },
+  { from: "maya", text: "got it. give me a minute to rethink your plan around that." },
+  { from: "maya", time: "2 minutes later", text: "took the recipes out. this week is two runs and a gear check. thursday at 5 still good?" },
 ];
 
-const schedule = (c: Copy): Array<{ when: string; what: string[] }> => [
-  { when: "Every few hours", what: ["Checks the creators you admire for posts beating their usual", "Checks your own posts. If one takes off, you hear about it while it's still climbing"] },
-  { when: "Every day", what: [`Searches your niche on ${c.platforms}`, "Spots formats and sounds catching on with creators like you", "Finds new accounts worth watching", "A morning text, only when something's worth saying"] },
-  { when: "Around your shoots", what: ["The shot list that morning", "“how'd it go?” that evening", "Missed one? She offers to put it back the next day. No guilt"] },
-  { when: "Every Sunday", what: ["An honest read of your week: what worked, what didn't, one thing to try", "Next week's plan, built around your calendar"] },
-  { when: `Every week, on the ${c.partnerPlan} plan`, what: ["New brands paying creators in your niche", "Follow-ups on pitches that haven't heard back, twice at most"] },
-  { when: "All the time", what: ["Learns from what you save, pass on and post", "Learns how you write captions", "Keeps up with your calendar"] },
+/** Things people text her to stay in charge. Each one works today. */
+const ASKS = ["text me less", "don't text me before 9", "move thursday's shoot to 6", "never pitch me dance trends", "be more blunt", "pause"];
+
+const TRACK: Array<[string, string]> = [
+  ["A plan every week.", "Shoots on your calendar, sized to what you can really do."],
+  ["A nudge before you film.", "Miss one and she moves it. No guilt."],
+  ["Help finishing the video.", "Send her what you filmed. She writes the caption and finds a sound."],
+  ["A Sunday check-in.", "What you posted, what worked, and one thing to try next."],
 ];
 
 const DEAL_STEPS: Array<[string, string]> = [
-  ["She spots them", "Brands already paying creators in your niche, from the sponsored posts she's watching anyway. Once a week she tells you who's new."],
-  ["She finds the right person", "A real contact from the brand's own site or profile. Never a guessed email."],
-  ["She builds your media kit", "Your followers, typical views and best posts, with a link you can share. Never your rates."],
-  ["She writes the outreach", "The email, the DM, or the answers to a brand's creator application, in your voice."],
-  ["You approve, it sends", "Nothing goes out without your OK. Emails go from your own inbox."],
-  ["She keeps it moving", "Tracks replies, tells you what they said, and follows up twice at most. Every brand lives in Deals in the app."],
-];
-
-const VOICE = [
-  "wait, your first marathon?!",
-  "ok THAT one. the dog at the tv 😭",
-  "i can't see watch time from here, tiktok keeps that in the app. i can see it did 3× your normal though.",
-  "i get it. putting in the hours just to watch views crawl is exhausting.",
-  "tuesday 5 works? i'll put it in and nudge you before.",
-  "that's the third time an object open beat your normal. it's a thing now.",
-  "YES. you posted the scary one.",
+  ["She finds the brands", "The ones already paying creators like you."],
+  ["She builds your media kit", "Your followers, typical views and best posts, on one link."],
+  ["She writes the pitch", "In your voice. Nothing goes out without your OK."],
 ];
 
 const faq = (c: Copy): Array<[string, string]> => [
-  ["What does Maya actually do?", `The work of a content team. She watches your niche and the creators you admire, turns what's working into ideas for you, plans your shoots around your calendar, writes your captions, reads your numbers against your own normal, and on the ${c.partnerPlan} plan, finds brand deals and writes the outreach. You stay the creator: she doesn't film, edit or post for you.`],
-  ["Where do I talk to her?", "In your texts, over iMessage or SMS. Anything the app can do, you can ask her for by text. There's no chat inside the app on purpose."],
-  ["Then what's the app for?", "Seeing her work. Every idea she's sent with the post that inspired it, your numbers, your week, your brand deals, and widgets for your home screen."],
-  ["Will she text me too much?", "She texts first only when something's worth it, never during your quiet hours, and there's a daily limit on how often. Text her \"pause\" any time, and \"resume\" when you want her back."],
-  ["How do brand deals work?", `On the ${c.partnerPlan} plan, she finds brands already paying creators in your niche, finds a real contact, builds your media kit, and writes the email, DM or application for you. Nothing is sent until you approve it, emails go from your own inbox, and she follows up twice at most. The deal is yours to make.`],
+  ["Where do I talk to her?", "In your texts, over iMessage or SMS. There's no chat inside the app on purpose."],
+  ["Then what's the app for?", "Keeping her work: every idea she's sent, your numbers, your week and your brand deals."],
+  ["Will she text me too much?", "She texts first only when something's worth it, and never during your quiet hours. Text her \"less\" or \"pause\" any time."],
+  ["Does she post for me?", "No. You film, edit and post. She never posts, comments or messages anyone as you."],
   ["What can she see?", c.whatSheSees],
-  ["Is it on Android?", "iPhone first. Android is planned."],
   ["How does the free trial work?", "Seven days free with a card on file, then the plan you picked. Cancel in one tap in Settings. Delete everything by typing DELETE."],
 ];
 
@@ -140,12 +122,12 @@ export default async function Landing({ igOn = instagramOn() }: { igOn?: boolean
   const qr = await qrSvg();
   return (
     <div className="mx">
+      <noscript><style>{".iv .msg-live *, .iv .s-chart i { animation-play-state: running !important; }"}</style></noscript>
       <a href="#main" className="mx-skip">Skip to content</a>
       <header className="mx-nav wrap">
         <Link href="/" className="mx-brand" aria-label="Maya home"><Flower />maya</Link>
         <nav aria-label="Main navigation">
-          <a href="#texts">How it works</a>
-          <a href="#team">What she does</a>
+          <a href="#how">How it works</a>
           <a href="#deals">Brand deals</a>
           <a href="#pricing">Pricing</a>
         </nav>
@@ -153,17 +135,15 @@ export default async function Landing({ igOn = instagramOn() }: { igOn?: boolean
       </header>
 
       <main id="main">
-        {/* ——— 1. Hero ——— */}
+        {/* ——— 1. Hero: who she is ——— */}
         <section className="hero wrap" aria-labelledby="hero-title">
           <div className="hero-copy">
             <span className="eyebrow"><i className="dot" />{c.eyebrow}</span>
-            <h1 id="hero-title">Your whole content team. <em>In one text thread.</em></h1>
-            <p className="lede">
-              {c.lede}
-            </p>
+            <h1 id="hero-title">{c.headline} <em>in your texts.</em></h1>
+            <p className="lede">{c.lede}</p>
             <div className="hero-cta">
               <GetApp link={link} where="hero" />
-              <a className="ghost" href="#texts">See how it works</a>
+              <a className="ghost" href="#how">See how it works</a>
             </div>
             <p className="fine">{availability(link)}</p>
           </div>
@@ -171,105 +151,109 @@ export default async function Landing({ igOn = instagramOn() }: { igOn?: boolean
             <Phone className="ph-back" label="The Maya app's Today screen: her latest idea, your numbers against your normal, and what's coming up">
               <TodayScreen igOn={igOn} />
             </Phone>
-            <Phone className="ph-front" label="A text thread with Maya: a trend from a creator you follow, three captions for the video you filmed, then your post taking off">
+            <Phone className="ph-front" label="A text thread with Maya: a reminder to film today, a caption for the video, then her Sunday read of the week">
               <MessagesScreen lines={HERO_THREAD} />
             </Phone>
-            <span className="float float-a"><b>3 captions</b> in your voice<small>for the video you already filmed</small></span>
+            <span className="float float-a"><b>3 of 4</b> posted this week<small>she keeps count, kindly</small></span>
             <span className="float float-b"><i className="cal">THU<b>8</b></i>Film at 5:00<small>booked from a text</small></span>
           </div>
         </section>
 
-        {/* ——— 2. She lives in your texts ——— */}
-        <section id="texts" className="texts wrap" aria-labelledby="texts-title">
-          <div className="texts-copy">
-            <span className="eyebrow">How it works</span>
-            <h2 id="texts-title">She lives in <span>your texts.</span></h2>
-            <p>
-              Maya texts you over iMessage or SMS, like anyone else in your phone.
-            </p>
-            <p className="texts-strong">Everything she does, you can ask for by text.</p>
-          </div>
-          <div className="asks" aria-label="Things you can text Maya">
-            {ASKS.map((a, i) => (
-              <p key={a} className="bub bub-out" style={{ "--i": i } as CSSProperties}>{a}</p>
-            ))}
-          </div>
-        </section>
-
-        {/* ——— 3. The app is the visual ——— */}
-        <section id="app" className="appsec" aria-labelledby="app-title">
-          <div className="wrap appsec-grid">
-            <div className="appsec-copy">
-              <span className="eyebrow">The app</span>
-              <h2 id="app-title">The app is where <span>her work lives.</span></h2>
-              <p>Text her for talking. The app is for seeing her work.</p>
-              <ul className="ticks">
-                <li>Every idea she&apos;s sent, with the post that inspired it. Swipe to save or pass</li>
-                <li>Your {c.platforms} numbers, against your own normal</li>
-                <li>Your week, your shoots, her Sunday review</li>
-                <li>Your brand deals and media kit</li>
-                <li>Home-screen widgets, and “Send to Maya” from any app&apos;s share button</li>
+        <section id="how" className="rows wrap" aria-label="How it works">
+          {/* ——— 2. She keeps you on track ——— */}
+          <div className="row">
+            <div className="row-copy">
+              <span className="eyebrow">Staying consistent</span>
+              <h2>She keeps you <span>on track.</span></h2>
+              <p>A plan for the week that fits your life, and someone who notices when you follow through.</p>
+              <ul className="points">
+                {TRACK.map(([h, d]) => (
+                  <li key={h}><b>{h}</b><span>{d}</span></li>
+                ))}
               </ul>
             </div>
-            <div className="appsec-stage">
-              <Phone className="ph-small" label="The Ideas screen: a swipeable card with a hook, the post that inspired it and why it fits">
-                <IdeasScreen />
-              </Phone>
-              <Phone className="ph-small ph-offset" label={`Your numbers: ${c.platforms} followers and every post against your normal`}>
-                <NumbersScreen igOn={igOn} />
-              </Phone>
-            </div>
-          </div>
-        </section>
-
-        {/* ——— 4. Her team ——— */}
-        <section id="team" className="team wrap" aria-labelledby="team-title">
-          <div className="intro">
-            <span className="eyebrow">What she does</span>
-            <h2 id="team-title">Meet your team. <span>It&apos;s all Maya.</span></h2>
-          </div>
-          <div className="team-grid">
-            {team(c).map((t, i) => (
-              <article key={t.role} className={`role role-${i + 1}`}>
-                <span className="role-head">
-                  <b>{t.role}</b>
-                  {t.plan ? <span className="role-plan">{t.plan}</span> : null}
-                </span>
-                <p>{t.line}</p>
-                <p className="bub bub-in role-proof">{t.proof}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        {/* ——— 5. Her schedule ——— */}
-        <section id="schedule" className="sched" aria-label="Her routine">
-          <div className="wrap sched-grid">
-            <div className="sched-copy">
-              <span className="eyebrow">On her own</span>
-                            <p>You don&apos;t have to ask. Maya runs her own routine for you, all day, every day, and texts you only when there&apos;s something worth your time.</p>
-              <Phone className="ph-small sched-phone" label="Her Sunday review: a short read of the week and what to try next">
+            <div className="row-stage">
+              <Phone label="Her Sunday review: what you posted, what worked, and what to try next">
                 <ReviewScreen />
               </Phone>
             </div>
-            <ol className="sched-list">
-              {schedule(c).map((s) => (
-                <li key={s.when}>
-                  <b>{s.when}</b>
-                  <ul>{s.what.map((w) => <li key={w}>{w}</li>)}</ul>
-                </li>
-              ))}
-            </ol>
+          </div>
+
+          {/* ——— 3. Her first text ——— */}
+          <div className="row row-flip row-band">
+            <div className="row-copy">
+              <span className="eyebrow">Her first text</span>
+              <h2>She&apos;s already <span>watched your videos.</span></h2>
+              <p>Minutes after you sign up, she tells you which post worked and what to film next.</p>
+            </div>
+            <div className="row-stage">
+              <InView>
+                <Phone label="Maya's first text: she names your best post, with its numbers, and offers the next idea">
+                  <MessagesScreen lines={FIRST_THREAD} />
+                </Phone>
+              </InView>
+            </div>
+          </div>
+
+          {/* ——— 4. Your numbers ——— */}
+          <div className="row">
+            <div className="row-copy">
+              <span className="eyebrow">Your numbers</span>
+              <h2>She finds what&apos;s <span>working for you.</span></h2>
+              <p>Every post against your own normal, so one lucky video doesn&apos;t steer you wrong.</p>
+            </div>
+            <div className="row-stage">
+              <InView>
+                <Phone label={`Your numbers: ${c.platforms} followers and every post against your normal`}>
+                  <NumbersScreen igOn={igOn} />
+                </Phone>
+              </InView>
+            </div>
+          </div>
+
+          {/* ——— 5. Your call ——— */}
+          <div className="row row-flip row-band">
+            <div className="row-copy">
+              <span className="eyebrow">Your call</span>
+              <h2>Tell her no. <span>She listens.</span></h2>
+              <p>Say what you don&apos;t want and she rebuilds your plan around it.</p>
+              <div className="row-asks" aria-label="Things you can text Maya">
+                {ASKS.map((a) => (
+                  <p key={a} className="bub bub-out">{a}</p>
+                ))}
+              </div>
+            </div>
+            <div className="row-stage">
+              <InView>
+                <Phone label="You tell Maya you don't want recipe videos; two minutes later she sends a new plan without them">
+                  <MessagesScreen lines={NO_THREAD} />
+                </Phone>
+              </InView>
+            </div>
+          </div>
+
+          {/* ——— 6. The app ——— */}
+          <div className="row">
+            <div className="row-copy">
+              <span className="eyebrow">The app</span>
+              <h2>Everything she sends, <span>kept in one place.</span></h2>
+              <p>Text her to talk. Open the app to see your ideas, your week and your numbers.</p>
+            </div>
+            <div className="row-stage">
+              <Phone label="The Ideas screen: a swipeable card with a hook, the post that inspired it and why it fits">
+                <IdeasScreen />
+              </Phone>
+            </div>
           </div>
         </section>
 
-        {/* ——— 6. Brand deals ——— */}
+        {/* ——— 7. Brand deals ——— */}
         <section id="deals" className="deals wrap" aria-labelledby="deals-title">
           <div className="deals-copy">
             <span className="eyebrow">Brand deals · {c.partnerLabel} plan</span>
             <h2 id="deals-title">She goes looking <span>for brand deals.</span></h2>
-            <p>Maya doesn&apos;t wait for brands to find you. She finds the ones already paying creators in your niche, does the homework, and writes the outreach. You just say yes.</p>
-            <ol className="deal-steps">
+            <p>She does the homework and writes the pitch. You say yes.</p>
+            <ol className="deal-steps deals-short">
               {DEAL_STEPS.map(([h, d]) => (
                 <li key={h}><b>{h}</b><span>{d}</span></li>
               ))}
@@ -277,66 +261,21 @@ export default async function Landing({ igOn = instagramOn() }: { igOn?: boolean
             <p className="fine">On the {c.partnerPlan} plan, {price(PARTNER.priceUsd)}/month.</p>
           </div>
           <div className="deals-stage">
-            <Phone label="The Deals screen: your media kit, brands ready for you, and a brand that replied">
+            <Phone label="The Deals screen: your media kit, brands ready for you, and one in progress">
               <DealsScreen />
             </Phone>
             <span className="float float-deal">
               <Flower />
-              <span>pacefern paid two runners you watch this month. want me to find the right person there and draft a pitch?</span>
+              <span>pacefern paid two runners you watch this month. want me to draft a pitch?</span>
             </span>
           </div>
         </section>
 
-        {/* ——— 7. Her voice ——— */}
-        <section className="voice" aria-labelledby="voice-title">
-          <div className="wrap intro">
-            <span className="eyebrow">What she sounds like</span>
-            <h2 id="voice-title">An expert who <span>texts like a friend.</span></h2>
-            <p className="sub">Warm, quick, a little funny, and honest. Never a report, never a hype machine.</p>
-          </div>
-          <div className="voice-track" aria-label="Examples of how Maya texts">
-            <div className="voice-row">
-              {[...VOICE, ...VOICE].map((v, i) => (
-                <p key={i} className="bub bub-in" aria-hidden={i >= VOICE.length ? true : undefined}>{v}</p>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ——— 8. Trust ——— */}
-        <section className="trust wrap" aria-label="What she promises">
-          <div>
-            <b>She never invents a number.</b>
-            <p>Every figure is one she read. If she can&apos;t see it, she tells you.</p>
-          </div>
-          <div>
-            <b>Nothing goes out without you.</b>
-            <p>Pitches, emails and applications wait for your OK.</p>
-          </div>
-          <div>
-            <b>Yours to delete.</b>
-            <p>Type DELETE in Settings and everything is gone.</p>
-          </div>
-        </section>
-
-        {/* ——— 9. Setup ——— */}
-        <section className="setup wrap" aria-labelledby="setup-title">
-          <div className="intro">
-            <span className="eyebrow">Getting started</span>
-            <h2 id="setup-title">Three steps. <span>Then she gets to work.</span></h2>
-          </div>
-          <ol className="steps">
-            <li><b>Get the app</b><span>Download it and sign in. It takes a tap.</span></li>
-            <li><b>Tell her where you post</b><span>{c.whereYouPost}</span></li>
-            <li><b>Text her START</b><span>She reads your posts and your niche, then sends her first text within minutes.</span></li>
-          </ol>
-        </section>
-
-        {/* ——— 10. Pricing ——— */}
+        {/* ——— 8. Pricing ——— */}
         <section id="pricing" className="pricing wrap" aria-labelledby="pricing-title">
           <div className="intro">
             <span className="eyebrow">Pricing</span>
-            <h2 id="pricing-title">Seven days free. <span>Then one small monthly.</span></h2>
+            <h2 id="pricing-title">Seven days <span>free.</span></h2>
           </div>
           <div className={`prices prices-${offeredTiers(igOn).length}`} style={{ "--n": offeredTiers(igOn).length } as CSSProperties}>
             {offeredTiers(igOn).map((tier) => (
@@ -347,10 +286,9 @@ export default async function Landing({ igOn = instagramOn() }: { igOn?: boolean
                 <p>{tierCopy(tier, igOn).blurb}</p>
                 <ul>
                   <li>{c.accountLine(tier)}</li>
-                  <li>Trends, ideas and captions, texted to you</li>
+                  <li>Ideas, a weekly plan and captions, by text</li>
                   <li>Your numbers against your normal</li>
-                  <li>Shoots planned, reminders, a Sunday review</li>
-                  {tier === "partner" ? <li>Brand deals: found, pitched with your OK, replies tracked</li> : null}
+                  {tier === "partner" ? <li>Brand deals: found and pitched, with your OK</li> : null}
                 </ul>
                 <small className="price-fine">or {price(TIERS[tier].annualUsd)}/year. Cancel in one tap.</small>
               </div>
@@ -362,11 +300,38 @@ export default async function Landing({ igOn = instagramOn() }: { igOn?: boolean
           </div>
         </section>
 
-        {/* ——— 11. FAQ ——— */}
+        {/* ——— 9. Setup, and what she promises ——— */}
+        <section className="setup wrap" aria-labelledby="setup-title">
+          <div className="intro">
+            <span className="eyebrow">Getting started</span>
+            <h2 id="setup-title">Three <span>steps.</span></h2>
+          </div>
+          <ol className="steps">
+            <li><b>Get the app</b><span>Sign in with a tap.</span></li>
+            <li><b>Tell her where you post</b><span>{c.whereYouPost}</span></li>
+            <li><b>Text her START</b><span>Her first text arrives within minutes.</span></li>
+          </ol>
+        </section>
+        <section className="trust wrap" aria-label="What she promises">
+          <div>
+            <b>She never invents a number.</b>
+            <p>If she can&apos;t see it, she says so.</p>
+          </div>
+          <div>
+            <b>She never posts for you.</b>
+            <p>Your account stays yours.</p>
+          </div>
+          <div>
+            <b>Yours to delete.</b>
+            <p>Type DELETE in Settings and everything is gone.</p>
+          </div>
+        </section>
+
+        {/* ——— 10. FAQ ——— */}
         <section id="faq" className="faq wrap" aria-labelledby="faq-title">
           <div className="intro">
             <span className="eyebrow">Questions</span>
-            <h2 id="faq-title">Good questions.</h2>
+            <h2 id="faq-title">Questions.</h2>
           </div>
           <div className="faq-list">
             {faq(c).map(([q, a]) => (
@@ -378,12 +343,12 @@ export default async function Landing({ igOn = instagramOn() }: { igOn?: boolean
           </div>
         </section>
 
-        {/* ——— 12. Get the app ——— */}
+        {/* ——— 11. Get the app ——— */}
         <section id="get" className="get wrap" aria-labelledby="get-title">
           <div className="get-card">
             <div className="get-copy">
               <Flower className="get-flower" />
-              <h2 id="get-title">Go make the thing. <span>She&apos;ll handle the rest.</span></h2>
+              <h2 id="get-title">Go make the thing. <span>She&apos;ll keep you going.</span></h2>
               <p>{availability(link)}</p>
               <GetApp link={link} where="footer" variant="light" />
             </div>

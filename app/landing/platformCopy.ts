@@ -14,7 +14,9 @@ export function platformCopy(igOn: boolean = instagramOn()) {
     /** "TikTok and Instagram" or "TikTok". */
     platforms: igOn ? "TikTok and Instagram" : "TikTok",
     siteDescription: igOn ? "A creator's assistant for TikTok and Instagram." : "A content assistant for TikTok creators.",
-    lede: `Maya is a ${igOn ? "TikTok and Instagram" : "TikTok"} expert who watches your niche, turns what's working into ideas, plans your shoots, writes your captions, reads your numbers, and finds you brand deals. All over text.`,
+    /** The headline's first half; the second half ("in your texts.") is the same either way. */
+    headline: igOn ? "Your content assistant," : "Your TikTok assistant,",
+    lede: "Maya helps you decide what to make, plan when to film it, and keep posting every week.",
     eyebrow: igOn ? "For TikTok and Instagram creators" : "For TikTok creators",
     whereYouPost: igOn ? "Your TikTok, your Instagram, or both, and a few creators you love." : "Your TikTok, and a few creators you love.",
     whatSheSees: igOn
