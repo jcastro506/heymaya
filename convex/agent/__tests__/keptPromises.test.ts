@@ -43,3 +43,19 @@ describe("hashtags the way their best posts use them (2026-11-12)", async () => 
     expect(capHashtags("the $4 one won #thrift", 0)).toBe("the $4 one won");
   });
 });
+
+describe("every tool schema is one a provider accepts (2026-11-12: a duplicate 'required' broke every partner turn)", () => {
+  it("no duplicate or missing required fields, at any depth", () => {
+    const bad: string[] = [];
+    const walk = (name: string, p: unknown, path: string) => {
+      if (!p || typeof p !== "object") return;
+      const o = p as { required?: string[]; properties?: Record<string, unknown>; items?: unknown };
+      if (Array.isArray(o.required) && new Set(o.required).size !== o.required.length) bad.push(`${name}${path}: duplicate required`);
+      for (const r of o.required ?? []) if (o.properties && !(r in o.properties)) bad.push(`${name}${path}: required ${r} not a property`);
+      for (const [k, v] of Object.entries(o.properties ?? {})) walk(name, v, `${path}.${k}`);
+      if (o.items) walk(name, o.items, `${path}[]`);
+    };
+    for (const t of TOOLS) walk(t.function.name, t.function.parameters, "");
+    expect(bad).toEqual([]);
+  });
+});
