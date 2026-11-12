@@ -26,6 +26,8 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
 import { clip } from "../lib/clip";
 import { PERSONAS, personaFor } from "./personas";
+import { claimsIn, numbersIn, unbacked } from "../core/numbers";
+import { multipleFor, normalsByPlatform } from "../core/normal";
 
 const D = 86_400_000;
 const seasonKey = (season: string) => `season:${season}`;
@@ -345,5 +347,36 @@ export const taste = internalQuery({
       best: all.filter((x) => x.good === 3).slice(0, 10).map((x) => ({ type: x.type, text: clip(x.text, 260), note: x.note })),
       overall,
     };
+  },
+});
+
+/** Dev: every text she sent a season's creators, through the code number check (core/numbers), flagged ones listed. */
+export const numberAudit = internalQuery({
+  args: { season: v.string() },
+  handler: async (ctx, a): Promise<{ texts: number; withClaims: number; flagged: Array<{ who: string; kind: string; bad: string[]; text: string }> }> => {
+    const s = await readKey<SeasonState>(ctx, seasonKey(a.season));
+    if (!s) return { texts: 0, withClaims: 0, flagged: [] };
+    let texts = 0, withClaims = 0;
+    const flagged: Array<{ who: string; kind: string; bad: string[]; text: string }> = [];
+    for (const runId of s.runs) {
+      const st = await readKey<{ creatorId: Id<"creators">; persona: string }>(ctx, `sim:${runId}:state`);
+      if (!st) continue;
+      const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", st.creatorId)).order("desc").take(300)) as Doc<"ownPosts">[];
+      const normals = normalsByPlatform(posts, Date.now());
+      const counts = posts.flatMap((p) => [p.metrics.views, p.metrics.likes, p.metrics.comments, p.metrics.shares, p.metrics.saves ?? 0]).filter((n) => n > 0);
+      for (const n of normals.values()) if (n) counts.push(n.value);
+      const multiples = posts.flatMap((p) => [multipleFor(p, normals), p.multiple, p.reachMultiple]).filter((m): m is number => typeof m === "number");
+      const msgs = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", st.creatorId)).take(2000)) as Doc<"messages">[];
+      const theirs = numbersIn(msgs.filter((m) => m.direction === "in").map((m) => m.body).join(" "));
+      for (const m of msgs.filter((x) => x.direction === "out")) {
+        texts++;
+        const c = claimsIn(m.body);
+        if (!c.length) continue;
+        withClaims++;
+        const bad = unbacked(c, { counts, multiples, free: theirs });
+        if (bad.length) flagged.push({ who: st.persona, kind: m.kind ?? "?", bad: bad.map((b) => b.text), text: m.body.slice(0, 220) });
+      }
+    }
+    return { texts, withClaims, flagged };
   },
 });
