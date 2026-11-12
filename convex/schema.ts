@@ -62,6 +62,8 @@ export default defineSchema({
     weekPlansOffAt: v.optional(v.number()),
     /** Brands she pitched them, when the text went out (core/editor afterSent): not pitched again for four weeks. */
     dealBrandsSaid: v.optional(v.array(v.object({ brand: v.string(), at: v.number() }))),
+    /** The deals pipeline (partnerships/pipeline): the message where they said yes, which every pipeline action cites. */
+    dealPipeline: v.optional(v.object({ messageId: v.id("messages"), at: v.number() })),
     /** What she noticed and might text them about (core/editor): one pick a day, or none. */
     noticed: v.optional(v.array(v.object({
       id: v.string(),
@@ -919,6 +921,9 @@ export default defineSchema({
     /** The local hours their routines run at (core/routines), so the hourly pass reads no creator rows. */
     routineHours: v.optional(v.array(v.number())),
     isEval: v.boolean(),
+    /** Their plan tier and whether the deals pipeline is on, so the weekly partner pass reads no creator rows. */
+    tier: v.optional(v.string()),
+    dealPipeline: v.optional(v.boolean()),
   })
     .index("by_creator", ["creatorId"])
     .index("by_paired_status", ["paired", "status"]),

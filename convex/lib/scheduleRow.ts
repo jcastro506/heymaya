@@ -40,6 +40,8 @@ export function scheduleFields(c: Doc<"creators">): ScheduleFields {
     tasteEventsSeen: c.taste?.eventsSeen,
     routineHours: c.routines?.length ? [...new Set(c.routines.map((r) => r.hour))].sort((x, y) => x - y) : undefined,
     isEval: /^eval(-run)?:/.test(c.clerkUserId),
+    tier: c.plan.tier,
+    dealPipeline: c.dealPipeline ? true : undefined,
   };
 }
 

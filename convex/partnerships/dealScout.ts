@@ -101,7 +101,7 @@ export function parseDeals(raw: string, leads: Lead[]): { picks: Array<{ brand: 
 export const DEALS_SKILL = `deal-scout
 When: weekly, deciding which brands could pay THIS creator, for what, and saying it in one text.
 You're given their numbers today and what you concluded about them last time, how brand money usually follows a creator (knowledge for your judgment, not rules), what they make, who watches them if known, what they've said they want or won't do, and brands with money moving in their lane right now, each with the signals behind it. First decide where they are for brands right now, from all their numbers, not followers alone. Then pick at most three that genuinely fit THEM: their content and style, their audience, where they are, their goals. For each, the kind of deal that fits (ugc, affiliate, gifting, sponsorship, ambassador, event) and one plain reason in their world ("you already film your morning coffee, and they're paying creators for exactly that"). Someone small gets UGC, affiliate and seeding, never "they'll sponsor you"; someone who has grown gets what bigger creators get. Never a brand they excluded or a deal type they ruled out. Never invent a rate, a contact or a program you weren't given: the next step is research, which starts when they say yes. Say what the signal says and no more: "running video ads" is not "paying creators" unless the signal says the ads were made with creators or they paid creators they watch.
-The message: short bubbles with a line of only --- between them, plain words, the brands by name, end with one easy ask ("want me to look into any of these?"). No stats-speak; "selling a lot on TikTok Shop" beats "24,737 units".
+The message: short bubbles with a line of only --- between them, plain words, the brands by name, end with one easy ask: whether you should do this for them every week (find brands like these, draft the pitches, and they just send them from their Gmail). No stats-speak; "selling a lot on TikTok Shop" beats "24,737 units".
 Output ONLY JSON: {"stage": "≤80 chars: your read of where they are for brands right now, in plain words", "picks": [{"brand": "", "type": "ugc", "why": "≤200"}], "message": "the text"}`;
 
 /** A brand pitched this recently isn't pitched again. */
@@ -114,7 +114,7 @@ export function recentlyPitched(said: Array<{ brand: string; at: number }>, now:
 
 export const inputs = internalQuery({
   args: { creatorId: v.id("creators") },
-  handler: async (ctx, a): Promise<{ week: string; keywords: string[]; known: string[]; excluded: string[]; dealTypes: string[]; paidOnly: boolean; already: boolean; lastStage?: { stage: string; followers?: number; at?: number } } | null> => {
+  handler: async (ctx, a): Promise<{ week: string; keywords: string[]; known: string[]; excluded: string[]; dealTypes: string[]; paidOnly: boolean; already: boolean; pipeline: boolean; lastStage?: { stage: string; followers?: number; at?: number } } | null> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c) return null;
     const week = weekKey(Date.now(), c.timezone);
@@ -127,6 +127,7 @@ export const inputs = internalQuery({
       // brand was pitched ten Sundays running, reworded each time).
       week, keywords, known: [...rows.map((r) => (r.data as { brand?: string }).brand ?? r.brandDomain), ...recentlyPitched(c.dealBrandsSaid ?? [], Date.now())], excluded: data.excludedBrands ?? [], dealTypes: data.dealTypes ?? [], paidOnly: data.paidOnly ?? false,
       already: (c.noticed ?? []).some((n) => n.sourceKey === `deals:${week}`),
+      pipeline: Boolean(c.dealPipeline),
       ...(c.dealStage ? { lastStage: { stage: c.dealStage.stage, at: c.dealStage.at, ...(c.dealStage.followers ? { followers: c.dealStage.followers } : {}) } } : {}),
     };
   },
@@ -157,6 +158,8 @@ export const run = internalAction({
     const i = await ctx.runQuery(internal.partnerships.dealScout.inputs, { creatorId: a.creatorId });
     if (!i) return { noticed: false, reason: "creator not found" };
     if (i.already && !a.preview) return { noticed: false, reason: "already scouted this week" };
+    // With the pipeline on, brands are found and pitched there each week (partnerships/pipeline); no list on top.
+    if (i.pipeline && !a.preview) return { noticed: false, reason: "the deals pipeline handles it" };
     // No lane keywords yet: the shop and ad searches wait, but brands paying the creators they watch still count.
     if (!a.preview) await ctx.runAction(internal.connections.sync.refreshFollowers, { creatorId: a.creatorId }).catch(() => undefined);
     const leads = await gatherLeads(ctx, a.creatorId, i);

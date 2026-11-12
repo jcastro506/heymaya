@@ -1,5 +1,18 @@
 "use client";
 import { useEffect } from "react";
+import { ConvexHttpClient } from "convex/browser";
+import { api } from "@/convex/_generated/api";
+
+/**
+ * Tell Maya the pitch is on its way (partnerships/pipeline.opened): the brand counts as contacted and the follow-up
+ * clock starts. From the browser on purpose: a link preview fetches the page but runs no script, so only a person
+ * opening it counts. Waits at most a moment, then Gmail opens regardless.
+ */
+async function recordOpened(code: string): Promise<void> {
+  const url = process.env.NEXT_PUBLIC_CONVEX_URL;
+  if (!url) return;
+  await Promise.race([new ConvexHttpClient(url).mutation(api.partnerships.pipeline.opened, { code }).catch(() => undefined), new Promise((r) => setTimeout(r, 700))]);
+}
 
 const q = (s: string) => encodeURIComponent(s);
 
@@ -17,9 +30,10 @@ export function gmailLinks(to: string, subject: string, body: string) {
  * email loaded in their Gmail"). On an iPhone without the Gmail app, it falls through to Gmail on the web. The one
  * button is there only if the phone asks first or blocks the jump.
  */
-export function OpenInGmail({ to, subject, body }: { to: string; subject: string; body: string }) {
+export function OpenInGmail({ to, subject, body, code }: { to: string; subject: string; body: string; code: string }) {
   const links = gmailLinks(to, subject, body);
-  const go = () => {
+  const go = async () => {
+    await recordOpened(code);
     const ua = navigator.userAgent;
     if (/iPhone|iPad|iPod/i.test(ua)) {
       window.location.href = links.ios;
@@ -28,6 +42,6 @@ export function OpenInGmail({ to, subject, body }: { to: string; subject: string
     } else if (/Android/i.test(ua)) window.location.href = links.android;
     else window.location.href = links.web;
   };
-  useEffect(() => { go(); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- once, on arrival: the whole point of the link
-  return <button type="button" className="send-primary" onClick={go}>Open in Gmail</button>;
+  useEffect(() => { void go(); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- once, on arrival: the whole point of the link
+  return <button type="button" className="send-primary" onClick={() => void go()}>Open in Gmail</button>;
 }
