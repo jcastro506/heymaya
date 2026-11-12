@@ -191,7 +191,16 @@ export const draft = internalAction({
     if (!a.force && a.horizon !== "first" && !(await ctx.runQuery(internal.calendar.weekPlan.usesPlans, { creatorId: a.creatorId, now }))) {
       return { sent: false, reason: "they haven't booked a plan; the week waits until they ask" };
     }
-    let picked = pickIdeas(inp.ideas, Math.max(1, Math.min(5, Math.round(inp.postsPerWeek) || 1)), inp.experiment);
+    // Fresh ideas first (scout/stock): a plan built only from what's left repeats itself (season sim, 2026-11-12).
+    let inpNow = inp;
+    // Day one has its own tuned seeding (calendar/firstIdeas) below.
+    if (a.horizon !== "first") try {
+      const up = await ctx.runAction(internal.scout.stock.topUp, { creatorId: a.creatorId, now });
+      if (up.added > 0) inpNow = (await ctx.runQuery(internal.calendar.weekPlan.inputsFor, { creatorId: a.creatorId, now })) ?? inp;
+    } catch (e) {
+      console.error(`[weekPlan] stock top-up failed for ${a.creatorId}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    let picked = pickIdeas(inpNow.ideas, Math.max(1, Math.min(5, Math.round(inpNow.postsPerWeek) || 1)), inpNow.experiment);
     if (picked.length === 0 && a.horizon === "first") {
       // Day one: nothing found yet, so the first plan is seeded from their own posts.
       const seeded = await ctx.runAction(internal.calendar.firstIdeas.seed, { creatorId: a.creatorId, n: Math.max(1, Math.min(5, Math.round(inp.postsPerWeek) || 1)) });
