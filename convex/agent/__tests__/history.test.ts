@@ -56,6 +56,11 @@ describe("milestones", () => {
     expect(pickMilestone({ ...inp, topViews: 1_200_000, said: ["views:1000000", "views:100000"] })).toBeNull();
   });
 
+  it("names the post, and says it's the biggest since they started, not ever", () => {
+    const m = pickMilestone({ ...inp, topViews: 120_000, topCaption: "the 5am alarm" })!;
+    expect(m.line).toBe('"the 5am alarm" crossed 100k. your biggest since we started.');
+  });
+
   it("nothing earned means nothing said", () => {
     expect(pickMilestone(inp)).toBeNull();
     expect(pickMilestone({ ...inp, topViews: 4_000, ideasSent: 3, monthsTogether: 0 })).toBeNull();
@@ -111,6 +116,20 @@ describe("on rows", () => {
     }
     const exhausted = (await t.query(internal.agent.history.milestoneInputs, { creatorId }))!;
     expect(pickMilestone(exhausted), "nothing left to say").toBeNull();
+  });
+
+  it("an old viral post before they joined is not a milestone on their first morning (2026-11-12)", async () => {
+    const t = convexTest(schema, modules);
+    const now = Date.now();
+    const creatorId = await t.run((ctx) => seedCreator(ctx, "old", { createdAt: now - 86_400_000 }));
+    await t.run(async (ctx) => {
+      await ctx.db.insert("ownPosts", { creatorId, platform: "tiktok", postId: "viral", url: "https://tiktok.com/@a/video/1", createTime: now - 300 * 86_400_000, contentType: "video", caption: "the old hit #fyp", hashtags: [], metrics: { views: 1_100_000, likes: 1, comments: 1, shares: 1 }, metricsAsOf: now, source: "scrape" } as never);
+      await ctx.db.insert("ownPosts", { creatorId, platform: "tiktok", postId: "new", url: "https://tiktok.com/@a/video/2", createTime: now - 3_600_000, contentType: "video", caption: "first one since #fyp", hashtags: [], metrics: { views: 900, likes: 1, comments: 1, shares: 1 }, metricsAsOf: now, source: "scrape" } as never);
+    });
+    const mi = (await t.query(internal.agent.history.milestoneInputs, { creatorId }))!;
+    expect(mi.topViews).toBe(900);
+    expect(mi.topCaption).toBe("first one since");
+    expect(pickMilestone(mi)).toBeNull();
   });
 
   it("every skill sees it, or a new one silently forgets how long she has known them", () => {
