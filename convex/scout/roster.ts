@@ -26,6 +26,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { addTracked } from "../agent/manage";
 import { pairedRows } from "../core/schedule";
+import { spreadDelays, HOURLY_SPREAD_MS } from "../core/fanout";
 
 export const ROSTER = {
   /** Below this, she is actively short of accounts and should ask sooner. */
@@ -156,16 +157,14 @@ export const offer = internalAction({
 });
 
 /** The fleet pass. Runs after the sweep, so the lane is fresh. */
+/** Daily: one offer action per creator, spread over the hour (core/fanout). A loop of them in one action stops at ten minutes. */
 export const run = internalAction({
   args: {},
-  handler: async (ctx): Promise<{ creators: number; offered: number }> => {
+  handler: async (ctx): Promise<{ creators: number }> => {
     const ids = (await ctx.runQuery(internal.scout.roster.paired, {})) as Id<"creators">[];
-    let offered = 0;
-    for (const creatorId of ids) {
-      const r = await ctx.runAction(internal.scout.roster.offer, { creatorId });
-      if (r.offered) offered++;
-    }
-    return { creators: ids.length, offered };
+    const delays = spreadDelays(ids.length, HOURLY_SPREAD_MS);
+    for (let k = 0; k < ids.length; k++) await ctx.scheduler.runAfter(delays[k], internal.scout.roster.offer, { creatorId: ids[k] });
+    return { creators: ids.length };
   },
 });
 
