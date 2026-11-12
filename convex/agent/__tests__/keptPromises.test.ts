@@ -59,3 +59,24 @@ describe("every tool schema is one a provider accepts (2026-11-12: a duplicate '
     expect(bad).toEqual([]);
   });
 });
+
+describe("quiet hours read by code (2026-11-12: 'not before 9am' became 22 hours of silence)", async () => {
+  const { quietHoursFrom, clockOf } = await import("../manage");
+  const cur = { start: "22:00", end: "07:00" };
+  it("one edge moves only that edge, whatever the model said", () => {
+    expect(quietHoursFrom("can you not text me before 9am? mornings are chaos", { start: "09:00", end: "07:00" }, cur)).toEqual({ ok: true, start: "22:00", end: "09:00" });
+    expect(quietHoursFrom("nothing before 9", { start: "09:00", end: "07:00" }, cur)).toEqual({ ok: true, start: "22:00", end: "09:00" });
+    expect(quietHoursFrom("don't message me after 10pm", { start: "07:00", end: "22:00" }, cur)).toEqual({ ok: true, start: "22:00", end: "07:00" });
+    expect(quietHoursFrom("no texts after 11", { start: "x", end: "y" }, cur)).toEqual({ ok: true, start: "23:00", end: "07:00" });
+  });
+  it("a full range is the model's, unless it would silence them most of the day", () => {
+    expect(quietHoursFrom("quiet from 10pm to 8am", { start: "22:00", end: "08:00" }, cur)).toEqual({ ok: true, start: "22:00", end: "08:00" });
+    expect(quietHoursFrom("quiet from 10pm to 8am", { start: "08:00", end: "22:00" }, cur), "code reads the range").toEqual({ ok: true, start: "22:00", end: "08:00" });
+    expect(quietHoursFrom("quiet please", { start: "08:00", end: "23:00" }, cur), "a model reading that silences most of the day").toEqual({ ok: false });
+  });
+  it("reads clocks", () => {
+    expect(clockOf("9:30pm")).toBe("21:30");
+    expect(clockOf("12am")).toBe("00:00");
+    expect(clockOf("25")).toBeNull();
+  });
+});

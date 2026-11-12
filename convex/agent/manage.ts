@@ -18,14 +18,61 @@ export type ManageAction = (typeof MANAGE_ACTIONS)[number];
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
+/** Pure: minutes from midnight for "HH:MM". */
+function mins(hhmm: string): number { const [h, m] = hhmm.split(":").map(Number); return h * 60 + m; }
+
+/** Pure: "9", "9am", "9:30pm", "21:00" → "HH:MM", or null. */
+export function clockOf(raw: string): string | null {
+  const m = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?$/i.exec(raw.trim());
+  if (!m) return null;
+  let h = Number(m[1]);
+  const min = Number(m[2] ?? 0);
+  const ap = (m[3] ?? "").toLowerCase().replace(/\./g, "");
+  if (h > 23 || min > 59) return null;
+  if (ap === "pm" && h < 12) h += 12;
+  if (ap === "am" && h === 12) h = 0;
+  return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+}
+
+/**
+ * Pure: the quiet hours their words mean, given what they are now. Code reads the plain one-edge forms itself
+ * ("nothing before 9" moves only the end; "not after 10pm" only the start); a model's reading is used otherwise.
+ * A window over 14 hours is almost certainly a misreading (2026-11-12: "not before 9am" became 09:00–07:00,
+ * silence for 22 hours a day, and her 1 pm booking was refused as "quiet hours"), so it's refused, not applied.
+ */
+export function quietHoursFrom(text: string, proposed: { start: string; end: string }, current: { start: string; end: string }): { ok: true; start: string; end: string } | { ok: false } {
+  const t = text.toLowerCase();
+  const before = /\b(?:before|until|till|til)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?)/.exec(t);
+  const after = /\b(?:after|past|later than)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?)/.exec(t);
+  const range = /\b(?:from|between)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?)\s*(?:to|and|-|until|till)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?)/.exec(t);
+  let start = proposed.start, end = proposed.end;
+  if (range) {
+    // "from 10 to 8": a night start (evening) and a morning end, unless they said am/pm.
+    const s0 = range[1], e0 = range[2];
+    start = clockOf(/am|pm/.test(s0) ? s0 : Number(s0.split(":")[0]) <= 12 ? `${s0}pm` : s0) ?? start;
+    end = clockOf(/am|pm/.test(e0) ? e0 : `${e0}am`) ?? end;
+  } else if (before || after) {
+    start = current.start; end = current.end;
+    // "before 9" with no am/pm means the morning edge; "after 10" with none means the night edge.
+    if (before) { const raw = before[1]; end = clockOf(/am|pm/.test(raw) ? raw : `${raw}am`) ?? end; }
+    if (after) { const raw = after[1]; const n = Number(raw.split(":")[0]); start = clockOf(/am|pm/.test(raw) ? raw : n <= 12 ? `${raw}pm` : raw) ?? start; }
+  }
+  const span = (mins(end) - mins(start) + 1440) % 1440;
+  if (span === 0 || span > 14 * 60) return { ok: false };
+  return { ok: true, start, end };
+}
+
 export const setQuietHours = internalMutation({
-  args: { creatorId: v.id("creators"), start: v.string(), end: v.string() },
+  // `said`: their words, so code can read the plain forms itself (quietHoursFrom).
+  args: { creatorId: v.id("creators"), start: v.string(), end: v.string(), said: v.optional(v.string()) },
   handler: async (ctx, a): Promise<{ ok: boolean; body: string }> => {
     if (!HHMM.test(a.start) || !HHMM.test(a.end)) return { ok: false, body: "i didn't catch the hours. say it like 'nothing before 9am' or 'quiet from 10pm to 8am'." };
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c) return { ok: false, body: "" };
-    await ctx.db.patch(c._id, { quietHours: { start: a.start, end: a.end }, updatedAt: Date.now() });
-    return { ok: true, body: `done: nothing from me between ${pretty(a.start)} and ${pretty(a.end)}. it's in settings if you want to change it.` };
+    const q = quietHoursFrom(a.said ?? "", { start: a.start, end: a.end }, c.quietHours);
+    if (!q.ok) return { ok: false, body: "i want to get this right: from what time at night to what time in the morning should i stay quiet? like '10pm to 9am'." };
+    await ctx.db.patch(c._id, { quietHours: { start: q.start, end: q.end }, updatedAt: Date.now() });
+    return { ok: true, body: `done: nothing from me between ${pretty(q.start)} and ${pretty(q.end)}. it's in settings if you want to change it.` };
   },
 });
 
