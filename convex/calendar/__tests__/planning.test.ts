@@ -129,3 +129,34 @@ describe("draftWeek", () => {
     expect(draftWeek({ now: NOON, timeZone: TZ, postsPerWeek: 0, filmDays: [], filmHour: null, editMinutes: 20, busy: [], model, ideas: many })).toHaveLength(PLAN.minSlots);
   });
 });
+
+describe("a skipped idea leaves the plan (2026-11-12: one idea on eight Sunday plans in a row)", async () => {
+  const { pickIdeas, PLAN_SKIPS_MAX } = await import("../planning");
+  const { skippedPlans } = await import("../weekPlan");
+  it("counts earlier weeks it sat in unfilmed; this week, filmed ideas and edit blocks don't count", () => {
+    const m = skippedPlans([
+      { ideaId: "a", planKey: "w1", kind: "film", filmed: false },
+      { ideaId: "a", planKey: "w1", kind: "edit", filmed: false },
+      { ideaId: "a", planKey: "w2", kind: "film", filmed: false },
+      { ideaId: "a", planKey: "w3", kind: "film", filmed: false },
+      { ideaId: "b", planKey: "w1", kind: "film", filmed: true },
+      { ideaId: "b", planKey: "w2", kind: "film", filmed: false },
+      { ideaId: "c", planKey: "w1", kind: "film", filmed: false },
+    ], "w3");
+    expect(m.get("a")).toBe(2);
+    expect(m.has("b")).toBe(false);
+    expect(m.get("c")).toBe(1);
+  });
+
+  it("pickIdeas leaves out an idea skipped twice, even a saved one, and keeps the experiment's slot", () => {
+    const ideas = [
+      { ideaId: "stale", hook: "five subscriptions", status: "saved", savedAt: 9, skippedPlans: PLAN_SKIPS_MAX },
+      { ideaId: "once", hook: "grad school funding", status: "sent", sentAt: 5, skippedPlans: 1 },
+      { ideaId: "fresh", hook: "new one", status: "sent", sentAt: 8 },
+    ];
+    expect(pickIdeas(ideas, 2, null).map((x) => x.ideaId)).toEqual(["fresh", "once"]);
+    const withExp = pickIdeas([ideas[0]], 2, "dollar figure in the first 2 seconds");
+    expect(withExp.map((x) => x.experiment)).toEqual([true]);
+    expect(pickIdeas([ideas[0]], 2, null)).toEqual([]);
+  });
+});
