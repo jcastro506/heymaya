@@ -435,9 +435,10 @@ export const run = internalAction({
       // 12. The readback: their real posts, a viewer's line if one is new.
       if (want("readback")) {
         const since = Date.now();
-        const r = await ctx.runAction(internal.scout.readback.run, {});
+        // This creator's pass, run now (the fleet run only schedules one per creator).
+        const r = await ctx.runAction(internal.scout.readback.runOne, { creatorId, bucket: `gauntlet-${since}`, now: since });
         const out = await ctx.runQuery(internal.eval.memoryGauntlet.outboundSince, { creatorId, since });
-        record("readback", out.map((m) => `[${m.kind}] ${m.body}`), { result: r }, r.failed === 0, r.failed === 0 ? (out.length ? "read their posts; something to say" : "read their posts; nothing new to react to, which is correct if nothing is new") : "the readback failed for someone");
+        record("readback", out.map((m) => `[${m.kind}] ${m.body}`), { result: r }, !r.failed, !r.failed ? (out.length ? "read their posts; something to say" : "read their posts; nothing new to react to, which is correct if nothing is new") : "the readback failed for someone");
       }
       // 13. The weekly review, on their real numbers.
       if (want("review")) {

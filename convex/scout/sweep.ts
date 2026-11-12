@@ -20,7 +20,8 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { THRESHOLDS } from "../config/thresholds";
 import { pairedRows } from "../core/schedule";
 import { drillCheck, faultFor } from "../eval/faults";
-import { readHealth } from "./sampler";
+import { chunks, readHealth } from "./sampler";
+import { spreadDelays, HOURLY_SPREAD_MS } from "../core/fanout";
 
 const PER_KEYWORD = 3;
 
@@ -120,12 +121,25 @@ export const writeShapes = internalMutation({
   },
 });
 
+/** Keywords per sweep action: two searches each (a platform each), well inside the ten-minute limit. */
+export const SWEEP_BATCH = 15;
+
 export const run = internalAction({
   // `creatorId`: only that creator's keywords (the living simulation; eval creators aren't in the fleet sweep).
-  args: { creatorId: v.optional(v.id("creators")) },
-  handler: async (ctx, args): Promise<{ keywords: number; signals: number; failed: number }> => {
+  // `batch`: the keywords one fleet action searches; the fleet run splits them (the sampler's reason, 2026-11-12).
+  args: { creatorId: v.optional(v.id("creators")), batch: v.optional(v.array(v.object({ keyword: v.string(), creatorIds: v.array(v.id("creators")) }))) },
+  handler: async (ctx, args): Promise<{ keywords: number; signals: number; failed: number; batches?: number }> => {
     const now = Date.now();
-    const keywords = args.creatorId ? await ctx.runQuery(internal.scout.sweep.keywordsFor, { creatorId: args.creatorId }) : await ctx.runQuery(internal.scout.sweep.distinctKeywords, {});
+    if (!args.batch && !args.creatorId) {
+      const all = await ctx.runQuery(internal.scout.sweep.distinctKeywords, {});
+      if (all.length > SWEEP_BATCH) {
+        const parts = chunks(all, SWEEP_BATCH);
+        const delays = spreadDelays(parts.length, HOURLY_SPREAD_MS);
+        for (let k = 0; k < parts.length; k++) await ctx.scheduler.runAfter(delays[k], internal.scout.sweep.run, { batch: parts[k] });
+        return { keywords: all.length, signals: 0, failed: 0, batches: parts.length };
+      }
+    }
+    const keywords = args.batch ?? (args.creatorId ? await ctx.runQuery(internal.scout.sweep.keywordsFor, { creatorId: args.creatorId }) : await ctx.runQuery(internal.scout.sweep.distinctKeywords, {}));
     let signals = 0, failed = 0;
     let firstError = "";
     for (const { keyword, creatorIds } of keywords) {

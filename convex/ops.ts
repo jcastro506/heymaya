@@ -18,6 +18,9 @@ function authorized(token: string): boolean {
   return Boolean(expected) && token === expected;
 }
 
+/** The day's ledger rows /ops sums at most (a busy fleet's day is more; the total then reads as "at least"). */
+const OPS_COST_ROWS = 20_000;
+
 export const overview = query({
   args: { token: v.string() },
   handler: async (ctx, a) => {
@@ -60,7 +63,8 @@ export const overview = query({
     const jobs = (await ctx.db.query("jobs").order("desc").take(200)) as Doc<"jobs">[];
     const failed = jobs.filter((j) => j.status === "failed" || j.status === "dead").slice(0, 12).map((j) => ({ id: j._id, kind: j.kind, status: j.status, attempts: j.attempts, error: j.lastError ?? null, creatorId: j.creatorId ?? null, updatedAt: j.updatedAt }));
     const breakers = (await ctx.db.query("vendorBreaker").collect()) as Doc<"vendorBreaker">[];
-    const fleetCosts = (await ctx.db.query("costEvents").filter((q) => q.gte(q.field("at"), day)).collect()) as Doc<"costEvents">[];
+    // Through the `at` index and bounded: a filter scanned the whole ledger (2026-11-12, core/reconcile ledgerPage).
+    const fleetCosts = (await ctx.db.query("costEvents").withIndex("by_at", (q) => q.gte("at", day)).take(OPS_COST_ROWS)) as Doc<"costEvents">[];
     const byVendor: Record<string, number> = {};
     for (const x of fleetCosts) byVendor[x.vendor] = Math.round(((byVendor[x.vendor] ?? 0) + x.costUsd) * 1000) / 1000;
     return { at: now, creators: rows, failedJobs: failed, queued: jobs.filter((j) => j.status === "queued").length, running: jobs.filter((j) => j.status === "running").length, breakers: breakers.map((b) => ({ vendor: b.vendor, verdict: b.verdict, balance: b.balance, detail: b.detail, checkedAt: b.checkedAt })), spendDayByVendor: byVendor };
