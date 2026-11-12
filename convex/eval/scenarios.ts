@@ -51,6 +51,11 @@ export const cloneForRun = internalMutation({
       channel: { paired: false },
       plan: { founding: false, status: "paused", tier: source.plan.tier },
       openQuestionId: undefined,
+      // A source's "hold on" and pause belong to the source: carried over and shifted by a season's clock they
+      // dated a hush 16 days in the future and silenced a clone for a whole run (2026-11-12).
+      hushedAt: undefined,
+      hushMessageId: undefined,
+      messagingPausedAt: undefined,
       notes: source.notes.map(({ sourceMessageId: _messageId, ...note }) => { void _messageId; return note; }),
       firstWeek: undefined,
       createdAt: Date.now(),

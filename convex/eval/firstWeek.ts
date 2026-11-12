@@ -34,6 +34,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
+import { actorModel, parseActor, personaFor, personaPrompt, tenure, type ActorDay } from "./personas";
 import { parseJson } from "../agent/opinion";
 import { CRITIC_TIMEOUT_MS } from "../agent/critic";
 import { TABLES_BY_CREATOR } from "../account/deletion";
@@ -139,7 +140,7 @@ export function timezonesFor(n: number, now: number): string[] {
   return Array.from({ length: n }, (_, i) => pool[i % pool.length]);
 }
 
-export type Step = "age" | "expireQuestions" | "sampler" | "sweep" | "morning" | "scout" | "actor" | "invite" | "scoutAfternoon" | "howDidItGo" | "review" | "weekPlan" | "quiet" | "actorEvening" | "snapshot" | `beat:${string}`;
+export type Step = "age" | "expireQuestions" | "sampler" | "sweep" | "morning" | "scout" | "editor" | "editorAfternoon" | "actor" | "invite" | "scoutAfternoon" | "howDidItGo" | "review" | "weekPlan" | "quiet" | "actorEvening" | "snapshot" | `beat:${string}`;
 
 /** Pure: the simulated weekday of day `d` (0 Sunday). */
 export function weekdayOf(d: number, signupWeekday: number): number {
@@ -159,16 +160,18 @@ export function dayPlan(d: number, opts: { signupWeekday: number; script?: "none
    * the lane reads, the morning, two scout passes, their replies, the review and next week's plan.
    */
   if (opts.script === "horizon") {
-    return ["age", "expireQuestions", "sampler", "sweep", "morning", "scout", "actor", ...horizonBeats(d).map((b) => `beat:${b}` as Step), "scoutAfternoon", "howDidItGo", "review", "weekPlan", "actorEvening", "snapshot"];
+    return ["age", "expireQuestions", "sampler", "sweep", "morning", "scout", "editor", "actor", ...horizonBeats(d).map((b) => `beat:${b}` as Step), "scoutAfternoon", "editorAfternoon", "howDidItGo", "review", "weekPlan", "actorEvening", "snapshot"];
   }
   const sunday = weekdayOf(d, opts.signupWeekday) === 0;
   // The product script's moments run after the morning: she has spoken, and they answer.
   const beats: Step[] = opts.script === "product" ? productBeats(d).map((b) => `beat:${b}` as Step) : [];
   return [
-    "age", "expireQuestions", "sampler", "sweep", "morning", "scout", "actor", ...beats,
+    // The editor follows each scout pass (2026-11-09): since the one-pick-a-day change the scout only notices,
+    // and the editor's cron skips sim creators, so no idea was ever texted in a sim.
+    "age", "expireQuestions", "sampler", "sweep", "morning", "scout", "editor", "actor", ...beats,
     ...(d === 1 ? (["invite"] as Step[]) : []),
     ...(sunday && d >= MIN_DAYS_BEFORE_REVIEW ? (["review"] as Step[]) : []),
-    "scoutAfternoon", "howDidItGo",
+    "scoutAfternoon", "editorAfternoon", "howDidItGo",
     ...(sunday ? (["weekPlan"] as Step[]) : []),
     "quiet", "actorEvening", "snapshot",
   ];
@@ -195,7 +198,7 @@ const hours = (ms: number | null | undefined) => (ms === null || ms === undefine
 // ------------------------------------------------------------------ state (syncState rows; no new table)
 
 type CreatorSlot = { i: number; subject: string; handles: { tiktok?: string; instagram?: string }; timezone: string; note?: string; creatorId?: Id<"creators">; error?: string };
-type Opts = { days: number; watchCap: number; transcriptCap: number; admired: number; pairAfterMs: number; day0MaxMs: number; maxCredits: number; signupWeekday: number; seed: number; replay: boolean; script: "none" | "product" | "horizon" };
+type Opts = { /** Behavioural personas (eval/personas) instead of the one busy actor. */ personas?: boolean; days: number; watchCap: number; transcriptCap: number; admired: number; pairAfterMs: number; day0MaxMs: number; maxCredits: number; signupWeekday: number; seed: number; replay: boolean; script: "none" | "product" | "horizon" };
 export type RunState = { runId: string; startedAt: number; opts: Opts; creators: CreatorSlot[]; stopped?: string };
 type Cursor = { phase: "signup" | "day" | "judge" | "done"; d: number; k: number; attempt: number; since: number };
 type Ev = { name: string; simMs: number; detail?: string };
@@ -203,7 +206,9 @@ export type CreatorLog = {
   i: number; createdRealAt: number; cursor: Cursor; events: Ev[];
   admiredDone?: boolean; pairedDone?: boolean; actorSeenAt: number; turns: number; waitedSince?: number;
   steps: Array<{ d: number; step: string; result: string; ms: number }>;
-  actor: Array<{ d: number; said: string[]; acts: string[]; heard: string[] }>;
+  actor: ActorDay[];
+  /** They texted STOP (personas): the day and their reason. Nothing of hers may follow. */
+  left?: { d: number; why: string };
   failures: Array<{ d: number; step: string; error: string }>;
   snapshots: Array<{ d: number; snap: unknown }>;
   judged?: unknown;
@@ -414,7 +419,7 @@ export const runCredits = internalQuery({
 const optsV = {
   days: v.optional(v.number()), watchCap: v.optional(v.number()), transcriptCap: v.optional(v.number()), admired: v.optional(v.number()),
   pairAfterMs: v.optional(v.number()), day0MaxMs: v.optional(v.number()), maxCredits: v.optional(v.number()), signupWeekday: v.optional(v.number()), seed: v.optional(v.number()),
-  replay: v.optional(v.boolean()), script: v.optional(v.union(v.literal("none"), v.literal("product"), v.literal("horizon"))),
+  replay: v.optional(v.boolean()), personas: v.optional(v.boolean()), script: v.optional(v.union(v.literal("none"), v.literal("product"), v.literal("horizon"))),
 };
 
 /** Pure: the run's options, defaults filled and bounds enforced. */
@@ -679,6 +684,9 @@ async function textAsCreator(ctx: ActionCtx, runId: string, i: number, n: number
 /** One actor turn, with probability `p`, if she has said anything new. Deterministic per run, creator, day and slot. */
 async function actorTurn(ctx: ActionCtx, s: RunState, i: number, log: CreatorLog, d: number, slot: string, p: number): Promise<string> {
   const slotRow = slotOf(s, i);
+  if (log.left) return "left";
+  const persona = s.opts.personas ? personaFor(i) : null;
+  if (persona) p = slot === "day0" ? persona.day0 : slot === "morning" ? persona.morning : persona.evening;
   const seen = await ctx.runQuery(internal.eval.firstWeek.unseenFromMaya, { creatorId: slotRow.creatorId, since: log.actorSeenAt });
   if (!seen.messages.length && !seen.ideas.length) return "nothing new";
   await ctx.runMutation(internal.eval.firstWeek.patchLog, { runId: s.runId, i, set: { actorSeenAt: seen.newest } });
@@ -693,6 +701,34 @@ async function actorTurn(ctx: ActionCtx, s: RunState, i: number, log: CreatorLog
   }
   const platforms = [slotRow.handles.tiktok && "TikTok", slotRow.handles.instagram && "Instagram"].filter(Boolean).join(" and ") || "TikTok";
   const voice = await ctx.runQuery(internal.eval.firstWeek.captionsOf, { creatorId: slotRow.creatorId });
+  if (persona) {
+    // A person with a temperament, on a model that isn't hers; they may ask for less, pause, or leave.
+    const felt = log.actor.filter((a) => typeof a.mood === "number").slice(-4).map((a) => ({ day: a.d, mood: a.mood, why: a.why }));
+    const r = await callModel(ctx, { creatorId: slotRow.creatorId, purpose: "fw_actor", model: actorModel(), messages: [{ role: "system", content: `${personaPrompt(platforms, persona)}\nA message may carry buttons; to tap one, reply with its label exactly.\n\nYour own captions:\n${voice}` }, { role: "user", content: JSON.stringify({ day: d, howYouFeltLately: felt, mayaSaid: seen.messages, ideasSent: seen.ideas }) }], temperature: 0.8, maxTokens: 700, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
+    const out = parseActor(r.ok ? r.content : "");
+    const said: string[] = [], heard: string[] = [], acts: string[] = [];
+    if (!r.ok) acts.push(`actor model failed: ${r.reason}`);
+    for (const text of out.action === "stop" ? [] : out.replies) {
+      log.turns += 1;
+      await ctx.runMutation(internal.eval.firstWeek.patchLog, { runId: s.runId, i, set: { turns: log.turns } });
+      said.push(clip(text, 400));
+      heard.push(await textAsCreator(ctx, s.runId, i, log.turns, slotRow.creatorId, clip(text, 400)));
+    }
+    for (const t of out.ideas) {
+      const idea = seen.ideas.find((x) => x.id === t.ideaId);
+      if (idea) acts.push(`${t.act} ${clip(idea.hook, 60)}${(await ctx.runMutation(internal.eval.firstWeek.actOnIdea, { creatorId: slotRow.creatorId, ideaId: idea.id, act: t.act })) ? "" : " (refused)"}`);
+    }
+    if (out.action === "stop") {
+      // The opt-out door, as the phone path takes it (core/imessage handleText), without a vendor send.
+      log.turns += 1;
+      await ctx.runMutation(internal.core.imessage.receiveInbound, { creatorId: slotRow.creatorId, body: "STOP", kind: "optout", channelMessageId: `fw:${s.runId}:${i}:${log.turns}` });
+      await ctx.runMutation(internal.core.imessage.markOptedOut, { creatorId: slotRow.creatorId });
+      await ctx.runMutation(internal.eval.firstWeek.patchLog, { runId: s.runId, i, set: { turns: log.turns, left: { d, why: out.why } } });
+      said.push("STOP");
+    }
+    await ctx.runMutation(internal.eval.firstWeek.patchLog, { runId: s.runId, i, append: { actor: [{ d, said, acts, heard, mood: out.mood, why: out.why, action: out.action } satisfies ActorDay] } });
+    return `${persona.id}: mood ${out.mood ?? "?"}, ${said.length} replies, ${out.action}`;
+  }
   const system = `${actorPromptFor(platforms)}\nA message may carry buttons; to tap one, reply with its label exactly.\n\nYour own captions:\n${voice}`;
   const r = await callModel(ctx, { creatorId: slotRow.creatorId, purpose: "fw_actor", model: REGISTRY.writer.primary, messages: [{ role: "system", content: system }, { role: "user", content: JSON.stringify({ day: d, mayaSaid: seen.messages, ideasSent: seen.ideas }) }], temperature: 0.8, maxTokens: 700, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
   const out = r.ok ? parseJson<{ replies?: Array<{ text?: string }>; ideas?: Array<{ ideaId?: string; act?: string }> }>(r.content) : null;
@@ -788,6 +824,7 @@ export const runStep = internalAction({
         case "sweep": { const r = await ctx.runAction(internal.scout.sweep.run, { creatorId: id }); result = `${r.keywords} keywords, ${r.signals} shapes, ${r.failed} failed`; if (r.failed) failure = `sweep: ${r.failed} searches failed`; break; }
         case "morning": result = said(await ctx.runAction(internal.agent.cadence.morning, { creatorId: id })); break;
         case "scout": case "scoutAfternoon": result = said(await ctx.runAction(internal.scout.scout.run, { creatorId: id })); break;
+        case "editor": case "editorAfternoon": result = said(await ctx.runAction(internal.core.editor.pick, { creatorId: id })); break;
         case "invite": result = (await ctx.runMutation(internal.scout.firstWeek.inviteOne, { creatorId: id })).invited ? "invited" : "not sent"; break;
         case "howDidItGo": result = said(await ctx.runAction(internal.agent.cadence.howDidItGo, { creatorId: id })); break;
         case "review": result = said(await ctx.runAction(internal.review.weekly.run, { creatorId: id })); break;
@@ -1079,6 +1116,49 @@ export const days = internalQuery({
  * sent each creator, with what they had just said, in order; the iMessage menu line is shown as it is
  * delivered, since that is what a person reads. Sim creators of this run only.
  */
+/**
+ * A personas run, as a population: each creator's two weeks (replies, mood, asked for less, left and why),
+ * what she sent them, and anything she sent after they said STOP. One row a creator, then by persona.
+ */
+export const population = internalQuery({
+  args: { runId: v.string() },
+  handler: async (ctx, a): Promise<Record<string, unknown> | null> => {
+    const s = await readKey<RunState>(ctx, stateKey(a.runId));
+    if (!s) return null;
+    const rows: Array<Record<string, unknown>> = [];
+    for (const c of s.creators) {
+      const log = await readKey<CreatorLog>(ctx, logKey(a.runId, c.i));
+      if (!log) continue;
+      const t = tenure(personaFor(c.i).id, log.actor, log.left, s.opts.days);
+      const snaps = log.snapshots.map((x) => ({ d: x.d, ...(x.snap as { out?: number; outProactive?: number; outKinds?: string[]; ideasSaved?: number; ideasPassed?: number }) }));
+      const last = snaps.at(-1);
+      rows.push({
+        i: c.i, handle: c.handles.tiktok ?? c.handles.instagram, ...t,
+        cursor: `${log.cursor.phase} d${log.cursor.d}`,
+        herTextsByDay: snaps.map((x) => x.outProactive ?? 0),
+        kinds: snaps.flatMap((x) => x.outKinds ?? []).reduce<Record<string, number>>((acc, k) => ((acc[k] = (acc[k] ?? 0) + 1), acc), {}),
+        ideasSaved: last?.ideasSaved ?? 0, ideasPassed: last?.ideasPassed ?? 0,
+        textsAfterStop: log.left ? snaps.filter((x) => x.d > log.left!.d).reduce((n, x) => n + (x.out ?? 0), 0) : 0,
+        failures: log.failures.length,
+        moods: log.actor.map((x) => x.mood ?? null).filter((m) => m !== null),
+        lastWhy: log.actor.filter((x) => x.why).at(-1)?.why ?? null,
+      });
+    }
+    const by = new Map<string, Array<Record<string, unknown>>>();
+    for (const r of rows) by.set(String(r.persona), [...(by.get(String(r.persona)) ?? []), r]);
+    const avg = (xs: number[]) => (xs.length ? Math.round((xs.reduce((x, y) => x + y, 0) / xs.length) * 10) / 10 : null);
+    const personas = [...by.entries()].map(([persona, rs]) => ({
+      persona, n: rs.length,
+      moodLast: avg(rs.map((r) => r.moodLast as number | null).filter((m): m is number => m !== null)),
+      replies: avg(rs.map((r) => Number(r.replies))),
+      left: rs.filter((r) => r.leftDay !== null).length,
+      askedLess: rs.reduce((n, r) => n + Number(r.askedLess) + Number(r.paused), 0),
+      activeLastThird: rs.filter((r) => r.activeLastThird).length,
+    }));
+    return { runId: a.runId, days: s.opts.days, stopped: s.stopped ?? null, creators: rows, personas, totals: { creators: rows.length, left: rows.filter((r) => r.leftDay !== null).length, activeLastThird: rows.filter((r) => r.activeLastThird).length, textsAfterStop: rows.reduce((n, r) => n + Number(r.textsAfterStop), 0), failures: rows.reduce((n, r) => n + Number(r.failures), 0) } };
+  },
+});
+
 export const voice = internalQuery({
   args: { runId: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, a): Promise<Array<{ i: number; handle: string; day: number; kind: string; theySaid: string | null; mayaSaid: string }>> => {
