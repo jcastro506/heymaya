@@ -42,6 +42,9 @@ export const laneFor = internalQuery({
   handler: async (ctx, a): Promise<LaneBenchmark> => await laneBenchmarkFor(ctx, a.creatorId, a.now),
 });
 
+/** Observations a lane benchmark reads at most (~1 KB each, far under the 16 MB read limit). */
+export const BENCHMARK_ROWS = 4000;
+
 export async function laneBenchmarkFor(ctx: QueryCtx, creatorId: Id<"creators">, now: number): Promise<LaneBenchmark> {
   const a = { creatorId, now };
   {
@@ -49,7 +52,9 @@ export async function laneBenchmarkFor(ctx: QueryCtx, creatorId: Id<"creators">,
     const keywords = ((c?.dossier as { keywords?: string[] } | undefined)?.keywords ?? []).map((k) => k.toLowerCase());
     const tracked = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"trackedAccounts">[];
     const handles = new Set(tracked.filter((t) => t.status === "active").map((t) => t.handle));
-    const rows = (await ctx.db.query("observations").withIndex("by_sampledAt", (q) => q.gte("sampledAt", a.now - WEEK_MS)).collect()) as Doc<"observations">[];
+    // The newest of the week, bounded: the whole week is past what one function may read (2026-11-12, scout/sounds
+    // observationPage). A query can't page, and the newest few thousand hold every lane's recent posts.
+    const rows = (await ctx.db.query("observations").withIndex("by_sampledAt", (q) => q.gte("sampledAt", a.now - WEEK_MS)).order("desc").take(BENCHMARK_ROWS)) as Doc<"observations">[];
     // Dedupe by post, newest sample wins.
     const byPost = new Map<string, Doc<"observations">>();
     for (const r of rows) {
