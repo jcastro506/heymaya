@@ -55,6 +55,17 @@ export interface Reason { kind: "shoot_today" | "event_today" | "missed" | "mile
 const fmtTime = (e: number, tz: string) => new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(e).toLowerCase().replace(":00", "");
 const hookOf = (title: string) => title.replace(/^(film|edit|post)( \(experiment\))?: /, "");
 
+/**
+ * Pure: for each block, how many EARLIER booked film blocks for the same video (idea, else title) ended unfilmed.
+ * Not `missedAt`: that's written only when they answer "didn't happen", and the repeats were unanswered nags.
+ */
+export function slippedCounts(blocks: Array<{ _id: Id<"calendarBlocks">; ideaId?: Id<"ideas">; title: string; start: number }>, history: Array<{ _id: Id<"calendarBlocks">; ideaId?: Id<"ideas">; title: string; kind: string; start: number; end: number; consentAt?: number; filmedAt?: number }>): Record<string, number> {
+  const key = (b: { ideaId?: Id<"ideas">; title: string }) => (b.ideaId ? `i:${b.ideaId}` : `t:${hookOf(b.title).toLowerCase()}`);
+  const out: Record<string, number> = {};
+  for (const b of blocks) out[String(b._id)] = history.filter((h) => h._id !== b._id && h.kind === "film" && h.consentAt && !h.filmedAt && h.end <= b.start && key(h) === key(b)).length;
+  return out;
+}
+
 /** The morning's reasons, from rows. Pure. Empty means silence. */
 export function morningReasons(input: {
   now: number;
@@ -64,6 +75,8 @@ export function morningReasons(input: {
   milestone: { key: string; line: string } | null;
   streakWeeks: number;
   said: string[];
+  /** Per block: how many earlier blocks for the same video were missed in the last two weeks. */
+  slipped?: Record<string, number>;
 }): Reason[] {
   const { now, timezone } = input;
   const today = dayKeyInZone(now, timezone);
@@ -73,7 +86,11 @@ export function morningReasons(input: {
     if (b.status === "deleted" || !b.consentAt) continue;
     const day = dayKeyInZone(b.start, timezone);
     if (day === today && b.start > now && (b.kind === "film" || b.kind === "post")) out.push({ kind: "shoot_today", text: `${b.kind === "film" ? "filming" : "posting"} today at ${fmtTime(b.start, timezone)}: ${hookOf(b.title)}`, blockId: b._id });
-    if (day === yesterday && b.kind === "film" && b.end < now && !b.filmedAt && !b.missedAt) out.push({ kind: "missed", text: `yesterday's block (${hookOf(b.title)}, ${fmtTime(b.start, timezone)}) did not happen; ask whether to put it back`, blockId: b._id });
+    if (day === yesterday && b.kind === "film" && b.end < now && !b.filmedAt && !b.missedAt) {
+      // The same video slipping again isn't the same question (2026-11-12: "didn't happen, put it back?" three mornings running).
+      const before = input.slipped?.[String(b._id)] ?? 0;
+      out.push({ kind: "missed", text: before >= 1 ? `yesterday's block (${hookOf(b.title)}) did not happen, and it has slipped ${before + 1} times now; don't offer to put it back again: ask lightly whether to let this one go or swap it for something easier` : `yesterday's block (${hookOf(b.title)}, ${fmtTime(b.start, timezone)}) did not happen; ask whether to put it back`, blockId: b._id });
+    }
   }
   for (const e of input.events) {
     if (e.status !== "active" || e.class === "private" || e.class === "routine") continue;
@@ -138,7 +155,7 @@ export const dueNow = internalQuery({
 
 export const morningInputs = internalQuery({
   args: { creatorId: v.id("creators"), now: v.number() },
-  handler: async (ctx, a): Promise<{ creator: Doc<"creators">; blocks: Doc<"calendarBlocks">[]; events: Doc<"calendarEvents">[]; milestone: { key: string; line: string } | null; said: string[]; streak: number } | null> => {
+  handler: async (ctx, a): Promise<{ creator: Doc<"creators">; blocks: Doc<"calendarBlocks">[]; events: Doc<"calendarEvents">[]; milestone: { key: string; line: string } | null; said: string[]; slipped: Record<string, number>; streak: number } | null> => {
     const creator = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!creator) return null;
     const from = a.now - 2 * 86_400_000, to = a.now + 86_400_000;
@@ -152,7 +169,10 @@ export const morningInputs = internalQuery({
     const followers = snaps.length ? snaps.reduce((s, r) => s + r.followers, 0) : null;
     const milestone = followerMilestone(followers, said) ?? (mi ? pickMilestone(mi) : null);
     const postsPerWeek = (creator.dossier as { cadence?: { postsPerWeek?: number } } | undefined)?.cadence?.postsPerWeek ?? null;
-    return { creator, blocks, events, milestone, said, streak: streakWeeks({ now: a.now, timezone: creator.timezone, postsPerWeek, postTimes: posts.map((p) => p.createTime) }) };
+    // Earlier misses of the same video (by idea, else by title), so a third slip gets a different question.
+    const misses = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("start", a.now - 14 * 86_400_000).lte("start", a.now)).take(200)) as Doc<"calendarBlocks">[];
+    const slipped = slippedCounts(blocks, misses);
+    return { creator, blocks, events, milestone, said, slipped, streak: streakWeeks({ now: a.now, timezone: creator.timezone, postsPerWeek, postTimes: posts.map((p) => p.createTime) }) };
   },
 });
 
@@ -212,7 +232,7 @@ export const morning = internalAction({
     const now = a.now ?? Date.now();
     const inp = await ctx.runQuery(internal.agent.cadence.morningInputs, { creatorId: a.creatorId, now });
     if (!inp) return { sent: false, reason: "creator not found" };
-    const reasons = morningReasons({ now, timezone: inp.creator.timezone, blocks: inp.blocks, events: inp.events, milestone: inp.milestone, streakWeeks: inp.streak, said: inp.said });
+    const reasons = morningReasons({ now, timezone: inp.creator.timezone, blocks: inp.blocks, events: inp.events, milestone: inp.milestone, streakWeeks: inp.streak, said: inp.said, slipped: inp.slipped });
     if (!reasons.length) return { sent: false, reason: "nothing to say" };
     const rails = await railsOk(ctx as never, a.creatorId, now);
     if (!rails.ok) return { sent: false, reason: rails.reason ?? "rails" };

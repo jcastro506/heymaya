@@ -104,6 +104,14 @@ You're given their numbers today and what you concluded about them last time, ho
 The message: short bubbles with a line of only --- between them, plain words, the brands by name, end with one easy ask ("want me to look into any of these?"). No stats-speak; "selling a lot on TikTok Shop" beats "24,737 units".
 Output ONLY JSON: {"stage": "≤80 chars: your read of where they are for brands right now, in plain words", "picks": [{"brand": "", "type": "ugc", "why": "≤200"}], "message": "the text"}`;
 
+/** A brand pitched this recently isn't pitched again. */
+export const PITCH_AGAIN_AFTER_MS = 28 * 86_400_000;
+
+/** Pure: brands she pitched within PITCH_AGAIN_AFTER_MS of `now`. */
+export function recentlyPitched(said: Array<{ brand: string; at: number }>, now: number): string[] {
+  return Array.from(new Set(said.filter((x) => now - x.at < PITCH_AGAIN_AFTER_MS).map((x) => x.brand)));
+}
+
 export const inputs = internalQuery({
   args: { creatorId: v.id("creators") },
   handler: async (ctx, a): Promise<{ week: string; keywords: string[]; known: string[]; excluded: string[]; dealTypes: string[]; paidOnly: boolean; already: boolean; lastStage?: { stage: string; followers?: number; at?: number } } | null> => {
@@ -115,7 +123,9 @@ export const inputs = internalQuery({
     const data = (p?.data ?? {}) as { excludedBrands?: string[]; dealTypes?: string[]; paidOnly?: boolean };
     const keywords = (((c.dossier as { keywords?: unknown } | undefined)?.keywords ?? []) as unknown[]).filter((k): k is string => typeof k === "string").slice(0, 2);
     return {
-      week, keywords, known: rows.map((r) => (r.data as { brand?: string }).brand ?? r.brandDomain), excluded: data.excludedBrands ?? [], dealTypes: data.dealTypes ?? [], paidOnly: data.paidOnly ?? false,
+      // Brands already in their record, and brands she pitched in the last four weeks (2026-11-12: the same hotel
+      // brand was pitched ten Sundays running, reworded each time).
+      week, keywords, known: [...rows.map((r) => (r.data as { brand?: string }).brand ?? r.brandDomain), ...recentlyPitched(c.dealBrandsSaid ?? [], Date.now())], excluded: data.excludedBrands ?? [], dealTypes: data.dealTypes ?? [], paidOnly: data.paidOnly ?? false,
       already: (c.noticed ?? []).some((n) => n.sourceKey === `deals:${week}`),
       ...(c.dealStage ? { lastStage: { stage: c.dealStage.stage, at: c.dealStage.at, ...(c.dealStage.followers ? { followers: c.dealStage.followers } : {}) } } : {}),
     };
@@ -177,7 +187,7 @@ export const run = internalAction({
     if (!verdict.pass) return { noticed: false, reason: `held by the critic: ${verdict.problems.join(", ")}`, stage: out.stage };
     if (a.preview) return { noticed: false, reason: "preview", picks: out.picks, message: out.message, stage: out.stage };
     if (out.stage) await ctx.runMutation(internal.partnerships.dealScout.recordStage, { creatorId: a.creatorId, stage: out.stage, ...(followers ? { followers } : {}) });
-    await ctx.runMutation(internal.core.editor.notice, { creatorId: a.creatorId, c: { id: `deals:${i.week}`, kind: "deal", sourceKey: `deals:${i.week}`, base: 2.5, ttlMs: 5 * 86_400_000, summary: `brands that could pay them (${out.stage || "today"}): ${out.picks.map((p) => `${p.brand} (${p.type})`).join(", ")}`, draft: { body: out.message } } });
+    await ctx.runMutation(internal.core.editor.notice, { creatorId: a.creatorId, c: { id: `deals:${i.week}`, kind: "deal", sourceKey: `deals:${i.week}`, base: 2.5, ttlMs: 5 * 86_400_000, summary: `brands that could pay them (${out.stage || "today"}): ${out.picks.map((p) => `${p.brand} (${p.type})`).join(", ")}`, draft: { body: out.message }, onSent: { dealBrands: out.picks.map((p) => p.brand) } } });
     return { noticed: true, reason: "noticed for the daily pick", picks: out.picks, message: out.message, stage: out.stage };
   },
 });

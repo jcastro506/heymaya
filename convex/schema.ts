@@ -60,6 +60,8 @@ export default defineSchema({
     textFirstPace: v.optional(v.union(v.literal("less"), v.literal("normal"), v.literal("more"))),
     /** They said no week plans (2026-11-12, core/routines setWeekPlans): the Sunday plan isn't sent; "plan my week" still is. */
     weekPlansOffAt: v.optional(v.number()),
+    /** Brands she pitched them, when the text went out (core/editor afterSent): not pitched again for four weeks. */
+    dealBrandsSaid: v.optional(v.array(v.object({ brand: v.string(), at: v.number() }))),
     /** What she noticed and might text them about (core/editor): one pick a day, or none. */
     noticed: v.optional(v.array(v.object({
       id: v.string(),
