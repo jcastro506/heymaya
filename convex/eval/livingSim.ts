@@ -526,8 +526,10 @@ async function lifeFor(ctx: ActionCtx, s: State, persona: Persona): Promise<NonN
     { role: "user", content: `Their captions:\n${voice}\n\nBriefs, in order:\n${briefs.map((b, i) => `${i + 1}. ${b.brief}`).join("\n")}` },
   ] });
   const texts = r.ok ? (parseJson<{ texts?: unknown[] }>(r.content)?.texts ?? []).map((t) => clip(String(t ?? "").trim(), 300)) : [];
+  // A brief never goes out as their text (2026-11-12: a short answer sent "a big thing coming up in a few weeks
+  // (an event, trip…" to her verbatim). A beat without its own words is skipped.
   let k = 0;
-  const life = script.map((e) => ({ day: e.day, kind: e.kind, text: e.brief ? (texts[k++] || e.brief) : e.text }));
+  const life = script.map((e) => ({ day: e.day, kind: e.kind, text: e.brief ? (texts[k++] ?? "") : e.text })).filter((e) => e.text);
   await ctx.runMutation(internal.eval.livingSim.writeState, { runId: s.runId, state: { ...s, life } });
   s.life = life;
   return life;
