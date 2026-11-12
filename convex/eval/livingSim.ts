@@ -33,6 +33,7 @@ import { applyIdeaAct } from "../core/ideaActs";
 import { tiktok } from "../integrations/scrapeCreators/platforms/tiktok";
 import { THRESHOLDS } from "../config/thresholds";
 import { clip } from "../lib/clip";
+import { PERSONAS, actorModel, parseActor, personaPrompt, type Persona } from "./personas";
 
 const D = 86_400_000;
 const STEP_GAP_MS = 5_000;
@@ -113,6 +114,53 @@ export function lifeScript(days: number): LifeEvent[] {
   ];
 }
 
+/**
+ * The season's life (2026-11-12): the same beats as lifeScript, for any creator. Each `brief` is rewritten
+ * once by the actor into their own lane and voice (a dog trainer's "big thing" isn't a half marathon), and
+ * what they actually said is kept in state, so the probes are judged against what really happened.
+ */
+export function seasonScript(days: number): Array<LifeEvent & { brief: string }> {
+  const at = (f: number) => Math.max(1, Math.round(days * f));
+  return [
+    { day: at(0.07), kind: "life", brief: "a big thing coming up in a few weeks (an event, trip, launch, competition: something real in your life or content) that you're a bit nervous about", text: "" },
+    { day: at(0.18), kind: "rule", brief: "a firm rule: one specific kind of video or trend you never want her to suggest", text: "" },
+    { day: at(0.3), kind: "slump", brief: "your views have been dead lately and you wonder out loud if your kind of content is done", text: "" },
+    { day: at(0.42), kind: "life", brief: "someone is visiting or joining you next week who could help you film", text: "" },
+    { day: at(0.5), kind: "life", brief: "the big thing you were nervous about happened: how it went, in one excited or honest text", text: "" },
+    { day: at(0.6), kind: "brand", brief: "a brand DMed you offering free product for a post; you ask if it's worth it", text: "" },
+    { day: at(0.72), kind: "shift", brief: "you've been enjoying making a different (but related) kind of content more lately; name it", text: "" },
+    { day: days - 2, kind: "probe", brief: "", text: "ok real question, what do you actually know about me at this point?" },
+    { day: days - 1, kind: "probe", brief: "", text: "do you remember the big thing i was nervous about a while back? how'd it go?" },
+    { day: days, kind: "probe", brief: "", text: "what's changed in what you suggest to me compared to when we started?" },
+  ];
+}
+
+/** Real zones, one per UTC offset, so some city is always mid-morning. */
+export const DAY_ZONES = ["Pacific/Pago_Pago", "Pacific/Honolulu", "America/Anchorage", "America/Los_Angeles", "America/Denver", "America/Chicago", "America/New_York", "America/Halifax", "America/Sao_Paulo", "Atlantic/South_Georgia", "Atlantic/Azores", "Europe/London", "Europe/Berlin", "Europe/Athens", "Europe/Moscow", "Asia/Dubai", "Asia/Karachi", "Asia/Dhaka", "Asia/Bangkok", "Asia/Singapore", "Asia/Tokyo", "Australia/Brisbane", "Pacific/Noumea", "Pacific/Auckland"] as const;
+
+/** Pure: the local hour in a zone at `now`. */
+export function hourIn(zone: string, now: number): number {
+  return Number(new Intl.DateTimeFormat("en-US", { timeZone: zone, hour: "numeric", hourCycle: "h23" }).format(new Date(now)));
+}
+
+/**
+ * Pure: a zone where it's mid-morning now (10, else 9 or 11). A season day is a few real minutes, so the
+ * clock barely moves: a creator whose zone sits at 3 a.m. would have every job held for quiet hours for
+ * months (2026-11-12 smoke run). Each simulated day is lived as a morning instead.
+ */
+export function morningZone(now: number): string {
+  for (const want of [10, 9, 11, 12, 8]) {
+    const z = DAY_ZONES.find((x) => hourIn(x, now) === want);
+    if (z) return z;
+  }
+  return "Europe/London";
+}
+
+/** Pure: the persona a season creator plays, by id (a run without one keeps the old busy actor). */
+export function temperamentOf(id: string | undefined): Persona | null {
+  return id ? (PERSONAS.find((p) => p.id === id) ?? null) : null;
+}
+
 // ------------------------------------------------------------------ guards + state
 
 async function simCreator(ctx: MutationCtx, creatorId: Id<"creators">): Promise<Doc<"creators">> {
@@ -124,7 +172,15 @@ async function simCreator(ctx: MutationCtx, creatorId: Id<"creators">): Promise<
 type Future = { offsetMs: number; doc: Record<string, unknown> };
 type LanePost = { postId: string; url: string; createTime: number; views: number; clipId: string | null; paid: boolean };
 type LaneAccount = { handle: string; trackedAccountId: Id<"trackedAccounts">; posts: LanePost[] };
-type State = { runId: string; creatorId: Id<"creators">; persona: string; days: number; startedAt: number; seed: number; future: Future[]; releasedDraftPostIds: string[]; t0?: number; lane?: LaneAccount[] };
+type State = {
+  runId: string; creatorId: Id<"creators">; persona: string; days: number; startedAt: number; seed: number; future: Future[]; releasedDraftPostIds: string[]; t0?: number; lane?: LaneAccount[];
+  /** A season run (eval/season): who they are (eval/personas), their plan, the season it belongs to. */
+  temperament?: string; tier?: "solo" | "partner"; season?: string;
+  /** Their life script, in their own words (seasonScript, rewritten once). */
+  life?: Array<{ day: number; kind: string; text: string }>;
+  /** They texted STOP: the day and why. Her jobs keep running so anything she sends after is counted. */
+  left?: { d: number; why: string } | null;
+};
 const stateKey = (runId: string) => `sim:${runId}:state`;
 const dayKey = (runId: string, d: number) => `sim:${runId}:day:${String(d).padStart(3, "0")}`;
 
@@ -151,7 +207,7 @@ export const writeState = internalMutation({
 // ------------------------------------------------------------------ setup
 
 export const prepare = internalMutation({
-  args: { creatorId: v.id("creators"), days: v.number(), runId: v.string(), persona: v.string(), seed: v.number() },
+  args: { creatorId: v.id("creators"), days: v.number(), runId: v.string(), persona: v.string(), seed: v.number(), tier: v.optional(v.union(v.literal("solo"), v.literal("partner"))) },
   handler: async (ctx, a): Promise<{ held: number; kept: number; days: number }> => {
     const c = await simCreator(ctx, a.creatorId);
     const now = Date.now();
@@ -160,7 +216,7 @@ export const prepare = internalMutation({
     const t0 = Math.max(now - a.days * D, all.length > 10 ? all[9] + 1 : now - a.days * D);
     const days = Math.max(3, Math.ceil((now - t0) / D));
     // Paired (so her rails allow texting) but with no chat or phone: an eval-run creator is never delivered to.
-    await ctx.db.patch(a.creatorId, { plan: { ...c.plan, status: "comped", tier: "partner" }, channel: { ...c.channel, paired: true }, firstWeek: undefined });
+    await ctx.db.patch(a.creatorId, { plan: { ...c.plan, status: "comped", tier: a.tier ?? "partner" }, channel: { ...c.channel, paired: true }, firstWeek: undefined });
     const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"ownPosts">[];
     const future: Future[] = [];
     for (const p of posts) {
@@ -233,6 +289,19 @@ async function ageWorld(ctx: ActionCtx, creatorId: Id<"creators">, delta: number
   for (const table of TABLES_BY_CREATOR) await ctx.runMutation(internal.eval.livingSim.ageTable, { creatorId, table, delta });
 }
 
+/** A season creator lives each day in the morning (morningZone); their clock moves only when it has drifted out of the day. */
+export const setMorning = internalMutation({
+  args: { creatorId: v.id("creators"), now: v.number() },
+  handler: async (ctx, a): Promise<string> => {
+    const c = await simCreator(ctx, a.creatorId);
+    const h = hourIn(c.timezone, a.now);
+    if (h >= 9 && h <= 13) return c.timezone;
+    const zone = morningZone(a.now);
+    await ctx.db.patch(a.creatorId, { timezone: zone });
+    return zone;
+  },
+});
+
 export const releasePost = internalMutation({
   args: { creatorId: v.id("creators"), doc: v.any(), createTime: v.number() },
   handler: async (ctx, a): Promise<Id<"ownPosts">> => {
@@ -255,22 +324,36 @@ export const actOnIdea = internalMutation({
 // ------------------------------------------------------------------ the run
 
 export const start = internalAction({
-  args: { persona: v.string(), days: v.number(), seed: v.optional(v.number()) },
+  // `sourceId` clones any onboarded eval creator (a first-week run's); `temperament`, `tier` and `season` make it a season run (eval/season).
+  args: { persona: v.optional(v.string()), sourceId: v.optional(v.id("creators")), days: v.number(), seed: v.optional(v.number()), temperament: v.optional(v.string()), tier: v.optional(v.union(v.literal("solo"), v.literal("partner"))), season: v.optional(v.string()) },
   handler: async (ctx, a): Promise<{ runId: string; held: number; kept: number; days: number }> => {
     if (a.days < 3 || a.days > 180) throw new Error("days must be 3–180");
-    const runId = `sim-${Date.now()}`;
-    const source = await ctx.runQuery(internal.eval.expertBench.personaSource, { clerkUserId: a.persona });
-    if (!source) throw new Error(`persona ${a.persona} is missing`);
+    if (a.temperament && !temperamentOf(a.temperament)) throw new Error(`no temperament ${a.temperament}`);
+    const runId = `sim-${Date.now()}-${Math.floor(Math.random() * 1e4)}`;
+    const source = a.sourceId ?? (a.persona ? await ctx.runQuery(internal.eval.expertBench.personaSource, { clerkUserId: a.persona }) : null);
+    if (!source) throw new Error(`persona ${a.persona ?? "(none)"} is missing`);
+    // A season clones first-week creators whose admired step may have failed under replay: an empty lane is no
+    // lane. Run the app's own suggestions for the source (live reads), as a real signup's screen 3 does.
+    if (a.season && (await ctx.runQuery(internal.eval.livingSim.trackedOf, { creatorId: source })).length < 2) {
+      try {
+        const r = await ctx.runAction(internal.onboarding.suggest.suggestFor, { creatorId: source, waitMs: 60_000 });
+        const picks = r.suggestions.filter((x) => x.platform === "tiktok").slice(0, 3).map((x) => ({ platform: x.platform, handle: x.handle, why: clip(x.why, 200) }));
+        if (picks.length) await ctx.runMutation(internal.eval.firstWeek.addAdmired, { creatorId: source, picks });
+      } catch (e) {
+        console.error(`[season] admired for ${source}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
     const creatorId = await ctx.runMutation(internal.eval.scenarios.cloneForRun, { sourceId: source, runId });
     // Enough real history to replay: page back through her TikTok until it covers the run.
     const handle = await ctx.runQuery(internal.account.setup.handlesFor, { creatorId });
     if (handle?.tiktok) await ctx.runAction(internal.eval.livingSim.deepen, { creatorId, handle: handle.tiktok, days: a.days });
-    const r = await ctx.runMutation(internal.eval.livingSim.prepare, { creatorId, days: a.days, runId, persona: a.persona, seed: a.seed ?? 7 });
+    const r = await ctx.runMutation(internal.eval.livingSim.prepare, { creatorId, days: a.days, runId, persona: a.persona ?? `@${handle?.tiktok ?? "?"}`, seed: a.seed ?? 7, ...(a.tier ? { tier: a.tier } : {}) });
     // The accounts she watches, replayed too: their real posts, released day by day (a live lane is silent
     // when a simulated day is five real minutes).
     const lane = await ctx.runAction(internal.eval.livingSim.fetchLane, { creatorId, since: Date.now() - (r.days + 45) * D });
     const s0 = await ctx.runQuery(internal.eval.livingSim.readState, { runId });
-    await ctx.runMutation(internal.eval.livingSim.writeState, { runId, state: { ...s0, lane } });
+    await ctx.runMutation(internal.eval.livingSim.writeState, { runId, state: { ...s0, lane, ...(a.temperament ? { temperament: a.temperament } : {}), ...(a.tier ? { tier: a.tier } : {}), ...(a.season ? { season: a.season } : {}) } });
+    if (a.season) await ctx.runMutation(internal.eval.season.joined, { season: a.season, runId });
     // Day 0: the world moves forward so the start date is "now"; each day then ages it one day back.
     await ageWorld(ctx, creatorId, r.days * D);
     await ctx.scheduler.runAfter(0, internal.eval.livingSim.dayWorld, { runId, d: 1 });
@@ -286,6 +369,7 @@ export const dayWorld = internalAction({
     if (!s) return null;
     await ageWorld(ctx, s.creatorId, -D);
     const now = Date.now();
+    if (s.season) await ctx.runMutation(internal.eval.livingSim.setMorning, { creatorId: s.creatorId, now });
     const due = s.future.filter((f) => f.offsetMs <= a.d * D);
     const rand = rng(s.seed * 1000 + a.d);
     const notes: string[] = [];
@@ -346,10 +430,19 @@ export const dayMaya = internalAction({
         jobs[name] = `failed: ${e instanceof Error ? clip(e.message, 100) : "error"}`;
       }
     };
+    await step("expireQuestions", async () => ({ sent: false, reason: `expired ${(await ctx.runMutation(internal.core.messages.expireStaleQuestions, { creatorId: id, now })).expired}` }));
     // Her lane's keyword tops (the fleet sweep skips eval creators; cached by keyword and week).
     await step("sweep", async () => { const r = await ctx.runAction(internal.scout.sweep.run, { creatorId: id }); return { sent: r.signals > 0, reason: `${r.keywords} keywords, ${r.signals} shapes, ${r.failed} failed` }; });
     await step("morning", () => ctx.runAction(internal.agent.cadence.morning, { creatorId: id, now }));
     await step("scout", () => ctx.runAction(internal.scout.scout.run, { creatorId: id }));
+    if (s.season) {
+      // What the hourly crons do for a paired person, which skip sim creators (2026-11-12: without the editor
+      // nothing the scout noticed was ever texted, so a sim measured silence).
+      await step("trends", () => ctx.runAction(internal.scout.trends.judge, { creatorId: id, now }));
+      await step("editor", () => ctx.runAction(internal.core.editor.pick, { creatorId: id, now }));
+      if (a.d === 1) await step("invite", async () => ({ sent: (await ctx.runMutation(internal.scout.firstWeek.inviteOne, { creatorId: id })).invited, reason: "first-week invite" }));
+      if (a.d % 7 === 5) await step("taste", () => ctx.runAction(internal.taste.profile.rewrite, { creatorId: id }));
+    }
     if (a.d % 7 === 6) await step("weekPlan", () => ctx.runAction(internal.calendar.weekPlan.draft, { creatorId: id, now, horizon: "next_week" }));
     if (a.d % 7 === 0) await step("weeklyReview", () => ctx.runAction(internal.review.weekly.run, { creatorId: id }));
     if (a.d % 7 === 3) await step("dealsOffer", () => ctx.runAction(internal.partnerships.kit.offerOne, { creatorId: id }));
@@ -390,6 +483,11 @@ export const dayCreator = internalAction({
     const rand = rng(s.seed * 7919 + a.d);
     const said: string[] = [];
     const today = await ctx.runQuery(internal.eval.livingSim.todayFromMaya, { creatorId: id, since: a.dayStart - 60_000 });
+    const persona = temperamentOf(s.temperament);
+    if (persona) {
+      await seasonDay(ctx, s, a.d, a.dayStart, persona, today);
+      return null;
+    }
     const events = lifeScript(s.days).filter((e) => e.day === a.d);
     const probes: Array<{ q: string; a: string }> = [];
     // Her life first: things she'd text unprompted.
@@ -417,6 +515,75 @@ export const dayCreator = internalAction({
   },
 });
 
+/** Their life script in their own words, written once from their captions and lane (seasonScript). */
+async function lifeFor(ctx: ActionCtx, s: State, persona: Persona): Promise<NonNullable<State["life"]>> {
+  if (s.life) return s.life;
+  const script = seasonScript(s.days);
+  const voice = await ctx.runQuery(internal.eval.livingSim.voiceOf, { creatorId: s.creatorId });
+  const briefs = script.filter((e) => e.brief);
+  const r = await callModel(ctx, { creatorId: s.creatorId, purpose: "sim_life", model: actorModel(), temperature: 0.9, maxTokens: 900, apiKey: process.env.OPENROUTER_API_KEY ?? "", messages: [
+    { role: "system", content: `You write the texts a real TikTok creator will send their assistant over the next few months. Write each as the creator, in their own voice (their case, emoji, slang; short, like a real text), specific to THEIR content and life as their captions suggest. ${persona.who}\nReturn ONLY JSON: {"texts": ["one text per brief, in order"]}` },
+    { role: "user", content: `Their captions:\n${voice}\n\nBriefs, in order:\n${briefs.map((b, i) => `${i + 1}. ${b.brief}`).join("\n")}` },
+  ] });
+  const texts = r.ok ? (parseJson<{ texts?: unknown[] }>(r.content)?.texts ?? []).map((t) => clip(String(t ?? "").trim(), 300)) : [];
+  let k = 0;
+  const life = script.map((e) => ({ day: e.day, kind: e.kind, text: e.brief ? (texts[k++] || e.brief) : e.text }));
+  await ctx.runMutation(internal.eval.livingSim.writeState, { runId: s.runId, state: { ...s, life } });
+  s.life = life;
+  return life;
+}
+
+/** A season day for someone with a temperament: their life, then their reaction to what she sent, mood kept. */
+async function seasonDay(ctx: ActionCtx, s: State, d: number, dayStart: number, persona: Persona, today: { messages: Array<{ id: string; kind: string; text: string }>; ideas: Array<{ id: Id<"ideas">; hook: string }> }): Promise<void> {
+  const id = s.creatorId;
+  const said: string[] = [], probes: Array<{ q: string; a: string }> = [], acts: string[] = [];
+  let actor: { mood: number | null; why: string; action: string; answered: boolean } | null = null;
+  if (!s.left) {
+    const life = await lifeFor(ctx, s, persona);
+    for (const e of life.filter((x) => x.day === d)) {
+      const reply = await sayAndHear(ctx, id, e.text);
+      said.push(e.text);
+      if (e.kind === "probe") probes.push({ q: e.text, a: reply });
+    }
+    const rand = rng(s.seed * 7919 + d * 31 + persona.id.length);
+    const odds = (persona.morning + persona.evening) / 2;
+    today = await ctx.runQuery(internal.eval.livingSim.todayFromMaya, { creatorId: id, since: dayStart - 60_000, all: true });
+    if (today.messages.length || today.ideas.length) {
+      if (rand() < odds) {
+        const prior = await ctx.runQuery(internal.eval.livingSim.days, { runId: s.runId });
+        const felt = prior.map((x) => x.actor as { mood?: number; why?: string } | undefined).filter((x) => x && typeof x.mood === "number").slice(-4).map((x, i) => ({ mood: x!.mood, why: x!.why, ago: i }));
+        const voice = await ctx.runQuery(internal.eval.livingSim.voiceOf, { creatorId: id });
+        const r = await callModel(ctx, { creatorId: id, purpose: "sim_actor", model: actorModel(), temperature: 0.8, maxTokens: 700, apiKey: process.env.OPENROUTER_API_KEY ?? "", messages: [
+          { role: "system", content: `${personaPrompt("TikTok", persona)}\n\nYour own captions:\n${voice}` },
+          { role: "user", content: JSON.stringify({ day: d, howYouFeltLately: felt, mayaSaid: today.messages, ideasSent: today.ideas.map((x) => ({ ideaId: x.id, hook: x.hook })) }) },
+        ] });
+        const out = parseActor(r.ok ? r.content : "");
+        // Their replies, and her answer to them (it counts toward tomorrow's mood: they read it).
+        if (out.action !== "stop") for (const t of out.replies) { const heard = await sayAndHear(ctx, id, t); said.push(t); acts.push(`she answered: ${clip(heard, 200)}`); }
+        for (const t of out.ideas) {
+          const idea = today.ideas.find((x) => String(x.id) === t.ideaId);
+          if (idea) { await ctx.runMutation(internal.eval.livingSim.actOnIdea, { creatorId: id, ideaId: idea.id, act: t.act }); acts.push(`${t.act} ${clip(idea.hook, 60)}`); }
+        }
+        if (out.action === "stop") {
+          // The opt-out door (core/imessage), recorded without a turn: STOP is not a conversation.
+          await ctx.runMutation(internal.core.messages.recordInbound, { creatorId: id, surface: "telegram", body: "STOP" });
+          await ctx.runMutation(internal.core.imessage.markOptedOut, { creatorId: id });
+          said.push("STOP");
+          s.left = { d, why: out.why };
+          await ctx.runMutation(internal.eval.livingSim.writeState, { runId: s.runId, state: { ...s } });
+        }
+        actor = { mood: out.mood, why: out.why, action: out.action, answered: said.length > 0 };
+      } else {
+        actor = { mood: null, why: "", action: "none", answered: false };
+      }
+    }
+  }
+  const snap = await ctx.runQuery(internal.eval.livingSim.snapshot, { creatorId: id, since: dayStart - 60_000 });
+  await ctx.runMutation(internal.eval.livingSim.note, { runId: s.runId, d, patch: { said, probes, acts, actor, left: s.left ?? null, snap } });
+  if (d < s.days) await ctx.scheduler.runAfter(STEP_GAP_MS, internal.eval.livingSim.dayWorld, { runId: s.runId, d: d + 1 });
+  else await ctx.scheduler.runAfter(STEP_GAP_MS, internal.eval.livingSim.judgeProbes, { runId: s.runId });
+}
+
 /** Her text through the same path a phone takes; returns Maya's reply text. */
 async function sayAndHear(ctx: Parameters<typeof callModel>[0], creatorId: Id<"creators">, text: string): Promise<string> {
   const c = ctx as unknown as { runMutation: (f: unknown, a: unknown) => Promise<{ messageId: Id<"messages"> }>; runAction: (f: unknown, a: unknown) => Promise<unknown>; runQuery: (f: unknown, a: unknown) => Promise<Array<{ text: string }>> };
@@ -432,12 +599,13 @@ async function sayAndHear(ctx: Parameters<typeof callModel>[0], creatorId: Id<"c
 }
 
 export const todayFromMaya = internalQuery({
-  args: { creatorId: v.id("creators"), since: v.number() },
+  // `all`: her replies too (a season's people react to how she answered them, not only to what she started).
+  args: { creatorId: v.id("creators"), since: v.number(), all: v.optional(v.boolean()) },
   handler: async (ctx, a): Promise<{ messages: Array<{ id: string; kind: string; text: string }>; ideas: Array<{ id: Id<"ideas">; hook: string }> }> => {
-    const msgs = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId).gte("ts", a.since)).take(40)) as Doc<"messages">[];
+    const msgs = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId).gte("ts", a.since)).take(60)) as Doc<"messages">[];
     const ideas = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(10)) as Doc<"ideas">[];
     return {
-      messages: msgs.filter((m) => m.direction === "out" && m.proactive).map((m) => ({ id: m._id, kind: m.kind ?? "", text: clip(m.body, 600) })),
+      messages: msgs.filter((m) => m.direction === "out" && (m.proactive || a.all)).map((m) => ({ id: m._id, kind: `${m.proactive ? "she texted first" : "her reply"}: ${m.kind ?? ""}`, text: clip(m.body, 600) })),
       ideas: ideas.filter((i) => i.createdAt >= a.since).map((i) => ({ id: i._id, hook: clip((i.version as { hook?: string } | undefined)?.hook ?? i.messageText, 140) })),
     };
   },
@@ -505,7 +673,7 @@ export const judgeProbes = internalAction({
     const s = await ctx.runQuery(internal.eval.livingSim.readState, { runId: a.runId });
     if (!s) return null;
     const days = await ctx.runQuery(internal.eval.livingSim.days, { runId: a.runId });
-    const script = lifeScript(s.days);
+    const script = s.life ?? lifeScript(s.days);
     // Her real records too: a true fact from their profile or posts is not an invention (sim 1's judge flagged one).
     const known = await ctx.runQuery(internal.eval.expertBench.postsByPlatform, { creatorId: s.creatorId });
     const records = { whatSheKnowsAboutThem: (known as { whatSheKnowsAboutThem?: unknown }).whatSheKnowsAboutThem, whatTheyToldHer: (known as { whatTheyToldHer?: unknown }).whatTheyToldHer };

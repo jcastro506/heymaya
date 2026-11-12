@@ -161,6 +161,7 @@ import type * as eval_replay from "../eval/replay.js";
 import type * as eval_run from "../eval/run.js";
 import type * as eval_scaleTest from "../eval/scaleTest.js";
 import type * as eval_scenarios from "../eval/scenarios.js";
+import type * as eval_season from "../eval/season.js";
 import type * as eval_sendPage from "../eval/sendPage.js";
 import type * as eval_silenceSim from "../eval/silenceSim.js";
 import type * as eval_suggestQuality from "../eval/suggestQuality.js";
@@ -425,6 +426,7 @@ declare const fullApi: ApiFromModules<{
   "eval/run": typeof eval_run;
   "eval/scaleTest": typeof eval_scaleTest;
   "eval/scenarios": typeof eval_scenarios;
+  "eval/season": typeof eval_season;
   "eval/sendPage": typeof eval_sendPage;
   "eval/silenceSim": typeof eval_silenceSim;
   "eval/suggestQuality": typeof eval_suggestQuality;
