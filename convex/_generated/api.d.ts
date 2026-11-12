@@ -106,6 +106,7 @@ import type * as core_jobs from "../core/jobs.js";
 import type * as core_llm from "../core/llm.js";
 import type * as core_messages from "../core/messages.js";
 import type * as core_normal from "../core/normal.js";
+import type * as core_numbers from "../core/numbers.js";
 import type * as core_pairing from "../core/pairing.js";
 import type * as core_paused from "../core/paused.js";
 import type * as core_phoneRail from "../core/phoneRail.js";
@@ -370,6 +371,7 @@ declare const fullApi: ApiFromModules<{
   "core/llm": typeof core_llm;
   "core/messages": typeof core_messages;
   "core/normal": typeof core_normal;
+  "core/numbers": typeof core_numbers;
   "core/pairing": typeof core_pairing;
   "core/paused": typeof core_paused;
   "core/phoneRail": typeof core_phoneRail;

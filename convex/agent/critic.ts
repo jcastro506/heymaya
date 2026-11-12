@@ -10,6 +10,8 @@ import type { ActionCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "./registry";
+import { internal } from "../_generated/api";
+import { claimsIn, numbersIn, unbacked } from "../core/numbers";
 
 export type Problem = "no_reaction" | "slop" | "invented_number" | "unsupported_claim" | "wrong_request" | "false_action" | "leak" | "off_voice" | "unsafe" | "no_link" | "no_action" | "directive_violation" | "too_long" | "generic_line" | "vague_sound" | "invented_sound" | "mixed_basis" | "unchecked_world_fact";
 
@@ -87,6 +89,18 @@ export async function critique(
   // A "why did it do that" read is SUPPOSED to name a cause; when code has already checked each cause
   // cites evidence (B2), the phrase check would reject the job itself. The model critic still judges it.
   if (!input.causesEvidenced && assertsUnprovenCause(input.text)) return { pass: false, problems: ["unsupported_claim"], note: "states a cause the available performance evidence cannot prove" };
+  // Numbers are arithmetic, not judgment (core/numbers, 2026-11-12): a count or multiple none of their figures back
+  // is caught here, before the model, every path alike.
+  try {
+    const claims = claimsIn(input.text);
+    if (claims.length) {
+      const f = await ctx.runQuery(internal.core.numbers.factsFor, { creatorId: input.creatorId });
+      const bad = unbacked(claims, { counts: f.counts, multiples: f.multiples, free: [...numbersIn(input.evidence), ...f.theirs] });
+      if (bad.length) return { pass: false, problems: ["invented_number"], note: `not in their numbers: ${bad.map((b) => b.text).join("; ").slice(0, 140)}` };
+    }
+  } catch (e) {
+    console.error(`[critic] number check failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
   const spec = REGISTRY.critic;
   const user = `Kind: ${input.kind}\n\nHouse rules:\n${input.directives.map((d) => `- ${d}`).join("\n") || "- none"}\n\nCreator voice block:\n${JSON.stringify(input.voice ?? {})}\n\nEvidence the message may cite:\n${JSON.stringify(input.evidence ?? {})}\n\nMessage:\n"""\n${input.text}\n"""`;
   let result = await callModel(ctx, { creatorId: input.creatorId, purpose: "critic", model: spec.primary, timeoutMs: CRITIC_TIMEOUT_MS, messages: [{ role: "system", content: CRITIC_PROMPT }, { role: "user", content: user }], temperature: 0, maxTokens: spec.maxTokens, apiKey: process.env.OPENROUTER_API_KEY ?? "" });
