@@ -26,3 +26,20 @@ describe("every stop she can promise has a tool behind it", () => {
     expect(EXPERIMENT_FIT_PROMPT).toMatch(/aren't chasing views/);
   });
 });
+
+describe("hashtags the way their best posts use them (2026-11-12)", async () => {
+  const { capHashtags, hashtagHabit } = await import("../finish");
+  it("their best posts' median, capped at two", () => {
+    const posts = [
+      { caption: "best one #a #b #c", multiple: 6 }, { caption: "second #a", multiple: 4 }, { caption: "third #a #b", multiple: 3 },
+      { caption: "flop #x #y #z #w", multiple: 0.3 },
+    ];
+    expect(hashtagHabit(posts)).toBe(2);
+    expect(hashtagHabit([{ caption: "no tags", multiple: 5 }, { caption: "none", multiple: 4 }, { caption: "nope", multiple: 3 }])).toBe(0);
+    expect(hashtagHabit([])).toBe(1);
+  });
+  it("keeps the first n, removes the rest cleanly", () => {
+    expect(capHashtags("ice dip before the wash 🥶 #GlowUp #skincare #acne #fyp", 1)).toBe("ice dip before the wash 🥶 #GlowUp");
+    expect(capHashtags("the $4 one won #thrift", 0)).toBe("the $4 one won");
+  });
+});
