@@ -8,7 +8,7 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery, type ActionCtx } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -33,13 +33,41 @@ export function risingSounds(obs: Array<{ clipId?: string; authorHandle: string;
   return Array.from(by.values()).filter((s) => s.accounts.length >= MIN_ACCOUNTS).sort((a, b) => b.accounts.length - a.accounts.length);
 }
 
-export const weekObservations = internalQuery({
-  args: { now: v.number() },
-  handler: async (ctx, a): Promise<Array<{ clipId?: string; authorHandle: string; url: string; views: number; keywords: string[] }>> => {
-    const rows = (await ctx.db.query("observations").withIndex("by_sampledAt", (q) => q.gte("sampledAt", a.now - WEEK_MS)).collect()) as Doc<"observations">[];
-    return rows.filter((r) => r.clipId).map((r) => ({ clipId: r.clipId, authorHandle: r.authorHandle, url: r.url, views: r.views, keywords: r.keywords }));
+/** The fields the sound passes read, from one page of the week's observations (sounds with a clip only). */
+export type SoundObservation = { platform: string; clipId: string; authorHandle: string; url: string; views: number; keywords: string[]; createTime: number };
+
+/**
+ * One page of the week's observations. The week is read in pages because the whole of it is larger than one
+ * function may read (2026-11-12: dev passed Convex's 16 MB limit and the daily trends and sound jobs crashed;
+ * a few dozen creators' sampled accounts reach the same size).
+ */
+export const observationPage = internalQuery({
+  args: { since: v.number(), cursor: v.union(v.string(), v.null()) },
+  handler: async (ctx, a): Promise<{ rows: SoundObservation[]; cursor: string; done: boolean }> => {
+    const page = await ctx.db.query("observations").withIndex("by_sampledAt", (q) => q.gte("sampledAt", a.since)).paginate({ cursor: a.cursor, numItems: OBS_PAGE });
+    const rows = (page.page as Doc<"observations">[]).filter((r) => r.clipId).map((r) => ({ platform: r.platform, clipId: r.clipId!, authorHandle: r.authorHandle, url: r.url, views: r.views, keywords: r.keywords, createTime: r.createTime }));
+    return { rows, cursor: page.continueCursor, done: page.isDone };
   },
 });
+
+/** Rows per page: well under the read limit at observations' size (~1 KB each). */
+export const OBS_PAGE = 1500;
+/** Pages at most: 300k observations a week. Past that the newest-first tail is dropped, and logged. */
+const MAX_PAGES = 200;
+
+/** Every observation of the last week that carries a sound, page by page. */
+export async function weekSoundObservations(ctx: ActionCtx, now: number): Promise<SoundObservation[]> {
+  const out: SoundObservation[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const r: { rows: SoundObservation[]; cursor: string; done: boolean } = await ctx.runQuery(internal.scout.sounds.observationPage, { since: now - WEEK_MS, cursor });
+    out.push(...r.rows);
+    if (r.done) return out;
+    cursor = r.cursor;
+  }
+  console.error(`[sounds] the week's observations ran past ${MAX_PAGES} pages; read the first ${MAX_PAGES * OBS_PAGE}`);
+  return out;
+}
 
 /** Who cares about a sound: creators watching one of its accounts, or whose lane keywords surfaced it. */
 export const audienceFor = internalQuery({
@@ -89,7 +117,7 @@ export const run = internalAction({
   args: {},
   handler: async (ctx): Promise<{ sounds: number; written: number }> => {
     const now = Date.now();
-    const obs = await ctx.runQuery(internal.scout.sounds.weekObservations, { now });
+    const obs = await weekSoundObservations(ctx, now);
     const rising = risingSounds(obs).slice(0, 10);
     let written = 0;
     for (const s of rising) {

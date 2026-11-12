@@ -28,7 +28,7 @@ import { pairedRows } from "../core/schedule";
 import { spreadDelays, HOURLY_SPREAD_MS } from "../core/fanout";
 import { coverKey, rememberMedia } from "../media";
 import { clip } from "../lib/clip";
-import { risingSounds } from "./sounds";
+import { risingSounds, weekSoundObservations, type SoundObservation } from "./sounds";
 
 export const TREND = {
   /** What found real trends in the live test. Each is one shared read a day. */
@@ -206,17 +206,13 @@ export const byClip = internalQuery({
   },
 });
 
-/** Lane observations this week that carry a sound (the sweep and the sampler), for the niche half. */
-export const laneSounds = internalQuery({
-  args: { now: v.number() },
-  handler: async (ctx, a): Promise<SeenPost[]> => {
-    const rows = (await ctx.db.query("observations").withIndex("by_sampledAt", (q) => q.gte("sampledAt", a.now - 7 * DAY)).collect()) as Doc<"observations">[];
-    const keep = new Set(risingSounds(rows.filter((r) => r.clipId).map((r) => ({ clipId: r.clipId, authorHandle: r.authorHandle, url: r.url, views: r.views, keywords: r.keywords }))).map((s) => s.clipId));
-    return rows
-      .filter((r) => r.platform === "tiktok" && r.clipId && keep.has(r.clipId))
-      .map((r) => ({ sound: { clipId: r.clipId!, title: null, author: null, uses: null, original: null }, authorHandle: r.authorHandle, url: r.url, views: r.views, postedAt: r.createTime, videoUrl: null, thumbnailUrl: null, source: "lane", keywords: r.keywords }));
-  },
-});
+/** Pure: lane observations this week that carry a sound two or more accounts used (the sweep and the sampler), for the niche half. */
+export function laneSounds(rows: SoundObservation[]): SeenPost[] {
+  const keep = new Set(risingSounds(rows).map((s) => s.clipId));
+  return rows
+    .filter((r) => r.platform === "tiktok" && keep.has(r.clipId))
+    .map((r) => ({ sound: { clipId: r.clipId, title: null, author: null, uses: null, original: null }, authorHandle: r.authorHandle, url: r.url, views: r.views, postedAt: r.createTime, videoUrl: null, thumbnailUrl: null, source: "lane", keywords: r.keywords }));
+}
 
 export const upsert = internalMutation({
   args: {
@@ -425,7 +421,7 @@ export const run = internalAction({
     }
     // A hashtag page is any age; only this week's posts count toward "right now".
     const recent = posts.filter((p) => !p.postedAt || now - toMs(p.postedAt) < 7 * DAY);
-    const lane = await ctx.runQuery(internal.scout.trends.laneSounds, { now });
+    const lane = laneSounds(await weekSoundObservations(ctx, now));
     const found = candidates([...recent, ...lane]);
     const known = new Map((await ctx.runQuery(internal.scout.trends.byClip, { clipIds: found.map((c) => c.clipId) })).map((k) => [k.clipId, k]));
     const toCheck = found.filter((c) => { const k = known.get(c.clipId); return !k || (k.status !== "faded" && now - k.checkedAt > 18 * 3_600_000); }).slice(0, TREND.checkPerDay);
