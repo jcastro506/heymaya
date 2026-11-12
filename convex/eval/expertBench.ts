@@ -235,7 +235,9 @@ export const sendDraft = internalAction({
     const info = await ctx.runAction(internal.reads.read.read, { kind: "post.info", params: { platform, url: a.url }, creatorId: a.creatorId, force: true });
     const videoUrl = (info.value as { videoUrl?: string | null } | null)?.videoUrl;
     if (!videoUrl) throw new Error("the draft's video isn't downloadable");
-    const media = await fetchMedia(videoUrl);
+    // A phone's attachment isn't held to the inline-watch limit: the app stores the file and watching uses the
+    // Files API past it (gemini/client). The sim's download is a stand-in for that upload, so it takes the same size.
+    const media = await fetchMedia(videoUrl, 200 * 1024 * 1024);
     if (!media.ok) throw new Error(`draft download: ${media.reason}`);
     const fileId = await ctx.storage.store(new Blob([media.bytes], { type: media.mimeType }));
     return { messageId: await ctx.runMutation(internal.eval.expertBench.recordDraft, { creatorId: a.creatorId, fileId, mime: media.mimeType, body: a.body }) };

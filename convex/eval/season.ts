@@ -105,6 +105,40 @@ export const start = internalAction({
   },
 });
 
+/**
+ * Stop a season: each creator's state row goes, so their next scheduled step finds nothing and ends (every
+ * living-sim step returns when its state is missing). Their rows stay for reading; the season row records why.
+ */
+export const stop = internalMutation({
+  args: { season: v.string(), why: v.string() },
+  handler: async (ctx, a): Promise<{ stopped: number }> => {
+    const s = await readKey<SeasonState>(ctx, seasonKey(a.season));
+    if (!s) return { stopped: 0 };
+    let stopped = 0;
+    for (const runId of s.runs) {
+      const row = await ctx.db.query("syncState").withIndex("by_key", (q) => q.eq("key", `sim:${runId}:state`)).unique();
+      if (row) { await ctx.db.delete(row._id); stopped++; }
+    }
+    await writeKey(ctx, seasonKey(a.season), { ...s, stopped: { at: Date.now(), why: a.why } });
+    return { stopped };
+  },
+});
+
+/**
+ * Dev only: live trends whose watch failed wait 20 hours to be tried again (scout/trends toWatch). After an
+ * outage (2026-11-12: Gemini had no credit) a season would start with nothing to judge; this clears the wait.
+ */
+export const rewatch = internalMutation({
+  args: {},
+  handler: async (ctx): Promise<{ cleared: number }> => {
+    if (!process.env.ENVIRONMENT_NAME || /prod/i.test(process.env.ENVIRONMENT_NAME)) throw new Error("dev and staging only");
+    const rows = (await ctx.db.query("trends").withIndex("by_status", (q) => q.eq("status", "live")).take(60)) as Doc<"trends">[];
+    let cleared = 0;
+    for (const t of rows.filter((x) => !x.recipe && x.watchedAt)) { await ctx.db.patch(t._id, { watchedAt: undefined }); cleared++; }
+    return { cleared };
+  },
+});
+
 // ------------------------------------------------------------------ the population
 
 type Day = { d: number; snap?: { outProactive?: number; outKinds?: string[]; out?: number; ideasSaved?: number; ideasPassed?: number; ideasPosted?: number; ideasTotal?: number; costUsdLast30m?: number; memory?: { rules?: string[] } }; actor?: { mood: number | null; why: string; action: string; answered: boolean } | null; left?: { d: number; why: string } | null; probes?: Array<{ q: string; a: string; verdict?: { remembers?: number; invented?: string[] } | null }>; jobs?: Record<string, string>; said?: string[] };
