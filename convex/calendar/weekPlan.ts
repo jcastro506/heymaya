@@ -167,6 +167,8 @@ export const draft = internalAction({
     const inp = await ctx.runQuery(internal.calendar.weekPlan.inputsFor, { creatorId: a.creatorId, now });
     if (!inp) return { sent: false, reason: "creator not found" };
     if (inp.alreadyPlanned && !a.force) return { sent: false, reason: "this week is already planned" };
+    // They said no plans (core/routines setWeekPlans): only one they ask for goes out.
+    if (g.creator.weekPlansOffAt && !a.force) return { sent: false, reason: "they turned week plans off" };
     // A weekly plan goes to people who use plans (2026-11-02): Adina got three and booked none, and each one
     // was a text into silence. The first one is part of meeting her; after two weeks, they need to have
     // booked one, or ask ("plan my week" → force).

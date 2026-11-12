@@ -58,6 +58,8 @@ export default defineSchema({
     hushMessageId: v.optional(v.id("messages")),
     /** How often she may text first about her own finds (core/reachOut). Set by them in chat ("text me less"). */
     textFirstPace: v.optional(v.union(v.literal("less"), v.literal("normal"), v.literal("more"))),
+    /** They said no week plans (2026-11-12, core/routines setWeekPlans): the Sunday plan isn't sent; "plan my week" still is. */
+    weekPlansOffAt: v.optional(v.number()),
     /** What she noticed and might text them about (core/editor): one pick a day, or none. */
     noticed: v.optional(v.array(v.object({
       id: v.string(),
