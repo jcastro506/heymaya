@@ -230,6 +230,7 @@ import type * as partnerships_kitPage from "../partnerships/kitPage.js";
 import type * as partnerships_kitSettings from "../partnerships/kitSettings.js";
 import type * as partnerships_kitTools from "../partnerships/kitTools.js";
 import type * as partnerships_mailbox from "../partnerships/mailbox.js";
+import type * as partnerships_pipeline from "../partnerships/pipeline.js";
 import type * as partnerships_pitch from "../partnerships/pitch.js";
 import type * as partnerships_privacy from "../partnerships/privacy.js";
 import type * as partnerships_providerConfig from "../partnerships/providerConfig.js";
@@ -497,6 +498,7 @@ declare const fullApi: ApiFromModules<{
   "partnerships/kitSettings": typeof partnerships_kitSettings;
   "partnerships/kitTools": typeof partnerships_kitTools;
   "partnerships/mailbox": typeof partnerships_mailbox;
+  "partnerships/pipeline": typeof partnerships_pipeline;
   "partnerships/pitch": typeof partnerships_pitch;
   "partnerships/privacy": typeof partnerships_privacy;
   "partnerships/providerConfig": typeof partnerships_providerConfig;

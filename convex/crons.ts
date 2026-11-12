@@ -98,4 +98,6 @@ crons.daily("partnership weekly offer", { hourUTC: 17, minuteUTC: 15 }, internal
 crons.daily("finish lessons", { hourUTC: 15, minuteUTC: 20 }, internal.agent.finish.learnAll, {});
 // A1: each creator's account type from their public profiles, weekly (reads are cached a week).
 crons.daily("account setup check", { hourUTC: 14, minuteUTC: 5 }, internal.account.setup.checkAll, {});
+// The deals pipeline (partnerships/pipeline), weekly for those who turned it on: new brands, follow-ups, drafts only.
+crons.weekly("deals pipeline", { dayOfWeek: "monday", hourUTC: 15, minuteUTC: 15 }, internal.partnerships.pipeline.runAll, {});
 export default crons;
