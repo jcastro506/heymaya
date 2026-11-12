@@ -70,7 +70,7 @@ export const byStripeCustomer = internalQuery({
 export const foundingSeatsTaken = internalQuery({
   args: {},
   handler: async (ctx): Promise<number> => {
-    const rows = (await ctx.db.query("creators").filter((q) => q.eq(q.field("plan.founding"), true)).collect()) as Doc<"creators">[];
+    const rows = (await ctx.db.query("creators").withIndex("by_founding", (q) => q.eq("plan.founding", true)).take(FOUNDING_SEATS * 4)) as Doc<"creators">[];
     return rows.filter((c) => c.plan.stripeSubscriptionId).length;
   },
 });
@@ -167,7 +167,7 @@ export const applyEvent = internalMutation({
 export const seatsLeft = internalQuery({
   args: {},
   handler: async (ctx): Promise<number> => {
-    const rows = (await ctx.db.query("creators").filter((q) => q.eq(q.field("plan.founding"), true)).collect()) as Doc<"creators">[];
+    const rows = (await ctx.db.query("creators").withIndex("by_founding", (q) => q.eq("plan.founding", true)).take(FOUNDING_SEATS * 4)) as Doc<"creators">[];
     return Math.max(0, FOUNDING_SEATS - rows.filter((c) => c.plan.stripeSubscriptionId).length);
   },
 });

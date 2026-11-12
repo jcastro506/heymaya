@@ -197,6 +197,8 @@ export default defineSchema({
     updatedAt: v.optional(v.number()),
   })
     .index("by_stripe_customer", ["plan.stripeCustomerId"])
+    // Founding seats are counted at checkout; a filter scanned every creator row (dossiers included) to count them.
+    .index("by_founding", ["plan.founding"])
     .index("by_clerkUserId", ["clerkUserId"])
     .index("by_share_token", ["shareToken.hash"])
     .index("by_kit_slug", ["kitLink.slug"])

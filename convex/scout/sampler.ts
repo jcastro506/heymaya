@@ -20,6 +20,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { THRESHOLDS } from "../config/thresholds";
 import { drillCheck, faultFor } from "../eval/faults";
+import { spreadDelays, HOURLY_SPREAD_MS } from "../core/fanout";
 
 /**
  * Pure: the health of one pass of reads, or null when nothing was read. Down when at least half
@@ -197,14 +198,36 @@ export const writeBreakouts = internalMutation({
 });
 
 /** The fleet job: sample every distinct tracked account once, fan out to its admirers. */
+/** Accounts per sampler action. A read and its writes take a few seconds; 20 stays far inside the ten-minute limit. */
+export const SAMPLE_BATCH = 20;
+
+const accountV = v.object({ platform: v.union(v.literal("tiktok"), v.literal("instagram")), handle: v.string(), rows: v.array(v.object({ id: v.id("trackedAccounts"), creatorId: v.id("creators") })) });
+
+/** Pure: a list in chunks of `size`. */
+export function chunks<T>(xs: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < xs.length; i += size) out.push(xs.slice(i, i + size));
+  return out;
+}
+
 export const run = internalAction({
   // `creatorId`: only that creator's roster, for the same-day sample after onboarding (day one is a working day).
-  args: { slot: v.optional(v.string()), creatorId: v.optional(v.id("creators")) },
-  handler: async (ctx, args): Promise<{ accounts: number; signals: number; failed: number; gone: number }> => {
+  // `batch`: the accounts one fleet action reads. The fleet run itself only splits the roster: reading every
+  // watched account in one action stopped at the ten-minute limit at about a hundred creators (2026-11-12).
+  args: { slot: v.optional(v.string()), creatorId: v.optional(v.id("creators")), batch: v.optional(v.array(accountV)) },
+  handler: async (ctx, args): Promise<{ accounts: number; signals: number; failed: number; gone: number; batches?: number }> => {
     const now = Date.now();
-    const slot = `sample-${Math.floor(now / (6 * 3_600_000))}`; // one read per account per 6 h bucket
-    const all = await ctx.runQuery(internal.scout.sampler.distinctTracked, {});
-    const accounts = args.creatorId ? all.filter((a) => a.rows.some((r) => r.creatorId === args.creatorId)) : all;
+    const slot = args.slot ?? `sample-${Math.floor(now / (6 * 3_600_000))}`; // one read per account per 6 h bucket
+    if (!args.batch && !args.creatorId) {
+      const all = await ctx.runQuery(internal.scout.sampler.distinctTracked, {});
+      if (all.length > SAMPLE_BATCH) {
+        const parts = chunks(all, SAMPLE_BATCH);
+        const delays = spreadDelays(parts.length, HOURLY_SPREAD_MS);
+        for (let k = 0; k < parts.length; k++) await ctx.scheduler.runAfter(delays[k], internal.scout.sampler.run, { slot, batch: parts[k] });
+        return { accounts: all.length, signals: 0, failed: 0, gone: 0, batches: parts.length };
+      }
+    }
+    const accounts = args.batch ?? (await ctx.runQuery(internal.scout.sampler.distinctTracked, {})).filter((a) => !args.creatorId || a.rows.some((r) => r.creatorId === args.creatorId));
     let signals = 0, failed = 0, gone = 0;
     let firstError = "";
     for (const acct of accounts) {

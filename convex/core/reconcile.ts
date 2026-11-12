@@ -6,7 +6,7 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery, type ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 
@@ -21,13 +21,37 @@ export function compare(vendorCredits: number | null, ledgerCredits: number): { 
   return { ok: Math.abs(delta) <= TOLERANCE, delta, detail: `vendor ${vendorCredits} vs ledger ${ledgerCredits} (${Math.round(delta * 100)}%)` };
 }
 
-export const ledgerCreditsToday = internalQuery({
-  args: { sinceUtcMidnight: v.number() },
-  handler: async (ctx, a): Promise<number> => {
-    const rows = (await ctx.db.query("costEvents").filter((q) => q.and(q.eq(q.field("vendor"), "scrapecreators"), q.gte(q.field("at"), a.sinceUtcMidnight))).collect()) as Doc<"costEvents">[];
-    return rows.reduce((s, r) => s + (r.units ?? 0), 0);
+/**
+ * One page of the ledger since `since`, summed: credits read and OpenRouter spend. Read through the `at` index
+ * in pages: the credit total used to `.filter` the whole costEvents table (every call ever made) and stood at
+ * 26,137 of the 32,000 documents a function may read on dev (2026-11-12); a busy day alone passes it at scale.
+ */
+export const ledgerPage = internalQuery({
+  args: { since: v.number(), cursor: v.union(v.string(), v.null()) },
+  handler: async (ctx, a): Promise<{ credits: number; openRouterUsd: number; cursor: string; done: boolean }> => {
+    const page = await ctx.db.query("costEvents").withIndex("by_at", (q) => q.gte("at", a.since)).paginate({ cursor: a.cursor, numItems: LEDGER_PAGE });
+    const rows = page.page as Doc<"costEvents">[];
+    return {
+      credits: rows.filter((r) => r.vendor === "scrapecreators").reduce((s, r) => s + (r.units ?? 0), 0),
+      openRouterUsd: rows.filter((r) => r.vendor === "openrouter").reduce((s, r) => s + r.costUsd, 0),
+      cursor: page.continueCursor, done: page.isDone,
+    };
   },
 });
+
+export const LEDGER_PAGE = 4000;
+
+/** The ledger since `since`, page by page (an action: no single read holds a busy day). */
+export async function ledgerSince(ctx: ActionCtx, since: number): Promise<{ credits: number; openRouterUsd: number }> {
+  let credits = 0, openRouterUsd = 0, cursor: string | null = null;
+  for (let k = 0; k < 500; k++) {
+    const r: { credits: number; openRouterUsd: number; cursor: string; done: boolean } = await ctx.runQuery(internal.core.reconcile.ledgerPage, { since, cursor });
+    credits += r.credits; openRouterUsd += r.openRouterUsd;
+    if (r.done) break;
+    cursor = r.cursor;
+  }
+  return { credits, openRouterUsd };
+}
 
 export const run = internalAction({
   args: {},
@@ -47,21 +71,14 @@ export const run = internalAction({
     } catch {
       vendor = null;
     }
-    const ledger = await ctx.runQuery(internal.core.reconcile.ledgerCreditsToday, { sinceUtcMidnight: midnight });
+    const ledger = (await ledgerSince(ctx, midnight)).credits;
     const r = compare(vendor, ledger);
     await ctx.runMutation(internal.core.smoke.record, { vendor: "scrapecreators", check: "reconcile", ok: r.ok, detail: r.detail });
     return { ok: r.ok, detail: r.detail };
   },
 });
 
-/** Our ledger's OpenRouter spend in a window (every creator, eval runs included: the key pays for both). */
-export const ledgerOpenRouterSince = internalQuery({
-  args: { since: v.number() },
-  handler: async (ctx, a): Promise<number> => {
-    const rows = (await ctx.db.query("costEvents").withIndex("by_at", (q) => q.gte("at", a.since)).collect()) as Doc<"costEvents">[];
-    return rows.filter((r) => r.vendor === "openrouter").reduce((s, r) => s + r.costUsd, 0);
-  },
-});
+
 
 /**
  * COGS §7: OpenRouter's own bill against our ledger, daily. The key endpoint reports lifetime
@@ -94,7 +111,7 @@ export const openRouter = internalAction({
       return { ok: true, detail: "first reading" };
     }
     const vendorUsd = Math.max(0, usage - prev.usage);
-    const ledgerUsd = await ctx.runQuery(internal.core.reconcile.ledgerOpenRouterSince, { since: prev.at });
+    const ledgerUsd = (await ledgerSince(ctx, prev.at)).openRouterUsd;
     const base = Math.max(vendorUsd, ledgerUsd, 0.01);
     const delta = (vendorUsd - ledgerUsd) / base;
     const ok = Math.abs(delta) <= TOLERANCE || vendorUsd + ledgerUsd < 0.05; // pennies aren't a finding

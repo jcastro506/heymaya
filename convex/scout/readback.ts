@@ -14,13 +14,15 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { THRESHOLDS } from "../config/thresholds";
 import { pairedRows } from "../core/schedule";
 import { addNoticed, type NewCandidate } from "../core/editor";
+import { spreadDelays, HOURLY_SPREAD_MS } from "../core/fanout";
 
 export const WIN_MULTIPLE = 3;
 
 export const pairedCreators = internalQuery({
-  args: {},
-  handler: async (ctx): Promise<Array<{ id: Id<"creators">; handles: { tiktok?: string; instagram?: string } }>> => {
-    return (await pairedRows(ctx)).filter((c) => c.status !== "deleting").map((c) => ({ id: c.creatorId, handles: c.handles }));
+  // `creatorId`: just that one, if they're still paired (runOne checks again when its turn comes).
+  args: { creatorId: v.optional(v.id("creators")) },
+  handler: async (ctx, a): Promise<Array<{ id: Id<"creators">; handles: { tiktok?: string; instagram?: string } }>> => {
+    return (await pairedRows(ctx)).filter((c) => c.status !== "deleting" && (!a.creatorId || c.creatorId === a.creatorId)).map((c) => ({ id: c.creatorId, handles: c.handles }));
   },
 });
 
@@ -90,45 +92,60 @@ export const noticePostRead = internalMutation({
   },
 });
 
+/**
+ * Every six hours, one action per paired creator, spread over the hour (core/fanout, S0). It used to loop every
+ * creator inside one action: a creator's pass reads their posts, watches up to three new ones, scores predictions
+ * and asks the model which idea they made, 30–90 s each, so the ten-minute limit cut it off at about 10–20 people
+ * and everyone after them silently stopped being read (2026-11-12, found while simulating many creators).
+ */
 export const run = internalAction({
   args: {},
-  handler: async (ctx): Promise<{ creators: number; wins: number; failed: number }> => {
+  handler: async (ctx): Promise<{ creators: number }> => {
     const now = Date.now();
     const bucket = `${new Date(now).toISOString().slice(0, 10)}-${Math.floor(new Date(now).getUTCHours() / 6)}`; // one feed read per 6 h slot
     const creators = await ctx.runQuery(internal.scout.readback.pairedCreators, {});
-    let wins = 0, failed = 0;
-    for (const c of creators) {
-      try {
-        for (const platform of enabledPlatforms()) {
-          const handle = c.handles[platform];
-          if (!handle) continue;
-          const r = await ctx.runAction(internal.reads.read.read, { kind: "account.posts", params: { platform, handle, sort: "latest", slot: `readback-${bucket}` }, creatorId: c.id });
-          const posts = Array.isArray(r.value) ? r.value : [];
-          const up = await ctx.runMutation(internal.onboarding.ingest.upsertOwnPosts, { creatorId: c.id, posts, now, handle });
-          // 2026-09-07: her picture of them froze at onboarding; every new post is watched too,
-          // so the person she knows keeps up with the person posting. A failed watch is a card
-          // marked degraded, never a missing post.
-          for (const ownPostId of up.insertedIds.slice(0, 3)) {
-            try { await ctx.runAction(internal.onboarding.watch.watchPost, { creatorId: c.id, ownPostId }); } catch (err) { console.error(`[readback] watch failed: ${String(err).slice(0, 120)}`); }
-            try { await ctx.runAction(internal.agent.postMemory.indexPost, { creatorId: c.id, ownPostId }); } catch (err) { console.error(`[readback] post memory failed: ${String(err).slice(0, 120)}`); }
-            // §24: a viewer's line within the hour of noticing, from the card she just made.
-            try { await ctx.runAction(internal.agent.cadence.sawIt, { creatorId: c.id, ownPostId, now }); } catch (err) { console.error(`[readback] saw-it failed: ${String(err).slice(0, 120)}`); }
-          }
+    const delays = spreadDelays(creators.length, HOURLY_SPREAD_MS);
+    for (let k = 0; k < creators.length; k++) await ctx.scheduler.runAfter(delays[k], internal.scout.readback.runOne, { creatorId: creators[k].id, bucket, now });
+    return { creators: creators.length };
+  },
+});
+
+/** One creator's readback: their new posts read, watched and remembered; wins, predictions and matched ideas. */
+export const runOne = internalAction({
+  args: { creatorId: v.id("creators"), bucket: v.string(), now: v.number() },
+  handler: async (ctx, a): Promise<{ wins: number; failed: boolean }> => {
+    const c = (await ctx.runQuery(internal.scout.readback.pairedCreators, { creatorId: a.creatorId }))[0];
+    if (!c) return { wins: 0, failed: false };
+    const now = a.now;
+    try {
+      for (const platform of enabledPlatforms()) {
+        const handle = c.handles[platform];
+        if (!handle) continue;
+        const r = await ctx.runAction(internal.reads.read.read, { kind: "account.posts", params: { platform, handle, sort: "latest", slot: `readback-${a.bucket}` }, creatorId: c.id });
+        const posts = Array.isArray(r.value) ? r.value : [];
+        const up = await ctx.runMutation(internal.onboarding.ingest.upsertOwnPosts, { creatorId: c.id, posts, now, handle });
+        // 2026-09-07: her picture of them froze at onboarding; every new post is watched too,
+        // so the person she knows keeps up with the person posting. A failed watch is a card
+        // marked degraded, never a missing post.
+        for (const ownPostId of up.insertedIds.slice(0, 3)) {
+          try { await ctx.runAction(internal.onboarding.watch.watchPost, { creatorId: c.id, ownPostId }); } catch (err) { console.error(`[readback] watch failed: ${String(err).slice(0, 120)}`); }
+          try { await ctx.runAction(internal.agent.postMemory.indexPost, { creatorId: c.id, ownPostId }); } catch (err) { console.error(`[readback] post memory failed: ${String(err).slice(0, 120)}`); }
+          // §24: a viewer's line within the hour of noticing, from the card she just made.
+          try { await ctx.runAction(internal.agent.cadence.sawIt, { creatorId: c.id, ownPostId, now }); } catch (err) { console.error(`[readback] saw-it failed: ${String(err).slice(0, 120)}`); }
         }
-        await ctx.runMutation(internal.onboarding.ingest.computeMultiples, { creatorId: c.id });
-        // Avatars for their handles and the accounts they watch, only the ones still missing.
-        try { await ctx.runAction(internal.media.refreshAvatars, { creatorId: c.id }); } catch (err) { console.error(`[readback] avatars: ${String(err).slice(0, 120)}`); }
-        await ctx.runMutation(internal.review.predictions.scoreDue, { creatorId: c.id, now }); // §13.6: the 48 h outcome beside the call
-        const { written } = await ctx.runMutation(internal.scout.readback.writeWins, { creatorId: c.id, now });
-        wins += written;
-        await ctx.runMutation(internal.scout.readback.noticePostRead, { creatorId: c.id, now });
-        // §13.5: did they make one of the ideas? A judgment, per new post, against the last 14 days of ideas.
-        await ctx.runAction(internal.scout.matchPost.run, { creatorId: c.id });
-      } catch (error) {
-        failed += 1;
-        console.error(`[readback] ${c.id}: ${error instanceof Error ? error.message : String(error)}`);
       }
+      await ctx.runMutation(internal.onboarding.ingest.computeMultiples, { creatorId: c.id });
+      // Avatars for their handles and the accounts they watch, only the ones still missing.
+      try { await ctx.runAction(internal.media.refreshAvatars, { creatorId: c.id }); } catch (err) { console.error(`[readback] avatars: ${String(err).slice(0, 120)}`); }
+      await ctx.runMutation(internal.review.predictions.scoreDue, { creatorId: c.id, now }); // §13.6: the 48 h outcome beside the call
+      const { written } = await ctx.runMutation(internal.scout.readback.writeWins, { creatorId: c.id, now });
+      await ctx.runMutation(internal.scout.readback.noticePostRead, { creatorId: c.id, now });
+      // §13.5: did they make one of the ideas? A judgment, per new post, against the last 14 days of ideas.
+      await ctx.runAction(internal.scout.matchPost.run, { creatorId: c.id });
+      return { wins: written, failed: false };
+    } catch (error) {
+      console.error(`[readback] ${c.id}: ${error instanceof Error ? error.message : String(error)}`);
+      return { wins: 0, failed: true };
     }
-    return { creators: creators.length, wins, failed };
   },
 });
