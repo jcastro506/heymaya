@@ -51,6 +51,21 @@ export const FINISH_WATCH_PROMPT = `You are watching AND listening to one short 
 }
 voiceCarriesIt: true when the words are the point and music must stay under them. beatDriven: true when the cuts land on a rhythm or would suit one.`;
 
+/** Pure: their best posts' hashtag habit, capped at two (the median count among their top quarter by multiple). */
+export function hashtagHabit(posts: Array<{ caption: string; multiple?: number | null }>): number {
+  const ranked = posts.filter((p) => typeof p.multiple === "number").sort((a, b) => (b.multiple ?? 0) - (a.multiple ?? 0));
+  const top = ranked.slice(0, Math.max(3, Math.ceil(ranked.length / 4)));
+  if (top.length < 3) return 1;
+  const counts = top.map((p) => (p.caption.match(/#[\p{L}\p{N}_]+/gu) ?? []).length).sort((a, b) => a - b);
+  return Math.min(2, counts[Math.floor(counts.length / 2)]);
+}
+
+/** Pure: a caption with at most `n` hashtags (the first ones), the rest taken out cleanly. */
+export function capHashtags(text: string, n: number): string {
+  let k = 0;
+  return text.replace(/\s*#[\p{L}\p{N}_]+/gu, (m) => (++k <= n ? m : "")).replace(/[ \t]{2,}/g, " ").trim();
+}
+
 export const FINISH_SKILL = `finish
 When: they sent a video they filmed and haven't posted, and they need the caption and the sound. That is the job: finish it with them. Only if their words ask what you think of it (or whether it'll do well) do you also give a read, two lines, the one fix that matters most.
 You have: the card (what you saw and heard in the draft), their own captions and habits (the voice block in your prefix: length, case, emoji, hashtags, their best lines), their past posts' sounds, and sounds the accounts they watch used this week.
@@ -65,7 +80,7 @@ Sounds: one to three, each with why it fits THIS video (the mood, the pace, the 
 - Follow evidence.soundPlan. "over": they'll mute the clip and put a song over it, so suggest SONGS that fit the pace, the cuts and the mood; never "your own audio" or "keep the song on it" (howToUse says where to start it and to mute the original). "voice": their own audio stays; your own audio or a quiet bed under it. "ask": return "sounds": [] (code asks them which they want); still write the captions.
 - Look the sound up before you name it: sound_info gives its name, how many videos use it, and whether it's cleared for business accounts; sound_videos shows whether people are using it now. A sound you did not look up this turn is not named; code removes it.
 - Prefer a sound the accounts they watch are using this week, or one on their own posts that did well, when it fits the video. A sound that doesn't fit the mood is wrong even if it's big.
-- When voiceCarriesIt, their own audio is usually right, or a quiet music bed under it; say so plainly.
+- When voiceCarriesIt, their own audio is usually right, or a quiet music bed under it; say so plainly, with what in the clip makes it right. When it doesn't, "keep it as is" is not an answer: name a sound you looked up (soundCandidates first: what their lane is using this week) and why it fits.
 - If the draft already has a song on it (audioNow music), "keep the song that's already on it" is an option (source "already-in-the-clip"); never call a song "your own audio". "your own audio" means their voice or the real sound of the moment.
 - If a sound is NOT cleared for business accounts, say: fine on a personal account, but not on a business account or a paid post.
 - Instagram: you can't always check Instagram audio. Name the track to search in Reels audio and say to check it's there.
@@ -309,7 +324,8 @@ export const run = internalAction({
     const plan = soundPlan(theirWords, card);
     const burstIds = new Set<string>([...ids, a.messageId].map(String));
     const conversation = g.recent.filter((m) => !burstIds.has(String(m._id))).slice(-10).map((m) => `${m.direction === "in" ? "them" : "you"}: ${clip(m.body, 300)}`);
-    const evidence = { theirWords: clip(theirWords, 900), ...(cards.length > 1 ? { videos: cards.map((x) => ({ video: x.n, card: x.card })) } : { card }), soundPlan: plan, conversation, soundCandidates: candidates, platforms: Object.keys(creator.handles).filter((k) => (creator.handles as Record<string, unknown>)[k]) };
+    const tags = await ctx.runQuery(internal.agent.finish.hashtagBudget, { creatorId: creator._id });
+    const evidence = { hashtags: tags === 0 ? "none: their best posts don't use them" : `at most ${tags}, like their best posts`, theirWords: clip(theirWords, 900), ...(cards.length > 1 ? { videos: cards.map((x) => ({ video: x.n, card: x.card })) } : { card }), soundPlan: plan, conversation, soundCandidates: candidates, platforms: Object.keys(creator.handles).filter((k) => (creator.handles as Record<string, unknown>)[k]) };
     const user = `Evidence (everything you may cite is here or in a lookup you make):\n${JSON.stringify(evidence)}`;
     const inv = await investigate(ctx, { creatorId: creator._id, sourceMessageId: a.messageId, purpose: "finish", prefix, user, budget: { calls: 5, credits: 12, deadlineAt: Date.now() + 60_000 }, temperature: 0.6, maxTokens: 1800 });
     let out = inv.content ? parseJson<Out>(inv.content) : null;
@@ -333,7 +349,9 @@ export const run = internalAction({
       if (verdict.problems.some((p) => p === "unchecked_world_fact" || p === "unsupported_claim")) out = { ...out, platformNote: "" };
       else criticSkipped = true;
     }
-    const captions = out.captions.slice(0, 3).map((c) => ({ text: String(c.text ?? "").slice(0, 400), shape: String(c.shape ?? ""), why: String(c.why ?? "").slice(0, 200) })).filter((c) => c.text.trim());
+    // Hashtags as their best posts use them, by code (season sim, 2026-11-12: five to seven tags a caption, the
+    // grader's commonest "tacky").
+    const captions = out.captions.slice(0, 3).map((c) => ({ text: capHashtags(String(c.text ?? "").slice(0, 400), tags), shape: String(c.shape ?? ""), why: String(c.why ?? "").slice(0, 200) })).filter((c) => c.text.trim());
     const { kept: backed, dropped } = backedSounds(out.sounds, inv.trace);
     // "over": the clip gets muted, so "keep your audio" isn't an answer; "ask": no picks until they say which.
     const kept = plan === "ask" ? [] : plan === "over" ? backed.filter((x) => !keepsTheirAudio(x)) : oneOwnAudio(backed);
@@ -479,5 +497,13 @@ export const learnAll = internalAction({
     const due = await ctx.runQuery(internal.agent.finish.unlearned, { now: Date.now() });
     for (const [i, d] of due.entries()) await ctx.scheduler.runAfter(i * 1_000, internal.agent.finish.learnOne, { finishId: d.finishId });
     return { scheduled: due.length };
+  },
+});
+
+export const hashtagBudget = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<number> => {
+    const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(60)) as Doc<"ownPosts">[];
+    return hashtagHabit(posts.map((p) => ({ caption: p.caption, multiple: p.reachMultiple ?? p.multiple ?? null })));
   },
 });
