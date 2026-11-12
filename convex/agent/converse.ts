@@ -590,7 +590,7 @@ export const run = internalAction({
     // §1 chat is complete: the same rows the Settings controls write, from a sentence.
     if (intent.intent === "manage") {
       let out: { ok: boolean; body: string; buttons?: Array<{ id: string; label: string }> };
-      if (intent.action === "quiet_hours") out = await ctx.runMutation(internal.agent.manage.setQuietHours, { creatorId: creator._id, start: intent.start, end: intent.end });
+      if (intent.action === "quiet_hours") out = await ctx.runMutation(internal.agent.manage.setQuietHours, { creatorId: creator._id, start: intent.start, end: intent.end, said: target.body });
       else if (intent.action === "tone") out = await ctx.runMutation(internal.agent.manage.setTone, { creatorId: creator._id, tone: intent.tone });
       else if (intent.action === "add_admired") out = await ctx.runMutation(internal.agent.manage.addAdmired, { creatorId: creator._id, platform: intent.platform, handle: intent.handle });
       else if (intent.action === "stop_watching") out = await ctx.runMutation(internal.agent.manage.stopWatchingButtons, { creatorId: creator._id, handle: intent.handle });
