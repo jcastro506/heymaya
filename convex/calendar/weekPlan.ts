@@ -146,7 +146,9 @@ export function composeWeek(slots: Slot[], tz: string, fromHistory: boolean, lab
     // One line a post (2026-10-21: long reasons made a wall). A short why, written to them, still rides the line
     // (2026-09-07: no why felt generic); a long one, one with a stat, or one written about them stays in the app.
     const why = s.why && s.why.length <= 70 && !/\d/.test(s.why) && !/\b(she|her|hers|he|his|they|their|the creator)\b/i.test(s.why) ? ` (${s.why})` : "";
-    return `${day}: ${s.hook}${why}${s.experiment ? " (this week's experiment)" : ""}. film ${t(s.film.start)}, post ${t(s.post.at)}`;
+    // The post's day when it isn't the film day (2026-11-12: "film 5 pm, post 4 pm" read as posting before filming).
+    const postDay = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(s.post.at).toLowerCase();
+    return `${day}: ${s.hook}${why}${s.experiment ? " (this week's experiment)" : ""}. film ${t(s.film.start)}, post ${postDay === day ? "" : `${postDay} `}${t(s.post.at)}`;
   });
   const basis = fromHistory ? "post times are when your people are on." : "post times are a guess until i've seen more of your posts.";
   // Separate texts, the way a person would send it: the month (if any), the week, the ask.
