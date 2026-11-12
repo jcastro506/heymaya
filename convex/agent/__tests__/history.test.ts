@@ -10,7 +10,7 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { HISTORY, historySection, patternLines, pickMilestone, standingLine, type Standing } from "../history";
+import { HISTORY, historySection, impliedSaid, patternLines, pickMilestone, standingLine, type Standing } from "../history";
 
 const base = (over: Partial<Standing> = {}): Standing => ({ postsRead: 40, daysTogether: 120, ideasSent: 60, postedFromHer: 9, confidence: "solid", ...over });
 
@@ -52,8 +52,20 @@ describe("milestones", () => {
     const m = pickMilestone({ ...inp, topViews: 1_200_000 })!;
     expect(m.key).toBe("views:1000000");
     expect(m.line).toMatch(/million/);
-    expect(pickMilestone({ ...inp, topViews: 1_200_000, said: ["views:1000000"] })?.key).toBe("views:100000");
-    expect(pickMilestone({ ...inp, topViews: 1_200_000, said: ["views:1000000", "views:100000"] })).toBeNull();
+    // markSaid writes the smaller ones too (impliedSaid), so after a million, nothing smaller follows.
+    expect(pickMilestone({ ...inp, topViews: 1_200_000, said: impliedSaid("views:1000000") })).toBeNull();
+  });
+
+  it("names the post, and says it's the biggest since they started, not ever", () => {
+    const m = pickMilestone({ ...inp, topViews: 120_000, topCaption: "the 5am alarm" })!;
+    expect(m.line).toBe('"the 5am alarm" crossed 100k. your biggest since we started.');
+  });
+
+  it("a million said means 100k never comes after it; followers likewise; other milestones untouched", () => {
+    expect(impliedSaid("views:1000000").sort()).toEqual(["views:100000", "views:1000000"]);
+    expect(impliedSaid("followers:100000").sort()).toEqual(["followers:1000", "followers:10000", "followers:100000"]);
+    expect(impliedSaid("months:6")).toEqual(["months:6"]);
+    expect(pickMilestone({ topViews: 1_200_000, ideasSent: 0, monthsTogether: 0, said: impliedSaid("views:1000000") })).toBeNull();
   });
 
   it("nothing earned means nothing said", () => {
@@ -113,6 +125,20 @@ describe("on rows", () => {
     expect(pickMilestone(exhausted), "nothing left to say").toBeNull();
   });
 
+  it("an old viral post before they joined is not a milestone on their first morning (2026-11-12)", async () => {
+    const t = convexTest(schema, modules);
+    const now = Date.now();
+    const creatorId = await t.run((ctx) => seedCreator(ctx, "old", { createdAt: now - 86_400_000 }));
+    await t.run(async (ctx) => {
+      await ctx.db.insert("ownPosts", { creatorId, platform: "tiktok", postId: "viral", url: "https://tiktok.com/@a/video/1", createTime: now - 300 * 86_400_000, contentType: "video", caption: "the old hit #fyp", hashtags: [], metrics: { views: 1_100_000, likes: 1, comments: 1, shares: 1 }, metricsAsOf: now, source: "scrape" } as never);
+      await ctx.db.insert("ownPosts", { creatorId, platform: "tiktok", postId: "new", url: "https://tiktok.com/@a/video/2", createTime: now - 3_600_000, contentType: "video", caption: "first one since #fyp", hashtags: [], metrics: { views: 900, likes: 1, comments: 1, shares: 1 }, metricsAsOf: now, source: "scrape" } as never);
+    });
+    const mi = (await t.query(internal.agent.history.milestoneInputs, { creatorId }))!;
+    expect(mi.topViews).toBe(900);
+    expect(mi.topCaption).toBe("first one since");
+    expect(pickMilestone(mi)).toBeNull();
+  });
+
   it("every skill sees it, or a new one silently forgets how long she has known them", () => {
     const files = ["opinion", "converse", "profile", "moment"].map((f) => readFileSync(new URL(`../${f}.ts`, import.meta.url), "utf8"))
       .concat([
@@ -121,5 +147,32 @@ describe("on rows", () => {
         readFileSync(new URL("../../onboarding/firstRead.ts", import.meta.url), "utf8"),
       ]);
     for (const src of files) for (const call of src.match(/buildPrefix\(\{[^}]*\}\)/g) ?? []) expect(call, `buildPrefix without history: ${call}`).toMatch(/\bhistory\b/);
+  });
+});
+
+describe("she doesn't ask the same question about the same video every morning (2026-11-12)", async () => {
+  const { slippedCounts, morningReasons } = await import("../cadence");
+  const H = 3_600_000, D = 24 * H;
+  const now = Date.UTC(2026, 10, 7, 15);
+  const block = (id: string, dayAgo: number, extra: Record<string, unknown> = {}) => ({ _id: id as never, kind: "film", title: "film: stretching one chicken breast", start: now - dayAgo * D, end: now - dayAgo * D + H, status: "confirmed", consentAt: now - 10 * D, ...extra });
+  it("counts earlier booked, unfilmed shoots of the same video; filmed or unbooked ones don't count", () => {
+    const today = block("c", 1);
+    const counts = slippedCounts([today], [block("a", 3), block("b", 2), block("f", 4, { filmedAt: 1 }), block("u", 5, { consentAt: undefined }), { ...block("x", 2), title: "film: something else" }, today]);
+    expect(counts.c).toBe(2);
+  });
+  it("the first miss asks to put it back; a repeat asks whether to let it go", () => {
+    const y = block("c", 1);
+    const first = morningReasons({ now, timezone: "UTC", blocks: [y], events: [], milestone: null, streakWeeks: 0, said: [] });
+    expect(first.find((r) => r.kind === "missed")!.text).toMatch(/ask whether to put it back/);
+    const again = morningReasons({ now, timezone: "UTC", blocks: [y], events: [], milestone: null, streakWeeks: 0, said: [], slipped: { c: 2 } });
+    expect(again.find((r) => r.kind === "missed")!.text).toMatch(/slipped 3 times.*let this one go/);
+  });
+});
+
+describe("a brand pitched in the last four weeks isn't pitched again", async () => {
+  const { recentlyPitched, PITCH_AGAIN_AFTER_MS } = await import("../../partnerships/dealScout");
+  it("keeps recent pitches, forgets old ones", () => {
+    const now = 1_800_000_000_000;
+    expect(recentlyPitched([{ brand: "Marriott Bonvoy", at: now - 7 * 86_400_000 }, { brand: "Marriott Bonvoy", at: now - 14 * 86_400_000 }, { brand: "Old", at: now - PITCH_AGAIN_AFTER_MS - 1 }], now)).toEqual(["Marriott Bonvoy"]);
   });
 });

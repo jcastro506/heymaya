@@ -127,6 +127,34 @@ describe("the Sunday plan goes to people who use plans (2026-11-02)", () => {
   });
 });
 
+describe("they said no plans, and she can't promise it without the row (2026-11-12)", () => {
+  it("week_plans off holds the Sunday plan; asking still gets one; on brings it back", async () => {
+    const t = convexTest(schema, modules);
+    vi.useFakeTimers({ now: SUNDAY_6PM, toFake: ["Date"] });
+    const creatorId = await creatorWithIdeas(t);
+    const other = await t.run((ctx) => seedCreator(ctx, "other", { timezone: TZ, channel: { paired: true } }));
+    expect((await t.mutation(internal.core.routines.setWeekPlans, { creatorId, on: false })).ok).toBe(true);
+    const held = await t.action(internal.calendar.weekPlan.draft, { creatorId, now: SUNDAY_6PM });
+    expect(held).toMatchObject({ sent: false, reason: "they turned week plans off" });
+    expect(await t.run((ctx) => ctx.db.query("calendarBlocks").collect()), "nothing written").toHaveLength(0);
+    expect((await t.run((ctx) => ctx.db.get(other)))?.weekPlansOffAt, "cross-tenant: only theirs").toBeUndefined();
+    const asked = await t.action(internal.calendar.weekPlan.draft, { creatorId, now: SUNDAY_6PM, force: true });
+    expect(asked.sent, asked.reason).toBe(true);
+    await t.mutation(internal.core.routines.setWeekPlans, { creatorId, on: true });
+    expect((await t.run((ctx) => ctx.db.get(creatorId)))?.weekPlansOffAt).toBeUndefined();
+  });
+
+  it("pause_texts is the same pause the word 'pause' sets, and resume undoes it", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await creatorWithIdeas(t);
+    await t.mutation(internal.core.routines.setPaused, { creatorId, paused: true });
+    const r = await t.action(internal.calendar.weekPlan.draft, { creatorId, now: SUNDAY_6PM });
+    expect(r).toMatchObject({ sent: false, reason: "they asked her to stop texting first" });
+    await t.mutation(internal.core.routines.setPaused, { creatorId, paused: false });
+    expect((await t.run((ctx) => ctx.db.get(creatorId)))?.messagingPausedAt).toBeUndefined();
+  });
+});
+
 describe("reminders around a booked block", () => {
   async function booked(t: ReturnType<typeof convexTest>, opts: { start: number; quiet?: { start: string; end: string } }) {
     const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { timezone: TZ, channel: { paired: true }, plan: { status: "active", founding: true }, ...(opts.quiet ? { quietHours: opts.quiet } : {}) }));

@@ -21,6 +21,7 @@ import { v } from "convex/values";
 import { internalQuery, type QueryCtx } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
+import { clipWords } from "../lib/clip";
 
 export const HISTORY = {
   /** Below this many read posts she says so and hedges. */
@@ -103,11 +104,13 @@ export const forCreator = internalQuery({
 export interface Milestone { key: string; line: string }
 
 /** Pure. The one milestone worth saying now, or null. Ordered so the biggest wins. */
-export function pickMilestone(input: { topViews: number; ideasSent: number; monthsTogether: number; said: string[] }): Milestone | null {
+export function pickMilestone(input: { topViews: number; topCaption?: string | null; ideasSent: number; monthsTogether: number; said: string[] }): Milestone | null {
   const said = new Set(input.said);
   for (const v of [...HISTORY.viewsMilestones].reverse()) {
     const key = `views:${v}`;
-    if (input.topViews >= v && !said.has(key)) return { key, line: `that one crossed ${v >= 1_000_000 ? "a million" : `${Math.round(v / 1000)}k`}. your biggest yet.` };
+    // Named, so "that one" is never a guess (2026-11-12: she said a million on day one about a year-old post).
+    const which = input.topCaption ? `"${input.topCaption}"` : "that one";
+    if (input.topViews >= v && !said.has(key)) return { key, line: `${which} crossed ${v >= 1_000_000 ? "a million" : `${Math.round(v / 1000)}k`}. your biggest since we started.` };
   }
   for (const m of [...HISTORY.monthsMilestones].reverse()) {
     const key = `months:${m}`;
@@ -123,13 +126,17 @@ export function pickMilestone(input: { topViews: number; ideasSent: number; mont
 export const milestoneInputs = internalQuery({
   // `now` is the caller's clock (the morning runs on the touch's own time); wall clock otherwise.
   args: { creatorId: v.id("creators"), now: v.optional(v.number()) },
-  handler: async (ctx, a): Promise<{ topViews: number; ideasSent: number; monthsTogether: number; said: string[] } | null> => {
+  handler: async (ctx, a): Promise<{ topViews: number; topCaption: string | null; ideasSent: number; monthsTogether: number; said: string[] } | null> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c) return null;
-    const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(200)) as Doc<"ownPosts">[];
+    // Only what they posted since they joined: a milestone is news. An old viral hit fired "that one crossed a
+    // million" on a new creator's first morning, and she had to walk it back (season sim, 2026-11-12).
+    const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("createTime", c.createdAt)).take(200)) as Doc<"ownPosts">[];
+    const top = posts.reduce<Doc<"ownPosts"> | null>((m, p) => (!m || p.metrics.views > m.metrics.views ? p : m), null);
     const ideas = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(300)) as Doc<"ideas">[];
     return {
-      topViews: posts.reduce((m, p) => Math.max(m, p.metrics.views), 0),
+      topViews: top?.metrics.views ?? 0,
+      topCaption: top ? clipWords(top.caption.replace(/#[\p{L}\p{N}_]+/gu, "").replace(/\s+/g, " ").trim(), 60) || null : null,
       ideasSent: ideas.length,
       monthsTogether: Math.floor(((a.now ?? Date.now()) - c.createdAt) / (30 * 86_400_000)),
       said: c.milestonesSaid ?? [],
@@ -137,12 +144,26 @@ export const milestoneInputs = internalQuery({
   },
 });
 
+/** Every count milestone below this many followers is implied by saying this one. */
+const FOLLOWER_STEPS = [1_000, 10_000, 100_000, 1_000_000];
+
+/**
+ * Pure: saying a count milestone says the smaller ones too. Otherwise the next morning announces "that one
+ * crossed 100k" after "a million" (season sim, 2026-11-12: milestones went 1M, then 100k, for the same person).
+ */
+export function impliedSaid(key: string): string[] {
+  const m = /^(views|followers):(\d+)$/.exec(key);
+  if (!m) return [key];
+  const steps: readonly number[] = m[1] === "views" ? HISTORY.viewsMilestones : FOLLOWER_STEPS;
+  return [key, ...steps.filter((n) => n < Number(m[2])).map((n) => `${m[1]}:${n}`)];
+}
+
 export const markSaid = internalMutation({
   args: { creatorId: v.id("creators"), key: v.string() },
   handler: async (ctx, a): Promise<null> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c) return null;
-    await ctx.db.patch(a.creatorId, { milestonesSaid: Array.from(new Set([...(c.milestonesSaid ?? []), a.key])), updatedAt: Date.now() });
+    await ctx.db.patch(a.creatorId, { milestonesSaid: Array.from(new Set([...(c.milestonesSaid ?? []), ...impliedSaid(a.key)])), updatedAt: Date.now() });
     return null;
   },
 });

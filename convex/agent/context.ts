@@ -236,7 +236,7 @@ export type CreatorId = Id<"creators">;
 export function textingSection(c: Doc<"creators">): string {
   const pace = { less: "less: your own finds every few days at most", normal: "normal: your own finds about once a day at most", more: "more: up to twice a day" }[c.textFirstPace ?? "normal"];
   const list = (c.routines ?? []).map((r) => `- ${describeRoutine(r)} (id ${r.id})`).join("\n");
-  return `# Texting them first\nPace they chose: ${pace}. Most days you start one text or none; their routines below always run.\nTheir routines: ${list ? `\n${list}` : "none. If they ask for something regular (\"every morning send me…\"), save it with routine_add."}`;
+  return `# Texting them first\nPace they chose: ${pace}. Most days you start one text or none; their routines below always run.\nSunday week plan: ${c.weekPlansOffAt ? "OFF (they said no plans; only when they ask)" : "on"}.\nTheir routines: ${list ? `\n${list}` : "none. If they ask for something regular (\"every morning send me…\"), save it with routine_add."}\nWhen they ask you to stop or change something you do, change it with a tool (texting_pace, week_plans, pause_texts, routine_stop) in the same turn. Never promise a change you didn't make.`;
 }
 
 export function planSection(c: Doc<"creators">): string {

@@ -12,7 +12,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { localHourMinute } from "../scout/gate";
 import { dayKeyInZone } from "./cadence";
 import { pairedRows } from "./schedule";
-import { pausedByThem } from "./paused";
+import { pausedByThem, statusAfterLegacyPause } from "./paused";
 import { buildPrefix } from "../agent/context";
 import { investigate } from "../agent/investigate";
 import { critique, tooLong } from "../agent/critic";
@@ -92,6 +92,37 @@ export const setPace = internalMutation({
     await ctx.db.patch(c._id, { textFirstPace: a.pace, updatedAt: Date.now() });
     const said = { less: "her own finds at most every few days", normal: "her own finds at most once a day", more: "her own finds up to twice a day" }[a.pace];
     return { ok: true, body: `set: ${said}. routines they asked for and their own shoots are unchanged` };
+  },
+});
+
+/**
+ * Week plans on or off (2026-11-12). A season sim found her promising "no more plans" five times while the
+ * Sunday plan kept going out: nothing she could change stopped it. Off holds the plan job (calendar/weekPlan);
+ * asking for one ("plan my week", week_replan) still works.
+ */
+export const setWeekPlans = internalMutation({
+  args: { creatorId: v.id("creators"), on: v.boolean() },
+  handler: async (ctx, a): Promise<{ ok: boolean; body: string }> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!c) return { ok: false, body: "no account" };
+    await ctx.db.patch(c._id, { weekPlansOffAt: a.on ? undefined : Date.now(), updatedAt: Date.now() });
+    return { ok: true, body: a.on ? "set: the week plan comes on Sundays again" : "set: no more week plans unless they ask for one" };
+  },
+});
+
+/**
+ * Pause or resume her texting first, from their own words ("pause this", "go quiet for a bit"). The same field
+ * the exact "pause"/"stop" command sets (agent/commands), so every door agrees: a promise to go quiet is a row.
+ */
+export const setPaused = internalMutation({
+  args: { creatorId: v.id("creators"), paused: v.boolean() },
+  handler: async (ctx, a): Promise<{ ok: boolean; body: string }> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!c) return { ok: false, body: "no account" };
+    const now = Date.now();
+    if (a.paused) await ctx.db.patch(c._id, { messagingPausedAt: c.messagingPausedAt ?? now, updatedAt: now });
+    else await ctx.db.patch(c._id, { messagingPausedAt: undefined, ...(c.plan.status === "paused" ? { plan: { ...c.plan, status: statusAfterLegacyPause(c.plan, now) } } : {}), updatedAt: now });
+    return { ok: true, body: a.paused ? "paused: you won't text first until they say resume; replies still flow" : "resumed: you text first again" };
   },
 });
 

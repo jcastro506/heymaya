@@ -8,7 +8,7 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalQuery } from "../_generated/server";
+import { internalAction, internalQuery, type ActionCtx } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -35,10 +35,34 @@ const WEEK_MS = 7 * 86_400_000;
 /** No Sunday review before this many days together: there is no week to review. */
 export const MIN_DAYS_BEFORE_REVIEW = 5;
 
+export const EXPERIMENT_FIT_PROMPT = `A content creator's assistant wants to give them this experiment for next week. Below are their standing rules and what the assistant knows they said about what they want. Does the experiment go against any of it (by meaning: a views target when they said they aren't chasing views, a format they ruled out)? Answer only "yes" or "no".`;
+
+/** Their recent words to her: a "stop chasing views" lives in a message as often as in a rule. */
+export const recentWords = internalQuery({
+  args: { creatorId: v.id("creators"), since: v.number() },
+  handler: async (ctx, a): Promise<string[]> => {
+    const rows = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId).gte("ts", a.since)).order("desc").take(60)) as Doc<"messages">[];
+    return rows.filter((m) => m.direction === "in" && (m.kind ?? "inbound") === "inbound").map((m) => m.body.slice(0, 200)).slice(0, 25);
+  },
+});
+
+async function experimentFits(ctx: ActionCtx, creatorId: Id<"creators">, experiment: string, directives: string[], personal: string): Promise<boolean> {
+  if (!experiment.trim()) return true;
+  const said = await ctx.runQuery(internal.review.weekly.recentWords, { creatorId, since: Date.now() - 30 * 86_400_000 });
+  if (!directives.length && !said.length && !personal.trim()) return true;
+  const r = await callModel(ctx, { creatorId, purpose: "experiment_fit", model: REGISTRY.screener.primary, temperature: 0, maxTokens: 3, apiKey: process.env.OPENROUTER_API_KEY ?? "", messages: [
+    { role: "system", content: EXPERIMENT_FIT_PROMPT },
+    { role: "user", content: `Experiment: ${experiment.slice(0, 200)}\n\nTheir rules:\n${directives.map((d) => `- ${d}`).join("\n") || "none"}\n\nWhat they've said lately (newest first):\n${said.map((x) => `- ${x}`).join("\n") || "nothing"}\n\nWhat she knows about them:\n${personal.slice(0, 1500) || "nothing"}` },
+  ] });
+  // A screen that couldn't answer keeps the experiment (the review already saw the rules): never silence on a hiccup.
+  if (!r.ok) return true;
+  return !r.content.trim().toLowerCase().startsWith("yes");
+}
+
 export const WEEKLY_REVIEW_SKILL = `weekly-review
 Send it the way a person texts: two or three short texts, a line containing only --- between them inside "message"; the question, if any, is the last text on its own.
 When: Sunday. You are telling them what happened this week and why, in under 900 characters, no bullets, no headers, like a text from someone who watched every post.
-Order: (1) the week in one line with a number they were given (posts, median multiple); (2) the one thing that most explains it, from the cards and numbers, not from theory; (3) LIKED vs WORKED: which ideas they took and which posts actually performed, and if those disagree say so plainly, because results beat taste and you owe them that; (4) last week's experiment: held, failed, or unknown, with the number; (5) one new experiment for next week, small enough to do in one post; (6) if you have a scored prediction record, one honest line on how your calls have been running. (7) The pulse tells you how they've been with you this week, read from what they did, never from asking. If it is cooling or silent, end with ONE specific question about their content that a reply would answer in a sentence (which of two hooks, whether a post is still planned); never ask how they feel about you, whether they'd miss you, or whether anything was useless. If warm or steady, no question unless one is genuinely useful. (8) If "growth" is present, one line on whether the plan is working: posts in lane vs out, their multiples, follows and the follower delta where you have them; if it says due, revise the plan out loud (keep, widen, switch) with those numbers.
+Order: (1) the week in one line with a number they were given (posts, median multiple); (2) the one thing that most explains it, from the cards and numbers, not from theory; (3) LIKED vs WORKED: which ideas they took and which posts actually performed, and if those disagree say so plainly, because results beat taste and you owe them that; (4) last week's experiment: held, failed, or unknown, with the number; (5) one new experiment for next week, small enough to do in one post, measured by something they care about (a views or follower target only if they want growth; if they've said they aren't chasing numbers, measure by whether they made it, or by saves or comments) and never against anything they told you; (6) if you have a scored prediction record, one honest line on how your calls have been running. (7) The pulse tells you how they've been with you this week, read from what they did, never from asking. If it is cooling or silent, end with ONE specific question about their content that a reply would answer in a sentence (which of two hooks, whether a post is still planned); never ask how they feel about you, whether they'd miss you, or whether anything was useless. If warm or steady, no question unless one is genuinely useful. (8) If "growth" is present, one line on whether the plan is working: posts in lane vs out, their multiples, follows and the follower delta where you have them; if it says due, revise the plan out loud (keep, widen, switch) with those numbers.
 The rung is a computed fact you were given. You may disagree with it, but then say why in "rungOverride".
 Never invent a metric. If the week is thin (under three posts with a 48 h sample), say so and make the review about the one thing you can see.
 Output ONLY JSON:
@@ -190,7 +214,10 @@ export const run = internalAction({
 
     const produced = producedStamp(spec.primary);
     const ev = (["held", "failed", "unknown", "none"] as const).includes(out.experimentVerdict as never) ? (out.experimentVerdict as "held" | "failed" | "unknown" | "none") : "none";
-    await ctx.runMutation(internal.review.weekly.finish, { creatorId: a.creatorId, experimentVerdict: ev, newExperiment: out.newExperiment ?? "", rungOverride: out.rungOverride && out.rungOverride.rung !== inp.rung.rung ? { rung: String(out.rungOverride.rung), why: String(out.rungOverride.why ?? "").slice(0, 120) } : undefined, rung: inp.rung.rung });
+    // The experiment goes into next week's plan word for word, unchecked (2026-11-12: "beat 62k" four Sundays running
+    // after they said four times they weren't chasing views). One cheap screen against what they told her.
+    const newExperiment = await experimentFits(ctx, a.creatorId, out.newExperiment ?? "", inp.directives.map((d) => d.verbatim), inp.personal) ? (out.newExperiment ?? "") : "";
+    await ctx.runMutation(internal.review.weekly.finish, { creatorId: a.creatorId, experimentVerdict: ev, newExperiment, rungOverride: out.rungOverride && out.rungOverride.rung !== inp.rung.rung ? { rung: String(out.rungOverride.rung), why: String(out.rungOverride.why ?? "").slice(0, 120) } : undefined, rung: inp.rung.rung });
     const weekKey = new Date(now).toISOString().slice(0, 10);
     // One Sunday text, not two (2026-10-12): the review opens next week's plan. If the week can't be planned
     // (nothing to plan with, no free time), the review goes on its own, as before.

@@ -31,6 +31,17 @@ const WEEKDAY: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4
 /** Sunday, on their clock, after the review has had its hour. */
 export const PLAN_HOUR_LOCAL = 18;
 
+/** Pure: per idea, how many earlier weeks' plans put it on a film block that was never filmed (withdrawn plans, deleted, aren't passed in). */
+export function skippedPlans(blocks: Array<{ ideaId: string | null; planKey: string | null; kind: string; filmed: boolean }>, thisKey: string): Map<string, number> {
+  const filmed = new Set(blocks.filter((b) => b.filmed && b.ideaId).map((b) => b.ideaId!));
+  const weeks = new Map<string, Set<string>>();
+  for (const b of blocks) {
+    if (!b.ideaId || !b.planKey || b.planKey === thisKey || b.kind !== "film" || filmed.has(b.ideaId)) continue;
+    weeks.set(b.ideaId, (weeks.get(b.ideaId) ?? new Set()).add(b.planKey));
+  }
+  return new Map([...weeks].map(([id, keys]) => [id, keys.size]));
+}
+
 export const inputsFor = internalQuery({
   args: { creatorId: v.id("creators"), now: v.number() },
   handler: async (ctx, a) => {
@@ -45,6 +56,10 @@ export const inputsFor = internalQuery({
     const blocks = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("start", a.now - 86_400_000)).take(200)) as Doc<"calendarBlocks">[];
     const ideas = (await ctx.db.query("ideas").withIndex("by_creator_status", (q) => q.eq("creatorId", a.creatorId).eq("status", "sent")).order("desc").take(40)) as Doc<"ideas">[];
     const hearted = (await ctx.db.query("ideas").withIndex("by_creator_status", (q) => q.eq("creatorId", a.creatorId).eq("status", "hearted")).order("desc").take(40)) as Doc<"ideas">[];
+    // Earlier weeks' plans each idea sat in without being filmed (planning.pickIdeas leaves the stale ones out).
+    const past = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("start", a.now - 60 * 86_400_000).lt("start", a.now - 86_400_000)).take(400)) as Doc<"calendarBlocks">[];
+    const thisKey = planKeyFor(a.now, tz);
+    const skipped = skippedPlans(past.filter((b) => b.status !== "deleted").map((b) => ({ ideaId: b.ideaId ? String(b.ideaId) : null, planKey: b.planKey ?? null, kind: b.kind, filmed: Boolean(b.filmedAt) })), thisKey);
     const habits = await habitsFor(ctx, creator, a.now);
     const experiment = creator.experiments.filter((e) => !(e as { result?: string }).result).slice(-1)[0]?.text ?? null;
     const medianCut = dossier?.fingerprint?.medianCutSeconds;
@@ -73,6 +88,7 @@ export const inputsFor = internalQuery({
         status: i.savedAt ? "saved" : i.status,
         savedAt: i.savedAt ?? null,
         sentAt: i.sentAt ?? null,
+        skippedPlans: skipped.get(String(i._id)) ?? 0,
       })),
       experiment,
       alreadyPlanned: blocks.some((b) => b.planKey === planKeyFor(a.now, tz) && b.status !== "deleted"),
@@ -167,6 +183,8 @@ export const draft = internalAction({
     const inp = await ctx.runQuery(internal.calendar.weekPlan.inputsFor, { creatorId: a.creatorId, now });
     if (!inp) return { sent: false, reason: "creator not found" };
     if (inp.alreadyPlanned && !a.force) return { sent: false, reason: "this week is already planned" };
+    // They said no plans (core/routines setWeekPlans): only one they ask for goes out.
+    if (g.creator.weekPlansOffAt && !a.force) return { sent: false, reason: "they turned week plans off" };
     // A weekly plan goes to people who use plans (2026-11-02): Adina got three and booked none, and each one
     // was a text into silence. The first one is part of meeting her; after two weeks, they need to have
     // booked one, or ask ("plan my week" → force).
