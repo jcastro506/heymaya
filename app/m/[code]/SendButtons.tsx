@@ -1,18 +1,6 @@
 "use client";
 import { useEffect } from "react";
-import { ConvexHttpClient } from "convex/browser";
-import { api } from "@/convex/_generated/api";
-
-/**
- * Tell Maya the pitch is on its way (partnerships/pipeline.opened): the brand counts as contacted and the follow-up
- * clock starts. From the browser on purpose: a link preview fetches the page but runs no script, so only a person
- * opening it counts. Waits at most a moment, then Gmail opens regardless.
- */
-async function recordOpened(code: string): Promise<void> {
-  const url = process.env.NEXT_PUBLIC_CONVEX_URL;
-  if (!url) return;
-  await Promise.race([new ConvexHttpClient(url).mutation(api.partnerships.pipeline.opened, { code }).catch(() => undefined), new Promise((r) => setTimeout(r, 700))]);
-}
+import { recordPitchOpened } from "@/lib/pitchOpened";
 
 const q = (s: string) => encodeURIComponent(s);
 
@@ -33,7 +21,7 @@ export function gmailLinks(to: string, subject: string, body: string) {
 export function OpenInGmail({ to, subject, body, code }: { to: string; subject: string; body: string; code: string }) {
   const links = gmailLinks(to, subject, body);
   const go = async () => {
-    await recordOpened(code);
+    await recordPitchOpened(code);
     const ua = navigator.userAgent;
     if (/iPhone|iPad|iPod/i.test(ua)) {
       window.location.href = links.ios;
