@@ -50,6 +50,21 @@ export function clashReason(hit: { id: string; kind: string; title: string; star
 }
 
 /** A write they asked for is done at once and confirmed by the caller in one line. */
+/**
+ * Did her last text before their message raise a conflict? Then their go-ahead can carry overlapOk or quietOk.
+ * Pure-ish: reads the one message before theirs.
+ */
+export const askedBefore = internalQuery({
+  args: { creatorId: v.id("creators"), messageId: v.id("messages") },
+  handler: async (ctx, a): Promise<{ overlap: boolean; quiet: boolean }> => {
+    const m = (await ctx.db.get(a.messageId)) as Doc<"messages"> | null;
+    if (!m || m.creatorId !== a.creatorId) return { overlap: false, quiet: false };
+    const before = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId).lt("ts", m.ts)).order("desc").take(6)) as Doc<"messages">[];
+    const hers = before.filter((x) => x.direction === "out").slice(0, 3).map((x) => x.body.toLowerCase()).join(" ");
+    return { overlap: /overlap|clash|same time as|on top of|double[- ]book|conflicts? with/.test(hers), quiet: /quiet hours/.test(hers) };
+  },
+});
+
 export const write = internalAction({
   args: { creatorId: v.id("creators"), op: v.union(v.literal("block_move"), v.literal("block_drop"), v.literal("block_add")), args: v.any() },
   handler: async (ctx, a): Promise<{ ok: boolean; reason?: string; detail?: string }> => {
@@ -97,6 +112,21 @@ export const write = internalAction({
       const r = await ctx.runAction(internal.calendar.blocks.confirm, { blockId });
       await ctx.runAction(internal.calendar.reminders.scheduleFor, { blockId });
       return { ok: true, detail: `added ${kind} block ${fmt(when.at)} (${minutes} min)${r.ok ? ", on their calendar" : ", saved here (calendar not connected)"}. id ${blockId}` };
+    }
+
+    // Several at once ("cancel everything this week", day sim 2026-11-12: one per call ran out and left the week booked).
+    if (a.op === "block_drop" && Array.isArray(args.blockIds) && args.blockIds.length) {
+      const revs = (args.revs ?? {}) as Record<string, number>;
+      const done: string[] = [], failed: string[] = [];
+      for (const raw of (args.blockIds as unknown[]).slice(0, 40).map(String)) {
+        const one = await ctx.runQuery(internal.calendar.blocks.byId, { blockId: raw as Id<"calendarBlocks"> }).catch(() => null);
+        if (!one || one.creatorId !== a.creatorId) { failed.push(`${raw}: not theirs`); continue; }
+        if (one.status === "deleted") continue;
+        const r = await ctx.runAction(internal.calendar.blocks.remove, { blockId: one._id, ...(raw in revs ? { expectedRev: revs[raw] } : {}) });
+        if (r.ok) done.push(`${one.kind} ${fmt(one.start)}`); else failed.push(`${one.kind} ${fmt(one.start)}: ${r.reason ?? "could not drop"}`);
+      }
+      if (!done.length) return { ok: false, reason: failed.join("; ") || "nothing to drop" };
+      return { ok: true, detail: `dropped ${done.length}: ${done.join(", ")}${failed.length ? `. not dropped: ${failed.join("; ")}` : ""}` };
     }
 
     const blockId = String(args.blockId ?? "") as Id<"calendarBlocks">;
