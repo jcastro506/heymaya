@@ -255,6 +255,7 @@ import type * as scout_roster from "../scout/roster.js";
 import type * as scout_sampler from "../scout/sampler.js";
 import type * as scout_scout from "../scout/scout.js";
 import type * as scout_sounds from "../scout/sounds.js";
+import type * as scout_stock from "../scout/stock.js";
 import type * as scout_sweep from "../scout/sweep.js";
 import type * as scout_trends from "../scout/trends.js";
 import type * as share from "../share.js";
@@ -520,6 +521,7 @@ declare const fullApi: ApiFromModules<{
   "scout/sampler": typeof scout_sampler;
   "scout/scout": typeof scout_scout;
   "scout/sounds": typeof scout_sounds;
+  "scout/stock": typeof scout_stock;
   "scout/sweep": typeof scout_sweep;
   "scout/trends": typeof scout_trends;
   share: typeof share;
