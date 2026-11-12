@@ -5,7 +5,8 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { risingSounds } from "../sounds";
+import { OBS_PAGE, risingSounds } from "../sounds";
+import { laneSounds } from "../trends";
 
 describe("sounds", () => {
   it("groups by sound and keeps only sounds used by two or more accounts", () => {
@@ -34,5 +35,29 @@ describe("sounds", () => {
     const sounds = g!.candidates.filter((s) => s.kind === "sound");
     expect(sounds.map((s) => s.clipId)).toEqual(["s1"]);
     expect(g!.tasteDropped.some((d) => d.why.includes("sound not rising"))).toBe(true);
+  });
+
+  it("reads the week in pages, so a week bigger than one function may read still counts every sound (2026-11-12)", async () => {
+    const t = convexTest(schema, modules);
+    const now = Date.now();
+    const n = OBS_PAGE + 40;
+    await t.run(async (ctx) => {
+      for (let i = 0; i < n; i++) {
+        await ctx.db.insert("observations", { platform: "tiktok", postId: `p${i}`, authorHandle: `acct${i % 3}`, url: `https://www.tiktok.com/@acct${i % 3}/video/${i}`, createTime: now - 3_600_000, sampledAt: now - 60_000 - i, ageHours: 1, views: 100 + i, likes: 0, comments: 0, shares: 0, keywords: ["running"], source: "test", ...(i % 2 ? { clipId: i % 4 === 1 ? "hot" : "other" } : {}) });
+      }
+      // Older than a week: not this week's sound.
+      await ctx.db.insert("observations", { platform: "tiktok", postId: "old", authorHandle: "z", url: "https://www.tiktok.com/@z/video/0", createTime: now - 9e8, sampledAt: now - 8 * 86_400_000, ageHours: 1, views: 1, likes: 0, comments: 0, shares: 0, keywords: [], source: "test", clipId: "hot" });
+    });
+    const first = await t.query(internal.scout.sounds.observationPage, { since: now - 7 * 86_400_000, cursor: null });
+    expect(first.done).toBe(false);
+    const second = await t.query(internal.scout.sounds.observationPage, { since: now - 7 * 86_400_000, cursor: first.cursor });
+    expect(second.done).toBe(true);
+    const rows = [...first.rows, ...second.rows];
+    // Every observation with a sound, none without, none from last week.
+    expect(rows).toHaveLength(n / 2);
+    expect(rows.some((r) => r.authorHandle === "z")).toBe(false);
+    const lane = laneSounds(rows);
+    expect(new Set(lane.map((p) => p.sound?.clipId))).toEqual(new Set(["hot", "other"]));
+    expect(lane.every((p) => p.source === "lane" && p.postedAt === now - 3_600_000)).toBe(true);
   });
 });
