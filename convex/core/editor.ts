@@ -242,7 +242,11 @@ export const decide = internalMutation({
 export const afterSent = internalMutation({
   args: { creatorId: v.id("creators"), messageId: v.id("messages"), onSent: v.any(), now: v.number() },
   handler: async (ctx, a): Promise<null> => {
-    const o = (a.onSent ?? {}) as { ideaId?: Id<"ideas">; unseen?: Id<"ideas">[]; steps?: Array<"first_scout" | "first_calendar_or_worth_seeing"> };
+    const o = (a.onSent ?? {}) as { ideaId?: Id<"ideas">; unseen?: Id<"ideas">[]; steps?: Array<"first_scout" | "first_calendar_or_worth_seeing">; dealBrands?: string[] };
+    if (o.dealBrands?.length) {
+      const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+      if (c) await ctx.db.patch(a.creatorId, { dealBrandsSaid: [...o.dealBrands.map((brand) => ({ brand, at: a.now })), ...(c.dealBrandsSaid ?? [])].slice(0, 40) });
+    }
     if (o.ideaId) await ctx.runMutation(internal.scout.scout.linkIdeaMessage, { ideaId: o.ideaId, messageId: a.messageId, sentAt: a.now });
     if (o.unseen?.length) await ctx.runMutation(internal.core.unseen.markSurfaced, { creatorId: a.creatorId, ids: o.unseen, now: a.now });
     for (const step of o.steps ?? []) await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: a.creatorId, step });

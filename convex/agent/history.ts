@@ -144,12 +144,26 @@ export const milestoneInputs = internalQuery({
   },
 });
 
+/** Every count milestone below this many followers is implied by saying this one. */
+const FOLLOWER_STEPS = [1_000, 10_000, 100_000, 1_000_000];
+
+/**
+ * Pure: saying a count milestone says the smaller ones too. Otherwise the next morning announces "that one
+ * crossed 100k" after "a million" (season sim, 2026-11-12: milestones went 1M, then 100k, for the same person).
+ */
+export function impliedSaid(key: string): string[] {
+  const m = /^(views|followers):(\d+)$/.exec(key);
+  if (!m) return [key];
+  const steps: readonly number[] = m[1] === "views" ? HISTORY.viewsMilestones : FOLLOWER_STEPS;
+  return [key, ...steps.filter((n) => n < Number(m[2])).map((n) => `${m[1]}:${n}`)];
+}
+
 export const markSaid = internalMutation({
   args: { creatorId: v.id("creators"), key: v.string() },
   handler: async (ctx, a): Promise<null> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c) return null;
-    await ctx.db.patch(a.creatorId, { milestonesSaid: Array.from(new Set([...(c.milestonesSaid ?? []), a.key])), updatedAt: Date.now() });
+    await ctx.db.patch(a.creatorId, { milestonesSaid: Array.from(new Set([...(c.milestonesSaid ?? []), ...impliedSaid(a.key)])), updatedAt: Date.now() });
     return null;
   },
 });
