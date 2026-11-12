@@ -442,6 +442,8 @@ export const dayMaya = internalAction({
       await step("editor", () => ctx.runAction(internal.core.editor.pick, { creatorId: id, now }));
       if (a.d === 1) await step("invite", async () => ({ sent: (await ctx.runMutation(internal.scout.firstWeek.inviteOne, { creatorId: id })).invited, reason: "first-week invite" }));
       if (a.d % 7 === 5) await step("taste", () => ctx.runAction(internal.taste.profile.rewrite, { creatorId: id }));
+      // The deals pipeline's Monday run, for anyone who said yes to it (partnerships/pipeline).
+      if (a.d % 7 === 1) await step("dealsPipeline", async () => { const r = await ctx.runAction(internal.partnerships.pipeline.weekly, { creatorId: id, now }); return { sent: (r.drafts ?? 0) > 0, reason: r.reason }; });
     }
     if (a.d % 7 === 6) await step("weekPlan", () => ctx.runAction(internal.calendar.weekPlan.draft, { creatorId: id, now, horizon: "next_week" }));
     if (a.d % 7 === 0) await step("weeklyReview", () => ctx.runAction(internal.review.weekly.run, { creatorId: id }));
