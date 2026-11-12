@@ -691,3 +691,62 @@ describe("Gmail by a link in a text (2026-10-21)", () => {
     expect(fetcher.mock.calls.some(([u]) => String(u).includes("revoke"))).toBe(true);
   });
 });
+
+describe("the deals pipeline (2026-11-12): wide, drafted, never sent by her", async () => {
+  const { dueFollowUps, readyText, PIPELINE } = await import("../pipeline");
+  it("follow-ups fall due after an opened pitch with no reply, under the cap", () => {
+    const now = 1_800_000_000_000;
+    const base = { status: "contacted", followUpCount: 0, lastOutboundAt: now - 6 * 86_400_000, followUpAt: now - 1 };
+    expect(dueFollowUps([{ id: "a", brand: "A", ...base }, { id: "b", brand: "B", ...base, lastInboundAt: now - 1000 }, { id: "c", brand: "C", ...base, followUpCount: 2 }, { id: "d", brand: "D", ...base, followUpAt: now + 1000 }, { id: "e", brand: "E", ...base, status: "replied" }], now).map((x) => x.id)).toEqual(["a"]);
+  });
+  it("the week's text is code's: brands by name, a Gmail link each, nothing when nothing's ready", () => {
+    expect(readyText([])).toBeNull();
+    const t = readyText([{ brand: "Pacefern", link: "https://x/m/1", followUp: false }, { brand: "Solebird", link: "https://x/m/2", followUp: true }])!;
+    expect(t).toMatch(/1 new pitch ready: Pacefern/);
+    expect(t).toMatch(/1 follow-up ready \(Solebird\)/);
+    expect(t).toMatch(/Pacefern: https:\/\/x\/m\/1/);
+    expect(t).not.toMatch(/\bsent\b/);
+  });
+
+  it("consent is their own message, partner plan only; it reaches the slim row; another creator can't use it", async () => {
+    const f = await fixture();
+    const other = await f.t.mutation(internal.core.messages.recordInbound, { creatorId: f.b, surface: "web", body: "yes" });
+    expect((await f.t.mutation(internal.partnerships.pipeline.setConsent, { creatorId: f.a, messageId: other.messageId, on: true })).ok).toBe(false);
+    expect((await f.t.mutation(internal.partnerships.pipeline.setConsent, { creatorId: f.a, messageId: f.source, on: true })).ok).toBe(true);
+    const row = await f.t.run((ctx) => ctx.db.query("schedule").withIndex("by_creator", (q) => q.eq("creatorId", f.a)).unique());
+    expect(row?.dealPipeline).toBe(true);
+    const plain = await f.t.run((ctx) => seedCreator(ctx, "solo-c", { clerkUserId: "u_c", handles: { tiktok: "tt_c" } }));
+    const m = await f.t.mutation(internal.core.messages.recordInbound, { creatorId: plain, surface: "web", body: "yes keep finding brands" });
+    expect((await f.t.mutation(internal.partnerships.pipeline.setConsent, { creatorId: plain, messageId: m.messageId, on: true })).body).toMatch(/aren't on their plan/);
+  });
+
+  it("opening a pitch in Gmail marks the brand contacted and starts the clock, never approves it, counts once; a follow-up opened counts as one", async () => {
+    const f = await fixture();
+    const d1 = await f.draft();
+    const code1 = (await f.t.run((ctx) => ctx.db.get(d1.id)))!.shareCode!;
+    expect((await f.t.mutation(api.partnerships.pipeline.opened, { code: code1 })).ok).toBe(true);
+    expect((await f.t.mutation(api.partnerships.pipeline.opened, { code: code1 })).ok, "once").toBe(false);
+    const after = Draft.parse((await f.t.run((ctx) => ctx.db.get(d1.id)))!.data);
+    expect(after.status, "never approved: she doesn't send").toBe("draft");
+    expect(after.openedAt).toBeDefined();
+    const o = (await f.t.run((ctx) => ctx.db.get(f.opportunityId)))!.data as { status: string; followUpAt: number; followUpCount: number };
+    expect(o.status).toBe("contacted");
+    expect(o.followUpCount).toBe(0);
+    expect(o.followUpAt - Date.now()).toBe(PIPELINE.followUpDays * 86_400_000);
+    const d2 = await f.draft("A quick follow-up with one new idea.");
+    const code2 = (await f.t.run((ctx) => ctx.db.get(d2.id)))!.shareCode!;
+    await f.t.mutation(api.partnerships.pipeline.opened, { code: code2 });
+    expect(((await f.t.run((ctx) => ctx.db.get(f.opportunityId)))!.data as { followUpCount: number }).followUpCount).toBe(1);
+    expect((await f.t.mutation(api.partnerships.pipeline.opened, { code: "0".repeat(24) })).ok).toBe(false);
+  });
+
+  it("the weekly pass only takes people who turned it on, and nobody's eval rows", async () => {
+    const f = await fixture();
+    expect(await f.t.query(internal.partnerships.pipeline.due, {})).toEqual([]);
+    // Paired, as a real user is; the consent write then syncs the slim row (lib/scheduleRow).
+    await f.t.run(async (ctx) => { const c = (await ctx.db.get(f.a))!; await ctx.db.patch(f.a, { channel: { ...c.channel, paired: true } }); });
+    await f.t.mutation(internal.partnerships.pipeline.setConsent, { creatorId: f.a, messageId: f.source, on: true });
+    expect(await f.t.query(internal.partnerships.pipeline.due, {})).toEqual([f.a]);
+    expect((await f.t.action(internal.partnerships.pipeline.weekly, { creatorId: f.b })).reason).toBe("pipeline not on");
+  });
+});

@@ -92,6 +92,8 @@ export const Draft = z.object({
   providerMessageId: z.string().optional(), error: z.string().optional(), createdAt: z.number(),
   /** K1: an approved first pitch waits for the weekday-morning window on their clock, unless they said now. */
   sendAt: z.number().optional(),
+  /** They tapped "Open in Gmail" on its send page (partnerships/pipeline.opened). Never an approval: she doesn't send it. */
+  openedAt: z.number().optional(),
 });
 export type DraftData = z.infer<typeof Draft>;
 export const CLOSED = new Set(["declined", "closed", "suppressed", "completed"]);

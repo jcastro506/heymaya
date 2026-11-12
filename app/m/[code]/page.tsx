@@ -23,7 +23,7 @@ export default async function SendPage({ params }: { params: Promise<{ code: str
         <p className="send-kicker">From Maya</p>
         <h1>Opening your pitch to {d.brand} in Gmail…</h1>
         <p className="send-help">Give it a read and hit send.</p>
-        <OpenInGmail to={d.to} subject={d.subject} body={d.body} />
+        <OpenInGmail to={d.to} subject={d.subject} body={d.body} code={code} />
       </main>
     );
   }

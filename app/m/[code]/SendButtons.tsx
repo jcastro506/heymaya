@@ -1,5 +1,6 @@
 "use client";
 import { useEffect } from "react";
+import { recordPitchOpened } from "@/lib/pitchOpened";
 
 const q = (s: string) => encodeURIComponent(s);
 
@@ -17,9 +18,10 @@ export function gmailLinks(to: string, subject: string, body: string) {
  * email loaded in their Gmail"). On an iPhone without the Gmail app, it falls through to Gmail on the web. The one
  * button is there only if the phone asks first or blocks the jump.
  */
-export function OpenInGmail({ to, subject, body }: { to: string; subject: string; body: string }) {
+export function OpenInGmail({ to, subject, body, code }: { to: string; subject: string; body: string; code: string }) {
   const links = gmailLinks(to, subject, body);
-  const go = () => {
+  const go = async () => {
+    await recordPitchOpened(code);
     const ua = navigator.userAgent;
     if (/iPhone|iPad|iPod/i.test(ua)) {
       window.location.href = links.ios;
@@ -28,6 +30,6 @@ export function OpenInGmail({ to, subject, body }: { to: string; subject: string
     } else if (/Android/i.test(ua)) window.location.href = links.android;
     else window.location.href = links.web;
   };
-  useEffect(() => { go(); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- once, on arrival: the whole point of the link
-  return <button type="button" className="send-primary" onClick={go}>Open in Gmail</button>;
+  useEffect(() => { void go(); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- once, on arrival: the whole point of the link
+  return <button type="button" className="send-primary" onClick={() => void go()}>Open in Gmail</button>;
 }

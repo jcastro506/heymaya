@@ -125,10 +125,11 @@ export const partnerCreators = internalQuery({
   handler: async (ctx): Promise<Id<"creators">[]> => {
     const rows = (await ctx.db.query("schedule").withIndex("by_paired_status", (q) => q.eq("paired", true)).collect()) as Doc<"schedule">[];
     const out: Id<"creators">[] = [];
+    // From schedule rows only (2026-11-12): reading every creator's full row to check a tier passes the read
+    // limit at a few hundred users. The tier is on the slim row (lib/scheduleRow).
     for (const r of rows) {
       if (r.isEval || !["active", "trialing", "comped"].includes(r.status)) continue;
-      const c = (await ctx.db.get(r.creatorId)) as Doc<"creators"> | null;
-      if (c && partnershipsOpen(c)) out.push(c._id);
+      if (partnershipsOpen({ _id: r.creatorId, plan: { status: r.status, tier: r.tier } })) out.push(r.creatorId);
     }
     return out;
   },
