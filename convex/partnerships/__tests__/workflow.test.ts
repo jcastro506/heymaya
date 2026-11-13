@@ -6,7 +6,7 @@ import { api, internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { Draft, MAX_FOLLOW_UPS, Opportunity, applicationCheckIn, followUpEligible, nextFollowUpAt, publicUrl, spentWithoutReply } from "../contracts";
+import { Draft, MAX_FOLLOW_UPS, Opportunity, applicationCheckIn, evidenceText, followUpEligible, nextFollowUpAt, publicUrl, spentWithoutReply } from "../contracts";
 import { mime } from "../delivery";
 import { linksProfile, profileTarget } from "../contracts";
 import { encrypt, _resetEncryptionKeyCache } from "../../lib/encryption";
@@ -775,5 +775,13 @@ describe("the deals pipeline (2026-11-12): wide, drafted, never sent by her", as
     await f.t.mutation(internal.partnerships.pipeline.setConsent, { creatorId: f.a, messageId: f.source, on: true });
     expect(await f.t.query(internal.partnerships.pipeline.due, {})).toEqual([f.a]);
     expect((await f.t.action(internal.partnerships.pipeline.weekly, { creatorId: f.b })).reason).toBe("pipeline not on");
+  });
+});
+
+describe("quotes compare as words, not typography (real deals run 2026-11-13)", () => {
+  it("curly quotes, dashes, ellipses, spacing and markdown marks don't make a real quote fail", () => {
+    expect(evidenceText("Our community is everything to us \u2013 which is why we\u2019ll\u2026")).toBe(evidenceText("our community is everything to us - which is why we'll..."));
+    expect(evidenceText("# Join\n\n**our** creators")).toBe("join our creators");
+    expect(evidenceText("contact@brand.com")).not.toBe(evidenceText("deals@brand.com"));
   });
 });

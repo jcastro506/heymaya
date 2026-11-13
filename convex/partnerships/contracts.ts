@@ -40,7 +40,7 @@ export function hostOf(url: string): string {
 }
 /** Pure: text as compared for a quote: straight quotes, single spaces, lowercase (the words must still all be there). */
 export function evidenceText(s: string): string {
-  return s.replace(/[\u2018\u2019\u201B]/g, "'").replace(/[\u201C\u201D]/g, '"').replace(/[#*_>`]+/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+  return s.replace(/[\u2018\u2019\u201B]/g, "'").replace(/[\u201C\u201D]/g, '"').replace(/[\u2010-\u2015\u2212]/g, "-").replace(/\u2026/g, "...").replace(/[#*_>`]+/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
 }
 /** Pure: the page links this URL as a whole link (never a prefix: "instagram.com/shoe" is not in "instagram.com/shoeco"). */
 export function linksUrl(pageText: string, url: string): boolean {
