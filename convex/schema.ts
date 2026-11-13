@@ -23,6 +23,8 @@ export default defineSchema({
     shareToken: v.optional(v.object({ hash: v.string(), issuedAt: v.number() })),
     /** A1: each platform's account type from their public profile (weekly), for the setup advice. */
     accountTypes: v.optional(v.object({ tiktok: v.optional(v.union(v.literal("personal"), v.literal("creator"), v.literal("business"))), instagram: v.optional(v.union(v.literal("personal"), v.literal("creator"), v.literal("business"))), checkedAt: v.number() })),
+    /** Where their phone says they are (the app, with their permission): a city, never coordinates. Stale after a week. */
+    whereNow: v.optional(v.object({ place: v.string(), at: v.number() })),
     /** scout/local: the last weekly look for what's on near them (where, how many found, and why). */
     localScout: v.optional(v.object({ at: v.number(), place: v.optional(v.string()), found: v.number(), reason: v.string() })),
     /** B6: the public media-kit page's unguessable slug; public numbers only, revocable. */

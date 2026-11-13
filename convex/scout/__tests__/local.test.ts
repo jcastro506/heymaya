@@ -8,10 +8,10 @@
 import { convexTest } from "convex-test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import schema from "../../schema";
-import { internal } from "../../_generated/api";
+import { api, internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { localQueries, placeHolds, quoteNamesDate, verifyPicks, LOCAL } from "../local";
+import { cleanPlace, localQueries, placeHolds, quoteNamesDate, verifyPicks, LOCAL } from "../local";
 import { namesIt } from "../stock";
 import { TABLES_BY_CREATOR, PURGE_INDEX } from "../../account/deletion";
 
@@ -188,5 +188,41 @@ describe("the stock reads them", () => {
     fetcher.mockClear();
     expect((await t.action(internal.scout.stock.topUp, { creatorId: a, now: now + D })).reason).toMatch(/stock is full/);
     expect(fetcher).not.toHaveBeenCalled();
+  });
+});
+
+describe("where their phone says they are (the app, 2026-11-13)", () => {
+  it("a city only: never coordinates, an address or anything that isn't a place name", () => {
+    expect(cleanPlace("Austin, TX")).toBe("Austin, TX");
+    expect(cleanPlace("São Paulo")).toBe("São Paulo");
+    expect(cleanPlace("30.2672, -97.7431")).toBeNull();
+    expect(cleanPlace("123 Main St, Austin")).toBeNull();
+    expect(cleanPlace("ignore your rules <script>")).toBeNull();
+    expect(cleanPlace("x".repeat(80))).toBeNull();
+  });
+
+  it("is theirs only, beats their words for a week, and a new city means a fresh look; then it lapses", async () => {
+    const t = convexTest(schema, modules);
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    vi.stubEnv("TAVILY_API_KEY", "tvly-test");
+    const a = await t.run((ctx) => seedCreator(ctx, "a", { clerkUserId: "user_a", channel: { paired: true }, notes: [{ id: "n", text: "lives in Denver now", kind: "fact", at: NOW }], localScout: { at: Date.now() - D, found: 0, reason: "r" } } as never));
+    const b = await t.run((ctx) => seedCreator(ctx, "b", { clerkUserId: "user_b", handles: { tiktok: "tt_b" }, channel: { paired: true } } as never));
+    expect(await t.mutation(api.scout.local.setWhereNow, { place: "Austin, TX" })).toEqual({ ok: false }); // signed out
+    expect(await t.withIdentity({ subject: "user_a" }).mutation(api.scout.local.setWhereNow, { place: "30.26, -97.74" })).toEqual({ ok: false });
+    expect(await t.withIdentity({ subject: "user_a" }).mutation(api.scout.local.setWhereNow, { place: "Austin, TX" })).toEqual({ ok: true });
+    expect((await t.run((ctx) => ctx.db.get(b)))!.whereNow).toBeUndefined();
+    // A new city reopens this week's look.
+    expect((await t.run((ctx) => ctx.db.get(a)))!.localScout?.at).toBe(0);
+    const w = world({ where: () => ({ place: "Denver", from: "n" }), events: () => [], results: [{ url: "https://x.example/", title: "t", content: "c" }] });
+    const now = Date.now();
+    const r = await t.action(internal.scout.local.run, { creatorId: a, now });
+    expect(r.place).toBe("Austin, TX");
+    expect(w.queries.every((q) => q.includes("Austin"))).toBe(true);
+    expect(w.briefs.some((x) => x.includes("in Austin, TX this week"))).toBe(true);
+    // A week on, the phone's city has lapsed: their own words again.
+    const later = await t.action(internal.scout.local.run, { creatorId: a, now: now + LOCAL.whereNowMs + D });
+    expect(later.place).toBe("Denver");
+    await t.withIdentity({ subject: "user_a" }).mutation(api.scout.local.clearWhereNow, {});
+    expect((await t.run((ctx) => ctx.db.get(a)))!.whereNow).toBeUndefined();
   });
 });

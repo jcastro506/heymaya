@@ -42,6 +42,7 @@ struct OnboardingFlow: View {
       case .connect: ConnectStep(model: model)
       case .watch: WatchStep(model: model)
       case .calendar: CalendarStep(model: model)
+      case .nearby: NearbyStep(model: model)
       case .meet: MeetStep(model: model)
       case .done: DoneStep(paired: model.progress?.paired ?? false) { model.celebrate = false }
       } }
@@ -583,6 +584,49 @@ private struct CalendarStep: View {
     .padding(16)
     .background(RoundedRectangle(cornerRadius: 18).fill(Palette.panel))
     .overlay(RoundedRectangle(cornerRadius: 18).stroke(done ? Palette.ok.opacity(0.5) : Palette.line))
+  }
+}
+
+// MARK: - 6. Nearby (2026-11-13: what's on near them, wherever they are; "while using the app", a city only)
+
+/// The words, kept out of the view so the copy test can read them.
+enum NearbyWords {
+  static let title = "Maya keeps an eye on what's happening near you."
+  static let subtitle = "Markets, races, festivals, openings. She turns the good ones into ideas, wherever you are that week."
+  static let allow = "Allow location"
+  static let city = "She only ever sees your city, never where you are exactly"
+  static let when = "Only while you're using the app"
+  static let later = "No problem. You can turn it on later in Settings."
+}
+
+private struct NearbyStep: View {
+  let model: OnboardingModel
+  @State private var busy = false
+  @State private var problem: String?
+
+  var body: some View {
+    StepFrame(step: .nearby, kicker: "Near you", title: NearbyWords.title, subtitle: NearbyWords.subtitle) {
+      VStack(alignment: .leading, spacing: 8) {
+        Label(NearbyWords.city, systemImage: "building.2")
+        Label(NearbyWords.when, systemImage: "iphone")
+      }
+      .font(MayaFont.caption)
+      .foregroundStyle(Palette.muted)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      Problem(text: problem)
+    } footer: {
+      PrimaryButton(title: NearbyWords.allow, busy: busy) {
+        Task {
+          busy = true
+          let ok = model.preview ? true : await Nearby.shared.ask()
+          busy = false
+          if !ok { problem = NearbyWords.later }
+          model.nearbySeen = true
+        }
+      }
+      Button("Not now") { model.nearbySeen = true }
+        .font(MayaFont.callout).foregroundStyle(Palette.muted)
+    }
   }
 }
 

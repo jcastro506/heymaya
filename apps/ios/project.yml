@@ -66,6 +66,7 @@ targets:
         LSApplicationQueriesSchemes: [sms, tiktok, instagram]
         NSCalendarsFullAccessUsageDescription: Maya puts your filming and posting times on your calendar, around the plans you already have, so you don't have to. She never shares your plans with anyone.
         NSCalendarsUsageDescription: Maya puts the filming sessions you book on your calendar and plans them around your week.
+        NSLocationWhenInUseUsageDescription: Maya looks for markets, races and festivals near you and turns the good ones into ideas. She only ever sees your city.
         CFBundleURLTypes:
           - CFBundleURLName: ai.heymaya.maya
             CFBundleURLSchemes: [maya]

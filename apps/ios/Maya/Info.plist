@@ -45,6 +45,8 @@
 	<string>Maya puts your filming and posting times on your calendar, around the plans you already have, so you don't have to. She never shares your plans with anyone.</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>Maya puts the filming sessions you book on your calendar and plans them around your week.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Maya looks for markets, races and festivals near you and turns the good ones into ideas. She only ever sees your city.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 </dict>

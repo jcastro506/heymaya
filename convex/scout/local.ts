@@ -16,6 +16,8 @@
  */
 import { v } from "convex/values";
 import { internalAction, internalQuery, type ActionCtx, type QueryCtx } from "../_generated/server";
+import { mutation } from "../lib/functions";
+import { creatorForIdentity } from "../core/identity";
 import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -36,6 +38,8 @@ export const LOCAL = {
   searches: 2,
   /** At most this many events kept a week. */
   picks: 3,
+  /** Where the phone said they are counts for this long (a trip doesn't become home). */
+  whereNowMs: 7 * D,
   /** Never twice in this window (the cron is weekly; a retry or a second trigger doesn't spend again). */
   minGapMs: 6 * D,
 } as const;
@@ -122,7 +126,7 @@ export const PICK_PROMPT = `You find things happening near a content creator in 
 
 export const inputs = internalQuery({
   args: { creatorId: v.id("creators"), now: v.number() },
-  handler: async (ctx, a): Promise<{ sources: Array<{ id: string; text: string }>; lane: string; keyword?: string; have: Array<{ url: string; title: string }>; lastAt?: number } | null> => {
+  handler: async (ctx, a): Promise<{ sources: Array<{ id: string; text: string }>; lane: string; keyword?: string; have: Array<{ url: string; title: string }>; lastAt?: number; whereNow?: string } | null> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c || c.plan.status === "deleting") return null;
     const notes = (c.notes ?? []).filter((n) => !n.tombstonedAt && n.kind !== "bit" && (!n.expiresHint || n.expiresHint > a.now));
@@ -139,6 +143,7 @@ export const inputs = internalQuery({
       keyword: row?.keywords?.[0],
       have,
       lastAt: c.localScout?.at,
+      ...(c.whereNow && a.now - c.whereNow.at < LOCAL.whereNowMs ? { whereNow: c.whereNow.place } : {}),
     };
   },
 });
@@ -186,12 +191,16 @@ async function runLocal(ctx: ActionCtx, creatorId: Id<"creators">, now: number, 
     await ctx.runMutation(internal.scout.local.record, { creatorId, now, ...(r.place ? { place: r.place } : {}), reason: r.reason, picks });
     return r;
   };
-  if (!i.sources.length) return await done({ place: null, searched: 0, added: 0, reason: "nothing they've said tells where they live" });
   const apiKey = process.env.OPENROUTER_API_KEY ?? "";
-  const w = await callModel(ctx, { creatorId, purpose: "local_where", model: REGISTRY.screener.primary, temperature: 0, maxTokens: 120, timeoutMs: 20_000, apiKey, messages: [{ role: "system", content: WHERE_PROMPT }, { role: "user", content: JSON.stringify(i.sources) }] });
-  if (!w.ok) return await done({ place: null, searched: 0, added: 0, reason: `where: no answer (${w.reason ?? "model error"})` });
-  const wj = json(w.content);
-  const place = placeHolds(wj.place, wj.from, i.sources);
+  // Where they are, in order: their phone this week (the app, with their permission), then their own words.
+  let place = i.whereNow ?? null;
+  if (!place) {
+    if (!i.sources.length) return await done({ place: null, searched: 0, added: 0, reason: "nothing they've said tells where they live" });
+    const w = await callModel(ctx, { creatorId, purpose: "local_where", model: REGISTRY.screener.primary, temperature: 0, maxTokens: 120, timeoutMs: 20_000, apiKey, messages: [{ role: "system", content: WHERE_PROMPT }, { role: "user", content: JSON.stringify(i.sources) }] });
+    if (!w.ok) return await done({ place: null, searched: 0, added: 0, reason: `where: no answer (${w.reason ?? "model error"})` });
+    const wj = json(w.content);
+    place = placeHolds(wj.place, wj.from, i.sources);
+  }
   if (!place) return await done({ place: null, searched: 0, added: 0, reason: "where they live isn't in their own words yet" });
   const results: Result[] = [];
   let searched = 0;
@@ -204,12 +213,46 @@ async function runLocal(ctx: ActionCtx, creatorId: Id<"creators">, now: number, 
   const today = new Date(now).toISOString().slice(0, 10);
   const p = await callModel(ctx, { creatorId, purpose: "local_pick", model: REGISTRY.writer.primary, temperature: 0.2, maxTokens: 900, timeoutMs: 40_000, apiKey, messages: [
     { role: "system", content: PICK_PROMPT },
-    { role: "user", content: `Today: ${today}. They live in ${place}.\nTheir lane: ${i.lane || "unknown"}\nAlready found (don't repeat): ${i.have.map((h) => h.title).join("; ") || "none"}\n\nSearch results:\n${results.map((r) => `- url: ${r.url}\n  title: ${r.title}\n  text: ${r.excerpt}`).join("\n")}` },
+    { role: "user", content: `Today: ${today}. ${i.whereNow ? `They're in ${place} this week (their phone says so; it may be a trip).` : `They live in ${place}.`}\nTheir lane: ${i.lane || "unknown"}\nAlready found (don't repeat): ${i.have.map((h) => h.title).join("; ") || "none"}\n\nSearch results:\n${results.map((r) => `- url: ${r.url}\n  title: ${r.title}\n  text: ${r.excerpt}`).join("\n")}` },
   ] });
   if (!p.ok) return await done({ place, searched, added: 0, reason: `pick: no answer (${p.reason ?? "model error"})` });
   const { kept, dropped } = verifyPicks(json(p.content).events, results, now, i.have as Array<{ url: string; title: string }>);
   return await done({ place, searched, added: kept.length, reason: kept.length ? `kept ${kept.length}${dropped.length ? `; dropped: ${dropped.join("; ")}` : ""}` : `nothing that fits${dropped.length ? ` (dropped: ${dropped.join("; ")})` : ""}` }, kept);
 }
+
+/** Pure: a city as the phone names it ("Austin, TX"), or null. Plain words only: never coordinates or an address. */
+export function cleanPlace(raw: string): string | null {
+  const p = raw.replace(/\s+/g, " ").trim();
+  if (p.length < 2 || p.length > 60 || /\d/.test(p) || !/^[\p{L}][\p{L}\p{M} .,'’()-]*$/u.test(p)) return null;
+  return p;
+}
+
+/** The app: where their phone says they are, as a city (with their permission; at most daily). */
+export const setWhereNow = mutation({
+  args: { place: v.string() },
+  handler: async (ctx, a): Promise<{ ok: boolean }> => {
+    const c = await creatorForIdentity(ctx);
+    if (!c) return { ok: false };
+    const place = cleanPlace(a.place);
+    if (!place) return { ok: false };
+    const now = Date.now();
+    // A new city mid-week is worth a fresh look (a trip); the same city isn't.
+    const moved = !c.whereNow || c.whereNow.place.toLowerCase() !== place.toLowerCase();
+    await ctx.db.patch(c._id, { whereNow: { place, at: now }, ...(moved && c.localScout ? { localScout: { ...c.localScout, at: 0 } } : {}) });
+    return { ok: true };
+  },
+});
+
+/** The app: they turned location off; forget where the phone said they were. */
+export const clearWhereNow = mutation({
+  args: {},
+  handler: async (ctx): Promise<{ ok: boolean }> => {
+    const c = await creatorForIdentity(ctx);
+    if (!c) return { ok: false };
+    if (c.whereNow) await ctx.db.patch(c._id, { whereNow: undefined });
+    return { ok: true };
+  },
+});
 
 /** Weekly, every paired creator with a dossier, spread over the hour. */
 export const due = internalQuery({
