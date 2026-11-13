@@ -94,6 +94,33 @@ describe("partnership evidence and fit", () => {
     // Still no invented evidence: an excerpt nothing returned is refused, and the refusal says what to cite.
     await expect(f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "shoeco.com", opportunity: { ...base, contactEmail: "hello@shoeco.net", evidence: [site, { ...bio, excerpt: "collabs: boss@shoeco.net" }] } } })).rejects.toThrow(/nothing you read this week.*Cite a url you fetched/);
   });
+  it("real deals run 2026-11-13: a quote read many steps ago, spaced differently, or cited on the wrong page of the same site, still counts; another site never does", async () => {
+    const f = await fixture();
+    const now = Date.now();
+    const contact = { url: "https://panforge.store/pages/contact", excerpt: "Questions?\n\nEmail:   contact@panforge.store  We usually respond in a day.", checkedAt: now - 9000, kind: "extract" };
+    const home = { url: "https://panforge.store/", excerpt: "Panforge makes cast iron. We work with \u201Ccooks with a camera\u201D.", checkedAt: now - 8000, kind: "extract" };
+    const lookalike = { url: "https://panforge-deals.net/", excerpt: "Email: contact@panforge.store", checkedAt: now - 7000, kind: "extract" };
+    for (const r of [contact, home, lookalike]) {
+      const id = await f.t.mutation(internal.partnerships.store.reserveResearch, { creatorId: f.a });
+      await f.t.mutation(internal.partnerships.store.saveResearch, { creatorId: f.a, id, results: [r] });
+    }
+    // Ten more reads of other brands after: the old window (six rows) had forgotten Panforge by now.
+    for (let i = 0; i < 10; i++) {
+      const id = await f.t.mutation(internal.partnerships.store.reserveResearch, { creatorId: f.a });
+      await f.t.mutation(internal.partnerships.store.saveResearch, { creatorId: f.a, id, results: [{ url: `https://other${i}.com/`, excerpt: "other brand", checkedAt: now - 100 + i, kind: "search" }] });
+    }
+    const base = { ...f.input.opportunity, brand: "Panforge" };
+    const saved = await f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "panforge.store", opportunity: { ...base, contactEmail: "contact@panforge.store", evidence: [
+      { ...home, excerpt: "We work with \"cooks with a camera\"" },
+      { url: "https://panforge.store/", excerpt: "Email: contact@panforge.store", checkedAt: now, kind: "extract" },
+    ] } } }) as { id: Id<"partnershipOpportunities"> };
+    const row = await f.t.run(ctx => ctx.db.get(saved.id));
+    expect(Opportunity.parse(row!.data).evidence.map(e => e.url)).toEqual(["https://panforge.store/", "https://panforge.store/pages/contact"]);
+    // Words nobody published, or a quote only a lookalike site carries, are still refused.
+    await expect(f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "panforge.store", opportunity: { ...base, contactEmail: "contact@panforge.store", evidence: [home, { url: "https://panforge.store/", excerpt: "Email: deals@panforge.store", checkedAt: now, kind: "extract" }] } } })).rejects.toThrow(/nothing you read this week/);
+    await expect(f.t.mutation(internal.partnerships.store.change, { creatorId: f.a, sourceMessageId: f.source, operation: "save", input: { brandDomain: "panforge.store", opportunity: { ...base, contactEmail: "contact@panforge.store", evidence: [home, { url: "https://panforge-deals.net/pages/x", excerpt: "Email: contact@panforge.store", checkedAt: now, kind: "extract" }] } } })).rejects.toThrow();
+  });
+
   it("deals sim 2026-09-28: the route is the profile the site links, however the site wrote the link", async () => {
     const f = await fixture();
     const now = Date.now();
