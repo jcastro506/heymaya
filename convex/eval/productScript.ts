@@ -22,6 +22,7 @@ import { dayKeyInZone } from "../core/cadence";
 import { THRESHOLDS } from "../config/thresholds";
 import { CADENCE } from "../agent/cadence";
 import { clip, clipWords } from "../lib/clip";
+import { pausedByThem } from "../core/paused";
 
 export type Role = "follows_through" | "flakes";
 export const roleOf = (i: number): Role => (i % 2 === 0 ? "follows_through" : "flakes");
@@ -73,7 +74,8 @@ export const probe = internalQuery({
     const ideas = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(100)) as Doc<"ideas">[];
     const messages = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId).gte("ts", a.since ?? 0)).order("desc").take(400)) as Doc<"messages">[];
     return {
-      creator: { quietHours: c.quietHours, tone: c.tone, status: c.plan.status, careUntil: c.careUntil ?? null, timezone: c.timezone, notes: (c.notes ?? []).filter((n) => !n.tombstonedAt).map((n) => n.text) },
+      // Their pause is its own field since the stop/resume change (core/paused): it reads as "paused" here.
+      creator: { quietHours: c.quietHours, tone: c.tone, status: pausedByThem(c) ? "paused" : c.plan.status, careUntil: c.careUntil ?? null, timezone: c.timezone, notes: (c.notes ?? []).filter((n) => !n.tombstonedAt).map((n) => n.text) },
       directives: directives.filter((x) => x.active).map((x) => x.verbatim),
       personal: personal.map((x) => x.text),
       events: events.filter((e) => e.status === "active").map((e) => ({ title: e.title, start: e.start })),
@@ -319,7 +321,7 @@ export async function runBeat(env: BeatEnv, beat: string): Promise<Check[]> {
           }
           const moved = await say("tomorrow");
           const p = await probeOf(env);
-          check("rebooked for tomorrow from the offer", p.blocks.some((x) => x.kind === "film" && x.booked && x.status !== "deleted" && x.start > Date.now() && (x.id === b.id || x.ideaId === b.ideaId)), moved);
+          check("rebooked for tomorrow from the offer", p.blocks.some((x) => x.kind === "film" && x.booked && x.status !== "deleted" && x.start > Date.now() && (x.id === b.id || (b.ideaId ? x.ideaId === b.ideaId : x.title.toLowerCase().includes(b.title.toLowerCase().replace(/^film:\s*/, "").replace(/["“”]/g, "").slice(0, 24))))), moved);
         }
       }
       break;
