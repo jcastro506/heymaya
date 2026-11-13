@@ -100,4 +100,6 @@ crons.daily("finish lessons", { hourUTC: 15, minuteUTC: 20 }, internal.agent.fin
 crons.daily("account setup check", { hourUTC: 14, minuteUTC: 5 }, internal.account.setup.checkAll, {});
 // The deals pipeline (partnerships/pipeline), weekly for those who turned it on: new brands, follow-ups, drafts only.
 crons.weekly("deals pipeline", { dayOfWeek: "monday", hourUTC: 15, minuteUTC: 15 }, internal.partnerships.pipeline.runAll, {});
+// The idea stock (scout/stock), daily and on its own: a full stock costs nothing; a low one gets a few fresh ideas.
+crons.daily("idea stock", { hourUTC: 14, minuteUTC: 45 }, internal.scout.stock.runAll, {});
 export default crons;

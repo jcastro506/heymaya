@@ -77,3 +77,15 @@ describe("topping up", () => {
     expect((await t.run((ctx) => ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", b)).collect()))).toHaveLength(6);
   });
 });
+
+describe("the stock has its own daily job (2026-11-12: it only ran inside the plan, which stops for non-planners)", () => {
+  it("schedules one top-up per paired creator with a dossier, nobody else", async () => {
+    const t = convexTest(schema, modules);
+    const a = await t.run((ctx) => seedCreator(ctx, "a", { channel: { paired: true }, dossier: { keywords: ["x"] } }));
+    await t.run((ctx) => seedCreator(ctx, "b", { clerkUserId: "u_b", handles: { tiktok: "tt_b" }, channel: { paired: false }, dossier: { keywords: ["x"] } }));
+    const r = await t.action(internal.scout.stock.runAll, {});
+    expect(r.creators).toBe(1);
+    const jobs = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
+    expect(jobs.filter((j) => j.name.includes("stock")).map((j) => String((j.args[0] as { creatorId: string }).creatorId))).toEqual([a]);
+  });
+});
