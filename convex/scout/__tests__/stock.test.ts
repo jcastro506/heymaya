@@ -117,6 +117,30 @@ describe("topping up", () => {
     expect(brief).not.toContain("b's");
     expect(brief.indexOf("Their life right now")).toBeLessThan(brief.indexOf("Holidays coming up"));
   });
+
+  it("after the move, what stays true reaches the brief for six weeks, then doesn't (horizon sim 2026-11-13)", async () => {
+    const t = convexTest(schema, modules);
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    const now = Date.now();
+    const a = await t.run((ctx) => seedCreator(ctx, "a", { channel: { paired: true }, notes: [
+      { id: "m", text: "moving to Denver in a week", kind: "life", at: now - 30 * 86_400_000, expiresHint: now - 86_400_000, after: "lives in Denver now" },
+      { id: "old", text: "an old move's leftover", kind: "life", at: 1, expiresHint: 2 },
+    ] }));
+    await t.mutation(internal.agent.consolidate.consolidateOne, { creatorId: a, now });
+    // An after-note from long ago stays a fact in the prefix but is not "their life right now".
+    await t.run(async (ctx) => {
+      const c = (await ctx.db.get(a))!;
+      await ctx.db.patch(a, { notes: [...(c.notes ?? []), { id: "z_after", text: "lives in Austin now", kind: "fact", at: now - 60 * 86_400_000 }] });
+    });
+    const fetcher = vi.fn(async (_u: unknown, _init?: unknown) => reply([{ hook: "first grocery run in a new city", why: "the move" }]));
+    vi.stubGlobal("fetch", fetcher);
+    await t.action(internal.scout.stock.topUp, { creatorId: a, now });
+    const brief = (JSON.parse(String((fetcher.mock.calls[0][1] as { body: string }).body)) as { messages: Array<{ role: string; content: string }> }).messages.find((m) => m.role === "user")!.content;
+    const life = brief.slice(brief.indexOf("Their life right now"), brief.indexOf("Holidays coming up"));
+    expect(life).toContain("lives in Denver now");
+    expect(life).not.toContain("moving to Denver in a week");
+    expect(life).not.toContain("Austin");
+  });
 });
 
 describe("the stock has its own daily job (2026-11-12: it only ran inside the plan, which stops for non-planners)", () => {

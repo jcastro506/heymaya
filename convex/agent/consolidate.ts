@@ -14,6 +14,10 @@ import { captureStyle } from "./personalHistory";
 import { ensureSeparated } from "../taste/separation";
 import { allRows } from "../core/schedule";
 
+/** The lasting note a change leaves behind ("lives in Denver now"): one id shape, read by the idea brief. */
+export const afterNoteId = (id: string) => `${id}_after`;
+export const isAfterNote = (n: { id: string }) => n.id.endsWith("_after");
+
 export const maintainPersonal = internalMutation({
   args: { creatorId: v.id("creators"), now: v.optional(v.number()) },
   handler: async (ctx, a) => {
@@ -69,7 +73,7 @@ export const consolidateOne = internalMutation({
         if (!n.tombstonedAt && n.expiresHint && n.expiresHint < now && !n.confirmedAt && n.kind !== "bit") {
           expiredNotes++;
           // Horizon sim (2026-11-12): "moving to Denver" expired after the move and she forgot they live there now.
-          if (n.after && !(c.notes ?? []).some((m) => !m.tombstonedAt && m.text.toLowerCase() === n.after!.toLowerCase())) lasting.push({ id: `${n.id}_after`, text: n.after, kind: "fact", sourceMessageId: n.sourceMessageId, at: now });
+          if (n.after && !(c.notes ?? []).some((m) => !m.tombstonedAt && m.text.toLowerCase() === n.after!.toLowerCase())) lasting.push({ id: afterNoteId(n.id), text: n.after, kind: "fact", sourceMessageId: n.sourceMessageId, at: now });
           return { ...n, tombstonedAt: now };
         }
         return n;
