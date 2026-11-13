@@ -7,7 +7,7 @@ import { creatorForIdentity } from "../core/identity";
 import { encrypt, decrypt } from "../lib/encryption";
 import { exchangeCode, refreshAccessToken, revokeToken } from "../integrations/google/calendar";
 import { active, partnershipsOpen } from "./store";
-import { providerBase } from "./providerConfig";
+import { emailSendEnabled, providerBase } from "./providerConfig";
 import { email, Draft, Opportunity } from "./contracts";
 
 type Tokens = { access: string; refresh: string; expiresAt: number };
@@ -51,6 +51,8 @@ export const connect = mutation({ args: {}, handler: async (ctx): Promise<string
   const c = await creatorForIdentity(ctx);
   if (!c) throw new Error("Sign in first");
   await active(ctx, c._id);
+  // Drafts only (operator, 2026-11-13): she writes the pitch, they send it. Connecting Gmail is off with sending.
+  if (!emailSendEnabled(c)) throw new Error("Pitches open in your own Gmail; there's nothing to connect");
   if (!process.env.GOOGLE_CLIENT_ID) throw new Error("Email connection is not configured");
   return await mintConnectLink(ctx, c._id);
 } });
@@ -58,6 +60,7 @@ export const connect = mutation({ args: {}, handler: async (ctx): Promise<string
 /** In chat ("connect my gmail"): who it's connected as, or a fresh one-time link. */
 export const chatLink = internalMutation({ args: { creatorId: v.id("creators") }, handler: async (ctx, a): Promise<string> => {
   await active(ctx, a.creatorId);
+  if (!emailSendEnabled(await ctx.db.get(a.creatorId))) return "there's nothing to connect: you never send email for them. Every pitch goes as a link that opens in their own Gmail or Mail, filled in, and they hit send.";
   const row = await ctx.db.query("partnershipMailboxes").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).unique();
   if (row) return `already connected: ${row.email}. pitches send from there after they approve each one.`;
   if (!process.env.GOOGLE_CLIENT_ID) return "connecting Gmail isn't available yet; their pitches still go as a link that opens in their Gmail.";
@@ -145,7 +148,7 @@ export const status = query({ args: {}, handler: async (ctx) => {
   const c = await creatorForIdentity(ctx);
   if (!c) return null;
   const row = await ctx.db.query("partnershipMailboxes").withIndex("by_creator", q => q.eq("creatorId", c._id)).unique();
-  return { connected: !!row, email: row?.email ?? null, attention: row?.attention ?? null, available: partnershipsOpen(c), sendingEnabled: process.env.PARTNERSHIP_EMAIL_SEND_ENABLED === "true" };
+  return { connected: !!row, email: row?.email ?? null, attention: row?.attention ?? null, available: partnershipsOpen(c) && emailSendEnabled(c), sendingEnabled: emailSendEnabled(c) };
 } });
 export const attention = internalMutation({ args: { creatorId: v.id("creators"), generation: v.string(), failed: v.boolean() }, handler: async (ctx, a) => {
   const row = await ctx.db.query("partnershipMailboxes").withIndex("by_creator", q => q.eq("creatorId", a.creatorId)).unique();
