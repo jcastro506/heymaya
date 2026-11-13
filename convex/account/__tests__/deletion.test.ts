@@ -35,6 +35,7 @@ async function oneRowEverywhere(t: ReturnType<typeof convexTest>, creatorId: Id<
     await ctx.db.insert("predictions", { creatorId, subject: { ownPostId: post }, confidence: "fine", expectedMultiple: 1, opinion: {}, produced, createdAt: now });
     await ctx.db.insert("calendarBlocks", { creatorId, kind: "film", start: now, end: now + 1, title: "b", ideaId: idea, status: "proposed", createdAt: now });
     await ctx.db.insert("calendarEvents", { creatorId, calendarId: "primary", externalId: "e", title: "t", start: now, end: now + 1, allDay: false, recurring: false, class: "unknown", classifiedBy: "code", status: "active", updatedAt: now, createdAt: now });
+    await ctx.db.insert("localEvents", { creatorId, place: "p", title: "t", date: "2026-12-01", url: "https://example.com/", quote: "q", why: "w", foundAt: now });
     await ctx.db.insert("tasteEvents", { creatorId, ideaId: idea, kind: "heart", weight: 1, features: [], at: now });
     await ctx.db.insert("oauthStates", { creatorId, provider: "google", token: `tok_${creatorId}`, expiresAt: now + 1000, createdAt: now });
     await ctx.db.insert("connections", { creatorId, provider: "google_calendar", status: "connected", tokenRef: "enc", updatedAt: now });

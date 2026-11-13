@@ -28,6 +28,7 @@ import { momentsOf } from "../onboarding/moments";
 import { multiplesHold } from "../calendar/firstIdeas";
 import { pairedRows } from "../core/schedule";
 import { isAfterNote } from "../agent/consolidate";
+import { upcomingLocal } from "./local";
 import { spreadDelays, HOURLY_SPREAD_MS } from "../core/fanout";
 
 const D = 86_400_000;
@@ -42,7 +43,16 @@ export const STOCK = {
   laneMs: 21 * D,
   /** Moments this close are worth planning for. */
   momentsAheadMs: 42 * D,
+  /** Something this close with no idea for it gets one, even when the stock is full. */
+  soonMs: 10 * D,
 } as const;
+
+/** Pure: does this idea name the thing (any distinctive word of its title)? A fact for the gate; she judges the rest. */
+export function namesIt(text: string, title: string): boolean {
+  const t = text.toLowerCase();
+  const words = title.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !["with", "trip", "event", "events", "festival", "annual", "the", "and", "from", "night", "week", "weekend", "day"].includes(w));
+  return words.some((w) => new RegExp(`\\b${w}`).test(t));
+}
 
 /** Pure: how many fresh ideas they should have, from how often they post. */
 export function stockTarget(postsPerWeek: number | null | undefined): number {
@@ -115,7 +125,7 @@ export function parseStock(raw: string, n: number, allowedLinks: string[], have:
 
 export const inputs = internalQuery({
   args: { creatorId: v.id("creators"), now: v.number() },
-  handler: async (ctx, a): Promise<{ fresh: number; target: number; have: string[]; passed: string[]; lane: Array<{ kind: string; text: string; link: string }>; trends: Array<{ verdict: string; hook: string; what: string; link: string }>; calendar: string[]; life: string[]; haveTexts: string[] } | null> => {
+  handler: async (ctx, a): Promise<{ fresh: number; target: number; have: string[]; passed: string[]; lane: Array<{ kind: string; text: string; link: string }>; trends: Array<{ verdict: string; hook: string; what: string; link: string }>; calendar: string[]; life: string[]; haveTexts: string[]; local: Array<{ line: string; link: string }>; soon: string[] } | null> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c) return null;
     const ideas = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("createdAt", a.now - 90 * D)).take(300)) as Doc<"ideas">[];
@@ -132,12 +142,22 @@ export const inputs = internalQuery({
       if (t && t.status === "live" && t.recipe) trends.push({ verdict: p.verdict, hook: p.hook, what: clip(t.recipe.what, 200), link: t.examples[0]?.url ?? "" });
     }
     const events = (await ctx.db.query("calendarEvents").withIndex("by_creator_start", (q) => q.eq("creatorId", a.creatorId).gte("start", a.now).lte("start", a.now + STOCK.momentsAheadMs)).take(40)) as Doc<"calendarEvents">[];
+    const near = await upcomingLocal(ctx, a.creatorId, a.now);
+    const shown = events.filter((e) => e.status === "active" && e.class !== "private" && e.class !== "routine");
+    // Coming up within ten days and no idea since it was known names it: worth one idea even when the stock is full.
+    const ideaTexts = ideas.map((i) => ({ at: i.createdAt, about: (i.version as { about?: string } | undefined)?.about, text: `${hookOf(i)} ${String((i.version as { why?: string } | undefined)?.why ?? "")}` }));
+    const soon = [
+      ...shown.filter((e) => e.start - a.now <= STOCK.soonMs).map((e) => ({ title: e.title, since: e.createdAt })),
+      ...(await ctx.db.query("localEvents").withIndex("by_creator_date", (q) => q.eq("creatorId", a.creatorId).gte("date", new Date(a.now).toISOString().slice(0, 10)).lte("date", new Date(a.now + STOCK.soonMs).toISOString().slice(0, 10))).take(10) as Doc<"localEvents">[]).map((e) => ({ title: e.title, since: e.foundAt })),
+    ].filter((s) => !ideaTexts.some((t) => t.about === s.title || (t.at >= s.since && namesIt(t.text, s.title)))).map((s) => s.title).slice(0, 2);
     return {
       fresh, target: stockTarget(ppw),
       have: ideas.filter((i) => i.status !== "passed").map(hookOf).slice(0, 60),
       passed: ideas.filter((i) => i.status === "passed").map(hookOf).slice(0, 20),
       lane, trends,
-      calendar: events.filter((e) => e.status === "active" && e.class !== "private" && e.class !== "routine").map((e) => `${e.title} (${new Date(e.start).toISOString().slice(0, 10)}, in ${Math.round((e.start - a.now) / D)} days)`).slice(0, 8),
+      local: near.map((e) => ({ line: `${e.title} (${e.date}, in ${e.days} days, ${e.place}) · ${e.why}`, link: e.url })),
+      soon,
+      calendar: shown.map((e) => `${e.title} (${new Date(e.start).toISOString().slice(0, 10)}, in ${Math.round((e.start - a.now) / D)} days)`).slice(0, 8),
       // What they told her about their life (plans, a move, a race): in the brief, not only deep in the prefix.
       // A change that just happened ("lives in Denver now") stays in the brief for six weeks, then lives in the prefix like any fact.
       life: (c.notes ?? []).filter((n) => !n.tombstonedAt && n.kind !== "bit" && (!n.expiresHint || n.expiresHint > a.now) && (n.kind === "life" || n.after || (isAfterNote(n) && a.now - n.at < STOCK.momentsAheadMs))).slice(-8).map((n) => clip(n.text, 160)),
@@ -148,7 +168,7 @@ export const inputs = internalQuery({
 });
 
 export const write = internalMutation({
-  args: { creatorId: v.id("creators"), ideas: v.array(v.object({ hook: v.string(), why: v.string(), shoot: v.string(), evidencePostIds: v.array(v.string()), link: v.string() })), model: v.string() },
+  args: { creatorId: v.id("creators"), ideas: v.array(v.object({ hook: v.string(), why: v.string(), shoot: v.string(), evidencePostIds: v.array(v.string()), link: v.string() })), model: v.string(), about: v.optional(v.string()) },
   handler: async (ctx, a): Promise<{ ideaIds: Id<"ideas">[] }> => {
     const now = Date.now();
     const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(300)) as Doc<"ownPosts">[];
@@ -167,7 +187,7 @@ export const write = internalMutation({
         evidenceLinks: raw.link ? [raw.link] : [],
         fit: "yes",
         fitWhy: why,
-        version: { hook: raw.hook, why, evidencePostIds: raw.evidencePostIds },
+        version: { hook: raw.hook, why, evidencePostIds: raw.evidencePostIds, ...(a.about ? { about: a.about } : {}) },
         ...(raw.shoot ? { shotList: raw.shoot } : {}),
         messageText: `${raw.hook} — ${why}`,
         produced: { skillVersion: "idea-stock/1", model: a.model, thresholdsVersion: "n/a" },
@@ -187,7 +207,8 @@ export const topUp = internalAction({
     const now = a.now ?? Date.now();
     const i = await ctx.runQuery(internal.scout.stock.inputs, { creatorId: a.creatorId, now });
     if (!i) return { added: 0, reason: "creator not found" };
-    const need = i.target - i.fresh;
+    const soonOnly = i.target - i.fresh <= 0 && i.soon.length > 0;
+    const need = soonOnly ? 1 : i.target - i.fresh;
     if (need <= 0) return { added: 0, reason: `stock is full (${i.fresh} fresh)` };
     const g = await ctx.runQuery(internal.agent.context.gather, { creatorId: a.creatorId });
     if (!g) return { added: 0, reason: "creator not found" };
@@ -195,8 +216,9 @@ export const topUp = internalAction({
     const moments = upcomingMoments(now);
     const full = momentsFull(i.haveTexts, moments.map((m) => m.name));
     const brief = [
-      `Write ${need} ideas.`,
+      soonOnly ? `Write 1 idea, for what's coming up soon and has no idea yet: ${i.soon.join(" or ")}.` : `Write ${need} ideas.`,
       `Their life right now (what they told you, and their calendar, next six weeks) — this comes first:\n${[...i.life.map((l) => `- ${l}`), ...i.calendar.map((e) => `- on their calendar: ${e}`)].join("\n") || "nothing they've mentioned"}`,
+      `Happening near them (found on the web, dated on the page; only if it fits them, and link the page):\n${i.local.map((l) => `- ${l.line} · ${l.link}`).join("\n") || "nothing found"}`,
       `Their lane in the last three weeks:\n${i.lane.map((l) => `- ${l.kind}: ${l.text} · ${l.link}`).join("\n") || "nothing new"}`,
       `Trends you judged for them:\n${i.trends.map((t) => `- ${t.verdict}: ${t.what} · their version: ${t.hook}${t.link ? ` · ${t.link}` : ""}`).join("\n") || "none live"}`,
       `Holidays coming up (one idea at most, if it fits them): ${moments.filter((m) => !full.has(m.name)).map((m) => `${m.name} in ${m.days} days`).join(", ") || "none to write for"}${full.size ? ` · they already have ideas for ${[...full].join(", ")}: no more` : ""}`,
@@ -207,10 +229,11 @@ export const topUp = internalAction({
     const spec = REGISTRY.writer;
     const r = await callModel(ctx, { creatorId: a.creatorId, purpose: "idea_stock", model: spec.primary, temperature: 0.6, maxTokens: 1400, timeoutMs: 45_000, apiKey: process.env.OPENROUTER_API_KEY ?? "", messages: [{ role: "system", content: prefix }, { role: "user", content: brief }] });
     if (!r.ok) return { added: 0, reason: `no answer: ${r.reason ?? "model error"}` };
-    const allowed = [...i.lane.map((l) => l.link), ...i.trends.map((t) => t.link)].filter(Boolean);
+    const allowed = [...i.lane.map((l) => l.link), ...i.trends.map((t) => t.link), ...i.local.map((l) => l.link)].filter(Boolean);
     const ideas = parseStock(r.content, need, allowed, [...i.have, ...i.passed], full);
     if (!ideas.length) return { added: 0, reason: "the model gave no usable ideas" };
-    const w = await ctx.runMutation(internal.scout.stock.write, { creatorId: a.creatorId, ideas, model: spec.primary });
+    // A "soon" idea remembers what it was for, so the same race or festival never gets a second one from this path.
+    const w = await ctx.runMutation(internal.scout.stock.write, { creatorId: a.creatorId, ideas, model: spec.primary, ...(soonOnly ? { about: i.soon[0] } : {}) });
     return { added: w.ideaIds.length, reason: `topped up to ${i.fresh + w.ideaIds.length} of ${i.target}` };
   },
 });

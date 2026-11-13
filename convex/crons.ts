@@ -102,4 +102,6 @@ crons.daily("account setup check", { hourUTC: 14, minuteUTC: 5 }, internal.accou
 crons.weekly("deals pipeline", { dayOfWeek: "monday", hourUTC: 15, minuteUTC: 15 }, internal.partnerships.pipeline.runAll, {});
 // The idea stock (scout/stock), daily and on its own: a full stock costs nothing; a low one gets a few fresh ideas.
 crons.daily("idea stock", { hourUTC: 14, minuteUTC: 45 }, internal.scout.stock.runAll, {});
+// What's on near them (scout/local): weekly, Monday, before the day's stock top-up reads it.
+crons.weekly("local events", { dayOfWeek: "monday", hourUTC: 13, minuteUTC: 30 }, internal.scout.local.runAll, {});
 export default crons;
