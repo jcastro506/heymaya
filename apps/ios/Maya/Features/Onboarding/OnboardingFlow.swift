@@ -152,7 +152,7 @@ private struct NameStep: View {
   @FocusState private var focused: Bool
 
   var body: some View {
-    StepFrame(step: .name, kicker: "Hi", title: "What should Maya call you?", subtitle: "Your first name, or what friends call you. She'll use it when she texts you.") {
+    StepFrame(step: .name, kicker: "Hi", title: "What should Maya call you?", subtitle: "Your first name, or what friends call you.") {
       VStack(alignment: .leading, spacing: 10) {
         TextField("First name", text: $name)
           .textContentType(.givenName)
@@ -166,6 +166,7 @@ private struct NameStep: View {
           .focused($focused)
           .onSubmit(save)
         Problem(text: problem)
+        MayaTexts(messages: MayaExamples.name(name))
       }
     } footer: {
       PrimaryButton(title: "Continue", busy: busy, disabled: name.trimmingCharacters(in: .whitespaces).isEmpty, action: save)
@@ -267,7 +268,7 @@ private struct TierCard: View {
 /// The Connect step's words, for one platform or both. Pure.
 enum ConnectWords {
   static func title(instagram: Bool) -> String { instagram ? "Connect your accounts." : "Connect your TikTok." }
-  static let subtitle = "So she can see your posts and what your followers love, and her ideas sound like you. She never posts for you."
+  static let subtitle = "So her ideas come from your real posts. She never posts for you."
   static func button(instagram: Bool, connected: Bool) -> String {
     connected ? "Continue" : instagram ? "Connect one to continue" : "Connect TikTok to continue"
   }
@@ -354,6 +355,7 @@ private struct ConnectStep: View {
         }
         .font(MayaFont.callout)
         .disabled(busy != nil)
+        MayaTexts(messages: MayaExamples.connect)
       }
     } footer: {
       PrimaryButton(title: ConnectWords.button(instagram: instagram, connected: !accounts.isEmpty), disabled: accounts.isEmpty) {
@@ -433,7 +435,7 @@ private struct WatchStep: View {
   @State private var problem: String?
 
   var body: some View {
-    StepFrame(step: .watch, kicker: "Your favorites", title: "Who do you love watching?", subtitle: "Add a few creators you like. She'll keep an eye on them for ideas.") {
+    StepFrame(step: .watch, kicker: "Your favorites", title: "Who do you love watching?", subtitle: "Add a few creators you like.") {
       VStack(alignment: .leading, spacing: 10) {
         HStack(spacing: 8) {
           if model.instagramEnabled {
@@ -471,6 +473,7 @@ private struct WatchStep: View {
         }
       }
       Problem(text: problem)
+      if model.watched.isEmpty { MayaTexts(messages: MayaExamples.watch) }
     } footer: {
       PrimaryButton(title: model.watched.isEmpty ? "Skip for now" : "Done") { model.watchSeen = true }
     }
@@ -494,7 +497,7 @@ private struct WatchStep: View {
 /// The words, kept out of the view so the copy test can read them.
 enum CalendarWords {
   static let title = "Maya plans your week for you."
-  static let subtitle = "She puts filming and posting times on your calendar, around the plans you already have. Pick the one you actually use."
+  static let subtitle = "She plans filming around the week you already have. Pick the calendar you use."
   static let phone = "iPhone calendar"
   static let phoneHelp = "iCloud, or any account on this phone"
   static let google = "Google Calendar"
@@ -537,14 +540,7 @@ private struct CalendarStep: View {
           google = problem == nil
           busy = nil
         }
-        VStack(alignment: .leading, spacing: 8) {
-          Label("She only adds the times you say yes to", systemImage: "checkmark.circle")
-          Label("She never shares your plans with anyone", systemImage: "lock")
-        }
-        .font(MayaFont.caption)
-        .foregroundStyle(Palette.muted)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 4)
+        MayaTexts(messages: MayaExamples.calendar)
       }
       Problem(text: problem)
     } footer: {
@@ -592,10 +588,8 @@ private struct CalendarStep: View {
 /// The words, kept out of the view so the copy test can read them.
 enum NearbyWords {
   static let title = "Maya keeps an eye on what's happening near you."
-  static let subtitle = "Markets, races, festivals, openings. She turns the good ones into ideas, wherever you are that week."
+  static let subtitle = "Markets, races, festivals. Wherever you are that week."
   static let allow = "Allow location"
-  static let city = "She only ever sees your city, never where you are exactly"
-  static let when = "Only while you're using the app"
   static let later = "No problem. You can turn it on later in Settings."
 }
 
@@ -606,13 +600,7 @@ private struct NearbyStep: View {
 
   var body: some View {
     StepFrame(step: .nearby, kicker: "Near you", title: NearbyWords.title, subtitle: NearbyWords.subtitle) {
-      VStack(alignment: .leading, spacing: 8) {
-        Label(NearbyWords.city, systemImage: "building.2")
-        Label(NearbyWords.when, systemImage: "iphone")
-      }
-      .font(MayaFont.caption)
-      .foregroundStyle(Palette.muted)
-      .frame(maxWidth: .infinity, alignment: .leading)
+      MayaTexts(messages: MayaExamples.nearby)
       Problem(text: problem)
     } footer: {
       PrimaryButton(title: NearbyWords.allow, busy: busy) {
