@@ -101,7 +101,7 @@ export function parseDeals(raw: string, leads: Lead[]): { picks: Array<{ brand: 
 
 /** Pure: the floor for the weekly offer: her picks, each with its lead's own signal, and the one ask. No model. */
 export function dealsFloor(picks: Array<{ brand: string; type: DealType }>, leads: Lead[]): string {
-  const lines = picks.map((p) => { const l = leads.find((x) => x.brand === p.brand); return `${p.brand}${l?.signals[0] ? `: ${l.signals[0]}` : ""}`; });
+  const lines = picks.map((p) => { const l = leads.find((x) => x.brand === p.brand); return `${/^[a-z0-9._]+$/.test(p.brand) ? `@${p.brand}` : p.brand}${l?.signals[0] ? `: ${l.signals[0]}` : ""}`; });
   return [`a few brands with money moving in your lane this week:`, lines.join("\n"), `want me to look for brands like these every week and draft the pitches? you'd just send them.`].join("\n---\n");
 }
 
