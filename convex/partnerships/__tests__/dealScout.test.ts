@@ -107,3 +107,13 @@ describe("the kit a brand can use", () => {
     expect(k?.kit.contactEmail).toBe("me@example.com");
   });
 });
+
+describe("the weekly offer's floor (2026-11-13: never silent when the check holds it)", () => {
+  it("names her picks with each lead's own signal and asks once; no model", async () => {
+    const { dealsFloor } = await import("../dealScout");
+    const text = dealsFloor([{ brand: "Panforge", type: "gifting" }], [{ brand: "Panforge", key: "panforge", signals: ["paid 2 creators you watch this month (#ad)"], score: 3, url: null }]);
+    expect(text).toContain("Panforge: paid 2 creators you watch this month (#ad)");
+    expect(text).toMatch(/want me to look for brands like these every week/);
+    expect(text.split("\n---\n")).toHaveLength(3);
+  });
+});

@@ -181,11 +181,13 @@ async function runPersona(ctx: ActionCtx, mode: Mode, key: Persona["key"], judge
     // 1. Finding it: the weekly offer from the lane's paid posts (fakes), or her search of the real web.
     if (mode === "fakes") {
       await ctx.runMutation(internal.eval.partnershipGauntlet.setPlan, { creatorId, status: "comped", tier: "partner", paired: true });
-      const offer = await ctx.runAction(internal.partnerships.kit.offerOne, { creatorId });
+      // Deals v2 (2026-10-12): the weekly look is noticed for the daily pick, not texted on its own. Its message is kept.
+      const offer = await ctx.runAction(internal.partnerships.dealScout.run, { creatorId });
       await ctx.runMutation(internal.eval.partnershipGauntlet.setPlan, { creatorId, status: "comped", tier: "partner", paired: false });
-      const text = (await ctx.runQuery(internal.eval.dealsE2E.rows, { creatorId })).messages.find((m) => (m.dedupeKey ?? "").startsWith("partner-week:"))?.body ?? "";
-      r.said.push({ who: "maya", text: `[weekly offer] ${text}` });
-      check("offered from the lane", offer.sent && text.includes(`@${p.brandHandle}`), `offer ${offer.sent ? "sent" : offer.reason}; names @${p.brandHandle}: ${text.includes(`@${p.brandHandle}`)}`);
+      const text = offer.message ?? "";
+      r.said.push({ who: "maya", text: `[weekly offer, for the daily pick] ${text || offer.reason}` });
+      const named = (offer.picks ?? []).some((x) => x.brand.toLowerCase().replace(/^@/, "") === p.brandHandle.toLowerCase()) || text.includes(`@${p.brandHandle}`);
+      check("offered from the lane", offer.noticed && named, `${offer.reason}; picks ${(offer.picks ?? []).map((x) => x.brand).join(", ") || "none"}; names @${p.brandHandle}: ${named}`);
       await say(r, p.script.yes);
     } else {
       await say(r, "find me brands that are paying creators like me right now, and tell me which one you'd go for");
@@ -221,7 +223,10 @@ async function runPersona(ctx: ActionCtx, mode: Mode, key: Persona["key"], judge
     } else if (d?.data.channel === "application") {
       const answers = d.data.answers ?? [];
       const labels = (oppNow?.data.applicationFields ?? []).map((f) => f.label);
-      check("answers only the form's questions", answers.length >= 3 && answers.every((x) => labels.includes(x.label)), `${answers.length} answers`);
+      // Every field she could answer from their data is answered; what only they know (name, handle, rate, the terms box) is theirs.
+      const theirs = /name|handle|rate|fee|price|terms|agree|consent|email|phone|address/i;
+      const missed = labels.filter((l) => !answers.some((x) => x.label === l) && !theirs.test(l));
+      check("answers only the form's questions, every one it can", answers.length >= 1 && answers.every((x) => labels.includes(x.label)) && !missed.length, `${answers.length} answered${missed.length ? `; left blank: ${missed.join(", ")}` : ""}`);
       const portfolio = answers.find((x) => /portfolio|link/i.test(x.label))?.answer ?? "";
       check("portfolio is their kit or their posts", /\/k\/[a-z0-9]{8,40}/.test(portfolio) || s.ownUrls.some((u) => portfolio.includes(u)), clip(portfolio, 120) || "no portfolio answer");
       check("no invented rate", !answers.some((x) => /rate/i.test(x.label) && /\$\s?\d/.test(x.answer)), "the rate is theirs to give");

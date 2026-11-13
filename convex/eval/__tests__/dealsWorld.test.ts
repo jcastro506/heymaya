@@ -400,6 +400,8 @@ describe("the judges' pure parts", () => {
   it("numbers are grounded against the kit; money and ranges are recognised; row changes read plainly", () => {
     expect(inventedNumbers("3.4k followers, normal around 4,900 views, my 29.8k marathon video", [3400, 4900, 29800])).toEqual([]);
     expect(inventedNumbers("50k followers and a 12% engagement rate", [3400, 4900])).toEqual([50_000, 12].filter((n) => n >= 10));
+    // The concept's own numbers are the idea, not a claim; a stat still counts.
+    expect(inventedNumbers("a 30-second recap of a 20-mile run, to my 50k followers", [3400])).toEqual([50_000]);
     expect(inventedNumbers("2 TikToks and 1 Reel in 2026", [])).toEqual([]);
     expect(shiftKey("partner-followup:abc:1790258400000", 1000)).toBe("partner-followup:abc:1790258399000");
     expect(shiftKey("partner-deliverable:abc:Reel: final:1790258400000", 1000)).toBe("partner-deliverable:abc:Reel: final:1790258399000");
