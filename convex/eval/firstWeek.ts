@@ -140,7 +140,7 @@ export function timezonesFor(n: number, now: number): string[] {
   return Array.from({ length: n }, (_, i) => pool[i % pool.length]);
 }
 
-export type Step = "age" | "expireQuestions" | "sampler" | "sweep" | "morning" | "scout" | "editor" | "editorAfternoon" | "actor" | "invite" | "scoutAfternoon" | "howDidItGo" | "review" | "weekPlan" | "quiet" | "actorEvening" | "snapshot" | `beat:${string}`;
+export type Step = "age" | "expireQuestions" | "sampler" | "sweep" | "stock" | "morning" | "scout" | "editor" | "editorAfternoon" | "actor" | "invite" | "scoutAfternoon" | "howDidItGo" | "review" | "weekPlan" | "quiet" | "actorEvening" | "snapshot" | `beat:${string}`;
 
 /** Pure: the simulated weekday of day `d` (0 Sunday). */
 export function weekdayOf(d: number, signupWeekday: number): number {
@@ -160,7 +160,7 @@ export function dayPlan(d: number, opts: { signupWeekday: number; script?: "none
    * the lane reads, the morning, two scout passes, their replies, the review and next week's plan.
    */
   if (opts.script === "horizon") {
-    return ["age", "expireQuestions", "sampler", "sweep", "morning", "scout", "editor", "actor", ...horizonBeats(d).map((b) => `beat:${b}` as Step), "scoutAfternoon", "editorAfternoon", "howDidItGo", "review", "weekPlan", "actorEvening", "snapshot"];
+    return ["age", "expireQuestions", "sampler", "sweep", "stock", "morning", "scout", "editor", "actor", ...horizonBeats(d).map((b) => `beat:${b}` as Step), "scoutAfternoon", "editorAfternoon", "howDidItGo", "review", "weekPlan", "actorEvening", "snapshot"];
   }
   const sunday = weekdayOf(d, opts.signupWeekday) === 0;
   // The product script's moments run after the morning: she has spoken, and they answer.
@@ -168,7 +168,7 @@ export function dayPlan(d: number, opts: { signupWeekday: number; script?: "none
   return [
     // The editor follows each scout pass (2026-11-09): since the one-pick-a-day change the scout only notices,
     // and the editor's cron skips sim creators, so no idea was ever texted in a sim.
-    "age", "expireQuestions", "sampler", "sweep", "morning", "scout", "editor", "actor", ...beats,
+    "age", "expireQuestions", "sampler", "sweep", "stock", "morning", "scout", "editor", "actor", ...beats,
     ...(d === 1 ? (["invite"] as Step[]) : []),
     ...(sunday && d >= MIN_DAYS_BEFORE_REVIEW ? (["review"] as Step[]) : []),
     "scoutAfternoon", "editorAfternoon", "howDidItGo",
@@ -825,6 +825,7 @@ export const runStep = internalAction({
         case "morning": result = said(await ctx.runAction(internal.agent.cadence.morning, { creatorId: id })); break;
         case "scout": case "scoutAfternoon": result = said(await ctx.runAction(internal.scout.scout.run, { creatorId: id })); break;
         case "editor": case "editorAfternoon": result = said(await ctx.runAction(internal.core.editor.pick, { creatorId: id })); break;
+        case "stock": { const r = await ctx.runAction(internal.scout.stock.topUp, { creatorId: id }); result = `${r.added} added: ${r.reason}`; break; }
         case "invite": result = (await ctx.runMutation(internal.scout.firstWeek.inviteOne, { creatorId: id })).invited ? "invited" : "not sent"; break;
         case "howDidItGo": result = said(await ctx.runAction(internal.agent.cadence.howDidItGo, { creatorId: id })); break;
         case "review": result = said(await ctx.runAction(internal.review.weekly.run, { creatorId: id })); break;

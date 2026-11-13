@@ -438,6 +438,7 @@ export const dayMaya = internalAction({
     if (s.season) {
       // What the hourly crons do for a paired person, which skip sim creators (2026-11-12: without the editor
       // nothing the scout noticed was ever texted, so a sim measured silence).
+      await step("stock", async () => { const r = await ctx.runAction(internal.scout.stock.topUp, { creatorId: id, now }); return { sent: r.added > 0, reason: r.reason }; });
       await step("trends", () => ctx.runAction(internal.scout.trends.judge, { creatorId: id, now }));
       await step("editor", () => ctx.runAction(internal.core.editor.pick, { creatorId: id, now }));
       if (a.d === 1) await step("invite", async () => ({ sent: (await ctx.runMutation(internal.scout.firstWeek.inviteOne, { creatorId: id })).invited, reason: "first-week invite" }));
