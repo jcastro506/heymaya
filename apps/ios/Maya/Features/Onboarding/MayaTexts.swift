@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Show, don't tell (operator, 2026-11-13): an onboarding screen shows what Maya would text them because of it,
-/// instead of lines explaining it. Her bubbles arrive one after another with typing dots, like Messages.
+/// Show, don't tell (operator, 2026-11-13): where a screen asks for something whose payoff isn't obvious (their
+/// account, their location), it shows what Maya would text them because of it. Only there: not every screen. Her bubbles arrive one after another with typing dots, like Messages.
 /// Examples only: made-up posts and places, never a real creator's name.
 struct MayaTexts: View {
   let messages: [String]
@@ -69,22 +69,10 @@ private struct TypingDots: View {
 
 /// What she'd text, per screen. Kept out of the views so the copy test reads them. Her voice: lowercase, short.
 enum MayaExamples {
-  static func name(_ typed: String) -> [String] {
-    let n = typed.trimmingCharacters(in: .whitespaces)
-    return ["hey \(n.isEmpty ? "there" : n)! it's maya 👋"]
-  }
   static let connect = [
     "your thrifted cast iron video did 4× your usual views",
     "it's the reveal at the end. people watched it twice",
     "want another one built the same way?",
-  ]
-  static let watch = [
-    "one of your favorites just posted a ranking video that's doing 10× her usual",
-    "your version: rank the 5 pre-run snacks you actually eat",
-  ]
-  static let calendar = [
-    "put the pasta one on thursday at 6, right after your gym class",
-    "want it?",
   ]
   static let nearby = [
     "you're in new york this week!",
