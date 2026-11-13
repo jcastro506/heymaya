@@ -4,7 +4,7 @@ import { internalQuery, query, type MutationCtx, type QueryCtx } from "../_gener
 import { internalMutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
 import { creatorForIdentity } from "../core/identity";
-import { APPLICATION_CHECK_IN_DAYS, CLOSED, Draft, Evidence, Opportunity, Profile, publicUrl, followUpEligible, linksProfile, linksUrl, sameUrl, type OpportunityData } from "./contracts";
+import { APPLICATION_CHECK_IN_DAYS, CLOSED, Draft, Evidence, Opportunity, Profile, publicUrl, followUpEligible, linksProfile, linksUrl, sameUrl, hostOf, evidenceText, type OpportunityData } from "./contracts";
 import { TIERS, entitlementsFor, type Entitlements } from "../billing/tiers";
 import { emailSendEnabled } from "./providerConfig";
 import { clip } from "../lib/clip";
@@ -241,13 +241,20 @@ export const change = internalMutation({
       // "search", then "extract", was refused twice with no reason given, ran out of turn, and told the
       // creator the brand had no email. A bio-email save needs three reads (search, site, profile), so the
       // window is the last six research rows, not two.
-      const research = await ctx.db.query("partnershipResearch").withIndex("by_creator", q => q.eq("creatorId", a.creatorId)).order("desc").take(6);
+      // 2026-11-13 (real deals run): six rows was too few once she searched several brands in one turn; her quote of a
+      // page she had really read was refused. Thirty rows of at most five 5k excerpts stays well inside a read.
+      const research = await ctx.db.query("partnershipResearch").withIndex("by_creator", q => q.eq("creatorId", a.creatorId)).order("desc").take(30);
       const fetched = research.flatMap(r => (r.data as Array<{ url: string; excerpt: string; checkedAt: number; kind: string }>)).filter(f => f.checkedAt >= now - 7 * 86400000 && f.checkedAt <= now);
       data.evidence.forEach((e, i) => {
-        const same = fetched.filter(f => f.url === e.url && f.excerpt.includes(e.excerpt));
+        // Same words however spaced or quoted; on the page she cited, or failing that another page of the same site she
+        // read (she found contact@ on /pages/contact and cited the homepage). The url saved is the page it is really on.
+        const quote = evidenceText(e.excerpt);
+        const has = (f: { excerpt: string }) => quote.length > 0 && evidenceText(f.excerpt).includes(quote);
+        const exactPage = fetched.filter(f => sameUrl(f.url, e.url) && has(f));
+        const same = exactPage.length ? exactPage : fetched.filter(f => hostOf(f.url) === hostOf(e.url) && has(f));
         const f = same.find(x => x.checkedAt === e.checkedAt && x.kind === e.kind) ?? same.find(x => x.kind === e.kind) ?? same.sort((x, y) => (y.kind === "search" ? 0 : 1) - (x.kind === "search" ? 0 : 1) || y.checkedAt - x.checkedAt)[0];
         if (!f) throw new Error(`Evidence must come from recent research results: nothing you read this week at ${e.url} contains "${e.excerpt.slice(0, 60)}". Cite a url you fetched with a phrase copied from its excerpt`);
-        data.evidence[i] = { ...e, kind: f.kind as typeof e.kind, checkedAt: f.checkedAt };
+        data.evidence[i] = { ...e, url: f.url, kind: f.kind as typeof e.kind, checkedAt: f.checkedAt };
       });
       // Contact address must be literally published in the cited text. It is NOT deliverability verification.
       const official = data.evidence.filter(e => new URL(e.url).hostname.replace(/^www\./, "") === domain);
