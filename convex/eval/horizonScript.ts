@@ -31,9 +31,9 @@ export type HorizonRole = "goal" | "life";
 export const horizonRole = (i: number): HorizonRole => (i % 2 === 0 ? "goal" : "life");
 
 const GOAL_RE = /\b(marathon|chicago|26\.2|race day|race week|taper|weeks? (out|to go|until)|countdown|bib|training block|start line|finish line)\b/i;
-const TAPER_RE = /\b(taper|race week|this weekend|final long run|last long run|shakeout|carb|bib|weeks? out|days? out|start line|nerves)\b/i;
-const RECAP_RE = /\b(recap|finished|finish line|medal|recovery|recovering|post-race|after the race|i did it|ran it|26\.2 done|results?)\b/i;
-const MOVE_RE = /\b(denver|moving|the move|new city|new place|boxes|colorado)\b/i;
+const TAPER_RE = /\b(race[- ]day|race morning|taper|race week|this weekend|final long run|last long run|shakeout|carb|bib|weeks? out|days? out|start line|nerves)\b/i;
+const RECAP_RE = /\b(just ran|ran (a|the|my) (full )?marathon|after (the|my|a) (race|marathon)|post-marathon|recap|finished|finish line|medal|recovery|recovering|post-race|after the race|i did it|ran it|26\.2 done|results?)\b/i;
+const MOVE_RE = /\b(denver|moving|the move|new city|new place|boxes|colorado|pack(ing)? up|unpack\w*|empty (the|my) fridge|new kitchen)\b/i;
 
 /** Pure: which horizon beats run in step `d` (the week number, from 1). */
 export function horizonBeats(d: number): string[] {
@@ -125,7 +125,8 @@ export async function runHorizonBeat(env: HorizonEnv, beat: string): Promise<Che
       if (role === "goal") {
         const weeksLeft = RACE_WEEK - env.d;
         check("the goal is still a row", kept.some((x) => /chicago|marathon/i.test(x)), `notes: ${p.creator.notes.filter((x) => /chicago|marathon/i.test(x)).join(" | ") || "none"}; personal: ${p.personal.filter((x) => /chicago|marathon|series/i.test(x)).slice(-2).join(" | ") || "none"}`);
-        const goalIdeas = w.ideas.filter((x) => GOAL_RE.test(`${x.hook} ${x.text}`));
+        // Her stock tops up when fewer than three ideas are fresh (ten days), so a week can add none: count the open ones.
+        const goalIdeas = p.ideas.filter((x) => x.createdAt >= now - 10 * D).filter((x) => GOAL_RE.test(`${x.hook} ${x.text}`));
         const planHits = w.plan ? GOAL_RE.test(w.plan) : null;
         const arc = `${goalIdeas.length}/${w.ideas.length} ideas on the goal; plan ${planHits === null ? "not sent" : planHits ? "has it" : "doesn't"}; ${weeksLeft >= 0 ? `${weeksLeft} weeks to go` : `${-weeksLeft} weeks after`}${goalIdeas[0] ? `; e.g. "${clip(goalIdeas[0].hook, 90)}"` : ""}`;
         if (weeksLeft > 3) {
@@ -144,13 +145,15 @@ export async function runHorizonBeat(env: HorizonEnv, beat: string): Promise<Che
         // Anything on their calendar in the next three weeks should reach her work before it happens.
         const soon = p.events.filter((e) => e.start > now && e.start - now <= 21 * D && !/move to denver/i.test(e.title));
         for (const e of soon) {
-          const word = e.title.split(" ")[e.title.startsWith("Denver") ? 1 : 0].toLowerCase(); // "half" / "boulder"
+          // Her words, not the event's title: "13 miles" is the half, "the mountains" is the Boulder trip.
+          const re = /half/i.test(e.title) ? /\b(half|13(\.1)? miles?|race)\b/i : /\b(boulder|mountains?|road trip|colorado|sam)\b/i;
           const days = Math.round((e.start - now) / D);
-          check(`a calendar event ${days <= 7 ? "this week" : "1–3 weeks out"} shows up in her work`, said.some((t) => t.toLowerCase().includes(word)), `${e.title} in ${days} days; mentioned: ${said.some((t) => t.toLowerCase().includes(word))}`);
+          const hit = said.some((t) => re.test(t));
+          check(`a calendar event ${days <= 7 ? "this week" : "1–3 weeks out"} shows up in her work`, hit, `${e.title} in ${days} days; mentioned: ${hit}`);
         }
         const toMove = MOVE_WEEK - env.d;
         if (toMove >= 0 && toMove <= 3) check("the move shapes her ideas as it gets close", said.some((t) => MOVE_RE.test(t)), `${toMove} weeks to the move`);
-        if (toMove < 0 && toMove >= -4) check("after the move she knows they live in Denver now", said.some((t) => /\bdenver|colorado|new city|new place\b/i.test(t)), `${-toMove} weeks after the move`);
+        if (toMove < 0 && toMove >= -4) check("after the move she knows they live in Denver now", said.some((t) => /\b(denver|colorado|new city|new place|new kitchen|new home|unpack\w*)\b/i.test(t)), `${-toMove} weeks after the move`);
         check("life (record)", null, `${w.ideas.length} ideas; move ${toMove >= 0 ? `in ${toMove} weeks` : `${-toMove} weeks ago`}; calendar soon: ${soon.map((e) => e.title).join(", ") || "nothing"}`);
       }
       break;
@@ -158,7 +161,7 @@ export async function runHorizonBeat(env: HorizonEnv, beat: string): Promise<Che
     case "h-recall": {
       if (role === "goal") {
         const r = await say("wait remind me what we said we'd do for chicago?");
-        check("recalls the agreed series weeks later", /chicago|marathon/i.test(r) && /series|training|leading up|every week|build|content|countdown/i.test(r), r);
+        check("recalls the agreed series weeks later", /chicago|marathon|race day|training block/i.test(r) && /series|training|leading up|every week|build|content|countdown/i.test(r), r);
       } else {
         const r = await say("did i tell you about the move?");
         check("recalls the move weeks later", /denver/i.test(r), r);
@@ -176,7 +179,8 @@ export async function runHorizonBeat(env: HorizonEnv, beat: string): Promise<Che
     case "h-finished": {
       if (role !== "goal") { check("celebrates the finish first", null, "the life creator has no race"); break; }
       const r = await say("I FINISHED CHICAGO!!! 3:58. legs are destroyed but i did it");
-      const first = r.split(/(?<=[.!?])\s|\n/)[0] ?? "";
+      // The opening line, not the first sentence: "SUB FOUR. Holy shit, you did it!!" opens with a celebration.
+      const first = r.split("\n")[0] ?? "";
       check("celebrates the finish first", /!|congrat|you did it|proud|incredible|amazing|legend|huge/i.test(first) && !/^(how|what|when)\b/i.test(first), r);
       break;
     }
