@@ -59,19 +59,21 @@ export function freeSlotOn(dayEpoch: number, minutes: number, busy: Busy[], pref
   return null;
 }
 
-export interface IdeaLite { ideaId: string; hook: string; status: string; savedAt?: number | null; sentAt?: number | null; experiment?: boolean; why?: string | null; /** Earlier weeks' plans it was in without being filmed. */ skippedPlans?: number }
+export interface IdeaLite { ideaId: string; hook: string; status: string; savedAt?: number | null; sentAt?: number | null; experiment?: boolean; why?: string | null; /** Earlier weeks' plans it was in without being filmed. */ skippedPlans?: number; /** The date (YYYY-MM-DD) of the race, market or event it's for, when that's inside the plan's window. */ due?: string | null }
 
 /** An idea in this many earlier plans, never filmed, leaves the plan (it stays in their Ideas). */
 export const PLAN_SKIPS_MAX = 2;
 
 /**
- * Which ideas fill the week: saved first, then hearted, then recent unexpired sends. The experiment goes last so
+ * Which ideas fill the week: saved first, then ones for something dated in the window, then hearted, then recent unexpired sends. The experiment goes last so
  * it always gets a slot. An idea skipped in PLAN_SKIPS_MAX earlier plans is left out (2026-11-12: one idea was on
  * a creator's plan eight Sundays running, and the grader called the plans spam). Pure.
  */
 export function pickIdeas(ideas: IdeaLite[], slots: number, experiment: string | null): Array<{ ideaId: string | null; hook: string; why?: string; experiment: boolean }> {
-  const rank = (i: IdeaLite) => (i.status === "saved" ? 0 : i.status === "hearted" ? 1 : i.status === "sent" ? 2 : 9);
-  const pool = ideas.filter((i) => rank(i) < 9 && (i.skippedPlans ?? 0) < PLAN_SKIPS_MAX).sort((a, b) => rank(a) - rank(b) || (b.savedAt ?? b.sentAt ?? 0) - (a.savedAt ?? a.sentAt ?? 0));
+  // An idea for something dated this week or next (a race, a market) can't wait for next week's plan (local sim,
+  // 2026-11-13: a race nine days out lost its slot to undated ideas sent at the same moment). After saved ones, soonest first.
+  const rank = (i: IdeaLite) => (i.status === "saved" ? 0 : i.due && ["hearted", "sent"].includes(i.status) ? 0.5 : i.status === "hearted" ? 1 : i.status === "sent" ? 2 : 9);
+  const pool = ideas.filter((i) => rank(i) < 9 && (i.skippedPlans ?? 0) < PLAN_SKIPS_MAX).sort((a, b) => rank(a) - rank(b) || (a.due && b.due ? a.due.localeCompare(b.due) : 0) || (b.savedAt ?? b.sentAt ?? 0) - (a.savedAt ?? a.sentAt ?? 0));
   const n = experiment ? Math.max(0, slots - 1) : slots;
   const out: Array<{ ideaId: string | null; hook: string; why?: string; experiment: boolean }> = pool.slice(0, n).map((i) => ({ ideaId: i.ideaId, hook: i.hook, ...(i.why ? { why: i.why } : {}), experiment: false }));
   if (experiment) out.push({ ideaId: null, hook: experiment, experiment: true });

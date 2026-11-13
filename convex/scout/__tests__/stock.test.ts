@@ -9,7 +9,7 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { STOCK, momentOf, momentsFull, parseStock, stockTarget, upcomingMoments } from "../stock";
+import { STOCK, aboutOf, momentOf, momentsFull, parseStock, stockTarget, upcomingMoments } from "../stock";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
@@ -152,5 +152,15 @@ describe("the stock has its own daily job (2026-11-12: it only ran inside the pl
     expect(r.creators).toBe(1);
     const jobs = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
     expect(jobs.filter((j) => j.name.includes("stock")).map((j) => String((j.args[0] as { creatorId: string }).creatorId))).toEqual([a]);
+  });
+});
+
+describe("aboutOf: a soon idea is filed under the thing it's for", () => {
+  it("names the event the idea is about, not the first one asked for", () => {
+    const soon = ["Stevie Wonder", "North Shore Artisan Gift Market - The Great Chicago Holiday Food Festival"];
+    expect(aboutOf([{ hook: "Holiday Market High Protein Cinnamon Rolls", why: "the food festival is next week" }], soon)).toBe(soon[1]);
+  });
+  it("falls back to the first when the idea names none", () => {
+    expect(aboutOf([{ hook: "five minute oats", why: "quick" }], ["Austin Jingle Bell 5K"])).toBe("Austin Jingle Bell 5K");
   });
 });

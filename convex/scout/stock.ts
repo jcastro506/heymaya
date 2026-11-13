@@ -47,11 +47,27 @@ export const STOCK = {
   soonMs: 10 * D,
 } as const;
 
-/** Pure: does this idea name the thing (any distinctive word of its title)? A fact for the gate; she judges the rest. */
+/**
+ * Pure: does this idea name the thing? A fact for the gate; she judges the rest. One distinctive word of a short
+ * title ("Stevie Wonder", "half marathon"); two of a long one. Local sim (2026-11-13): "fast-food craving" counted
+ * as covering "The Great Chicago Holiday Food Festival" on one shared word, so for a food creator every festival
+ * looked done.
+ */
 export function namesIt(text: string, title: string): boolean {
   const t = text.toLowerCase();
-  const words = title.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !["with", "trip", "event", "events", "festival", "annual", "the", "and", "from", "night", "week", "weekend", "day"].includes(w));
-  return words.some((w) => new RegExp(`\\b${w}`).test(t));
+  const words = [...new Set(title.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !["with", "trip", "event", "events", "festival", "annual", "the", "and", "from", "night", "week", "weekend", "day"].includes(w)))];
+  const hits = words.filter((w) => new RegExp(`\\b${w}`).test(t)).length;
+  return hits >= (words.length >= 3 ? 2 : 1);
+}
+
+/**
+ * Pure: which of the soon things the written idea is for. Local sim (2026-11-13): asked for "Stevie Wonder or the
+ * holiday food market", she wrote for the market and the idea was filed under the concert, so the market stayed
+ * uncovered and the concert looked done. The one it names; the first only when it names none.
+ */
+export function aboutOf(ideas: Array<{ hook: string; why: string }>, soon: string[]): string {
+  const text = ideas.map((x) => `${x.hook} ${x.why}`).join(" ");
+  return soon.find((t) => namesIt(text, t)) ?? soon[0];
 }
 
 /** Pure: how many fresh ideas they should have, from how often they post. */
@@ -233,7 +249,7 @@ export const topUp = internalAction({
     const ideas = parseStock(r.content, need, allowed, [...i.have, ...i.passed], full);
     if (!ideas.length) return { added: 0, reason: "the model gave no usable ideas" };
     // A "soon" idea remembers what it was for, so the same race or festival never gets a second one from this path.
-    const w = await ctx.runMutation(internal.scout.stock.write, { creatorId: a.creatorId, ideas, model: spec.primary, ...(soonOnly ? { about: i.soon[0] } : {}) });
+    const w = await ctx.runMutation(internal.scout.stock.write, { creatorId: a.creatorId, ideas, model: spec.primary, ...(soonOnly ? { about: aboutOf(ideas, i.soon) } : {}) });
     return { added: w.ideaIds.length, reason: `topped up to ${i.fresh + w.ideaIds.length} of ${i.target}` };
   },
 });

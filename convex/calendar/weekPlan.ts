@@ -13,6 +13,7 @@ import { deviceBusyOf } from "./device";
 import { v } from "convex/values";
 import { HOURLY_SPREAD_MS, spreadDelays } from "../core/fanout";
 import { eventDescription, ideaForEvent } from "./eventBody";
+import { namesIt } from "../scout/stock";
 import { internalAction, internalQuery } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
@@ -60,6 +61,19 @@ export const inputsFor = internalQuery({
     const past = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("start", a.now - 60 * 86_400_000).lt("start", a.now - 86_400_000)).take(400)) as Doc<"calendarBlocks">[];
     const thisKey = planKeyFor(a.now, tz);
     const skipped = skippedPlans(past.filter((b) => b.status !== "deleted").map((b) => ({ ideaId: b.ideaId ? String(b.ideaId) : null, planKey: b.planKey ?? null, kind: b.kind, filmed: Boolean(b.filmedAt) })), thisKey);
+    // What each idea is for, when that's dated inside the window: a "soon" idea names it (about); a local idea links its page and names it.
+    const today = new Date(a.now).toISOString().slice(0, 10);
+    const local = (await ctx.db.query("localEvents").withIndex("by_creator_date", (q) => q.eq("creatorId", a.creatorId).gte("date", today).lte("date", new Date(horizon).toISOString().slice(0, 10))).take(20)) as Doc<"localEvents">[];
+    const dated = [
+      ...local.map((e) => ({ title: e.title, date: e.date, url: e.url })),
+      ...events.filter((e) => e.status === "active" && e.start >= a.now).map((e) => ({ title: e.title, date: new Date(e.start).toISOString().slice(0, 10), url: "" })),
+    ];
+    const dueOf = (i: Doc<"ideas">): string | null => {
+      const about = (i.version as { about?: string } | undefined)?.about;
+      const text = `${(i.version as { hook?: string } | undefined)?.hook ?? i.messageText} ${(i.version as { why?: string } | undefined)?.why ?? ""}`;
+      const hit = dated.find((e) => e.title === about) ?? dated.find((e) => e.url && i.evidenceLinks[0] === e.url && namesIt(text, e.title));
+      return hit?.date ?? null;
+    };
     const habits = await habitsFor(ctx, creator, a.now);
     const experiment = creator.experiments.filter((e) => !(e as { result?: string }).result).slice(-1)[0]?.text ?? null;
     const medianCut = dossier?.fingerprint?.medianCutSeconds;
@@ -89,6 +103,7 @@ export const inputsFor = internalQuery({
         savedAt: i.savedAt ?? null,
         sentAt: i.sentAt ?? null,
         skippedPlans: skipped.get(String(i._id)) ?? 0,
+        due: dueOf(i),
       })),
       experiment,
       alreadyPlanned: blocks.some((b) => b.planKey === planKeyFor(a.now, tz) && b.status !== "deleted"),

@@ -160,3 +160,17 @@ describe("a skipped idea leaves the plan (2026-11-12: one idea on eight Sunday p
     expect(pickIdeas([ideas[0]], 2, null)).toEqual([]);
   });
 });
+
+describe("pickIdeas: an idea for something dated in the window goes first", () => {
+  it("puts the race nine days out ahead of undated ideas sent at the same moment, soonest first, after saved", () => {
+    const at = 1_000;
+    const ideas = [
+      { ideaId: "a", hook: "legs after the bed", status: "sent", sentAt: at },
+      { ideaId: "b", hook: "trail of lights run", status: "sent", sentAt: at, due: "2026-12-05" },
+      { ideaId: "c", hook: "iced coffee 10k", status: "sent", sentAt: at, due: "2026-11-28" },
+      { ideaId: "d", hook: "watch checking", status: "sent", sentAt: at + 5 },
+      { ideaId: "e", hook: "one they saved", status: "sent", savedAt: at, sentAt: at },
+    ];
+    expect(pickIdeas(ideas.map((i) => ({ ...i, status: i.savedAt ? "saved" : i.status })), 3, null).map((p) => p.ideaId)).toEqual(["e", "c", "b"]);
+  });
+});
