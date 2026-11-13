@@ -244,6 +244,13 @@ export const tasteInputs = internalQuery({
       if (f.captions.length) items.push({ type: "caption", day: day(f.createdAt), text: clip(`captions for a video they filmed: ${f.captions.map((x, i) => `${i + 1}. ${x.text}`).join(" | ")}`, 600) });
       if (f.sounds.length) items.push({ type: "sound", day: day(f.createdAt), text: clip(`sounds for that video: ${f.sounds.map((x) => `${x.name} (${x.why}; ${x.howToUse})`).join(" | ")}`, 600) });
     }
+    // Ideas written to their list without a text (the stock, day one's seeding): the Ideas tab is her work too.
+    for (const i of (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", st.creatorId)).take(300)) as Doc<"ideas">[]) {
+      const skill = (i.produced as { skillVersion?: string } | undefined)?.skillVersion ?? "";
+      if (!/^(idea-stock|first-plan-ideas)\//.test(skill)) continue;
+      const v0 = i.version as { hook?: string; why?: string } | undefined;
+      items.push({ type: "idea", day: day(i.createdAt), text: clip(`[in their Ideas list] ${v0?.hook ?? i.messageText} — ${v0?.why ?? ""}${i.shotList ? ` · shoot: ${i.shotList}` : ""}`, 500) });
+    }
     for (const t of c.trendPicks ?? []) if (t.verdict !== "skip") items.push({ type: "trend", day: day(t.at), text: clip(`trend pick (${t.verdict}): ${t.hook}${t.onScreenText ? ` · on screen: ${t.onScreenText}` : ""} · why: ${t.why}`, 500) });
     items.sort((x, y) => x.day - y.day);
     return {
