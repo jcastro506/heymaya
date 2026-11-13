@@ -151,6 +151,7 @@ import type * as eval_judge from "../eval/judge.js";
 import type * as eval_lessonsLive from "../eval/lessonsLive.js";
 import type * as eval_livingSim from "../eval/livingSim.js";
 import type * as eval_loadTest from "../eval/loadTest.js";
+import type * as eval_localLive from "../eval/localLive.js";
 import type * as eval_longTenure from "../eval/longTenure.js";
 import type * as eval_memoryGauntlet from "../eval/memoryGauntlet.js";
 import type * as eval_onboardingRead from "../eval/onboardingRead.js";
@@ -420,6 +421,7 @@ declare const fullApi: ApiFromModules<{
   "eval/lessonsLive": typeof eval_lessonsLive;
   "eval/livingSim": typeof eval_livingSim;
   "eval/loadTest": typeof eval_loadTest;
+  "eval/localLive": typeof eval_localLive;
   "eval/longTenure": typeof eval_longTenure;
   "eval/memoryGauntlet": typeof eval_memoryGauntlet;
   "eval/onboardingRead": typeof eval_onboardingRead;
