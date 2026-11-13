@@ -10,7 +10,7 @@ import { EXPERIMENT_FIT_PROMPT } from "../../review/weekly";
 describe("every stop she can promise has a tool behind it", () => {
   const names = TOOLS.map((t) => t.function.name);
   it("week_plans and pause_texts exist, are free, and only run when they asked", () => {
-    for (const n of ["week_plans", "pause_texts", "texting_pace", "routine_stop"]) {
+    for (const n of ["week_plans", "pause_texts", "video_replies", "texting_pace", "routine_stop"]) {
       expect(names, n).toContain(n);
       expect(REPLY_ONLY_TOOLS.has(n), n).toBe(true);
       expect(TOOL_CREDITS[n], n).toBe(0);
@@ -18,7 +18,7 @@ describe("every stop she can promise has a tool behind it", () => {
   });
 
   it("the tools tell her never to promise without calling them", () => {
-    for (const n of ["week_plans", "pause_texts"]) expect(TOOLS.find((t) => t.function.name === n)!.function.description).toMatch(/[Nn]ever promise/);
+    for (const n of ["week_plans", "pause_texts", "video_replies"]) expect(TOOLS.find((t) => t.function.name === n)!.function.description).toMatch(/[Nn]ever promise/);
   });
 
   it("the weekly experiment is screened by meaning against what they said", () => {
