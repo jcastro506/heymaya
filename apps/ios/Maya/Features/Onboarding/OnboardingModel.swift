@@ -10,7 +10,7 @@ import Observation
 /// or signing in on another phone resumes at the right screen. Only the two skippable steps are
 /// remembered on the phone, because skipping them writes nothing to the server.
 enum OnboardingStep: Equatable, CaseIterable {
-  case name, plan, connect, watch, calendar, meet, done
+  case name, plan, connect, watch, calendar, nearby, meet, done
 
   struct Facts: Equatable {
     var planStatus: String?
@@ -23,6 +23,8 @@ enum OnboardingStep: Equatable, CaseIterable {
     var nameConfirmed: Bool = true
     /// They answered the calendar screen (yes, no, or not now). Apple doesn't let an app require it.
     var calendarSeen: Bool = true
+    /// They answered the location screen (yes or not now). Optional, like the calendar.
+    var nearbySeen: Bool = true
     /// Accounts they already watch (so a returning user on a new phone isn't asked again).
     var watching: Int = 0
   }
@@ -39,14 +41,16 @@ enum OnboardingStep: Equatable, CaseIterable {
     if !(f.watchSeen || f.paired) { return .watch }
     // Before texting her (2026-10-02): her first plan arrives minutes after START, ready to go on their calendar.
     if !(f.calendarSeen || f.paired) { return .calendar }
+    // With the calendar (2026-11-13): her weekly look for what's on near them, wherever they are.
+    if !(f.nearbySeen || f.paired) { return .nearby }
     // Texting her is required (operator, 2026-10-02): she works over Messages, so there's no way past it but to text.
     if !f.paired { return .meet }
     return .done
   }
 
-  /// The dots across the top: six real steps.
-  var index: Int { [.name: 1, .plan: 2, .connect: 3, .watch: 4, .calendar: 5, .meet: 6][self] ?? 6 }
-  static let count = 6
+  /// The dots across the top: seven real steps.
+  var index: Int { [.name: 1, .plan: 2, .connect: 3, .watch: 4, .calendar: 5, .nearby: 6, .meet: 7][self] ?? 7 }
+  static let count = 7
 }
 
 struct OnboardingProgress: Decodable, Equatable {
@@ -88,6 +92,7 @@ final class OnboardingModel {
   var connectSeen: Bool { didSet { if !preview { UserDefaults.standard.set(connectSeen, forKey: Self.key("connectSeen")) } } }
   var watchSeen: Bool { didSet { if !preview { UserDefaults.standard.set(watchSeen, forKey: Self.key("watchSeen")) } } }
   var calendarSeen: Bool { didSet { if !preview { UserDefaults.standard.set(calendarSeen, forKey: Self.key("calendarSeen")) } } }
+  var nearbySeen: Bool { didSet { if !preview { UserDefaults.standard.set(nearbySeen, forKey: Self.key("nearbySeen")) } } }
 
   /// Debug only (`-MayaOnboarding plan|connect|watch|meet`): every screen with made-up data, no network,
   /// and nothing saved to the phone (a preview must never skip a real run's steps).
@@ -99,10 +104,12 @@ final class OnboardingModel {
     watchSeen = UserDefaults.standard.bool(forKey: Self.key("watchSeen"))
     // Already answered the iPhone's prompt (say, a reinstall): don't ask again.
     calendarSeen = UserDefaults.standard.bool(forKey: Self.key("calendarSeen")) || EKEventStore.authorizationStatus(for: .event) != .notDetermined
+    nearbySeen = UserDefaults.standard.bool(forKey: Self.key("nearbySeen")) || Nearby.answered
     if let start = preview {
       connectSeen = ![.name, .plan, .connect].contains(start)
-      watchSeen = [.calendar, .meet, .done].contains(start)
-      calendarSeen = [.meet, .done].contains(start)
+      watchSeen = [.calendar, .nearby, .meet, .done].contains(start)
+      calendarSeen = [.nearby, .meet, .done].contains(start)
+      nearbySeen = [.meet, .done].contains(start)
       progress = OnboardingProgress(paired: start == .done, planStatus: [.name, .plan].contains(start) ? "onboarding" : "trialing", phone: nil, posts: 24, firstName: "Riley", nameConfirmed: start != .name, instagramEnabled: false)
       social = SocialStatus(status: "connected", accounts: [.name, .plan, .connect].contains(start) ? [] : [.init(platform: "tiktok", username: "riverloopruns", needsReconnect: false)])
       loaded = true
@@ -116,7 +123,7 @@ final class OnboardingModel {
   var instagramEnabled: Bool { progress?.instagramEnabled ?? true }
 
   var facts: OnboardingStep.Facts {
-    .init(planStatus: progress?.planStatus, connectedAccounts: social?.accounts.filter { !$0.needsReconnect }.count ?? 0, connectSeen: connectSeen, paired: progress?.paired ?? false, watchSeen: watchSeen, nameConfirmed: progress?.nameConfirmed ?? true, calendarSeen: calendarSeen, watching: watched.count)
+    .init(planStatus: progress?.planStatus, connectedAccounts: social?.accounts.filter { !$0.needsReconnect }.count ?? 0, connectSeen: connectSeen, paired: progress?.paired ?? false, watchSeen: watchSeen, nameConfirmed: progress?.nameConfirmed ?? true, calendarSeen: calendarSeen, nearbySeen: nearbySeen, watching: watched.count)
   }
 
   var step: OnboardingStep { OnboardingStep.decide(facts) }
@@ -125,7 +132,7 @@ final class OnboardingModel {
   /// the server, so there's no going "back" past them.
   var canGoBack: Bool {
     switch step {
-    case .watch, .calendar: return true
+    case .watch, .calendar, .nearby: return true
     case .meet: return !(progress?.paired ?? false)
     default: return false
     }
@@ -135,7 +142,8 @@ final class OnboardingModel {
     switch step {
     case .watch: connectSeen = false
     case .calendar: watchSeen = false
-    case .meet: calendarSeen = false
+    case .nearby: calendarSeen = false
+    case .meet: nearbySeen = false
     default: break
     }
   }

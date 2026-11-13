@@ -4,8 +4,8 @@ import XCTest
 /// Onboarding resumes from the server's facts (spec §5.1): the right screen after a kill, a reinstall
 /// or a sign-in on another phone, and nobody who's already set up is sent back through it.
 final class OnboardingTests: XCTestCase {
-  private func step(plan: String? = nil, accounts: Int = 0, connectSeen: Bool = false, paired: Bool = false, watchSeen: Bool = false, nameConfirmed: Bool = true, calendarSeen: Bool = true, watching: Int = 0) -> OnboardingStep {
-    OnboardingStep.decide(.init(planStatus: plan, connectedAccounts: accounts, connectSeen: connectSeen, paired: paired, watchSeen: watchSeen, nameConfirmed: nameConfirmed, calendarSeen: calendarSeen, watching: watching))
+  private func step(plan: String? = nil, accounts: Int = 0, connectSeen: Bool = false, paired: Bool = false, watchSeen: Bool = false, nameConfirmed: Bool = true, calendarSeen: Bool = true, nearbySeen: Bool = true, watching: Int = 0) -> OnboardingStep {
+    OnboardingStep.decide(.init(planStatus: plan, connectedAccounts: accounts, connectSeen: connectSeen, paired: paired, watchSeen: watchSeen, nameConfirmed: nameConfirmed, calendarSeen: calendarSeen, nearbySeen: nearbySeen, watching: watching))
   }
 
   func testTheOrder() {
@@ -21,6 +21,8 @@ final class OnboardingTests: XCTestCase {
   func testCalendarComesBeforeTextingHerAndCanBeSkipped() {
     XCTAssertEqual(step(plan: "trialing", accounts: 1, connectSeen: true, watchSeen: true, calendarSeen: false), .calendar, "asked after favorites, before texting her")
     XCTAssertEqual(step(plan: "trialing", accounts: 1, connectSeen: true, watchSeen: true, calendarSeen: true), .meet, "a yes, a no or not now all move on")
+    XCTAssertEqual(step(plan: "trialing", accounts: 1, connectSeen: true, watchSeen: true, calendarSeen: true, nearbySeen: false), .nearby, "what's on near them, after the calendar")
+    XCTAssertEqual(step(plan: "trialing", accounts: 1, connectSeen: true, paired: true, watchSeen: true, nearbySeen: false), .done, "someone already texting her isn't asked for location")
     XCTAssertEqual(step(plan: "active", accounts: 1, connectSeen: true, paired: true, watchSeen: true, calendarSeen: false), .done, "someone already texting her isn't stopped for it")
     XCTAssertEqual(OnboardingStep.calendar.index, 5)
     XCTAssertEqual(OnboardingStep.meet.index, OnboardingStep.count)
@@ -67,7 +69,9 @@ final class OnboardingTests: XCTestCase {
     XCTAssertEqual(m.step, .meet)
     XCTAssertTrue(m.canGoBack)
     m.back()
-    XCTAssertEqual(m.step, .calendar, "back from texting her reopens the calendar")
+    XCTAssertEqual(m.step, .nearby, "back from texting her reopens location")
+    m.back()
+    XCTAssertEqual(m.step, .calendar, "back from location reopens the calendar")
     m.back()
     XCTAssertEqual(m.step, .watch, "back from the calendar reopens favorites")
     m.back()
