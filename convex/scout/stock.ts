@@ -26,6 +26,8 @@ import { bare, clip, clipWords } from "../lib/clip";
 import { scrubPostIds } from "../core/plainLanguage";
 import { momentsOf } from "../onboarding/moments";
 import { multiplesHold } from "../calendar/firstIdeas";
+import { pairedRows } from "../core/schedule";
+import { spreadDelays, HOURLY_SPREAD_MS } from "../core/fanout";
 
 const D = 86_400_000;
 
@@ -57,6 +59,7 @@ export function upcomingMoments(now: number): Array<{ name: string; date: string
 export const STOCK_SKILL = `idea-stock
 When: their list of ideas is running low. You're writing the next few posts they could make, for their Ideas list and next week's plan.
 Use what you were given, in this order of trust: what they told you (rules, things they said they don't want, what they're into now) beats what worked; what worked for THEM (their own posts with the biggest multiples and saves, the formats in their dossier) beats what worked for others.
+A goal or date they told you about, or one on their calendar (a race, a launch, a trip, a move), gets ideas that build toward it, tighter as it nears (the prep, the week of, the day), and after it a recap or what's next, never still counting down.
 Mix, when the evidence is there: at least one that puts a format of theirs that worked on a NEW topic they'd want; one from their lane (a breakout, shape, sound or trend you were given, with its link); one timely if a moment or something on their calendar is within three weeks. Never a topic or format they ruled out. Never an idea they already have or passed on (listed). No trend talk for its own sake, no "go viral", nothing generic you could send anyone in their lane.
 Each idea is filmable this week with what they have: a hook line a person would say, one clause on why (in plain words: "like your rating series", "people in your lane are doing X this week"), and how to shoot it in a few words.
 The why says only what you were given: which of their posts it rhymes with, which lane post or trend it comes from, which moment it's for. Never a claim about the platform, search traffic, the algorithm, or "your best numbers" unless that fact is in front of you.
@@ -174,5 +177,25 @@ export const topUp = internalAction({
     if (!ideas.length) return { added: 0, reason: "the model gave no usable ideas" };
     const w = await ctx.runMutation(internal.scout.stock.write, { creatorId: a.creatorId, ideas, model: spec.primary });
     return { added: w.ideaIds.length, reason: `topped up to ${i.fresh + w.ideaIds.length} of ${i.target}` };
+  },
+});
+
+/**
+ * Daily, its own job (2026-11-12, horizon sim): the stock used to top up only inside the Sunday plan, and the plan
+ * stops for people who never book one, so exactly they never got a fresh idea again (weeks of "0 ideas, no plan").
+ * One action per creator, spread over the hour; a full stock costs nothing.
+ */
+export const due = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<Id<"creators">[]> => (await pairedRows(ctx, { activeOnly: true })).filter((r) => r.hasDossier).map((r) => r.creatorId),
+});
+
+export const runAll = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{ creators: number }> => {
+    const ids = await ctx.runQuery(internal.scout.stock.due, {});
+    const delays = spreadDelays(ids.length, HOURLY_SPREAD_MS);
+    for (let k = 0; k < ids.length; k++) await ctx.scheduler.runAfter(delays[k], internal.scout.stock.topUp, { creatorId: ids[k] });
+    return { creators: ids.length };
   },
 });
