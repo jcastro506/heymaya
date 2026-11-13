@@ -31,9 +31,9 @@ export type HorizonRole = "goal" | "life";
 export const horizonRole = (i: number): HorizonRole => (i % 2 === 0 ? "goal" : "life");
 
 const GOAL_RE = /\b(marathon|chicago|26\.2|race day|race week|taper|weeks? (out|to go|until)|countdown|bib|training block|start line|finish line)\b/i;
-const TAPER_RE = /\b(race[- ]day|race morning|taper|race week|this weekend|final long run|last long run|shakeout|carb|bib|weeks? out|days? out|start line|nerves)\b/i;
-const RECAP_RE = /\b(just ran|ran (a|the|my) (full )?marathon|after (the|my|a) (race|marathon)|post-marathon|recap|finished|finish line|medal|recovery|recovering|post-race|after the race|i did it|ran it|26\.2 done|results?)\b/i;
-const MOVE_RE = /\b(denver|moving|the move|new city|new place|boxes|colorado|pack(ing)? up|unpack\w*|empty (the|my) fridge|new kitchen)\b/i;
+const TAPER_RE = /\b(race[- ]day|race morning|taper\w*|race week|this weekend|final long run|last long run|shakeout|carb|bib|weeks? out|days? out|start line|nerves)\b/i;
+const RECAP_RE = /\b(just ran|ran (a|the|my) (full )?marathon|after (the|my|a) (race|marathon)|post[- ]?marathon|recap|finish(ed)?|finish line|across the line|sub[- ]?4|\d:\d\d|after (my|your) first marathon|medal|recovery|recovering|post-race|after the race|i did it|ran it|26\.2 done|results?)\b/i;
+const MOVE_RE = /\b(denver|moving|the move|new city|new place|boxes|colorado|pack(ing)? up|unpack\w*|empty (the|my) fridge|fridge is (almost )?empty|new kitchen)\b/i;
 
 /** Pure: which horizon beats run in step `d` (the week number, from 1). */
 export function horizonBeats(d: number): string[] {

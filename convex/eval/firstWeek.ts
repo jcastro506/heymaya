@@ -825,7 +825,13 @@ export const runStep = internalAction({
           result = `${stride === D ? "a day" : "a week"} passed (${rows} rows moved)`;
           break;
         }
-        case "expireQuestions": result = `expired ${(await ctx.runMutation(internal.core.messages.expireStaleQuestions, { creatorId: id })).expired}`; break;
+        case "expireQuestions": {
+          // The nightly work: stale questions expire, and consolidation turns ended notes into what stays true ("lives in Denver now").
+          const q = (await ctx.runMutation(internal.core.messages.expireStaleQuestions, { creatorId: id })).expired;
+          const c = await ctx.runMutation(internal.agent.consolidate.consolidateOne, { creatorId: id, now: Date.now() });
+          result = `expired ${q}; notes ended ${c.expiredNotes}`;
+          break;
+        }
         case "sampler": { const r = await ctx.runAction(internal.scout.sampler.run, { creatorId: id }); result = `${r.accounts} accounts, ${r.signals} breakouts, ${r.failed} failed`; if (r.failed) failure = `sampler: ${r.failed} account reads failed`; break; }
         case "sweep": { const r = await ctx.runAction(internal.scout.sweep.run, { creatorId: id }); result = `${r.keywords} keywords, ${r.signals} shapes, ${r.failed} failed`; if (r.failed) failure = `sweep: ${r.failed} searches failed`; break; }
         case "morning": result = said(await ctx.runAction(internal.agent.cadence.morning, { creatorId: id })); break;
