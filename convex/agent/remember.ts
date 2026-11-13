@@ -119,7 +119,11 @@ export const addNote = internalMutation({
       return { added: false, ...(superseded ? { epoch: (c.memoryEpoch ?? 0) + 1 } : {}) };
     }
     const id = `n_${now}_${Math.floor(Math.random() * 1e6)}`;
-    notes.push({ id, text: a.text, kind: a.kind, sourceMessageId: a.sourceMessageId, at: now, expiresHint: a.expiresDays ? now + a.expiresDays * 86_400_000 : undefined, ...(a.expiresDays && a.after ? { after: a.after } : {}) });
+    // A correction of a time-bound note ("moving to Denver today") keeps what stays true after it, and its end date
+    // unless it gives a new one; otherwise "moving today" outlives the move and "lives in Denver" is lost (horizon sim).
+    const expiresHint = a.expiresDays ? now + a.expiresDays * 86_400_000 : superseded?.expiresHint;
+    const after = a.after ?? superseded?.after;
+    notes.push({ id, text: a.text, kind: a.kind, sourceMessageId: a.sourceMessageId, at: now, expiresHint, ...(expiresHint && after ? { after } : {}) });
     await ctx.db.patch(c._id, { notes: notes.slice(-60), updatedAt: now }); // a bounded memory; the oldest fall off, the dossier keeps what mattered
     await ctx.scheduler.runAfter(0, internal.agent.memory.index, { creatorId: c._id, kind: "note", refId: id, text: a.text });
     return { added: true, ...(superseded ? { epoch: (c.memoryEpoch ?? 0) + 1 } : {}) };
