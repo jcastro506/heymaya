@@ -27,6 +27,7 @@ import { scrubPostIds } from "../core/plainLanguage";
 import { momentsOf } from "../onboarding/moments";
 import { multiplesHold } from "../calendar/firstIdeas";
 import { pairedRows } from "../core/schedule";
+import { isAfterNote } from "../agent/consolidate";
 import { spreadDelays, HOURLY_SPREAD_MS } from "../core/fanout";
 
 const D = 86_400_000;
@@ -138,8 +139,10 @@ export const inputs = internalQuery({
       lane, trends,
       calendar: events.filter((e) => e.status === "active" && e.class !== "private" && e.class !== "routine").map((e) => `${e.title} (${new Date(e.start).toISOString().slice(0, 10)}, in ${Math.round((e.start - a.now) / D)} days)`).slice(0, 8),
       // What they told her about their life (plans, a move, a race): in the brief, not only deep in the prefix.
-      life: (c.notes ?? []).filter((n) => !n.tombstonedAt && n.kind !== "bit" && (!n.expiresHint || n.expiresHint > a.now) && (n.kind === "life" || n.after)).slice(-8).map((n) => clip(n.text, 160)),
-      haveTexts: ideas.filter((i) => i.status !== "passed" && a.now - i.createdAt < STOCK.freshMs).map((i) => `${hookOf(i)} ${String((i.version as { why?: string } | undefined)?.why ?? "")}`),
+      // A change that just happened ("lives in Denver now") stays in the brief for six weeks, then lives in the prefix like any fact.
+      life: (c.notes ?? []).filter((n) => !n.tombstonedAt && n.kind !== "bit" && (!n.expiresHint || n.expiresHint > a.now) && (n.kind === "life" || n.after || (isAfterNote(n) && a.now - n.at < STOCK.momentsAheadMs))).slice(-8).map((n) => clip(n.text, 160)),
+      // Holiday ideas count over the same six weeks the calendar looks ahead, so a holiday can't refill every ten days.
+      haveTexts: ideas.filter((i) => i.status !== "passed" && a.now - i.createdAt < STOCK.momentsAheadMs).map((i) => `${hookOf(i)} ${String((i.version as { why?: string } | undefined)?.why ?? "")}`),
     };
   },
 });
