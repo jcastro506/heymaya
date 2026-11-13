@@ -42,7 +42,7 @@ export function namesAnAccount(text: string, handle: string): boolean {
 }
 
 export const CLASSIFY_PROMPT = `You label one message a content creator sent to their assistant. Pick exactly one label:
-- "profile_ask": they are asking about a specific OTHER creator's account by its @handle (not a brand or company they want to research, pitch, work with or get paid by: that is "text") (why it's growing, what it's doing, whether to copy it). Give the handle without @ and the platform (instagram if they say ig/insta/reels or the handle style suggests it, else tiktok). Never their own handle.
+- "profile_ask": they are asking about a specific OTHER creator's account by its @handle (not a brand or company they want to research, pitch, work with or get paid by: that is "text") (why it's growing, what it's doing, whether to copy it). Give the handle without @ and the platform (always tiktok). Never their own handle.
 - "recall": they want something from earlier: an idea she sent, something they saved, a thing she said or they told her.
 - "opinion_ask": they are asking for her judgment on a plan or a hook in words (no link, no file), e.g. "should i post at 7", "is this hook good: …".
 - "calendar_answer": they are answering a question she asked about a filming block or a date.
@@ -60,8 +60,8 @@ export const CLASSIFY_PROMPT = `You label one message a content creator sent to 
 - "check_in": it COULD be about them as a person or just about content, and nothing in the message or her last message settles it ("i'm giving up", "i'm done", "what's even the point", "i can't do this anymore" with no content words around it).
 - Frustration about content is "text", never these two: "i'm giving up on tiktok", "i'm so over posting", "this flopped and i'm done", "i want to quit posting", "what's the point if nobody watches". When unsure between "text" and "check_in", decide from THEIR message: content words in it (posting, tiktok, views, a video) make it "text"; her last message is almost always about content, so it settles nothing unless it was her asking whether they meant posting or more. When unsure between "check_in" and "distress", choose "check_in".
 - "text": anything else, including answers about goals ("brand deals", "just staying consistent", "I already have 100k, I want better partnerships"), motivation, or uncertainty. These are conversation, not niche changes or calendar consent. Follow a new concrete request normally even during onboarding.
-Examples: "i'm at a rooftop bar with the whole run club, what do i shoot" → moment · "make it 15 seconds" → edit_idea lengthSec "15" · "change the hook to 'nobody trains for this part'" → edit_idea hook · "scrap that" → drop_idea · "add @runwithcarly to the list" → manage/add_admired handle runwithcarly · "watch @gymgirl on insta" → manage/add_admired instagram · "be blunter with me" → manage/tone blunt · "go easier on me" → manage/tone friend · "don't text me before 9am" → manage/quiet_hours end 09:00 (start from current) · "stop watching @x" → manage/stop_watching · "i only do gear reviews now" → manage/niche · "why is @x blowing up" → profile_ask · "what was that shoe rack idea" → recall · "should i post at 7 or 9" → opinion_ask.
-Output ONLY JSON: {"intent": "profile_ask|recall|opinion_ask|calendar_answer|manage|moment|edit_idea|drop_idea|distress|check_in|text", "handle": "", "platform": "tiktok|instagram", "action": "", "start": "", "end": "", "tone": "", "field": "", "text": ""}`;
+Examples: "i'm at a rooftop bar with the whole run club, what do i shoot" → moment · "make it 15 seconds" → edit_idea lengthSec "15" · "change the hook to 'nobody trains for this part'" → edit_idea hook · "scrap that" → drop_idea · "add @runwithcarly to the list" → manage/add_admired handle runwithcarly · "be blunter with me" → manage/tone blunt · "go easier on me" → manage/tone friend · "don't text me before 9am" → manage/quiet_hours end 09:00 (start from current) · "stop watching @x" → manage/stop_watching · "i only do gear reviews now" → manage/niche · "why is @x blowing up" → profile_ask · "what was that shoe rack idea" → recall · "should i post at 7 or 9" → opinion_ask.
+Output ONLY JSON: {"intent": "profile_ask|recall|opinion_ask|calendar_answer|manage|moment|edit_idea|drop_idea|distress|check_in|text", "handle": "", "platform": "tiktok", "action": "", "start": "", "end": "", "tone": "", "field": "", "text": ""}`;
 
 /**
  * Pure: an unmistakable "watch this account" request, read by code with no model call. The scale test
@@ -93,7 +93,8 @@ export function obviousWatch(text: string, own: { tiktok?: string; instagram?: s
   const rest = m[3].toLowerCase();
   if ([own.tiktok, own.instagram].filter(Boolean).map((h) => h!.toLowerCase()).includes(handle)) return null;
   if (/\b(post|video|reel|caption|idea|hook)\b/.test(rest)) return null; // "add @x to the caption" is not a watch
-  const platform = /\b(insta|instagram|ig|reels?)\b/.test(rest) ? "instagram" : "tiktok";
+  if (/\b(insta|instagram|ig|reels?)\b/.test(rest)) return null; // TikTok only: she answers that one herself
+  const platform = "tiktok" as const;
   if (/^(stop watching|unwatch|remove|drop)$/.test(verb)) return { intent: "manage", action: "stop_watching", handle };
   return { intent: "manage", action: "add_admired", platform, handle };
 }
@@ -134,7 +135,7 @@ export async function classifyText(ctx: ActionCtx, input: { creatorId: Id<"creat
     }
     if (j.intent === "manage") {
       const handle = String(j.handle ?? "").replace(/^@/, "").trim().toLowerCase();
-      const platform = j.platform === "instagram" ? "instagram" : "tiktok";
+      const platform = "tiktok" as const;
       if (j.action === "quiet_hours" && j.start && j.end) return { intent: "manage", action: "quiet_hours", start: String(j.start), end: String(j.end) };
       if (j.action === "tone" && (j.tone === "coach" || j.tone === "friend" || j.tone === "blunt")) return { intent: "manage", action: "tone", tone: j.tone };
       // "watch X" / "stop watching X" must name X in their message; a handle lifted from context is not a command
@@ -149,7 +150,7 @@ export async function classifyText(ctx: ActionCtx, input: { creatorId: Id<"creat
       const handle = String(j.handle ?? "").replace(/^@/, "").trim().toLowerCase();
       const mine = [input.ownHandles.tiktok, input.ownHandles.instagram].filter(Boolean).map((h) => h!.toLowerCase().replace(/^@/, ""));
       if (!handle || mine.includes(handle) || !namesAnAccount(input.text, handle)) return { intent: "text" };
-      return { intent: "profile_ask", platform: j.platform === "instagram" ? "instagram" : "tiktok", handle };
+      return { intent: "profile_ask", platform: "tiktok" as const, handle };
     }
     if (j.intent === "recall" || j.intent === "opinion_ask" || j.intent === "calendar_answer") return { intent: j.intent };
     return { intent: "text" };

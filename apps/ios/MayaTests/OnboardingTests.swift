@@ -85,24 +85,17 @@ final class OnboardingTests: XCTestCase {
     XCTAssertEqual(OnboardingModel.plain(nil), "Something went wrong. Try again in a moment.")
   }
 
-  /// Instagram off: the Connect step lists TikTok alone and says so; on, both as before.
-  func testConnectListsOnlyTikTokWhenInstagramIsOff() {
-    XCTAssertEqual(Platforms.connectable(instagram: false), ["tiktok"])
-    XCTAssertEqual(Platforms.connectable(instagram: true), ["instagram", "tiktok"])
-    XCTAssertEqual(ConnectWords.title(instagram: false), "Connect your TikTok.")
-    XCTAssertEqual(ConnectWords.button(instagram: false, connected: false), "Connect TikTok to continue")
-    XCTAssertEqual(ConnectWords.button(instagram: false, connected: true), "Continue")
-    XCTAssertEqual(ConnectWords.title(instagram: true), "Connect your accounts.")
+  /// TikTok only: the Connect step asks for their TikTok and says so.
+  func testConnectAsksForTikTok() {
+    XCTAssertEqual(ConnectWords.title, "Connect your TikTok.")
+    XCTAssertEqual(ConnectWords.button(connected: false), "Connect TikTok to continue")
+    XCTAssertEqual(ConnectWords.button(connected: true), "Continue")
   }
 
-  /// The flag comes from the server; a server that predates it had Instagram on.
-  @MainActor
-  func testInstagramFlagFromProgress() throws {
-    let off = try JSONDecoder().decode(OnboardingProgress.self, from: Data(#"{"paired":false,"planStatus":"trialing","phone":null,"posts":0,"instagramEnabled":false}"#.utf8))
-    XCTAssertEqual(off.instagramEnabled, false)
-    let old = try JSONDecoder().decode(OnboardingProgress.self, from: Data(#"{"paired":false,"planStatus":"trialing","phone":null,"posts":0}"#.utf8))
-    XCTAssertNil(old.instagramEnabled)
-    XCTAssertFalse(OnboardingModel(preview: .connect).instagramEnabled, "the preview runs TikTok only")
+  /// A server that still sends the old Instagram flag decodes fine; the app ignores it.
+  func testOldInstagramFlagIsIgnored() throws {
+    let p = try JSONDecoder().decode(OnboardingProgress.self, from: Data(#"{"paired":false,"planStatus":"trialing","phone":null,"posts":0,"instagramEnabled":true}"#.utf8))
+    XCTAssertEqual(p.planStatus, "trialing")
   }
 
   /// The plan step starts on the first plan the server offers, never a hardcoded "duo".

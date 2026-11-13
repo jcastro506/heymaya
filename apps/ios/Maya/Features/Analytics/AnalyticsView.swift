@@ -1,7 +1,7 @@
 import Charts
 import SwiftUI
 
-/// Your numbers, honestly: per platform, only what TikTok and Instagram actually give us
+/// Your numbers, honestly: only what TikTok actually gives us
 /// (via your connected accounts, or the public counts), each labelled with where it came from.
 struct AnalyticsView: View {
   @State private var data = Live<Analytics?>("ui:analytics")
@@ -29,31 +29,18 @@ struct AnalyticsView: View {
 
   @ViewBuilder
   private func content(_ a: Analytics) -> some View {
-    // With Instagram off, an old Instagram connection shows nothing here (no Instagram cards or prompts).
-    let accounts = a.accounts.filter { Platforms.instagramEnabled || $0.platform != "instagram" }
+    // TikTok only (2026-11-13): an old Instagram connection shows nothing here.
+    let accounts = a.accounts.filter { $0.platform == "tiktok" }
     VStack(spacing: 12) {
       ForEach(accounts) { AccountCard(account: $0) }
     }
 
-    if accounts.count > 1 {
-      Picker("Platform", selection: $platform) {
-        Text("All").tag("all")
-        ForEach(accounts) { Text($0.platform == "instagram" ? "Instagram" : "TikTok").tag($0.platform) }
-      }
-      .pickerStyle(.segmented)
-    }
-
-    // A1: account-level cards for the chosen platform(s): growth everywhere; profile and audience on Instagram.
-    let shown = accounts.filter { platform == "all" || $0.platform == platform }
+    // A1: follower growth for their TikTok.
     VStack(spacing: 12) {
-      ForEach(shown) { FollowerGrowthCard(account: $0) }
-      if let ig = shown.first(where: { $0.platform == "instagram" }) {
-        if let p = ig.profile { ProfileNumbersCardView(profile: p) }
-        if let au = ig.audience { WhoFollowsCardView(audience: au) }
-      }
+      ForEach(accounts) { FollowerGrowthCard(account: $0) }
     }
 
-    let posts = a.posts.filter { (platform == "all" || $0.platform == platform) && (Platforms.instagramEnabled || $0.platform != "instagram") }
+    let posts = a.posts.filter { $0.platform == "tiktok" }
     if posts.isEmpty {
       EmptyNote(text: "No posts read yet. They show up here after her next read of your account.")
     } else {
@@ -149,8 +136,8 @@ struct AccountSetupSheet: View {
               }
             }
           }
-          if let url = URL(string: platform == "instagram" ? "instagram://user?username=" : "snssdk1233://") {
-            Link(destination: url) { Label(platform == "instagram" ? "Open Instagram" : "Open TikTok", systemImage: "arrow.up.forward.app").frame(maxWidth: .infinity) }
+          if let url = URL(string: "snssdk1233://") {
+            Link(destination: url) { Label("Open TikTok", systemImage: "arrow.up.forward.app").frame(maxWidth: .infinity) }
               .buttonStyle(.borderedProminent).tint(Palette.purple).padding(.top, 6)
           }
         }.padding(20)
@@ -233,15 +220,15 @@ struct AnalyticsTile: View {
   }
 }
 
-/// A small platform glyph for covers, so a mixed TikTok + Instagram feed stays readable.
+/// A small TikTok glyph for covers.
 struct PlatformMark: View {
   let platform: String
   var body: some View {
-    Image(systemName: platform == "instagram" ? "camera.fill" : "music.note")
+    Image(systemName: "music.note")
       .font(.system(size: 10, weight: .bold))
       .foregroundStyle(.white)
       .frame(width: 22, height: 22)
-      .background(platform == "instagram" ? Palette.coral : .black.opacity(0.55), in: Circle())
-      .accessibilityLabel(platform == "instagram" ? "Instagram" : "TikTok")
+      .background(.black.opacity(0.55), in: Circle())
+      .accessibilityLabel("TikTok")
   }
 }

@@ -19,7 +19,6 @@ struct SettingsView: View {
       }
       Section("Your accounts") {
         if let tiktok = settings.handles.tiktok { row("TikTok", "@\(tiktok)") }
-        if let ig = settings.shownInstagram { row("Instagram", "@\(ig)") }
       }
       Section {
         CalendarRow()

@@ -25,14 +25,13 @@ beforeEach(() => {
 afterEach(() => { for (const k of ENV_KEYS) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; } resetFixtureClients(); });
 
 const TT = "https://www.tiktok.com/@runwithcarly/video/7395965676629888274";
-const IG = "https://www.instagram.com/reel/DbrZ8lIlxma/";
 
 type Report = { status: string; summary: { pass: number; fail: number; na: number }; matrix: Record<string, Record<string, string>>; failures: Array<{ scenario: string; flow: string; why: string[] }>; cells: Array<Cell & { verdict: { pass: boolean | null; why: string[] } }> };
 
 async function drill(scenarios: string[], flows?: string[]) {
   const t = convexTest(schema, modules);
   const videoFileId = await t.run((ctx) => ctx.storage.store(new Blob([new Uint8Array(64)], { type: "video/mp4" })));
-  const r = await t.action(internal.eval.outageDrill.start, { scenarios, flows, turnMode: "inline", tiktokLink: TT, instagramLink: IG, videoFileId, runId: "drill-test" });
+  const r = await t.action(internal.eval.outageDrill.start, { scenarios, flows, turnMode: "inline", tiktokLink: TT, videoFileId, runId: "drill-test" });
   for (let i = 0; i < r.cells; i++) await t.action(internal.eval.outageDrill.runCell, { runId: r.runId, i });
   await t.action(internal.eval.outageDrill.finishRun, { runId: r.runId });
   const report = (await t.query(internal.eval.outageDrill.report, { runId: r.runId, cells: true })) as Report;
@@ -45,7 +44,7 @@ describe("the plan", () => {
     for (const f of FAULTS) expect(SCENARIOS[f]).toEqual([f]);
     expect(SCENARIOS.bad_day.length).toBeGreaterThan(3);
     expect(flowsFor("bad_day")).toEqual([...FLOWS]);
-    expect(flowsFor("scrape_402")).toEqual(expect.arrayContaining(["scout", "sampler", "sweep", "tiktok_link", "instagram_link"]));
+    expect(flowsFor("scrape_402")).toEqual(expect.arrayContaining(["scout", "sampler", "sweep", "tiktok_link"]));
     expect(flowsFor("gmail_5xx")).toEqual(["email_send"]);
     expect(flowsFor("classifier_timeout")).toEqual(["text"]);
   });
@@ -75,22 +74,21 @@ describe("the verdict", () => {
 
 describe("the drill, run", () => {
   it("ScrapeCreators out of credits (402): every flow ends, the waiting creator is told it's ours, the operator gets a row, nothing is cached or retired", async () => {
-    const { report, faultsLeft } = await drill(["scrape_402"], ["scout", "sampler", "sweep", "text", "tiktok_link", "instagram_link"]);
+    const { report, faultsLeft } = await drill(["scrape_402"], ["scout", "sampler", "sweep", "text", "tiktok_link"]);
     expect(report.status).toBe("finished");
     expect(faultsLeft.config).toBeNull(); // the switch is off after the run
     const cells = Object.fromEntries(report.cells.map((c) => [c.flow, c]));
-    for (const flow of ["scout", "sampler", "sweep", "tiktok_link", "instagram_link"]) {
+    for (const flow of ["scout", "sampler", "sweep", "tiktok_link"]) {
       expect(cells[flow].reached, flow).toBe(true);
       expect(cells[flow].verdict.pass, `${flow}: ${cells[flow].verdict.why.join("; ")}`).toBe(true);
       expect(cells[flow].badCache, flow).toEqual([]);
       expect(cells[flow].wrongMarks, flow).toEqual([]);
     }
     // Out of credits reaches the operator from whichever flow hit it first, the scout included (it used to degrade silently).
-    for (const flow of ["scout", "sampler", "sweep", "tiktok_link", "instagram_link"]) expect(cells[flow].operator.health, flow).toContain("scrapecreators/credit-balance:drill");
+    for (const flow of ["scout", "sampler", "sweep", "tiktok_link"]) expect(cells[flow].operator.health, flow).toContain("scrapecreators/credit-balance:drill");
     expect(cells.sampler.operator.health).toContain("scrapecreators/read:creator:drill");
     expect(cells.sweep.operator.health).toContain("scrapecreators/read:creator:drill");
     expect(cells.tiktok_link.heard.map((h) => h.kind)).toEqual(["opinion"]);
-    expect(cells.instagram_link.heard.map((h) => h.kind)).toEqual(["opinion"]);
     for (const c of report.cells) expect(["stuck", "silent"]).not.toContain(c.ended);
   });
 

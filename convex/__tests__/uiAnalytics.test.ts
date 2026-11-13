@@ -65,10 +65,10 @@ describe("analytics for the app", () => {
     expect(new Set(zernioPosts.map((p) => String(p.platform).toLowerCase()))).toEqual(new Set(["tiktok", "instagram"]));
   });
 
-  it("overview: both accounts, connected, followers now and a month ago, posts with a basis", async () => {
+  it("overview: their TikTok, connected, followers now and a month ago, posts with a basis", async () => {
     const { t } = await setup();
     const r = await t.withIdentity({ subject: "user_a" }).query(api.ui.analytics, {});
-    expect(r?.accounts.map((a) => [a.platform, a.connected])).toEqual([["tiktok", true], ["instagram", true]]);
+    expect(r?.accounts.map((a) => [a.platform, a.connected]), "TikTok only: a connected Instagram is never shown").toEqual([["tiktok", true]]);
     const tt = r!.accounts.find((a) => a.platform === "tiktok")!;
     expect([tt.followers, tt.followers30dAgo]).toEqual([2000, 1800]);
     expect(r?.posts.length).toBeGreaterThan(0);
@@ -84,13 +84,6 @@ describe("analytics for the app", () => {
     save("post.tiktok", r);
   });
 
-  it("an Instagram post keeps its connected numbers and labels them", async () => {
-    const { t, instagram } = await setup();
-    const r = await t.withIdentity({ subject: "user_a" }).query(api.ui.post, { id: instagram as never });
-    expect(r?.platform).toBe("instagram");
-    expect(r?.connected).not.toBeNull();
-    save("post.instagram", r);
-  });
 
   it("a public-only post leads with the public count and says reach is unknown", async () => {
     const { t, publicOnly } = await setup();
@@ -108,60 +101,27 @@ describe("analytics for the app", () => {
     expect(await t.query(api.ui.post, { id: bPost as never })).toBeNull();
   });
 
-  it("A1: follower growth per platform, 'From your profile' and 'Who follows you' on Instagram, from stored rows only", async () => {
+  it("A1: follower growth for their TikTok, from stored rows only; a connected Instagram is never shown", async () => {
     const { t } = await setupWithInsights();
     const r = await t.withIdentity({ subject: "user_a" }).query(api.ui.analytics, {});
-    const ig = r!.accounts.find((x) => x.platform === "instagram")!;
+    expect(r!.accounts.map((x) => x.platform)).toEqual(["tiktok"]);
     const tt = r!.accounts.find((x) => x.platform === "tiktok")!;
-    expect(ig.growth!.days.length).toBeGreaterThan(30);
-    expect(ig.growth!.days.length).toBeLessThanOrEqual(90);
-    expect(ig.growth!.flowReported).toBe(true);
-    expect(ig.growth!.gained30d).toBeGreaterThan(0);
-    for (const d of ig.growth!.days) expect(Object.keys(d).sort()).toEqual(["day", "followers", "gained", "lost"]);
-    expect(ig.profile).toMatchObject({ status: "ok", profileLinkTaps: 37, follows: 142, unfollows: 19 });
-    expect(ig.audience!.status).toBe("ok");
-    for (const k of ["gender", "age", "countries", "cities"] as const) {
-      expect(ig.audience![k].length).toBeGreaterThan(0);
-      for (const x of ig.audience![k]) { expect(x.share).toBeGreaterThan(0); expect(x.share).toBeLessThanOrEqual(1); }
-    }
-    expect(ig.audience!.gender.reduce((s, x) => s + x.share, 0)).toBeLessThanOrEqual(1.001);
     expect(tt.growth!.days.length).toBeGreaterThan(0);
+    for (const d of tt.growth!.days) expect(Object.keys(d).sort()).toEqual(["day", "followers", "gained", "lost"]);
     expect([tt.profile, tt.audience], "TikTok gives neither at account level").toEqual([null, null]);
     save("analytics", r);
   });
 
-  it("A1: empty states carry a reason: not connected, under 100 followers, not reported yet", async () => {
-    const { t, a } = await setupWithInsights();
-    await t.run(async (ctx) => {
-      const rows = await ctx.db.query("accountInsights").collect();
-      for (const row of rows) if (row.kind === "audience") await ctx.db.patch(row._id, { status: "too_few_followers", audience: undefined, audienceBase: undefined });
-      for (const row of rows) if (row.kind === "insights" && row.platform === "instagram") await ctx.db.delete(row._id);
-    });
-    let r = await t.withIdentity({ subject: "user_a" }).query(api.ui.analytics, {});
-    let ig = r!.accounts.find((x) => x.platform === "instagram")!;
-    expect(ig.audience).toMatchObject({ status: "too_few_followers", gender: [], age: [], countries: [], cities: [] });
-    expect(ig.profile).toMatchObject({ status: "not_reported", profileLinkTaps: null, follows: null });
-    await t.run(async (ctx) => {
-      const conn = await ctx.db.query("connections").filter((q) => q.eq(q.field("creatorId"), a)).first();
-      await ctx.db.patch(conn!._id, { zernioAccounts: [] });
-    });
-    r = await t.withIdentity({ subject: "user_a" }).query(api.ui.analytics, {});
-    ig = r!.accounts.find((x) => x.platform === "instagram")!;
-    expect([ig.connected, ig.growth, ig.profile?.status, ig.audience?.status]).toEqual([false, null, "not_connected", "not_connected"]);
-  });
-
-  it("A1 cross-tenant: B sees none of A's audience or growth", async () => {
+  it("A1 cross-tenant: B sees none of A's growth", async () => {
     const { t } = await setupWithInsights();
     await t.run(async (ctx) => {
       const b = (await ctx.db.query("creators").collect()).find((c) => c.clerkUserId === "user_b")!;
-      await ctx.db.patch(b._id, { handles: { tiktok: "tt_b", instagram: "ig_b" } });
-      await ctx.db.insert("connections", { creatorId: b._id, provider: "zernio", status: "connected", zernioAccounts: [{ accountId: "ig", platform: "instagram", username: "ig_b", needsReconnect: false, canFetchAnalytics: true }], updatedAt: Date.now() } as never);
+      await ctx.db.patch(b._id, { handles: { tiktok: "tt_b" } });
+      await ctx.db.insert("connections", { creatorId: b._id, provider: "zernio", status: "connected", zernioAccounts: [{ accountId: "tt", platform: "tiktok", username: "tt_b", needsReconnect: false, canFetchAnalytics: true }], updatedAt: Date.now() } as never);
     });
     const r = await t.withIdentity({ subject: "user_b" }).query(api.ui.analytics, {});
-    const ig = r!.accounts.find((x) => x.platform === "instagram")!;
-    expect(ig.growth, "same Zernio account id, other creator: nothing").toBeNull();
-    expect(ig.audience).toMatchObject({ status: "not_reported", gender: [] });
-    expect(ig.profile).toMatchObject({ status: "not_reported", profileLinkTaps: null });
+    const tt = r!.accounts.find((x) => x.platform === "tiktok")!;
+    expect(tt.growth, "same Zernio account id, other creator: nothing").toBeNull();
   });
 });
 

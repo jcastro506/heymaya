@@ -73,19 +73,18 @@ describe("the schedule", () => {
     expect(() => resolveOpts({ maxCredits: 10 })).toThrow();
   });
 
-  it("the default subjects cover TikTok-only, Instagram-only and both", () => {
-    expect(DEFAULT_SUBJECTS.filter((s) => s.tiktok && !s.instagram).length).toBeGreaterThan(0);
-    expect(DEFAULT_SUBJECTS.filter((s) => s.instagram && !s.tiktok).length).toBeGreaterThan(0);
-    expect(DEFAULT_SUBJECTS.filter((s) => s.instagram && s.tiktok).length).toBeGreaterThan(0);
+  it("the default subjects are TikTok accounts only", () => {
+    expect(DEFAULT_SUBJECTS.length).toBeGreaterThan(0);
+    expect(DEFAULT_SUBJECTS.every((s) => s.tiktok && !s.instagram)).toBe(true);
   });
 });
 
 describe("credits", () => {
   it("the default run's estimate is explicit, and what it may spend is bounded by the ceiling", () => {
     const e = estimateCredits(DEFAULT_SUBJECTS, resolveOpts({}));
-    expect(e.perCreator).toEqual([100, 100, 100, 100, 113, 113, 100, 113]);
-    expect(e.total).toBe(839);
-    expect(e.needed).toBe(600);
+    expect(e.perCreator).toEqual([100, 100, 100, 100, 100]);
+    expect(e.total).toBe(500);
+    expect(e.needed).toBe(500);
     expect(estimateCredits([{ tiktok: "a" }], resolveOpts({ watchCap: 0, transcriptCap: 0, admired: 0, days: 1 })).total).toBe(3 + 22);
   });
   it("start refuses, by name, on an unknown balance or one below what the run may spend", () => {
@@ -145,8 +144,8 @@ describe("isolation", () => {
       sched: await ctx.db.query("schedule").withIndex("by_creator", (q) => q.eq("creatorId", r.creatorId as Id<"creators">)).first(),
     }));
     expect(c?.clerkUserId).toBe("eval-run:fw-t1:0");
-    expect(c?.handles).toEqual({ tiktok: "cam.luyckx", instagram: "camruns" });
-    expect(c?.plan).toMatchObject({ status: "trialing", tier: "duo" });
+    expect(c?.handles, "TikTok only: an Instagram handle is never taken").toEqual({ tiktok: "cam.luyckx" });
+    expect(c?.plan).toMatchObject({ status: "trialing", tier: "solo" });
     expect(JSON.parse(job!.payloadJson!)).toEqual({ reason: "onboarding", watchCap: 2, transcriptCap: 6 });
     expect(sched?.isEval).toBe(true);
     // The real rule: a handle belongs to one creator. A second run with the same handle is refused, and says why.
@@ -171,7 +170,7 @@ describe("isolation", () => {
 
   it("ageing moves only the sim creator's rows, through its indexes", async () => {
     const t = convexTest(schema, modules);
-    const r = await t.mutation(internal.eval.firstWeek.createOne, { runId: "fw-t3", i: 0, handles: { instagram: "someone_ig" }, timezone: "UTC", watchCap: 0, transcriptCap: 0 });
+    const r = await t.mutation(internal.eval.firstWeek.createOne, { runId: "fw-t3", i: 0, handles: { tiktok: "someone_tt" }, timezone: "UTC", watchCap: 0, transcriptCap: 0 });
     const creatorId = r.creatorId as Id<"creators">;
     const other = await t.run((ctx) => seedCreator(ctx, "other"));
     await t.run(async (ctx) => {
@@ -190,14 +189,14 @@ describe("isolation", () => {
 });
 
 describe("the report", () => {
-  it("has a timeline, the week's numbers, Instagram coverage and cost (the simulation's own model calls excluded)", async () => {
+  it("has a timeline, the week's numbers and cost (the simulation's own model calls excluded)", async () => {
     const t = convexTest(schema, modules);
     const runId = "fw-rep1";
-    const made = await t.mutation(internal.eval.firstWeek.createOne, { runId, i: 0, handles: { instagram: "ig_only_creator" }, timezone: "UTC", watchCap: 2, transcriptCap: 6 });
+    const made = await t.mutation(internal.eval.firstWeek.createOne, { runId, i: 0, handles: { tiktok: "tt_creator" }, timezone: "UTC", watchCap: 2, transcriptCap: 6 });
     const creatorId = made.creatorId as Id<"creators">;
     const t0 = await t.run(async (ctx) => (await ctx.db.get(creatorId))!.createdAt);
     const state: RunState = { runId, startedAt: t0, opts: resolveOpts({}), creators: [
-      { i: 0, subject: subjectFor(runId, 0), handles: { instagram: "ig_only_creator" }, timezone: "UTC", creatorId },
+      { i: 0, subject: subjectFor(runId, 0), handles: { tiktok: "tt_creator" }, timezone: "UTC", creatorId },
       { i: 1, subject: subjectFor(runId, 1), handles: { tiktok: "taken_one" }, timezone: "UTC", error: "signup refused: @taken_one is already set up with another account" },
     ] };
     const log: CreatorLog = { i: 0, createdRealAt: t0, cursor: { phase: "done", d: 7, k: 0, attempt: 0, since: t0 }, events: [{ name: "dossier", simMs: 0.2 * H }, { name: "catalogue_read", simMs: 0.2 * H, detail: "succeeded" }], actorSeenAt: 0, turns: 2, steps: [{ d: 1, step: "sweep", result: "failed: vendor 500", ms: 10 }], actor: [], failures: [], snapshots: [], judged: [{ what: "first_read", text: "x", verdict: { i: 0, grounded: 2, specific: 2, rightPlatform: "yes", invented: [], note: "" } }] };
@@ -209,8 +208,8 @@ describe("the report", () => {
       await out("ok, went through your reels", "first_read", `first_read:${creatorId}`, 0.4 * H);
       await out("here's your week", "plan", "plan:week:2026-09-21", 0.8 * H);
       await out("your week in one line", "review", "review:1", 6 * 24 * H + 10 * H);
-      const signalId = await ctx.db.insert("signals", { creatorId, url: "https://www.instagram.com/reel/abc/", kind: "breakout", sourcePostIds: ["abc"], score: 1, corroboration: { accounts: 1, soundRising: false }, verdict: "sent", why: "5x", thresholdsVersion: "t", createdAt: t0 + 20 * H });
-      await ctx.db.insert("ideas", { creatorId, signalId, evidenceLinks: ["https://www.instagram.com/reel/abc/"], fit: "yes", fitWhy: "yours", version: { hook: "h" }, messageText: "try this", status: "sent", sentAt: t0 + 20 * H, produced: { skillVersion: "s", model: "m", thresholdsVersion: "t" }, createdAt: t0 + 20 * H });
+      const signalId = await ctx.db.insert("signals", { creatorId, url: "https://www.tiktok.com/@someone/video/7000000000000000001", kind: "breakout", sourcePostIds: ["abc"], score: 1, corroboration: { accounts: 1, soundRising: false }, verdict: "sent", why: "5x", thresholdsVersion: "t", createdAt: t0 + 20 * H });
+      await ctx.db.insert("ideas", { creatorId, signalId, evidenceLinks: ["https://www.tiktok.com/@someone/video/7000000000000000001"], fit: "yes", fitWhy: "yours", version: { hook: "h" }, messageText: "try this", status: "sent", sentAt: t0 + 20 * H, produced: { skillVersion: "s", model: "m", thresholdsVersion: "t" }, createdAt: t0 + 20 * H });
       await ctx.db.patch((await ctx.db.query("jobs").withIndex("by_idempotencyKey", (q) => q.eq("idempotencyKey", `ingest:${creatorId}:v0`)).first())!._id, { status: "succeeded", updatedAt: t0 + 0.2 * H });
       const cost = (vendor: "scrapecreators" | "openrouter", kind: string, units: number, costUsd: number) => ctx.db.insert("costEvents", { creatorId, vendor, kind, units, costUsd, costSource: "endpoint_table", environment: "test", at: t0 + H });
       await cost("scrapecreators", "account.posts", 2, 0.004);
@@ -223,13 +222,12 @@ describe("the report", () => {
     const c = r.creators[0];
     expect(c).toMatchObject({ helloAtHours: 0.1, firstReadAtHours: 0.4, firstPlanAtHours: 0.8, firstIdeaTextedAtHours: 20, firstIdeaAnyAtHours: 0.8, sundayReviewAtHours: 154, dossierAtHours: 0.2 });
     expect(c.catalogue.status).toBe("succeeded");
-    expect(c.ideasWeek1).toEqual({ total: 1, texted: 1, byInspiration: { instagram: 1 } });
-    expect(c.instagram).toMatchObject({ hasInstagram: true, instagramOnly: true, gotIgGroundedIdea: true });
+    expect(c.ideasWeek1).toEqual({ total: 1, texted: 1, byInspiration: { tiktok: 1 } });
     expect(c.cost).toMatchObject({ scrapeCredits: 12, modelUsd: 0.01, simOverheadUsd: 0.5 });
     expect(c.failures.map((f) => f.step)).toContain("sweep");
     expect(c.timeline.map((x) => x.what)).toEqual(expect.arrayContaining(["signed up", "hello", "first read", "first week plan", "first idea texted", "Sunday review"]));
     expect(r.creators[1]).toMatchObject({ creatorId: null, phase: "never started" });
-    expect(r.fleet).toMatchObject({ creators: 2, started: 1, onboarded: 1, pctIdeaWithin24h: 100, pctTextedIdeaWithin24h: 100, pctSundayReview: 100, instagram: { creatorsWithInstagram: 1, withIgGroundedIdeas: 1, pct: 100, instagramOnly: 1, instagramOnlyWithIgGroundedIdeas: 1 }, judge: { items: 1, meanGrounded: 2 } });
+    expect(r.fleet).toMatchObject({ creators: 2, started: 1, onboarded: 1, pctIdeaWithin24h: 100, pctTextedIdeaWithin24h: 100, pctSundayReview: 100, judge: { items: 1, meanGrounded: 2 } });
     expect(r.fleet.failures.some((f) => f.i === 1 && f.step === "signup")).toBe(true);
     expect(r.credits.attributed).toBe(12);
   });

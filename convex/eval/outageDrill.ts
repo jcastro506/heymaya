@@ -6,7 +6,7 @@
  * - FAULTS come from eval/faults.ts: a thin guard at each vendor boundary, on only for this drill's
  *   own creators, never in production, and cleared after every cell.
  * - CREATORS: one isolated eval creator per scenario (`eval-run:drill-…`, never paired to a person,
- *   so nothing is delivered), with a TikTok AND an Instagram handle and watched accounts on both.
+ *   so nothing is delivered), with a TikTok handle and watched TikTok accounts.
  *   Its own daily cap, signals and messages, so one scenario can't starve the next.
  * - FLOWS are the real functions: a text turn and two "why did this blow up <link>" turns and a
  *   camera-roll draft go through the real converse queue (enqueue → drain → runJob → dead letter);
@@ -33,11 +33,11 @@ import { clip } from "../lib/clip";
 
 // ------------------------------------------------------------------ the plan (pure)
 
-export const FLOWS = ["scout", "sampler", "sweep", "analytics", "web_search", "email_send", "text", "tiktok_link", "instagram_link", "finish"] as const;
+export const FLOWS = ["scout", "sampler", "sweep", "analytics", "web_search", "email_send", "text", "tiktok_link", "finish"] as const;
 export type Flow = (typeof FLOWS)[number];
 
 /** A person is waiting on these: silence is a failure even if the operator knows. */
-export const WAITING: ReadonlySet<Flow> = new Set(["text", "tiktok_link", "instagram_link", "finish", "email_send"]);
+export const WAITING: ReadonlySet<Flow> = new Set(["text", "tiktok_link", "finish", "email_send"]);
 /** Fleet jobs: nobody is waiting, so a failure must reach the operator. */
 export const FLEET: ReadonlySet<Flow> = new Set(["scout", "sampler", "sweep", "analytics"]);
 
@@ -49,9 +49,9 @@ export const SCENARIOS: Record<string, Fault[]> = {
 
 /** Which flows can reach each vendor. A cell outside this is noise (the fault can't fire), so it isn't run unless asked. */
 const REACHES: Record<string, Flow[]> = {
-  scrapecreators: ["scout", "sampler", "sweep", "text", "tiktok_link", "instagram_link", "finish"],
-  gemini: ["tiktok_link", "instagram_link", "finish"],
-  writer: ["scout", "text", "tiktok_link", "instagram_link", "finish"],
+  scrapecreators: ["scout", "sampler", "sweep", "text", "tiktok_link", "finish"],
+  gemini: ["tiktok_link", "finish"],
+  writer: ["scout", "text", "tiktok_link", "finish"],
   classifier: ["text"],
   zernio: ["analytics"],
   tavily: ["web_search"],
@@ -125,11 +125,9 @@ export function matrixOf(cells: Cell[]): { summary: { pass: number; fail: number
 
 interface World {
   ownTiktok: string;
-  ownInstagram: string;
-  watched: { tiktok: string[]; instagram: string[] };
+  watched: { tiktok: string[] };
   keywords: string[];
   tiktokLink: string | null;
-  instagramLink: string | null;
   videoFileId: Id<"_storage"> | null;
   videoReal: boolean;
   notes: string[];
@@ -188,14 +186,14 @@ export const createCreator = internalMutation({
     const id = await ctx.db.insert("creators", {
       clerkUserId,
       email: `drill-${a.runId}-${a.scenario}@eval.invalid`,
-      handles: a.mailbox ? {} : { tiktok: w.ownTiktok, instagram: w.ownInstagram },
+      handles: a.mailbox ? {} : { tiktok: w.ownTiktok },
       ownership: "unverified",
       niche: "running and marathon training",
       timezone: "UTC",
       quietHours: { start: "00:00", end: "00:00" },
       tone: "friend",
       mode: "full",
-      dossier: { keywords: w.keywords, persona: { summary: "a runner who films training runs and race days, on TikTok and Instagram" } },
+      dossier: { keywords: w.keywords, persona: { summary: "a runner who films training runs and race days, on TikTok" } },
       dossierVersion: 1,
       notes: [],
       affinities: [],
@@ -206,7 +204,7 @@ export const createCreator = internalMutation({
       conversationalOnboardingAt: now,
     } as never);
     if (!a.mailbox) {
-      for (const [platform, handles] of [["tiktok", w.watched.tiktok], ["instagram", w.watched.instagram]] as const) {
+      for (const [platform, handles] of [["tiktok", w.watched.tiktok]] as const) {
         for (const handle of handles) await ctx.db.insert("trackedAccounts", { creatorId: id, platform, handle, addedBy: "creator", baselineN: 0, status: "active", createdAt: now });
       }
     }
@@ -223,8 +221,8 @@ export const setupScout = internalMutation({
     const tracked = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).collect()) as Doc<"trackedAccounts">[];
     let n = 0;
     for (const url of a.links) {
-      const platform = url.includes("tiktok.com") ? "tiktok" : "instagram";
-      const postId = url.match(/\/video\/(\d+)/)?.[1] ?? url.match(/instagram\.com\/(?:p|reel|reels)\/([A-Za-z0-9_-]+)/)?.[1] ?? `drill-${n}`;
+      const platform = "tiktok" as const;
+      const postId = url.match(/\/video\/(\d+)/)?.[1] ?? `drill-${n}`;
       const t = tracked.find((x) => x.platform === platform);
       await ctx.db.insert("signals", { creatorId: a.creatorId, kind: "breakout", sourcePostIds: [postId], trackedAccountId: t?._id, score: 6.2, corroboration: { accounts: 0, soundRising: false }, verdict: "pending", url, detected: `6.2× this account's normal at 9h; ${url}`, why: `6.2× this account's normal at 9h; ${url}`, thresholdsVersion: "drill", createdAt: Date.now() } as never);
       n++;
@@ -248,7 +246,7 @@ export const setConnection = internalMutation({
     await drillCreator(ctx, a.creatorId);
     const rows = await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).eq("provider", "zernio")).collect();
     for (const r of rows) await ctx.db.delete(r._id);
-    if (a.on) await ctx.db.insert("connections", { creatorId: a.creatorId, provider: "zernio", status: "connected", zernioProfileId: "drill-profile", zernioAccounts: [{ accountId: "drill-tt", platform: "tiktok", username: "drill", canFetchAnalytics: true, needsReconnect: false }, { accountId: "drill-ig", platform: "instagram", username: "drill", canFetchAnalytics: true, needsReconnect: false }], updatedAt: Date.now() });
+    if (a.on) await ctx.db.insert("connections", { creatorId: a.creatorId, provider: "zernio", status: "connected", zernioProfileId: "drill-profile", zernioAccounts: [{ accountId: "drill-tt", platform: "tiktok", username: "drill", canFetchAnalytics: true, needsReconnect: false }], updatedAt: Date.now() });
     return null;
   },
 });
@@ -377,7 +375,6 @@ export function assessCell(input: { scenario: string; flow: Flow; faults: Fault[
   const keysFor: Record<Flow, (k: string) => boolean> = {
     text: (k) => Boolean(input.inboundId && k.includes(input.inboundId)),
     tiktok_link: (k) => Boolean(input.inboundId && k.includes(input.inboundId)),
-    instagram_link: (k) => Boolean(input.inboundId && k.includes(input.inboundId)),
     finish: (k) => Boolean(input.inboundId && k.includes(input.inboundId)),
     email_send: (k) => /^partner-(send-result|preflight):/.test(k),
     scout: (k) => /^(scout|askstop|foryou):/.test(k),
@@ -389,7 +386,7 @@ export function assessCell(input: { scenario: string; flow: Flow; faults: Fault[
   const heard = o.outbound.filter((m) => keysFor[flow](m.key) || m.key.startsWith("status:")).map((m) => ({ kind: m.kind, key: m.key, head: m.head }));
   const fakeSuccess: string[] = [];
   const writerDown = hitVendor("writer_");
-  if ((flow === "tiktok_link" || flow === "instagram_link") && writerDown && o.predictions > 0) fakeSuccess.push("a prediction was written while the writer was down");
+  if (flow === "tiktok_link" && writerDown && o.predictions > 0) fakeSuccess.push("a prediction was written while the writer was down");
   if (flow === "finish" && (writerDown || hitVendor("gemini_")) && o.finishes > 0) fakeSuccess.push("captions were recorded without a watch or a writer");
   if (flow === "scout" && writerDown && (o.ideas > 0 || o.outbound.some((m) => m.key.startsWith("scout:")))) fakeSuccess.push("an idea went out while the writer was down");
   if (flow === "email_send" && hitVendor("gmail_")) {
@@ -458,10 +455,9 @@ async function runFlow(ctx: ActionCtx, s: State, scenario: string, flow: Flow, c
       const id = await inbound("what should i post this week? keep it short");
       return { ...(await turn(ctx, creatorId, id, s.turnMode)), inboundId: id };
     }
-    case "tiktok_link":
-    case "instagram_link": {
-      const link = flow === "tiktok_link" ? w.tiktokLink : w.instagramLink;
-      if (!link) return { ended: "skipped", detail: `no ${flow === "tiktok_link" ? "TikTok" : "Instagram"} link found for the world` };
+    case "tiktok_link": {
+      const link = w.tiktokLink;
+      if (!link) return { ended: "skipped", detail: "no TikTok link found for the world" };
       const id = await inbound(`why did this blow up ${link}`);
       return { ...(await turn(ctx, creatorId, id, s.turnMode)), inboundId: id };
     }
@@ -471,7 +467,7 @@ async function runFlow(ctx: ActionCtx, s: State, scenario: string, flow: Flow, c
       return { ...(await turn(ctx, creatorId, id, s.turnMode)), inboundId: id };
     }
     case "scout": {
-      const links = [w.tiktokLink, w.instagramLink].filter((x): x is string => Boolean(x));
+      const links = [w.tiktokLink].filter((x): x is string => Boolean(x));
       if (!links.length) return { ended: "skipped", detail: "no links to make signals from" };
       await ctx.runMutation(internal.eval.outageDrill.setupScout, { creatorId, links });
       try {
@@ -585,7 +581,7 @@ export const prepareWorld = internalAction({
   args: { world: v.any() },
   handler: async (ctx, a): Promise<World> => {
     const w = a.world as World;
-    const firstLink = async (platform: "tiktok" | "instagram", handle: string | undefined): Promise<string | null> => {
+    const firstLink = async (platform: "tiktok", handle: string | undefined): Promise<string | null> => {
       if (!handle) return null;
       try {
         const r = await ctx.runAction(internal.reads.read.read, { kind: "account.posts", params: { platform, handle, sort: "latest" } });
@@ -597,7 +593,6 @@ export const prepareWorld = internalAction({
       }
     };
     w.tiktokLink ??= await firstLink("tiktok", w.watched.tiktok[0]);
-    w.instagramLink ??= await firstLink("instagram", w.watched.instagram[0]);
     if (!w.videoFileId && w.tiktokLink) {
       try {
         const info = await ctx.runAction(internal.reads.read.read, { kind: "post.info", params: { platform: "tiktok", url: w.tiktokLink } });
@@ -621,12 +616,9 @@ export const start = internalAction({
     flows: v.optional(v.array(v.string())),
     allFlows: v.optional(v.boolean()),
     ownTiktok: v.optional(v.string()),
-    ownInstagram: v.optional(v.string()),
     watchedTiktok: v.optional(v.array(v.string())),
-    watchedInstagram: v.optional(v.array(v.string())),
     keywords: v.optional(v.array(v.string())),
     tiktokLink: v.optional(v.string()),
-    instagramLink: v.optional(v.string()),
     /** A draft clip already in storage (skips fetching one). */
     videoFileId: v.optional(v.id("_storage")),
     /** Tests only: run each turn inline instead of waiting on the scheduled queue, and don't chain cells. */
@@ -641,10 +633,10 @@ export const start = internalAction({
     const runId = a.runId ?? `drill-${Date.now()}`;
     const world = await ctx.runAction(internal.eval.outageDrill.prepareWorld, {
       world: {
-        ownTiktok: a.ownTiktok ?? "drill.runner.tt", ownInstagram: a.ownInstagram ?? "drill.runner.ig",
-        watched: { tiktok: a.watchedTiktok ?? ["andi.renay", "becca_foggia"], instagram: a.watchedInstagram ?? ["nike", "natgeo"] },
+        ownTiktok: a.ownTiktok ?? "drill.runner.tt",
+        watched: { tiktok: a.watchedTiktok ?? ["andi.renay", "becca_foggia"] },
         keywords: a.keywords ?? ["marathon training"],
-        tiktokLink: a.tiktokLink ?? null, instagramLink: a.instagramLink ?? null,
+        tiktokLink: a.tiktokLink ?? null,
         videoFileId: a.videoFileId ?? null, videoReal: Boolean(a.videoFileId), notes: [],
       } satisfies World,
     });
@@ -682,7 +674,7 @@ export const report = internalQuery({
       status: s.finishedAt ? "finished" : s.stopped ? "stopped" : `running (${cells.length} of ${s.plan.length} cells)`,
       startedAt: new Date(s.startedAt).toISOString(),
       finishedAt: s.finishedAt ? new Date(s.finishedAt).toISOString() : null,
-      world: { tiktokLink: s.world.tiktokLink, instagramLink: s.world.instagramLink, videoReal: s.world.videoReal, notes: s.world.notes },
+      world: { tiktokLink: s.world.tiktokLink, videoReal: s.world.videoReal, notes: s.world.notes },
       summary,
       matrix,
       failures: cells.filter((c) => c.verdict.pass === false).map((c) => ({ scenario: c.scenario, flow: c.flow, why: c.verdict.why, heard: c.heard.map((h) => `${h.kind}: ${h.head}`), operator: c.operator, ended: `${c.ended}: ${c.endDetail}` })),

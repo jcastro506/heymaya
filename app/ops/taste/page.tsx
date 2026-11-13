@@ -42,7 +42,7 @@ export default function TastePage() {
   }
   const toggle = (f: string) => setFlags((cur) => (cur.includes(f) ? cur.filter((x) => x !== f) : [...cur, f]));
   const item = n.item;
-  const handles = item ? [item.account.handles.tiktok && `TikTok @${item.account.handles.tiktok}`, item.account.handles.instagram && `Instagram @${item.account.handles.instagram}`].filter(Boolean).join(" · ") : "";
+  const handles = item ? [item.account.handles.tiktok && `TikTok @${item.account.handles.tiktok}`].filter(Boolean).join(" · ") : "";
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-xl flex-col gap-5 p-5 text-[15px]">

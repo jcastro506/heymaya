@@ -73,7 +73,7 @@ You have: the card (what you saw and heard in the draft), their own captions and
 Captions: write three, and make them three DIFFERENT kinds, never three rewordings:
 - "their-usual": the shape of their own best captions (same length, case, emoji and hashtag habits), about THIS video;
 - "question": a line that gets the comments talking, in their voice, about something in this video people will have an opinion on;
-- "search": for TikTok, one or two words people actually search for this (use suggestions or search_keyword if you're not sure), worked in the way they'd write it; for Instagram, the line that makes someone save or send it, only if that fits how they write.
+- "search": for TikTok, one or two words people actually search for this (use suggestions or search_keyword if you're not sure), worked in the way they'd write it.
 Every caption uses a concrete thing from THIS video (the card's about, spokenWords, onScreenText, payoff). It must read like they wrote it: if they write lowercase with no emoji, so do you. Never: explaining the joke, an abstract noun (journey, mindset, era, discipline, vibes), a borrowed format (pov:, nobody:, tell me why, it's giving, the way I), a stock phrase (hits different, main character, core memory, living my best life, that girl, obsessed, a whole mood, no thoughts just), hashtag stuffing, anything cheesy you'd see on a stock video. If a phrase could be on a thousand other videos, it isn't theirs. A caption can be short. Short and theirs beats clever and generic.
 
 Sounds: one to three, each with why it fits THIS video (the mood, the pace, the words) in a few words, and how to use it ("low under your voice", "start it on the first cut").
@@ -83,7 +83,6 @@ Sounds: one to three, each with why it fits THIS video (the mood, the pace, the 
 - When voiceCarriesIt, their own audio is usually right, or a quiet music bed under it; say so plainly, with what in the clip makes it right. When it doesn't, "keep it as is" is not an answer: name a sound you looked up (soundCandidates first: what their lane is using this week) and why it fits.
 - If the draft already has a song on it (audioNow music), "keep the song that's already on it" is an option (source "already-in-the-clip"); never call a song "your own audio". "your own audio" means their voice or the real sound of the moment.
 - If a sound is NOT cleared for business accounts, say: fine on a personal account, but not on a business account or a paid post.
-- Instagram: you can't always check Instagram audio. Name the track to search in Reels audio and say to check it's there.
 
 Answer what they asked (evidence.theirWords is everything they sent, in order; [video N] marks each video). Set "answering":
 - "sound": they asked about the sound or audio. Code sends only your sound, so it has to stand on its own.
@@ -95,12 +94,12 @@ Several videos: work out from their words which ones they mean (they may say an 
 Their latest words win: context they add later ("this is for halloween") changes everything, the captions and hashtags included.
 evidence.conversation is what was already said. If you already told them a sound for this video, stay with it unless something they said since changes it, and then say why in a few words. Never flip-flop.
 Their words on the draft may say the platform ("for insta"); write for that platform. Otherwise, for where they post.
-If it's a paid or gifted post (their words say sponsored, paid, #ad, a brand deal), the platformNote reminds them to turn on the label: TikTok's content disclosure toggle, Instagram's paid partnership label.
+If it's a paid or gifted post (their words say sponsored, paid, #ad, a brand deal), the platformNote reminds them to turn on the label: TikTok's content disclosure toggle.
 platformNote is only for practical things: that disclosure label, where to find a sound, a licensing warning. Never a claim about what the algorithm rewards; you haven't checked that.
 One "keep your own audio" line at most; don't list the same advice twice under two names.
 Never comment on how they look (tired, hunched, their body or face); react to the video, not to them.
 Output ONLY JSON:
-{"answering": "sound|caption|which|read|full", "pick": 1, "pickLine": "≤160 or ''", "reaction": "≤200: one line as a viewer, the moment that got you, named from the card", "read": "≤240 or ''", "captions": [{"text": "≤300, exactly as they'd paste it", "shape": "their-usual|question|search", "why": "≤160: why this one, for them (kept for when they ask)"}], "sounds": [{"name": "≤80: 'title by author', or 'your own audio'", "clipId": "the TikTok clip id you looked up, or ''", "platform": "tiktok|instagram|both", "source": "their-own-audio|already-in-the-clip|watched-accounts|their-past-post|trending", "why": "≤120", "howToUse": "≤100"}], "platformNote": "≤160 or ''"}`;
+{"answering": "sound|caption|which|read|full", "pick": 1, "pickLine": "≤160 or ''", "reaction": "≤200: one line as a viewer, the moment that got you, named from the card", "read": "≤240 or ''", "captions": [{"text": "≤300, exactly as they'd paste it", "shape": "their-usual|question|search", "why": "≤160: why this one, for them (kept for when they ask)"}], "sounds": [{"name": "≤80: 'title by author', or 'your own audio'", "clipId": "the TikTok clip id you looked up, or ''", "platform": "tiktok", "source": "their-own-audio|already-in-the-clip|watched-accounts|their-past-post|trending", "why": "≤120", "howToUse": "≤100"}], "platformNote": "≤160 or ''"}`;
 
 /**
  * Pure: what kind of sound they want. "over": a song over the video with their own audio muted (they
@@ -381,8 +380,8 @@ export const SOUND_ASK_MS = 24 * 3_600_000;
 export const SOUND_SKILL = `sound
 When: you finished a video with them and asked whether they want their voice in it or a song over it; they answered. Pick the sound now.
 evidence.soundPlan "over": they'll mute the clip, so suggest one to three SONGS that fit the pace, the cuts and the mood (evidence.card), or that match the vibe or song they named. "voice": their audio stays; your own audio, or a quiet bed under it.
-Look every sound up before you name it (sound_info, sound_videos; suggestions or search_keyword for a vibe); a sound you didn't look up this turn is removed by code. Prefer sounds the accounts they watch use this week or that did well on their posts, when they fit. If one isn't cleared for business accounts, say so. Instagram audio can't always be checked: name the track to search in Reels audio.
-Output ONLY JSON: {"sounds": [{"name": "", "clipId": "", "platform": "tiktok|instagram|both", "source": "their-own-audio|watched-accounts|their-past-post|trending|they-named-it", "why": "≤120", "howToUse": "≤100"}], "platformNote": "≤160 or ''"}`;
+Look every sound up before you name it (sound_info, sound_videos; suggestions or search_keyword for a vibe); a sound you didn't look up this turn is removed by code. Prefer sounds the accounts they watch use this week or that did well on their posts, when they fit. If one isn't cleared for business accounts, say so.
+Output ONLY JSON: {"sounds": [{"name": "", "clipId": "", "platform": "tiktok", "source": "their-own-audio|watched-accounts|their-past-post|trending|they-named-it", "why": "≤120", "howToUse": "≤100"}], "platformNote": "≤160 or ''"}`;
 
 /** The latest finish still waiting on "voice or a song?", within 24 hours. */
 export const pendingSoundAsk = internalQuery({

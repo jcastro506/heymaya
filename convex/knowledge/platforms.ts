@@ -1,5 +1,5 @@
 /**
- * B3 capability 6: Maya's dated notes on TikTok and Instagram rules and programs. Every fact
+ * B3 capability 6: Maya's dated notes on TikTok rules and programs. Every fact
  * carries its official source and the day it was checked; she must cite "as of <month>" and say a
  * fact may have changed once it's older than 60 days (operator alert flags stale ones).
  *
@@ -7,7 +7,6 @@
  * not a full read of each page. Spot-check at the B5 sign-off; update `verifiedOn` when re-checked.
  * Facts here are rules and programs, never growth advice: advice is her judgment.
  */
-import { instagramOn } from "../config/platforms";
 
 export interface PlatformFact {
   id: string;
@@ -60,59 +59,11 @@ export const PLATFORM_FACTS: PlatformFact[] = [
     verifiedOn: "2026-09-24",
   },
   {
-    id: "ig-account-status",
-    platform: "instagram",
-    tags: ["shadowban", "shadow ban", "views died", "restricted", "recommend", "explore", "account status", "violation", "appeal", "reach"],
-    fact: "Instagram's Account Status (Settings → Account → Account Status) shows whether your content and account are eligible to be recommended to non-followers (Explore, Reels, Search, Suggested), which posts caused it, and lets you edit, delete or request a review.",
-    source: "https://help.instagram.com/338481628002750",
-    verifiedOn: "2026-09-24",
-  },
-  {
-    id: "ig-originality",
-    platform: "instagram",
-    tags: ["repost", "reposting", "watermark", "tiktok watermark", "original", "cross-post", "aggregator", "reach"],
-    fact: "Instagram says it's less likely to recommend a repost of a reel that's already on Instagram, content with noticeable watermarks, and accounts that mostly reshare others' content; original creators get priority.",
-    source: "https://creators.instagram.com/blog/recommendations-and-originality",
-    verifiedOn: "2026-09-24",
-  },
-  {
-    id: "ig-trial-reels",
-    platform: "instagram",
-    tags: ["trial reels", "test", "non-followers", "experiment", "try"],
-    fact: "Instagram trial reels (professional accounts) are shown to non-followers first; your followers don't see them unless you later share the reel with everyone. Toggle 'Trial' before sharing.",
-    source: "https://help.instagram.com/1013292530224018",
-    verifiedOn: "2026-09-24",
-  },
-  {
-    id: "ig-paid-partnership",
-    platform: "instagram",
-    tags: ["sponsored", "brand deal", "disclosure", "paid partnership", "ad", "branded content", "ftc"],
-    fact: "On Instagram, tag sponsored posts with the paid partnership label (branded content tools, for accounts that meet the eligibility requirements).",
-    source: "https://help.instagram.com/1109894795810258",
-    verifiedOn: "2026-09-24",
-  },
-  {
-    id: "ig-ranking-signals",
-    platform: "instagram",
-    tags: ["algorithm", "ranking", "how it works", "sends", "shares", "watch time"],
-    fact: "Instagram says recommendations are ranked on predicted engagement per viewer: watch time, shares/sends, follows, likes, comments and profile visits.",
-    source: "https://about.instagram.com/blog/announcements/instagram-ranking-explained",
-    verifiedOn: "2026-09-24",
-  },
-  {
     id: "tt-one-marketplace",
     platform: "tiktok",
     tags: ["brand deals", "brand deal", "creator marketplace", "tiktok one", "marketplace", "sponsorship", "get paid", "brands find me", "followers", "eligibility"],
     fact: "TikTok One (formerly the Creator Marketplace), where brands find and hire creators: sign-up needs 18+, a country where it has launched, and following the Community Guidelines and Branded Content Policy. Sign-up itself has no follower minimum; brand projects need at least 1,000 followers plus requirements that vary by project. (Third-party guides quoting 10,000 are out of date.)",
     source: "https://ads.tiktok.com/help/article/how-creators-can-sign-up-for-tiktok-one",
-    verifiedOn: "2026-09-24",
-  },
-  {
-    id: "ig-creator-marketplace",
-    platform: "instagram",
-    tags: ["brand deals", "brand deal", "creator marketplace", "marketplace", "sponsorship", "get paid", "brands find me", "partnership messages", "eligibility"],
-    fact: "Instagram's creator marketplace (brands find creators and send partnership messages) needs a professional (creator or business) account, 18+, an eligible country, and an account in line with the Partner Monetization Policies. Instagram's help page lists eligibility; confirm the current country list there.",
-    source: "https://help.instagram.com/1389278101788752",
     verifiedOn: "2026-09-24",
   },
 ];
@@ -122,7 +73,7 @@ export function factsFor(topic: string, platform: "tiktok" | "instagram" | "both
   const t = topic.toLowerCase();
   const words = t.split(/\W+/).filter((w) => w.length > 2);
   return PLATFORM_FACTS
-    .filter((f) => (platform === "both" ? (instagramOn() || f.platform !== "instagram") : f.platform === platform))
+    .filter((f) => platform === "both" || f.platform === platform)
     .map((f) => ({ f, score: f.tags.reduce((s, tag) => s + (t.includes(tag) ? 3 : words.some((w) => tag.split(" ").includes(w)) ? 1 : 0), 0) }))
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score)

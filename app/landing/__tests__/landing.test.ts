@@ -58,7 +58,7 @@ describe("prices and CTAs (sibling coherence)", () => {
     const withoutImports = landing.replace(/import[^;]+;/g, "");
     expect(withoutImports).not.toMatch(/\$\d/);
     expect(landing).toMatch(/price\(TIERS\[tier\]\.priceUsd\)/);
-    expect(landing).toMatch(/offeredTiers\(igOn\)\.map/);
+    expect(landing).toMatch(/offeredTiers\(\)\.map/);
     expect(landing).not.toMatch(/TIER_NAMES/);
   });
 
@@ -70,22 +70,22 @@ describe("prices and CTAs (sibling coherence)", () => {
   });
 });
 
-/** The page itself, rendered, with the Instagram switch each way (convex/config/platforms). */
-async function render(igOn: boolean): Promise<string> {
-  return renderToStaticMarkup(await Landing({ igOn }));
+/** The page itself, rendered. TikTok only (2026-11-13). */
+async function render(): Promise<string> {
+  return renderToStaticMarkup(await Landing());
 }
 const cards = (html: string) => [...html.matchAll(/<span class="price-name">([^<]+)<\/span>/g)].map((m) => m[1]);
 
-describe("the landing with Instagram off (the default)", () => {
+describe("the landing: TikTok only", () => {
   it("never says Instagram, Reels or two accounts, anywhere on the page", async () => {
-    const html = await render(false);
+    const html = await render();
     expect(html).toMatch(/Your TikTok assistant, <em>in your texts\.<\/em>/);
     expect(html).not.toMatch(/Instagram|Reels|plat-ig/i);
     expect(html).toMatch(/For TikTok creators/);
   });
 
   it("offers exactly the two TikTok plans, at the prices in billing/tiers, one of them featured", async () => {
-    const html = await render(false);
+    const html = await render();
     expect(cards(html)).toEqual(["Maya", "Maya + Deals"]);
     expect(html).toContain(`${price(TIERS.solo.priceUsd)}<small>/month</small>`);
     expect(html).toContain(`${price(TIERS.partner.priceUsd)}<small>/month</small>`);
@@ -95,10 +95,10 @@ describe("the landing with Instagram off (the default)", () => {
   });
 
   it("the copy helper and the terms line agree with the cards", () => {
-    const c = platformCopy(false);
+    const c = platformCopy();
     expect(c.platforms).toBe("TikTok");
     expect(c.partnerLabel).toBe("Maya + Deals");
-    const line = paymentLine(false);
+    const line = paymentLine();
     expect(line).toContain(price(TIERS.solo.priceUsd));
     expect(line).toContain(price(TIERS.partner.annualUsd));
     expect(line).not.toContain(price(TIERS.duo.priceUsd));
@@ -107,36 +107,18 @@ describe("the landing with Instagram off (the default)", () => {
 
 describe("what the page promises is what she does today", () => {
   it("claims nothing that's switched off: no storyboards, no sending from their inbox, no reply tracking, no posting", async () => {
-    const html = await render(false);
+    const html = await render();
     expect(html).not.toMatch(/show me what that would look like|from your own inbox|tracks (the )?repl|three captions|3 captions/i);
     expect(html).toMatch(/She never posts for you/);
   });
 
   it("her texts arrive with typing dots, and the phones below the hero wait until they're on screen", async () => {
-    const html = await render(false);
+    const html = await render();
     expect(html.match(/class="msg-typing"/g)?.length).toBeGreaterThanOrEqual(6);
     expect(html.match(/class="iv"/g)?.length).toBe(3);
     const css = read("landing.css");
     expect(css).toMatch(/\.iv:not\(\.iv-go\) \.msg-live \*[^}]*animation-play-state: paused/);
     expect(html).toMatch(/<noscript><style>\.iv \.msg-live \*[^<]*running/);
     expect(css).toMatch(/prefers-reduced-motion: reduce\) \{\s*\.mx \*[^}]*animation: none !important/);
-  });
-});
-
-describe("the landing with Instagram on", () => {
-  it("names both platforms and shows the Instagram account", async () => {
-    const html = await render(true);
-    expect(html).toMatch(/For TikTok and Instagram creators/);
-    expect(html).toMatch(/Your content assistant,/);
-    expect(html).toMatch(/plat-ig/);
-    expect(html).toMatch(/Reels watch time/);
-  });
-
-  it("offers all three plans, the middle one featured", async () => {
-    const html = await render(true);
-    expect(cards(html)).toEqual([TIERS.solo.label, TIERS.duo.label, TIERS.partner.label]);
-    expect(html).toContain(`${price(TIERS.duo.priceUsd)}<small>/month</small>`);
-    expect(html.match(/price-feat/g)?.length).toBe(1);
-    expect(paymentLine(true)).toContain(price(TIERS.duo.annualUsd));
   });
 });

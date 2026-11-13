@@ -29,10 +29,6 @@ struct YouView: View {
       }
     }
     .task { await settings.run() }
-    // The share extension can't ask the server which platforms are on; it reads the last answer.
-    .onChange(of: settings.state) { _, state in
-      if !Fixtures.enabled, case .value(let s?) = state { Platforms.remember(s.instagramEnabled) }
-    }
     .task { await lane.run() }
   }
 
@@ -121,14 +117,13 @@ struct YouView: View {
 struct ProfileHeader: View {
   let settings: CreatorSettings
   var body: some View {
-    let name = settings.handles.tiktok ?? settings.shownInstagram ?? "you"
+    let name = settings.handles.tiktok ?? "you"
     HStack(spacing: 16) {
-      Avatar(text: name, size: 72, image: settings.avatars?.tiktok ?? (settings.instagramOn ? settings.avatars?.instagram : nil))
+      Avatar(text: name, size: 72, image: settings.avatars?.tiktok)
       VStack(alignment: .leading, spacing: 6) {
         Text("@\(name)").font(MayaFont.title).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
         HStack(spacing: 6) {
           if settings.handles.tiktok != nil { PlatformBadge(platform: "tiktok") }
-          if settings.shownInstagram != nil { PlatformBadge(platform: "instagram") }
           Chip(text: settings.planName, color: Palette.purple)
         }
       }
@@ -172,7 +167,7 @@ struct Avatar: View {
 struct PlatformBadge: View {
   let platform: String
   var body: some View {
-    Label(platform == "instagram" ? "Instagram" : "TikTok", systemImage: platform == "instagram" ? "camera" : "music.note")
+    Label("TikTok", systemImage: "music.note")
       .font(.caption2.weight(.semibold))
       .padding(.horizontal, 8).padding(.vertical, 3)
       .foregroundStyle(Palette.ink)

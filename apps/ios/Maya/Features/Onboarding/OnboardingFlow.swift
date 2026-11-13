@@ -266,89 +266,54 @@ private struct TierCard: View {
 
 /// The Connect step's words, for one platform or both. Pure.
 enum ConnectWords {
-  static func title(instagram: Bool) -> String { instagram ? "Connect your accounts." : "Connect your TikTok." }
+  static let title = "Connect your TikTok."
   static let subtitle = "So her ideas come from your real posts. She never posts for you."
-  static func button(instagram: Bool, connected: Bool) -> String {
-    connected ? "Continue" : instagram ? "Connect one to continue" : "Connect TikTok to continue"
-  }
+  static func button(connected: Bool) -> String { connected ? "Continue" : "Connect TikTok to continue" }
 }
 
 private struct ConnectStep: View {
   let model: OnboardingModel
   @State private var busy: String?
   @State private var problem: String?
-  /// Instagram only connects as a Creator or Business account; the steps come from the server's one
-  /// definition (account/setup.ts), the same ones the Analytics screen shows.
-  @State private var igSetup = Live<AccountSetup?>("account/setup:advice", args: ["platform": "instagram", "accountType": "personal"])
-  @State private var showIGSetup = false
 
-  private var instagram: Bool { model.instagramEnabled }
-  /// With Instagram off, only TikTok counts toward moving on.
-  private var accounts: [SocialStatus.Account] {
-    let on = Platforms.connectable(instagram: instagram)
-    return model.social?.accounts.filter { !$0.needsReconnect && on.contains($0.platform) } ?? []
+  /// Their TikTok, connected and readable (TikTok only, 2026-11-13).
+  private var account: SocialStatus.Account? {
+    model.social?.accounts.first { !$0.needsReconnect && $0.platform == "tiktok" }
   }
 
   var body: some View {
-    StepFrame(step: .connect, kicker: instagram ? "Your accounts" : "Your account", title: ConnectWords.title(instagram: instagram), subtitle: ConnectWords.subtitle) {
+    StepFrame(step: .connect, kicker: "Your account", title: ConnectWords.title, subtitle: ConnectWords.subtitle) {
       VStack(spacing: 12) {
-        ForEach(Platforms.connectable(instagram: instagram), id: \.self) { platform in
-          let account = accounts.first { $0.platform == platform }
-          HStack(spacing: 14) {
-            Image(systemName: platform == "instagram" ? "camera" : "music.note")
-              .font(.title3)
-              .frame(width: 44, height: 44)
-              .background(Circle().fill(Palette.wash))
-              .foregroundStyle(Palette.purple)
-            VStack(alignment: .leading, spacing: 2) {
-              Text(platform == "instagram" ? "Instagram" : "TikTok").font(MayaFont.headline).foregroundStyle(Palette.ink)
-              Text(account.map { "@\($0.username ?? "connected")" } ?? "Your posts and how they did")
-                .font(MayaFont.caption).foregroundStyle(account == nil ? Palette.muted : Palette.ok)
-            }
-            Spacer()
-            if account != nil {
-              Image(systemName: "checkmark.circle.fill").font(.title2).foregroundStyle(Palette.ok)
-            } else {
-              Button {
-                Task {
-                  busy = platform
-                  problem = await model.connect(platform: platform)
-                  // Wait for Zernio to attach it before deciding (it confirms a moment after the sheet closes).
-                  // Only if it still isn't there is it almost always a personal account: show how to switch.
-                  if platform == "instagram", !model.preview {
-                    if await model.waitForAccount(platform: "instagram") {
-                      problem = nil
-                    } else {
-                      problem = "Instagram didn't connect. It needs a Creator account first: here's how."
-                      showIGSetup = true
-                    }
-                  }
-                  busy = nil
-                }
-              } label: {
-                if busy == platform { ProgressView() } else { Text("Connect").font(MayaFont.headline) }
-              }
-              .buttonStyle(.bordered)
-              .disabled(busy != nil)
-            }
+        HStack(spacing: 14) {
+          Image(systemName: "music.note")
+            .font(.title3)
+            .frame(width: 44, height: 44)
+            .background(Circle().fill(Palette.wash))
+            .foregroundStyle(Palette.purple)
+          VStack(alignment: .leading, spacing: 2) {
+            Text("TikTok").font(MayaFont.headline).foregroundStyle(Palette.ink)
+            Text(account.map { "@\($0.username ?? "connected")" } ?? "Your posts and how they did")
+              .font(MayaFont.caption).foregroundStyle(account == nil ? Palette.muted : Palette.ok)
           }
-          .padding(16)
-          .background(RoundedRectangle(cornerRadius: 18).fill(Palette.panel))
-          .overlay(RoundedRectangle(cornerRadius: 18).stroke(account != nil ? Palette.ok.opacity(0.5) : Palette.line))
-          if platform == "instagram", account == nil {
-            Button { Haptics.tap(); showIGSetup = true } label: {
-              Label("Needs a Creator account (free, about a minute). How to switch", systemImage: "info.circle")
-                .font(MayaFont.caption)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+          Spacer()
+          if account != nil {
+            Image(systemName: "checkmark.circle.fill").font(.title2).foregroundStyle(Palette.ok)
+          } else {
+            Button {
+              Task { busy = "tiktok"; problem = await model.connect(platform: "tiktok"); busy = nil }
+            } label: {
+              if busy == "tiktok" { ProgressView() } else { Text("Connect").font(MayaFont.headline) }
             }
-            .padding(.horizontal, 4)
-            .padding(.top, -4)
+            .buttonStyle(.bordered)
+            .disabled(busy != nil)
           }
         }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 18).fill(Palette.panel))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(account != nil ? Palette.ok.opacity(0.5) : Palette.line))
       }
       Problem(text: problem)
-      if accounts.isEmpty {
+      if account == nil {
         Button("Already connected? Check again") {
           Task { busy = "check"; problem = await model.recheck(); busy = nil }
         }
@@ -357,23 +322,10 @@ private struct ConnectStep: View {
         MayaTexts(messages: MayaExamples.connect)
       }
     } footer: {
-      PrimaryButton(title: ConnectWords.button(instagram: instagram, connected: !accounts.isEmpty), disabled: accounts.isEmpty) {
+      PrimaryButton(title: ConnectWords.button(connected: account != nil), disabled: account == nil) {
         model.connectSeen = true
       }
-      .disabled(accounts.isEmpty)
-    }
-    .task(id: instagram) { if instagram { await igSetup.run() } }
-    // An Instagram error is wrong the moment Instagram shows up connected (it can arrive after the check).
-    .onChange(of: accounts.contains { $0.platform == "instagram" }) { _, connected in
-      if connected, problem?.hasPrefix("Instagram") == true { problem = nil }
-      if connected { showIGSetup = false }
-    }
-    .sheet(isPresented: $showIGSetup) {
-      if case .value(let setup?) = igSetup.state {
-        AccountSetupSheet(platform: "instagram", setup: setup)
-      } else {
-        ProgressView().presentationDetents([.medium])
-      }
+      .disabled(account == nil)
     }
   }
 }
@@ -428,7 +380,6 @@ private struct MeetStep: View {
 
 private struct WatchStep: View {
   let model: OnboardingModel
-  @State private var platform = "tiktok"
   @State private var handle = ""
   @State private var busy = false
   @State private var problem: String?
@@ -437,15 +388,7 @@ private struct WatchStep: View {
     StepFrame(step: .watch, kicker: "Your favorites", title: "Who do you love watching?", subtitle: "Add a few creators you like. She watches them for ideas.") {
       VStack(alignment: .leading, spacing: 10) {
         HStack(spacing: 8) {
-          if model.instagramEnabled {
-            Menu {
-              Button("Instagram") { platform = "instagram" }
-              Button("TikTok") { platform = "tiktok" }
-            } label: { platformIcon }
-            .accessibilityLabel(platform == "instagram" ? "Instagram" : "TikTok")
-          } else {
-            platformIcon.accessibilityLabel("TikTok")
-          }
+          platformIcon.accessibilityLabel("TikTok")
           TextField("@handle", text: $handle)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
@@ -461,7 +404,7 @@ private struct WatchStep: View {
         if !model.watched.isEmpty {
           ForEach(model.watched) { w in
             HStack(spacing: 10) {
-              Image(systemName: w.platform == "tiktok" ? "music.note" : "camera").foregroundStyle(Palette.purple).frame(width: 20)
+              Image(systemName: "music.note").foregroundStyle(Palette.purple).frame(width: 20)
               Text("@\(w.handle)").font(MayaFont.headline).foregroundStyle(Palette.ink)
               Spacer()
               Image(systemName: "checkmark.circle.fill").foregroundStyle(Palette.ok)
@@ -478,15 +421,14 @@ private struct WatchStep: View {
   }
 
   private var platformIcon: some View {
-    Image(systemName: platform == "instagram" ? "camera" : "music.note")
+    Image(systemName: "music.note")
       .frame(width: 44, height: 44)
       .background(RoundedRectangle(cornerRadius: 12).fill(Palette.wash))
       .foregroundStyle(Palette.purple)
   }
 
   private func add() {
-    let platform = model.instagramEnabled ? platform : "tiktok"
-    Task { busy = true; problem = await model.addOwn(platform: platform, handle: handle); if problem == nil { handle = "" }; busy = false }
+    Task { busy = true; problem = await model.addOwn(platform: "tiktok", handle: handle); if problem == nil { handle = "" }; busy = false }
   }
 }
 

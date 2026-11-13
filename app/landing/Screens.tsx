@@ -2,14 +2,13 @@
  * The iPhone app's screens, drawn in HTML from the SwiftUI source (apps/ios/Maya: Palette,
  * MayaFont, HeroCard, PostTile, IdeaCard, StatTile, MayaBubble, the tab bar), so the landing
  * shows the app itself rather than an illustration of it. The creator is a sample: a runner
- * who posts on TikTok and Instagram. Every number on a screen is one the app would show for
+ * who posts on TikTok. Every number on a screen is one the app would show for
  * that creator; nothing claims to be a real person's account.
  *
  * Static and server-rendered. The motion (her typing, messages arriving, the card swiping, bars
  * growing) is CSS, and stops under prefers-reduced-motion.
  */
 import type { CSSProperties, ReactNode } from "react";
-import { instagramOn } from "@/convex/config/platforms";
 
 export function Flower({ className = "", size }: { className?: string; size?: number }) {
   return (
@@ -57,14 +56,10 @@ export function Cover({ kind, overlay, className = "", style }: { kind: CoverKin
   );
 }
 
-function Platform({ p }: { p: "tiktok" | "instagram" }) {
-  return p === "tiktok" ? (
+function Platform(_: { p: "tiktok" }) {
+  return (
     <span className="plat plat-tt" aria-label="TikTok">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.6 5.8A4.3 4.3 0 0 1 15.5 3h-3.1v12.4a2.6 2.6 0 1 1-2.6-2.6c.3 0 .5 0 .8.1V9.7a5.7 5.7 0 1 0 4.9 5.7V9.1a7.3 7.3 0 0 0 4.3 1.4V7.4a4.3 4.3 0 0 1-3.2-1.6Z" fill="currentColor" /></svg>
-    </span>
-  ) : (
-    <span className="plat plat-ig" aria-label="Instagram">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="5" fill="none" stroke="currentColor" strokeWidth="2" /><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" strokeWidth="2" /><circle cx="17.2" cy="6.8" r="1.2" fill="currentColor" /></svg>
     </span>
   );
 }
@@ -127,15 +122,15 @@ export function MessagesScreen({ lines, footer = "Delivered", animate = true }: 
 
 const WEEK = [
   { kind: "hill" as const, p: "tiktok" as const, views: "31.2K", multiple: "3.1×", day: "Tue", up: true },
-  { kind: "track" as const, p: "instagram" as const, views: "12.4K", multiple: "1.6×", day: "Mon", up: true },
+  { kind: "track" as const, p: "tiktok" as const, views: "12.4K", multiple: "1.6×", day: "Mon", up: true },
   { kind: "kitchen" as const, p: "tiktok" as const, views: "6.8K", multiple: "0.7×", day: "Sat", up: false },
-  { kind: "river" as const, p: "instagram" as const, views: "9.1K", multiple: "1.1×", day: "Thu", up: false },
+  { kind: "river" as const, p: "tiktok" as const, views: "9.1K", multiple: "1.1×", day: "Thu", up: false },
 ];
 
 /** Views of the last posts against their normal (≈10K): the bars above it are filled. */
 const BARS = [0.62, 0.9, 1.05, 0.7, 1.12, 0.68, 1.6, 3.1];
 
-export function PostsBlock({ compact = false, igOn = instagramOn() }: { compact?: boolean; igOn?: boolean }) {
+export function PostsBlock({ compact = false }: { compact?: boolean }) {
   return (
     <div className="s-sec">
       <div className="s-sec-head">
@@ -157,7 +152,7 @@ export function PostsBlock({ compact = false, igOn = instagramOn() }: { compact?
         {WEEK.map((w) => (
           <div key={w.day} className="s-post">
             <Cover kind={w.kind} />
-            <Platform p={igOn ? w.p : "tiktok"} />
+            <Platform p={w.p} />
             <span className="s-post-meta">
               <em className={w.up ? "good" : ""}>{w.multiple}</em>
               <b>{w.views}</b>
@@ -170,7 +165,7 @@ export function PostsBlock({ compact = false, igOn = instagramOn() }: { compact?
   );
 }
 
-export function TodayScreen({ igOn = instagramOn() }: { igOn?: boolean } = {}) {
+export function TodayScreen() {
   return (
     <div className="app">
       <div className="app-scroll">
@@ -188,7 +183,7 @@ export function TodayScreen({ igOn = instagramOn() }: { igOn?: boolean } = {}) {
             </div>
           </div>
         </div>
-        <PostsBlock compact igOn={igOn} />
+        <PostsBlock compact />
         <div className="s-sec">
           <span className="s-kicker">Coming up</span>
           <div className="s-up">
@@ -243,30 +238,22 @@ export function IdeasScreen() {
   );
 }
 
-/* ——— Your numbers: TikTok and Instagram side by side (AnalyticsView); TikTok alone while Instagram is off ——— */
+/* ——— Your numbers: their TikTok (AnalyticsView) ——— */
 
-export function NumbersScreen({ igOn = instagramOn() }: { igOn?: boolean } = {}) {
+export function NumbersScreen() {
   return (
     <div className="app">
       <div className="app-scroll">
         <h3 className="app-title">Your numbers</h3>
-        <div className={`s-accts${igOn ? "" : " s-accts-one"}`}>
+        <div className="s-accts s-accts-one">
           <div className="s-acct">
             <Platform p="tiktok" />
             <b>2,140</b>
             <small>followers</small>
             <em className="good">+96 in 30 days</em>
           </div>
-          {igOn ? (
-            <div className="s-acct">
-              <Platform p="instagram" />
-              <b>8,050</b>
-              <small>followers</small>
-              <em className="good">+214 in 30 days</em>
-            </div>
-          ) : null}
         </div>
-        <PostsBlock compact igOn={igOn} />
+        <PostsBlock compact />
         <div className="s-note">
           <Flower size={20} />
           <p>the hill one did 3.1× your normal. that’s the thing to do again.</p>

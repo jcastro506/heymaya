@@ -11,7 +11,7 @@
  * answer until morning rather than waking them.
  */
 
-import { instagramOn, platformOn } from "./config/platforms";
+import { platformOn } from "./config/platforms";
 import { v } from "convex/values";
 import { httpAction, internalQuery } from "./_generated/server";
 import { internalMutation, mutation } from "./lib/functions";
@@ -50,11 +50,10 @@ export function nextAwake(now: number, timezone: string, quiet: { start: string;
   return t;
 }
 
-/** Pure: only a TikTok or Instagram post link; everything else is refused with a reason. */
+/** Pure: only a TikTok post link; everything else is refused with a reason. */
 export function shareTarget(url: string): { ok: true; url: string; platform: "tiktok" | "instagram" } | { ok: false; reason: string } {
   const link = parseLink(clip(url.trim(), 500));
-  if (!link) return { ok: false, reason: instagramOn() ? "only TikTok and Instagram posts can be sent to Maya" : "only TikTok posts can be sent to Maya right now" };
-  if (!platformOn(link.platform)) return { ok: false, reason: "only TikTok posts can be sent to Maya right now" };
+  if (!link || !platformOn(link.platform)) return { ok: false, reason: "only TikTok posts can be sent to Maya" };
   return { ok: true, url: link.url, platform: link.platform };
 }
 

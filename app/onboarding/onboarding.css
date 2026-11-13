@@ -217,7 +217,6 @@ body:has(.maya-onboard) { background: #fcfbf8; }
 .maya-onboard .connection-card .btn-secondary, .maya-onboard .connected-label { grid-column: 1 / -1; }
 .maya-onboard .connection-copy h2, .maya-onboard .calendar-panel h2 { font-size: 20px; }
 .maya-onboard .platform-mark { width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center; color: #fff; font-size: 25px; font-weight: 700; }
-.maya-onboard .platform-mark.instagram { background: linear-gradient(135deg, #7056c7, #dc547a 56%, #f2a34a); }
 .maya-onboard .platform-mark.tiktok { background: #272238; text-shadow: 2px 1px #ff5576, -2px -1px #55e5df; }
 .maya-onboard .connected-label { color: var(--ok); font-size: 11px; font-weight: 700; letter-spacing: .9px; text-transform: uppercase; }
 .maya-onboard .privacy-note { text-align: center; color: var(--muted); font-size: 11px; }

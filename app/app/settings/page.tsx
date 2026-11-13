@@ -81,7 +81,7 @@ export default function SettingsPage() {
 
       <section className="flex flex-col gap-2 text-sm">
         <h2 className="text-sm uppercase tracking-wide opacity-50">Accounts</h2>
-        <div>TikTok: {s.handles.tiktok ? `@${s.handles.tiktok}` : "—"} · Instagram: {s.handles.instagram ? `@${s.handles.instagram}` : "—"}</div>
+        <div>TikTok: {s.handles.tiktok ? `@${s.handles.tiktok}` : "—"}</div>
         <div>Telegram: {s.paired ? "connected" : <Link className="underline" href="/telegram">connect</Link>} · plan: {s.plan} · {TIERS[s.tier].label.toLowerCase()} ({s.accountCap} connected account{s.accountCap === 1 ? "" : "s"})</div>
       </section>
 
@@ -144,13 +144,13 @@ export default function SettingsPage() {
       <section className="flex flex-col gap-2 text-sm">
         <h2 className="text-sm uppercase tracking-wide opacity-50">Connected accounts</h2>
         {zNote && <p className="text-xs opacity-80">{zNote}</p>}
-        <p className="opacity-70">Connect your own TikTok or Instagram and she reads your real numbers, labeled as such. Opens when the trial ends. She never posts for you.</p>
+        <p className="opacity-70">Connect your TikTok and she reads your real numbers, labeled as such. Opens when the trial ends. She never posts for you.</p>
         {z && z.accounts.length > 0 && (
           <ul className="flex flex-col gap-1">
-            {z.accounts.map((a) => (
+            {z.accounts.filter((a) => a.platform === "tiktok").map((a) => (
               <li key={a.accountId} className="flex items-center justify-between">
                 <span>{a.platform}{a.username ? ` · @${a.username}` : ""}{!a.canFetchAnalytics ? " · numbers not available on this plan" : ""}</span>
-                {a.needsReconnect ? <button className="underline text-xs" onClick={async () => { const r = await zStart({ platform: a.platform as "tiktok" | "instagram" }); if (r.ok) window.location.href = r.url; else setZNote(r.reason); }}>reconnect</button> : <span className="text-[11px] uppercase tracking-wide text-emerald-300">connected</span>}
+                {a.needsReconnect ? <button className="underline text-xs" onClick={async () => { const r = await zStart({ platform: "tiktok" }); if (r.ok) window.location.href = r.url; else setZNote(r.reason); }}>reconnect</button> : <span className="text-[11px] uppercase tracking-wide text-emerald-300">connected</span>}
               </li>
             ))}
           </ul>
@@ -158,7 +158,6 @@ export default function SettingsPage() {
         {z?.detail && <p className="text-xs opacity-60">{z.detail}</p>}
         <div className="flex gap-2">
           <button className="btn-secondary" onClick={async () => { const r = await zStart({ platform: "tiktok" }); if (r.ok) window.location.href = r.url; else setZNote(r.reason); }}>connect TikTok</button>
-          <button className="btn-secondary" onClick={async () => { const r = await zStart({ platform: "instagram" }); if (r.ok) window.location.href = r.url; else setZNote(r.reason); }}>connect Instagram</button>
         </div>
         {z && z.status !== "disconnected" && <button className="text-xs underline opacity-60 self-start" onClick={async () => { const r = await zDisconnect({}); setZNote(r.detail); }}>disconnect all</button>}
       </section>

@@ -121,10 +121,10 @@ describe("the world is deterministic", () => {
     expect(FAKE_BRAND.page).toBe(byKey("northline").pages[0].content);
     // the official site links the real account, never the lookalike
     const about = byKey("summit").pages[0].content;
-    expect(linksProfile(about, "https://www.instagram.com/summitelectrolytes/")).toBe(true);
-    expect(linksProfile(about, "https://www.instagram.com/summit.electrolytes.collabs/")).toBe(false);
-    expect(worldProfile("instagram", "@SummitElectrolytes")?.bio).toContain("team@summitelectrolytes.com");
-    expect(fakeRead("profile", { platform: "instagram", handle: "summit.electrolytes.collabs" })).toMatchObject({ bio: expect.stringContaining("summitcollabs.payouts@gmail.com"), verified: false });
+    expect(linksProfile(about, "https://www.tiktok.com/@summitelectrolytes")).toBe(true);
+    expect(linksProfile(about, "https://www.tiktok.com/@summit.electrolytes.collabs")).toBe(false);
+    expect(worldProfile("tiktok", "@SummitElectrolytes")?.bio).toContain("team@summitelectrolytes.com");
+    expect(fakeRead("profile", { platform: "tiktok", handle: "summit.electrolytes.collabs" })).toMatchObject({ bio: expect.stringContaining("summitcollabs.payouts@gmail.com"), verified: false });
     expect(() => fakeRead("profile", { platform: "tiktok", handle: "nike" })).toThrow(/wasn't found/);
     expect(() => fakeRead("account.posts", { platform: "tiktok", handle: "stridelab" })).toThrow(/eval world/);
     expect(new Set(BRANDS.map((b) => b.domain)).size).toBe(BRANDS.length);
@@ -319,8 +319,8 @@ describe("the fixture's vendors are the fakes, and nothing else changes", () => 
     expect((await w.snap()).research.calls).toBe(before.research.calls);
     expect((await w.snap()).costs.tavilyCalls).toBe(before.costs.tavilyCalls);
     const site = await w.t.action(internal.partnerships.research.run, { creatorId: w.creatorId, url: "https://summitelectrolytes.com/about" }) as { results: Array<Record<string, unknown>> };
-    const real = await w.t.action(internal.partnerships.research.run, { creatorId: w.creatorId, profile: "instagram:summitelectrolytes" }) as { results: Array<Record<string, unknown>> };
-    const fake = await w.t.action(internal.partnerships.research.run, { creatorId: w.creatorId, profile: "instagram:summit.electrolytes.collabs" }) as { results: Array<Record<string, unknown>> };
+    const real = await w.t.action(internal.partnerships.research.run, { creatorId: w.creatorId, profile: "tiktok:summitelectrolytes" }) as { results: Array<Record<string, unknown>> };
+    const fake = await w.t.action(internal.partnerships.research.run, { creatorId: w.creatorId, profile: "tiktok:summit.electrolytes.collabs" }) as { results: Array<Record<string, unknown>> };
     const source = await w.say("summit keeps paying people i follow. i want paid deals");
     const base = { brand: "Summit Electrolytes", campaign: "Creators", type: "sponsorship", fit: "paid", unknowns: [], assessment: { verdict: "investigate", goalAlignment: "g", contentAlignment: "c", audienceFit: "a", commercialFit: "m", concerns: [], creatorEvidence: [{ kind: "message", id: source, quote: "i want paid deals", reason: "goal" }] }, eligibility: "", compensation: "Paid", route: "email" };
     await expect(w.t.mutation(internal.partnerships.store.change, { creatorId: w.creatorId, sourceMessageId: source, operation: "save", input: { brandDomain: "summitelectrolytes.com", opportunity: { ...base, contactEmail: "summitcollabs.payouts@gmail.com", evidence: [site.results[0], fake.results[0]] } } })).rejects.toThrow(/Email is not present/);
@@ -346,7 +346,7 @@ describe("the fixture's vendors are the fakes, and nothing else changes", () => 
 
   it("the profile tool for a fixture answers from the world, never the vendor or the shared cache", async () => {
     const w = await world();
-    const r = await w.t.action(internal.reads.read.read, { kind: "profile", params: { platform: "instagram", handle: "summitelectrolytes" }, creatorId: w.creatorId });
+    const r = await w.t.action(internal.reads.read.read, { kind: "profile", params: { platform: "tiktok", handle: "summitelectrolytes" }, creatorId: w.creatorId });
     expect(r.value).toMatchObject({ handle: "summitelectrolytes", followerCount: 48_200 });
     expect(await w.t.run((ctx) => ctx.db.query("readCache").collect())).toEqual([]);
     await expect(w.t.action(internal.reads.read.read, { kind: "account.posts", params: { platform: "tiktok", handle: "stridelab" }, creatorId: w.creatorId })).rejects.toThrow(/eval world/);

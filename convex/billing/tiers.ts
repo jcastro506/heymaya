@@ -3,42 +3,36 @@
  * landing, the terms, Settings, her plan line and the three doors all read from here.
  * Budgets, never booleans: a tier without partnerships is an allowance of zero.
  */
-import { enabledPlatforms, instagramOn, platformOn } from "../config/platforms";
+import { platformOn } from "../config/platforms";
 
 export type Tier = "solo" | "duo" | "partner";
 export const TIER_NAMES: readonly Tier[] = ["solo", "duo", "partner"] as const;
 
 export interface Entitlements {
   tier: Tier;
-  /** Connected TikTok + Instagram accounts she may read. */
+  /** Connected accounts she may read: their TikTok. */
   accounts: number;
   partnerships: { researchPerMonth: number; opportunitiesPerMonth: number; draftsPerMonth: number };
 }
 
-export const TIERS: Record<Tier, { label: string; priceUsd: number; annualUsd: number; blurb: string; accounts: number; partnerships: Entitlements["partnerships"] }> = {
-  solo: { label: "One account", priceUsd: 19, annualUsd: 190, blurb: "Everything, for one TikTok or Instagram account.", accounts: 1, partnerships: { researchPerMonth: 0, opportunitiesPerMonth: 0, draftsPerMonth: 0 } },
-  duo: { label: "Both accounts", priceUsd: 24.99, annualUsd: 249.9, blurb: "Everything, for your TikTok and your Instagram.", accounts: 2, partnerships: { researchPerMonth: 0, opportunitiesPerMonth: 0, draftsPerMonth: 0 } },
-  partner: { label: "Both plus partnerships", priceUsd: 29.99, annualUsd: 299.9, blurb: "Both accounts, and she finds brand opportunities, drafts the pitch for your approval, and tracks the replies.", accounts: 2, partnerships: { researchPerMonth: 40, opportunitiesPerMonth: 10, draftsPerMonth: 30 } },
-};
-
 /**
- * TikTok only (config/platforms, 2026-10-12): two plans, the assistant and the assistant plus deals. The tier ids
- * and prices stay (no Stripe change, no migration); only what people see changes, and "duo" is no longer offered.
+ * TikTok only (2026-11-13): two plans, the assistant and the assistant plus deals. The tier ids and prices stay (no
+ * Stripe change, no migration); "duo" is no longer offered, and an old duo row reads as the plain plan.
  */
-const TIKTOK_ONLY_COPY: Record<Tier, { label: string; blurb: string }> = {
-  solo: { label: "Maya", blurb: "Your content assistant: ideas worth making, your week planned around your life, and what's working, by text." },
-  duo: { label: "Maya", blurb: "Your content assistant: ideas worth making, your week planned around your life, and what's working, by text." },
-  partner: { label: "Maya + Deals", blurb: "Everything in Maya, plus she finds brands that pay creators like you, builds your media kit, and drafts the pitch for your OK." },
+export const TIERS: Record<Tier, { label: string; priceUsd: number; annualUsd: number; blurb: string; accounts: number; partnerships: Entitlements["partnerships"] }> = {
+  solo: { label: "Maya", priceUsd: 19, annualUsd: 190, blurb: "Your content assistant: ideas worth making, your week planned around your life, and what's working, by text.", accounts: 1, partnerships: { researchPerMonth: 0, opportunitiesPerMonth: 0, draftsPerMonth: 0 } },
+  duo: { label: "Maya", priceUsd: 24.99, annualUsd: 249.9, blurb: "Your content assistant: ideas worth making, your week planned around your life, and what's working, by text.", accounts: 1, partnerships: { researchPerMonth: 0, opportunitiesPerMonth: 0, draftsPerMonth: 0 } },
+  partner: { label: "Maya + Deals", priceUsd: 29.99, annualUsd: 299.9, blurb: "Everything in Maya, plus she finds brands that pay creators like you, builds your media kit, and drafts the pitch for your OK.", accounts: 1, partnerships: { researchPerMonth: 40, opportunitiesPerMonth: 10, draftsPerMonth: 30 } },
 };
 
-/** What a tier is called and promises, for the platforms that are on. Pure. */
-export function tierCopy(tier: Tier, igOn: boolean = instagramOn()): { label: string; blurb: string } {
-  return igOn ? { label: TIERS[tier].label, blurb: TIERS[tier].blurb } : TIKTOK_ONLY_COPY[tier];
+/** What a tier is called and promises. Pure. */
+export function tierCopy(tier: Tier): { label: string; blurb: string } {
+  return { label: TIERS[tier].label, blurb: TIERS[tier].blurb };
 }
 
 /** The tiers offered to someone choosing a plan now. Pure. */
-export function offeredTiers(igOn: boolean = instagramOn()): Tier[] {
-  return igOn ? [...TIER_NAMES] : ["solo", "partner"];
+export function offeredTiers(): Tier[] {
+  return ["solo", "partner"];
 }
 
 export const NO_PARTNERSHIPS: Entitlements["partnerships"] = { researchPerMonth: 0, opportunitiesPerMonth: 0, draftsPerMonth: 0 };
@@ -59,8 +53,7 @@ export function price(usd: number): string {
 export function entitlementsFor(plan: { status: string; tier?: string }): Entitlements {
   const tier: Tier = isTier(plan.tier) ? plan.tier : plan.status === "comped" ? "duo" : "solo";
   const live = plan.status === "active" || plan.status === "trialing" || plan.status === "comped";
-  // TikTok only: one account is all there is to read.
-  return { tier, accounts: Math.min(TIERS[tier].accounts, enabledPlatforms().length), partnerships: live ? TIERS[tier].partnerships : NO_PARTNERSHIPS };
+  return { tier, accounts: TIERS[tier].accounts, partnerships: live ? TIERS[tier].partnerships : NO_PARTNERSHIPS };
 }
 
 /** Env key for a price: STRIPE_PRICE_DUO_MONTHLY. Pure. */
@@ -78,12 +71,12 @@ export function tierFromPriceId(priceId: string | undefined, env: Record<string,
 /** The only money facts she may state, for their tier. Pure. */
 export function planLineFor(tier: Tier): string {
   const others = offeredTiers().filter((t) => t !== tier).map((t) => `${price(TIERS[t].priceUsd)} for ${tierCopy(t).label}`).join(", ");
-  return `${price(TIERS[tier].priceUsd)} a month on their plan (${tierCopy(tier).label}); ${others ? `the other plan${offeredTiers().length > 2 ? "s are" : " is"} ${others}` : "it's the only plan"}. card on file, first charge on day seven, cancel or switch in one tap in Settings.`;
+  return `${price(TIERS[tier].priceUsd)} a month on their plan (${tierCopy(tier).label}); ${others ? `the other plan is ${others}` : "it's the only plan"}. card on file, first charge on day seven, cancel or switch in one tap in Settings.`;
 }
 
 /** The accounts within the plan, in the order the vendor lists them (oldest first). Pure. */
 export function accountsWithinPlan<T>(accounts: readonly T[], cap: number): T[] {
-  // Only platforms that are on (config/platforms): with Instagram off, a solo plan's one account is their TikTok.
+  // TikTok only: an old Instagram connection is never read.
   const on = (x: T) => { const p = typeof x === "object" && x !== null ? (x as { platform?: string }).platform : undefined; return p === undefined || platformOn(p); };
   return accounts.filter(on).slice(0, Math.max(0, cap));
 }

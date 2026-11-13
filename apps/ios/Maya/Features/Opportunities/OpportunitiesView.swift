@@ -128,13 +128,9 @@ struct LockedDealsView: View {
   }
 
   /// The plan that opens Deals, by the name the server gives it (billing/tiers.ts tierCopy).
-  private var planName: String { Platforms.instagramEnabled ? "Partner" : "Maya + Deals" }
+  private let planName = "Maya + Deals"
 
-  private var affiliateDetail: String {
-    Platforms.instagramEnabled
-      ? "TikTok Shop and brands' own affiliate programs, for Reels and TikToks alike. Commission on things you'd post about anyway."
-      : "TikTok Shop and brands' own affiliate programs. Commission on things you'd post about anyway."
-  }
+  private let affiliateDetail = "TikTok Shop and brands' own affiliate programs. Commission on things you'd post about anyway."
 
   private var price: String {
     o.unlockPriceUsd.formatted(.currency(code: "USD"))

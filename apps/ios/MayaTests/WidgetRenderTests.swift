@@ -102,7 +102,7 @@ final class WidgetRenderTests: XCTestCase {
     let long = WidgetData(
       nextBlock: d.nextBlock.map { .init(kind: $0.kind, start: $0.start, end: $0.end, title: $0.title, hook: String(repeating: "the longest hook anyone ever wrote ", count: 3), ideaId: nil, booked: false) },
       blocks: d.blocks,
-      bestIdea: .init(id: "x", hook: "when your coach says easy pace but your watch says you have been lying to yourself for six whole months", cover: nil, coverPlatform: "instagram",
+      bestIdea: .init(id: "x", hook: "when your coach says easy pace but your watch says you have been lying to yourself for six whole months", cover: nil, coverPlatform: "tiktok",
                       fitWhy: "Your honest-training posts get saved twice as often as your race posts, and this one rides a sound that is climbing in your niche right now.", isNew: false),
       lastPosts: d.lastPosts.map { .init(id: $0.id, platform: $0.platform, createTime: $0.createTime, views: 1_234_567, multiple: 12.46, settled: false, cover: $0.cover) },
       newIdeas: 128, asOf: d.asOf)

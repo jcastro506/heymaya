@@ -5,7 +5,7 @@ import { api } from "@/convex/_generated/api";
 /**
  * A post from her engagement text (engage/links): note the open, then forward to the post. Public in
  * proxy.ts, and deliberately outside /o/* and /app/*, which the app claims (a claimed path would open
- * Maya instead of TikTok or Instagram). An unknown code, or the backend being down, lands on the home page.
+ * Maya instead of TikTok). An unknown code, or the backend being down, lands on the home page.
  */
 export const dynamic = "force-dynamic";
 

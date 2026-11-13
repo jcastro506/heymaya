@@ -11,15 +11,6 @@ import { modules } from "../../../tests/_modules";
 import { setupAdvice } from "../setup";
 
 describe("setup advice for onboarding", () => {
-  it("the query is the one definition: Instagram personal needs the switch, with steps; nothing to do for creator", async () => {
-    const t = convexTest(schema, modules);
-    const ig = await t.query(api.account.setup.advice, { platform: "instagram", accountType: "personal" });
-    expect(ig).toEqual(setupAdvice("instagram", "personal"));
-    expect(ig?.needed).toBe(true);
-    expect(ig?.steps.length).toBeGreaterThanOrEqual(3);
-    expect(await t.query(api.account.setup.advice, { platform: "instagram", accountType: "creator" })).toBeNull();
-    expect((await t.query(api.account.setup.advice, { platform: "tiktok", accountType: "business" }))?.needed, "TikTok stays personal; business is optional advice, never a blocker").toBe(false);
-  });
 
   it("Connect shows the hint on Instagram and opens the steps when Instagram didn't attach", () => {
     const src = readFileSync(new URL("../../../apps/ios/Maya/Features/Onboarding/OnboardingFlow.swift", import.meta.url), "utf8");

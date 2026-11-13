@@ -91,7 +91,7 @@ struct PostNumbersView: View {
       SectionHeader(text: "Her read")
       HStack(alignment: .top, spacing: 12) {
         FlowerMark(size: 24)
-        Text(n.read ?? "Connect your \(n.platform == "instagram" ? "Instagram" : "TikTok") in Settings and she can tell you how many people it reached, and read why.")
+        Text(n.read ?? "Connect your TikTok in Settings and she can tell you how many people it reached, and read why.")
           .font(MayaFont.body).foregroundStyle(n.read == nil ? Palette.muted : Palette.ink)
           .fixedSize(horizontal: false, vertical: true)
       }
@@ -109,7 +109,7 @@ struct PostNumbersView: View {
 
     if !n.cannotKnow.isEmpty {
       VStack(alignment: .leading, spacing: 10) {
-        SectionHeader(text: "What \(n.platform == "instagram" ? "Instagram" : "TikTok") doesn't show")
+        SectionHeader(text: "What TikTok doesn't show")
         ForEach(n.cannotKnow, id: \.self) { line in
           Label(line.prefix(1).uppercased() + line.dropFirst(), systemImage: "eye.slash")
             .font(MayaFont.callout).foregroundStyle(Palette.muted)

@@ -35,7 +35,6 @@
 	<array>
 		<string>sms</string>
 		<string>tiktok</string>
-		<string>instagram</string>
 	</array>
 	<key>MayaClerkPublishableKey</key>
 	<string>$(MAYA_CLERK_PUBLISHABLE_KEY)</string>

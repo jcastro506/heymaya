@@ -107,8 +107,8 @@ describe("one question at a time, each once", () => {
 });
 
 const kit = (over: Partial<KitV2> = {}): KitV2 => ({
-  name: "sam", lane: "running", asOf: NOW, photo: { url: "https://x/p.jpg", source: "instagram" }, photoSetting: "auto", photoCheck: null, oneLine: { text: "Honest early-morning running", approved: false }, showAudience: null, styles: [], services: ["Sponsored posts"], region: "US", contactEmail: "sam@x.com", brandWork: [{ brand: "@hoka", source: "their_post", url: "u", at: 1 }],
-  platforms: [{ platform: "instagram", handle: "sam", followers: 8050, followersAsOf: NOW, normalViews: 9000, posts: 20, engagement: { perView: 0.06, perFollower: 0.02, posts: 12 }, growth30d: { net: 214, gained: null, lost: null }, audience: { source: "connected", asOf: NOW, age: [{ label: "25-34", share: 0.41 }], gender: [{ label: "Women", share: 0.71 }], countries: [], cities: [] }, best: [{ url: "a", platform: "instagram", views: 30000, multiple: 3.1, caption: "hill @trailfuel", createTime: NOW, cover: null }, { url: "b", platform: "instagram", views: 12000, multiple: 1.3, caption: "track", createTime: NOW, cover: null }] }],
+  name: "sam", lane: "running", asOf: NOW, photo: { url: "https://x/p.jpg", source: "tiktok" }, photoSetting: "auto", photoCheck: null, oneLine: { text: "Honest early-morning running", approved: false }, showAudience: null, styles: [], services: ["Sponsored posts"], region: "US", contactEmail: "sam@x.com", brandWork: [{ brand: "@hoka", source: "their_post", url: "u", at: 1 }],
+  platforms: [{ platform: "tiktok", handle: "sam", followers: 8050, followersAsOf: NOW, normalViews: 9000, posts: 20, engagement: { perView: 0.06, perFollower: 0.02, posts: 12 }, growth30d: { net: 214, gained: null, lost: null }, audience: { source: "connected", asOf: NOW, age: [{ label: "25-34", share: 0.41 }], gender: [{ label: "Women", share: 0.71 }], countries: [], cities: [] }, best: [{ url: "a", platform: "instagram", views: 30000, multiple: 3.1, caption: "hill @trailfuel", createTime: NOW, cover: null }, { url: "b", platform: "instagram", views: 12000, multiple: 1.3, caption: "track", createTime: NOW, cover: null }] }],
   ...over,
 });
 
@@ -154,9 +154,9 @@ const OPP = (brand: string, status = "shortlisted", extra: Record<string, unknow
 async function world(tier: "solo" | "partner" = "partner") {
   const t = convexTest(schema, modules);
   const ids = await t.run(async (ctx) => {
-    const a = await seedCreator(ctx, "a", { clerkUserId: "user_a", handles: { instagram: "sam" }, plan: { status: "active", founding: false, tier } } as never);
-    const b = await seedCreator(ctx, "b", { clerkUserId: "user_b", handles: { instagram: "bee" }, plan: { status: "active", founding: false, tier: "partner" } } as never);
-    for (const [who, h] of [[a, "sam"], [b, "bee"]] as const) for (let i = 0; i < 4; i++) await ctx.db.insert("ownPosts", { creatorId: who, platform: "instagram", postId: `${h}${i}`, url: `https://www.instagram.com/reel/${h}${i}/`, createTime: Date.now() - (i + 1) * D, contentType: "video", caption: `${h} run ${i}`, hashtags: [], metrics: { views: 1000 * (i + 1), likes: 50, comments: 5, shares: 2 }, metricsAsOf: Date.now(), source: "scrape" } as never);
+    const a = await seedCreator(ctx, "a", { clerkUserId: "user_a", handles: { tiktok: "sam" }, plan: { status: "active", founding: false, tier } } as never);
+    const b = await seedCreator(ctx, "b", { clerkUserId: "user_b", handles: { tiktok: "bee" }, plan: { status: "active", founding: false, tier: "partner" } } as never);
+    for (const [who, h] of [[a, "sam"], [b, "bee"]] as const) for (let i = 0; i < 4; i++) await ctx.db.insert("ownPosts", { creatorId: who, platform: "tiktok", postId: `${h === "sam" ? "71" : "72"}${"0".repeat(16)}${i}`, url: `https://www.tiktok.com/@${h}/video/${h === "sam" ? "71" : "72"}${"0".repeat(16)}${i}`, createTime: Date.now() - (i + 1) * D, contentType: "video", caption: `${h} run ${i}`, hashtags: [], metrics: { views: 1000 * (i + 1), likes: 50, comments: 5, shares: 2 }, metricsAsOf: Date.now(), source: "scrape" } as never);
     const oppA = await ctx.db.insert("partnershipOpportunities", { creatorId: a, brandDomain: "pacefern.com", data: OPP("Pacefern"), updatedAt: Date.now() });
     const oppB = await ctx.db.insert("partnershipOpportunities", { creatorId: b, brandDomain: "solebird.com", data: OPP("Solebird"), updatedAt: Date.now() });
     return { a, b, oppA, oppB };
@@ -170,7 +170,7 @@ describe("the kit's doors (fail-closed, sibling coherence)", () => {
     await expect(w.t.mutation(internal.partnerships.kitSettings.change, { creatorId: w.a, change: { op: "audience", on: true } })).rejects.toThrow(/partnerships plan/);
     await expect(w.t.mutation(internal.partnerships.kitPage.kitLinkFor, { creatorId: w.a, on: true })).rejects.toThrow(/partnerships plan/);
     expect(await w.t.query(internal.partnerships.kitTools.kitFor, { creatorId: w.a })).toBeNull();
-    await expect(w.t.mutation(internal.partnerships.kitSettings.variantFor, { creatorId: w.a, opportunityId: w.oppA, postUrls: ["https://www.instagram.com/reel/sam0/"], idea: "a hill idea for them" })).rejects.toThrow(/partnerships plan/);
+    await expect(w.t.mutation(internal.partnerships.kitSettings.variantFor, { creatorId: w.a, opportunityId: w.oppA, postUrls: ["https://www.tiktok.com/@sam/video/7100000000000000000"], idea: "a hill idea for them" })).rejects.toThrow(/partnerships plan/);
     // off always works
     expect(await w.t.mutation(internal.partnerships.kitPage.kitLinkFor, { creatorId: w.a, on: false })).toEqual({ url: null });
   });
@@ -214,27 +214,27 @@ describe("the kit's doors (fail-closed, sibling coherence)", () => {
 describe("per-brand links (cross-tenant, fail-closed)", () => {
   it("leads only with their own posts; never on someone else's deal", async () => {
     const w = await world();
-    await expect(w.t.mutation(internal.partnerships.kitSettings.variantFor, { creatorId: w.a, opportunityId: w.oppA, postUrls: ["https://www.instagram.com/reel/bee0/"], idea: "a hill idea for them" })).rejects.toThrow(/Not one of their posts/);
-    await expect(w.t.mutation(internal.partnerships.kitSettings.variantFor, { creatorId: w.b, opportunityId: w.oppA, postUrls: ["https://www.instagram.com/reel/bee0/"], idea: "a hill idea for them" })).rejects.toThrow(/unavailable/);
-    const r = await w.t.mutation(internal.partnerships.kitSettings.variantFor, { creatorId: w.a, opportunityId: w.oppA, postUrls: ["https://www.instagram.com/reel/sam1?igsh=abc"], idea: "a 15 second hill repeat with the gel at the top" });
+    await expect(w.t.mutation(internal.partnerships.kitSettings.variantFor, { creatorId: w.a, opportunityId: w.oppA, postUrls: ["https://www.tiktok.com/@bee/video/7200000000000000000"], idea: "a hill idea for them" })).rejects.toThrow(/Not one of their posts/);
+    await expect(w.t.mutation(internal.partnerships.kitSettings.variantFor, { creatorId: w.b, opportunityId: w.oppA, postUrls: ["https://www.tiktok.com/@bee/video/7200000000000000000"], idea: "a hill idea for them" })).rejects.toThrow(/unavailable/);
+    const r = await w.t.mutation(internal.partnerships.kitSettings.variantFor, { creatorId: w.a, opportunityId: w.oppA, postUrls: ["https://www.tiktok.com/@sam/video/7100000000000000001?is_from_webapp=1"], idea: "a 15 second hill repeat with the gel at the top" });
     const slug = r.url.split("/k/")[1];
     const page = await w.t.query(api.partnerships.kitPage.publicKit, { slug });
     expect(page?.forBrand?.brand).toBe("Pacefern");
-    expect(page?.platforms[0].best[0].url).toBe("https://www.instagram.com/reel/sam1/");
+    expect(page?.platforms[0].best[0].url).toBe("https://www.tiktok.com/@sam/video/7100000000000000001");
     expect(JSON.stringify(page)).not.toContain("bee");
     // one link per deal: making it again updates it
-    expect((await w.t.mutation(internal.partnerships.kitSettings.variantFor, { creatorId: w.a, opportunityId: w.oppA, postUrls: ["https://www.instagram.com/reel/sam2/"], idea: "another idea for the same brand" })).url).toBe(r.url);
+    expect((await w.t.mutation(internal.partnerships.kitSettings.variantFor, { creatorId: w.a, opportunityId: w.oppA, postUrls: ["https://www.tiktok.com/@sam/video/7100000000000000002"], idea: "another idea for the same brand" })).url).toBe(r.url);
   });
   it("dies when the relationship closes", async () => {
     const w = await world();
-    const slug = (await w.t.mutation(internal.partnerships.kitSettings.variantFor, { creatorId: w.a, opportunityId: w.oppA, postUrls: ["https://www.instagram.com/reel/sam0/"], idea: "a hill idea for them" })).url.split("/k/")[1];
+    const slug = (await w.t.mutation(internal.partnerships.kitSettings.variantFor, { creatorId: w.a, opportunityId: w.oppA, postUrls: ["https://www.tiktok.com/@sam/video/7100000000000000000"], idea: "a hill idea for them" })).url.split("/k/")[1];
     await w.t.run((ctx) => ctx.db.patch(w.oppA, { data: OPP("Pacefern", "declined") }));
     expect(await w.t.query(api.partnerships.kitPage.publicKit, { slug })).toBeNull();
-    await expect(w.t.mutation(internal.partnerships.kitSettings.variantFor, { creatorId: w.a, opportunityId: w.oppA, postUrls: ["https://www.instagram.com/reel/sam0/"], idea: "a hill idea for them" })).rejects.toThrow(/closed/);
+    await expect(w.t.mutation(internal.partnerships.kitSettings.variantFor, { creatorId: w.a, opportunityId: w.oppA, postUrls: ["https://www.tiktok.com/@sam/video/7100000000000000000"], idea: "a hill idea for them" })).rejects.toThrow(/closed/);
   });
   it("an open counts only after the pitch went out, never a bot, never the creator", async () => {
     const w = await world();
-    const slug = (await w.t.mutation(internal.partnerships.kitSettings.variantFor, { creatorId: w.a, opportunityId: w.oppA, postUrls: ["https://www.instagram.com/reel/sam0/"], idea: "a hill idea for them" })).url.split("/k/")[1];
+    const slug = (await w.t.mutation(internal.partnerships.kitSettings.variantFor, { creatorId: w.a, opportunityId: w.oppA, postUrls: ["https://www.tiktok.com/@sam/video/7100000000000000000"], idea: "a hill idea for them" })).url.split("/k/")[1];
     const human = "Mozilla/5.0 (Macintosh) Safari/605.1.15";
     expect(await w.t.mutation(api.partnerships.kitSettings.recordOpen, { slug, userAgent: human })).toEqual({ counted: false }); // not sent yet
     await w.t.run((ctx) => ctx.db.patch(w.oppA, { data: OPP("Pacefern", "contacted", { lastOutboundAt: Date.now() - 3_600_000 }) }));

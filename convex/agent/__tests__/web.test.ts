@@ -34,8 +34,8 @@ describe("platform facts", () => {
   });
   it("finds the right note for what creators actually ask", () => {
     expect(factsFor("how many followers do i need to get paid by tiktok", "tiktok")[0].id).toBe("tt-creator-rewards");
-    expect(factsFor("am i shadowbanned? my views died").map((f) => f.id)).toEqual(expect.arrayContaining(["tt-fyf-ineligible", "ig-account-status"]));
-    expect(factsFor("does instagram hide reels with a tiktok watermark", "instagram")[0].id).toBe("ig-originality");
+    expect(factsFor("am i shadowbanned? my views died").map((f) => f.id)).toEqual(expect.arrayContaining(["tt-fyf-ineligible"]));
+    expect(factsFor("am i shadowbanned? my views died").every((f) => f.platform === "tiktok"), "TikTok only").toBe(true);
     expect(factsFor("what's the weather")).toEqual([]);
   });
   it("a fact older than 60 days reads as possibly changed", () => {

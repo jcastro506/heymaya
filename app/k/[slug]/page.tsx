@@ -23,7 +23,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 const fmt = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M` : n >= 10_000 ? `${Math.round(n / 1_000)}K` : n >= 1_000 ? `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}K` : String(Math.round(n)));
 const pct = (x: number) => `${(x * 100).toFixed(x < 0.1 ? 1 : 0)}%`;
-const PLATFORM: Record<string, string> = { tiktok: "TikTok", instagram: "Instagram" };
+const PLATFORM: Record<string, string> = { tiktok: "TikTok" };
 
 export default async function MediaKit({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -62,7 +62,6 @@ export default async function MediaKit({ params }: { params: Promise<{ slug: str
         </section>
       ) : null}
 
-      {totalFollowers > 0 && kit.platforms.length > 1 ? <p className="kit-total"><b>{fmt(totalFollowers)}</b> followers across TikTok and Instagram</p> : null}
 
       {kit.platforms.map((p) => (
         <section key={p.platform} className="kit-platform">

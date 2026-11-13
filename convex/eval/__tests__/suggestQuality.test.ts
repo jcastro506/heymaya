@@ -33,7 +33,7 @@ describe("hard checks", () => {
     expect(hardChecks(facts({ lastPostDaysAgo: 45 }), why, "tiktok", ["tiktok"]).active).toBe(false);
     expect(hardChecks(facts({ lastPostDaysAgo: null }), why, "tiktok", ["tiktok"]).active).toBe(false);
     expect(hardChecks(facts({ postsRead: 2 }), why, "tiktok", ["tiktok"]).enoughPosts).toBe(false);
-    expect(hardChecks(facts(), why, "tiktok", ["instagram"]).onConnectedPlatform).toBe(false);
+    expect(hardChecks(facts(), why, "tiktok", []).onConnectedPlatform).toBe(false);
     expect(hardChecks(facts(), "Her last post did 2 million views.", "tiktok", ["tiktok"]).reasonNumbersMatch).toBe(false);
   });
 
@@ -50,12 +50,12 @@ describe("hard checks", () => {
 
 describe("the judge's answer", () => {
   it("adversarial: out-of-range scores, unknown words, bad indexes and prose around the JSON", () => {
-    const content = 'here you go {"cards":[{"i":0,"realCreator":"yes","kind":"creator","relevance":3,"learnable":2,"reasonAccurate":"yes","note":"ok"},{"i":1,"realCreator":"maybe","relevance":2,"learnable":1,"reasonAccurate":"yes"},{"i":2,"realCreator":"no","relevance":9,"learnable":1,"reasonAccurate":"no"},{"i":7,"realCreator":"yes","relevance":2,"learnable":2,"reasonAccurate":"yes"}],"set":{"score":2,"note":"thin on instagram"}} thanks';
+    const content = 'here you go {"cards":[{"i":0,"realCreator":"yes","kind":"creator","relevance":3,"learnable":2,"reasonAccurate":"yes","note":"ok"},{"i":1,"realCreator":"maybe","relevance":2,"learnable":1,"reasonAccurate":"yes"},{"i":2,"realCreator":"no","relevance":9,"learnable":1,"reasonAccurate":"no"},{"i":7,"realCreator":"yes","relevance":2,"learnable":2,"reasonAccurate":"yes"}],"set":{"score":2,"note":"thin on tiktok"}} thanks';
     const r = parseJudge(content, 3);
     expect(r.cards[0]?.relevance).toBe(3);
     expect(r.cards[1]).toBeNull();
     expect(r.cards[2]).toBeNull();
-    expect(r).toMatchObject({ setScore: 2, setNote: "thin on instagram" });
+    expect(r).toMatchObject({ setScore: 2, setNote: "thin on tiktok" });
     expect(parseJudge("not json", 2)).toEqual({ cards: [null, null], setScore: null, setNote: "" });
   });
 });
@@ -63,7 +63,7 @@ describe("the judge's answer", () => {
 describe("subjects", () => {
   it("a subject gets the production start path with its catalogue job retired, so only the first read runs", async () => {
     const t = convexTest(schema, modules);
-    const r = await t.mutation(internal.eval.suggestQuality.createSubject, { label: "t1", handles: { instagram: "someone.real" }, niche: "home cooking for busy parents", timezone: "America/Chicago" });
+    const r = await t.mutation(internal.eval.suggestQuality.createSubject, { label: "t1", handles: { tiktok: "someone.real" }, niche: "home cooking for busy parents", timezone: "America/Chicago" });
     expect(r.ok).toBe(true);
     const job = await t.run((ctx) => ctx.db.query("jobs").withIndex("by_idempotencyKey", (q) => q.eq("idempotencyKey", `ingest:${r.creatorId}:v0`)).first());
     expect(job?.status).toBe("dead");

@@ -63,7 +63,7 @@ targets:
       properties:
         MayaConvexURL: $(MAYA_CONVEX_URL)
         MayaClerkPublishableKey: $(MAYA_CLERK_PUBLISHABLE_KEY)
-        LSApplicationQueriesSchemes: [sms, tiktok, instagram]
+        LSApplicationQueriesSchemes: [sms, tiktok]
         NSCalendarsFullAccessUsageDescription: Maya puts your filming and posting times on your calendar, around the plans you already have, so you don't have to. She never shares your plans with anyone.
         NSCalendarsUsageDescription: Maya puts the filming sessions you book on your calendar and plans them around your week.
         NSLocationWhenInUseUsageDescription: Maya looks for markets, races and festivals near you and turns the good ones into ideas. She only ever sees your city.
@@ -90,7 +90,7 @@ targets:
         product: ClerkConvex
       - package: Nuke
         product: NukeUI
-  # M5: "Send to Maya" from the TikTok / Instagram share sheet (app spec §10.1).
+  # M5: "Send to Maya" from the TikTok share sheet (app spec §10.1).
   MayaShare:
     type: app-extension
     platform: iOS

@@ -31,7 +31,7 @@ const LINK = "https://www.tiktok.com/@runwithcarly/video/7395965676629888274";
 
 async function drillWorld() {
   const t = convexTest(schema, modules);
-  const creatorId = await t.run((ctx) => seedCreator(ctx, "drill", { clerkUserId: "eval-run:drill-test", handles: { tiktok: "drill.tt", instagram: "drill.ig" }, quietHours: { start: "00:00", end: "00:00" }, dossier: { keywords: ["marathon training"], persona: { summary: "runner" } }, plan: { status: "comped", tier: "partner", founding: false } }));
+  const creatorId = await t.run((ctx) => seedCreator(ctx, "drill", { clerkUserId: "eval-run:drill-test", handles: { tiktok: "drill.tt" }, quietHours: { start: "00:00", end: "00:00" }, dossier: { keywords: ["marathon training"], persona: { summary: "runner" } }, plan: { status: "comped", tier: "partner", founding: false } }));
   return { t, creatorId };
 }
 const outbound = async (t: ReturnType<typeof convexTest>, creatorId: Id<"creators">) => (await t.run((ctx) => ctx.db.query("messages").collect())).filter((m) => m.creatorId === creatorId && m.direction === "out");
@@ -136,7 +136,7 @@ describe("fleet reads write the health row the creator status has always read", 
 
   it("a scoped pass under a drill fault writes a drill row: on the console, never in the hourly alert or a creator's status", async () => {
     const { t, creatorId } = await drillWorld();
-    await t.run((ctx) => ctx.db.insert("trackedAccounts", { creatorId, platform: "instagram", handle: "nike", addedBy: "creator", baselineN: 0, status: "active", createdAt: Date.now() } as never));
+    await t.run((ctx) => ctx.db.insert("trackedAccounts", { creatorId, platform: "tiktok", handle: "nike", addedBy: "creator", baselineN: 0, status: "active", createdAt: Date.now() } as never));
     await t.run((ctx) => ctx.db.insert("trackedAccounts", { creatorId, platform: "tiktok", handle: "runwithcarly", addedBy: "creator", baselineN: 0, status: "active", createdAt: Date.now() } as never));
     await t.mutation(internal.eval.faults.set, { faults: ["scrape_429"], creatorIds: [creatorId] });
     const r = await t.action(internal.scout.sampler.run, { creatorId });

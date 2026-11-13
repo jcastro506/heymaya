@@ -11,12 +11,12 @@ export interface Persona {
   key: "sam" | "priya" | "leo";
   name: string;
   handle: string;
-  platform: "tiktok" | "instagram";
+  platform: "tiktok";
   niche: string;
   followers: number;
   posts: PersonaPost[];
-  watched: Array<{ platform: "tiktok" | "instagram"; handle: string }>;
-  lanePosts: Array<{ platform: "tiktok" | "instagram"; author: string; postId: string; daysAgo: number; views: number; paid: boolean; mentions: string[] }>;
+  watched: Array<{ platform: "tiktok"; handle: string }>;
+  lanePosts: Array<{ platform: "tiktok"; author: string; postId: string; daysAgo: number; views: number; paid: boolean; mentions: string[] }>;
   /** The brand the story is about: its world key and the handle its lane posts tag. */
   brandKey: string;
   brandHandle: string;
@@ -33,7 +33,7 @@ export const E2E_BRANDS: WorldBrand[] = [
     keywords: ["dewdrop", "skincare", "skin", "serum", "ugc", "beauty", "creator", "apply"],
     pages: [
       { url: "https://dewdropskin.com/creators", title: "Dewdrop Skincare UGC creators", snippet: "Dewdrop pays UGC creators per video for our ads and product pages. Apply at dewdropskin.com/ugc-apply.", content: "Dewdrop Skincare UGC creators. We pay creators per video for content we run as ads and on our product pages. We care about clear, honest skincare videos more than follower counts. Apply at https://dewdropskin.com/ugc-apply" },
-      { url: "https://dewdropskin.com/ugc-apply", title: "Apply: Dewdrop UGC", snippet: "Application: name, Instagram handle, portfolio link, skin type, rate per video, terms.", content: "Apply to create UGC for Dewdrop. Application questions:\n1. Full name (required)\n2. Instagram handle (required)\n3. Portfolio link (required)\n4. Your skin type (required)\n5. Rate per video in USD (optional)\n6. I agree to the Dewdrop creator terms (required)\nWe reply within two weeks." },
+      { url: "https://dewdropskin.com/ugc-apply", title: "Apply: Dewdrop UGC", snippet: "Application: name, TikTok handle, portfolio link, skin type, rate per video, terms.", content: "Apply to create UGC for Dewdrop. Application questions:\n1. Full name (required)\n2. TikTok handle (required)\n3. Portfolio link (required)\n4. Your skin type (required)\n5. Rate per video in USD (optional)\n6. I agree to the Dewdrop creator terms (required)\nWe reply within two weeks." },
     ],
   },
   {
@@ -58,7 +58,7 @@ export const PERSONAS: Persona[] = [
     script: { goal: "i want paid running partnerships, US only", yes: "yes, look into northline running for me", ready: "ok, get the pitch to northline ready. short, mention my marathon block series", retry: "draft it please" },
   },
   {
-    key: "priya", name: "Priya", handle: ig("priyaglow"), platform: "instagram", niche: "Honest skincare for sensitive skin", followers: 6_400,
+    key: "priya", name: "Priya", handle: ig("priyaglow"), platform: "tiktok", niche: "Honest skincare for sensitive skin", followers: 6_400,
     posts: [
       { postId: ig("pr1"), daysAgo: 4, views: 8_900, likes: 610, caption: "my 3-step routine for a flare-up week" },
       { postId: ig("pr2"), daysAgo: 8, views: 31_000, likes: 2_700, caption: "i tried the viral serum for 30 days. honest review" },
@@ -67,11 +67,11 @@ export const PERSONAS: Persona[] = [
       { postId: ig("pr5"), daysAgo: 23, views: 5_800, likes: 380, caption: "barrier repair, explained in 30 seconds" },
       { postId: ig("pr6"), daysAgo: 30, views: 12_100, likes: 950, caption: "my skin, no filter, day 1 vs day 60" },
     ],
-    watched: [{ platform: "instagram", handle: ig("glowjen") }, { platform: "instagram", handle: ig("skinbyana") }],
+    watched: [{ platform: "tiktok", handle: ig("glowjen") }, { platform: "tiktok", handle: ig("skinbyana") }],
     lanePosts: [
-      { platform: "instagram", author: ig("glowjen"), postId: ig("lp1"), daysAgo: 5, views: 22_000, paid: true, mentions: ["evale2e_dewdrop"] },
-      { platform: "instagram", author: ig("skinbyana"), postId: ig("lp2"), daysAgo: 9, views: 14_500, paid: true, mentions: ["evale2e_dewdrop"] },
-      { platform: "instagram", author: ig("skinbyana"), postId: ig("lp3"), daysAgo: 3, views: 9_000, paid: false, mentions: ["evale2e_someserum"] },
+      { platform: "tiktok", author: ig("glowjen"), postId: ig("lp1"), daysAgo: 5, views: 22_000, paid: true, mentions: ["evale2e_dewdrop"] },
+      { platform: "tiktok", author: ig("skinbyana"), postId: ig("lp2"), daysAgo: 9, views: 14_500, paid: true, mentions: ["evale2e_dewdrop"] },
+      { platform: "tiktok", author: ig("skinbyana"), postId: ig("lp3"), daysAgo: 3, views: 9_000, paid: false, mentions: ["evale2e_someserum"] },
     ],
     brandKey: "dewdrop", brandHandle: "evale2e_dewdrop", expectRoute: "application",
     script: { goal: "i'd love to do UGC, paid, and gifted stuff is fine too", yes: "ooh yes, look into dewdrop for me", ready: "ok help me apply to dewdrop", retry: "can you prep my answers for their form?" },
@@ -104,5 +104,5 @@ export const personaByKey = (k: string): Persona => {
 
 /** Pure: the public URL of a persona's seeded post. */
 export function personaPostUrl(p: Pick<Persona, "handle" | "platform">, postId: string): string {
-  return p.platform === "tiktok" ? `https://www.tiktok.com/@${p.handle}/video/${postId.replace(/\D/g, "").padStart(19, "8")}` : `https://www.instagram.com/reel/${postId}/`;
+  return `https://www.tiktok.com/@${p.handle}/video/${postId.replace(/\D/g, "").padStart(19, "8")}`;
 }

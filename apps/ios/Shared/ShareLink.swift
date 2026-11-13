@@ -28,22 +28,15 @@ enum ShareLink {
     return c.url
   }
 
-  /// The first TikTok (or, when Instagram is on, Instagram) post link anywhere in what was shared
-  /// (apps share text with the link inside).
-  static func postLink(in texts: [String], instagram: Bool = Platforms.instagramEnabled) -> (url: String, platform: String)? {
-    let hosts = instagram ? #"(tiktok\.com|instagram\.com)"# : #"(tiktok\.com)"#
-    let pattern = #"https?://(?:www\.|m\.|vm\.|vt\.)?"# + hosts + #"/[^\s"'<>]+"#
+  /// The first TikTok post link anywhere in what was shared (apps share text with the link inside).
+  static func postLink(in texts: [String]) -> (url: String, platform: String)? {
+    let pattern = #"https?://(?:www\.|m\.|vm\.|vt\.)?tiktok\.com/[^\s"'<>]+"#
     for t in texts {
-      if let r = t.range(of: pattern, options: [.regularExpression, .caseInsensitive]) {
-        let url = String(t[r])
-        return (url, url.lowercased().contains("instagram") ? "Instagram" : "TikTok")
-      }
+      if let r = t.range(of: pattern, options: [.regularExpression, .caseInsensitive]) { return (String(t[r]), "TikTok") }
     }
     return nil
   }
 
   /// What the share sheet says when nothing it was given is a post she can read.
-  static func notAPost(instagram: Bool = Platforms.instagramEnabled) -> String {
-    instagram ? "Maya can read TikTok and Instagram posts. This doesn't look like one." : "Maya reads TikTok posts right now. This doesn't look like one."
-  }
+  static let notAPost = "Maya reads TikTok posts. This doesn't look like one."
 }

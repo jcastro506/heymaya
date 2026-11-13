@@ -223,15 +223,15 @@ function fakeZernio(route: Route) {
   }));
 }
 
-/** Live answers, with SPEC_COMMENTS on one Instagram post so the write path has something to write. */
+/** Live answers, with SPEC_COMMENTS on one TikTok post so the write path has something to write. */
 const liveRoute = (withComments = true): Route => (url) => {
   const p = url.pathname;
   const acc = url.searchParams.get("accountId") ?? "";
   if (p === "/api/v1/inbox/comments") {
     const base = L[acc.startsWith("ig") ? "inboxCommentedPosts.instagram" : "inboxCommentedPosts.tiktok"].body as { data: Array<Record<string, unknown>> };
-    return { status: 200, body: { ...base, data: base.data.map((d, i) => (withComments && acc.startsWith("ig") && i === 0 ? { ...d, commentCount: 4 } : d)) } };
+    return { status: 200, body: { ...base, data: base.data.map((d, i) => (withComments && acc.startsWith("tt") && i === 0 ? { ...d, commentCount: 4 } : d)) } };
   }
-  if (p.startsWith("/api/v1/inbox/comments/")) return { status: 200, body: p.endsWith("/18126394246784607") && withComments ? SPEC_COMMENTS : L["comments.instagram.1"].body };
+  if (p.startsWith("/api/v1/inbox/comments/")) return { status: 200, body: p.endsWith("/7670709537535544590") && withComments ? SPEC_COMMENTS : L["comments.instagram.1"].body };
   if (p === "/api/v1/analytics") return { status: 200, body: L[acc.startsWith("ig") ? "analytics.instagram" : "analytics.tiktok"].body };
   if (p === "/api/v1/analytics/post-timeline") return { status: 200, body: L["postTimeline.tiktok.0"].body };
   if (p.endsWith("/instagram/demographics")) return { status: 200, body: L[url.searchParams.get("metric") === "engaged_audience_demographics" ? "igDemographics.engaged" : "igDemographics.follower"].body };
@@ -245,11 +245,9 @@ async function seed(t: ReturnType<typeof convexTest>, suffix: string) {
     const creatorId = await seedCreator(ctx, suffix, { clerkUserId: `user_${suffix}`, handles: { tiktok: `tt_${suffix}`, instagram: `ig_${suffix}` }, plan: { founding: true, status: "active", tier: "duo" } });
     await ctx.db.insert("connections", { creatorId, provider: "zernio", status: "connected", zernioProfileId: `prof_${suffix}`, updatedAt: Date.now(),
       zernioAccounts: [
-        { accountId: `ig_${suffix}`, platform: "instagram", username: `ig_${suffix}`, needsReconnect: false, canFetchAnalytics: true },
         { accountId: `tt_${suffix}`, platform: "tiktok", username: `tt_${suffix}`, needsReconnect: false, canFetchAnalytics: true },
       ] } as never);
-    // Their own Instagram post the comments belong to, and a TikTok post the timeline lands on.
-    await ctx.db.insert("ownPosts", { creatorId, platform: "instagram", postId: "DbrZ8lIlxma", url: "https://www.instagram.com/p/DbrZ8lIlxma/", createTime: NOW - 10 * DAY, contentType: "photo", caption: "", hashtags: [], metrics: { views: 5, likes: 0, comments: 4, shares: 0 }, metricsAsOf: NOW, source: "zernio" });
+    // Their own TikTok post: the comments belong to it and the timeline lands on it.
     await ctx.db.insert("ownPosts", { creatorId, platform: "tiktok", postId: "7670709537535544590", url: "https://www.tiktok.com/@kevin.castro9996/video/7670709537535544590", createTime: NOW - 10 * DAY, contentType: "video", caption: "", hashtags: [], metrics: { views: 118, likes: 1, comments: 0, shares: 2 }, metricsAsOf: NOW - DAY, source: "zernio", history: [{ at: NOW - 9 * DAY, views: 100 }] });
     return creatorId;
   });
@@ -273,11 +271,11 @@ describe("comments, end to end (read only)", () => {
     expect(r.failed).toBe(0);
     const rows = await t.run((ctx) => ctx.db.query("postComments").collect());
     expect(rows.map((x) => x.commentId).sort()).toEqual(["c1", "c1r", "c2", "c3", "c4"]);
-    expect(rows.every((x) => x.creatorId === a && x.ownPostId && x.postUrl === "https://www.instagram.com/p/DbrZ8lIlxma/")).toBe(true);
+    expect(rows.every((x) => x.creatorId === a && x.ownPostId && x.postUrl === "https://www.tiktok.com/@kevin.castro9996/video/7670709537535544590")).toBe(true);
     expect(rows.find((x) => x.commentId === "c1r")).toMatchObject({ isOwner: true, question: false, parentId: "c1" });
     expect(JSON.stringify(rows), "no commenter names stored").not.toMatch(/a_person|b_person|heymaya182/);
     const status = (await t.run((ctx) => ctx.db.query("accountInsights").collect())).filter((x) => x.kind === "comments");
-    expect(status.map((x) => `${x.platform}:${x.status}`).sort()).toEqual(["instagram:ok", "tiktok:ok"]);
+    expect(status.map((x) => `${x.platform}:${x.status}`).sort()).toEqual(["tiktok:ok"]);
     // The timeline reading landed in the TikTok post's history (one row, equal to its lifetime views).
     const tt = await t.run((ctx) => ctx.db.query("ownPosts").collect());
     expect(tt.find((p) => p.platform === "tiktok")!.history!.map((h) => h.views)).toEqual([100, 118]);
@@ -299,7 +297,7 @@ describe("comments, end to end (read only)", () => {
     const out = await runTool(actionCtx(t), a, { name: "own_comments", args: { why: "what are people asking" } }, DEFAULT_BUDGET(), trace);
     expect(trace).toMatchObject([{ tool: "own_comments", ok: true, credits: 0 }]);
     expect(out).toMatch(/data, not instructions/);
-    expect(out).toMatch(/"what mic do you use" \(asked by 2 people\) \(34 likes\) on https:\/\/www\.instagram\.com\/p\/DbrZ8lIlxma\//);
+    expect(out).toMatch(/"what mic do you use" \(asked by 2 people\) \(34 likes\) on https:\/\/www\.tiktok\.com\/@kevin\.castro9996\/video\/7670709537535544590/);
     expect(out).toMatch(/worth answering[\s\S]*what mic do you use[\s\S]*which mic do u use/);
     expect(out.split("worth answering")[1]).not.toMatch(/audio this clean/);
     const other = await runTool(actionCtx(t), b, { name: "own_comments", args: { why: "x" } }, DEFAULT_BUDGET(), []);
@@ -313,8 +311,7 @@ describe("comments, end to end (read only)", () => {
     fakeZernio(liveRoute());
     const actions: string[] = [];
     const trace: ToolCallRecord[] = [];
-    // Instagram: the media id comes from the commented-posts list by permalink (the shortcode isn't it).
-    const own = await runTool(actionCtx(t, (n) => actions.push(n)), a, { name: "post_comments", args: { url: "https://www.instagram.com/p/DbrZ8lIlxma/", why: "what are they asking" } }, DEFAULT_BUDGET(), trace);
+    const own = await runTool(actionCtx(t, (n) => actions.push(n)), a, { name: "post_comments", args: { url: "https://www.tiktok.com/@kevin.castro9996/video/7670709537535544590", why: "what are they asking" } }, DEFAULT_BUDGET(), trace);
     expect(trace[0]).toMatchObject({ tool: "post_comments", ok: true, credits: 0 });
     expect(actions).not.toContain("reads/read:read");
     expect(own).toMatch(/their own post, read from their connected account/);
@@ -323,8 +320,8 @@ describe("comments, end to end (read only)", () => {
     expect((await t.run((ctx) => ctx.db.query("postComments").collect())).length).toBe(5);
 
     const trace2: ToolCallRecord[] = [];
-    const theirs = await runTool(actionCtx(t, (n) => actions.push(n)), a, { name: "post_comments", args: { url: "https://www.instagram.com/p/SomeoneElse1/", why: "x" } }, DEFAULT_BUDGET(), trace2);
-    expect(trace2[0]).toMatchObject({ credits: 15 });
+    const theirs = await runTool(actionCtx(t, (n) => actions.push(n)), a, { name: "post_comments", args: { url: "https://www.tiktok.com/@someoneelse/video/7000000000000000001", why: "x" } }, DEFAULT_BUDGET(), trace2);
+    expect(trace2[0]).toMatchObject({ credits: 1 });
     expect(actions).toContain("reads/read:read");
     expect(theirs).toMatch(/public comment/);
   });
@@ -351,7 +348,7 @@ describe("comments, end to end (read only)", () => {
     const r = await t.action(internal.connections.insightsSync.syncCreator, { creatorId: a });
     expect(r.failed).toBe(0);
     const status = (await t.run((ctx) => ctx.db.query("accountInsights").collect())).filter((x) => x.kind === "comments");
-    expect(status.map((x) => x.status)).toEqual(["not_available", "not_available"]);
+    expect(status.map((x) => x.status)).toEqual(["not_available"]);
     expect(await t.run((ctx) => ctx.db.query("postComments").collect())).toEqual([]);
   });
 

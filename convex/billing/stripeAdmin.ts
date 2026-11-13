@@ -33,7 +33,7 @@ export const inventory = internalAction({
 export function planCatalog(): Array<{ tier: string; name: string; prices: Array<{ interval: "monthly" | "annual"; recurring: "month" | "year"; unitAmount: number; lookupKey: string; envKey: string }> }> {
   return TIER_NAMES.map((tier) => ({
     tier,
-    name: `Maya: ${TIERS[tier].label}`,
+    name: tier === "duo" ? "Maya (old two-account plan)" : TIERS[tier].label,
     prices: (["monthly", "annual"] as const).map((interval) => ({
       interval,
       recurring: interval === "monthly" ? "month" as const : "year" as const,

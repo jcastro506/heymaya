@@ -1,8 +1,7 @@
 import Foundation
 
 /// What a public post looks like, from TikTok's oEmbed endpoint (no key, meant for embedding).
-/// Instagram's oEmbed needs an app token, so IG and unknown links get a designed fallback
-/// until post covers are stored server-side (audit doc: image storage).
+/// Any other link gets a designed fallback until post covers are stored server-side (audit doc: image storage).
 struct PostPreview: Equatable, Sendable {
   let thumbnail: URL?
   let author: String?
@@ -10,11 +9,10 @@ struct PostPreview: Equatable, Sendable {
   let title: String?
   let platform: Platform
 
-  enum Platform: String, Sendable { case tiktok, instagram, other }
+  enum Platform: String, Sendable { case tiktok, other }
 
   static func platform(of url: String) -> Platform {
     if url.contains("tiktok.com") { return .tiktok }
-    if url.contains("instagram.com") { return .instagram }
     return .other
   }
 

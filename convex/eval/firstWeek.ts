@@ -1,7 +1,7 @@
 /**
  * The first-week simulation (plan: the MVP path, never run end to end until now). Brand-new
  * creators sign up with REAL handles and live their first week, compressed, so we can see what a
- * new TikTok or Instagram creator actually gets: the catalogue read and dossier, pairing by text,
+ * new TikTok creator actually gets: the catalogue read and dossier, pairing by text,
  * the hello, the first read, the first ideas, the first week plan, and the first Sunday review.
  * Not to be confused with `scout/firstWeek.ts`, which is the product's own first-week ledger.
  *
@@ -60,21 +60,18 @@ const MIN = 60_000;
 export interface Subject { tiktok?: string; instagram?: string; timezone?: string; note?: string }
 
 /**
- * ⚠️ DEFAULT SUBJECTS — SWAP FREELY. Real public accounts, chosen for spread, not vetted live:
- * 2 TikTok-only, 3 Instagram-only, 3 on both; small and large; eight different lanes. The two small
- * runners come from our recorded vendor fixtures; the rest are well-known public creators. A handle
- * already held by another creator on the deployment (a scenario persona, an earlier run) is refused
- * by the real signup rule and reported as a named failure; `preflight` shows which before you start.
+ * ⚠️ DEFAULT SUBJECTS — SWAP FREELY. Real public TikTok accounts, chosen for spread, not vetted live: small and
+ * large, five different lanes (TikTok only, 2026-11-13). The small runner comes from our recorded vendor fixtures;
+ * the rest are well-known public creators. A handle already held by another creator on the deployment (a scenario
+ * persona, an earlier run) is refused by the real signup rule and reported as a named failure; `preflight` shows
+ * which before you start.
  */
 export const DEFAULT_SUBJECTS: Subject[] = [
-  { tiktok: "cam.luyckx", note: "TikTok only, small, running" },
-  { instagram: "stephpiruns", note: "Instagram only, small, running" },
-  { instagram: "minimalistbaker", note: "Instagram only, large, recipes" },
-  { tiktok: "hankgreen1", note: "TikTok only, large, science" },
-  { tiktok: "thekoreanvegan", instagram: "thekoreanvegan", note: "both, large, food + storytelling" },
-  { tiktok: "plantkween", instagram: "plantkween", note: "both, mid, plants" },
-  { instagram: "leoniehanne", note: "Instagram only, large, fashion" },
-  { tiktok: "brittany_broski", instagram: "brittany_broski", note: "both, large, comedy" },
+  { tiktok: "cam.luyckx", note: "small, running" },
+  { tiktok: "hankgreen1", note: "large, science" },
+  { tiktok: "thekoreanvegan", note: "large, food + storytelling" },
+  { tiktok: "plantkween", note: "mid, plants" },
+  { tiktok: "brittany_broski", note: "large, comedy" },
 ];
 
 export const FW_DEFAULTS = {
@@ -284,9 +281,8 @@ export const createOne = internalMutation({
       const armed = await armReplay(ctx, [creatorId], a.runId);
       if (!armed.ok) throw new Error(`replay refused: ${armed.reason}`);
     }
-    // Checkout: a trial (no Stripe row, nothing charged), one account on solo, both on duo.
-    const both = Boolean(c.handles.tiktok && c.handles.instagram);
-    await ctx.db.patch(creatorId, { plan: { ...c.plan, status: "trialing", tier: both ? "duo" : "solo" }, updatedAt: Date.now() });
+    // Checkout: a trial (no Stripe row, nothing charged) on the plain plan.
+    await ctx.db.patch(creatorId, { plan: { ...c.plan, status: "trialing", tier: "solo" }, updatedAt: Date.now() });
     return { ok: true, creatorId };
   },
 });
@@ -447,7 +443,7 @@ export function resolveOpts(a: Partial<Opts>): Opts {
 export function estimateCredits(subjects: Subject[], o: Opts): { perCreator: number[]; total: number; needed: number } {
   if (o.replay) return { perCreator: subjects.map(() => 0), total: 0, needed: 0 };
   const perCreator = subjects.map((sub) => {
-    const platforms = (sub.tiktok ? 1 : 0) + (sub.instagram ? 1 : 0);
+    const platforms = sub.tiktok ? 1 : 0;
     const onboarding = platforms * 1 + platforms * 2 + o.transcriptCap + 10 * o.watchCap + (o.admired > 0 ? 10 * platforms : 0) + o.admired;
     const week = 16 + 6 * o.days;
     return onboarding + week;
@@ -699,7 +695,7 @@ async function actorTurn(ctx: ActionCtx, s: RunState, i: number, log: CreatorLog
     await ctx.runMutation(internal.eval.firstWeek.patchLog, { runId: s.runId, i, append: { actor: [{ d, said: [], acts: [`ignored (${slot})`], heard: [] }] } });
     return "ignored";
   }
-  const platforms = [slotRow.handles.tiktok && "TikTok", slotRow.handles.instagram && "Instagram"].filter(Boolean).join(" and ") || "TikTok";
+  const platforms = "TikTok";
   const voice = await ctx.runQuery(internal.eval.firstWeek.captionsOf, { creatorId: slotRow.creatorId });
   if (persona) {
     // A person with a temperament, on a model that isn't hers; they may ask for less, pause, or leave.
@@ -876,7 +872,7 @@ export const FW_JUDGE = `You judge what an assistant named Maya sent a creator i
 For each item return:
 - grounded 0-2: 2 = rests on specific things in their posts/dossier or on the linked source; 1 = partly; 0 = generic or unsupported.
 - specific 0-2: 2 = could only have been written for this creator; 0 = could be sent to anyone in the niche.
-- rightPlatform: "yes" if it fits the platform(s) they are actually on (an Instagram-only creator told to use a TikTok-only feature is "no"); "na" if no platform is implied.
+- rightPlatform: "yes" if it fits TikTok, the platform they are on (anything Instagram-only, like Reels features, is "no"); "na" if no platform is implied.
 - invented: anything stated as fact that the evidence does not support (numbers, posts, events).
 - note: ≤140 chars.
 Output ONLY JSON: {"items":[{"i":0,"grounded":0,"specific":0,"rightPlatform":"yes|no|na","invented":[],"note":""}]}`;
@@ -956,7 +952,6 @@ export type CreatorReport = {
   firstIdeaTextedAtHours: number | null; firstPlanAtHours: number | null; firstIdeaAnyAtHours: number | null;
   ideasWeek1: { total: number; texted: number; byInspiration: Record<string, number> };
   weekPlans: Array<{ atHours: number; key: string }>; sundayReviewAtHours: number | null;
-  instagram: { hasInstagram: boolean; instagramOnly: boolean; igPostsRead: number; igGroundedIdeas: number; gotIgGroundedIdea: boolean };
   failures: Array<{ d: number; step: string; error: string }>;
   cost: { modelUsd: number; scrapeCredits: number; scrapeUsd: number; otherUsd: number; simOverheadUsd: number; byKind: Record<string, number> };
   judged: unknown; actorTurns: number; stepsRun: number;
@@ -973,7 +968,7 @@ export const creatorReport = internalQuery({
     const base = { i: a.i, handles: slot.handles, timezone: slot.timezone, note: slot.note };
     const c = slot.creatorId ? ((await ctx.db.get(slot.creatorId)) as Doc<"creators"> | null) : null;
     if (!c || !slot.creatorId) {
-      return { ...base, creatorId: null, phase: "never started", dayReached: 0, timeline: [], catalogue: { status: null, attempts: 0, error: slot.error ?? null, postsRead: { tiktok: 0, instagram: 0 }, readFrom: null, doneAtHours: null }, dossierAtHours: null, helloAtHours: null, firstReadAtHours: null, firstIdeaTextedAtHours: null, firstPlanAtHours: null, firstIdeaAnyAtHours: null, ideasWeek1: { total: 0, texted: 0, byInspiration: {} }, weekPlans: [], sundayReviewAtHours: null, instagram: { hasInstagram: Boolean(slot.handles.instagram), instagramOnly: Boolean(slot.handles.instagram && !slot.handles.tiktok), igPostsRead: 0, igGroundedIdeas: 0, gotIgGroundedIdea: false }, failures: log?.failures ?? [{ d: 0, step: "signup", error: slot.error ?? "no creator" }], cost: { modelUsd: 0, scrapeCredits: 0, scrapeUsd: 0, otherUsd: 0, simOverheadUsd: 0, byKind: {} }, judged: null, actorTurns: 0, stepsRun: 0 };
+      return { ...base, creatorId: null, phase: "never started", dayReached: 0, timeline: [], catalogue: { status: null, attempts: 0, error: slot.error ?? null, postsRead: { tiktok: 0, instagram: 0 }, readFrom: null, doneAtHours: null }, dossierAtHours: null, helloAtHours: null, firstReadAtHours: null, firstIdeaTextedAtHours: null, firstPlanAtHours: null, firstIdeaAnyAtHours: null, ideasWeek1: { total: 0, texted: 0, byInspiration: {} }, weekPlans: [], sundayReviewAtHours: null, failures: log?.failures ?? [{ d: 0, step: "signup", error: slot.error ?? "no creator" }], cost: { modelUsd: 0, scrapeCredits: 0, scrapeUsd: 0, otherUsd: 0, simOverheadUsd: 0, byKind: {} }, judged: null, actorTurns: 0, stepsRun: 0 };
     }
     const id = slot.creatorId;
     const t0 = c.createdAt;
@@ -984,13 +979,11 @@ export const creatorReport = internalQuery({
     const ideas = (await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", id)).take(300)) as Doc<"ideas">[];
     const weekIdeas = ideas.filter((x) => x.createdAt - t0 <= 8 * D);
     const byInspiration: Record<string, number> = {};
-    let igGrounded = 0;
     for (const x of weekIdeas) {
       const sig = x.signalId ? ((await ctx.db.get(x.signalId)) as Doc<"signals"> | null) : null;
       const own = x.rhymesWithOwnPostId ? ((await ctx.db.get(x.rhymesWithOwnPostId)) as Doc<"ownPosts"> | null) : null;
       const p = inspirationPlatform([...(sig?.url ? [sig.url] : []), ...x.evidenceLinks], own?.platform ?? null);
       byInspiration[p] = (byInspiration[p] ?? 0) + 1;
-      if (p === "instagram" || p === "own_instagram") igGrounded++;
     }
     const texted = weekIdeas.filter((x) => x.messageId || x.sentAt || x.surfacedAt).sort((x, y) => (x.sentAt ?? x.surfacedAt ?? x.createdAt) - (y.sentAt ?? y.surfacedAt ?? y.createdAt));
     const firstTexted = texted[0] ? texted[0].sentAt ?? texted[0].surfacedAt ?? texted[0].createdAt : null;
@@ -1042,7 +1035,6 @@ export const creatorReport = internalQuery({
       firstIdeaTextedAtHours: at(firstTexted), firstPlanAtHours: at(firstPlanAt), firstIdeaAnyAtHours: anyIdea.length ? at(Math.min(...anyIdea)) : null,
       ideasWeek1: { total: weekIdeas.length, texted: texted.length, byInspiration },
       weekPlans: plans.map((p) => ({ atHours: at(p.ts) ?? 0, key: p.dedupeKey ?? "" })), sundayReviewAtHours: at(review?.ts),
-      instagram: { hasInstagram: Boolean(c.handles.instagram), instagramOnly: Boolean(c.handles.instagram && !c.handles.tiktok), igPostsRead: postsRead.instagram, igGroundedIdeas: igGrounded, gotIgGroundedIdea: igGrounded > 0 },
       failures, cost, judged: log?.judged ?? null, actorTurns: log?.turns ?? 0, stepsRun: log?.steps.length ?? 0,
       checks: log?.checks ?? [],
     };
@@ -1054,7 +1046,6 @@ export type FleetSummary = {
   medianHoursToFirstIdeaAny: number | null; medianHoursToFirstIdeaTexted: number | null;
   pctIdeaWithin24h: number | null; pctTextedIdeaWithin24h: number | null; pctFirstReadWithin1h: number | null;
   pctWeekPlan: number | null; pctSundayReview: number | null;
-  instagram: { creatorsWithInstagram: number; withIgGroundedIdeas: number; pct: number | null; instagramOnly: number; instagramOnlyWithIgGroundedIdeas: number };
   failures: Array<{ i: number; d: number; step: string; error: string }>;
   costPerOnboardedCreator: { modelUsd: number | null; scrapeCredits: number | null; totalUsd: number | null };
   judge: { items: number; meanGrounded: number | null; meanSpecific: number | null; wrongPlatform: number; withInvented: number };
@@ -1070,8 +1061,6 @@ export function summarise(reports: CreatorReport[]): FleetSummary {
   const started = reports.filter((r) => r.creatorId);
   const onboarded = started.filter((r) => r.firstReadAtHours !== null);
   const within = (x: number | null, h: number) => x !== null && x <= h;
-  const ig = started.filter((r) => r.instagram.hasInstagram);
-  const igOnly = started.filter((r) => r.instagram.instagramOnly);
   const judgedItems = started.flatMap((r) => (Array.isArray(r.judged) ? (r.judged as Array<{ verdict: JudgedItem | null }>) : [])).map((x) => x.verdict).filter((x): x is JudgedItem => Boolean(x));
   const perCreatorUsd = onboarded.map((r) => r.cost.modelUsd + r.cost.scrapeUsd + r.cost.otherUsd);
   return {
@@ -1083,7 +1072,6 @@ export function summarise(reports: CreatorReport[]): FleetSummary {
     pctFirstReadWithin1h: pct(started.filter((r) => within(r.firstReadAtHours, 1)).length, started.length),
     pctWeekPlan: pct(started.filter((r) => r.weekPlans.length > 0).length, started.length),
     pctSundayReview: pct(started.filter((r) => r.sundayReviewAtHours !== null).length, started.length),
-    instagram: { creatorsWithInstagram: ig.length, withIgGroundedIdeas: ig.filter((r) => r.instagram.gotIgGroundedIdea).length, pct: pct(ig.filter((r) => r.instagram.gotIgGroundedIdea).length, ig.length), instagramOnly: igOnly.length, instagramOnlyWithIgGroundedIdeas: igOnly.filter((r) => r.instagram.gotIgGroundedIdea).length },
     failures: reports.flatMap((r) => r.failures.map((f) => ({ i: r.i, ...f }))),
     costPerOnboardedCreator: { modelUsd: mean(onboarded.map((r) => r.cost.modelUsd)), scrapeCredits: mean(onboarded.map((r) => r.cost.scrapeCredits)), totalUsd: mean(perCreatorUsd) },
     judge: { items: judgedItems.length, meanGrounded: mean(judgedItems.map((x) => x.grounded)), meanSpecific: mean(judgedItems.map((x) => x.specific)), wrongPlatform: judgedItems.filter((x) => x.rightPlatform === "no").length, withInvented: judgedItems.filter((x) => x.invented.length > 0).length },

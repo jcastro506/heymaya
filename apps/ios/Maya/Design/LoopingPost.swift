@@ -2,8 +2,7 @@ import SwiftUI
 import WebKit
 
 /// The inspiring post, playing silently on a loop behind the idea's hook (spec §M1 additions).
-/// TikTok's official embed player only; Instagram's embed carries its own chrome, so it keeps
-/// the still cover. Off under Reduce Motion and Low Power Mode; the cover shows until ready.
+/// TikTok's official embed player only; any other link keeps the still cover. Off under Reduce Motion and Low Power Mode; the cover shows until ready.
 struct LoopingPost: View {
   let url: String
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
