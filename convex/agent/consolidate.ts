@@ -63,14 +63,18 @@ export const consolidateOne = internalMutation({
     let expiredNotes = 0, hoursLearned = 0;
     {
       const patch: Partial<Doc<"creators">> = {};
+      const lasting: Doc<"creators">["notes"] = [];
       const notes = (c.notes ?? []).map((n) => {
         // §21.5 callbacks: a running bit never expires on its own; only "forget that" ends one.
         if (!n.tombstonedAt && n.expiresHint && n.expiresHint < now && !n.confirmedAt && n.kind !== "bit") {
           expiredNotes++;
+          // Horizon sim (2026-11-12): "moving to Denver" expired after the move and she forgot they live there now.
+          if (n.after && !(c.notes ?? []).some((m) => !m.tombstonedAt && m.text.toLowerCase() === n.after!.toLowerCase())) lasting.push({ id: `${n.id}_after`, text: n.after, kind: "fact", sourceMessageId: n.sourceMessageId, at: now });
           return { ...n, tombstonedAt: now };
         }
         return n;
       });
+      notes.push(...lasting);
       if (expiredNotes) patch.notes = notes;
       const inbound = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", c._id).gte("ts", now - 28 * 86_400_000)).collect()) as Doc<"messages">[];
       const hour = preferredHour(inbound.filter((m) => m.direction === "in" && (m.kind ?? "inbound") === "inbound").map((m) => m.ts), c.timezone);

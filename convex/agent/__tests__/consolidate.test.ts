@@ -43,4 +43,19 @@ describe("consolidate", () => {
     expect(c?.notes.find((n) => n.id === "live")?.tombstonedAt).toBeUndefined();
     expect(c?.preferredSendHour).toBe(19);
   });
+
+  it("a time-bound note leaves what stays true when it expires (horizon sim: the move)", async () => {
+    const t = convexTest(schema, modules);
+    const now = Date.UTC(2026, 8, 3, 3, 0);
+    const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { timezone: "UTC", notes: [
+      { id: "move", text: "moving to Denver on Jan 8", kind: "life", at: 1, expiresHint: now - 1, after: "lives in Denver now" },
+      { id: "trip", text: "trip in june", kind: "life", at: 1, expiresHint: now - 1 },
+    ] }));
+    await t.mutation(internal.agent.consolidate.consolidateOne, { creatorId, now });
+    await t.mutation(internal.agent.consolidate.consolidateOne, { creatorId, now: now + 1 });
+    const c = await t.run((ctx) => ctx.db.get(creatorId));
+    const live = c!.notes.filter((n) => !n.tombstonedAt);
+    expect(live.map((n) => [n.text, n.kind])).toEqual([["lives in Denver now", "fact"]]);
+    expect(live[0].expiresHint).toBeUndefined();
+  });
 });

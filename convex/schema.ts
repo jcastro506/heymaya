@@ -138,6 +138,8 @@ export default defineSchema({
         sourceMessageId: v.optional(v.id("messages")),
         at: v.number(),
         expiresHint: v.optional(v.number()),
+        // What stays true once a time-bound note has passed ("moving to Denver Jan 8" → "lives in Denver"); kept as a fact on expiry.
+        after: v.optional(v.string()),
         confirmedAt: v.optional(v.number()),
         tombstonedAt: v.optional(v.number()),
       }),
