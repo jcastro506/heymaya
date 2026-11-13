@@ -166,7 +166,6 @@ private struct NameStep: View {
           .focused($focused)
           .onSubmit(save)
         Problem(text: problem)
-        MayaTexts(messages: MayaExamples.name(name))
       }
     } footer: {
       PrimaryButton(title: "Continue", busy: busy, disabled: name.trimmingCharacters(in: .whitespaces).isEmpty, action: save)
@@ -435,7 +434,7 @@ private struct WatchStep: View {
   @State private var problem: String?
 
   var body: some View {
-    StepFrame(step: .watch, kicker: "Your favorites", title: "Who do you love watching?", subtitle: "Add a few creators you like.") {
+    StepFrame(step: .watch, kicker: "Your favorites", title: "Who do you love watching?", subtitle: "Add a few creators you like. She watches them for ideas.") {
       VStack(alignment: .leading, spacing: 10) {
         HStack(spacing: 8) {
           if model.instagramEnabled {
@@ -473,7 +472,6 @@ private struct WatchStep: View {
         }
       }
       Problem(text: problem)
-      if model.watched.isEmpty { MayaTexts(messages: MayaExamples.watch) }
     } footer: {
       PrimaryButton(title: model.watched.isEmpty ? "Skip for now" : "Done") { model.watchSeen = true }
     }
@@ -540,7 +538,6 @@ private struct CalendarStep: View {
           google = problem == nil
           busy = nil
         }
-        MayaTexts(messages: MayaExamples.calendar)
       }
       Problem(text: problem)
     } footer: {
