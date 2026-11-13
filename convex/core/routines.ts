@@ -111,6 +111,21 @@ export const setWeekPlans = internalMutation({
 });
 
 /**
+ * What a video they send with no question gets: the full read (reaction, a caption, a sound) or just a reaction
+ * (2026-11-12, season sim: "please stop sending caption ideas i didn't ask for, just say lol cool", ten times, with
+ * nothing she could change). Asking for captions or a sound still gets them.
+ */
+export const setVideoReplies = internalMutation({
+  args: { creatorId: v.id("creators"), mode: v.union(v.literal("full"), v.literal("react")) },
+  handler: async (ctx, a): Promise<{ ok: boolean; body: string }> => {
+    const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    if (!c) return { ok: false, body: "no account" };
+    await ctx.db.patch(c._id, { videoReplies: a.mode === "react" ? "react" : undefined, updatedAt: Date.now() });
+    return { ok: true, body: a.mode === "react" ? "set: a video with no question gets a short reaction; captions and sounds only when they ask" : "set: a video with no question gets your reaction, a caption and a sound" };
+  },
+});
+
+/**
  * Pause or resume her texting first, from their own words ("pause this", "go quiet for a bit"). The same field
  * the exact "pause"/"stop" command sets (agent/commands), so every door agrees: a promise to go quiet is a row.
  */
