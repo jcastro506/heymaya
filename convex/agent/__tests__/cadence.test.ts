@@ -65,11 +65,14 @@ describe("the human cadence: pure", () => {
   });
 
   it("followers cross a round number once", () => {
-    expect(followerMilestone(12_400, [])).toMatchObject({ key: "followers:10000" });
-    expect(followerMilestone(12_400, ["followers:10000"])).toBeNull();
-    expect(followerMilestone(999, [])).toBeNull();
-    expect(followerMilestone(null, [])).toBeNull();
-    expect(followerMilestone(1_200_000, [])?.line).toMatch(/a million/);
+    expect(followerMilestone(12_400, [], 9_800)).toMatchObject({ key: "followers:10000" });
+    expect(followerMilestone(12_400, ["followers:10000"], 9_800)).toBeNull();
+    expect(followerMilestone(999, [], 900)).toBeNull();
+    expect(followerMilestone(null, [], 0)).toBeNull();
+    expect(followerMilestone(1_200_000, [], 990_000)?.line).toMatch(/a million/);
+    // Joined already past it, or unknown when they joined: not news (2026-11-12).
+    expect(followerMilestone(1_200_000, [], 1_150_000)).toBeNull();
+    expect(followerMilestone(12_400, [])).toBeNull();
   });
 
   it("sibling coherence: the cron, the buttons, the kinds; the image skill is gone", () => {
