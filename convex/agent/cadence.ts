@@ -124,9 +124,12 @@ export function morningHourFor(quiet: { start: string; end: string } | undefined
 }
 
 /** Followers crossing a round number, once each. Pure. */
-export function followerMilestone(followers: number | null, said: string[]): { key: string; line: string } | null {
+export function followerMilestone(followers: number | null, said: string[], atJoin: number | null = null): { key: string; line: string } | null {
   if (followers === null) return null;
-  const crossed = [1_000_000, 100_000, 10_000, 1_000].find((n) => followers >= n);
+  // Only a line they crossed since joining is news (2026-11-12: someone who joined with 1.2M heard "you crossed a
+  // million followers" on day one). Unknown count at joining: nothing is said, rather than guess.
+  if (atJoin === null) return null;
+  const crossed = [1_000_000, 100_000, 10_000, 1_000].find((n) => followers >= n && atJoin < n);
   if (!crossed) return null;
   const key = `followers:${crossed}`;
   if (said.includes(key)) return null;
@@ -167,7 +170,12 @@ export const morningInputs = internalQuery({
     const mi = await ctx.runQuery(internal.agent.history.milestoneInputs, { creatorId: a.creatorId, now: a.now });
     const said = creator.milestonesSaid ?? [];
     const followers = snaps.length ? snaps.reduce((s, r) => s + r.followers, 0) : null;
-    const milestone = followerMilestone(followers, said) ?? (mi ? pickMilestone(mi) : null);
+    // Their count when they joined: the first snapshot from then on, per platform, summed.
+    const early = (await ctx.db.query("followerSnapshots").withIndex("by_creator_day", (q) => q.eq("creatorId", a.creatorId)).order("asc").take(30)) as Doc<"followerSnapshots">[];
+    const firstPer = new Map<string, number>();
+    for (const s of early) if (s.at >= creator.createdAt - 86_400_000 && !firstPer.has(s.platform)) firstPer.set(s.platform, s.followers);
+    const atJoin = firstPer.size ? [...firstPer.values()].reduce((x, y) => x + y, 0) : null;
+    const milestone = followerMilestone(followers, said, atJoin) ?? (mi ? pickMilestone(mi) : null);
     const postsPerWeek = (creator.dossier as { cadence?: { postsPerWeek?: number } } | undefined)?.cadence?.postsPerWeek ?? null;
     // Earlier misses of the same video (by idea, else by title), so a third slip gets a different question.
     const misses = (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).gte("start", a.now - 14 * 86_400_000).lte("start", a.now)).take(200)) as Doc<"calendarBlocks">[];
