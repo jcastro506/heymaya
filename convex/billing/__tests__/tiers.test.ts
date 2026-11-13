@@ -29,7 +29,7 @@ describe("the tiers", () => {
     expect(TIERS.duo.priceUsd).toBe(24.99);
     expect(TIERS.partner.priceUsd).toBe(29.99);
     expect(TIERS.solo.accounts).toBe(1);
-    expect(TIERS.duo.accounts).toBe(2);
+    expect(TIERS.duo.accounts).toBe(1); // TikTok only: one account on every plan
     expect(TIERS.partner.partnerships.opportunitiesPerMonth).toBeGreaterThan(0);
     expect(TIERS.duo.partnerships.opportunitiesPerMonth).toBe(0);
     for (const f of ["app/landing/Landing.tsx", "app/app/settings/page.tsx"]) expect(readFileSync(new URL(`../../../${f}`, import.meta.url), "utf8"), `${f} reads prices from tiers.ts`).toMatch(/from "@\/convex\/billing\/tiers"/);
@@ -37,15 +37,12 @@ describe("the tiers", () => {
     // The terms render the payment line from tiers.ts, so they always list exactly what is offered.
     expect(terms).toMatch(/\{paymentLine\(\)\}/);
     expect(terms, "no hardcoded price in the terms").not.toMatch(/\$\d/);
-    for (const igOn of [false, true]) {
-      const line = paymentLine(igOn);
-      for (const t of offeredTiers(igOn)) {
-        expect(line, `${t} monthly, instagram ${igOn}`).toContain(price(TIERS[t].priceUsd));
-        expect(line, `${t} annual, instagram ${igOn}`).toContain(price(TIERS[t].annualUsd));
-      }
-      for (const t of TIER_NAMES.filter((x) => !offeredTiers(igOn).includes(x))) expect(line, `${t} not offered`).not.toContain(price(TIERS[t].priceUsd));
+    const line = paymentLine();
+    for (const t of offeredTiers()) {
+      expect(line, `${t} monthly`).toContain(price(TIERS[t].priceUsd));
+      expect(line, `${t} annual`).toContain(price(TIERS[t].annualUsd));
     }
-    expect(paymentLine(false)).not.toContain(price(TIERS.duo.priceUsd));
+    for (const t of TIER_NAMES.filter((x) => !offeredTiers().includes(x))) expect(line, `${t} not offered`).not.toContain(price(TIERS[t].priceUsd));
     expect(readFileSync(new URL("../../../app/landing/Landing.tsx", import.meta.url), "utf8")).not.toMatch(/\$19|\$29|founding price/i);
     expect(readFileSync(new URL("../../../app/app/settings/page.tsx", import.meta.url), "utf8")).not.toMatch(/\$19|\$180/);
   });
@@ -56,7 +53,7 @@ describe("the tiers", () => {
     expect(entitlementsFor({ status: "comped" }).tier).toBe("duo");
     expect(entitlementsFor({ status: "active", tier: "partner" }).partnerships).toEqual(TIERS.partner.partnerships);
     const dead = entitlementsFor({ status: "canceled", tier: "partner" });
-    expect(dead.accounts).toBe(2);
+    expect(dead.accounts).toBe(1);
     expect(dead.partnerships.opportunitiesPerMonth).toBe(0);
     expect(entitlementsFor({ status: "past_due", tier: "partner" }).partnerships.opportunitiesPerMonth).toBe(0);
     expect(partnershipsOpen({ _id: "c", plan: { status: "past_due", tier: "partner" } }, {})).toBe(false);
@@ -130,10 +127,11 @@ describe("the doors, on rows", () => {
       await ctx.db.insert("connections", { creatorId: b, provider: "zernio", status: "connected", zernioProfileId: "p_b", zernioAccounts: [{ accountId: "acc_b1", platform: "tiktok", needsReconnect: false, canFetchAnalytics: true }, { accountId: "acc_b2", platform: "instagram", needsReconnect: false, canFetchAnalytics: true }], updatedAt: now });
     });
     expect(await t.query(internal.connections.sync.accountCap, { creatorId: a })).toBe(1);
-    expect(await t.query(internal.connections.sync.accountCap, { creatorId: b })).toBe(2);
+    expect(await t.query(internal.connections.sync.accountCap, { creatorId: b })).toBe(1);
     expect(await t.query(internal.connections.sync.creatorForAccount, { accountId: "acc_a1" })).toBe(a);
     expect(await t.query(internal.connections.sync.creatorForAccount, { accountId: "acc_a2" }), "solo: the second account is beyond the plan").toBeNull();
-    expect(await t.query(internal.connections.sync.creatorForAccount, { accountId: "acc_b2" })).toBe(b);
+    expect(await t.query(internal.connections.sync.creatorForAccount, { accountId: "acc_b1" })).toBe(b);
+    expect(await t.query(internal.connections.sync.creatorForAccount, { accountId: "acc_b2" }), "TikTok only: an old Instagram connection is never read").toBeNull();
     expect(await t.query(internal.connections.sync.creatorForAccount, { accountId: "acc_nobody" })).toBeNull();
   });
 

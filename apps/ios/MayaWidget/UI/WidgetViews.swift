@@ -116,7 +116,7 @@ struct CoverTile: View {
               MeshGradient(width: 2, height: 2, points: [[0, 0], [1, 0], [0, 1], [1, 1]],
                            colors: [Palette.wash, Palette.purple.opacity(0.45), Palette.coral.opacity(0.45), Palette.wash])
             }
-            Image(systemName: platform == "instagram" ? "camera.fill" : platform == "tiktok" ? "music.note" : "lightbulb.fill")
+            Image(systemName: platform == "tiktok" ? "music.note" : "lightbulb.fill")
               .font(.system(size: 18, weight: .semibold))
               .foregroundStyle(deep ? .white.opacity(0.45) : Palette.ink.opacity(0.35))
           }
@@ -131,12 +131,12 @@ struct PlatformDot: View {
   let platform: String
   var size: CGFloat = 18
   var body: some View {
-    Image(systemName: platform == "instagram" ? "camera.fill" : "music.note")
+    Image(systemName: "music.note")
       .font(.system(size: size * 0.46, weight: .bold))
       .foregroundStyle(.white)
       .frame(width: size, height: size)
-      .background(platform == "instagram" ? Palette.coral : .black.opacity(0.55), in: Circle())
-      .accessibilityLabel(platform == "instagram" ? "Instagram" : "TikTok")
+      .background(.black.opacity(0.55), in: Circle())
+      .accessibilityLabel("TikTok")
   }
 }
 

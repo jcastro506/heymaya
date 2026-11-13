@@ -10,7 +10,7 @@ describe("the per-plan Stripe catalog", () => {
     expect(c.map((p) => p.tier)).toEqual(["solo", "duo", "partner"]);
     for (const p of c) {
       const t = TIERS[p.tier as keyof typeof TIERS];
-      expect(p.name).toBe(`Maya: ${t.label}`);
+      expect(p.name).toBe(p.tier === "duo" ? "Maya (old two-account plan)" : t.label);
       expect(p.prices.map((x) => [x.interval, x.recurring, x.unitAmount])).toEqual([["monthly", "month", Math.round(t.priceUsd * 100)], ["annual", "year", Math.round(t.annualUsd * 100)]]);
       expect(p.prices.map((x) => x.envKey)).toEqual([priceEnvKey(p.tier as never, "monthly"), priceEnvKey(p.tier as never, "annual")]);
       expect(new Set(p.prices.map((x) => x.recurring)).size, "one price per interval per product").toBe(2);

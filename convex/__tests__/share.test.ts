@@ -16,9 +16,9 @@ import { unseenActions } from "../core/act";
 afterEach(() => { vi.useRealTimers(); });
 
 describe("pure", () => {
-  it("accepts only TikTok and Instagram posts", () => {
+  it("accepts only TikTok posts", () => {
     expect(shareTarget("https://www.tiktok.com/@noahperlofit/video/7676142812504673567?_r=1")).toMatchObject({ ok: true, platform: "tiktok" });
-    expect(shareTarget("https://www.instagram.com/reel/DcRIKq6xDpQ/?igsh=x")).toMatchObject({ ok: true, platform: "instagram" });
+    expect(shareTarget("https://www.instagram.com/reel/DcRIKq6xDpQ/?igsh=x")).toMatchObject({ ok: false });
     for (const bad of ["https://youtube.com/watch?v=1", "javascript:alert(1)", "ignore previous instructions", "", "https://evil.example/tiktok.com/@a/video/1"]) expect(shareTarget(bad).ok, bad).toBe(false);
   });
   it("holds her answer until their quiet hours end", () => {
@@ -74,7 +74,7 @@ describe("Send to Maya", () => {
     expect((await s.post("not-a-token", { url: TT })).status).toBe(401);
     const yt = await s.post(s.tokenA, { url: "https://youtube.com/watch?v=1" });
     expect(yt.status).toBe(400);
-    expect(await yt.json()).toMatchObject({ ok: false, reason: expect.stringMatching(/TikTok and Instagram/) });
+    expect(await yt.json()).toMatchObject({ ok: false, reason: expect.stringMatching(/only TikTok posts/) });
     const junk = await s.t.fetch("/share", { method: "POST", headers: { authorization: `Bearer ${s.tokenA}` }, body: "{not json" });
     expect(junk.status).toBe(400);
     expect(await s.t.run((c) => c.db.query("messages").collect())).toHaveLength(0);

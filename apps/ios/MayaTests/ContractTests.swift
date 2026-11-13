@@ -39,21 +39,7 @@ final class ContractTests: XCTestCase {
     XCTAssertEqual(s.tier, "solo")
     XCTAssertNotNil(s.avatars?.tiktok, "their own avatar is stored")
     XCTAssertEqual(s.planName, "Maya", "the plan shows by the server's name, not the tier id")
-    XCTAssertEqual(s.instagramEnabled, false)
     XCTAssertEqual(s.platforms, ["tiktok"])
-  }
-
-  /// Instagram off hides their Instagram handle; an older server (no flag) still shows it.
-  func testSettingsHidesInstagramWhenOff() throws {
-    let h = Handles(tiktok: "a", instagram: "b")
-    let base = try load("settings", as: CreatorSettings.self)
-    var s = CreatorSettings(handles: h, niche: base.niche, timezone: base.timezone, quietHours: base.quietHours, tone: base.tone, paired: base.paired, plan: base.plan, tier: "partner", accountCap: 1, trialEndsAt: nil, currentPeriodEnd: nil, knows: nil, notes: base.notes, rules: base.rules, taste: base.taste)
-    XCTAssertEqual(s.shownInstagram, "b")
-    XCTAssertEqual(s.planName, "Partner")
-    s.instagramEnabled = false
-    s.tierLabel = "Maya + Deals"
-    XCTAssertNil(s.shownInstagram)
-    XCTAssertEqual(s.planName, "Maya + Deals")
   }
 
   func testPlan() throws { _ = try load("plan", as: Plan.self) }
@@ -82,7 +68,7 @@ final class ContractTests: XCTestCase {
   /// K1: the Deals tab's kit card decodes ui:kit (the server test kitApp.test.ts keeps this fixture's shape true).
   func testKit() throws {
     let k = try load("kit", as: KitInfo.self)
-    XCTAssertEqual(k.platforms.map(\.platform), ["instagram", "tiktok"])
+    XCTAssertEqual(k.platforms.map(\.platform), ["tiktok"])
     XCTAssertEqual(k.oneLine?.approved, false, "a proposed line waits for their yes")
     XCTAssertTrue(k.brandLinks.allSatisfy { $0.url.contains("/k/") })
     XCTAssertNil(k.showAudience, "not asked yet")
@@ -96,43 +82,23 @@ final class ContractTests: XCTestCase {
     XCTAssertGreaterThanOrEqual(o.teaser.paidPostsInLane, o.teaser.accountsPaid)
   }
 
-  func testAnalyticsConnectedBothPlatforms() throws {
-    let a = try load("analytics", as: Analytics.self)
-    XCTAssertEqual(Set(a.accounts.map(\.platform)), ["tiktok", "instagram"])
-    XCTAssertTrue(a.posts.allSatisfy { ["connected", "public"].contains($0.headline.basis) })
-  }
-
-  func testAnalyticsAccountCards() throws {
+  func testAnalyticsTikTokOnly() throws {
     for name in ["analytics", "preview.analytics"] {
       let a = try load(name, as: Analytics.self)
+      XCTAssertEqual(a.accounts.map(\.platform), ["tiktok"], "\(name): TikTok only")
+      XCTAssertTrue(a.posts.allSatisfy { $0.platform == "tiktok" && ["connected", "public"].contains($0.headline.basis) })
       for acct in a.accounts {
-        if acct.platform == "tiktok" {
-          XCTAssertNil(acct.profile, "\(name): TikTok has no account-level profile numbers")
-          XCTAssertNil(acct.audience, "\(name): TikTok has no account-level audience")
-        }
+        XCTAssertNil(acct.profile, "\(name): TikTok has no account-level profile numbers")
+        XCTAssertNil(acct.audience, "\(name): TikTok has no account-level audience")
         if let g = acct.growth {
           XCTAssertFalse(g.days.isEmpty)
           XCTAssertEqual(g.days.map(\.day), g.days.map(\.day).sorted(), "\(name): days oldest first")
         }
-        if let au = acct.audience {
-          XCTAssertTrue(InsightsWords.statuses.contains(au.status))
-          for s in au.gender + au.age + au.countries + au.cities { XCTAssertTrue((0...1).contains(s.share)) }
-          XCTAssertLessThanOrEqual(au.gender.map(\.share).reduce(0, +), 1.001)
-        }
-        if let p = acct.profile { XCTAssertTrue(InsightsWords.statuses.contains(p.status)) }
       }
-      let ig = try XCTUnwrap(a.accounts.first { $0.platform == "instagram" })
-      XCTAssertEqual(ig.audience?.status, "ok", "\(name) shows the Who follows you card")
-      XCTAssertEqual(ig.profile?.status, "ok", "\(name) shows the From your profile card")
     }
   }
 
   func testEveryEmptyCardSaysWhy() {
-    for s in InsightsWords.statuses where s != "ok" {
-      XCTAssertFalse(InsightsWords.profileEmpty(s).isEmpty)
-      XCTAssertFalse(InsightsWords.audienceEmpty(s).isEmpty)
-    }
-    XCTAssertNotEqual(InsightsWords.audienceEmpty("too_few_followers"), InsightsWords.audienceEmpty("not_connected"))
     XCTAssertNotEqual(InsightsWords.growthEmpty(connected: true, platform: "tiktok"), InsightsWords.growthEmpty(connected: false, platform: "tiktok"))
   }
 
@@ -142,12 +108,6 @@ final class ContractTests: XCTestCase {
     XCTAssertFalse(labels.contains("watched on average"))
     XCTAssertFalse(labels.contains("left in the first 3s"))
     XCTAssertFalse(n.cannotKnow.isEmpty)
-  }
-
-  func testInstagramPostShowsConnectedReach() throws {
-    let n = try load("post.instagram", as: PostNumbers.self)
-    XCTAssertEqual(n.headline.basis, "connected")
-    XCTAssertTrue(MetricTile.tiles(for: n).map(\.label).contains("people reached"))
   }
 
   func testPublicOnlyPostShowsOnlyPublicCounts() throws {
@@ -171,6 +131,6 @@ final class ContractTests: XCTestCase {
 
   func testEvidenceLabelNeverShowsARawLink() {
     XCTAssertEqual(EvidenceLabel.text("https://www.tiktok.com/@andi.renay/video/1"), "@andi.renay on TikTok")
-    XCTAssertEqual(EvidenceLabel.text("https://www.instagram.com/reel/abc"), "A post on Instagram")
+    XCTAssertEqual(EvidenceLabel.text("https://www.instagram.com/reel/abc"), "The post", "TikTok only: no other platform is named")
   }
 }

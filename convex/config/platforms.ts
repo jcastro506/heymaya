@@ -1,24 +1,21 @@
 /**
- * Which platforms Maya works with (operator, 2026-10-12: "Instagram off for now", reversible). One switch, read at
- * the gates, never written into data: turning Instagram back on restores everything (handles, connections, posts).
- *
- * Off unless INSTAGRAM_ENABLED is "1" or "true" (Convex env for the backend, Vercel env for the website).
- * Tests default it on (tests/_clock.setup.ts) so the Instagram paths stay covered; off-mode tests stub it.
+ * Maya works with TikTok only (operator, 2026-11-13: "we're tiktok only, not instagram anymore. the product shouldn't
+ * be using or referencing it at all"). Was a switch (INSTAGRAM_ENABLED, off since 2026-10-13); now fixed off.
+ * The schema still accepts "instagram" on old rows; nothing reads, offers or mentions it.
  */
 export type Platform = "tiktok" | "instagram";
 
-export function instagramOn(env: Record<string, string | undefined> = process.env): boolean {
-  const v = (env.INSTAGRAM_ENABLED ?? "").trim().toLowerCase();
-  return v === "1" || v === "true";
+export function instagramOn(_env: Record<string, string | undefined> = process.env): boolean {
+  return false;
 }
 
-export function enabledPlatforms(env: Record<string, string | undefined> = process.env): Platform[] {
-  return instagramOn(env) ? ["tiktok", "instagram"] : ["tiktok"];
+export function enabledPlatforms(_env: Record<string, string | undefined> = process.env): Platform[] {
+  return ["tiktok"];
 }
 
-export function platformOn(p: string | undefined | null, env: Record<string, string | undefined> = process.env): boolean {
-  return p === "tiktok" || (p === "instagram" && instagramOn(env));
+export function platformOn(p: string | undefined | null, _env: Record<string, string | undefined> = process.env): boolean {
+  return p === "tiktok";
 }
 
-/** What she says when someone brings Instagram while it's off. */
-export const TIKTOK_ONLY_LINE = "I only work with TikTok right now. Send me the TikTok version and I'm on it.";
+/** What she says when someone brings an Instagram link. */
+export const TIKTOK_ONLY_LINE = "I only work with TikTok. Send me the TikTok version and I'm on it.";

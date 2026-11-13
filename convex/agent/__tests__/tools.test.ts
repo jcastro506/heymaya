@@ -11,7 +11,7 @@ import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
 import type { ActionCtx } from "../../_generated/server";
 import type { Id } from "../../_generated/dataModel";
-import { DEFAULT_BUDGET, runTool, SUMMARY_CAP, TOOL_CREDITS, TOOLS, type ToolCallRecord } from "../tools";
+import { DEFAULT_BUDGET, INSTAGRAM_TOOLS, runTool, SUMMARY_CAP, TOOL_CREDITS, TOOLS, type ToolCallRecord } from "../tools";
 import { LOOKUPS } from "../playbooks";
 import { tokens } from "../toolsData";
 
@@ -55,7 +55,9 @@ describe("runTool", () => {
       expect(TOOL_CREDITS[t.function.name], t.function.name).toBeDefined();
     }
     const names = TOOLS.map((t) => t.function.name);
-    for (const n of ["post_info", "post_transcript", "post_comments", "sound_info", "sound_videos", "sound_reels", "profile", "account_posts", "search_keyword", "search_hashtag", "search_reels", "search_ig_hashtag", "ig_popular", "trending_tiktok", "trending_reels", "suggestions", "discover_creators", "discover_profiles", "own_rhymes", "calendar_upcoming", "recall", "lane_benchmark"]) expect(names).toContain(n);
+    for (const n of ["post_info", "post_transcript", "post_comments", "sound_info", "sound_videos", "profile", "account_posts", "search_keyword", "search_hashtag", "trending_tiktok", "suggestions", "discover_creators", "own_rhymes", "calendar_upcoming", "recall", "lane_benchmark"]) expect(names).toContain(n);
+    // TikTok only: no Instagram tool is on the belt at all.
+    for (const n of INSTAGRAM_TOOLS) expect(names).not.toContain(n);
   });
 
   it("a tab has no link (the web app is retired): it names where it is in the app, free, without tenant data", async () => {

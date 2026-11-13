@@ -1,6 +1,6 @@
 /**
- * Instagram off (config/platforms, 2026-10-13): TikTok only, reversibly. Nothing Instagram is read, offered,
- * connected, watched or suggested; nothing Instagram is deleted; turning it back on restores it.
+ * TikTok only (config/platforms; off since 2026-10-13, for good since 2026-11-13). Nothing Instagram is read,
+ * offered, connected, watched or suggested; old Instagram rows are left alone and never read.
  */
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,15 +17,13 @@ import { shareTarget } from "../../share";
 import { factsFor } from "../../knowledge/platforms";
 import { PLATFORM_SCOPE } from "../../agent/context";
 
-beforeEach(() => { vi.stubEnv("INSTAGRAM_ENABLED", "0"); vi.stubEnv("MODEL_FAKE", "1"); vi.stubEnv("OPENROUTER_API_KEY", "fake"); });
+beforeEach(() => { vi.stubEnv("MODEL_FAKE", "1"); vi.stubEnv("OPENROUTER_API_KEY", "fake"); });
 afterEach(() => { vi.unstubAllEnvs(); });
 
 describe("the switch (pure)", () => {
-  it("off unless set on; TikTok is always on", () => {
+  it("Instagram is off whatever the env says; TikTok is always on", () => {
     expect(instagramOn({})).toBe(false);
-    expect(instagramOn({ INSTAGRAM_ENABLED: "1" })).toBe(true);
-    expect(instagramOn({ INSTAGRAM_ENABLED: "true" })).toBe(true);
-    expect(instagramOn({ INSTAGRAM_ENABLED: "yes please" })).toBe(false);
+    expect(instagramOn({ INSTAGRAM_ENABLED: "1" }), "the old switch does nothing").toBe(false);
     expect(enabledPlatforms()).toEqual(["tiktok"]);
     expect(platformOn("tiktok")).toBe(true);
     expect(platformOn("instagram")).toBe(false);
@@ -42,8 +40,7 @@ describe("the switch (pure)", () => {
   it("a solo plan's one account is their TikTok, even when Instagram was connected first", () => {
     const accts = [{ platform: "instagram", id: "ig" }, { platform: "tiktok", id: "tt" }];
     expect(accountsWithinPlan(accts, 1).map((a) => a.id)).toEqual(["tt"]);
-    vi.stubEnv("INSTAGRAM_ENABLED", "1");
-    expect(accountsWithinPlan(accts, 1).map((a) => a.id), "back on: as before").toEqual(["ig"]);
+    expect(accountsWithinPlan(accts, 5).map((a) => a.id), "never read, whatever the cap").toEqual(["tt"]);
   });
   it("no Instagram read, tool, link or fact gets through", () => {
     expect(isInstagramRead("search.reels", {})).toBe(true);
@@ -71,7 +68,7 @@ describe("on rows", () => {
     expect(await me.mutation(api.onboarding.start.start, { handles: { tiktok: "sam2", instagram: "ignored.while.off" }, timezone: "UTC" })).toMatchObject({ ok: true });
     const row = (await t.run((ctx) => ctx.db.get(c)))!;
     expect(row.handles.tiktok).toBe("sam2");
-    expect(row.handles.instagram, "kept for when it's back on; a new one isn't taken while off").toBe("sam.ig");
+    expect(row.handles.instagram, "an old one is left alone; a new one is never taken").toBe("sam.ig");
   });
   it("the watch list takes TikTok only; nothing Instagram is retired", async () => {
     const t = convexTest(schema, modules);
@@ -82,7 +79,7 @@ describe("on rows", () => {
     const sampled = await t.query(internal.scout.sampler.distinctTracked, {});
     expect(sampled.map((s) => s.platform)).toEqual(["tiktok"]);
     const ig = (await t.run((ctx) => ctx.db.query("trackedAccounts").collect())).find((r) => r.platform === "instagram")!;
-    expect(ig.status, "not retired, so it comes back with the switch").toBe("active");
+    expect(ig.status, "left alone, never read").toBe("active");
   });
   it("what the app is told: TikTok only, and the two plans", async () => {
     const t = convexTest(schema, modules);

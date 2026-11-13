@@ -708,16 +708,16 @@ const STEPS: Array<{ name: string; proves: string; run: StepFn }> = [
     },
   },
   {
-    name: "bio_email", proves: "a bio email is accepted only from the Instagram the brand's own site links (site extract + profile read)",
+    name: "bio_email", proves: "a bio email is accepted only from the TikTok the brand's own site links (site extract + profile read)",
     run: async (w) => {
       let said = (await say(w, "summit electrolytes keeps sponsoring people i follow. how would i even reach them?")).join("\n");
       let o = oppOf(await snap(w), "summit");
-      if (!o?.contactEmail) { said += "\n" + (await say(w, "can you find their email from their instagram and save them?")).join("\n"); o = oppOf(await snap(w), "summit"); w.memo.bio_retry = "yes"; }
+      if (!o?.contactEmail) { said += "\n" + (await say(w, "can you find their email from their tiktok and save them?")).join("\n"); o = oppOf(await snap(w), "summit"); w.memo.bio_retry = "yes"; }
       const s = await snap(w);
-      const profileRead = s.research.queries.some((q) => q.includes("profile instagram:summitelectrolytes"));
+      const profileRead = s.research.queries.some((q) => q.includes("profile tiktok:summitelectrolytes"));
       return {
-        rows: !o ? fail("no Summit relationship saved") : check(o.contactEmail === "team@summitelectrolytes.com" && o.evidence.some((e) => e.kind === "profile" && /instagram\.com\/summitelectrolytes\/?$/.test(e.url)) && profileRead, "contact team@summitelectrolytes.com from the linked Instagram bio, with the profile as evidence", `contact ${o.contactEmail ?? "none"}; profile read ${profileRead}; evidence ${JSON.stringify(o.evidence)}`),
-        words: check(/team@summitelectrolytes\.com|instagram/i.test(said), "told them how", "did not say how to reach them"),
+        rows: !o ? fail("no Summit relationship saved") : check(o.contactEmail === "team@summitelectrolytes.com" && o.evidence.some((e) => e.kind === "profile" && /tiktok\.com\/@summitelectrolytes\/?$/.test(e.url)) && profileRead, "contact team@summitelectrolytes.com from the linked TikTok bio, with the profile as evidence", `contact ${o.contactEmail ?? "none"}; profile read ${profileRead}; evidence ${JSON.stringify(o.evidence)}`),
+        words: check(/team@summitelectrolytes\.com|tiktok/i.test(said), "told them how", "did not say how to reach them"),
       };
     },
   },

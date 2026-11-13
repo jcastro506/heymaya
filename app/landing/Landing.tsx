@@ -12,7 +12,6 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import QRCode from "qrcode";
 import { TIERS, offeredTiers, price, tierCopy } from "@/convex/billing/tiers";
-import { instagramOn } from "@/convex/config/platforms";
 import { appLink, ctaLabel, type AppLink } from "@/lib/appLink";
 import { CtaLink } from "../cta";
 import { InView } from "./InView";
@@ -116,8 +115,8 @@ async function qrSvg(): Promise<string> {
   });
 }
 
-export default async function Landing({ igOn = instagramOn() }: { igOn?: boolean } = {}) {
-  const c = platformCopy(igOn);
+export default async function Landing() {
+  const c = platformCopy();
   const link = appLink();
   const qr = await qrSvg();
   return (
@@ -149,7 +148,7 @@ export default async function Landing({ igOn = instagramOn() }: { igOn?: boolean
           </div>
           <div className="hero-stage">
             <Phone className="ph-back" label="The Maya app's Today screen: her latest idea, your numbers against your normal, and what's coming up">
-              <TodayScreen igOn={igOn} />
+              <TodayScreen />
             </Phone>
             <Phone className="ph-front" label="A text thread with Maya: a reminder to film today, a caption for the video, then her Sunday read of the week">
               <MessagesScreen lines={HERO_THREAD} />
@@ -205,7 +204,7 @@ export default async function Landing({ igOn = instagramOn() }: { igOn?: boolean
             <div className="row-stage">
               <InView>
                 <Phone label={`Your numbers: ${c.platforms} followers and every post against your normal`}>
-                  <NumbersScreen igOn={igOn} />
+                  <NumbersScreen />
                 </Phone>
               </InView>
             </div>
@@ -277,13 +276,13 @@ export default async function Landing({ igOn = instagramOn() }: { igOn?: boolean
             <span className="eyebrow">Pricing</span>
             <h2 id="pricing-title">Seven days <span>free.</span></h2>
           </div>
-          <div className={`prices prices-${offeredTiers(igOn).length}`} style={{ "--n": offeredTiers(igOn).length } as CSSProperties}>
-            {offeredTiers(igOn).map((tier) => (
+          <div className={`prices prices-${offeredTiers().length}`} style={{ "--n": offeredTiers().length } as CSSProperties}>
+            {offeredTiers().map((tier) => (
               <div className={`price${tier === c.featured.tier ? " price-feat" : ""}`} key={tier}>
                 {tier === c.featured.tier ? <span className="price-tag">{c.featured.tag}</span> : null}
-                <span className="price-name">{tierCopy(tier, igOn).label}</span>
+                <span className="price-name">{tierCopy(tier).label}</span>
                 <div className="price-amt">{price(TIERS[tier].priceUsd)}<small>/month</small></div>
-                <p>{tierCopy(tier, igOn).blurb}</p>
+                <p>{tierCopy(tier).blurb}</p>
                 <ul>
                   <li>{c.accountLine(tier)}</li>
                   <li>Ideas, a weekly plan and captions, by text</li>

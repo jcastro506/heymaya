@@ -7,11 +7,11 @@ import { price, TIERS, TIER_NAMES, type Tier } from "@/convex/billing/tiers";
 import { OnboardShell } from "../onboarding/Shell";
 import { GetTheApp } from "./GetTheApp";
 
-type Platform = "tiktok" | "instagram";
+type Platform = "tiktok";
 type Interval = "monthly" | "annual";
 type Suggestion = { platform: Platform; handle: string; followers: number | null; why: string; displayName?: string; avatarUrl?: string };
 
-const PLATFORM_LABEL: Record<Platform, string> = { instagram: "Instagram", tiktok: "TikTok" };
+const PLATFORM_LABEL: Record<Platform, string> = { tiktok: "TikTok" };
 
 function initialStep(): 1 | 2 | 3 | 4 | 5 {
   if (typeof window === "undefined") return 1;
@@ -52,7 +52,7 @@ export default function StartPage() {
   const [error, setError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
   const [candidate, setCandidate] = useState("");
-  const [candidatePlatform, setCandidatePlatform] = useState<Platform>("instagram");
+  const [candidatePlatform, setCandidatePlatform] = useState<Platform>("tiktok");
   const [niche, setNiche] = useState("");
   const [phone, setPhoneValue] = useState("");
   const [consent, setConsent] = useState(false);
@@ -133,7 +133,7 @@ export default function StartPage() {
   const postsReady = (progress?.posts ?? 0) > 0 || progress?.ingest === "succeeded" || progress?.ingest === "failed" || progress?.ingest === "dead";
   useEffect(() => {
     if (step !== 3 || suggestions !== null || (!postsReady && !waitedForPosts)) return;
-    suggestionsQuery({}).then((rows) => setSuggestions(rows)).catch(() => setSuggestions([]));
+    suggestionsQuery({}).then((rows) => setSuggestions(rows.filter((r): r is Suggestion => r.platform === "tiktok"))).catch(() => setSuggestions([]));
   }, [step, suggestions, suggestionsQuery, postsReady, waitedForPosts]);
 
   function go(next: 1 | 2 | 3 | 4 | 5) {
@@ -244,14 +244,14 @@ export default function StartPage() {
 
       {step === 2 && (
         <section>
-          <div className="screen-heading"><span className="kicker">Your work</span><h1>Let me get to know what you make.</h1><p className="muted">Connect Instagram or TikTok. This gives me your real account history and the analytics the platform makes available.</p></div>
+          <div className="screen-heading"><span className="kicker">Your work</span><h1>Let me get to know what you make.</h1><p className="muted">Connect your TikTok. This gives me your real account history and the analytics the platform makes available.</p></div>
           {!planIsReady ? <div className="notice-card">Your plan is still activating. This normally takes a few seconds.</div> : null}
           <div className="connection-grid">
-            {(["instagram", "tiktok"] as const).map((platform) => {
+            {(["tiktok"] as const).map((platform) => {
               const account = socialConnections?.accounts.find((item) => item.platform === platform);
               const connected = connectedPlatforms.has(platform);
               return <article className={`connection-card ${connected ? "connected" : ""}`} key={platform}>
-                <div className={`platform-mark ${platform}`}>{platform === "instagram" ? "◎" : "♪"}</div>
+                <div className={`platform-mark ${platform}`}>♪</div>
                 <div className="connection-copy"><h2>{PLATFORM_LABEL[platform]}</h2><p className="muted small">{connected ? `@${account?.username ?? "connected"}` : "Posts, performance, and account history"}</p></div>
                 {connected ? <span className="connected-label">Connected</span> : <button className="btn-secondary" disabled={!planIsReady || busy !== null} onClick={() => connect(platform)}>{busy === `connect:${platform}` ? "Opening…" : "Connect"}</button>}
               </article>;
@@ -260,7 +260,7 @@ export default function StartPage() {
           {socialConnections?.status === "needs_reconnect" ? <div className="notice-card error">One account needs to be reconnected before I can rely on its numbers.</div> : null}
           {socialConnections?.detail ? <p className="tiny muted">{socialConnections.detail}</p> : null}
           {connectedCount < 1 && planIsReady ? <button className="link" disabled={busy !== null} onClick={checkConnections}>{busy === "recheck" ? "Checking…" : "Already connected? Check again"}</button> : null}
-          <button className="btn" disabled={connectedCount < 1 || busy !== null} onClick={() => go(3)}>{connectedCount < 1 ? "Connect one account to continue" : "Continue"}</button>
+          <button className="btn" disabled={connectedCount < 1 || busy !== null} onClick={() => go(3)}>{connectedCount < 1 ? "Connect your TikTok to continue" : "Continue"}</button>
           <p className="privacy-note">You stay in control. Maya reads these accounts and never publishes from onboarding.</p>
         </section>
       )}
@@ -281,7 +281,7 @@ export default function StartPage() {
               </article>;
             })}</div>
           ) : <div className="notice-card">I don’t have strong suggestions yet. Add someone you already like, or let me keep looking after setup.</div>}
-          <div className="manual-creator"><select className="input" value={candidatePlatform} onChange={(event) => setCandidatePlatform(event.target.value as Platform)} aria-label="Creator platform"><option value="instagram">Instagram</option><option value="tiktok">TikTok</option></select><input className="input" value={candidate} onChange={(event) => setCandidate(event.target.value)} placeholder="@someone you like" autoCapitalize="none" onKeyDown={(event) => { if (event.key === "Enter") void addCandidate(); }} /><button className="btn-secondary" disabled={!candidate.trim() || busy !== null} onClick={addCandidate}>{busy === "candidate" ? "Checking…" : "Add"}</button></div>
+          <div className="manual-creator"><select className="input" value={candidatePlatform} onChange={(event) => setCandidatePlatform(event.target.value as Platform)} aria-label="Creator platform"><option value="tiktok">TikTok</option></select><input className="input" value={candidate} onChange={(event) => setCandidate(event.target.value)} placeholder="@someone you like" autoCapitalize="none" onKeyDown={(event) => { if (event.key === "Enter") void addCandidate(); }} /><button className="btn-secondary" disabled={!candidate.trim() || busy !== null} onClick={addCandidate}>{busy === "candidate" ? "Checking…" : "Add"}</button></div>
           {admired.length > 0 ? <p className="tiny muted">Watching {admired.length} creator{admired.length === 1 ? "" : "s"}. You can change this anytime.</p> : null}
           <button className="btn" disabled={busy !== null} onClick={finishInspiration}>{admired.length > 0 ? "Use these creators" : "Find some for me later"}</button>
         </section>

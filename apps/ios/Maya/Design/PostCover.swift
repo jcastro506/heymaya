@@ -52,7 +52,7 @@ struct FallbackCover: View {
         width: 2, height: 2,
         points: [[0, 0], [1, 0], [0, 1], [1, 1]],
         colors: [Palette.wash, Palette.purple.opacity(0.35), Palette.coral.opacity(0.35), Palette.wash])
-      Image(systemName: platform == .instagram ? "camera.fill" : "music.note")
+      Image(systemName: platform == .tiktok ? "music.note" : "photo")
         .font(.system(size: 28, weight: .semibold))
         .foregroundStyle(Palette.ink.opacity(0.35))
     }

@@ -20,13 +20,14 @@ describe("the numbers check skips links (deals sim)", () => {
 });
 
 describe("an unmistakable watch request never needs the model (scale test)", () => {
-  it("reads the ways people ask, on both platforms", async () => {
+  it("reads the ways people ask; an Instagram ask is left to her", async () => {
     const { obviousWatch } = await import("../classify");
     const own = { tiktok: "me_tt" };
     expect(obviousWatch("add @duckinvaders to my list", own)).toEqual({ intent: "manage", action: "add_admired", platform: "tiktok", handle: "duckinvaders" });
-    expect(obviousWatch("can you keep an eye on @sbc_derm on instagram for me", own)).toMatchObject({ action: "add_admired", platform: "instagram", handle: "sbc_derm" });
-    expect(obviousWatch("add @blameytwins (instagram) to my list", own)).toMatchObject({ platform: "instagram" });
-    expect(obviousWatch("watch @naomiyoga on insta", own)).toMatchObject({ platform: "instagram" });
+    // TikTok only: an Instagram watch is hers to answer ("I only work with TikTok"), never a silent TikTok add.
+    expect(obviousWatch("can you keep an eye on @sbc_derm on instagram for me", own)).toBeNull();
+    expect(obviousWatch("add @blameytwins (instagram) to my list", own)).toBeNull();
+    expect(obviousWatch("watch @naomiyoga on insta", own)).toBeNull();
     expect(obviousWatch("stop watching @x.y", own)).toEqual({ intent: "manage", action: "stop_watching", handle: "x.y" });
   });
   it("leaves anything less clear to the model", async () => {

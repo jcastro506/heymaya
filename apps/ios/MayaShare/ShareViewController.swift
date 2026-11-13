@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-/// "Send to Maya" from the TikTok or Instagram share sheet (app spec §10.1). It finds the post
+/// "Send to Maya" from the TikTok share sheet (app spec §10.1). It finds the post
 /// link in what the app shared, takes an optional one-line note, and posts both to the server
 /// with the creator's share token. Her answer comes back in Messages, not here.
 final class ShareViewController: UIViewController {
@@ -39,7 +39,7 @@ final class ShareModel {
     if let found = ShareLink.postLink(in: candidates) {
       phase = .ready(url: found.url, platform: found.platform)
     } else {
-      phase = .failed(ShareLink.notAPost())
+      phase = .failed(ShareLink.notAPost)
     }
   }
 

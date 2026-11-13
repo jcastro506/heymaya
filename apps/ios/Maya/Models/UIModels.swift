@@ -133,24 +133,17 @@ struct CreatorSettings: Decodable, Equatable {
   let taste: Taste
   /// What to call their plan ("Maya", "Maya + Deals"); older servers don't send it.
   var tierLabel: String? = nil
-  /// Whether Instagram is on (config/platforms); older servers don't send it and had it on.
-  var instagramEnabled: Bool? = nil
   var platforms: [String]? = nil
 
   var planName: String { tierLabel ?? tier.capitalized }
-  var instagramOn: Bool { instagramEnabled ?? true }
-  /// Their Instagram handle, only while Instagram is on.
-  var shownInstagram: String? { instagramOn ? handles.instagram : nil }
 }
 
 struct Handles: Decodable, Equatable {
   let tiktok: String?
-  let instagram: String?
 }
 
 struct Avatars: Decodable, Equatable {
   let tiktok: String?
-  let instagram: String?
 }
 
 struct QuietHours: Decodable, Equatable {
@@ -360,9 +353,9 @@ struct AnalyticsAccount: Decodable, Equatable, Identifiable {
   let setup: AccountSetup?
   /// A1: daily followers with follows/unfollows where the platform gives them; nil until read.
   let growth: FollowerGrowth?
-  /// A1, Instagram only: profile link taps and follows over the last 30 days.
+  /// Not sent for TikTok (it has no account-level profile numbers); kept so an older server still decodes.
   let profile: ProfileNumbers?
-  /// A1, Instagram only: who follows them (100+ followers).
+  /// Not sent for TikTok; kept so an older server still decodes.
   let audience: AudienceCard?
 }
 
@@ -402,7 +395,7 @@ struct AudienceCard: Decodable, Equatable {
   let cities: [PostNumbers.Share]
 }
 
-/// A1: the one change that would help Maya on this platform (Instagram must be Creator to connect).
+/// A1: the one change that would help Maya on this platform, from the server (account/setup.ts).
 struct AccountSetup: Decodable, Equatable {
   let needed: Bool
   let title: String
@@ -478,7 +471,7 @@ struct PostNumbers: Decodable, Equatable {
 struct KitInfo: Decodable, Equatable {
   let link: String?
   let photo: String?
-  /// "instagram" / "tiktok" (their profile picture), "upload" (one they sent), "none" (their choice), "missing".
+  /// "tiktok" (their profile picture), "upload" (one they sent), "none" (their choice), "missing".
   let photoSource: String
   /// Why their profile picture is weak for a kit (a logo, no clear face), when it is.
   let photoWeak: String?

@@ -53,7 +53,7 @@ describe("the app's plan screen mirrors tiers.ts and the doors", () => {
     const t = convexTest(schema, modules);
     await t.run((ctx) => seedCreator(ctx, "a", { clerkUserId: "user_a", plan: { status: "trialing", founding: false, tier: "duo", stripeSubscriptionId: "sub_1", trialEndsAt: Date.UTC(2026, 9, 1) } }));
     const p = (await t.withIdentity({ subject: "user_a" }).query(api.ui.plans, {}))!;
-    expect(p.tiers.map((x) => x.tier)).toEqual([...TIER_NAMES]);
+    expect(p.tiers.map((x) => x.tier)).toEqual(["solo", "partner"]);
     for (const x of p.tiers) {
       expect(x.monthly).toBe(price(TIERS[x.tier].priceUsd));
       expect(x.annual).toBe(price(TIERS[x.tier].annualUsd));

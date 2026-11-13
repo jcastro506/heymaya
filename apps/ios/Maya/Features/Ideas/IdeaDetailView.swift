@@ -246,7 +246,6 @@ enum EvidenceLabel {
   /// "@andi.renay on TikTok" from the post URL, never a raw link.
   static func text(_ link: String) -> String {
     if let handle = PostPreview.handle(of: link) { return "\(handle) on TikTok" }
-    if link.contains("instagram.com") { return "A post on Instagram" }
     return "The post"
   }
 }

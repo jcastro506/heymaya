@@ -14,7 +14,7 @@ export default function LanePage() {
   const add = useMutation(api.onboarding.admired.add);
   const remove = useMutation(api.onboarding.admired.remove);
   const [handle, setHandle] = useState("");
-  const [platform, setPlatform] = useState<"tiktok" | "instagram">("tiktok");
+  const [platform, setPlatform] = useState<"tiktok">("tiktok");
   const [error, setError] = useState<string | null>(null);
   if (lane === undefined) return <p className="opacity-60 text-sm">loading…</p>;
   if (lane === null) return <p className="text-sm">No account yet.</p>;
@@ -53,10 +53,6 @@ export default function LanePage() {
           ))}
         </ul>
         <div className="flex gap-2 mt-3">
-          <select className="input w-28" value={platform} onChange={(e) => setPlatform(e.target.value as "tiktok" | "instagram")}>
-            <option value="tiktok">TikTok</option>
-            <option value="instagram">Instagram</option>
-          </select>
           <input className="input flex-1" placeholder="@handle" value={handle} onChange={(e) => setHandle(e.target.value)} autoCapitalize="none" onKeyDown={(e) => e.key === "Enter" && addOne()} />
           <button className="btn" onClick={addOne}>add</button>
         </div>

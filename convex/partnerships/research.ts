@@ -14,7 +14,7 @@ export const run = internalAction({
       // §8.3 bio email: the brand's own social profile, read through the same public reader as
       // everything else; stored as research so save() can check the email against it verbatim.
       const target = profileTarget(a.profile);
-      if (!target || a.query || a.url) throw new Error("Give one profile as instagram:handle or tiktok:handle");
+      if (!target || target.platform !== "tiktok" || a.query || a.url) throw new Error("Give one TikTok profile as tiktok:handle");
       const id = await ctx.runMutation(internal.partnerships.store.reserveResearch, { creatorId: a.creatorId, query: `profile ${target.platform}:${target.handle}` });
       const r = await ctx.runAction(internal.reads.read.read, { kind: "profile", params: { platform: target.platform, handle: target.handle }, creatorId: a.creatorId });
       const p = r.value as { handle?: string; bio?: string | null; externalUrl?: string | null; displayName?: string | null } | null;

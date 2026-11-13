@@ -134,7 +134,7 @@ describe("the story for each persona, through her tools (nothing sent)", () => {
   }
   it("a persona's per-brand link can't lead with another persona's post (cross-tenant)", async () => {
     const leo = await story("leo");
-    const priyaPost = "https://www.instagram.com/reel/evale2e_pr2/";
+    const priyaPost = "https://www.tiktok.com/@evale2e_priyaglow/video/8888888888888888882";
     expect(await leo.tool("kit_for_brand", { opportunityId: leo.saved.id, postUrls: [priyaPost], idea: "an idea that borrows someone else's post" })).toMatch(/refused: Not one of their posts/);
   });
 });

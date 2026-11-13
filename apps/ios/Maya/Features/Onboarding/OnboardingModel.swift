@@ -61,8 +61,6 @@ struct OnboardingProgress: Decodable, Equatable {
   /// From sign-in, or what they typed on the first screen.
   var firstName: String? = nil
   var nameConfirmed: Bool? = nil
-  /// Whether Instagram is on (config/platforms). Older servers don't send it; they had it on.
-  var instagramEnabled: Bool? = nil
 }
 
 struct SocialStatus: Decodable, Equatable {
@@ -110,7 +108,7 @@ final class OnboardingModel {
       watchSeen = [.calendar, .nearby, .meet, .done].contains(start)
       calendarSeen = [.nearby, .meet, .done].contains(start)
       nearbySeen = [.meet, .done].contains(start)
-      progress = OnboardingProgress(paired: start == .done, planStatus: [.name, .plan].contains(start) ? "onboarding" : "trialing", phone: nil, posts: 24, firstName: "Riley", nameConfirmed: start != .name, instagramEnabled: false)
+      progress = OnboardingProgress(paired: start == .done, planStatus: [.name, .plan].contains(start) ? "onboarding" : "trialing", phone: nil, posts: 24, firstName: "Riley", nameConfirmed: start != .name)
       social = SocialStatus(status: "connected", accounts: [.name, .plan, .connect].contains(start) ? [] : [.init(platform: "tiktok", username: "riverloopruns", needsReconnect: false)])
       loaded = true
     }
@@ -118,12 +116,8 @@ final class OnboardingModel {
 
   private static func key(_ name: String) -> String { "onboarding.\(name)" }
 
-  /// Whether Instagram is on. Until the server answers, or from a server that predates the
-  /// switch, it is (that is how those servers behave).
-  var instagramEnabled: Bool { progress?.instagramEnabled ?? true }
-
   var facts: OnboardingStep.Facts {
-    .init(planStatus: progress?.planStatus, connectedAccounts: social?.accounts.filter { !$0.needsReconnect }.count ?? 0, connectSeen: connectSeen, paired: progress?.paired ?? false, watchSeen: watchSeen, nameConfirmed: progress?.nameConfirmed ?? true, calendarSeen: calendarSeen, nearbySeen: nearbySeen, watching: watched.count)
+    .init(planStatus: progress?.planStatus, connectedAccounts: social?.accounts.filter { !$0.needsReconnect && $0.platform == "tiktok" }.count ?? 0, connectSeen: connectSeen, paired: progress?.paired ?? false, watchSeen: watchSeen, nameConfirmed: progress?.nameConfirmed ?? true, calendarSeen: calendarSeen, nearbySeen: nearbySeen, watching: watched.count)
   }
 
   var step: OnboardingStep { OnboardingStep.decide(facts) }
@@ -154,7 +148,7 @@ final class OnboardingModel {
     struct Ensured: Decodable { let ok: Bool }
     _ = try? await convex.mutation("onboarding/start:ensureCreator", with: ["timezone": TimeZone.current.identifier]) as Ensured
     await withTaskGroup(of: Void.self) { group in
-      group.addTask { await self.follow("onboarding/start:progress", OnboardingProgress?.self) { self.progress = $0; self.loaded = true; Platforms.remember($0?.instagramEnabled) } }
+      group.addTask { await self.follow("onboarding/start:progress", OnboardingProgress?.self) { self.progress = $0; self.loaded = true } }
       group.addTask { await self.follow("connections/zernio:status", SocialStatus?.self) { self.social = $0 } }
       group.addTask { await self.follow("onboarding/admired:list", [Watched]?.self) { self.watched = $0 ?? [] } }
     }
@@ -175,7 +169,7 @@ final class OnboardingModel {
   struct UrlResult: Decodable { let ok: Bool; let url: String?; let reason: String? }
 
   func checkout(tier: String, interval: String) async -> String? {
-    if preview { progress = OnboardingProgress(paired: false, planStatus: "trialing", phone: nil, posts: 24, instagramEnabled: false); return nil }
+    if preview { progress = OnboardingProgress(paired: false, planStatus: "trialing", phone: nil, posts: 24); return nil }
     do {
       let r: UrlResult = try await convex.action("billing/checkout:createCheckout", with: ["tier": tier, "interval": interval, "returnTo": "app_onboarding"])
       guard r.ok, let url = r.url.flatMap(URL.init(string:)) else { return Self.plain(r.reason) }
@@ -191,7 +185,7 @@ final class OnboardingModel {
   func saveName(_ name: String) async -> String? {
     let clean = name.trimmingCharacters(in: .whitespaces)
     guard !clean.isEmpty else { return "What should she call you?" }
-    if preview { progress = OnboardingProgress(paired: false, planStatus: "onboarding", phone: nil, posts: 24, firstName: clean, nameConfirmed: true, instagramEnabled: false); return nil }
+    if preview { progress = OnboardingProgress(paired: false, planStatus: "onboarding", phone: nil, posts: 24, firstName: clean, nameConfirmed: true); return nil }
     struct R: Decodable { let ok: Bool; let firstName: String?; let error: String? }
     do {
       let r: R = try await convex.mutation("onboarding/start:setName", with: ["firstName": clean])
@@ -224,18 +218,6 @@ final class OnboardingModel {
     struct R: Decodable { let accounts: Double }
     guard let r: R = try? await convex.action("connections/zernio:reconcile") else { return "I couldn't check that yet. Try again in a moment." }
     return r.accounts == 0 ? "Nothing's attached yet. If you finished connecting, give it a moment and check again." : nil
-  }
-
-  /// The account is attached by Zernio a moment after the sheet closes. Waits (checking with Zernio now and then)
-  /// before anyone calls it a failure: the screen used to decide in the first instant and show an error for an
-  /// account that was about to turn green.
-  func waitForAccount(platform: String, seconds: Int = 12) async -> Bool {
-    for second in 0..<seconds {
-      if social?.accounts.contains(where: { $0.platform == platform && !$0.needsReconnect }) == true { return true }
-      if second % 4 == 2 { _ = await recheck() }
-      try? await Task.sleep(for: .seconds(1))
-    }
-    return social?.accounts.contains(where: { $0.platform == platform && !$0.needsReconnect }) == true
   }
 
   func addOwn(platform: String, handle: String) async -> String? {

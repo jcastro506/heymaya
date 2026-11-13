@@ -362,7 +362,6 @@
 .s-post-meta small { font-size: 3.2cqw; }
 .plat { position: absolute; top: 2.4cqw; right: 2.4cqw; z-index: 1; width: 7cqw; height: 7cqw; border-radius: 2cqw; display: grid; place-items: center; background: #000000a0; color: #fff; }
 .plat svg { width: 4.6cqw; height: 4.6cqw; }
-.plat-ig { background: linear-gradient(45deg, #f9ce34, #ee2a7b 50%, #6228d7); }
 .s-up { display: grid; grid-template-columns: 15cqw 1fr auto; align-items: center; gap: 3.6cqw; }
 .s-date { display: grid; place-items: center; height: 16cqw; border: 1px solid var(--line); border-radius: 4cqw; background: var(--panel); font: 700 6cqw/1 var(--ios); }
 .s-date small { font-size: 3cqw; color: var(--coral); }
