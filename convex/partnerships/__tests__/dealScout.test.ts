@@ -70,6 +70,8 @@ describe("one tap to send (pure and on rows)", () => {
     expect(t).toContain("https://staging.hey-maya.ai/m/aaaaaaaaaaaaaaaaaaaaaaaa");
     expect(t).toContain("creators@tracksmith.com");
     expect(t).not.toMatch(/\bsent it\b|i sent|connect.*gmail/i);
+    expect(sendPageText("email", "Tracksmith", "creators@tracksmith.com", "u", "", "follow-up")).toMatch(/^here’s your follow-up to Tracksmith/);
+    expect(sendPageText("email", "Tracksmith", "creators@tracksmith.com", "u", "", "reply")).toMatch(/^here’s your reply to Tracksmith/);
     expect(sendPageText("application", "Glossier", "https://x/form", "u")).toMatch(/submit/);
     const dm = sendPageText("dm", "Glossier", "https://www.instagram.com/glossier/", "u", "hey Glossier team, i make…");
     expect(dm).toContain("@glossier on Instagram");
