@@ -34,6 +34,14 @@ export function looseUrl(s: string): string {
 export function sameUrl(a: string, b: string): boolean {
   return looseUrl(a) === looseUrl(b);
 }
+/** Pure: the host without "www.", or "" for a bad URL. */
+export function hostOf(url: string): string {
+  try { return new URL(url).hostname.toLowerCase().replace(/^www\./, ""); } catch { return ""; }
+}
+/** Pure: text as compared for a quote: straight quotes, single spaces, lowercase (the words must still all be there). */
+export function evidenceText(s: string): string {
+  return s.replace(/[\u2018\u2019\u201B]/g, "'").replace(/[\u201C\u201D]/g, '"').replace(/[#*_>`]+/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+}
 /** Pure: the page links this URL as a whole link (never a prefix: "instagram.com/shoe" is not in "instagram.com/shoeco"). */
 export function linksUrl(pageText: string, url: string): boolean {
   const t = looseUrl(pageText), u = looseUrl(url);
