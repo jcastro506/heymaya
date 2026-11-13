@@ -66,8 +66,7 @@ export const clear = internalMutation({
   args: {},
   handler: async (ctx): Promise<{ deleted: number }> => {
     let deleted = 0;
-    for (const c of (await ctx.db.query("creators").collect()) as Doc<"creators">[]) {
-      if (!c.clerkUserId.startsWith(PREFIX)) continue;
+    for (const c of (await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.gte("clerkUserId", PREFIX).lt("clerkUserId", `${PREFIX}\uffff`)).take(200)) as Doc<"creators">[]) {
       const rows = [
         ...(await ctx.db.query("localEvents").withIndex("by_creator_date", (q) => q.eq("creatorId", c._id)).collect()),
         ...(await ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).collect()),
