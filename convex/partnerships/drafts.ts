@@ -91,7 +91,7 @@ export const prepare = internalMutation({
     if (offerGmail) await ctx.db.patch(c._id, { gmailOfferedAt: now });
     const body = o.route === "email" && mailbox && emailSendEnabled(c)
       ? connectedReview({ brand: o.brand, from: mailbox.email, to: recipient, subject: data.subject ?? "", body: data.body, firstTouch: !o.threadId })
-      : sendPageText(o.route, o.brand, recipient, page, data.body) + offer;
+      : sendPageText(o.route, o.brand, recipient, page, data.body, o.status === "contacted" ? "follow-up" : ["replied", "negotiating", "agreed"].includes(o.status) ? "reply" : "pitch") + offer;
     if (!checkPlainLanguage(body).ok) throw new Error("The review would be altered by the chat formatter. Rephrase the draft before requesting approval.");
     // Exact approval display is authored by code, never rephrased by the model.
     await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, body, surface: c.channel.paired ? "telegram" : "web", dedupeKey: `partner-review:${id}`, proactive: false, kind: "reply" });
@@ -127,8 +127,8 @@ export function handleOf(url: string): string {
  * DM: the handle and the message right in the texts, the message alone in its bubble so it copies clean.
  * Application: a link to the answers to paste into their form.
  */
-export function sendPageText(route: "email" | "dm" | "application" | "unknown", brand: string, recipient: string, page: string, body = ""): string {
-  if (route === "email") return `here’s your pitch to ${brand}, ready to go. tap and it opens in your Gmail with everything filled in, to ${recipient}, your media kit linked. have a read:\n${page}\n---\nlet me know what you think. if you send it, tell me, and tell me when they reply.`;
+export function sendPageText(route: "email" | "dm" | "application" | "unknown", brand: string, recipient: string, page: string, body = "", kind: "pitch" | "follow-up" | "reply" = "pitch"): string {
+  if (route === "email") return `here’s your ${kind} to ${brand}, ready to go. tap and it opens in your Gmail with everything filled in, to ${recipient}, your media kit linked. have a read:\n${page}\n---\nlet me know what you think. if you send it, tell me, and tell me when they reply.`;
   if (route === "application") return `your ${brand} application answers are ready. open them here and paste each one into their form:\n${page}\n---\ntell me once you’ve submitted it so i can keep track.`;
   return `this one’s better as a DM. send it to ${handleOf(recipient)}:\n${recipient}\n---\n${body}\n---\nhold that message to copy it, paste it in their DMs, and tell me once it’s sent.`;
 }
