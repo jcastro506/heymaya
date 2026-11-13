@@ -89,7 +89,7 @@ export const prepare = internalMutation({
     const offerGmail = o.route === "email" && !mailbox && emailSendEnabled(c) && Boolean(process.env.GOOGLE_CLIENT_ID) && (!c.gmailOfferedAt || now - c.gmailOfferedAt > 7 * 86_400_000);
     const offer = offerGmail ? `\n---\nwant me to send these from your Gmail next time? connect it once here, it takes ten seconds:\n${await mintConnectLink(ctx, c._id, now)}` : "";
     if (offerGmail) await ctx.db.patch(c._id, { gmailOfferedAt: now });
-    const body = o.route === "email" && mailbox
+    const body = o.route === "email" && mailbox && emailSendEnabled(c)
       ? connectedReview({ brand: o.brand, from: mailbox.email, to: recipient, subject: data.subject ?? "", body: data.body, firstTouch: !o.threadId })
       : sendPageText(o.route, o.brand, recipient, page, data.body) + offer;
     if (!checkPlainLanguage(body).ok) throw new Error("The review would be altered by the chat formatter. Rephrase the draft before requesting approval.");

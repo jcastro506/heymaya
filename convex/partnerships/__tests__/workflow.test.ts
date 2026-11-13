@@ -285,6 +285,19 @@ describe("approval and delivery races", () => {
     vi.setSystemTime(Date.now() + 86400001);
     expect((await f.approve(d.data.approvalCode)).draftId).toBeUndefined();
   });
+  it("drafts only (operator 2026-11-13): with sending off, even a connected Gmail gets the open-in-Gmail link, never a SEND code, and nothing offers to connect", async () => {
+    const f = await fixture();
+    vi.stubEnv("PARTNERSHIP_EMAIL_SEND_ENABLED", "");
+    vi.stubEnv("GOOGLE_CLIENT_ID", "client");
+    await f.draft();
+    const out = await f.t.run(ctx => ctx.db.query("messages").withIndex("by_creator_and_ts", q => q.eq("creatorId", f.a)).collect());
+    const review = out.filter(m => m.direction === "out").map(m => m.body).join("\n");
+    expect(review).toContain("opens in your Gmail");
+    expect(review).not.toMatch(/SEND [0-9a-f]{6}/);
+    expect(review).not.toMatch(/connect it once/i);
+    expect(await f.t.mutation(internal.partnerships.mailbox.chatLink, { creatorId: f.a })).toContain("nothing to connect");
+    vi.stubEnv("PARTNERSHIP_EMAIL_SEND_ENABLED", "true");
+  });
   it("cancels consent after pause, preference change, or mailbox replacement", async () => {
     const f = await fixture(), d = await f.draft();
     await f.approve(d.data.approvalCode);
