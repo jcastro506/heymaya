@@ -71,6 +71,10 @@ describe("the pure parts", () => {
   it("an idea names a thing by a distinctive word, not a filler one", () => {
     expect(namesIt("pre-race pasta for the Denver half", "Denver Half Marathon")).toBe(true);
     expect(namesIt("a festival outfit check", "Denver Chili Festival")).toBe(false);
+    const fest = "North Shore Artisan Gift Market - The Great Chicago Holiday Food Festival";
+    expect(namesIt("turning another fast-food craving into a quick prep", fest)).toBe(false);
+    expect(namesIt("ties into the Chicago Holiday Food Festival", fest)).toBe(true);
+    expect(namesIt("go see Stevie Wonder", "Stevie Wonder")).toBe(true);
   });
 
   it("deletion covers the table", () => {
@@ -224,5 +228,14 @@ describe("where their phone says they are (the app, 2026-11-13)", () => {
     expect(later.place).toBe("Denver");
     await t.withIdentity({ subject: "user_a" }).mutation(api.scout.local.clearWhereNow, {});
     expect((await t.run((ctx) => ctx.db.get(a)))!.whereNow).toBeUndefined();
+  });
+});
+
+describe("the lane the picker sees", () => {
+  it("is their niche when the read wrote no summary and there are no keywords", async () => {
+    const t = convexTest(schema, modules);
+    const a = await t.run((ctx) => seedCreator(ctx, "a", { niche: "high protein meal prep", dossier: undefined, notes: [{ id: "n", text: "I live in Chicago", kind: "fact", at: NOW }] } as never));
+    const i = await t.query(internal.scout.local.inputs, { creatorId: a, now: NOW });
+    expect(i?.lane).toContain("high protein meal prep");
   });
 });
