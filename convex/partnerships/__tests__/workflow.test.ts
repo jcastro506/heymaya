@@ -159,6 +159,21 @@ describe("partnership evidence and fit", () => {
     await f.t.mutation(internal.core.messages.recordInbound, { creatorId: f.a, surface: "web", body: "put 175 per video for the rate" });
     await expect(prep([{ label: "Your TikTok handle", answer: "@sam" }, { label: "Your rate per video in USD", answer: "$175" }])).resolves.toBeTruthy();
   });
+  it("deals sim 2026-11-13: never ticks their terms box; fills a portfolio link with their work when it has one", async () => {
+    const f = await fixture();
+    const src = "https://brand.com/creators";
+    await f.t.run(async (ctx) => { const row = await ctx.db.get(f.opportunityId); await ctx.db.patch(f.opportunityId, { data: { ...row!.data, route: "application", routeUrl: "https://brand.com/apply", applicationFields: [{ label: "Portfolio link", required: true, type: "url", sourceUrl: src }, { label: "I agree to the creator terms", required: true, type: "consent", sourceUrl: src }] } }); });
+    const prep = (answers: Array<{ label: string; answer: string }>) => f.t.mutation(internal.partnerships.drafts.prepare, { creatorId: f.a, sourceMessageId: f.source, input: { opportunityId: f.opportunityId, subject: "Application", body: "Answers below.", answers } });
+    await expect(prep([{ label: "Portfolio link", answer: f.kit }, { label: "I agree to the creator terms", answer: "Yes" }])).rejects.toThrow(/theirs to do/);
+    await expect(prep([])).rejects.toThrow(new RegExp(`Answer Portfolio link with their work: ${f.kit.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    await expect(prep([{ label: "Portfolio link", answer: f.kit }])).resolves.toBeTruthy();
+  });
+  it("after they say it went out, the next email is a follow-up, not held to first-pitch rules", async () => {
+    const f = await fixture();
+    await f.t.run(async (ctx) => { const row = await ctx.db.get(f.opportunityId); await ctx.db.patch(f.opportunityId, { data: { ...row!.data, status: "contacted" } }); });
+    // No kit link and no brand in the subject: fine for a follow-up on a pitch they sent themselves.
+    await expect(f.t.mutation(internal.partnerships.drafts.prepare, { creatorId: f.a, sourceMessageId: f.source, input: { opportunityId: f.opportunityId, subject: "Re: running content", body: "Just bumping this in case it got buried. Happy to share a concept." } })).resolves.toBeTruthy();
+  });
   it("the model's shape slips are undone before the strict parse, and nothing else is (pure)", async () => {
     const { withoutWhy } = await import("../store");
     expect(withoutWhy({ why: "x", operation: "save", brandDomain: "b.com", opportunity: JSON.stringify({ brand: "B" }) })).toEqual({ brandDomain: "b.com", opportunity: { brand: "B" } });

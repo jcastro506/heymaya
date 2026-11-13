@@ -67,11 +67,21 @@ export const prepare = internalMutation({
       const unknown = input.answers.filter((x) => !asked.has(x.label)).map((x) => x.label);
       if (unknown.length) throw new Error(`Not questions on the form: ${unknown.slice(0, 3).join(", ")}`);
     }
+    // Applications (deals sim, 2026-11-13): she ticked "I agree to the terms" for them, and left the portfolio blank
+    // with their posts right there. A consent box is theirs; a link field she can fill, she fills.
+    if (o.route === "application") {
+      const fields = new Map(o.applicationFields.map((f) => [f.label, f]));
+      const ticked = (input.answers ?? []).filter((x) => fields.get(x.label)?.type === "consent").map((x) => x.label);
+      if (ticked.length) throw new Error(`Leave out ${ticked.join(", ")}: agreeing to terms is theirs to do on the form, never in a draft`);
+      const theirLink = c.kitLink ? kitUrl(c.kitLink.slug) : ((await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").first()) as Doc<"ownPosts"> | null)?.url;
+      const blank = o.applicationFields.filter((f) => f.type === "url" && /portfolio|example|work|link|website|sample/i.test(f.label) && !(input.answers ?? []).some((x) => x.label === f.label));
+      if (theirLink && blank.length) throw new Error(`Answer ${blank.map((f) => f.label).join(", ")} with their work: ${theirLink}`);
+    }
     // K1: the pitch's promises, by code. A broken draft is refused with the reasons; she redrafts.
     if (o.route === "email" || o.route === "dm") {
       const variant = await ctx.db.query("kitVariants").withIndex("by_opportunity", q => q.eq("opportunityId", row._id)).first();
       const kitLinks = [variant ? kitUrl(variant.slug) : null, c.kitLink ? kitUrl(c.kitLink.slug) : null].filter((u): u is string => Boolean(u));
-      const problems = pitchProblems({ route: o.route, firstTouch: !o.threadId, brand: o.brand, subject: input.subject, body: input.body, kitLinks }, await readKitV2(ctx, c));
+      const problems = pitchProblems({ route: o.route, firstTouch: !o.threadId && !FOLLOWING.has(o.status), brand: o.brand, subject: input.subject, body: input.body, kitLinks }, await readKitV2(ctx, c));
       if (problems.length) throw new Error(`Redraft before review: ${problems.join("; ")}`);
     }
     const code = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, "0")).join("");
@@ -127,6 +137,9 @@ export function handleOf(url: string): string {
  * DM: the handle and the message right in the texts, the message alone in its bubble so it copies clean.
  * Application: a link to the answers to paste into their form.
  */
+/** Already contacted (they told her it went out): the next email is a follow-up or a reply, not a first pitch. */
+const FOLLOWING = new Set(["contacted", "replied", "negotiating", "agreed"]);
+
 export function sendPageText(route: "email" | "dm" | "application" | "unknown", brand: string, recipient: string, page: string, body = "", kind: "pitch" | "follow-up" | "reply" = "pitch"): string {
   if (route === "email") return `here’s your ${kind} to ${brand}, ready to go. tap and it opens in your Gmail with everything filled in, to ${recipient}, your media kit linked. have a read:\n${page}\n---\nlet me know what you think. if you send it, tell me, and tell me when they reply.`;
   if (route === "application") return `your ${brand} application answers are ready. open them here and paste each one into their form:\n${page}\n---\ntell me once you’ve submitted it so i can keep track.`;
