@@ -251,6 +251,7 @@ import type * as review_weekly from "../review/weekly.js";
 import type * as scout_benchmarks from "../scout/benchmarks.js";
 import type * as scout_firstWeek from "../scout/firstWeek.js";
 import type * as scout_gate from "../scout/gate.js";
+import type * as scout_local from "../scout/local.js";
 import type * as scout_matchPost from "../scout/matchPost.js";
 import type * as scout_readback from "../scout/readback.js";
 import type * as scout_roster from "../scout/roster.js";
@@ -519,6 +520,7 @@ declare const fullApi: ApiFromModules<{
   "scout/benchmarks": typeof scout_benchmarks;
   "scout/firstWeek": typeof scout_firstWeek;
   "scout/gate": typeof scout_gate;
+  "scout/local": typeof scout_local;
   "scout/matchPost": typeof scout_matchPost;
   "scout/readback": typeof scout_readback;
   "scout/roster": typeof scout_roster;

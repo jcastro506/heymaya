@@ -23,6 +23,8 @@ export default defineSchema({
     shareToken: v.optional(v.object({ hash: v.string(), issuedAt: v.number() })),
     /** A1: each platform's account type from their public profile (weekly), for the setup advice. */
     accountTypes: v.optional(v.object({ tiktok: v.optional(v.union(v.literal("personal"), v.literal("creator"), v.literal("business"))), instagram: v.optional(v.union(v.literal("personal"), v.literal("creator"), v.literal("business"))), checkedAt: v.number() })),
+    /** scout/local: the last weekly look for what's on near them (where, how many found, and why). */
+    localScout: v.optional(v.object({ at: v.number(), place: v.optional(v.string()), found: v.number(), reason: v.string() })),
     /** B6: the public media-kit page's unguessable slug; public numbers only, revocable. */
     kitLink: v.optional(v.object({ slug: v.string(), createdAt: v.number() })),
     email: v.string(),
@@ -578,6 +580,20 @@ export default defineSchema({
   })
     .index("by_creator_start", ["creatorId", "start"])
     .index("by_creator_external", ["creatorId", "externalId"]),
+
+  // -------------------------------------------------------------- localEvents
+  // What's on near them (scout/local, weekly): an event from a web page, its date said on that page.
+  localEvents: defineTable({
+    creatorId: v.id("creators"),
+    place: v.string(),
+    title: v.string(),
+    date: v.string(), // YYYY-MM-DD, the first day, as the page says it
+    url: v.string(),
+    quote: v.string(), // verbatim from the page, naming the date
+    why: v.string(),
+    foundAt: v.number(),
+  })
+    .index("by_creator_date", ["creatorId", "date"]),
 
   // -------------------------------------------------------------- tasteEvents
   // §13.10 (1): one row per signal about an idea, written by code the moment it happens.
