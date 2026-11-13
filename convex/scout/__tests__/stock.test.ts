@@ -9,7 +9,7 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { STOCK, parseStock, stockTarget, upcomingMoments } from "../stock";
+import { STOCK, momentOf, momentsFull, parseStock, stockTarget, upcomingMoments } from "../stock";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
@@ -34,6 +34,22 @@ describe("the stock's pure parts", () => {
     expect(out[0].link).toBe("https://www.tiktok.com/@x/video/1");
     expect(out[1].link).toBe("");
     expect(parseStock("not json", 3, [], [])).toEqual([]);
+  });
+
+  it("a holiday is one idea a batch, and none once they have enough for it (horizon sim)", () => {
+    expect(momentOf("Stop ruining your Thanksgiving gravy")).toBe("thanksgiving");
+    expect(momentOf("friendsgiving on a budget")).toBe("thanksgiving");
+    expect(momentOf("moving to Denver with a kitchen in boxes")).toBeUndefined();
+    const raw = JSON.stringify({ ideas: [
+      { hook: "Stop serving dry Thanksgiving turkey", why: "timely" },
+      { hook: "Fix your gravy before the big day", why: "right before Thanksgiving" },
+      { hook: "Cooking my last meal in the old kitchen before Denver", why: "the move" },
+      { hook: "Christmas cookies, but fast", why: "" },
+    ] });
+    expect(parseStock(raw, 5, [], []).map((x) => x.hook)).toEqual(["Stop serving dry Thanksgiving turkey", "Cooking my last meal in the old kitchen before Denver", "Christmas cookies, but fast"]);
+    const full = momentsFull(["Thanksgiving turkey fix", "Thanksgiving gravy fix", "christmas once"], ["Thanksgiving", "Christmas"]);
+    expect([...full]).toEqual(["Thanksgiving"]);
+    expect(parseStock(raw, 5, [], [], full).map((x) => x.hook)).toEqual(["Cooking my last meal in the old kitchen before Denver", "Christmas cookies, but fast"]);
   });
 
   it("knows the moments in the next six weeks", () => {
@@ -75,6 +91,31 @@ describe("topping up", () => {
     expect(fetcher).not.toHaveBeenCalled();
     expect((await t.action(internal.scout.stock.topUp, { creatorId: b, now })).reason).toMatch(/full/);
     expect((await t.run((ctx) => ctx.db.query("ideas").withIndex("by_creator", (q) => q.eq("creatorId", b)).collect()))).toHaveLength(6);
+  });
+
+  it("their life is in the brief, ahead of holidays: what they told her, and their calendar six weeks out", async () => {
+    const t = convexTest(schema, modules);
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    const now = Date.now();
+    const a = await t.run((ctx) => seedCreator(ctx, "a", { channel: { paired: true }, notes: [
+      { id: "m", text: "moving to Denver in five weeks", kind: "life", at: now, expiresHint: now + 40 * 86_400_000 },
+      { id: "x", text: "an old trip", kind: "life", at: 1, expiresHint: now - 1 },
+    ] }));
+    const b = await t.run((ctx) => seedCreator(ctx, "b", { clerkUserId: "u_b", handles: { tiktok: "tt_b" }, channel: { paired: true }, notes: [{ id: "s", text: "b's secret wedding", kind: "life", at: now }] }));
+    await t.run(async (ctx) => {
+      await ctx.db.insert("calendarEvents", { creatorId: a, calendarId: "c", externalId: "e1", title: "Denver Half Marathon", start: now + 30 * 86_400_000, end: now + 30 * 86_400_000 + 3_600_000, allDay: false, recurring: false, class: "filmable", classifiedBy: "code", status: "active", updatedAt: now, createdAt: now } as never);
+      await ctx.db.insert("calendarEvents", { creatorId: b, calendarId: "c", externalId: "e2", title: "b's dentist", start: now + 3 * 86_400_000, end: now + 3 * 86_400_000 + 3_600_000, allDay: false, recurring: false, class: "filmable", classifiedBy: "code", status: "active", updatedAt: now, createdAt: now } as never);
+    });
+    const fetcher = vi.fn(async (_u: unknown, _init?: unknown) => reply([{ hook: "packing a whole kitchen into boxes", why: "the move" }]));
+    vi.stubGlobal("fetch", fetcher);
+    await t.action(internal.scout.stock.topUp, { creatorId: a, now });
+    const body = JSON.parse(String((fetcher.mock.calls[0][1] as { body: string }).body)) as { messages: Array<{ role: string; content: string }> };
+    const brief = body.messages.find((m) => m.role === "user")!.content;
+    expect(brief).toContain("moving to Denver in five weeks");
+    expect(brief).toContain("Denver Half Marathon");
+    expect(brief).not.toContain("an old trip");
+    expect(brief).not.toContain("b's");
+    expect(brief.indexOf("Their life right now")).toBeLessThan(brief.indexOf("Holidays coming up"));
   });
 });
 
