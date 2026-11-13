@@ -516,6 +516,12 @@ export const start = internalAction({
       }
     }
     if (subjects.length > 12) throw new Error("at most 12 creators a run");
+    // Named handles an earlier run still holds were refused at signup, inside the run, and the run sat at "signup"
+    // for an hour (2026-11-12). Refuse before creating anyone, naming who holds each.
+    if (handles?.length) {
+      const held = (await ctx.runQuery(internal.eval.firstWeek.preflight, { handles: subjects.map((s) => ({ ...(s.tiktok ? { tiktok: s.tiktok } : {}), ...(s.instagram ? { instagram: s.instagram } : {}) })) })).filter((x) => !x.free);
+      if (held.length) throw new Error(`run refused: already set up by an earlier run: ${held.map((x) => `${x.handles} by ${x.heldBy}`).join("; ")}. Clear that run first (eval/firstWeek:clear).`);
+    }
     // Credits are scarce: read the balance fresh and refuse, by name, before creating anyone.
     const est = estimateCredits(subjects, opts);
     let balance: number | null = opts.replay ? 0 : null;
