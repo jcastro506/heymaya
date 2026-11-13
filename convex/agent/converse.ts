@@ -41,6 +41,9 @@ import { clip } from "../lib/clip";
  * On a plan without partnerships she says so once and never writes a pitch (live 2026-09-12: "yes send it"
  * on such a plan produced a DM to "whatever brand of socks" out of thin air).
  */
+/** A deals turn in chat: room for research, the brand's own page, a save, a draft, and one retry. */
+export const DEALS_TURN = { calls: 10, ms: 90_000 } as const;
+
 export const NO_PARTNERSHIPS_LINE = `Brand outreach (finding brands, pitch emails or DMs to brands, tracking their replies) is on the partnerships plan, and they are not on it. If they ask for it, say that once, plainly, and offer what you do here: content that gets a brand's attention. Never write a pitch or DM to a brand, and never name a brand to approach.
 You can send nothing to anyone but them. "send it", "yes", "go ahead" with nothing pending from you means: ask in one line what they mean. Never invent the thing to send.`;
 
@@ -689,8 +692,11 @@ export const run = internalAction({
 
     // §13.11: conversation is armed too. Three lookups, ten credits, so "is this hashtag dead" or
     // "when should i post this week" is answered from the catalogue, not from memory.
+    // 2026-11-13 (real deals run): a proper save is search → the brand's page → (their profile) → save → draft, and one
+    // refusal ("extract the official page") needs a retry. Six calls ran out every time; she told them "it didn't go
+    // through on my end" instead of doing what the refusal said.
     const partnershipTurn = partnerships && /brand|partnership|sponsor|collab|pitch|email|application|follow.?up|deliverable|rate|paid deal/i.test([target.body, ...recent.slice(-4).map(m => m.body)].join(" "));
-    const inv = await investigate(ctx, { creatorId: creator._id, sourceMessageId: target._id, purpose: "converse", prefix, user: suffix, partnerships, budget: { calls: partnershipTurn ? 6 : 3, credits: 10, deadlineAt: Date.now() + (partnershipTurn ? 60_000 : 40_000) }, temperature: spec.temperature, maxTokens: spec.maxTokens });
+    const inv = await investigate(ctx, { creatorId: creator._id, sourceMessageId: target._id, purpose: "converse", prefix, user: suffix, partnerships, budget: { calls: partnershipTurn ? DEALS_TURN.calls : 3, credits: 10, deadlineAt: Date.now() + (partnershipTurn ? DEALS_TURN.ms : 40_000) }, temperature: spec.temperature, maxTokens: spec.maxTokens });
     if (process.env.EVAL_FAKES === "1" && creator.clerkUserId.startsWith("eval:partnership:")) {
       await ctx.runMutation(internal.eval.partnershipGauntlet.saveReport, { key: `eval:partnership_trace:${target._id}`, value: JSON.stringify({ ended: inv.ended, turns: inv.turns, trace: inv.trace }) });
     }
