@@ -238,7 +238,9 @@ export function numbersIn(text: string): number[] {
  * and years are ignored; anything else must match an allowed number within 6% (rounding like "3.4k").
  */
 export function inventedNumbers(draft: string, allowed: number[]): number[] {
-  return numbersIn(draft).filter((n) => n >= 10 && !(n >= 2000 && n <= 2100 && Number.isInteger(n)) && !allowed.some((a) => a > 0 && Math.abs(a - n) / a <= 0.06));
+  // A number in the idea itself ("a 30-second recap of a 20-mile run") is the concept, not a claim about them (2026-11-13).
+  const concept = new Set(Array.from(draft.matchAll(/(\d+(?:\.\d+)?)[\s-]*(?:seconds?|secs?|minutes?|mins?|milers?|miles?|mi|km|kilometers?|days?|weeks?|reps?|steps?|ingredients?)\b/gi), (m) => Number(m[1])));
+  return numbersIn(draft).filter((n) => !concept.has(n)).filter((n) => n >= 10 && !(n >= 2000 && n <= 2100 && Number.isInteger(n)) && !allowed.some((a) => a > 0 && Math.abs(a - n) / a <= 0.06));
 }
 
 /**

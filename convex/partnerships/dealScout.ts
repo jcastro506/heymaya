@@ -16,6 +16,7 @@ import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
 import { buildPrefix } from "../agent/context";
 import { critique, tooLong } from "../agent/critic";
+import { judgeLadder } from "../agent/guarded";
 import { clip } from "../lib/clip";
 import { weekKey } from "./kit";
 
@@ -96,6 +97,12 @@ export function parseDeals(raw: string, leads: Lead[]): { picks: Array<{ brand: 
   } catch {
     return { picks: [], message: "", stage: "" };
   }
+}
+
+/** Pure: the floor for the weekly offer: her picks, each with its lead's own signal, and the one ask. No model. */
+export function dealsFloor(picks: Array<{ brand: string; type: DealType }>, leads: Lead[]): string {
+  const lines = picks.map((p) => { const l = leads.find((x) => x.brand === p.brand); return `${/^[a-z0-9._]+$/.test(p.brand) ? `@${p.brand}` : p.brand}${l?.signals[0] ? `: ${l.signals[0]}` : ""}`; });
+  return [`a few brands with money moving in your lane this week:`, lines.join("\n"), `want me to look for brands like these every week and draft the pitches? you'd just send them.`].join("\n---\n");
 }
 
 export const DEALS_SKILL = `deal-scout
@@ -186,8 +193,24 @@ export const run = internalAction({
     if (!r.ok) return { noticed: false, reason: `no judgment: ${r.reason ?? "model error"}` };
     const out = parseDeals(r.content, leads);
     if (!out.picks.length || !out.message) return { noticed: false, reason: "none fit them this week", stage: out.stage };
-    const verdict = tooLong(out.message) ? { pass: false, problems: ["too_long"] } : await critique(ctx, { creatorId: a.creatorId, kind: "reply", text: out.message, evidence: { leads: leads.map((l) => ({ brand: l.brand, signals: l.signals })), numbers, herRead: out.stage }, voice: {}, directives: g.directives.map((x) => x.verbatim) });
-    if (!verdict.pass) return { noticed: false, reason: `held by the critic: ${verdict.problems.join(", ")}`, stage: out.stage };
+    // The critic sees everything the writer saw (2026-11-13: it judged without the scale, the audience or what they
+    // want, and held two of three weekly offers as "invented"). A held offer gets one rewrite fixing what it named,
+    // then a floor built by code from the leads' own signals: never silence (principle 5).
+    const system = { role: "system" as const, content: prefix };
+    const ask = { role: "user" as const, content: `${facts}\n\nPick at most three for them, or none.` };
+    const judge = async (text: string) => tooLong(text) ? { pass: false, problems: ["too_long" as const], note: "too long for a text" } : await critique(ctx, { creatorId: a.creatorId, kind: "reply", text, evidence: { facts, herRead: out.stage }, voice: {}, directives: g.directives.map((x) => x.verbatim) });
+    const judged = await judgeLadder({
+      first: out.message,
+      judge: judge as never,
+      rewrite: async (v) => {
+        const re = await callModel(ctx, { creatorId: a.creatorId, purpose: "deal_scout_rewrite", model: REGISTRY.writer.primary, temperature: 0.3, maxTokens: 600, apiKey: process.env.OPENROUTER_API_KEY ?? "", messages: [system, ask, { role: "assistant", content: r.content }, { role: "user", content: `That message didn't pass the check (${v.problems.join(", ")}: ${v.note ?? ""}). Rewrite only the message, same picks, fixing exactly that: every number and claim from the facts above, nothing else. Output the message text only.` }] });
+        return re.ok ? re.content.trim() : null;
+      },
+      cautious: async () => null,
+      floor: dealsFloor(out.picks, leads),
+    });
+    out.message = judged.text;
+    if (judged.rung === "floor" && judged.problems.length) console.warn(`[deal_scout] floor after: ${judged.problems.join(", ")}`);
     if (a.preview) return { noticed: false, reason: "preview", picks: out.picks, message: out.message, stage: out.stage };
     if (out.stage) await ctx.runMutation(internal.partnerships.dealScout.recordStage, { creatorId: a.creatorId, stage: out.stage, ...(followers ? { followers } : {}) });
     await ctx.runMutation(internal.core.editor.notice, { creatorId: a.creatorId, c: { id: `deals:${i.week}`, kind: "deal", sourceKey: `deals:${i.week}`, base: 2.5, ttlMs: 5 * 86_400_000, summary: `brands that could pay them (${out.stage || "today"}): ${out.picks.map((p) => `${p.brand} (${p.type})`).join(", ")}`, draft: { body: out.message }, onSent: { dealBrands: out.picks.map((p) => p.brand) } } });

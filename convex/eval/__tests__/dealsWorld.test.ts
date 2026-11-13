@@ -364,11 +364,15 @@ describe("the fixture's vendors are the fakes, and nothing else changes", () => 
     } } }) as { id: string };
     const ctx = { runQuery: w.t.query, runMutation: w.t.mutation, runAction: w.t.action } as never;
     const trace: ToolCallRecord[] = [];
-    const answers = JSON.stringify([{ label: "Full name", answer: "Sam" }, { label: "Niches you create in", answer: "Running, marathon training" }]);
-    const out = await runTool(ctx, w.creatorId, { name: "partnership_draft", args: { opportunityId: saved.id, subject: "Cadence application", body: "Your answers; the portfolio link and intro video are yours to add.", answers, why: "they asked" } }, DEFAULT_BUDGET(), trace, source);
+    // 2026-11-13: a blank portfolio field is refused with their own work to put there.
+    const first = await runTool(ctx, w.creatorId, { name: "partnership_draft", args: { opportunityId: saved.id, subject: "Cadence application", body: "Your answers; the intro video is yours to add.", answers: JSON.stringify([{ label: "Full name", answer: "Sam" }, { label: "Niches you create in", answer: "Running, marathon training" }]), why: "they asked" } }, DEFAULT_BUDGET(), trace, source);
+    const work = first.match(/Answer Portfolio link with 3 sample videos with their work: (\S+)/)?.[1];
+    expect(work).toMatch(/^https:\/\//);
+    const answers = JSON.stringify([{ label: "Full name", answer: "Sam" }, { label: "Portfolio link with 3 sample videos", answer: work }, { label: "Niches you create in", answer: "Running, marathon training" }]);
+    const out = await runTool(ctx, w.creatorId, { name: "partnership_draft", args: { opportunityId: saved.id, subject: "Cadence application", body: "Your answers; the intro video is yours to add.", answers, why: "they asked" } }, DEFAULT_BUDGET(), trace, source);
     expect(out).toContain('"status":"draft"');
     const d = (await w.snap()).drafts.at(-1)!;
-    expect(d.answers.map((x) => x.label)).toEqual(["Full name", "Niches you create in"]);
+    expect(d.answers.map((x) => x.label)).toEqual(["Full name", "Portfolio link with 3 sample videos", "Niches you create in"]);
     const bad = await runTool(ctx, w.creatorId, { name: "partnership_draft", args: { opportunityId: saved.id, subject: "Cadence application", body: "x", answers: JSON.stringify([{ label: "Your Social Security number", answer: "no" }]), why: "test" } }, DEFAULT_BUDGET(), trace, source);
     expect(bad).toMatch(/Not questions on the form/);
     expect((await w.opp("cadence")).applicationCheckInAt).toBe(Date.now() + 2 * DAY);
@@ -400,6 +404,8 @@ describe("the judges' pure parts", () => {
   it("numbers are grounded against the kit; money and ranges are recognised; row changes read plainly", () => {
     expect(inventedNumbers("3.4k followers, normal around 4,900 views, my 29.8k marathon video", [3400, 4900, 29800])).toEqual([]);
     expect(inventedNumbers("50k followers and a 12% engagement rate", [3400, 4900])).toEqual([50_000, 12].filter((n) => n >= 10));
+    // The concept's own numbers are the idea, not a claim; a stat still counts.
+    expect(inventedNumbers("a 30-second recap of a 20-mile run and an 18-miler, to my 50k followers", [3400])).toEqual([50_000]);
     expect(inventedNumbers("2 TikToks and 1 Reel in 2026", [])).toEqual([]);
     expect(shiftKey("partner-followup:abc:1790258400000", 1000)).toBe("partner-followup:abc:1790258399000");
     expect(shiftKey("partner-deliverable:abc:Reel: final:1790258400000", 1000)).toBe("partner-deliverable:abc:Reel: final:1790258399000");
