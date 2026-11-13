@@ -128,7 +128,7 @@ export function handleOf(url: string): string {
  * Application: a link to the answers to paste into their form.
  */
 export function sendPageText(route: "email" | "dm" | "application" | "unknown", brand: string, recipient: string, page: string, body = ""): string {
-  if (route === "email") return `here’s your pitch to ${brand}, ready to go. tap and it opens in your Gmail with everything filled in, to ${recipient}, your media kit linked. just read it and hit send:\n${page}\n---\ntell me once it’s sent, and send me anything they write back.`;
+  if (route === "email") return `here’s your pitch to ${brand}, ready to go. tap and it opens in your Gmail with everything filled in, to ${recipient}, your media kit linked. have a read:\n${page}\n---\nlet me know what you think. if you send it, tell me, and tell me when they reply.`;
   if (route === "application") return `your ${brand} application answers are ready. open them here and paste each one into their form:\n${page}\n---\ntell me once you’ve submitted it so i can keep track.`;
   return `this one’s better as a DM. send it to ${handleOf(recipient)}:\n${recipient}\n---\n${body}\n---\nhold that message to copy it, paste it in their DMs, and tell me once it’s sent.`;
 }

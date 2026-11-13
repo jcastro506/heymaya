@@ -55,7 +55,7 @@ export function readyText(drafts: Array<{ brand: string; link: string; followUp:
   if (!drafts.length) return null;
   const fresh = drafts.filter((d) => !d.followUp), follow = drafts.filter((d) => d.followUp);
   const head = [fresh.length ? `${fresh.length} new pitch${fresh.length > 1 ? "es" : ""} ready${fresh.length ? `: ${fresh.map((d) => d.brand).join(", ")}` : ""}` : "", follow.length ? `${follow.length} follow-up${follow.length > 1 ? "s" : ""} ready (${follow.map((d) => d.brand).join(", ")})` : ""].filter(Boolean).join(", and ");
-  return [`${head}. each one opens in your gmail, written and addressed. read it over and hit send:`, drafts.map((d) => `${d.brand}: ${d.link}`).join("\n")].join("\n---\n");
+  return [`${head}. each one opens in your gmail, written and addressed. read it over and hit send:`, drafts.map((d) => `${d.brand}: ${d.link}`).join("\n"), "tell me which ones you send, and when anyone replies."].join("\n---\n");
 }
 
 export const inputs = internalQuery({

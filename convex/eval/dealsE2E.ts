@@ -127,7 +127,7 @@ export const rows = internalQuery({ args: { creatorId: v.id("creators") }, handl
   const messages = (await ctx.db.query("messages").withIndex("by_creator_and_ts", (q) => q.eq("creatorId", a.creatorId)).take(200)) as Doc<"messages">[];
   const own = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(50)) as Doc<"ownPosts">[];
   return {
-    opps: opps.map((o) => ({ id: o._id, domain: o.brandDomain, data: o.data as { brand: string; type: string; route: string; status: string; assessment: { verdict: string }; evidence: Array<{ url: string }>; applicationFields?: Array<{ label: string }> } })),
+    opps: opps.map((o) => ({ id: o._id, domain: o.brandDomain, data: o.data as { brand: string; type: string; route: string; status: string; assessment: { verdict: string }; evidence: Array<{ url: string }>; applicationFields?: Array<{ label: string }>; appliedAt?: number; deliverables: Array<{ title: string; dueAt: number; status: string }> } })),
     drafts: drafts.map((d) => ({ id: d._id, opportunityId: d.opportunityId, data: d.data as { channel: string; subject: string; body: string; answers?: Array<{ label: string; answer: string }>; status: string; createdAt: number } })),
     variants: variants.map((x) => ({ opportunityId: x.opportunityId, slug: x.slug, postUrls: x.postUrls, idea: x.idea })),
     messages: messages.map((m) => ({ id: m._id, direction: m.direction, body: m.body, dedupeKey: m.dedupeKey, ts: m.ts })),
@@ -175,7 +175,7 @@ async function runPersona(ctx: ActionCtx, mode: Mode, key: Persona["key"], judge
   const sent0 = mode === "fakes" ? (await ctx.runQuery(internal.eval.fakes.box, {})).sent.length : 0;
   try {
     await ctx.runMutation(internal.eval.dealsE2E.seedPersona, { creatorId, persona: key, lane: mode === "fakes" });
-    if (mode === "fakes") await ctx.runAction(internal.eval.partnershipGauntlet.connectFakeMailbox, { creatorId });
+    // Drafts only (2026-11-13): no mailbox, in either mode. They send from their own Gmail and keep her posted.
     await say(r, p.script.goal);
 
     // 1. Finding it: the weekly offer from the lane's paid posts (fakes), or her search of the real web.
@@ -207,7 +207,7 @@ async function runPersona(ctx: ActionCtx, mode: Mode, key: Persona["key"], judge
     const d = s.drafts.filter((x) => !opp || x.opportunityId === opp.id).sort((x, y) => x.data.createdAt - y.data.createdAt).at(-1);
     const oppNow = opp ? s.opps.find((o) => o.id === opp.id) ?? opp : s.opps.at(-1);
     const variant = oppNow ? s.variants.find((x) => x.opportunityId === oppNow.id) : undefined;
-    check("saved as a draft awaiting the code", d?.data.status === "draft", d ? `${d.data.channel} draft, ${d.data.status}` : "no draft");
+    check("saved as a draft for them to send", d?.data.status === "draft", d ? `${d.data.channel} draft, ${d.data.status}` : "no draft");
     const kit = (await ctx.runQuery(internal.partnerships.kitTools.kitFor, { creatorId }))?.kit ?? null;
     const allowed = [...(kit?.platforms ?? []).flatMap((x) => [x.followers ?? 0, x.normalViews ?? 0, ...x.best.map((b) => b.views)]), ...(oppNow?.data.evidence ?? []).flatMap((e) => numbersIn(worldPage(e.url)?.content ?? "")), ...s.messages.filter((m) => m.direction === "in").flatMap((m) => numbersIn(m.body))];
     if (d?.data.channel === "email") {
@@ -227,6 +227,31 @@ async function runPersona(ctx: ActionCtx, mode: Mode, key: Persona["key"], judge
       check("no invented rate", !answers.some((x) => /rate/i.test(x.label) && /\$\s?\d/.test(x.answer)), "the rate is theirs to give");
     }
     if (mode === "fakes" && p.expectRoute) check(`the route is ${p.expectRoute}`, d?.data.channel === p.expectRoute, `drafted ${d?.data.channel ?? "nothing"}`);
+
+    // 5. They keep her posted (2026-11-13: she never reads or sends their mail; they tell her). Each step is a row.
+    if (oppNow && d) {
+      const statusNow = async () => (await ctx.runQuery(internal.eval.dealsE2E.rows, { creatorId })).opps.find((o) => o.id === oppNow.id)?.data;
+      const clean = (words: string[]) => !words.some((w) => /\bSEND [0-9a-f]{6}|connect (your )?gmail|i('ve| have)? sent (it|the|your)/i.test(w));
+      const step = async (text: string, want: string[], also?: (o: NonNullable<Awaited<ReturnType<typeof statusNow>>>, words: string[]) => [boolean, string]) => {
+        const words = await say(r, text);
+        const o = await statusNow();
+        const extra = o && also ? also(o, words) : [true, ""];
+        check(`"${clip(text, 40)}" → ${want.join(" or ")}`, Boolean(o && want.includes(o.status) && extra[0] && clean(words) && words.length), `status ${o?.status ?? "?"}${extra[1] ? `; ${extra[1]}` : ""}${clean(words) ? "" : "; she offered to send or asked for a code"}${words.length ? "" : "; no answer"}`);
+      };
+      if (d.data.channel === "application") {
+        await step("ok i submitted the application", ["contacted"], (o) => [Boolean(o.appliedAt), `applied ${o.appliedAt ? "recorded" : "not recorded"}`]);
+        await step(`${oppNow.data.brand} emailed back, they said no thanks for now`, ["declined", "closed"]);
+      } else {
+        await step(d.data.channel === "dm" ? "sent the dm!" : "sent it!", ["contacted"]);
+        const follow = await say(r, `no reply from ${oppNow.data.brand} yet, it's been a week. can you write me a short follow up?`);
+        const s2 = await ctx.runQuery(internal.eval.dealsE2E.rows, { creatorId });
+        const second = s2.drafts.filter((x) => x.opportunityId === oppNow.id).sort((x, y) => x.data.createdAt - y.data.createdAt).at(-1);
+        check("a follow-up draft when asked", Boolean(second && second.id !== d.id && second.data.status === "draft"), second && second.id !== d.id ? `${second.data.channel} draft, ${clip(second.data.body, 90)}` : `no new draft; she said: ${clip(follow.join(" / "), 160)}`);
+        await step(`they replied! ${oppNow.data.brand} wants 2 videos for $300 with 30 days exclusivity. is that good?`, ["replied", "negotiating"], (_o, words) => { const w = words.join(" ").toLowerCase(); const ok = w.includes("300") && /exclusiv/.test(w); return [ok, ok ? "named the asks" : `didn't name the asks: ${clip(words.join(" / "), 140)}`]; });
+        await step("ok i said yes. first video due dec 5, second one due dec 12", ["agreed"], (o) => [o.deliverables.length >= 2, `${o.deliverables.length} deliverables`]);
+        await step("both videos are posted and they paid me 🎉", ["completed"]);
+      }
+    }
 
     // 4. Nothing went out.
     const sent = mode === "fakes" ? (await ctx.runQuery(internal.eval.fakes.box, {})).sent.length - sent0 : 0;
