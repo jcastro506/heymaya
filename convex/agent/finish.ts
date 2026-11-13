@@ -364,6 +364,11 @@ export const run = internalAction({
       dropped, lookups: inv.trace.filter((t) => t.ok).map((t) => t.tool),
       soundPlan: plan, ...(waiting ? { soundAskAt: Date.now() } : {}),
     });
+    // They asked for just a reaction to videos they send without a question (core/routines setVideoReplies): only that.
+    if (answering === "full" && creator.videoReplies === "react" && (out.reaction ?? "").trim()) {
+      await reply(out.reaction!.trim(), { produced: producedStamp(REGISTRY.writer.primary), criticSkipped });
+      return { ok: true, reason: "reaction only (their setting)" };
+    }
     await reply(finishText({ answering, pickLine: cards.length > 1 ? out.pickLine : "", reaction: out.reaction ?? "", read: out.read, captions, sounds, platformNote: out.platformNote, soundAsk: plan === "over" ? SOUND_NONE_OVER : SOUND_QUESTION }), { produced: producedStamp(REGISTRY.writer.primary), criticSkipped });
     return { ok: true, reason: `finish (${answering}, ${cards.length} video${cards.length === 1 ? "" : "s"}): ${captions.length} captions, ${sounds.length} sounds${dropped.length ? `, dropped ${dropped.length} unbacked` : ""}` };
   },
