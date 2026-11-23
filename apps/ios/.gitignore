@@ -1,5 +1,6 @@
 Maya.xcodeproj/
 Config/Local.xcconfig
+Config/BuildNumber.xcconfig
 build/
 DerivedData/
 *.xcuserstate

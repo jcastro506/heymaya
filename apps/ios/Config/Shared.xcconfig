@@ -1,3 +1,7 @@
 // Values every configuration shares. Signing: set MAYA_DEVELOPMENT_TEAM in Config/Local.xcconfig
 // (gitignored) to your Apple team id before archiving for TestFlight.
 #include? "Local.xcconfig"
+
+// The build number: 1 by default, the git commit count once the scheme's pre-action has run (BuildNumber.xcconfig, gitignored).
+CURRENT_PROJECT_VERSION = 1
+#include? "BuildNumber.xcconfig"
