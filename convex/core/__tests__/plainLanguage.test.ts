@@ -333,3 +333,11 @@ describe("⚠️ THE GUARD MUST NOT DEPEND ON WHAT IT CHECKED BEFORE", () => {
     });
   });
 });
+
+describe("her app links keep their id (2026-11-23)", () => {
+  it("a row id inside a link's path stays; a bare one is still redacted", () => {
+    const link = "shots: https://staging.hey-maya.ai/o/idea/jn7d7fhe02htrvz024931nrcas8fe4yy";
+    expect(checkPlainLanguage(link, "maya").clean).toBe(link);
+    expect(checkPlainLanguage("draft ID jn7d7fhe02htrvz024931nrcas8fe4yy saved", "maya").clean).not.toMatch(/jn7d7fhe02/);
+  });
+});

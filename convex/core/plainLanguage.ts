@@ -148,7 +148,8 @@ const MACHINE_PATTERNS: Array<{ name: string; re: RegExp }> = [
    */
   {
     name: "id",
-    re: /(?:,?\s*\b(?:draft|post|placement|asset|message|creator)?\s*ID:?\s*)?[([]?`?\b[a-z0-9]{32}\b`?[)\]]?/gi,
+    // Not inside a link's path (2026-11-23): her app links end in a row id (/o/idea/<id>) and were cut to "/o/idea/".
+    re: /(?:,?\s*\b(?:draft|post|placement|asset|message|creator)?\s*ID:?\s*)?[([]?`?(?<!\/)\b[a-z0-9]{32}\b`?[)\]]?/gi,
   },
   /**
    * ⭐ NAMING HER OWN TOOLS. "The update tool said:", "**Draft tool said:**".
