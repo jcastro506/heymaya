@@ -60,7 +60,7 @@ ${rules}`;
 
 /** Pulls the first post out of her read so it lands in their Ideas with a link (2026-11-23). Words from the message only. */
 export const OPENING_IDEA_SKILL = `opening-idea
-From the message below, the post idea it gives them (usually the last text). Output ONLY JSON: {"hook":"the words in quotes they say or put on screen, verbatim from the message; if there are none, the idea in one line, under 90 characters","why":"why it should work, under 120 characters, in the message's own words","shoot":"the shots and length, under 120 characters, from the message"}. Use only what the message says. If the message gives no idea, output {"hook":""}.`;
+From the message below, the post idea it gives them (usually the last text). Output ONLY JSON: {"hook":"the words in quotes they say or put on screen, verbatim from the message; if there are none, the idea in one line, under 90 characters","why":"why THIS post should work, under 70 characters, from what the message says about the idea (never the line about who they are); empty if it doesn't say","shoot":"the shots and length, under 120 characters, from the message"}. Use only what the message says. If the message gives no idea, output {"hook":""}.`;
 
 /** Pure: the model's JSON, held to what a saved idea needs. Null when there's no idea in it. */
 export function parseOpeningIdea(raw: string): { hook: string; why: string; shoot: string } | null {

@@ -276,3 +276,11 @@ describe("a plan never has the same idea twice (sim, 2026-11-23)", () => {
     expect(got).toContain("c");
   });
 });
+
+describe("a plan never says to post in the middle of the night (sim, 2026-11-23)", () => {
+  it("history at 3 am still plans a post when they're awake", async () => {
+    const { draftWeek } = await import("../../calendar/planning");
+    const slots = draftWeek({ now: Date.UTC(2026, 10, 23, 17), timeZone: "America/Denver", postsPerWeek: 2, filmDays: [], filmHour: null, editMinutes: 0, busy: [], model: { hours: [{ hour: 3, score: 2, n: 4 }], confidence: "solid", defaultHour: 3 } as never, ideas: [{ ideaId: "a", hook: "x", experiment: false }, { ideaId: "b", hook: "y", experiment: false }], days: 7 });
+    for (const s of slots) expect(s.post.hour, "a waking hour").toBeGreaterThanOrEqual(7);
+  });
+});

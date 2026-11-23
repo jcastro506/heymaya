@@ -257,7 +257,7 @@ export const draft = internalAction({
     if (written.duplicate) return { sent: false, reason: "this week is already planned" };
     const base = (process.env.APP_URL ?? "").replace(/\/$/, "");
     const links: WeekLinks = base ? { app: `${base}/app/today`, ...(inp.calendarConnected ? {} : { calendar: `${base}/app/calendar` }) } : {};
-    const body = composeWeek(slots, inp.timezone, inp.model.hours.length > 0, weekLabel(slots, now, inp.timezone, restOfWeek), a.opener, a.horizon === "first", links);
+    const body = composeWeek(slots, inp.timezone, slots.every((x) => x.post.fromHistory), weekLabel(slots, now, inp.timezone, restOfWeek), a.opener, a.horizon === "first", links);
     if (a.horizon === "first") await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: a.creatorId, step: "first_plan" });
     // One question for the whole week: this IS the open question, and it supersedes any other.
     await ctx.runMutation(internal.core.messages.closeOpen, { creatorId: a.creatorId });

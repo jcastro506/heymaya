@@ -8,7 +8,7 @@
  * across a week with real gaps will place two of them at 3am.
  */
 
-import { atLocalHour, localHour, type PostTimeModel } from "./postTime";
+import { atLocalHour, AWAKE, DEFAULT_HOUR, localHour, type PostTimeModel } from "./postTime";
 
 export const PLAN = {
   minSlots: 1,
@@ -139,8 +139,10 @@ export function draftWeek(input: {
 }
 
 function nextPost(model: PostTimeModel, after: number, timeZone: string): Slot["post"] {
-  const candidates = model.hours.length ? model.hours.map((h) => h.hour) : [model.defaultHour];
-  const fromHistory = model.hours.length > 0;
+  // A person has to be up to post (sim, 2026-11-23: "post wed 3 am" on every line; the week plan skipped AWAKE).
+  const awake = model.hours.map((h) => h.hour).filter((h) => h >= AWAKE.from && h <= AWAKE.to);
+  const candidates = awake.length ? awake : [DEFAULT_HOUR];
+  const fromHistory = awake.length > 0;
   const nowHour = localHour(after, timeZone);
   for (const hour of candidates) if (hour > nowHour) return { at: atLocalHour(after, hour, timeZone), hour, fromHistory };
   return { at: atLocalHour(after + 86_400_000, candidates[0], timeZone), hour: candidates[0], fromHistory };
