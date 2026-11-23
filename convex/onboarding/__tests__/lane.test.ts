@@ -248,3 +248,17 @@ describe("the opening's idea lands in their app, linked (2026-11-23)", () => {
     expect(composeWeek([slot], "America/New_York", false, "next week", undefined, false)).not.toMatch(/https?:/);
   });
 });
+
+describe("the opening reads right as one message (sim, 2026-11-23)", () => {
+  it("an inline break becomes a real one; a real one is left alone", async () => {
+    const { splitMarks } = await import("../firstRead");
+    expect(splitMarks("how i see you. --- A 30-second dinner.")).toBe("how i see you.\n---\nA 30-second dinner.");
+    expect(splitMarks("a\n---\nb")).toBe("a\n---\nb");
+    expect(splitMarks("a well-made post -- not a break")).toBe("a well-made post -- not a break");
+  });
+  it("as the opening, 'ok, done going through your posts' goes: she never said she was looking", async () => {
+    const { openingWithRead } = await import("../hello");
+    const o = openingWithRead("hi, it's Maya!", "Ok, done going through your posts. People stay for the honest panic.\n---\nNext up: …").split("\n---\n");
+    expect(o[1]).toBe("People stay for the honest panic.");
+  });
+});

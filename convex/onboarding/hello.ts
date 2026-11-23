@@ -51,7 +51,15 @@ export function greetingOk(text: string, name: string | null): boolean {
  * the one practical ask, then the read without any introduction of hers. One message, in order, once.
  */
 export function openingWithRead(greeting: string, readBody: string): string {
-  const parts = readBody.split(/\n---\n/).map((p) => p.trim()).filter((p) => p && !/^(i'?m|i am) maya\b/i.test(p));
+  // A read written while they were texting opens "ok, done going through your posts" (sim, 2026-11-23); as the
+  // opening, right after the greeting, she never said she was looking, so that clause goes.
+  const parts = readBody.split(/\n---\n/).map((p) => p.trim()).filter((p) => p && !/^(i'?m|i am) maya\b/i.test(p))
+    .map((p, i) => {
+      if (i !== 0) return p;
+      const cut = p.replace(/^(ok(ay)?|alright),?\s+(i'?m\s+)?done\s+(going through|watching|looking at)\s+your posts[.!:,]?\s*/i, "");
+      return cut === p || !cut ? cut : cut[0].toUpperCase() + cut.slice(1);
+    })
+    .filter(Boolean);
   return [greetingWithSave(greeting), ...parts].join("\n---\n");
 }
 

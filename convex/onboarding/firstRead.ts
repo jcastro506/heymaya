@@ -71,6 +71,11 @@ export function parseOpeningIdea(raw: string): { hook: string; why: string; shoo
   return { hook, why: String(j.why ?? "").trim().slice(0, 140), shoot: String(j.shoot ?? "").trim().slice(0, 120) };
 }
 
+/** Pure: a text break the model wrote inline (" --- ", sim 2026-11-23) becomes a real one, or they'd see "---". */
+export function splitMarks(text: string): string {
+  return text.replace(/[ \t]*\n?[ \t]*(?<![-\w])---(?![-\w])[ \t]*\n?[ \t]*/g, "\n---\n").replace(/(\n---\n){2,}/g, "\n---\n").replace(/^\n---\n|\n---\n$/g, "");
+}
+
 /** Pure: the link line on her idea text. Her voice: lowercase, short. */
 export function withIdeaLink(text: string, url: string): string {
   const parts = text.split(/\n---\n/);
@@ -198,7 +203,7 @@ export const run = internalAction({
       apiKey: process.env.OPENROUTER_API_KEY ?? "",
     });
     if (!result.ok) return { ok: false, reason: result.reason };
-    let text: string = result.content.trim();
+    let text: string = splitMarks(result.content.trim());
     if (!text) return { ok: false, reason: "empty completion" };
 
     const d = creator.dossier as { voice?: unknown; persona?: unknown; works?: unknown } | undefined;
@@ -244,6 +249,7 @@ export const run = internalAction({
       }
     }
 
+    text = splitMarks(text); // rewrites too
     // The first post she gives them lands in their Ideas, and her text links to it: the app introduced by the
     // most useful thing in it (2026-11-23). Best effort: without a clean idea, the text goes as written.
     if (!args.dryRun && best) {
