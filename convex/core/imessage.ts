@@ -99,15 +99,30 @@ export function herLine(saved: string | undefined, lines: string[]): { line: str
 }
 
 /** The `sms:` link that opens Messages with the pairing text prefilled. iOS wants `&body=`, Android `?body=`; both read the other. Pure. */
+/** The first text the Text Maya button writes for them (operator, 2026-11-23: "START" and a 48-character id read like a machine). */
+export function pairingText(token: string): string {
+  return isPairingCode(token) ? `hey Maya! 👋 (code ${token})` : `START ${token}`;
+}
+
+/** Six characters people can read back: no 0/O, 1/I/L. */
+export const PAIRING_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+export function isPairingCode(s: string): boolean {
+  return new RegExp(`^[${PAIRING_CODE_ALPHABET}]{6}$`).test(s);
+}
+
 export function pairingSmsLink(lineNumber: string, token: string, platform: "ios" | "android" | "unknown" = "unknown"): string {
-  const body = encodeURIComponent(`START ${token}`);
+  const body = encodeURIComponent(pairingText(token));
   return platform === "android" ? `sms:${lineNumber}?body=${body}` : `sms:${lineNumber}&body=${body}`;
 }
 
-/** "START <token>" from the pairing screen, in any case, with any spacing. Pure. */
+/** Their first text's pairing code: "hey Maya! 👋 (code K7P29X)" (from 2026-11-23), or "START <token>" from older links. Pure. */
 export function parseStartText(text: string): string | null {
   const m = text.trim().match(/^start\s+([0-9a-f]{16,64})\s*$/i);
-  return m ? m[1].toLowerCase() : null;
+  if (m) return m[1].toLowerCase();
+  const short = text.trim().match(/^start\s+([a-z0-9]{6})\s*$/i);
+  if (short && isPairingCode(short[1].toUpperCase())) return short[1].toUpperCase();
+  const c = text.match(new RegExp(`\\bcode\\s*:?\\s*([${PAIRING_CODE_ALPHABET}]{6})\\b`, "i"));
+  return c && isPairingCode(c[1].toUpperCase()) ? c[1].toUpperCase() : null;
 }
 
 /* -------------------------------------------------------------------------- */

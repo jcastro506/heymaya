@@ -25,7 +25,7 @@ import { internal } from "../_generated/api";
 import { type MutationCtx } from "../_generated/server";
 import { internalMutation, mutation } from "../lib/functions";
 import type { Doc, Id } from "../_generated/dataModel";
-import { configuredLines, herLine, pairingSmsLink } from "./imessage";
+import { configuredLines, herLine, pairingSmsLink, PAIRING_CODE_ALPHABET } from "./imessage";
 import { helloParts, fallbackGreeting, openingWithRead } from "../onboarding/hello";
 import { saveContactLine } from "../onboarding/conversation";
 import { HELLO_PACE } from "../onboarding/hello";
@@ -81,6 +81,21 @@ function mintToken(): string {
     .join("");
 }
 
+/** A six-character code for the first text (core/imessage pairingText), unique among live codes. */
+async function uniqueCode(ctx: MutationCtx, now: number): Promise<string> {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const bytes = new Uint8Array(12);
+    crypto.getRandomValues(bytes);
+    // Rejection sampling keeps every character equally likely (31 doesn't divide 256).
+    const code = Array.from(bytes).filter((b) => b < 248).slice(0, 6).map((b) => PAIRING_CODE_ALPHABET[b % PAIRING_CODE_ALPHABET.length]).join("");
+    if (code.length < 6) continue;
+    const taken = (await ctx.db.query("creators").withIndex("by_pairing_token", (q) => q.eq("pairingToken", code)).first()) as Doc<"creators"> | null;
+    void now;
+    if (!taken) return code; // never reused, live or expired: a lookup by code must find one account
+  }
+  return mintToken(); // eight collisions in a row: the long token still pairs (START <token>)
+}
+
 export interface PairingLink {
   ok: boolean;
   deepLink?: string;
@@ -128,7 +143,7 @@ export async function mintPairing(ctx: MutationCtx, creator: Doc<"creators">): P
     if (!lineNumber) return { ok: false, error: "the phone channel isn't configured on this deployment" };
     if (stale) await ctx.db.patch(creator._id, { channel: { ...creator.channel, line: lineNumber }, updatedAt: now0 });
     const live = creator.pairingToken && creator.pairingExpiresAt && creator.pairingExpiresAt > now0;
-    const token = live ? creator.pairingToken! : mintToken();
+    const token = live ? creator.pairingToken! : await uniqueCode(ctx, now0);
     const expiresAt = live ? creator.pairingExpiresAt! : now0 + PAIRING_TTL_MS;
     if (!live) await ctx.db.patch(creator._id, { pairingToken: token, pairingExpiresAt: expiresAt, updatedAt: now0 });
     return { ok: true, token, deepLink: pairingSmsLink(lineNumber, token), botUsername: "", expiresAt, kind: "imessage", lineNumber };

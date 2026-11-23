@@ -308,7 +308,7 @@ export default async function Landing() {
           <ol className="steps">
             <li><b>Get the app</b><span>Sign in with a tap.</span></li>
             <li><b>Tell her where you post</b><span>{c.whereYouPost}</span></li>
-            <li><b>Text her START</b><span>Her first text arrives within minutes.</span></li>
+            <li><b>Say hey</b><span>Her first text arrives within minutes.</span></li>
           </ol>
         </section>
         <section className="trust wrap" aria-label="What she promises">

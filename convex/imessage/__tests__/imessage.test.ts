@@ -11,7 +11,7 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { menuLine, menuPick, pairingSmsLink, parseStartText, reactionEmoji } from "../../core/imessage";
+import { menuLine, menuPick, pairingSmsLink, pairingText, parseStartText, reactionEmoji } from "../../core/imessage";
 import { normalizePhone, parseClawEvent, parseSendResult, sendBody, signPayload, verifySignature } from "../../integrations/claw/client";
 
 const NOW = Date.now();
@@ -69,6 +69,13 @@ describe("her number: the pure parts", () => {
     expect(parseStartText("hey")).toBeNull();
     expect(pairingSmsLink("+15550001111", "tok", "ios")).toBe("sms:+15550001111&body=START%20tok");
     expect(pairingSmsLink("+15550001111", "tok", "android")).toBe("sms:+15550001111?body=START%20tok");
+    // 2026-11-23: the first text reads like a person's, with a short code people can read back.
+    expect(pairingText("K7P29X")).toBe("hey Maya! 👋 (code K7P29X)");
+    expect(parseStartText("hey Maya! 👋 (code K7P29X)")).toBe("K7P29X");
+    expect(parseStartText("Hey maya!! code: k7p29x")).toBe("K7P29X");
+    expect(parseStartText("start k7p29x")).toBe("K7P29X");
+    expect(parseStartText("my code is great")).toBeNull();
+    expect(parseStartText("code O0I1LL"), "no lookalike characters in a code").toBeNull();
   });
 
   it("the vendor's events are read defensively: a shape we do not know is ignored, never a throw", () => {
@@ -133,9 +140,9 @@ describe("her number: rows and doors, on the fake vendor", () => {
     const creator = await t.run((ctx) => ctx.db.get(creatorId));
     const minted = await t.run(async (ctx) => { const { mintPairing } = await import("../../core/pairing"); return await mintPairing(ctx, creator!); });
     expect(minted.ok && minted.kind).toBe("imessage");
-    expect(minted.ok && minted.deepLink).toMatch(/^sms:\+15550009999&body=START%20/);
+    expect(minted.ok && minted.deepLink).toMatch(/^sms:\+15550009999&body=hey%20Maya!%20%F0%9F%91%8B%20\(code%20[A-Z2-9]{6}\)$/);
     const token = minted.ok ? minted.token : "";
-    const r = await t.action(internal.core.imessage.handleText, { from: "(555) 123-4567", text: `START ${token}`, channelMessageId: "v1" });
+    const r = await t.action(internal.core.imessage.handleText, { from: "(555) 123-4567", text: pairingText(token), channelMessageId: "v1" });
     expect(r).toMatchObject({ ok: true, reason: "paired" });
     const after = await t.run((ctx) => ctx.db.get(creatorId));
     expect(after?.channel).toMatchObject({ paired: true, kind: "imessage" });
