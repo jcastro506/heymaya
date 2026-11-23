@@ -122,8 +122,8 @@ describe("at fleet scale", () => {
 
 describe("sibling coherence", () => {
   it("no fleet job reads the whole creators table", () => {
-    // The two left are operator-only, on demand, never on a cron: /ops metrics and a dev helper.
-    const allowed = new Set(["ops.ts", "onboarding/suggest.ts"]);
+    // The three left are operator-only, on demand, never on a cron: /ops metrics and two dev helpers.
+    const allowed = new Set(["ops.ts", "onboarding/suggest.ts", "eval/stale.ts"]);
     const offenders = sources().filter((p) => /query\("creators"\)\s*\.(collect|take)\(/.test(readFileSync(p, "utf8"))).map((p) => relative(CONVEX, p)).filter((p) => !allowed.has(p));
     expect(offenders).toEqual([]);
   });

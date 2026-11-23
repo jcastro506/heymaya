@@ -167,6 +167,7 @@ import type * as eval_scenarios from "../eval/scenarios.js";
 import type * as eval_season from "../eval/season.js";
 import type * as eval_sendPage from "../eval/sendPage.js";
 import type * as eval_silenceSim from "../eval/silenceSim.js";
+import type * as eval_stale from "../eval/stale.js";
 import type * as eval_suggestQuality from "../eval/suggestQuality.js";
 import type * as http from "../http.js";
 import type * as imessage_linqEvents from "../imessage/linqEvents.js";
@@ -438,6 +439,7 @@ declare const fullApi: ApiFromModules<{
   "eval/season": typeof eval_season;
   "eval/sendPage": typeof eval_sendPage;
   "eval/silenceSim": typeof eval_silenceSim;
+  "eval/stale": typeof eval_stale;
   "eval/suggestQuality": typeof eval_suggestQuality;
   http: typeof http;
   "imessage/linqEvents": typeof imessage_linqEvents;
