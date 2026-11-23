@@ -218,12 +218,13 @@ export const accountOwnersPage = internalQuery({
 });
 
 /** Every page into one map, built once per delta run instead of one table scan per row. */
-async function accountOwners(ctx: Pick<ActionCtx, "runQuery">): Promise<Map<string, Id<"creators">>> {
-  const map = new Map<string, Id<"creators">>();
+async function accountOwners(ctx: Pick<ActionCtx, "runQuery">): Promise<Map<string, Id<"creators">[]>> {
+  // An account can have more than one owner: a connected sim borrows a real creator's (eval/firstWeek connectedFrom).
+  const map = new Map<string, Id<"creators">[]>();
   let cursor: string | null = null;
   for (let pages = 0; pages < 500; pages++) {
     const r: { owners: Array<{ accountId: string; creatorId: Id<"creators"> }>; isDone: boolean; continueCursor: string } = await ctx.runQuery(internal.connections.sync.accountOwnersPage, { cursor });
-    for (const o of r.owners) map.set(o.accountId, o.creatorId);
+    for (const o of r.owners) map.set(o.accountId, [...(map.get(o.accountId) ?? []), o.creatorId]);
     if (r.isDone) break;
     cursor = r.continueCursor;
   }
@@ -247,7 +248,7 @@ export const delta = internalAction({
     let cur = await ctx.runQuery(internal.connections.sync.cursor, { key: "zernio:analytics:delta" });
     let pages = 0, rows = 0, written = 0, skipped = 0;
     const touched = new Set<Id<"creators">>();
-    let owners: Map<string, Id<"creators">> | null = null;
+    let owners: Map<string, Id<"creators">[]> | null = null;
     try {
       for (;;) {
         let res: { data?: Array<Record<string, unknown>>; nextCursor?: string; hasMore?: boolean };
@@ -270,10 +271,12 @@ export const delta = internalAction({
           const conn = normalizeConnected(row);
           const accountId = String((row.platforms?.[0]?.accountId ?? (item as { accountId?: string }).accountId) ?? "");
           owners ??= await accountOwners(ctx);
-          const creatorId = accountId ? owners.get(accountId) ?? null : null;
-          if (!conn || !creatorId) { skipped++; continue; }
-          await ctx.runMutation(internal.connections.sync.upsert, { creatorId, connected: conn, caption: row.content ?? "" });
-          touched.add(creatorId);
+          const ids = accountId ? owners.get(accountId) ?? [] : [];
+          if (!conn || !ids.length) { skipped++; continue; }
+          for (const creatorId of ids) {
+            await ctx.runMutation(internal.connections.sync.upsert, { creatorId, connected: conn, caption: row.content ?? "" });
+            touched.add(creatorId);
+          }
           written++;
         }
         if (res.nextCursor) { cur = res.nextCursor; await ctx.runMutation(internal.connections.sync.setCursor, { key: "zernio:analytics:delta", value: res.nextCursor }); }

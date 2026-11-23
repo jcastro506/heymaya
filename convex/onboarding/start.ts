@@ -81,7 +81,7 @@ export const start = mutation({
  * Screen 1, as one function the web form and the simulated run both call, so a rehearsal
  * drives the same rows and the same job the browser would.
  */
-export async function startCreator(ctx: MutationCtx, args: { subject: string; email: string; handles: { tiktok?: string; instagram?: string }; timezone?: string; /** First-week simulation only: a smaller catalogue read (see onboarding/ingest.ts run). */ ingestCaps?: { watchCap?: number; transcriptCap?: number } }): Promise<{ ok: boolean; creatorId?: string; error?: string }> {
+export async function startCreator(ctx: MutationCtx, args: { subject: string; email: string; handles: { tiktok?: string; instagram?: string }; timezone?: string; /** First-week simulation only: a smaller catalogue read (see onboarding/ingest.ts run). */ ingestCaps?: { watchCap?: number; transcriptCap?: number }; /** Simulation only: the one creator whose handle (and connection) this sim borrows. */ sharesHandleWith?: string }): Promise<{ ok: boolean; creatorId?: string; error?: string }> {
   {
     const identity = { subject: args.subject, email: args.email };
     // TikTok only: an Instagram handle an older app build sends is ignored.
@@ -94,7 +94,9 @@ export async function startCreator(ctx: MutationCtx, args: { subject: string; em
       .query("creators")
       .withIndex("by_tiktok", (q) => q.eq("handles.tiktok", tiktok))
       .first()) as Doc<"creators"> | null;
-    if (taken && taken.clerkUserId !== identity.subject) return { ok: false, error: `@${tiktok} is already set up with another account` };
+    // A connected sim borrows one named creator's account (eval/firstWeek connectedFrom); nobody else ever may.
+    const borrowed = Boolean(taken && args.sharesHandleWith && taken._id === args.sharesHandleWith && args.subject.startsWith("eval-run:"));
+    if (taken && taken.clerkUserId !== identity.subject && !borrowed) return { ok: false, error: `@${tiktok} is already set up with another account` };
 
     const existing = (await ctx.db
       .query("creators")
