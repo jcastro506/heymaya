@@ -83,8 +83,6 @@ export function numbersFor(p: Doc<"ownPosts">, siblings: Doc<"ownPosts">[], now:
     derived = derive(c, normals);
     if (c.reach !== null) lines.push(`reached ${c.reach.toLocaleString()} people (connected, read ${asOfHours}h ago)`);
     if (c.impressions !== null && c.reach) lines.push(`${c.impressions.toLocaleString()} impressions, so about ${derived.distribution ?? "?"} views per person (connected)`);
-    if (derived.retention !== null) lines.push(`watched ${Math.round(derived.retention * 100)}% of it on average (connected, Instagram Reels)`);
-    if (c.skipRatePct !== null) lines.push(`${Math.round(c.skipRatePct)}% left in the first 3 seconds (connected; Meta calls this an estimate)`);
     if (c.follows !== null && c.follows > 0) lines.push(`${c.follows} people followed from it (connected)`);
     // A1: TikTok's own reads (TikTok for Business connection, filled 24-48h after posting).
     if (c.completionRate !== null) lines.push(`${Math.round(c.completionRate * 100)}% watched to the end (connected, TikTok)`);
@@ -114,7 +112,6 @@ export function numbersFor(p: Doc<"ownPosts">, siblings: Doc<"ownPosts">[], now:
     cannotKnow.push("the skip rate and a second-by-second retention curve: TikTok doesn't give these");
     if (c && fresh && !c.viewerCountries) cannotKnow.push("where its viewers are: TikTok didn't report countries for this post");
   }
-  if (p.platform === "instagram" && (!c || c.durationSec === null)) cannotKnow.push("retention: it is only reported on Reels with a known duration");
   if (!c) cannotKnow.push("reach and impressions: no account connected, so only the public count");
 
   return { url: p.url, platform: p.platform, ageHours, headline, multiple, lines, cannotKnow, derived, shape: shapeOf(p, now), shapeLine: shapeLine(p, now) };
@@ -138,7 +135,7 @@ export const forUrl = internalQuery({
   handler: async (ctx, a): Promise<PostNumbers | null> => {
     const rows = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(120)) as Doc<"ownPosts">[];
     const norm = (u: string) => u.replace(/\?.*$/, "").replace(/\/$/, "").toLowerCase();
-    const id = a.url.match(/\/video\/(\d+)/)?.[1] ?? a.url.match(/instagram\.com\/(?:p|reel|reels)\/([A-Za-z0-9_-]+)/)?.[1] ?? null;
+    const id = a.url.match(/\/video\/(\d+)/)?.[1] ?? null;
     const p = rows.find((r) => norm(r.url) === norm(a.url)) ?? (id ? rows.find((r) => r.postId === id || r.url.includes(`/${id}`)) : undefined) ?? null;
     return p ? numbersFor(p, rows, a.now ?? Date.now()) : null;
   },

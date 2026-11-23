@@ -11,8 +11,9 @@ import { seedCreator } from "../../../tests/lib/creatorRow";
 import { enabledPlatforms, instagramOn, platformOn } from "../platforms";
 import { accountsWithinPlan, entitlementsFor, offeredTiers, planLineFor, tierCopy } from "../../billing/tiers";
 import { isInstagramRead } from "../../reads/read";
+import { KINDS } from "../../reads/kinds";
 import { addTracked } from "../../agent/manage";
-import { INSTAGRAM_TOOLS, platformBelt, TOOLS } from "../../agent/tools";
+import { INSTAGRAM_TOOLS, TOOLS } from "../../agent/tools";
 import { shareTarget } from "../../share";
 import { factsFor } from "../../knowledge/platforms";
 import { PLATFORM_SCOPE } from "../../agent/context";
@@ -43,12 +44,12 @@ describe("the switch (pure)", () => {
     expect(accountsWithinPlan(accts, 5).map((a) => a.id), "never read, whatever the cap").toEqual(["tt"]);
   });
   it("no Instagram read, tool, link or fact gets through", () => {
-    expect(isInstagramRead("search.reels", {})).toBe(true);
+    expect(Object.keys(KINDS).filter((k) => /reels|instagram|^ig\.|highlights|discover\.profiles/.test(k)), "no Instagram read kind exists").toEqual([]);
     expect(isInstagramRead("profile", { platform: "instagram" })).toBe(true);
     expect(isInstagramRead("post.info", { url: "https://www.instagram.com/p/abc/" })).toBe(true);
     expect(isInstagramRead("profile", { platform: "tiktok" })).toBe(false);
     expect(isInstagramRead("ads.meta", { query: "running" }), "the Meta ad library is about brands, not their Instagram").toBe(false);
-    const belt = platformBelt(TOOLS);
+    const belt = TOOLS;
     expect(belt.some((t) => INSTAGRAM_TOOLS.has(t.function.name))).toBe(false);
     for (const t of belt) expect(JSON.stringify((t.function.parameters as { properties?: { platform?: unknown } }).properties?.platform ?? {})).not.toContain("instagram");
     expect(shareTarget("https://www.instagram.com/reel/abc123/")).toMatchObject({ ok: false, reason: expect.stringMatching(/only TikTok/) });

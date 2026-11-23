@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { instagramSearchProfiles, profilesOf, profilesResult, tiktokFollowingProfiles, tiktokPopularProfiles } from "../profiles";
+import { profilesOf, profilesResult, tiktokFollowingProfiles, tiktokPopularProfiles } from "../profiles";
 import { slimForCache } from "../read";
 
 const SPEC = JSON.parse(readFileSync(new URL("../../integrations/scrapeCreators/fixtures.spec.json", import.meta.url), "utf8")) as Record<string, unknown>;
@@ -17,19 +17,15 @@ describe("discovered profiles", () => {
     expect(p[0].avatarUrl).toMatch(/^https:/);
   });
 
-  it("TikTok following and Instagram search read their own field names", () => {
+  it("TikTok following reads its own field names", () => {
     const f = tiktokFollowingProfiles(SPEC["/v1/tiktok/user/following"]);
     expect(f[0]).toMatchObject({ platform: "tiktok", handle: "barstoolbeachhouse", followerCount: 2175 });
-    const i = instagramSearchProfiles(SPEC["/v1/instagram/search/profiles"]);
-    expect(i[0]).toMatchObject({ platform: "instagram", handle: "charliejohnsonfitness" });
-    expect(typeof i[0].isPrivate).toBe("boolean");
   });
 
   it("adversarial: junk, missing arrays and handle-less rows give nothing, never a throw", () => {
     for (const bad of [null, undefined, "x", 42, {}, { creators: "no" }, { creators: [null, { tt_link: "https://tiktok.com/nobody" }] }]) {
       expect(tiktokPopularProfiles(bad)).toEqual([]);
     }
-    expect(instagramSearchProfiles({ profiles: [{ username: "" }, { username: "@Real.One" }] }).map((p) => p.handle)).toEqual(["real.one"]);
   });
 
   it("the stored value keeps its profiles and what the vendor charged, and the cache no longer strips them", () => {
@@ -41,10 +37,10 @@ describe("discovered profiles", () => {
     expect(profilesOf({ source: "x", query: {} }), "a row cached before §27 reads as missing, so it is re-read").toBeNull();
   });
 
-  it("sibling coherence: the three kinds normalize, and the belt formatter reads the same field", () => {
+  it("sibling coherence: the discovery kinds normalize, and the belt formatter reads the same field", () => {
     const kinds = readFileSync(new URL("../kinds.ts", import.meta.url), "utf8");
-    expect(kinds.match(/profilesResult\(/g)?.length, "each discovery kind stores normalized profiles").toBeGreaterThanOrEqual(3);
-    for (const fn of ["tiktokFollowingProfiles", "tiktokPopularProfiles", "instagramSearchProfiles"]) expect(kinds.split(fn).length - 1, `${fn} imported and used`).toBeGreaterThanOrEqual(2);
+    expect(kinds.match(/profilesResult\(/g)?.length, "each discovery kind stores normalized profiles").toBeGreaterThanOrEqual(2);
+    for (const fn of ["tiktokFollowingProfiles", "tiktokPopularProfiles"]) expect(kinds.split(fn).length - 1, `${fn} imported and used`).toBeGreaterThanOrEqual(2);
     expect(readFileSync(new URL("../../agent/tools.ts", import.meta.url), "utf8")).toMatch(/\?\.profiles \?\?/);
   });
 });

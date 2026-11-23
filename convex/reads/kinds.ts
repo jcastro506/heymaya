@@ -5,9 +5,7 @@
  */
 
 import { tiktok, extractClipId, soundFacts, postSound } from "../integrations/scrapeCreators/platforms/tiktok";
-import { instagramReelsPosts } from "./reels";
-import { instagramSearchProfiles, profilesResult, tiktokFollowingProfiles, tiktokPopularProfiles } from "./profiles";
-import { instagram } from "../integrations/scrapeCreators/platforms/instagram";
+import { profilesResult, tiktokFollowingProfiles, tiktokPopularProfiles } from "./profiles";
 import { cross } from "../integrations/scrapeCreators/platforms/cross";
 import { commerce } from "../integrations/scrapeCreators/platforms/commerce";
 import type { EndpointDeps } from "../integrations/scrapeCreators/deps";
@@ -16,7 +14,13 @@ import { normalizeHandle } from "./key";
 const H = 60 * 60 * 1000;
 const D = 24 * H;
 
+/** Rows still carry "instagram" (schema); a read only ever runs for TikTok. */
 export type Platform = "tiktok" | "instagram";
+
+/** TikTok only: anything else never reaches the vendor. */
+function tiktokOnly(platform: Platform): void {
+  if (platform !== "tiktok") throw new Error(`TikTok only: ${platform}`);
+}
 
 export interface KindSpec<P extends Record<string, unknown> = Record<string, unknown>> {
   ttlMs: number;
@@ -47,13 +51,6 @@ export const KINDS = {
     normalize: (p) => ({ region: p.region.toUpperCase() }),
     call: (p, deps) => tiktok.trendingFeed(p.region, { ...deps, trim: true }),
   }),
-  "trending.reels": spec<{ batch: number }>({
-    ttlMs: 6 * H,
-    shared: true,
-    path: "/v1/instagram/reels/trending",
-    normalize: (p) => ({ batch: p.batch }), // batch index lets the sweep pull several overlapping batches a day
-    call: (_p, deps) => instagram.reelsTrending(deps),
-  }),
 
   // ---- lane searches, shared by keyword
   "search.keyword": spec<{ keyword: string; window: "yesterday" | "this-week" | "this-month"; sort: "most-liked" | "date-posted" | "relevance"; region?: string }>({
@@ -78,45 +75,12 @@ export const KINDS = {
     normalize: (p) => ({ keyword: p.keyword.trim().toLowerCase(), window: p.window, sort: p.sort, region: (p.region ?? "US").toUpperCase() }),
     call: (p, deps) => tiktok.searchTop(p.keyword, { ...deps, datePosted: p.window, sortBy: p.sort, region: p.region }),
   }),
-  "search.reels": spec<{ keyword: string; window: "last-week" | "last-month"; page?: number }>({
-    ttlMs: 24 * H,
-    shared: true,
-    path: "/v2/instagram/reels/search",
-    normalize: (p) => ({ keyword: p.keyword.trim().toLowerCase(), window: p.window, page: p.page ?? 1 }),
-    // §27.3: normalized posts with authors; the raw payload never survived the cache.
-    call: async (p, deps) => {
-      const r = await instagram.reelsSearch(p.keyword, { ...deps, datePosted: p.window, page: p.page });
-      const charged = (r.raw as { credits_charged?: unknown } | null)?.credits_charged;
-      return { source: r.source, posts: instagramReelsPosts(r.raw), ...(typeof charged === "number" ? { credits_charged: charged } : {}) };
-    },
-  }),
-  "search.hashtagPosts": spec<{ hashtag: string; window: "last-week" | "last-month" }>({
-    ttlMs: 24 * H,
-    shared: true,
-    path: "/v1/instagram/search/hashtag",
-    normalize: (p) => ({ hashtag: p.hashtag.replace(/^#/, "").toLowerCase(), window: p.window }),
-    call: (p, deps) => instagram.searchHashtag(p.hashtag, { ...deps, datePosted: p.window, mediaType: "reels" }),
-  }),
-  "ig.popular": spec<{ topic: string }>({
-    ttlMs: 24 * H,
-    shared: true,
-    path: "/v1/instagram/search/popular",
-    normalize: (p) => ({ topic: p.topic.trim().toLowerCase() }),
-    call: (p, deps) => instagram.searchPopular(p.topic, deps),
-  }),
   "suggestions.tiktok": spec<{ keyword: string; region?: string }>({
     ttlMs: 24 * H,
     shared: true,
     path: "/v1/tiktok/search/suggestions",
     normalize: (p) => ({ keyword: p.keyword.trim().toLowerCase(), region: (p.region ?? "US").toUpperCase() }),
     call: (p, deps) => tiktok.searchSuggestions(p.keyword, { ...deps, region: p.region }),
-  }),
-  "suggestions.instagram": spec<{ keyword: string }>({
-    ttlMs: 24 * H,
-    shared: true,
-    path: "/v1/instagram/search",
-    normalize: (p) => ({ keyword: p.keyword.trim().toLowerCase() }),
-    call: (p, deps) => instagram.search(p.keyword, deps),
   }),
   "reddit.search": spec<{ keyword: string }>({
     ttlMs: 7 * D,
@@ -155,7 +119,7 @@ export const KINDS = {
     shared: true,
     path: "/v1/tiktok/profile",
     normalize: (p) => ({ platform: p.platform, handle: normalizeHandle(p.handle) }),
-    call: (p, deps) => (p.platform === "tiktok" ? tiktok.profile(p.handle, deps) : instagram.profile(p.handle, deps)),
+    call: (p, deps) => { tiktokOnly(p.platform); return tiktok.profile(p.handle, deps); },
   }),
   "profile.region": spec<{ handle: string }>({
     ttlMs: 30 * D,
@@ -171,11 +135,9 @@ export const KINDS = {
     path: "/v3/tiktok/profile/videos",
     normalize: (p) => ({ platform: p.platform, handle: normalizeHandle(p.handle), sort: p.sort, cursor: p.cursor, slot: p.slot }),
     call: async (p, deps) => {
-      if (p.platform === "tiktok") {
-        const posts = await tiktok.lastPosts(p.handle, 0, deps); // page one; cursor paging arrives with the sampler
-        return posts.map((post) => ({ ...post, clipId: extractClipId(post.raw) }));
-      }
-      return instagram.lastPosts(p.handle, 50, deps); // normalized; reels + posts + carousels
+      tiktokOnly(p.platform);
+      const posts = await tiktok.lastPosts(p.handle, 0, deps); // page one; cursor paging arrives with the sampler
+      return posts.map((post) => ({ ...post, clipId: extractClipId(post.raw) }));
     },
   }),
   "account.following": spec<{ handle: string }>({
@@ -191,13 +153,6 @@ export const KINDS = {
       return { ...out, users: r.users, count: r.count, total: r.total };
     },
   }),
-  "account.highlights": spec<{ handle: string }>({
-    ttlMs: 30 * D,
-    shared: false,
-    path: "/v1/instagram/user/highlights",
-    normalize: (p) => ({ handle: normalizeHandle(p.handle) }),
-    call: (p, deps) => instagram.highlights(p.handle, deps),
-  }),
   "account.collection": spec<{ url: string }>({
     ttlMs: 30 * D,
     shared: false,
@@ -211,13 +166,6 @@ export const KINDS = {
     path: "/v1/tiktok/creators/popular",
     normalize: (p) => ({ band: p.band, country: p.country.toUpperCase(), page: p.page ?? 1 }),
     call: async (p, deps) => profilesResult(await tiktok.popularCreators({ ...deps, followerCount: p.band, creatorCountry: p.country, audienceCountry: p.country, sortBy: "engagement", page: p.page }), tiktokPopularProfiles),
-  }),
-  "discover.profiles": spec<{ keyword: string }>({
-    ttlMs: 7 * D,
-    shared: true,
-    path: "/v1/instagram/search/profiles",
-    normalize: (p) => ({ keyword: p.keyword.trim().toLowerCase() }),
-    call: async (p, deps) => profilesResult(await instagram.searchProfiles(p.keyword, deps), instagramSearchProfiles),
   }),
   "social.profiles": spec<{ platform: Platform; handle: string }>({
     ttlMs: 30 * D,
@@ -234,12 +182,10 @@ export const KINDS = {
     path: "/v2/tiktok/video",
     normalize: (p) => ({ platform: p.platform, url: p.url.trim() }),
     call: (p, deps) => {
-      if (p.platform === "tiktok") {
-        const m = p.url.match(/@([^/]+)\/video\/(\d+)/);
-        if (!m) throw new Error(`not a TikTok video url: ${p.url}`);
-        return tiktok.post(m[1], m[2], deps);
-      }
-      return instagram.post(p.url, deps);
+      tiktokOnly(p.platform);
+      const m = p.url.match(/@([^/]+)\/video\/(\d+)/);
+      if (!m) throw new Error(`not a TikTok video url: ${p.url}`);
+      return tiktok.post(m[1], m[2], deps);
     },
   }),
   "post.transcript": spec<{ platform: Platform; url: string }>({
@@ -248,12 +194,10 @@ export const KINDS = {
     path: "/v1/tiktok/video/transcript",
     normalize: (p) => ({ platform: p.platform, url: p.url.trim() }),
     call: (p, deps) => {
-      if (p.platform === "tiktok") {
-        const m = p.url.match(/@([^/]+)\/video\/(\d+)/);
-        if (!m) throw new Error(`not a TikTok video url: ${p.url}`);
-        return tiktok.transcript(m[1], m[2], deps);
-      }
-      return instagram.mediaTranscript(p.url, deps);
+      tiktokOnly(p.platform);
+      const m = p.url.match(/@([^/]+)\/video\/(\d+)/);
+      if (!m) throw new Error(`not a TikTok video url: ${p.url}`);
+      return tiktok.transcript(m[1], m[2], deps);
     },
   }),
   "post.comments": spec<{ platform: Platform; url: string }>({
@@ -262,12 +206,10 @@ export const KINDS = {
     path: "/v1/tiktok/video/comments",
     normalize: (p) => ({ platform: p.platform, url: p.url.trim() }),
     call: (p, deps) => {
-      if (p.platform === "tiktok") {
-        const m = p.url.match(/@([^/]+)\/video\/(\d+)/);
-        if (!m) throw new Error(`not a TikTok video url: ${p.url}`);
-        return tiktok.comments(m[1], m[2], deps);
-      }
-      return instagram.postComments(p.url, deps);
+      tiktokOnly(p.platform);
+      const m = p.url.match(/@([^/]+)\/video\/(\d+)/);
+      if (!m) throw new Error(`not a TikTok video url: ${p.url}`);
+      return tiktok.comments(m[1], m[2], deps);
     },
   }),
 
@@ -290,13 +232,6 @@ export const KINDS = {
     normalize: (p) => ({ clipId: String(p.clipId) }),
     call: async (p, deps) => withSounds(await tiktok.songVideos(p.clipId, deps)),
   }),
-  "sound.reels": spec<{ audioId: string }>({
-    ttlMs: 24 * H,
-    shared: true,
-    path: "/v1/instagram/audio/reels",
-    normalize: (p) => ({ audioId: String(p.audioId) }),
-    call: (p, deps) => instagram.audioReels(p.audioId, deps),
-  }),
 
   // ---- account, 0 credits
   "vendor.credits": spec<Record<string, never>>({
@@ -311,21 +246,7 @@ export const KINDS = {
 export type ReadKind = keyof typeof KINDS;
 export type ParamsOf<K extends ReadKind> = (typeof KINDS)[K] extends KindSpec<infer P> ? P : never;
 
-/** Per-platform vendor path when a kind spans both platforms (for the credit table). */
-export function pathFor(kind: ReadKind, params: Record<string, unknown>): string {
-  const platform = params.platform as Platform | undefined;
-  switch (kind) {
-    case "profile":
-      return platform === "instagram" ? "/v1/instagram/profile" : "/v1/tiktok/profile";
-    case "account.posts":
-      return platform === "instagram" ? "/v2/instagram/user/posts" : "/v3/tiktok/profile/videos";
-    case "post.info":
-      return platform === "instagram" ? "/v1/instagram/post" : "/v2/tiktok/video";
-    case "post.transcript":
-      return platform === "instagram" ? "/v2/instagram/media/transcript" : "/v1/tiktok/video/transcript";
-    case "post.comments":
-      return platform === "instagram" ? "/v2/instagram/post/comments" : "/v1/tiktok/video/comments";
-    default:
-      return KINDS[kind].path;
-  }
+/** Vendor path for the credit table. */
+export function pathFor(kind: ReadKind, _params: Record<string, unknown>): string {
+  return KINDS[kind].path;
 }

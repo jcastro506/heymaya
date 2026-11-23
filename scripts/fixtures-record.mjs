@@ -26,11 +26,6 @@ const SAMPLES = [
   ["/v1/tiktok/search/top", { query: "marathon training", date_posted: "this-week" }],
   ["/v1/tiktok/search/suggestions", { query: "marathon" }],
   ["/v1/tiktok/get-trending-feed", { region: "US", trim: true }],
-  ["/v1/instagram/profile", { handle: "nike" }],
-  ["/v2/instagram/user/posts", { handle: "nike" }],
-  ["/v2/instagram/reels/search", { query: "marathon training" }],
-  ["/v1/instagram/search/popular", { query: "marathon training" }],
-  ["/v1/instagram/reels/trending", {}],
   ["/v1/credit-balance", {}],
 ];
 

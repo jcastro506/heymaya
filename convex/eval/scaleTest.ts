@@ -2,10 +2,10 @@
  * The 1,000-creator test, on real vendors and real models (operator, 2026-09-24): "can we test Maya
  * being used by 1000 plus users, all asking her to watch things, and making ScrapeCreators calls".
  *
- * Stages, each measured before the next: seed N load creators across 24 zones and 20 lanes (TikTok,
- * Instagram and both) → each texts Maya 2 "watch @x" requests through the SAME path a phone takes
+ * Stages, each measured before the next: seed N load creators across 24 zones and 20 lanes (TikTok
+ * only) → each texts Maya 2 "watch @x" requests through the SAME path a phone takes
  * (inbound row → converse job → queue → classifier → addTracked) → the fleet sampler reads every
- * distinct watched account (TikTok AND Instagram) → the scout runs for everyone due.
+ * distinct watched account → the scout runs for everyone due.
  * What it proves: the queue drains without starving anyone or breaking "one turn at a time per
  * creator"; vendor spend scales with DISTINCT accounts (the shared cache), not with users; nothing
  * fails silently; what it costs.
@@ -24,31 +24,31 @@ const POOL_KEY = "scale:pool";
 const RUN_KEY = (runId: string) => `scale:${runId}`;
 export const CREDIT_CEILING = 2500;
 
-const LANES: Array<{ niche: string; keywords: string[]; platforms: Array<"tiktok" | "instagram"> }> = [
-  { niche: "running", keywords: ["running", "marathon training"], platforms: ["tiktok", "instagram"] },
-  { niche: "meal prep", keywords: ["meal prep", "high protein"], platforms: ["tiktok", "instagram"] },
-  { niche: "solo travel", keywords: ["solo travel", "travel vlog"], platforms: ["instagram"] },
-  { niche: "personal finance", keywords: ["personal finance", "budgeting"], platforms: ["tiktok"] },
-  { niche: "home workouts", keywords: ["home workout", "fitness over 40"], platforms: ["instagram"] },
-  { niche: "skincare", keywords: ["skincare routine", "skincare"], platforms: ["tiktok", "instagram"] },
-  { niche: "cooking", keywords: ["easy dinner", "recipes"], platforms: ["tiktok"] },
-  { niche: "plants", keywords: ["houseplants", "plant care"], platforms: ["instagram"] },
-  { niche: "books", keywords: ["booktok", "book recommendations"], platforms: ["tiktok"] },
-  { niche: "coffee", keywords: ["coffee", "latte art"], platforms: ["tiktok", "instagram"] },
-  { niche: "photography", keywords: ["photography tips", "street photography"], platforms: ["instagram"] },
-  { niche: "dogs", keywords: ["dog training", "dogs"], platforms: ["tiktok", "instagram"] },
-  { niche: "tech", keywords: ["tech tips", "iphone tips"], platforms: ["tiktok"] },
-  { niche: "fashion", keywords: ["outfit ideas", "thrifting"], platforms: ["tiktok", "instagram"] },
-  { niche: "gardening", keywords: ["gardening", "vegetable garden"], platforms: ["instagram"] },
-  { niche: "gaming", keywords: ["gaming", "nintendo"], platforms: ["tiktok"] },
-  { niche: "yoga", keywords: ["yoga", "mobility"], platforms: ["instagram"] },
-  { niche: "baking", keywords: ["baking", "sourdough"], platforms: ["tiktok", "instagram"] },
-  { niche: "parenting", keywords: ["mom life", "parenting tips"], platforms: ["tiktok", "instagram"] },
-  { niche: "cars", keywords: ["car detailing", "cars"], platforms: ["tiktok"] },
+const LANES: Array<{ niche: string; keywords: string[] }> = [
+  { niche: "running", keywords: ["running", "marathon training"] },
+  { niche: "meal prep", keywords: ["meal prep", "high protein"] },
+  { niche: "solo travel", keywords: ["solo travel", "travel vlog"] },
+  { niche: "personal finance", keywords: ["personal finance", "budgeting"] },
+  { niche: "home workouts", keywords: ["home workout", "fitness over 40"] },
+  { niche: "skincare", keywords: ["skincare routine", "skincare"] },
+  { niche: "cooking", keywords: ["easy dinner", "recipes"] },
+  { niche: "plants", keywords: ["houseplants", "plant care"] },
+  { niche: "books", keywords: ["booktok", "book recommendations"] },
+  { niche: "coffee", keywords: ["coffee", "latte art"] },
+  { niche: "photography", keywords: ["photography tips", "street photography"] },
+  { niche: "dogs", keywords: ["dog training", "dogs"] },
+  { niche: "tech", keywords: ["tech tips", "iphone tips"] },
+  { niche: "fashion", keywords: ["outfit ideas", "thrifting"] },
+  { niche: "gardening", keywords: ["gardening", "vegetable garden"] },
+  { niche: "gaming", keywords: ["gaming", "nintendo"] },
+  { niche: "yoga", keywords: ["yoga", "mobility"] },
+  { niche: "baking", keywords: ["baking", "sourdough"] },
+  { niche: "parenting", keywords: ["mom life", "parenting tips"] },
+  { niche: "cars", keywords: ["car detailing", "cars"] },
 ];
 const ZONES = ["America/Los_Angeles", "America/Denver", "America/Chicago", "America/New_York", "America/Sao_Paulo", "Europe/London", "Europe/Paris", "Europe/Athens", "Asia/Dubai", "Asia/Kolkata", "Asia/Bangkok", "Asia/Tokyo", "Australia/Brisbane", "Australia/Sydney", "Pacific/Auckland", "Pacific/Honolulu", "America/Anchorage", "Atlantic/Azores", "Europe/Moscow", "Asia/Karachi", "Asia/Dhaka", "Asia/Shanghai", "Pacific/Noumea", "Pacific/Tongatapu"];
 
-type PoolEntry = { platform: "tiktok" | "instagram"; handle: string; lane: string };
+type PoolEntry = { platform: "tiktok"; handle: string; lane: string };
 
 /** Pure: a skewed pick (popular accounts are watched by many, the long tail by few), deterministic. */
 export function skewedPick<T>(xs: T[], i: number, k: number): T {
@@ -58,13 +58,13 @@ export function skewedPick<T>(xs: T[], i: number, k: number): T {
 
 // ------------------------------------------------------------------ the pool of real accounts
 
-/** Real creators to watch: TikTok from the creator-discovery list, Instagram from Reels search on each lane keyword. */
+/** Real TikTok creators to watch: the authors of the top posts for each lane keyword. */
 export const buildPool = internalAction({
   args: {},
-  handler: async (ctx): Promise<{ tiktok: number; instagram: number }> => {
+  handler: async (ctx): Promise<{ tiktok: number }> => {
     const pool: PoolEntry[] = [];
     const seen = new Set<string>();
-    const add = (platform: "tiktok" | "instagram", handle: string | null | undefined, lane: string) => {
+    const add = (platform: "tiktok", handle: string | null | undefined, lane: string) => {
       const h = (handle ?? "").replace(/^@/, "").toLowerCase().trim();
       if (!h || seen.has(`${platform}:${h}`)) return;
       seen.add(`${platform}:${h}`);
@@ -72,24 +72,15 @@ export const buildPool = internalAction({
     };
     for (const lane of LANES) {
       for (const kw of lane.keywords.slice(0, 1)) {
-        if (lane.platforms.includes("instagram")) {
-          try {
-            const r = await ctx.runAction(internal.reads.read.read, { kind: "search.reels", params: { keyword: kw, window: "last-month" } });
-            const posts = (Array.isArray(r.value) ? r.value : ((r.value as { posts?: unknown[] } | null)?.posts ?? [])) as Array<{ authorHandle?: string; author?: string }>;
-            for (const p of posts.slice(0, 15)) add("instagram", p.authorHandle ?? p.author, lane.niche);
-          } catch { /* a lane with no reels read is simply thinner */ }
-        }
-        if (lane.platforms.includes("tiktok")) {
-          try {
-            const r = await ctx.runAction(internal.reads.read.read, { kind: "search.keyword", params: { keyword: kw, window: "this-month", sort: "most-liked" } });
-            const posts = (Array.isArray(r.value) ? r.value : ((r.value as { posts?: unknown[] } | null)?.posts ?? [])) as Array<{ authorHandle?: string }>;
-            for (const p of posts.slice(0, 15)) add("tiktok", p.authorHandle, lane.niche);
-          } catch { /* same */ }
-        }
+        try {
+          const r = await ctx.runAction(internal.reads.read.read, { kind: "search.keyword", params: { keyword: kw, window: "this-month", sort: "most-liked" } });
+          const posts = (Array.isArray(r.value) ? r.value : ((r.value as { posts?: unknown[] } | null)?.posts ?? [])) as Array<{ authorHandle?: string }>;
+          for (const p of posts.slice(0, 15)) add("tiktok", p.authorHandle, lane.niche);
+        } catch { /* a lane with no keyword read is simply thinner */ }
       }
     }
     await ctx.runMutation(internal.eval.scaleTest.saveKey, { key: POOL_KEY, value: pool });
-    return { tiktok: pool.filter((p) => p.platform === "tiktok").length, instagram: pool.filter((p) => p.platform === "instagram").length };
+    return { tiktok: pool.length };
   },
 });
 
@@ -114,15 +105,14 @@ export const readKey = internalQuery({
 
 // ------------------------------------------------------------------ creators and their asks
 
-/** N creators across zones and lanes; handles on the platforms their lane lives on. */
+/** N creators across zones and lanes, each with a TikTok handle. */
 export const seed = internalMutation({
   args: { from: v.number(), count: v.number() },
   handler: async (ctx, a): Promise<number> => {
     const now = Date.now();
     for (let i = a.from; i < a.from + a.count; i++) {
       const lane = LANES[i % LANES.length];
-      const handles: Record<string, string> = {};
-      for (const p of lane.platforms) handles[p] = `scale_${p === "tiktok" ? "tt" : "ig"}_${i}`;
+      const handles = { tiktok: `scale_tt_${i}` };
       await ctx.db.insert("creators", {
         clerkUserId: `${LOAD_PREFIX}${i}`, email: `load-${i}@eval.invalid`, handles, ownership: "unverified",
         niche: lane.niche, timezone: ZONES[i % ZONES.length], quietHours: { start: "22:00", end: "07:00" }, tone: "friend", mode: "full",
@@ -148,12 +138,9 @@ export const loadCreators = internalQuery({
   },
 });
 
-/** Pure: how a real person asks. Instagram asks say so ("on insta"); TikTok is the default. */
+/** Pure: how a real person asks. */
 export function askText(e: PoolEntry, i: number): string {
-  const ig = e.platform === "instagram";
-  const forms = ig
-    ? [`watch @${e.handle} on insta`, `can you keep an eye on @${e.handle} on instagram for me`, `add @${e.handle} (instagram) to my list`]
-    : [`watch @${e.handle}`, `can you keep an eye on @${e.handle} for me`, `add @${e.handle} to my list`];
+  const forms = [`watch @${e.handle}`, `can you keep an eye on @${e.handle} for me`, `add @${e.handle} to my list`];
   return forms[i % forms.length];
 }
 
@@ -186,7 +173,7 @@ export const ask = internalMutation({
 export const measure = internalQuery({
   args: { from: v.number(), count: v.number(), since: v.number() },
   handler: async (ctx, a): Promise<Record<string, unknown>> => {
-    let asks = 0, replies = 0, tracked = 0, trackedIg = 0, watchingReplies = 0, refusals = 0;
+    let asks = 0, replies = 0, tracked = 0, watchingReplies = 0, refusals = 0;
     const lat: number[] = [];
     for (let i = a.from; i < a.from + a.count; i++) {
       const c = (await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", `${LOAD_PREFIX}${i}`)).first()) as Doc<"creators"> | null;
@@ -199,11 +186,11 @@ export const measure = internalQuery({
         if (r) { replies++; lat.push(r.ts - m.ts); if (/^watching @/.test(r.body)) watchingReplies++; else refusals++; }
       }
       const t = (await ctx.db.query("trackedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).take(20)) as Doc<"trackedAccounts">[];
-      tracked += t.length; trackedIg += t.filter((x) => x.platform === "instagram").length;
+      tracked += t.length;
     }
     lat.sort((x, y) => x - y);
     const q = (p: number) => (lat.length ? Math.round(lat[Math.min(lat.length - 1, Math.floor(lat.length * p))] / 1000) : null);
-    return { asks, replies, watchingReplies, otherReplies: refusals, tracked, trackedInstagram: trackedIg, latencySec: { p50: q(0.5), p90: q(0.9), p99: q(0.99), max: q(1) } };
+    return { asks, replies, watchingReplies, otherReplies: refusals, tracked, latencySec: { p50: q(0.5), p90: q(0.9), p99: q(0.99), max: q(1) } };
   },
 });
 

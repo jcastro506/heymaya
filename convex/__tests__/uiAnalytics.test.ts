@@ -16,8 +16,7 @@ import { modules } from "../../tests/_modules";
 import { seedCreator } from "../../tests/lib/creatorRow";
 import { normalizeConnected, type ZernioPostRow } from "../connections/analytics";
 import recorded from "../integrations/zernio/fixtures.recorded.json";
-import spec from "../integrations/zernio/fixtures.spec.json";
-import { normalizeDemographics, normalizeFollowerHistory, normalizeIgInsights } from "../connections/accountInsights";
+import { normalizeFollowerHistory } from "../connections/accountInsights";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 
@@ -125,7 +124,6 @@ describe("analytics for the app", () => {
   });
 });
 
-const S = spec as unknown as Record<string, Record<string, unknown>>;
 
 /** A realistic 60-day follower series ending today (Zernio's envelope), for the growth chart. */
 function series(start: number, perDay: (i: number) => [number, number]) {
@@ -147,16 +145,10 @@ async function setupWithInsights() {
   const { t } = base;
   const a = await t.run(async (ctx) => (await ctx.db.query("creators").collect()).find((c) => c.clerkUserId === "user_a")!._id as Id<"creators">);
   const now = Date.now();
-  // Instagram: a steady week, then a post that took off around day 45 (more follows, a few more unfollows).
+  // An old Instagram row (rows from before TikTok-only still exist): a steady week, then a post that took off around day 45.
   const igDays = normalizeFollowerHistory(series(7400, (i) => (i > 44 && i < 50 ? [60 - (i - 45) * 8, 6] : [9 + (i % 4), 2 + (i % 3 === 0 ? 1 : 0)])))!.days;
   const ttDays = normalizeFollowerHistory(series(1760, (i) => [3 + (i % 5 === 0 ? 4 : 0), i % 6 === 0 ? 2 : 1]))!.days;
   await t.mutation(internal.connections.insightsSync.writeHistory, { creatorId: a, platform: "instagram", accountId: "ig", days: igDays, now });
   await t.mutation(internal.connections.insightsSync.writeHistory, { creatorId: a, platform: "tiktok", accountId: "tt", days: ttDays, now });
-  const totals = { ...S.igInsightsTotals, metrics: { ...(S.igInsightsTotals.metrics as object), profile_links_taps: { total: 37 } }, unavailableMetrics: undefined };
-  const ig = normalizeIgInsights({ totals, follows: S.igFollowsBreakdown, reachSeries: S.igInsightsTimeSeries })!;
-  const metrics = Object.fromEntries(Object.entries({ reach: ig.reach, views: ig.views, accountsEngaged: ig.accountsEngaged, totalInteractions: ig.totalInteractions, profileLinkTaps: ig.profileLinkTaps, follows: ig.follows, unfollows: ig.unfollows }).filter((e): e is [string, number] => e[1] !== null));
-  await t.mutation(internal.connections.insightsSync.writeInsights, { creatorId: a, platform: "instagram", accountId: "ig", kind: "insights", status: "ok", now, fromDate: ig.fromDate!, toDate: ig.toDate!, metrics, reachDaily: ig.reachDaily! });
-  const aud = normalizeDemographics(S.igDemographics)!;
-  await t.mutation(internal.connections.insightsSync.writeInsights, { creatorId: a, platform: "instagram", accountId: "ig", kind: "audience", status: "ok", now, audience: { age: aud.age!, gender: aud.gender!, country: aud.country!, city: aud.city! }, audienceBase: aud.base! });
   return { ...base, a };
 }

@@ -57,7 +57,7 @@ const MIN = 60_000;
 
 // ------------------------------------------------------------------ who, and the knobs
 
-export interface Subject { tiktok?: string; instagram?: string; timezone?: string; note?: string }
+export interface Subject { tiktok?: string; timezone?: string; note?: string }
 
 /**
  * ⚠️ DEFAULT SUBJECTS — SWAP FREELY. Real public TikTok accounts, chosen for spread, not vetted live: small and
@@ -194,7 +194,7 @@ const hours = (ms: number | null | undefined) => (ms === null || ms === undefine
 
 // ------------------------------------------------------------------ state (syncState rows; no new table)
 
-type CreatorSlot = { i: number; subject: string; handles: { tiktok?: string; instagram?: string }; timezone: string; note?: string; creatorId?: Id<"creators">; error?: string };
+type CreatorSlot = { i: number; subject: string; handles: { tiktok?: string }; timezone: string; note?: string; creatorId?: Id<"creators">; error?: string };
 type Opts = { /** Behavioural personas (eval/personas) instead of the one busy actor. */ personas?: boolean; days: number; watchCap: number; transcriptCap: number; admired: number; pairAfterMs: number; day0MaxMs: number; maxCredits: number; signupWeekday: number; seed: number; replay: boolean; script: "none" | "product" | "horizon" };
 export type RunState = { runId: string; startedAt: number; opts: Opts; creators: CreatorSlot[]; stopped?: string };
 type Cursor = { phase: "signup" | "day" | "judge" | "done"; d: number; k: number; attempt: number; since: number };
@@ -267,7 +267,7 @@ async function fwCreator(ctx: MutationCtx, creatorId: Id<"creators">): Promise<D
 
 /** Screen 1 through checkout: the real start path, then a trial on the tier their handles need. */
 export const createOne = internalMutation({
-  args: { runId: v.string(), i: v.number(), handles: v.object({ tiktok: v.optional(v.string()), instagram: v.optional(v.string()) }), timezone: v.string(), watchCap: v.number(), transcriptCap: v.number(), replay: v.optional(v.boolean()) },
+  args: { runId: v.string(), i: v.number(), handles: v.object({ tiktok: v.optional(v.string()) }), timezone: v.string(), watchCap: v.number(), transcriptCap: v.number(), replay: v.optional(v.boolean()) },
   handler: async (ctx, a): Promise<{ ok: boolean; creatorId?: Id<"creators">; error?: string }> => {
     const subject = subjectFor(a.runId, a.i);
     if (!isFirstWeekSubject(subject)) throw new Error("not a first-week subject");
@@ -340,7 +340,7 @@ export const actOnIdea = internalMutation({
 // ------------------------------------------------------------------ reads
 
 /** What has happened so far for one creator, from rows (all indexed). */
-export type Observed = { createdAt: number; paired: boolean; dossier: boolean; dossierVersion: number; ingest: Array<{ status: string; attempts: number; error: string | null }>; busy: string[]; hello: boolean; firstReadCreatedAt: number | null; firstIdea: boolean; posts: { tiktok: number; instagram: number } };
+export type Observed = { createdAt: number; paired: boolean; dossier: boolean; dossierVersion: number; ingest: Array<{ status: string; attempts: number; error: string | null }>; busy: string[]; hello: boolean; firstReadCreatedAt: number | null; firstIdea: boolean; posts: { tiktok: number } };
 export const observe = internalQuery({
   args: { creatorId: v.id("creators") },
   handler: async (ctx, a): Promise<Observed | null> => {
@@ -362,7 +362,7 @@ export const observe = internalQuery({
       hello: Boolean(await dedupe(`hello:${a.creatorId}`)),
       firstReadCreatedAt: firstRead?._creationTime ?? null,
       firstIdea: Boolean(firstIdea),
-      posts: { tiktok: posts.filter((p) => p.platform === "tiktok").length, instagram: posts.filter((p) => p.platform === "instagram").length },
+      posts: { tiktok: posts.filter((p) => p.platform === "tiktok").length },
     };
   },
 });
@@ -452,7 +452,7 @@ export function estimateCredits(subjects: Subject[], o: Opts): { perCreator: num
   return { perCreator, total, needed: Math.min(total, o.maxCredits) };
 }
 
-const subjectsV = v.optional(v.array(v.object({ tiktok: v.optional(v.string()), instagram: v.optional(v.string()), timezone: v.optional(v.string()), note: v.optional(v.string()) })));
+const subjectsV = v.optional(v.array(v.object({ tiktok: v.optional(v.string()), timezone: v.optional(v.string()), note: v.optional(v.string()) })));
 
 /** The estimate for a run you are about to start (the same numbers `start` checks the balance against). */
 export const estimate = internalQuery({
@@ -478,13 +478,12 @@ export const preflight = internalQuery({
     const out: Array<{ i: number; handles: string; free: boolean; heldBy?: string }> = [];
     for (const [i, s] of (a.handles ?? DEFAULT_SUBJECTS).entries()) {
       let heldBy: string | undefined;
-      for (const platform of ["tiktok", "instagram"] as const) {
-        const h = s[platform]?.trim().replace(/^@/, "").toLowerCase();
-        if (!h) continue;
-        const c = (await ctx.db.query("creators").withIndex(platform === "tiktok" ? "by_tiktok" : "by_instagram", (q) => q.eq(platform === "tiktok" ? "handles.tiktok" : "handles.instagram", h)).first()) as Doc<"creators"> | null;
+      const h = s.tiktok?.trim().replace(/^@/, "").toLowerCase();
+      if (h) {
+        const c = (await ctx.db.query("creators").withIndex("by_tiktok", (q) => q.eq("handles.tiktok", h)).first()) as Doc<"creators"> | null;
         if (c) heldBy = isFirstWeekSubject(c.clerkUserId) ? `an earlier first-week run (${c.clerkUserId.split(":")[1]}); clear it` : /^eval/.test(c.clerkUserId) ? `eval creator ${c.clerkUserId}` : "a real account";
       }
-      out.push({ i, handles: [s.tiktok && `tiktok:@${s.tiktok}`, s.instagram && `instagram:@${s.instagram}`].filter(Boolean).join(" "), free: !heldBy, ...(heldBy ? { heldBy } : {}) });
+      out.push({ i, handles: s.tiktok ? `tiktok:@${s.tiktok}` : "", free: !heldBy, ...(heldBy ? { heldBy } : {}) });
     }
     return out;
   },
@@ -501,8 +500,8 @@ export const start = internalAction({
       const cached = await ctx.runQuery(internal.eval.replay.candidates, { limit: 200 });
       const has = (platform: string, h?: string) => !h || cached.some((c) => c.platform === platform && c.handle === h.trim().replace(/^@/, "").toLowerCase());
       if (handles?.length) {
-        const missing = handles.filter((h) => !has("tiktok", h.tiktok) || !has("instagram", h.instagram));
-        if (missing.length) throw new Error(`replay run refused: not in the read cache: ${missing.map((m) => [m.tiktok && `tiktok:@${m.tiktok}`, m.instagram && `instagram:@${m.instagram}`].filter(Boolean).join(" ")).join(", ")}. Cached: ${cached.slice(0, 20).map((c) => `${c.platform}:@${c.handle}`).join(", ")}`);
+        const missing = handles.filter((h) => !has("tiktok", h.tiktok));
+        if (missing.length) throw new Error(`replay run refused: not in the read cache: ${missing.map((m) => `tiktok:@${m.tiktok ?? "?"}`).join(", ")}. Cached: ${cached.slice(0, 20).map((c) => `${c.platform}:@${c.handle}`).join(", ")}`);
       } else {
         const checked = await ctx.runQuery(internal.eval.firstWeek.preflight, { handles: cached.map((c) => ({ [c.platform]: c.handle })) });
         const free = checked.filter((x) => x.free);
@@ -530,7 +529,7 @@ export const start = internalAction({
     const creators: CreatorSlot[] = [];
     for (const [i, s] of subjects.entries()) {
       const timezone = s.timezone ?? zones[i];
-      const slot: CreatorSlot = { i, subject: subjectFor(runId, i), handles: { tiktok: s.tiktok, instagram: s.instagram }, timezone, note: s.note };
+      const slot: CreatorSlot = { i, subject: subjectFor(runId, i), handles: { tiktok: s.tiktok }, timezone, note: s.note };
       const r = await ctx.runMutation(internal.eval.firstWeek.createOne, { runId, i, handles: slot.handles, timezone, watchCap: opts.watchCap, transcriptCap: opts.transcriptCap, replay: opts.replay });
       if (r.ok && r.creatorId) slot.creatorId = r.creatorId;
       else slot.error = `signup refused: ${r.error}`;
@@ -545,7 +544,7 @@ export const start = internalAction({
     }
     // The catalogue reads are queued; the minute drain would reach them, this just saves the minute.
     await ctx.scheduler.runAfter(0, internal.core.scheduler.drainJobs, { kinds: ["ingest_catalogue"] });
-    return { runId, creators: creators.map((c) => ({ i: c.i, handles: [c.handles.tiktok && `tiktok:@${c.handles.tiktok}`, c.handles.instagram && `instagram:@${c.handles.instagram}`].filter(Boolean).join(" "), timezone: c.timezone, ...(c.creatorId ? { creatorId: c.creatorId } : {}), ...(c.error ? { error: c.error } : {}) })), opts, credits: { balance, estimate: est.total, needed: est.needed } };
+    return { runId, creators: creators.map((c) => ({ i: c.i, handles: c.handles.tiktok ? `tiktok:@${c.handles.tiktok}` : "", timezone: c.timezone, ...(c.creatorId ? { creatorId: c.creatorId } : {}), ...(c.error ? { error: c.error } : {}) })), opts, credits: { balance, estimate: est.total, needed: est.needed } };
   },
 });
 
@@ -590,7 +589,7 @@ export const signupTick = internalAction({
       const o = await ctx.runQuery(internal.eval.firstWeek.observe, { creatorId: slot.creatorId });
       if (!o) return await toJudge(ctx, a.runId, a.i, 0, "signup", "creator row vanished");
       // The admired screen, once their posts have started to land (as the app's screen 3 waits).
-      if (!log.admiredDone && (o.posts.tiktok + o.posts.instagram > 0 || elapsed > 2 * MIN)) {
+      if (!log.admiredDone && (o.posts.tiktok > 0 || elapsed > 2 * MIN)) {
         let detail = "";
         if (s.opts.admired > 0) {
           try {
@@ -627,7 +626,7 @@ export const signupTick = internalAction({
       const now = await ctx.runQuery(internal.eval.firstWeek.observe, { creatorId: slot.creatorId });
       if (now) {
         const ingestDone = now.ingest.find((j) => j.status === "succeeded" || j.status === "dead" || j.status === "failed");
-        if (ingestDone) await event(ctx, a.runId, a.i, log, now.createdAt, "catalogue_read", `${ingestDone.status}${ingestDone.error ? `: ${ingestDone.error}` : ""}; tiktok ${now.posts.tiktok} posts, instagram ${now.posts.instagram} posts`);
+        if (ingestDone) await event(ctx, a.runId, a.i, log, now.createdAt, "catalogue_read", `${ingestDone.status}${ingestDone.error ? `: ${ingestDone.error}` : ""}; tiktok ${now.posts.tiktok} posts`);
         if (now.dossier) await event(ctx, a.runId, a.i, log, now.createdAt, "dossier", `version ${now.dossierVersion}`);
         if (now.hello) await event(ctx, a.runId, a.i, log, now.createdAt, "hello");
         if (now.firstReadCreatedAt) await event(ctx, a.runId, a.i, log, now.createdAt, "first_read");
@@ -945,9 +944,9 @@ export const judge = internalAction({
 
 export type CreatorReport = {
   checks?: Check[];
-  i: number; handles: { tiktok?: string; instagram?: string }; timezone: string; note?: string; creatorId: string | null; phase: string; dayReached: number;
+  i: number; handles: { tiktok?: string }; timezone: string; note?: string; creatorId: string | null; phase: string; dayReached: number;
   timeline: Array<{ what: string; atHours: number | null; detail?: string }>;
-  catalogue: { status: string | null; attempts: number; error: string | null; postsRead: { tiktok: number; instagram: number }; readFrom: unknown; doneAtHours: number | null };
+  catalogue: { status: string | null; attempts: number; error: string | null; postsRead: { tiktok: number }; readFrom: unknown; doneAtHours: number | null };
   dossierAtHours: number | null; helloAtHours: number | null; firstReadAtHours: number | null;
   firstIdeaTextedAtHours: number | null; firstPlanAtHours: number | null; firstIdeaAnyAtHours: number | null;
   ideasWeek1: { total: number; texted: number; byInspiration: Record<string, number> };
@@ -968,7 +967,7 @@ export const creatorReport = internalQuery({
     const base = { i: a.i, handles: slot.handles, timezone: slot.timezone, note: slot.note };
     const c = slot.creatorId ? ((await ctx.db.get(slot.creatorId)) as Doc<"creators"> | null) : null;
     if (!c || !slot.creatorId) {
-      return { ...base, creatorId: null, phase: "never started", dayReached: 0, timeline: [], catalogue: { status: null, attempts: 0, error: slot.error ?? null, postsRead: { tiktok: 0, instagram: 0 }, readFrom: null, doneAtHours: null }, dossierAtHours: null, helloAtHours: null, firstReadAtHours: null, firstIdeaTextedAtHours: null, firstPlanAtHours: null, firstIdeaAnyAtHours: null, ideasWeek1: { total: 0, texted: 0, byInspiration: {} }, weekPlans: [], sundayReviewAtHours: null, failures: log?.failures ?? [{ d: 0, step: "signup", error: slot.error ?? "no creator" }], cost: { modelUsd: 0, scrapeCredits: 0, scrapeUsd: 0, otherUsd: 0, simOverheadUsd: 0, byKind: {} }, judged: null, actorTurns: 0, stepsRun: 0 };
+      return { ...base, creatorId: null, phase: "never started", dayReached: 0, timeline: [], catalogue: { status: null, attempts: 0, error: slot.error ?? null, postsRead: { tiktok: 0 }, readFrom: null, doneAtHours: null }, dossierAtHours: null, helloAtHours: null, firstReadAtHours: null, firstIdeaTextedAtHours: null, firstPlanAtHours: null, firstIdeaAnyAtHours: null, ideasWeek1: { total: 0, texted: 0, byInspiration: {} }, weekPlans: [], sundayReviewAtHours: null, failures: log?.failures ?? [{ d: 0, step: "signup", error: slot.error ?? "no creator" }], cost: { modelUsd: 0, scrapeCredits: 0, scrapeUsd: 0, otherUsd: 0, simOverheadUsd: 0, byKind: {} }, judged: null, actorTurns: 0, stepsRun: 0 };
     }
     const id = slot.creatorId;
     const t0 = c.createdAt;
@@ -993,7 +992,7 @@ export const creatorReport = internalQuery({
     const ingest = jobs.filter((j) => j.kind === "ingest_catalogue").sort((x, y) => x.createdAt - y.createdAt);
     const ingestDone = ingest.find((j) => j.status === "succeeded") ?? ingest[ingest.length - 1] ?? null;
     const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", id)).take(1000)) as Doc<"ownPosts">[];
-    const postsRead = { tiktok: posts.filter((p) => p.platform === "tiktok").length, instagram: posts.filter((p) => p.platform === "instagram").length };
+    const postsRead = { tiktok: posts.filter((p) => p.platform === "tiktok").length };
     const costs = (await ctx.db.query("costEvents").withIndex("by_creator_at", (q) => q.eq("creatorId", id)).take(8000)) as Doc<"costEvents">[];
     const cost = { modelUsd: 0, scrapeCredits: 0, scrapeUsd: 0, otherUsd: 0, simOverheadUsd: 0, byKind: {} as Record<string, number> };
     for (const r of costs) {
@@ -1018,7 +1017,7 @@ export const creatorReport = internalQuery({
     const timeline = [
       { what: "signed up", atHours: 0 as number | null },
       ...(log?.events ?? []).filter((e) => ["admired", "pairing"].includes(e.name)).map((e) => ({ what: e.name, atHours: hours(e.simMs), detail: e.detail })),
-      { what: `catalogue read ${ingestDone?.status ?? "not run"}`, atHours: ev("catalogue_read") ? hours(ev("catalogue_read")!.simMs) : at(ingestDone && ingestDone.status !== "queued" && ingestDone.status !== "running" ? ingestDone.updatedAt : null), detail: `tiktok ${postsRead.tiktok}, instagram ${postsRead.instagram} posts` },
+      { what: `catalogue read ${ingestDone?.status ?? "not run"}`, atHours: ev("catalogue_read") ? hours(ev("catalogue_read")!.simMs) : at(ingestDone && ingestDone.status !== "queued" && ingestDone.status !== "running" ? ingestDone.updatedAt : null), detail: `tiktok ${postsRead.tiktok} posts` },
       { what: "dossier built", atHours: hours(dossierAt) },
       { what: "hello", atHours: at(hello?.ts) },
       ...(pending ? [{ what: "\"reading your posts\" (read not ready at pairing)", atHours: at(pending.ts) }] : []),
@@ -1121,7 +1120,7 @@ export const population = internalQuery({
       const snaps = log.snapshots.map((x) => ({ d: x.d, ...(x.snap as { out?: number; outProactive?: number; outKinds?: string[]; ideasSaved?: number; ideasPassed?: number }) }));
       const last = snaps.at(-1);
       rows.push({
-        i: c.i, handle: c.handles.tiktok ?? c.handles.instagram, ...t,
+        i: c.i, handle: c.handles.tiktok, ...t,
         cursor: `${log.cursor.phase} d${log.cursor.d}`,
         herTextsByDay: snaps.map((x) => x.outProactive ?? 0),
         kinds: snaps.flatMap((x) => x.outKinds ?? []).reduce<Record<string, number>>((acc, k) => ((acc[k] = (acc[k] ?? 0) + 1), acc), {}),
@@ -1162,7 +1161,7 @@ export const voice = internalQuery({
       for (const m of rows) {
         if (m.direction === "in") { last = m.kind === "pairing" ? null : clip(m.body, 280); continue; }
         const menu = m.buttons?.length ? ` ${menuLine(m.buttons)}` : "";
-        out.push({ i: slot.i, handle: slot.handles.tiktok ?? slot.handles.instagram ?? "?", day: Math.max(0, Math.floor((m.ts - c.createdAt) / D)), kind: m.kind ?? "reply", theySaid: last, mayaSaid: clip(`${m.body}${menu}`, 900) });
+        out.push({ i: slot.i, handle: slot.handles.tiktok ?? "?", day: Math.max(0, Math.floor((m.ts - c.createdAt) / D)), kind: m.kind ?? "reply", theySaid: last, mayaSaid: clip(`${m.body}${menu}`, 900) });
         last = null;
       }
     }

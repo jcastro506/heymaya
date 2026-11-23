@@ -97,15 +97,6 @@ describe("a drafted clip is finished, and what they post teaches her", () => {
   });
 });
 
-describe("an Instagram post read finds its video", () => {
-  it("reads the single-post envelope (the shape that hid every reel's video)", async () => {
-    const { igShortcodeToItem } = await import("../../integrations/scrapeCreators/platforms/instagram");
-    const item = igShortcodeToItem({ id: "1", shortcode: "DdDQgnBt3g1", is_video: true, video_url: "https://cdn.example/v.mp4", video_duration: 36.7, video_play_count: 540859, taken_at_timestamp: 1790000000, edge_media_to_caption: { edges: [{ node: { text: "Meal Prep French Toasts‼️" } }] }, edge_media_preview_like: { count: 9541 }, edge_media_to_parent_comment: { count: 29 }, owner: { username: "noahperlofit" } });
-    expect(item).toMatchObject({ code: "DdDQgnBt3g1", media_type: 2, video_versions: [{ url: "https://cdn.example/v.mp4" }], play_count: 540859, caption: { text: "Meal Prep French Toasts‼️" } });
-    expect(igShortcodeToItem({ shortcode: "x", is_video: false }).video_versions).toEqual([]);
-  });
-});
-
 describe("sibling coherence: a tool trace fits where it's stored (living sim, day 13)", () => {
   it("the scout's investigation accepts a trace entry carrying its result", async () => {
     const t = convexTest(schema, modules);

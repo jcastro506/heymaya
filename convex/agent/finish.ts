@@ -180,7 +180,7 @@ type Out = { answering?: string; pick?: number; pickLine?: string; reaction: str
 export function backedSounds(sounds: Out["sounds"], trace: Array<Pick<ToolCallRecord, "tool" | "ok" | "params" | "result">>): { kept: Array<Out["sounds"][number] & { licensedForBusiness?: boolean }>; dropped: string[] } {
   const kept: Array<Out["sounds"][number] & { licensedForBusiness?: boolean }> = [];
   const dropped: string[] = [];
-  const looked = trace.filter((t) => t.ok && ["sound_info", "sound_videos", "sound_reels", "trending_tiktok", "trending_reels", "account_posts", "search_keyword"].includes(t.tool));
+  const looked = trace.filter((t) => t.ok && ["sound_info", "sound_videos", "trending_tiktok", "account_posts", "search_keyword"].includes(t.tool));
   for (const s of sounds.slice(0, 3)) {
     const name = (s.name ?? "").trim();
     if (!name) continue;

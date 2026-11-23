@@ -12,12 +12,11 @@ describe("credits", () => {
       if (CREDITS_BY_PATH[path] !== undefined) expect(CREDITS_BY_PATH[path], path).toBe(credits);
     }
     expect(CREDITS_BY_PATH["/v2/tiktok/video"]).toBe(10);
-    expect(CREDITS_BY_PATH["/v2/instagram/post/comments"]).toBe(15);
+    expect(Object.keys(CREDITS_BY_PATH).some((p) => p.includes("/instagram/")), "TikTok only: no Instagram path is priced").toBe(false);
   });
-  it("the belt prices post_info at the vendor's 10 and comments by platform", () => {
+  it("the belt prices post_info at the vendor's 10 and comments at 1", () => {
     expect(TOOL_CREDITS.post_info).toBe(10);
     expect(priceFor("post_comments", { url: "https://www.tiktok.com/@a/video/1" })).toBe(1);
-    expect(priceFor("post_comments", { url: "https://www.instagram.com/reel/abc/" })).toBe(15);
     expect(priceFor("publish", {})).toBeUndefined();
   });
 });

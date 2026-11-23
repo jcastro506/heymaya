@@ -9,7 +9,7 @@ import { clip } from "../lib/clip";
  * product code depends on their shape. Publishing does not exist here.
  */
 
-import { instagramOn, platformOn } from "../config/platforms";
+import { platformOn } from "../config/platforms";
 import { v } from "convex/values";
 import { entitlementsFor } from "../billing/tiers";
 import { action, httpAction, internalAction, internalQuery, query, type ActionCtx } from "../_generated/server";
@@ -24,6 +24,7 @@ function client() {
   return zernioClient(process.env.ZERNIO_API_KEY ?? "");
 }
 
+/** Still takes "instagram" so an older app build gets a plain refusal instead of a validator error. */
 const PLATFORM = v.union(v.literal("tiktok"), v.literal("instagram"));
 
 export const connection = internalQuery({
@@ -44,7 +45,7 @@ export const meForConnect = internalQuery({
     const c = await creatorForIdentity(ctx);
     if (!c) return null;
     const conn = (await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", c._id).eq("provider", "zernio")).first()) as Doc<"connections"> | null;
-    return { creatorId: c._id, plan: c.plan.status, label: c.handles.tiktok ?? c.handles.instagram ?? c.email, accountCap: entitlementsFor(c.plan).accounts, connectedAccounts: (conn?.zernioAccounts ?? []).filter((x) => platformOn(x.platform)).length };
+    return { creatorId: c._id, plan: c.plan.status, label: c.handles.tiktok ?? c.email, accountCap: entitlementsFor(c.plan).accounts, connectedAccounts: (conn?.zernioAccounts ?? []).filter((x) => platformOn(x.platform)).length };
   },
 });
 
@@ -68,7 +69,8 @@ export const applyAccounts = internalMutation({
   handler: async (ctx, a): Promise<{ status: Doc<"connections">["status"]; backfill: boolean }> => {
     const conn = (await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).eq("provider", "zernio")).first()) as Doc<"connections"> | null;
     if (!conn) return { status: "disconnected", backfill: false };
-    const accounts = a.accounts.filter((x) => x.platform === "tiktok" || x.platform === "instagram").map((x) => ({ accountId: x.accountId, platform: x.platform as "tiktok" | "instagram", canFetchAnalytics: x.canFetchAnalytics, needsReconnect: x.needsReconnect, username: x.username ?? undefined }));
+    // TikTok only: any other account Zernio lists is not kept.
+    const accounts = a.accounts.filter((x) => x.platform === "tiktok").map((x) => ({ accountId: x.accountId, platform: "tiktok" as const, canFetchAnalytics: x.canFetchAnalytics, needsReconnect: x.needsReconnect, username: x.username ?? undefined }));
     const status: Doc<"connections">["status"] = accounts.length === 0 ? "attention" : accounts.some((x) => x.needsReconnect) ? "needs_reconnect" : "connected";
     await ctx.db.patch(conn._id, { zernioAccounts: accounts, status, detail: a.detail ?? (accounts.length === 0 ? "no account attached yet" : accounts.some((x) => x.needsReconnect) ? "an account needs reconnecting" : undefined), lastSyncedAt: Date.now(), updatedAt: Date.now() });
     // Authenticated account identities become the creator handles. The catalogue read
@@ -80,14 +82,13 @@ export const applyAccounts = internalMutation({
       for (const account of accounts) {
         const username = account.username?.trim().replace(/^@/, "").toLowerCase();
         if (!username || !/^[a-z0-9._]{1,40}$/.test(username)) continue;
-        const key = account.platform as "tiktok" | "instagram";
-        if (handles[key] === username) continue;
+        if (handles.tiktok === username) continue;
         const taken = (await ctx.db
           .query("creators")
-          .withIndex(key === "tiktok" ? "by_tiktok" : "by_instagram", (q) => q.eq(key === "tiktok" ? "handles.tiktok" : "handles.instagram", username))
+          .withIndex("by_tiktok", (q) => q.eq("handles.tiktok", username))
           .first()) as Doc<"creators"> | null;
         if (!taken || taken._id === creator._id) {
-          handles[key] = username;
+          handles.tiktok = username;
           changed = true;
         }
       }
@@ -127,9 +128,10 @@ export const startConnect = action({
     if (!me) return { ok: false, reason: "no account" };
     // TikTok only (config/platforms): an Instagram connect is refused, never half-made.
     if (!platformOn(a.platform)) return { ok: false, reason: "Maya works with TikTok only right now" };
+    const platform = "tiktok" as const;
     if (me.plan !== "active" && me.plan !== "trialing" && me.plan !== "comped") return { ok: false, reason: "choose a plan before connecting an account" };
     // §26: the plan's account cap is the door. Budgets, never booleans: solo is a cap of one.
-    if (me.connectedAccounts >= me.accountCap) return { ok: false, reason: me.accountCap === 1 ? (instagramOn() ? "your plan includes one connected account. switch to both accounts in Settings to add the other" : "your TikTok is already connected") : `your plan includes ${me.accountCap} connected accounts` };
+    if (me.connectedAccounts >= me.accountCap) return { ok: false, reason: me.accountCap === 1 ? "your TikTok is already connected" : `your plan includes ${me.accountCap} connected accounts` };
     if (!process.env.ZERNIO_API_KEY) return { ok: false, reason: "not configured" };
     const c = client();
     let conn = await ctx.runQuery(internal.connections.zernio.connection, { creatorId: me.creatorId });
@@ -146,7 +148,7 @@ export const startConnect = action({
     const appUrl = process.env.APP_URL ?? "http://localhost:3000";
     try {
       const returnUrl = a.returnTo === "app" ? `${appUrl}/o/billing?state=connected&auto=1` : a.returnTo === "onboarding" ? `${appUrl}/start?step=2&connect=back` : `${appUrl}/app/settings?connect=back`;
-      const { authUrl } = await connectUrl(c, a.platform, profileId, returnUrl);
+      const { authUrl } = await connectUrl(c, platform, profileId, returnUrl);
       return { ok: true, url: authUrl };
     } catch (e) {
       return { ok: false, reason: e instanceof ZernioError ? `zernio ${e.status}` : "connect failed" };

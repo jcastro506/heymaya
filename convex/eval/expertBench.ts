@@ -118,7 +118,7 @@ export const groundTruth = internalAction({
   handler: async (ctx, a): Promise<Record<string, unknown>> => {
     const history = await ctx.runQuery(internal.eval.expertBench.postsByPlatform, { creatorId: a.creatorId });
     const url = a.text.match(/https?:\/\/\S+/)?.[0];
-    const postId = url?.match(/\/video\/(\d+)/)?.[1] ?? url?.match(/instagram\.com\/(?:p|reel|reels)\/([A-Za-z0-9_-]+)/)?.[1];
+    const postId = url?.match(/\/video\/(\d+)/)?.[1];
     const numbers = url ? await ctx.runQuery(internal.connections.numbers.forUrl, { creatorId: a.creatorId, url }) : null;
     const pack = postId ? await ctx.runQuery(internal.agent.opinion.packForPostId, { creatorId: a.creatorId, postId }) : null;
     const watched = a.since ? await ctx.runQuery(internal.eval.expertBench.watchedSince, { creatorId: a.creatorId, since: a.since }) : null;
@@ -163,14 +163,14 @@ export const tracesSince = internalQuery({
   },
 });
 
-/** Both platforms, separately: their normal, their latest posts, and whether Zernio is connected. */
+/** Their TikTok: their normal, their latest posts, and whether Zernio is connected. */
 export const postsByPlatform = internalQuery({
   args: { creatorId: v.id("creators") },
   handler: async (ctx, a): Promise<Record<string, unknown>> => {
     const rows = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(120)) as Doc<"ownPosts">[];
     const now = Date.now();
     const out: Record<string, unknown> = {};
-    for (const platform of ["tiktok", "instagram"]) {
+    for (const platform of ["tiktok"]) {
       const mine = rows.filter((r) => r.platform === platform).sort((x, y) => y.createTime - x.createTime);
       if (!mine.length) continue;
       out[platform] = {
@@ -223,7 +223,7 @@ export const personaSource = internalQuery({
 export const sendDraft = internalAction({
   args: { creatorId: v.id("creators"), url: v.string(), body: v.string() },
   handler: async (ctx, a): Promise<{ messageId: Id<"messages"> }> => {
-    const platform = a.url.includes("instagram.com") ? "instagram" : "tiktok";
+    const platform = "tiktok";
     const info = await ctx.runAction(internal.reads.read.read, { kind: "post.info", params: { platform, url: a.url }, creatorId: a.creatorId, force: true });
     const videoUrl = (info.value as { videoUrl?: string | null } | null)?.videoUrl;
     if (!videoUrl) throw new Error("the draft's video isn't downloadable");
@@ -248,7 +248,7 @@ export const recordDraft = internalMutation({
 export const realCaption = internalQuery({
   args: { creatorId: v.id("creators"), url: v.string() },
   handler: async (ctx, a): Promise<string | null> => {
-    const id = a.url.match(/\/video\/(\d+)/)?.[1] ?? a.url.match(/instagram\.com\/(?:p|reel|reels)\/([A-Za-z0-9_-]+)/)?.[1];
+    const id = a.url.match(/\/video\/(\d+)/)?.[1];
     if (!id) return null;
     const rows = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).take(200)) as Doc<"ownPosts">[];
     { const c = rows.find((p) => p.postId === id || p.url.includes(id))?.caption; return c === undefined ? null : clip(c, 500); }

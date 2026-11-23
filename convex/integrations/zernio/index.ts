@@ -59,7 +59,7 @@ export function zernioClient(apiKey: string, fetchImpl: typeof fetch = fetch, ba
   };
 }
 
-export type ZernioPlatform = "tiktok" | "instagram";
+export type ZernioPlatform = "tiktok";
 
 export interface ZernioAccount { accountId: string; platform: string; username: string | null; needsReconnect: boolean; canFetchAnalytics: boolean; raw: Record<string, unknown> }
 
@@ -95,7 +95,7 @@ export async function createProfile(c: ZernioClient, name: string): Promise<{ id
  */
 export const CONNECT_SCOPES = "analytics,comments";
 
-/** OAuth kickoff. `x` maps to `twitter` on the wire (verified live in the old product); tiktok and instagram are themselves. */
+/** OAuth kickoff for their TikTok. */
 export async function connectUrl(c: ZernioClient, platform: ZernioPlatform, profileId: string, redirectUrl: string): Promise<{ authUrl: string; state: string }> {
   const raw = await c.request<{ authUrl?: string; state?: string }>(`/api/v1/connect/${platform}`, { query: { profileId, redirect_url: redirectUrl, scopes: CONNECT_SCOPES } });
   if (!raw?.authUrl) throw new ZernioError(200, `/api/v1/connect/${platform}`, "no authUrl in response");
@@ -151,7 +151,7 @@ export async function followerStats(c: ZernioClient, accountIds: string[], profi
 
 // ------------------------------------------------ A1: account-level analytics
 // Per the OpenAPI spec 1.69.0 (read 2026-09-24): paths are /v1/analytics/{platform}/... under
-// the /api base, like every other call here. All four need Zernio's analytics add-on (402 if
+// the /api base, like every other call here. They need Zernio's analytics add-on (402 if
 // not), return the shared envelope, and are parsed by connections/accountInsights.ts.
 
 export interface AccountInsightsQuery {
@@ -164,21 +164,6 @@ export interface AccountInsightsQuery {
 }
 
 const insightsQuery = (q: AccountInsightsQuery) => ({ accountId: q.accountId, fromDate: q.fromDate, toDate: q.toDate, metrics: q.metrics?.length ? q.metrics.join(",") : undefined, metricType: q.metricType, breakdown: q.breakdown });
-
-/** Instagram account insights: max 90 days; only `reach` supports time_series; breakdowns only with total_value. */
-export async function instagramAccountInsights(c: ZernioClient, q: AccountInsightsQuery): Promise<unknown> {
-  return await c.request("/api/v1/analytics/instagram/account-insights", { query: insightsQuery(q) });
-}
-
-/** Instagram daily running follower count with gained/lost (Zernio's own snapshotter). Max 89 days. */
-export async function instagramFollowerHistory(c: ZernioClient, q: Omit<AccountInsightsQuery, "breakdown">): Promise<unknown> {
-  return await c.request("/api/v1/analytics/instagram/follower-history", { query: insightsQuery(q) });
-}
-
-/** Instagram audience demographics. 400 `instagram_insufficient_followers` under 100 followers; top 45 per dimension. */
-export async function instagramDemographics(c: ZernioClient, q: { accountId: string; metric?: "follower_demographics" | "engaged_audience_demographics"; breakdown?: ReadonlyArray<"age" | "city" | "country" | "gender">; timeframe?: "this_week" | "this_month" }): Promise<unknown> {
-  return await c.request("/api/v1/analytics/instagram/demographics", { query: { accountId: q.accountId, metric: q.metric, breakdown: q.breakdown?.length ? q.breakdown.join(",") : undefined, timeframe: q.timeframe } });
-}
 
 /** A page of their post analytics (Zernio ids, platform ids and urls); `page` AND `limit`, or the API answers 400. */
 export async function postAnalyticsPage(c: ZernioClient, q: { accountId: string; fromDate: string; limit: number }): Promise<unknown> {
@@ -193,7 +178,7 @@ export async function tiktokAccountInsights(c: ZernioClient, q: Omit<AccountInsi
 // ------------------------------------------------ A2: per-post reads (recorded live 2026-10-01)
 // fixtures.live-2026-10-01.json: every one of these answered 200 on the operator's own accounts.
 
-/** One post's daily rows since Zernio started reading it. `postId` is Zernio's id or the platform's (TikTok video id; Instagram media id, not the shortcode). */
+/** One post's daily rows since Zernio started reading it. `postId` is Zernio's id or TikTok's video id. */
 export async function postTimeline(c: ZernioClient, postId: string): Promise<unknown> {
   return await c.request("/api/v1/analytics/post-timeline", { query: { postId } });
 }

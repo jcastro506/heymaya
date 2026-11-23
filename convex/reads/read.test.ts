@@ -26,10 +26,8 @@ describe("read() cache layer (plan §3.2, §3.75)", () => {
 
   it("every kind's vendor path has a credit cost", () => {
     for (const kind of Object.keys(KINDS) as Array<keyof typeof KINDS>) {
-      for (const platform of ["tiktok", "instagram"] as const) {
-        const path = pathFor(kind, { platform });
-        expect(CREDITS_BY_PATH[path], `${kind} → ${path}`).toBeTypeOf("number");
-      }
+      const path = pathFor(kind, { platform: "tiktok" });
+      expect(CREDITS_BY_PATH[path], `${kind} → ${path}`).toBeTypeOf("number");
     }
   });
 

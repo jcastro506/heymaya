@@ -12,7 +12,6 @@
 import { describe, expect, it } from "vitest";
 import recorded from "../../integrations/scrapeCreators/fixtures.recorded.json";
 import { tiktok } from "../../integrations/scrapeCreators/platforms/tiktok";
-import { instagram } from "../../integrations/scrapeCreators/platforms/instagram";
 import type { NormalizedPost } from "../../integrations/scrapeCreators/schemas";
 
 const R = recorded as unknown as Record<string, unknown>;
@@ -51,7 +50,7 @@ function assertUsablePosts(posts: NormalizedPost[], label: string, opts: { needV
 describe("recorded vendor shapes", () => {
   it("the recording covers every live path the belt can call", () => {
     const paths = Object.keys(R).filter((k) => !k.startsWith("_"));
-    expect(paths.length).toBeGreaterThanOrEqual(16);
+    expect(paths.length).toBeGreaterThanOrEqual(11);
     for (const p of paths) expect(R[p], p).toBeTruthy();
   });
 
@@ -103,40 +102,13 @@ describe("recorded vendor shapes", () => {
     const r = await tiktok.trendingFeed("US", depsFor("/v1/tiktok/get-trending-feed"));
     assertUsablePosts(r.posts, "tiktok trending");
   });
-
-  it("instagram profile: a handle and a follower count", async () => {
-    const p = await instagram.profile("nike", depsFor("/v1/instagram/profile"));
-    expect(p.handle).toBeTruthy();
-    expect(p.followerCount ?? 0).toBeGreaterThan(1000);
-  });
-
-  it("instagram account posts: ids, dates, engagement", async () => {
-    const posts = await instagram.lastPosts("nike", 30, depsFor("/v2/instagram/user/posts"));
-    assertUsablePosts(posts, "instagram account posts", { needViews: false });
-  });
-
-  it("instagram reels search and trending answer with reels", async () => {
-    const s = await instagram.reelsSearch("marathon training", depsFor("/v2/instagram/reels/search"));
-    expect(Array.isArray((s.raw as { reels?: unknown[] }).reels), "reels search shape changed").toBe(true);
-    const t = await instagram.reelsTrending(depsFor("/v1/instagram/reels/trending"));
-    expect(((t.raw as { reels?: unknown[] }).reels ?? []).length, "trending reels empty").toBeGreaterThan(0);
-  });
 });
 
 /**
- * Two shapes the recording never showed and a LIVE read of a connected account did
+ * Shapes the recording never showed and a LIVE read of a connected account did
  * (2026-09-05, the operator's own throwaway accounts). Both broke the catalogue read.
  */
 describe("live shapes the recording missed", () => {
-  it("instagram: a numeric pk is still an id", async () => {
-    const body = structuredClone(R["/v2/instagram/user/posts"]) as { items: Record<string, unknown>[] };
-    for (const item of body.items) { item.pk = 3712345678901234567; item.id = 3712345678901234567; }
-    const deps = { client: { request: async () => structuredClone(body) } } as never;
-    const posts = await instagram.lastPosts("heymaya182", 30, deps);
-    assertUsablePosts(posts, "instagram numeric pk", { needViews: false });
-    for (const p of posts) expect(typeof p.postId).toBe("string");
-  });
-
   it("tiktok: a photo carousel is an image, not a video to transcribe", async () => {
     const body = structuredClone(R["/v3/tiktok/profile/videos"]) as { aweme_list: Record<string, unknown>[] };
     const first = body.aweme_list[0];

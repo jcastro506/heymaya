@@ -13,8 +13,7 @@ describe("the scale test", () => {
     expect(picks.filter((p) => p < 25).length).toBeGreaterThan(400);
     expect(skewedPick(xs, 7, 1)).toBe(skewedPick(xs, 7, 1));
   });
-  it("Instagram asks say so; TikTok asks don't need to", () => {
-    expect(askText({ platform: "instagram", handle: "x", lane: "l" }, 0)).toMatch(/insta/);
+  it("asks read like a person", () => {
     expect(askText({ platform: "tiktok", handle: "x", lane: "l" }, 0)).toBe("watch @x");
   });
   it("a load creator's texts are never delivered, and clear removes everything it owns", async () => {
@@ -23,7 +22,7 @@ describe("the scale test", () => {
     const [c] = await t.query(internal.eval.scaleTest.loadCreators, { from: 0, count: 1 });
     expect(c.platforms.length).toBeGreaterThan(0);
     await t.mutation(internal.core.messages.send, { creatorId: c.id, surface: "telegram", body: "hi", dedupeKey: "k1", proactive: false, kind: "reply" });
-    await t.run(async (ctx) => { await ctx.db.insert("trackedAccounts", { creatorId: c.id, platform: "instagram", handle: "someone", status: "active", addedBy: "creator", baselineN: 0, createdAt: Date.now() } as never); });
+    await t.run(async (ctx) => { await ctx.db.insert("trackedAccounts", { creatorId: c.id, platform: "tiktok", handle: "someone", status: "active", addedBy: "creator", baselineN: 0, createdAt: Date.now() } as never); });
     const jobs = await t.run((ctx) => ctx.db.query("jobs").collect());
     expect(jobs.filter((j) => j.kind === "deliver_message")).toHaveLength(0);
     while ((await t.mutation(internal.eval.loadTest.clear, { limit: 10 })) > 0) { /* until none */ }

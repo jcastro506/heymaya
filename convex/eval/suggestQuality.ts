@@ -15,8 +15,8 @@ import { startCreator } from "../onboarding/start";
 import { clip, postsOf, statsFor, type CandidatePost, type CandidateStats } from "../onboarding/suggest";
 import { profilesOf } from "../reads/profiles";
 
-type Platform = "tiktok" | "instagram";
-const platformV = v.union(v.literal("tiktok"), v.literal("instagram"));
+type Platform = "tiktok";
+const platformV = v.literal("tiktok");
 const toMs = (t: number) => (t < 1e12 ? t * 1000 : t);
 const DAY = 86_400_000;
 
@@ -39,7 +39,7 @@ export interface Verdict { realCreator: "yes" | "no" | "unsure"; kind: string; r
 const numbersIn = (text: string) => (text.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map((n) => String(Number(n.replace(/,/g, ""))));
 
 /** What code can prove about one card. Pure. */
-export function hardChecks(facts: CardFacts, why: string, platform: Platform, connected: Platform[]): HardChecks {
+export function hardChecks(facts: CardFacts, why: string, platform: string, connected: string[]): HardChecks {
   const known = new Set<string>();
   for (const n of [facts.stats.medianViews, facts.stats.bestMultiple, facts.stats.postsLast30, facts.followers]) if (typeof n === "number") known.add(String(n));
   for (const p of facts.recentPosts) for (const n of numbersIn(p.caption)) known.add(n);
@@ -98,9 +98,6 @@ export const findSubjects = internalAction({
   args: { platform: platformV, keyword: v.string() },
   handler: async (ctx, a): Promise<Array<{ platform: Platform; handle: string; followers: number | null; bio: string | null; displayName: string | null }>> => {
     const read = async (kind: string, params: Record<string, unknown>) => (await ctx.runAction(internal.reads.read.read, { kind, params })).value;
-    if (a.platform === "instagram") {
-      return (profilesOf(await read("discover.profiles", { keyword: a.keyword })) ?? []).filter((p) => !p.isPrivate).map((p) => ({ platform: "instagram" as const, handle: p.handle, followers: p.followerCount, bio: p.bio ? clip(p.bio, 120) : null, displayName: p.displayName }));
-    }
     const v0 = await read("search.keyword", { keyword: a.keyword, window: "this-month", sort: "most-liked" });
     const arr = (Array.isArray(v0) ? v0 : ((v0 as { posts?: unknown[] } | null)?.posts ?? [])) as Array<{ authorHandle?: string | null }>;
     const handles = [...new Set(arr.map((p) => (p.authorHandle ?? "").toLowerCase()).filter(Boolean))].slice(0, 8);
@@ -117,7 +114,7 @@ export const findSubjects = internalAction({
 
 /** A subject row: the production start path, with the catalogue job retired so only the first read runs. */
 export const createSubject = internalMutation({
-  args: { label: v.string(), handles: v.object({ tiktok: v.optional(v.string()), instagram: v.optional(v.string()) }), niche: v.string(), timezone: v.string() },
+  args: { label: v.string(), handles: v.object({ tiktok: v.optional(v.string()) }), niche: v.string(), timezone: v.string() },
   handler: async (ctx, a): Promise<{ ok: boolean; creatorId?: Id<"creators">; error?: string }> => {
     const started = await startCreator(ctx, { subject: `eval-quality-${a.label}`, email: `eval-quality-${a.label}@example.com`, handles: a.handles, timezone: a.timezone });
     if (!started.ok || !started.creatorId) return { ok: false, error: started.error };
@@ -136,9 +133,9 @@ export const firstPass = internalAction({
     const g = await ctx.runQuery(internal.onboarding.suggest.gather, { creatorId: a.creatorId });
     if (!g) throw new Error("no such subject");
     const now = Date.now();
-    for (const platform of ["tiktok", "instagram"] as const) {
-      const handle = g.handles[platform];
-      if (!handle) continue;
+    const platform = "tiktok" as const;
+    const handle = g.handles.tiktok;
+    if (handle) {
       for (const sort of ["popular", "latest"] as const) {
         try {
           const r = await ctx.runAction(internal.reads.read.read, { kind: "account.posts", params: { platform, handle, sort, slot: "onboarding" }, creatorId: a.creatorId });
@@ -176,7 +173,7 @@ export const audit = internalAction({
   handler: async (ctx, a): Promise<{ label: string; cards: number; passed: number; setScore: number | null }> => {
     const g = await ctx.runQuery(internal.onboarding.suggest.gather, { creatorId: a.creatorId });
     if (!g) throw new Error("no such subject");
-    const connected = (["tiktok", "instagram"] as const).filter((p) => g.handles[p]);
+    const connected = (["tiktok"] as const).filter((p) => g.handles[p]);
     const t0 = Date.now();
     const r = await ctx.runAction(internal.onboarding.suggest.suggestFor, { creatorId: a.creatorId, waitMs: 0 });
     const now = Date.now();

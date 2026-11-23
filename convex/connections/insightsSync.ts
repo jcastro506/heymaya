@@ -4,12 +4,10 @@ import { clip } from "../lib/clip";
  * Code watches (law 3): she never calls Zernio; she reads `followerSnapshots` and
  * `accountInsights`.
  *
- *   Instagram, daily   follower-history (89 days: count, gained, lost) → followerSnapshots
- *                      account-insights, last 30 days: totals, the follows split, reach per day
- *   Instagram, weekly  demographics (only at 100+ followers; under that, said, not called)
  *   TikTok, daily      account-insights time series (89 days: count, gained, lost) → followerSnapshots
- *   Both, daily (A2)   comments on posts with new ones (read only) → postComments; post timelines → ownPosts.history
- *   Instagram, weekly  engaged-audience demographics (who engaged this month) → accountInsights "engaged"
+ *   TikTok, daily (A2) comments on posts with new ones (read only) → postComments; post timelines → ownPosts.history
+ *
+ * TikTok only: an old Instagram connection is never read.
  *
  * Bounded: an hourly pass takes the stalest 40 creators whose reads are over 20 hours old, four
  * at a time, so every connected creator is read about once a day up to ~900 of them. Fail-soft:
@@ -25,33 +23,31 @@ import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { accountsWithinPlan, entitlementsFor } from "../billing/tiers";
-import { instagramAccountInsights, instagramDemographics, instagramFollowerHistory, tiktokAccountInsights, zernioClient, type ZernioClient } from "../integrations/zernio/index";
+import { tiktokAccountInsights, zernioClient, type ZernioClient } from "../integrations/zernio/index";
 import { syncAccountComments } from "./comments";
 import { syncAccountTimelines } from "./timeline";
-import { classifyError, flowOver, IG_TOTAL_METRICS, normalizeDemographics, normalizeFollowerHistory, normalizeIgInsights, type FollowerDay, type ReadStatus } from "./accountInsights";
+import { classifyError, flowOver, normalizeFollowerHistory, type FollowerDay, type ReadStatus } from "./accountInsights";
 
 export const INSIGHTS = {
   staleAfterMs: 20 * 3_600_000,
-  audienceEveryMs: 7 * 86_400_000,
   creatorsPerPass: 40,
   concurrency: 4,
-  historyDays: 89,   // the spec's maximum for follower-history and TikTok account-insights
+  historyDays: 89,   // the spec's maximum for TikTok account-insights
   insightsDays: 30,
-  audienceMinFollowers: 100,
 } as const;
 
 const LIVE = new Set(["active", "trialing", "comped"]);
 const DAY = 86_400_000;
 const dayOf = (t: number) => new Date(t).toISOString().slice(0, 10);
 
-type Account = { accountId: string; platform: "tiktok" | "instagram" };
+type Account = { accountId: string; platform: "tiktok" };
 
 /** Pure: the accounts of a connection we may read — live plan, within the plan's cap, able and not broken. */
 export function readableAccounts(conn: Pick<Doc<"connections">, "provider" | "status" | "zernioAccounts">, plan: { status: string; tier?: string }): Account[] {
   if (conn.provider !== "zernio" || conn.status === "disconnected" || !LIVE.has(plan.status)) return [];
   return accountsWithinPlan(conn.zernioAccounts ?? [], entitlementsFor(plan).accounts)
-    .filter((x) => x.canFetchAnalytics && !x.needsReconnect && (x.platform === "tiktok" || x.platform === "instagram"))
-    .map((x) => ({ accountId: x.accountId, platform: x.platform }));
+    .filter((x) => x.canFetchAnalytics && !x.needsReconnect && x.platform === "tiktok")
+    .map((x) => ({ accountId: x.accountId, platform: "tiktok" as const }));
 }
 
 const lastTry = (r: Doc<"accountInsights"> | undefined) => (r ? Math.max(r.fetchedAt, r.attemptedAt ?? 0) : 0);
@@ -94,20 +90,14 @@ export async function dueCreators(ctx: Pick<ActionCtx, "runQuery">, now: number,
   return all.sort((x, y) => x.oldest - y.oldest).slice(0, limit).map((x) => x.creatorId);
 }
 
-/** One creator's readable accounts, and what is already stored for each. */
+/** One creator's readable accounts. */
 export const state = internalQuery({
   args: { creatorId: v.id("creators") },
-  handler: async (ctx, a): Promise<Array<Account & { audienceTriedAt: number; latestFollowers: number | null }>> => {
+  handler: async (ctx, a): Promise<Account[]> => {
     const creator = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     const conn = (await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).eq("provider", "zernio")).first()) as Doc<"connections"> | null;
     if (!creator || !conn) return [];
-    const audience = (await ctx.db.query("accountInsights").withIndex("by_creator_kind", (q) => q.eq("creatorId", a.creatorId).eq("kind", "audience")).take(20)) as Doc<"accountInsights">[];
-    const snaps = (await ctx.db.query("followerSnapshots").withIndex("by_creator_day", (q) => q.eq("creatorId", a.creatorId)).order("desc").take(20)) as Doc<"followerSnapshots">[];
-    return readableAccounts(conn, creator.plan).map((acc) => ({
-      ...acc,
-      audienceTriedAt: lastTry(audience.find((r) => r.accountId === acc.accountId)),
-      latestFollowers: snaps.find((s) => s.accountId === acc.accountId)?.followers ?? null,
-    }));
+    return readableAccounts(conn, creator.plan);
   },
 });
 
@@ -187,7 +177,7 @@ async function attempt(read: () => Promise<unknown>): Promise<{ raw: unknown; st
 /** One account's history into snapshots, returning the days for the totals. */
 async function history(ctx: ActionCtx, c: ZernioClient, creatorId: Id<"creators">, acc: Account, now: number): Promise<{ status: ReadStatus; days: FollowerDay[]; unavailable: string[]; detail?: string }> {
   const q = { accountId: acc.accountId, fromDate: dayOf(now - (INSIGHTS.historyDays - 1) * DAY), toDate: dayOf(now), metrics: ["follower_count", "followers_gained", "followers_lost"], metricType: "time_series" as const };
-  const r = await attempt(() => (acc.platform === "instagram" ? instagramFollowerHistory(c, q) : tiktokAccountInsights(c, q)));
+  const r = await attempt(() => tiktokAccountInsights(c, q));
   if (r.status !== "ok") return { status: r.status, days: [], unavailable: [], detail: r.detail };
   const h = normalizeFollowerHistory(r.raw);
   if (!h) return { status: "failed", days: [], unavailable: [], detail: "follower history was not the expected shape" };
@@ -196,78 +186,24 @@ async function history(ctx: ActionCtx, c: ZernioClient, creatorId: Id<"creators"
 }
 
 /** Every read for one account. Returns the failures, named, for the pass's one health row. */
-async function syncAccount(ctx: ActionCtx, c: ZernioClient, creatorId: Id<"creators">, acc: Account & { audienceTriedAt: number; latestFollowers: number | null }, now: number): Promise<string[]> {
+async function syncAccount(ctx: ActionCtx, c: ZernioClient, creatorId: Id<"creators">, acc: Account, now: number): Promise<string[]> {
   const failures: string[] = [];
   const base = { creatorId, platform: acc.platform, accountId: acc.accountId, now };
   const h = await history(ctx, c, creatorId, acc, now);
   if (h.status === "failed") failures.push(`${acc.platform} history: ${h.detail}`);
 
-  // A2, both platforms: comments on their recent posts (read only) and how their views arrived.
+  // A2: comments on their recent posts (read only) and how their views arrived.
   const cm = await syncAccountComments(ctx, c, creatorId, acc, now, classifyError);
   if (cm.status === "failed") failures.push(`${acc.platform} comments: ${cm.detail}`);
   await ctx.runMutation(internal.connections.insightsSync.writeInsights, { ...base, kind: "comments", status: cm.status === "ok" ? "ok" : cm.status, ...(cm.status === "ok" ? { metrics: { postsRead: cm.posts, commentsRead: cm.read } } : {}) });
   const tl = await syncAccountTimelines(ctx, c, creatorId, acc, now, classifyError);
   if (tl.failure) failures.push(`${acc.platform} timeline: ${tl.failure}`);
 
-  if (acc.platform === "tiktok") {
-    // TikTok's account endpoint has nothing else at account level (no reach, no demographics, per the spec).
-    const flow = flowOver(h.days, INSIGHTS.insightsDays, dayOf(now));
-    const metrics = nonNull({ followersGained: flow.gained, followersLost: flow.lost });
-    const status: ReadStatus = h.status === "ok" && Object.keys(metrics).length ? "ok" : h.status === "ok" ? "not_reported" : h.status;
-    await ctx.runMutation(internal.connections.insightsSync.writeInsights, { ...base, kind: "insights", status, fromDate: dayOf(now - (INSIGHTS.insightsDays - 1) * DAY), toDate: dayOf(now), metrics, unavailable: h.unavailable });
-    return failures;
-  }
-
-  // Instagram: three reads for the last 30 days. Breakdowns and time series can't share a call (spec).
-  const range = { accountId: acc.accountId, fromDate: dayOf(now - (INSIGHTS.insightsDays - 1) * DAY), toDate: dayOf(now) };
-  const totals = await attempt(() => instagramAccountInsights(c, { ...range, metrics: IG_TOTAL_METRICS, metricType: "total_value" }));
-  const follows = await attempt(() => instagramAccountInsights(c, { ...range, metrics: ["follows_and_unfollows"], metricType: "total_value", breakdown: "follow_type" }));
-  const reach = await attempt(() => instagramAccountInsights(c, { ...range, metrics: ["reach"], metricType: "time_series" }));
-  const reads = [totals, follows, reach];
-  for (const [name, r] of [["totals", totals], ["follows", follows], ["reach by day", reach]] as const) if (r.status === "failed") failures.push(`instagram ${name}: ${r.detail}`);
-  const ig = normalizeIgInsights({ totals: totals.raw, follows: follows.raw, reachSeries: reach.raw });
-  if (ig) {
-    const flow = flowOver(h.days, INSIGHTS.insightsDays, dayOf(now));
-    const metrics = nonNull({ reach: ig.reach, views: ig.views, accountsEngaged: ig.accountsEngaged, totalInteractions: ig.totalInteractions, profileLinkTaps: ig.profileLinkTaps, follows: ig.follows, unfollows: ig.unfollows, followersGained: flow.gained, followersLost: flow.lost });
-    await ctx.runMutation(internal.connections.insightsSync.writeInsights, { ...base, kind: "insights", status: Object.keys(metrics).length || ig.reachDaily ? "ok" : "not_reported", fromDate: ig.fromDate ?? range.fromDate, toDate: ig.toDate ?? range.toDate, metrics, ...(ig.reachDaily ? { reachDaily: ig.reachDaily } : {}), unavailable: ig.unavailable });
-  } else {
-    const all = reads.map((r) => r.status);
-    const status: ReadStatus = all.every((s) => s === "not_available") ? "not_available" : all.some((s) => s === "failed") ? "failed" : "not_reported";
-    await ctx.runMutation(internal.connections.insightsSync.writeInsights, { ...base, kind: "insights", status });
-  }
-
-  // Who follows them: weekly, and only where Instagram will answer.
-  if (acc.audienceTriedAt <= now - INSIGHTS.audienceEveryMs) {
-    const followers = h.days.filter((d) => d.followers !== null).at(-1)?.followers ?? acc.latestFollowers;
-    if (followers !== null && followers < INSIGHTS.audienceMinFollowers) {
-      await ctx.runMutation(internal.connections.insightsSync.writeInsights, { ...base, kind: "audience", status: "too_few_followers" });
-      await ctx.runMutation(internal.connections.insightsSync.writeInsights, { ...base, kind: "engaged", status: "too_few_followers" });
-    } else {
-      const r = await attempt(() => instagramDemographics(c, { accountId: acc.accountId, metric: "follower_demographics", breakdown: ["age", "gender", "country", "city"], timeframe: "this_month" }));
-      if (r.status === "failed") failures.push(`instagram audience: ${r.detail}`);
-      const aud = r.status === "ok" ? normalizeDemographics(r.raw) : null;
-      if (aud) {
-        const audience = Object.fromEntries((["age", "gender", "country", "city"] as const).filter((k) => aud[k]).map((k) => [k, aud[k]!]));
-        await ctx.runMutation(internal.connections.insightsSync.writeInsights, { ...base, kind: "audience", status: "ok", audience, ...(aud.base !== null ? { audienceBase: aud.base } : {}) });
-      } else {
-        await ctx.runMutation(internal.connections.insightsSync.writeInsights, { ...base, kind: "audience", status: r.status === "ok" ? "not_reported" : r.status });
-      }
-      // A2: who ENGAGED this month (not who follows), the same breakdowns, the same gate.
-      if (r.status === "not_available") {
-        await ctx.runMutation(internal.connections.insightsSync.writeInsights, { ...base, kind: "engaged", status: "not_available" });
-      } else {
-        const e = await attempt(() => instagramDemographics(c, { accountId: acc.accountId, metric: "engaged_audience_demographics", breakdown: ["age", "gender", "country", "city"], timeframe: "this_month" }));
-        if (e.status === "failed") failures.push(`instagram engaged audience: ${e.detail}`);
-        const eng = e.status === "ok" ? normalizeDemographics(e.raw) : null;
-        if (eng) {
-          const audience = Object.fromEntries((["age", "gender", "country", "city"] as const).filter((k) => eng[k]).map((k) => [k, eng[k]!]));
-          await ctx.runMutation(internal.connections.insightsSync.writeInsights, { ...base, kind: "engaged", status: "ok", audience, ...(eng.base !== null ? { audienceBase: eng.base } : {}) });
-        } else {
-          await ctx.runMutation(internal.connections.insightsSync.writeInsights, { ...base, kind: "engaged", status: e.status === "ok" ? "not_reported" : e.status });
-        }
-      }
-    }
-  }
+  // TikTok's account endpoint has nothing else at account level (no reach, no demographics, per the spec).
+  const flow = flowOver(h.days, INSIGHTS.insightsDays, dayOf(now));
+  const metrics = nonNull({ followersGained: flow.gained, followersLost: flow.lost });
+  const status: ReadStatus = h.status === "ok" && Object.keys(metrics).length ? "ok" : h.status === "ok" ? "not_reported" : h.status;
+  await ctx.runMutation(internal.connections.insightsSync.writeInsights, { ...base, kind: "insights", status, fromDate: dayOf(now - (INSIGHTS.insightsDays - 1) * DAY), toDate: dayOf(now), metrics, unavailable: h.unavailable });
   return failures;
 }
 

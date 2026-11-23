@@ -121,12 +121,13 @@ export const simPost = internalMutation({
   args: { creatorId: v.id("creators"), caption: v.string() },
   handler: async (ctx, a): Promise<{ ok: boolean; url?: string; reason?: string }> => {
     const c = await simCreator(ctx, a.creatorId);
-    const platform = c.handles.tiktok ? "tiktok" : "instagram";
-    const handle = c.handles[platform]!;
+    const platform = "tiktok";
+    const handle = c.handles.tiktok;
+    if (!handle) return { ok: false, reason: "no TikTok handle" };
     const latest = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId)).order("desc").first()) as Doc<"ownPosts"> | null;
     if (!latest) return { ok: false, reason: "no posts of theirs to model the new one on" };
     const postId = `sim${Date.now()}`;
-    const url = platform === "tiktok" ? `https://www.tiktok.com/@${handle}/video/${postId}` : `https://www.instagram.com/reel/${postId}/`;
+    const url = `https://www.tiktok.com/@${handle}/video/${postId}`;
     const { _id, _creationTime, ...rest } = latest;
     void _id; void _creationTime;
     await ctx.db.insert("ownPosts", { ...rest, platform, postId, url, caption: a.caption, createTime: Date.now(), metricsAsOf: Date.now(), metrics: { views: 0, likes: 0, comments: 0, shares: 0 }, crossPostOf: undefined } as never);

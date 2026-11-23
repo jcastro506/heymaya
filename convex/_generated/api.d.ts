@@ -178,7 +178,6 @@ import type * as integrations_google_calendar from "../integrations/google/calen
 import type * as integrations_linq_client from "../integrations/linq/client.js";
 import type * as integrations_openrouter_client from "../integrations/openrouter/client.js";
 import type * as integrations_openrouter_images from "../integrations/openrouter/images.js";
-import type * as integrations_scrapeCreators___tests___fixtures_instagram from "../integrations/scrapeCreators/__tests__/fixtures/instagram.js";
 import type * as integrations_scrapeCreators___tests___fixtures_tiktok from "../integrations/scrapeCreators/__tests__/fixtures/tiktok.js";
 import type * as integrations_scrapeCreators_client from "../integrations/scrapeCreators/client.js";
 import type * as integrations_scrapeCreators_deps from "../integrations/scrapeCreators/deps.js";
@@ -186,7 +185,6 @@ import type * as integrations_scrapeCreators_fixtureClient from "../integrations
 import type * as integrations_scrapeCreators_normalize from "../integrations/scrapeCreators/normalize.js";
 import type * as integrations_scrapeCreators_platforms_commerce from "../integrations/scrapeCreators/platforms/commerce.js";
 import type * as integrations_scrapeCreators_platforms_cross from "../integrations/scrapeCreators/platforms/cross.js";
-import type * as integrations_scrapeCreators_platforms_instagram from "../integrations/scrapeCreators/platforms/instagram.js";
 import type * as integrations_scrapeCreators_platforms_tiktok from "../integrations/scrapeCreators/platforms/tiktok.js";
 import type * as integrations_scrapeCreators_schemas from "../integrations/scrapeCreators/schemas.js";
 import type * as integrations_telegram_client from "../integrations/telegram/client.js";
@@ -245,7 +243,6 @@ import type * as reads_key from "../reads/key.js";
 import type * as reads_kinds from "../reads/kinds.js";
 import type * as reads_profiles from "../reads/profiles.js";
 import type * as reads_read from "../reads/read.js";
-import type * as reads_reels from "../reads/reels.js";
 import type * as review_predictions from "../review/predictions.js";
 import type * as review_pulse from "../review/pulse.js";
 import type * as review_rung from "../review/rung.js";
@@ -449,7 +446,6 @@ declare const fullApi: ApiFromModules<{
   "integrations/linq/client": typeof integrations_linq_client;
   "integrations/openrouter/client": typeof integrations_openrouter_client;
   "integrations/openrouter/images": typeof integrations_openrouter_images;
-  "integrations/scrapeCreators/__tests__/fixtures/instagram": typeof integrations_scrapeCreators___tests___fixtures_instagram;
   "integrations/scrapeCreators/__tests__/fixtures/tiktok": typeof integrations_scrapeCreators___tests___fixtures_tiktok;
   "integrations/scrapeCreators/client": typeof integrations_scrapeCreators_client;
   "integrations/scrapeCreators/deps": typeof integrations_scrapeCreators_deps;
@@ -457,7 +453,6 @@ declare const fullApi: ApiFromModules<{
   "integrations/scrapeCreators/normalize": typeof integrations_scrapeCreators_normalize;
   "integrations/scrapeCreators/platforms/commerce": typeof integrations_scrapeCreators_platforms_commerce;
   "integrations/scrapeCreators/platforms/cross": typeof integrations_scrapeCreators_platforms_cross;
-  "integrations/scrapeCreators/platforms/instagram": typeof integrations_scrapeCreators_platforms_instagram;
   "integrations/scrapeCreators/platforms/tiktok": typeof integrations_scrapeCreators_platforms_tiktok;
   "integrations/scrapeCreators/schemas": typeof integrations_scrapeCreators_schemas;
   "integrations/telegram/client": typeof integrations_telegram_client;
@@ -516,7 +511,6 @@ declare const fullApi: ApiFromModules<{
   "reads/kinds": typeof reads_kinds;
   "reads/profiles": typeof reads_profiles;
   "reads/read": typeof reads_read;
-  "reads/reels": typeof reads_reels;
   "review/predictions": typeof review_predictions;
   "review/pulse": typeof review_pulse;
   "review/rung": typeof review_rung;
