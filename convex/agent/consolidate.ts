@@ -16,6 +16,10 @@ import { allRows } from "../core/schedule";
 
 /** The lasting note a change leaves behind ("lives in Denver now"): one id shape, read by the idea brief. */
 export const afterNoteId = (id: string) => `${id}_after`;
+/** Pure: a plan that has passed, kept as one: "Happened (by 2026-10-11): running the chicago marathon on oct 11". */
+export function pastOf(text: string, endedAt: number): string {
+  return `Happened (by ${new Date(endedAt).toISOString().slice(0, 10)}): ${text}`.slice(0, 240);
+}
 export const isAfterNote = (n: { id: string }) => n.id.endsWith("_after");
 
 export const maintainPersonal = internalMutation({
@@ -73,7 +77,10 @@ export const consolidateOne = internalMutation({
         if (!n.tombstonedAt && n.expiresHint && n.expiresHint < now && !n.confirmedAt && n.kind !== "bit") {
           expiredNotes++;
           // Horizon sim (2026-11-12): "moving to Denver" expired after the move and she forgot they live there now.
-          if (n.after && !(c.notes ?? []).some((m) => !m.tombstonedAt && m.text.toLowerCase() === n.after!.toLowerCase())) lasting.push({ id: afterNoteId(n.id), text: n.after, kind: "fact", sourceMessageId: n.sourceMessageId, at: now });
+          // Horizon sim (2026-11-13): "running Chicago on Oct 11" expired on race day with no "after", so a week later
+          // the race was gone and the recap never came. A dated plan with no "after" is kept as something that happened.
+          const after = n.after ?? (n.kind === "life" ? pastOf(n.text, n.expiresHint) : undefined);
+          if (after && !(c.notes ?? []).some((m) => !m.tombstonedAt && m.text.toLowerCase() === after.toLowerCase())) lasting.push({ id: afterNoteId(n.id), text: after, kind: "fact", sourceMessageId: n.sourceMessageId, at: now });
           return { ...n, tombstonedAt: now };
         }
         return n;

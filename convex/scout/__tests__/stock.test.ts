@@ -9,7 +9,7 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { STOCK, aboutOf, momentOf, momentsFull, parseStock, stockTarget, upcomingMoments } from "../stock";
+import { STOCK, aboutOf, coversSoon, momentOf, momentsFull, parseStock, stockTarget, upcomingMoments } from "../stock";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
@@ -162,5 +162,23 @@ describe("aboutOf: a soon idea is filed under the thing it's for", () => {
   });
   it("falls back to the first when the idea names none", () => {
     expect(aboutOf([{ hook: "five minute oats", why: "quick" }], ["Austin Jingle Bell 5K"])).toBe("Austin Jingle Bell 5K");
+  });
+});
+
+describe("coversSoon: the week of counts, not an idea from weeks before (horizon sim: Boulder)", () => {
+  const D = 86_400_000;
+  const trip = { title: "Boulder trip with Sam", since: 0, start: 24 * D };
+  it("an idea written 24 days out doesn't cover the trip once it's close", () => {
+    expect(coversSoon({ at: 0, text: "Testing diner food on the road to Boulder" }, trip)).toBe(false);
+  });
+  it("an idea written inside the two weeks does", () => {
+    expect(coversSoon({ at: 11 * D, text: "Testing diner food on the road to Boulder" }, trip)).toBe(true);
+    expect(coversSoon({ at: 11 * D, about: "Boulder trip with Sam", text: "a road trip taste test" }, trip)).toBe(true);
+  });
+  it("an idea about something else never does", () => {
+    expect(coversSoon({ at: 20 * D, text: "Stop making gluey mashed potatoes" }, trip)).toBe(false);
+  });
+  it("the window is two weeks", () => {
+    expect(STOCK.soonMs).toBe(14 * D);
   });
 });

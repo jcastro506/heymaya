@@ -43,8 +43,11 @@ export const STOCK = {
   laneMs: 21 * D,
   /** Moments this close are worth planning for. */
   momentsAheadMs: 42 * D,
-  /** Something this close with no idea for it gets one, even when the stock is full. */
-  soonMs: 10 * D,
+  /**
+   * Something this close with no idea for it gets one, even when the stock is full. Horizon sim (2026-11-13): at ten
+   * days a half marathon ten days and eight hours out got nothing until it was three days away, too late to plan.
+   */
+  soonMs: 14 * D,
 } as const;
 
 /**
@@ -68,6 +71,16 @@ export function namesIt(text: string, title: string): boolean {
 export function aboutOf(ideas: Array<{ hook: string; why: string }>, soon: string[]): string {
   const text = ideas.map((x) => `${x.hook} ${x.why}`).join(" ");
   return soon.find((t) => namesIt(text, t)) ?? soon[0];
+}
+
+/**
+ * Pure: does this idea cover the thing coming up? Only an idea written once it was within the soon window counts.
+ * Horizon sim (2026-11-13): an idea about the road to Boulder, written 24 days out, counted as covering the trip for
+ * good, so the week of the trip got nothing. Far out is "start planning"; close is "the week of".
+ */
+export function coversSoon(idea: { at: number; about?: string; text: string }, thing: { title: string; since: number; start: number }): boolean {
+  if (idea.at < Math.max(thing.since, thing.start - STOCK.soonMs)) return false;
+  return idea.about === thing.title || namesIt(idea.text, thing.title);
 }
 
 /** Pure: how many fresh ideas they should have, from how often they post. */
@@ -160,12 +173,12 @@ export const inputs = internalQuery({
     const events = (await ctx.db.query("calendarEvents").withIndex("by_creator_start", (q) => q.eq("creatorId", a.creatorId).gte("start", a.now).lte("start", a.now + STOCK.momentsAheadMs)).take(40)) as Doc<"calendarEvents">[];
     const near = await upcomingLocal(ctx, a.creatorId, a.now);
     const shown = events.filter((e) => e.status === "active" && e.class !== "private" && e.class !== "routine");
-    // Coming up within ten days and no idea since it was known names it: worth one idea even when the stock is full.
+    // Coming up within two weeks and no idea since then names it: worth one idea even when the stock is full.
     const ideaTexts = ideas.map((i) => ({ at: i.createdAt, about: (i.version as { about?: string } | undefined)?.about, text: `${hookOf(i)} ${String((i.version as { why?: string } | undefined)?.why ?? "")}` }));
     const soon = [
-      ...shown.filter((e) => e.start - a.now <= STOCK.soonMs).map((e) => ({ title: e.title, since: e.createdAt })),
-      ...(await ctx.db.query("localEvents").withIndex("by_creator_date", (q) => q.eq("creatorId", a.creatorId).gte("date", new Date(a.now).toISOString().slice(0, 10)).lte("date", new Date(a.now + STOCK.soonMs).toISOString().slice(0, 10))).take(10) as Doc<"localEvents">[]).map((e) => ({ title: e.title, since: e.foundAt })),
-    ].filter((s) => !ideaTexts.some((t) => t.about === s.title || (t.at >= s.since && namesIt(t.text, s.title)))).map((s) => s.title).slice(0, 2);
+      ...shown.filter((e) => e.start - a.now <= STOCK.soonMs).map((e) => ({ title: e.title, since: e.createdAt, start: e.start })),
+      ...(await ctx.db.query("localEvents").withIndex("by_creator_date", (q) => q.eq("creatorId", a.creatorId).gte("date", new Date(a.now).toISOString().slice(0, 10)).lte("date", new Date(a.now + STOCK.soonMs).toISOString().slice(0, 10))).take(10) as Doc<"localEvents">[]).map((e) => ({ title: e.title, since: e.foundAt, start: Date.parse(e.date) })),
+    ].filter((s) => !ideaTexts.some((t) => coversSoon(t, s))).map((s) => s.title).slice(0, 2);
     return {
       fresh, target: stockTarget(ppw),
       have: ideas.filter((i) => i.status !== "passed").map(hookOf).slice(0, 60),
