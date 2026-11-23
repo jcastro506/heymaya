@@ -15,7 +15,8 @@ settings:
     SWIFT_VERSION: "5.0"
     SWIFT_STRICT_CONCURRENCY: targeted
     MARKETING_VERSION: "0.1.0"
-    CURRENT_PROJECT_VERSION: "1"
+    # CURRENT_PROJECT_VERSION (the build number) is not set here: Config/Shared.xcconfig reads it from
+    # Config/BuildNumber.xcconfig, which the scheme writes before every build (see schemes below).
     DEVELOPMENT_TEAM: $(MAYA_DEVELOPMENT_TEAM)
     CODE_SIGN_STYLE: Automatic
 packages:
@@ -171,6 +172,14 @@ schemes:
       targets:
         Maya: all
         MayaTests: [test]
+      # The build number is the commit count, written before every build (operator, 2026-11-23: no more
+      # bumping it by hand). Every merge raises it, so each TestFlight archive is higher than the last.
+      preActions:
+        - name: Build number from git
+          settingsTarget: Maya
+          script: |
+            n=$(git -C "$PROJECT_DIR" rev-list --count HEAD 2>/dev/null || echo 1)
+            echo "CURRENT_PROJECT_VERSION = $n" > "$PROJECT_DIR/Config/BuildNumber.xcconfig"
     test:
       targets:
         - MayaTests
