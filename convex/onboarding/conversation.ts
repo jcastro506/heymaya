@@ -6,11 +6,16 @@
  * line when there's something in it to see: her first plan (calendar/weekPlan).
  */
 
+/** Her intro when she can't see their TikTok yet: what to do, and that she starts the moment they do it. */
+export const NEEDS_ACCOUNT_LINE = "connect your TikTok in the Maya app and i'll go through your posts right away";
+
 /** Pure: the texts after her greeting. Brand deals are named only when their plan has them (§26). */
-export function introBody(partnerships: boolean, readDone = false): string[] {
+export function introBody(partnerships: boolean, readDone = false, hasAccount = true): string[] {
   // 2026-11-03: two texts at pairing, not four. The read that follows shows what she does; "text me like
   // you'd text a friend" fits after their first reply, not on top of the greeting.
   if (readDone) return [];
+  // 2026-11-23: without their TikTok she can't read anything; "going through your posts now" was a false promise.
+  if (!hasAccount) return [NEEDS_ACCOUNT_LINE];
   return [`going through your posts now, give me a few minutes${partnerships ? ". i'll keep an eye out for brand deals too" : ""}`];
 }
 

@@ -12,7 +12,7 @@ import { clip } from "../lib/clip";
 import { platformOn } from "../config/platforms";
 import { v } from "convex/values";
 import { entitlementsFor } from "../billing/tiers";
-import { action, httpAction, internalAction, internalQuery, query, type ActionCtx } from "../_generated/server";
+import { action, httpAction, internalAction, internalQuery, query, type ActionCtx, type MutationCtx } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -63,6 +63,18 @@ export const ensureProfileRow = internalMutation({
   },
 });
 
+/** The previous holder of a handle someone else just proved they own: the handle and that account's read go. */
+async function releaseHandle(ctx: MutationCtx, holder: Doc<"creators">, username: string, accountId: string): Promise<void> {
+  const { tiktok: _gone, ...rest } = holder.handles;
+  void _gone;
+  await ctx.db.patch(holder._id, { handles: rest, ownership: "unverified", updatedAt: Date.now() });
+  const conn = (await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", holder._id).eq("provider", "zernio")).first()) as Doc<"connections"> | null;
+  if (conn?.zernioAccounts?.some((x) => x.accountId === accountId || x.username?.toLowerCase() === username)) {
+    const left = conn.zernioAccounts.filter((x) => x.accountId !== accountId && x.username?.toLowerCase() !== username);
+    await ctx.db.patch(conn._id, { zernioAccounts: left, status: left.length ? conn.status : "attention", detail: left.length ? conn.detail : "this TikTok was connected to another Maya account", updatedAt: Date.now() });
+  }
+}
+
 /** Accounts as Zernio reports them become the row; status follows needsReconnect, never a token date. */
 export const applyAccounts = internalMutation({
   args: { creatorId: v.id("creators"), accounts: v.array(v.object({ accountId: v.string(), platform: v.string(), username: v.union(v.string(), v.null()), needsReconnect: v.boolean(), canFetchAnalytics: v.boolean() })), detail: v.optional(v.string()) },
@@ -87,10 +99,13 @@ export const applyAccounts = internalMutation({
           .query("creators")
           .withIndex("by_tiktok", (q) => q.eq("handles.tiktok", username))
           .first()) as Doc<"creators"> | null;
-        if (!taken || taken._id === creator._id) {
-          handles.tiktok = username;
-          changed = true;
-        }
+        // Connecting proves they own it, so the handle moves here (2026-11-23: an operator's second account
+        // connected their TikTok, the first account still held the handle, the handle was skipped in silence
+        // and her read died with "no handles to read" after she'd said "give me a few minutes"). The account
+        // that held it loses the handle and its read of that TikTok; nothing else of theirs changes.
+        if (taken && taken._id !== creator._id) await releaseHandle(ctx, taken, username, account.accountId);
+        handles.tiktok = username;
+        changed = true;
       }
       if (changed) {
         await ctx.db.patch(creator._id, { handles, ownership: "verified", updatedAt: Date.now() });

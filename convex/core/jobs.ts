@@ -92,8 +92,23 @@ export const SERIAL_KINDS: ReadonlySet<string> = new Set(["converse"]);
  */
 export const TURN_DEAD_TEXT = "i couldn't get an answer together for your last message. that's on my side, not you. send it again when you're ready?";
 
-/** A job just died: if it was someone's turn and nothing answered it, say so, once. */
+/**
+ * Her first read of their posts died (2026-11-23: "no handles to read" five times, after she'd texted "going
+ * through your posts now, give me a few minutes", then silence). What she says depends on why: without their
+ * TikTok there's something they can do; otherwise it's on her side and the operator alert has the job.
+ */
+export const READ_NO_ACCOUNT_TEXT = "i can't see your TikTok yet, so i haven't been able to go through your posts. open the Maya app and connect it, and i'll start right away";
+export const READ_DEAD_TEXT = "i hit a problem going through your posts, that's on my side, not you. i'm on it and i'll text you once i've got them";
+
+/** A job just died: if it was someone's turn (or their first read) and nothing answered it, say so, once. */
 async function onDead(ctx: MutationCtx, job: Doc<"jobs">): Promise<void> {
+  if (job.kind === "ingest_catalogue" && job.creatorId) {
+    const c = (await ctx.db.get(job.creatorId)) as Doc<"creators"> | null;
+    if (!c || c.plan.status === "deleting" || /^eval/.test(c.clerkUserId ?? "")) return;
+    const noAccount = /no handles/i.test(job.lastError ?? "") || !c.handles?.tiktok;
+    await ctx.runMutation(internal.core.messages.send, { creatorId: job.creatorId, surface: "telegram", body: noAccount ? READ_NO_ACCOUNT_TEXT : READ_DEAD_TEXT, dedupeKey: `read-dead:${job.creatorId}:${noAccount ? "account" : "ours"}`, proactive: false, kind: "status" });
+    return;
+  }
   if (!SERIAL_KINDS.has(job.kind) || !job.creatorId) return;
   let messageId: string | undefined;
   try {
