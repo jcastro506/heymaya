@@ -57,7 +57,7 @@ export const today = query({
     const statusLine = !c.channel.paired
       ? "Not connected to Messages yet. Text her START to finish."
       : !c.dossier
-        ? `Reading your posts now (${posts.length} so far).`
+        ? `Watching your posts now (${posts.length} so far).`
         : `Watching ${active.length} account${active.length === 1 ? "" : "s"}.${lastSample ? ` Last look ${Math.round((now - lastSample) / 3_600_000)}h ago.` : ""}${running.length ? ` Working on ${running.length} thing${running.length === 1 ? "" : "s"}.` : ""}`;
     return {
       statusLine,

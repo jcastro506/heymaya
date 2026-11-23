@@ -88,7 +88,7 @@ struct PostNumbersView: View {
     if let types = n.viewerTypes, !types.isEmpty { ShareBars(title: "Who watched", shares: types) }
 
     VStack(alignment: .leading, spacing: 12) {
-      SectionHeader(text: "Her read")
+      SectionHeader(text: "Her take")
       HStack(alignment: .top, spacing: 12) {
         FlowerMark(size: 24)
         Text(n.read ?? "Connect your TikTok in Settings and she can tell you how many people it reached, and read why.")

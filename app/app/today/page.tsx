@@ -46,7 +46,7 @@ export default function TodayPage() {
       <section>
         <h2 className="text-sm uppercase tracking-wide opacity-50">Your recent posts</h2>
         {t.week.length === 0 ? (
-          <p className="text-sm opacity-60 mt-2">{t.dossier ? "No posts read yet." : "She is reading your posts now."}</p>
+          <p className="text-sm opacity-60 mt-2">{t.dossier ? "No posts watched yet." : "She is watching your posts now."}</p>
         ) : (
           <ul className="mt-2 flex flex-col gap-2">
             {t.week.map((p) => (

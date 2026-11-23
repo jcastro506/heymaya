@@ -183,7 +183,7 @@ export default function SettingsPage() {
       <section className="flex flex-col gap-2 text-sm">
         <h2 className="text-sm uppercase tracking-wide opacity-50">What Maya knows about you</h2>
         {!s.knows ? (
-          <p className="opacity-60">She hasn&apos;t finished reading your posts yet.</p>
+          <p className="opacity-60">She hasn&apos;t finished watching your posts yet.</p>
         ) : (
           <div className="flex flex-col gap-2">
             <p>{s.knows.summary ?? "—"} <span className="opacity-50">({s.knows.mode})</span></p>

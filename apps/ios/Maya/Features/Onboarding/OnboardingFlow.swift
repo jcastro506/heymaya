@@ -579,8 +579,8 @@ private struct DoneStep: View {
       FlowerMark(size: 88).padding(.bottom, 24)
       Text("You're in.").font(MayaFont.display).foregroundStyle(Palette.ink)
       Text(paired
-        ? "She's reading your posts now. Watch for her first text; everything she makes shows up here."
-        : "She's reading your posts now, and everything she makes shows up here. She'll start texting once you send her START.")
+        ? "She's watching your posts now. Look out for her first text; everything she makes shows up here."
+        : "She's watching your posts now, and everything she makes shows up here. She'll start texting once you send her START.")
         .font(MayaFont.body).foregroundStyle(Palette.muted)
         .multilineTextAlignment(.center)
         .padding(.top, 10)
