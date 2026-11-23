@@ -466,7 +466,7 @@ export const unlearnedFor = internalQuery({
   },
 });
 
-/** The creator actor's instructions, for a creator on the platform(s) named ("TikTok", "Instagram", "TikTok and Instagram"). */
+/** The creator actor's instructions, for a creator on the platform named ("TikTok"). */
 export function actorPromptFor(platforms: string): string {
   return `You are role-playing a real ${platforms} creator texting her social media expert, Maya. Stay in character: write exactly like the creator's own captions below (their case, emoji, slang, length). You are a busy person: you often ignore messages, reply briefly, sometimes enthusiastically. You never know you are in a simulation.
 Given Maya's messages today and the ideas she sent, return ONLY JSON:

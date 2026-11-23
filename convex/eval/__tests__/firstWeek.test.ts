@@ -75,7 +75,7 @@ describe("the schedule", () => {
 
   it("the default subjects are TikTok accounts only", () => {
     expect(DEFAULT_SUBJECTS.length).toBeGreaterThan(0);
-    expect(DEFAULT_SUBJECTS.every((s) => s.tiktok && !s.instagram)).toBe(true);
+    expect(DEFAULT_SUBJECTS.every((s) => s.tiktok && !("instagram" in s))).toBe(true);
   });
 });
 
@@ -136,7 +136,7 @@ describe("isolation", () => {
 
   it("a creator is made by the real signup path: its catalogue job carries the sim's caps, on a trial of the right tier", async () => {
     const t = convexTest(schema, modules);
-    const r = await t.mutation(internal.eval.firstWeek.createOne, { runId: "fw-t1", i: 0, handles: { tiktok: "@Cam.Luyckx", instagram: "camruns" }, timezone: "Europe/London", watchCap: 2, transcriptCap: 6 });
+    const r = await t.mutation(internal.eval.firstWeek.createOne, { runId: "fw-t1", i: 0, handles: { tiktok: "@Cam.Luyckx" }, timezone: "Europe/London", watchCap: 2, transcriptCap: 6 });
     expect(r.ok).toBe(true);
     const { c, job, sched } = await t.run(async (ctx) => ({
       c: await ctx.db.get(r.creatorId as Id<"creators">),
@@ -144,7 +144,7 @@ describe("isolation", () => {
       sched: await ctx.db.query("schedule").withIndex("by_creator", (q) => q.eq("creatorId", r.creatorId as Id<"creators">)).first(),
     }));
     expect(c?.clerkUserId).toBe("eval-run:fw-t1:0");
-    expect(c?.handles, "TikTok only: an Instagram handle is never taken").toEqual({ tiktok: "cam.luyckx" });
+    expect(c?.handles).toEqual({ tiktok: "cam.luyckx" });
     expect(c?.plan).toMatchObject({ status: "trialing", tier: "solo" });
     expect(JSON.parse(job!.payloadJson!)).toEqual({ reason: "onboarding", watchCap: 2, transcriptCap: 6 });
     expect(sched?.isEval).toBe(true);
@@ -152,7 +152,7 @@ describe("isolation", () => {
     const again = await t.mutation(internal.eval.firstWeek.createOne, { runId: "fw-t2", i: 0, handles: { tiktok: "cam.luyckx" }, timezone: "UTC", watchCap: 2, transcriptCap: 6 });
     expect(again.ok).toBe(false);
     expect(again.error).toMatch(/already set up/);
-    expect((await t.query(internal.eval.firstWeek.preflight, { handles: [{ tiktok: "cam.luyckx" }, { instagram: "free_one" }] })).map((x) => x.free)).toEqual([false, true]);
+    expect((await t.query(internal.eval.firstWeek.preflight, { handles: [{ tiktok: "cam.luyckx" }, { tiktok: "free_one" }] })).map((x) => x.free)).toEqual([false, true]);
   });
 
   it("the fleet's due lists never include an eval creator, paired or not", async () => {

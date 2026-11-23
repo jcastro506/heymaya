@@ -22,7 +22,6 @@ import { seedCreator } from "../../../tests/lib/creatorRow";
 import live from "../../integrations/zernio/fixtures.live-2026-10-01.json";
 import { HANDLED_EVENTS } from "../../integrations/zernio/index";
 import { normalizeConnected, type ZernioPostRow } from "../analytics";
-import { normalizeDemographics } from "../accountInsights";
 import { numbersFor, shapeLine } from "../numbers";
 import { normalizeTimeline, toReadings } from "../timeline";
 import { authorKey, cleanText, commentFacts, groupQuestions, isQuestion, normalizeCommentedPosts, normalizeComments, normalizeCommentWebhook, worthAnswering } from "../comments";
@@ -118,11 +117,6 @@ describe("the live recording, parsed", () => {
     expect(mergeHistory([{ at: 3, views: 30 }], [{ at: 1, views: 10 }, { at: 2, views: 5 }])).toEqual([{ at: 1, views: 10 }, { at: 3, views: 30 }]);
   });
 
-  it("engaged audience under 100 followers: 200 with empty arrays is 'not reported', never an empty audience", () => {
-    expect(normalizeDemographics(L["igDemographics.engaged"].body)).toBeNull();
-    expect(normalizeDemographics(L["igDemographics.follower"].body)).toBeNull();
-  });
-
   it("comments: the live empty answers parse; the commented-posts list maps ids to links", () => {
     for (const k of Object.keys(L).filter((x) => x.startsWith("comments."))) expect(normalizeComments(L[k].body)!.comments).toEqual([]);
     const tt = normalizeCommentedPosts(L["inboxCommentedPosts.tiktok"].body)!;
@@ -174,24 +168,16 @@ describe("the live recording, parsed", () => {
   });
 });
 
-describe("tiktok viewer countries and the engaged audience, surfaced", () => {
+describe("tiktok viewer countries, surfaced", () => {
   it("view-weighted across posts; {} posts are skipped; none at all is said, not invented", () => {
     const vc = viewerCountriesAcross([{ views: 900, viewerCountries: { US: 0.5, GB: 0.5 }, asOf: 1 }, { views: 100, viewerCountries: { US: 1 }, asOf: 2 }, { views: 5000, viewerCountries: {}, asOf: 3 }])!;
     expect(vc).toMatchObject({ posts: 2, views: 1000, asOf: 2 });
     expect(vc.countries).toEqual([{ code: "US", share: 0.55 }, { code: "GB", share: 0.45 }]);
     expect(viewerCountriesAcross(posts("analytics.tiktok").map((p) => normalizeConnected(p)!).map((c) => ({ views: c.views, viewerCountries: c.viewerCountries, asOf: c.asOf })))).toBeNull();
-    const tt = accountFacts("tiktok", true, { insights: null, audience: null, snaps: [], viewerCountries: null }, NOW);
+    const tt = accountFacts("tiktok", true, { snaps: [], viewerCountries: null }, NOW);
     expect(tt.cannotKnow.join(" ")).toMatch(/didn't report viewer countries/);
-    const tt2 = accountFacts("tiktok", true, { insights: null, audience: null, snaps: [], viewerCountries: vc }, NOW);
+    const tt2 = accountFacts("tiktok", true, { snaps: [], viewerCountries: vc }, NOW);
     expect(tt2.lines.join(" ")).toMatch(/United States 55%, United Kingdom 45% \(connected, TikTok/);
-  });
-
-  it("the engaged audience is its own line, labelled; too few followers is said", () => {
-    const row = (status: string, audience?: unknown) => ({ _id: "x", _creationTime: 0, creatorId: "c", platform: "instagram", accountId: "ig", kind: "engaged", status, audience, fetchedAt: NOW - 3_600_000 }) as unknown as Doc<"accountInsights">;
-    const ok = accountFacts("instagram", true, { insights: null, audience: null, snaps: [], engaged: row("ok", { gender: [{ label: "F", value: 60, share: 0.6 }, { label: "M", value: 40, share: 0.4 }] }) }, NOW);
-    expect(ok.lines.join(" ")).toMatch(/who engaged with them this month: women 60%, men 40% \(connected, Instagram, read 1h ago\)/);
-    const few = accountFacts("instagram", true, { insights: null, audience: null, snaps: [], engaged: row("too_few_followers") }, NOW);
-    expect(few.cannotKnow.join(" ")).toMatch(/who engaged with them on Instagram: Instagram only shares this from 100 followers/);
   });
 
   it("the public kit shows no audience read without their yes: followers, engaged or viewer countries", () => {
@@ -234,9 +220,7 @@ const liveRoute = (withComments = true): Route => (url) => {
   if (p.startsWith("/api/v1/inbox/comments/")) return { status: 200, body: p.endsWith("/7670709537535544590") && withComments ? SPEC_COMMENTS : L["comments.instagram.1"].body };
   if (p === "/api/v1/analytics") return { status: 200, body: L[acc.startsWith("ig") ? "analytics.instagram" : "analytics.tiktok"].body };
   if (p === "/api/v1/analytics/post-timeline") return { status: 200, body: L["postTimeline.tiktok.0"].body };
-  if (p.endsWith("/instagram/demographics")) return { status: 200, body: L[url.searchParams.get("metric") === "engaged_audience_demographics" ? "igDemographics.engaged" : "igDemographics.follower"].body };
-  if (p.endsWith("/follower-history") || p.endsWith("/tiktok/account-insights")) return { status: 200, body: { success: true, metrics: {} } };
-  if (p.endsWith("/instagram/account-insights")) return { status: 200, body: { success: true, metrics: {} } };
+  if (p.endsWith("/tiktok/account-insights")) return { status: 200, body: { success: true, metrics: {} } };
   return { status: 404, body: { error: "not recorded" } };
 };
 

@@ -2,11 +2,9 @@
  * A1: the account type each platform needs for Maya to work fully, read from their PUBLIC profile
  * (no connection needed), and the one piece of setup advice per platform.
  *
- * Instagram must be professional to connect at all; Creator beats Business (Business accounts get
- * a limited music library). TikTok stays personal: a business account loses trending sounds and
- * the Creator Rewards Program, which costs more than the analytics it adds.
+ * TikTok stays personal: a business account loses trending sounds and the Creator Rewards Program,
+ * which costs more than the analytics it adds. TikTok only: an old Instagram row gets no advice.
  */
-import { enabledPlatforms, instagramOn } from "../config/platforms";
 import { v } from "convex/values";
 import { internalAction, internalQuery, query } from "../_generated/server";
 import { internalMutation } from "../lib/functions";
@@ -18,19 +16,15 @@ export interface SetupAdvice { needed: boolean; title: string; why: string; step
 
 /** Pure: what (if anything) to ask them to change, per platform and account type. */
 export function setupAdvice(platform: "tiktok" | "instagram", type: AccountType | null): SetupAdvice | null {
-  if (platform === "instagram" && !instagramOn()) return null;
-  if (platform === "instagram") {
-    if (type === "personal") return { needed: true, title: "Switch Instagram to a Creator account", why: "Instagram only lets a Creator or Business account connect, and without it Maya can't see your reach, saves or watch time. It's free and takes a minute. Creator keeps the full music library.", steps: ["Open Instagram and go to your profile", "Tap the menu (☰), then Settings and privacy", "Tap Account type and tools", "Tap Switch to professional account", "Choose Creator, pick a category, and tap Done"] };
-    if (type === "business") return { needed: false, title: "Creator works better than Business for you", why: "Business accounts get a limited music library. A Creator account connects the same way and keeps every sound. Optional.", steps: ["Settings and privacy", "Account type and tools", "Switch to creator account"] };
-    return null;
-  }
+  if (platform !== "tiktok") return null;
   if (type === "business") return { needed: false, title: "A personal TikTok gets every sound", why: "Business accounts can only use TikTok's commercial music, and can't earn from the Creator Rewards Program. Maya works with either; switch back only if that matters to you.", steps: ["Profile, then the menu (☰)", "Settings and privacy, then Account", "Switch to Personal Account"] };
   return null;
 }
 
 /**
  * The same advice, for a screen that can't know their account type yet (onboarding's Connect step,
- * before anything is connected): Instagram's switch steps, from the one definition above. Pure read.
+ * before anything is connected), from the one definition above. Pure read. The validator still takes
+ * "instagram" so an older app build's call answers null instead of failing.
  */
 export const advice = query({
   args: { platform: v.union(v.literal("tiktok"), v.literal("instagram")), accountType: v.union(v.literal("personal"), v.literal("creator"), v.literal("business")) },
@@ -39,18 +33,18 @@ export const advice = query({
 
 export const handlesFor = internalQuery({
   args: { creatorId: v.id("creators") },
-  handler: async (ctx, a): Promise<{ tiktok?: string; instagram?: string } | null> => {
+  handler: async (ctx, a): Promise<{ tiktok?: string } | null> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
-    return c ? { tiktok: c.handles.tiktok ?? undefined, instagram: c.handles.instagram ?? undefined } : null;
+    return c ? { tiktok: c.handles.tiktok ?? undefined } : null;
   },
 });
 
 export const save = internalMutation({
-  args: { creatorId: v.id("creators"), tiktok: v.optional(v.union(v.literal("personal"), v.literal("creator"), v.literal("business"))), instagram: v.optional(v.union(v.literal("personal"), v.literal("creator"), v.literal("business"))) },
+  args: { creatorId: v.id("creators"), tiktok: v.optional(v.union(v.literal("personal"), v.literal("creator"), v.literal("business"))) },
   handler: async (ctx, a): Promise<null> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c) return null;
-    await ctx.db.patch(a.creatorId, { accountTypes: { ...(c.accountTypes ?? {}), ...(a.tiktok ? { tiktok: a.tiktok } : {}), ...(a.instagram ? { instagram: a.instagram } : {}), checkedAt: Date.now() } });
+    await ctx.db.patch(a.creatorId, { accountTypes: { ...(c.accountTypes ?? {}), ...(a.tiktok ? { tiktok: a.tiktok } : {}), checkedAt: Date.now() } });
     return null;
   },
 });
@@ -58,23 +52,23 @@ export const save = internalMutation({
 /** One creator: read each public profile (cached a week, so ~free) and keep the account type. */
 export const check = internalAction({
   args: { creatorId: v.id("creators") },
-  handler: async (ctx, a): Promise<{ tiktok: AccountType | null; instagram: AccountType | null }> => {
+  handler: async (ctx, a): Promise<{ tiktok: AccountType | null }> => {
     const h = await ctx.runQuery(internal.account.setup.handlesFor, a);
-    const out: { tiktok: AccountType | null; instagram: AccountType | null } = { tiktok: null, instagram: null };
-    for (const platform of enabledPlatforms()) {
-      const handle = h?.[platform];
-      if (!handle) continue;
+    const out: { tiktok: AccountType | null } = { tiktok: null };
+    const platform = "tiktok" as const;
+    const handle = h?.tiktok;
+    if (handle) {
       try {
         let r = await ctx.runAction(internal.reads.read.read, { kind: "profile", params: { platform, handle }, creatorId: a.creatorId });
         // A profile cached before account types were read has no such key: read it fresh, once.
         if (r.value && typeof r.value === "object" && !("accountType" in (r.value as object))) r = await ctx.runAction(internal.reads.read.read, { kind: "profile", params: { platform, handle }, creatorId: a.creatorId, force: true });
         const t =(r.value as { accountType?: AccountType | null } | null)?.accountType ?? null;
-        out[platform] = t;
+        out.tiktok = t;
       } catch {
         // an unreadable profile keeps whatever we knew; the next weekly pass tries again
       }
     }
-    await ctx.runMutation(internal.account.setup.save, { creatorId: a.creatorId, ...(out.tiktok ? { tiktok: out.tiktok } : {}), ...(out.instagram ? { instagram: out.instagram } : {}) });
+    await ctx.runMutation(internal.account.setup.save, { creatorId: a.creatorId, ...(out.tiktok ? { tiktok: out.tiktok } : {}) });
     return out;
   },
 });

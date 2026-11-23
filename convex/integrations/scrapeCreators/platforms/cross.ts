@@ -114,23 +114,6 @@ export const CREDITS_BY_PATH: Record<string, number> = {
   "/v1/tiktok/song": 1,
   "/v1/tiktok/song/videos": 1,
   "/v1/tiktok/collection/videos": 1,
-  "/v1/instagram/profile": 1,
-  "/v1/instagram/profile/post-count": 1,
-  "/v1/instagram/user/posts": 1,
-  "/v2/instagram/user/posts": 1,
-  "/v1/instagram/user/reels": 1,
-  "/v1/instagram/post": 10, // 10 when media is found, 1 otherwise
-  "/v2/instagram/post/comments": 15, // per the vendor spec; mine Instagram comments on top posts only
-  "/v2/instagram/media/transcript": 1,
-  "/v2/instagram/reels/search": 1,
-  "/v1/instagram/search": 1,
-  "/v1/instagram/search/popular": 1,
-  "/v1/instagram/search/profiles": 1,
-  "/v1/instagram/search/hashtag": 1,
-  "/v1/instagram/reels/trending": 1,
-  "/v1/instagram/audio/reels": 1,
-  "/v1/instagram/user/highlights": 1,
-  "/v1/instagram/user/highlight/detail": 1,
   "/v1/find-social-profiles": 10, // per the vendor spec; 0 on a cache_max_age hit
   "/v1/reddit/search": 1,
   // Deals (2026-10-12): where money is moving in a lane.

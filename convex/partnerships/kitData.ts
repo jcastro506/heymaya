@@ -9,11 +9,10 @@
  * Pure helpers are exported for the tests; `readKitV2` is shared by the tool, the app and the page
  * (a query can't call a query).
  */
-import { instagramOn } from "../config/platforms";
 import type { QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { normalViews } from "../core/normal";
-import { appCards, tiktokViewerCountries } from "../connections/audience";
+import { tiktokViewerCountries } from "../connections/audience";
 import { countryName } from "../connections/accountInsights";
 import { avatarKey, coverForUrl, mediaUrl } from "../media";
 import { Opportunity, Profile } from "./contracts";
@@ -45,7 +44,7 @@ export interface KitPlatform {
   audience: KitAudience | null;
   /** TikTok only: a screenshot they sent is older than the window; she asks for a fresh one when it matters. */
   audienceStale?: boolean;
-  /** A2, Instagram connected: who engaged this month (not who follows). Absent or null = not reported. */
+  /** Was Instagram-connected engagement; always null now (TikTok only). Kept so older clients still decode. */
   engagedAudience?: KitAudience | null;
   /** A2, TikTok connected: viewer countries across recent posts, weighted by views. Absent or null = not reported. */
   viewerCountries?: { asOf: number | null; posts: number; countries: KitShare[] } | null;
@@ -145,15 +144,13 @@ export async function readKitV2(ctx: QueryCtx, c: Doc<"creators">, now = Date.no
   const posts = (await ctx.db.query("ownPosts").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).order("desc").take(200)) as Doc<"ownPosts">[];
   const since = new Date(now - 95 * DAY).toISOString().slice(0, 10);
   const snaps = (await ctx.db.query("followerSnapshots").withIndex("by_creator_day", (q) => q.eq("creatorId", c._id).gte("day", since)).take(400)) as Doc<"followerSnapshots">[];
-  const audienceRows = (await ctx.db.query("accountInsights").withIndex("by_creator_kind", (q) => q.eq("creatorId", c._id).eq("kind", "audience")).take(20)) as Doc<"accountInsights">[];
-  const engagedRows = (await ctx.db.query("accountInsights").withIndex("by_creator_kind", (q) => q.eq("creatorId", c._id).eq("kind", "engaged")).take(20)) as Doc<"accountInsights">[];
   const prof = (await ctx.db.query("partnershipProfiles").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).unique()) as Doc<"partnershipProfiles"> | null;
   const prefs = Profile.parse(prof?.data ?? {});
   const mailbox = (await ctx.db.query("partnershipMailboxes").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).first()) as Doc<"partnershipMailboxes"> | null;
   const opps = (await ctx.db.query("partnershipOpportunities").withIndex("by_creator", (q) => q.eq("creatorId", c._id)).take(200)) as Doc<"partnershipOpportunities">[];
 
   const platforms: KitPlatform[] = [];
-  for (const platform of (instagramOn() ? ["instagram", "tiktok"] as const : ["tiktok"] as const)) {
+  for (const platform of ["tiktok"] as const) {
     const mine = posts.filter((x) => x.platform === platform);
     const handle = c.handles[platform] ?? null;
     if (!mine.length && !handle) continue;
@@ -162,26 +159,14 @@ export async function readKitV2(ctx: QueryCtx, c: Doc<"creators">, now = Date.no
     const followers = latestSnap?.followers ?? null;
     let audience: KitAudience | null = null;
     let audienceStale = false;
-    if (platform === "instagram") {
-      const row = audienceRows.find((r) => r.platform === "instagram" && r.status === "ok") ?? null;
-      if (row) {
-        const a = appCards("instagram", true, { insights: null, audience: row, snaps: [] }, now).audience;
-        if (a && a.status === "ok") audience = { source: "connected", asOf: a.asOf ?? row.fetchedAt, age: a.age, gender: a.gender, countries: a.countries, cities: a.cities };
-      }
-    } else if (settings?.tiktokAudience) {
+    if (settings?.tiktokAudience) {
       if (freshScreenshot(settings.tiktokAudience.at, now)) audience = { source: "tiktok_studio", asOf: settings.tiktokAudience.at, age: settings.tiktokAudience.age, gender: settings.tiktokAudience.gender, countries: settings.tiktokAudience.countries, cities: [] };
       else audienceStale = true;
     }
-    let engagedAudience: KitAudience | null = null;
+    const engagedAudience: KitAudience | null = null;
     let viewerCountries: KitPlatform["viewerCountries"] = null;
-    if (platform === "instagram") {
-      const row = engagedRows.find((r) => r.platform === "instagram" && r.status === "ok") ?? null;
-      const a = row ? appCards("instagram", true, { insights: null, audience: row, snaps: [] }, now).audience : null;
-      if (row && a && a.status === "ok") engagedAudience = { source: "connected", asOf: a.asOf ?? row.fetchedAt, age: a.age, gender: a.gender, countries: a.countries, cities: a.cities };
-    } else {
-      const vc = await tiktokViewerCountries(ctx, c._id, now);
-      if (vc) viewerCountries = { asOf: vc.asOf, posts: vc.posts, countries: vc.countries.map((x) => ({ label: countryName(x.code), share: x.share })) };
-    }
+    const vc = await tiktokViewerCountries(ctx, c._id, now);
+    if (vc) viewerCountries = { asOf: vc.asOf, posts: vc.posts, countries: vc.countries.map((x) => ({ label: countryName(x.code), share: x.share })) };
     const best = bestPosts(mine.map((x) => ({ url: x.url, platform, views: x.metrics.views, multiple: x.multiple ?? null, caption: x.caption.split("\n")[0].slice(0, 100), createTime: x.createTime, cover: null as string | null })), now);
     for (const b of best) b.cover = await coverForUrl(ctx, b.url).catch(() => null);
     platforms.push({
@@ -201,14 +186,14 @@ export async function readKitV2(ctx: QueryCtx, c: Doc<"creators">, now = Date.no
     });
   }
 
-  // The photo: theirs if they sent one, off if they said no photo, else their profile picture (Instagram first).
+  // The photo: theirs if they sent one, off if they said no photo, else their TikTok profile picture.
   const setting = settings?.photo?.source ?? "auto";
   let photo: KitV2["photo"] = null;
   if (setting === "upload" && settings?.photo?.storageId) {
     const url = await ctx.storage.getUrl(settings.photo.storageId);
     if (url) photo = { url, source: "upload" };
   } else if (setting === "auto") {
-    for (const p of (instagramOn() ? ["instagram", "tiktok"] as const : ["tiktok"] as const)) {
+    for (const p of ["tiktok"] as const) {
       const h = c.handles[p];
       const url = h ? await mediaUrl(ctx, p, "avatar", avatarKey(h)) : null;
       if (url) { photo = { url, source: p }; break; }
@@ -224,7 +209,7 @@ export async function readKitV2(ctx: QueryCtx, c: Doc<"creators">, now = Date.no
   const lane = typeof (c.dossier as { lane?: unknown } | undefined)?.lane === "string" ? String((c.dossier as { lane: string }).lane) : c.niche || null;
 
   return {
-    name: (instagramOn() ? c.handles.instagram ?? c.handles.tiktok : c.handles.tiktok) ?? "creator",
+    name: c.handles.tiktok ?? "creator",
     lane,
     asOf: now,
     photo,

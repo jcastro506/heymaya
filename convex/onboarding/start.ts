@@ -4,7 +4,6 @@
  * so nothing waits on the Telegram step.
  */
 
-import { instagramOn } from "../config/platforms";
 import { v } from "convex/values";
 import { normalizePhone } from "../integrations/claw/client";
 import { internalQuery, query, type MutationCtx } from "../_generated/server";
@@ -85,19 +84,17 @@ export const start = mutation({
 export async function startCreator(ctx: MutationCtx, args: { subject: string; email: string; handles: { tiktok?: string; instagram?: string }; timezone?: string; /** First-week simulation only: a smaller catalogue read (see onboarding/ingest.ts run). */ ingestCaps?: { watchCap?: number; transcriptCap?: number } }): Promise<{ ok: boolean; creatorId?: string; error?: string }> {
   {
     const identity = { subject: args.subject, email: args.email };
-    const handles = { tiktok: cleanHandle(args.handles.tiktok), instagram: instagramOn() ? cleanHandle(args.handles.instagram) : undefined };
-    if (!handles.tiktok && !handles.instagram) return { ok: false, error: instagramOn() ? "one handle is required" : "your TikTok handle is required" };
+    // TikTok only: an Instagram handle an older app build sends is ignored.
+    const tiktok = cleanHandle(args.handles.tiktok);
+    if (!tiktok) return { ok: false, error: "your TikTok handle is required" };
+    const handles = { tiktok };
 
     // One creator per handle: a second signup with the same handle is a merge prompt, never a second row.
-    for (const platform of ["tiktok", "instagram"] as const) {
-      const h = handles[platform];
-      if (!h) continue;
-      const taken = (await ctx.db
-        .query("creators")
-        .withIndex(platform === "tiktok" ? "by_tiktok" : "by_instagram", (q) => q.eq(platform === "tiktok" ? "handles.tiktok" : "handles.instagram", h))
-        .first()) as Doc<"creators"> | null;
-      if (taken && taken.clerkUserId !== identity.subject) return { ok: false, error: `@${h} is already set up with another account` };
-    }
+    const taken = (await ctx.db
+      .query("creators")
+      .withIndex("by_tiktok", (q) => q.eq("handles.tiktok", tiktok))
+      .first()) as Doc<"creators"> | null;
+    if (taken && taken.clerkUserId !== identity.subject) return { ok: false, error: `@${tiktok} is already set up with another account` };
 
     const existing = (await ctx.db
       .query("creators")
@@ -105,8 +102,8 @@ export async function startCreator(ctx: MutationCtx, args: { subject: string; em
       .first()) as Doc<"creators"> | null;
     const now = Date.now();
     if (existing) {
-      // With Instagram off a stored Instagram handle is kept, so turning it back on restores it.
-      await ctx.db.patch(existing._id, { handles: instagramOn() ? handles : { ...handles, instagram: existing.handles.instagram }, timezone: args.timezone ?? existing.timezone, updatedAt: now });
+      // An Instagram handle stored on an old row is left alone, never read.
+      await ctx.db.patch(existing._id, { handles: { ...handles, instagram: existing.handles.instagram }, timezone: args.timezone ?? existing.timezone, updatedAt: now });
       return { ok: true, creatorId: existing._id };
     }
     const creatorId = await ctx.db.insert("creators", {
@@ -143,7 +140,7 @@ export async function startCreator(ctx: MutationCtx, args: { subject: string; em
       creatorId,
       payloadJson: JSON.stringify({ reason: "onboarding", ...(args.ingestCaps ?? {}) }),
     });
-    // A1: know each account's type before they try to connect (Instagram must be Creator or Business).
+    // A1: know their account type before they try to connect.
     await ctx.scheduler.runAfter(0, internal.account.setup.check, { creatorId });
     return { ok: true, creatorId };
   }
@@ -269,7 +266,8 @@ export const progress = query({
     const jobs = (await ctx.db.query("jobs").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).collect()) as Doc<"jobs">[];
     const ingest = jobs.filter((j) => j.kind === "ingest_catalogue").sort((x, y) => y.createdAt - x.createdAt)[0];
     const firstRead = jobs.filter((j) => j.kind === "first_read").sort((x, y) => y.createdAt - x.createdAt)[0];
-    return { state: paired ? "paired" : dossier ? "read" : posts.length ? "reading" : "none", posts: posts.length, transcripts, dossier, paired, ingest: ingest?.status ?? null, firstRead: firstRead?.status ?? null, timezone: creator.timezone, quietHours: creator.quietHours, channelKind: creator.channel.kind ?? "imessage", phone: creator.phone ?? null, planStatus: creator.plan.status, tier: creator.plan.tier ?? null, firstName: creator.firstName ?? null, nameConfirmed: Boolean(creator.nameConfirmedAt), instagramEnabled: instagramOn() };
+    // instagramEnabled stays false: app builds before 2026-11-13 show Instagram when the key is missing.
+    return { state: paired ? "paired" : dossier ? "read" : posts.length ? "reading" : "none", posts: posts.length, transcripts, dossier, paired, ingest: ingest?.status ?? null, firstRead: firstRead?.status ?? null, timezone: creator.timezone, quietHours: creator.quietHours, channelKind: creator.channel.kind ?? "imessage", phone: creator.phone ?? null, planStatus: creator.plan.status, tier: creator.plan.tier ?? null, firstName: creator.firstName ?? null, nameConfirmed: Boolean(creator.nameConfirmedAt), instagramEnabled: false };
   },
 });
 

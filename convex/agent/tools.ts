@@ -7,7 +7,6 @@
  * are ours, not the vendor's: the creator's own rhyming posts and their taste.
  */
 
-import { instagramOn } from "../config/platforms";
 import type { OpenRouterTool } from "../integrations/openrouter/client";
 import { WEB_CALLS_PER_TURN } from "./web";
 import { factsFor, staleDays } from "../knowledge/platforms";
@@ -27,25 +26,14 @@ export interface ToolBudget { calls: number; credits: number; deadlineAt: number
 export const DEFAULT_BUDGET = (): ToolBudget => ({ calls: 6, credits: 40, deadlineAt: Date.now() + 60_000 });
 
 /** Approximate credit prices per call (the ledger records the vendor's real number). */
-export const TOOL_CREDITS: Record<string, number> = { post_info: 10, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, sound_reels: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, search_reels: 1, search_ig_hashtag: 1, ig_popular: 1, trending_tiktok: 1, trending_reels: 1, suggestions: 1, discover_creators: 1, discover_profiles: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0, recall: 0, lane_benchmark: 0, week_plan: 0, block_move: 0, block_drop: 0, block_add: 0, week_replan: 0, own_post_numbers: 0, post_diagnosis: 0, audience: 0, own_comments: 0, growth_plan: 0, calendar_free: 0, mission_control_link: 0, ideas_list: 0, idea_get: 0, idea_update: 0, idea_status: 0, idea_plan: 0, web_search: 0, web_read: 0, platform_fact: 0, lane_brands: 0, media_kit: 0, media_kit_link: 0, finish_notes: 0, watch_account: 0, idea_add: 0, trends_now: 0, routine_add: 0, routine_stop: 0, texting_pace: 0, week_plans: 0, pause_texts: 0, video_replies: 0 };
+export const TOOL_CREDITS: Record<string, number> = { post_info: 10, post_transcript: 1, post_comments: 1, sound_info: 1, sound_videos: 1, profile: 1, account_posts: 1, search_keyword: 1, search_hashtag: 1, search_top: 1, trending_tiktok: 1, suggestions: 1, discover_creators: 1, own_rhymes: 0, taste: 0, calendar_upcoming: 0, recall: 0, lane_benchmark: 0, week_plan: 0, block_move: 0, block_drop: 0, block_add: 0, week_replan: 0, own_post_numbers: 0, post_diagnosis: 0, audience: 0, own_comments: 0, growth_plan: 0, calendar_free: 0, mission_control_link: 0, ideas_list: 0, idea_get: 0, idea_update: 0, idea_status: 0, idea_plan: 0, web_search: 0, web_read: 0, platform_fact: 0, lane_brands: 0, media_kit: 0, media_kit_link: 0, finish_notes: 0, watch_account: 0, idea_add: 0, trends_now: 0, routine_add: 0, routine_stop: 0, texting_pace: 0, week_plans: 0, pause_texts: 0, video_replies: 0 };
 
 const str = { type: "string" } as const;
 for (const tool of [...PARTNERSHIP_TOOLS, ...KIT_TOOLS]) TOOL_CREDITS[tool.function.name] = 0;
 
 /** K1: tools that exist only on the partnerships plan (the partnership_* belt plus the kit). */
-/** Tools that only read Instagram (config/platforms): off the belt while Instagram is off. */
+/** Instagram tool names (retired; TikTok only): a model that still reaches for one is refused. */
 export const INSTAGRAM_TOOLS = new Set(["search_reels", "search_ig_hashtag", "ig_popular", "sound_reels", "trending_reels", "discover_profiles"]);
-
-/** The belt for the platforms that are on: no Instagram-only tools, and "platform" choices narrowed to what's on. */
-export function platformBelt(tools: OpenRouterTool[]): OpenRouterTool[] {
-  if (instagramOn()) return tools;
-  return tools.filter((t) => !INSTAGRAM_TOOLS.has(t.function.name)).map((t) => {
-    const params = t.function.parameters as { properties?: Record<string, { enum?: unknown[] }> } | undefined;
-    const pl = params?.properties?.platform;
-    if (!pl?.enum?.includes("instagram")) return t;
-    return { ...t, function: { ...t.function, parameters: { ...params, properties: { ...params!.properties, platform: { ...pl, enum: pl.enum.filter((x) => x !== "instagram") } } } } };
-  });
-}
 
 /** Their settings change only in answer to something they said: never from a background pass. */
 export const REPLY_ONLY_TOOLS = new Set(["routine_add", "routine_stop", "texting_pace", "idea_add", "week_plans", "pause_texts", "video_replies"]);
@@ -111,14 +99,11 @@ export const TOOLS: OpenRouterTool[] = [
   { type: "function", function: { name: "week_replan", description: "Lay the coming week out again from their ideas, their cadence and their free time, and send it to them with a book-it button. Free. Use when they ask for a plan, or after they cleared the week.", parameters: { type: "object", properties: { why: str }, required: ["why"] } } },
 ];
 
-/** The vendor's price, platform-aware where it matters (docs/scrapecreators-credits.json). */
-export function priceFor(name: string, args: Record<string, unknown>): number | undefined {
+/** The vendor's price (docs/scrapecreators-credits.json). */
+export function priceFor(name: string, _args: Record<string, unknown>): number | undefined {
   if (PARTNERSHIP_TOOLS.some(t => t.function.name === name)) return 0; // research has its own transactional allowance
   const base = TOOL_CREDITS[name];
   if (base === undefined) return undefined;
-  const url = typeof args.url === "string" ? args.url : "";
-  const ig = args.platform === "instagram" || /instagram\.com/.test(url);
-  if (name === "post_comments") return ig ? 15 : 1;
   return base;
 }
 
@@ -185,21 +170,15 @@ function summarize(tool: string, value: unknown): string {
       const rows = (Array.isArray(value) ? value : ((value as { suggestions?: unknown[] } | null)?.suggestions ?? [])) as unknown[];
       return rows.length ? cap(rows.slice(0, 20).map((x) => (typeof x === "string" ? x : JSON.stringify(x))).join(" · ")) : "no suggestions";
     }
-    case "discover_creators":
-    case "discover_profiles": {
+    case "discover_creators": {
       const rows = (Array.isArray(value) ? value : ((value as { profiles?: unknown[]; creators?: unknown[]; users?: unknown[] } | null)?.profiles ?? (value as { creators?: unknown[] } | null)?.creators ?? (value as { users?: unknown[] } | null)?.users ?? [])) as Array<{ handle?: string; username?: string; followerCount?: number; followers?: number; bio?: string; displayName?: string }>;
       return rows.length ? cap(rows.slice(0, 15).map((r) => `@${r.handle ?? r.username ?? "?"} · ${r.followerCount ?? r.followers ?? "?"} followers · ${(r.displayName ?? "")} · "${clip(r.bio ?? "", 80)}"`).join("\n")) : "no profiles returned";
     }
     case "account_posts":
     case "search_keyword":
     case "search_hashtag":
-    case "search_reels":
-    case "search_ig_hashtag":
-    case "ig_popular":
     case "sound_videos":
-    case "sound_reels":
-    case "trending_tiktok":
-    case "trending_reels": {
+    case "trending_tiktok": {
       const rows = postsOf(value);
       if (!rows.length) return "no posts returned";
       const views = rows.map((p) => p.metrics?.viewCount ?? 0).filter((x) => x > 0).sort((a, b) => a - b);
@@ -229,8 +208,8 @@ async function runToolInner(ctx: ActionCtx, creatorId: Id<"creators">, call: { n
   const started = Date.now();
   // TikTok only (config/platforms): a model that reaches for Instagram anyway is told, not obeyed.
   const igUrl = [call.args.url, call.args.link].some((u) => typeof u === "string" && /instagram\.com/i.test(u));
-  if (!instagramOn() && (INSTAGRAM_TOOLS.has(call.name) || call.args.platform === "instagram" || igUrl)) {
-    trace.push({ tool: call.name, params: {}, ok: false, result: "instagram is off", at: Date.now() } as never);
+  if (INSTAGRAM_TOOLS.has(call.name) || call.args.platform === "instagram" || igUrl) {
+    trace.push({ tool: call.name, params: {}, ok: false, result: "TikTok only", at: Date.now() } as never);
     return "refused: Maya works with TikTok only right now. Use TikTok, or say plainly you only do TikTok for now.";
   }
   const record = (ok: boolean, credits?: number, detail?: string) => trace.push({ tool: call.name, params: Object.fromEntries(Object.entries(call.args).filter(([k]) => k !== "why")), why, credits, ms: Date.now() - started, ok, ...(detail ? { detail } : {}) });
@@ -243,7 +222,7 @@ async function runToolInner(ctx: ActionCtx, creatorId: Id<"creators">, call: { n
     return "refused: out of time. Answer with what you have.";
   }
   // A2: comments on THEIR OWN connected post come from their account, free, instead of the public read
-  // (15 credits on Instagram). Anything else (someone else's post, not connected, a failed read) falls through.
+  // Anything else (someone else's post, not connected, a failed read) falls through.
   if (call.name === "post_comments" && typeof call.args.url === "string") {
     try {
       const target = await ctx.runQuery(internal.connections.comments.ownPostTarget, { creatorId, url: call.args.url });
@@ -414,7 +393,7 @@ async function runToolInner(ctx: ActionCtx, creatorId: Id<"creators">, call: { n
       if (!/^[a-z0-9._]{2,30}$/.test(handle)) { record(false, 0, "bad handle"); return "that isn't a handle i can watch"; }
       const r = call.args.act === "stop"
         ? await ctx.runMutation(internal.agent.manage.stopWatchingNow, { creatorId, handle })
-        : await ctx.runMutation(internal.agent.manage.addAdmired, { creatorId, platform: call.args.platform === "instagram" ? "instagram" : "tiktok", handle });
+        : await ctx.runMutation(internal.agent.manage.addAdmired, { creatorId, platform: "tiktok", handle });
       record(r.ok, 0);
       return r.ok ? `done: ${r.body}` : `not done: ${r.body}`;
     }
@@ -440,7 +419,7 @@ async function runToolInner(ctx: ActionCtx, creatorId: Id<"creators">, call: { n
       return cap(`paying creators in their lane:\n${paying}\ntagged in their own posts (a brand they use, or a friend: judge which; a brand here is the strongest lead, lead with it):\n${tagged}${next}`);
     }
     if (call.name === "platform_fact") {
-      const facts = factsFor(String(call.args.topic ?? ""), call.args.platform === "tiktok" || call.args.platform === "instagram" ? call.args.platform : "both");
+      const facts = factsFor(String(call.args.topic ?? ""), "tiktok");
       record(true, 0);
       if (!facts.length) return "no note on that; if it matters, web_search the platform's own help page, or say you're not sure.";
       return cap(facts.map((f) => `- ${f.fact} (as of ${f.verifiedOn}${staleDays(f.verifiedOn) > 60 ? ", may have changed" : ""}; ${f.source})`).join("\n"));
@@ -519,7 +498,7 @@ async function runToolInner(ctx: ActionCtx, creatorId: Id<"creators">, call: { n
       return rows.length ? cap(rows.map((e) => `${when(e)} · ${e.title} (${e.class})`).join("\n")) : "nothing on their calendar in the next three weeks, or no calendar connected";
     }
     const link = typeof call.args.url === "string" ? parseLink(call.args.url) : null;
-    const platform = (call.args.platform as "tiktok" | "instagram" | undefined) ?? link?.platform ?? "tiktok";
+    const platform = "tiktok" as const; // anything Instagram was refused above
     let kind: string;
     let params: Record<string, unknown>;
     switch (call.name) {
@@ -559,29 +538,9 @@ async function runToolInner(ctx: ActionCtx, creatorId: Id<"creators">, call: { n
         kind = "search.hashtag";
         params = { hashtag: String(call.args.hashtag ?? "").replace(/^#/, "") };
         break;
-      case "search_reels":
-        kind = "search.reels";
-        params = { keyword: String(call.args.keyword ?? ""), window: "last-week" };
-        break;
-      case "search_ig_hashtag":
-        kind = "search.hashtagPosts";
-        params = { hashtag: String(call.args.hashtag ?? "").replace(/^#/, ""), window: "last-week" };
-        break;
-      case "ig_popular":
-        kind = "ig.popular";
-        params = { topic: String(call.args.topic ?? "") };
-        break;
-      case "sound_reels":
-        kind = "sound.reels";
-        params = { audioId: String(call.args.audioId ?? "") };
-        break;
       case "trending_tiktok":
         kind = "trending.tiktok";
         params = { region: String(call.args.region ?? "US") };
-        break;
-      case "trending_reels":
-        kind = "trending.reels";
-        params = { batch: 1 };
         break;
       case "suggestions":
         kind = "suggestions.tiktok";
@@ -590,10 +549,6 @@ async function runToolInner(ctx: ActionCtx, creatorId: Id<"creators">, call: { n
       case "discover_creators":
         kind = "discover.creators";
         params = { band: String(call.args.band ?? "100K-1M"), country: String(call.args.country ?? "US") };
-        break;
-      case "discover_profiles":
-        kind = "discover.profiles";
-        params = { keyword: String(call.args.keyword ?? "") };
         break;
       default:
         record(false, 0);

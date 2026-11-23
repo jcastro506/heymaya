@@ -1,6 +1,6 @@
 /**
  * The niche sweep (plan §3.2, §6 Sprint 2): once a day per distinct lane keyword
- * across the fleet, search TikTok and Instagram, write observations tagged with the
+ * across the fleet, search TikTok, write observations tagged with the
  * keyword, and turn the fastest-moving posts into `shape` signals for every creator
  * whose dossier carries that keyword. Shared by keyword, never by creator.
  *
@@ -146,8 +146,8 @@ export const run = internalAction({
       for (const platform of enabledPlatforms()) {
         try {
           const r = await ctx.runAction(internal.reads.read.read, {
-            kind: platform === "tiktok" ? "search.keyword" : "search.reels",
-            params: platform === "tiktok" ? { keyword, window: "this-week", sort: "most-liked" } : { keyword, window: "last-week" },
+            kind: "search.keyword",
+            params: { keyword, window: "this-week", sort: "most-liked" },
             creatorId: args.creatorId,
           });
           const value = r.value as { posts?: Post[]; raw?: unknown } | Post[] | null;

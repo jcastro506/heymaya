@@ -9,7 +9,7 @@ import { enabledPlatforms } from "../config/platforms";
 import { v } from "convex/values";
 import { internalQuery, type QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
-import { countryName, GENDER_WORDS } from "./accountInsights";
+import { countryName } from "./accountInsights";
 
 export interface AccountFacts {
   platform: "tiktok" | "instagram";
@@ -51,23 +51,11 @@ export function viewerCountriesAcross(posts: Array<{ views: number | null; viewe
   return { countries, posts: usable.length, views, asOf: usable.reduce<number | null>((m, p) => (p.asOf !== null && (m === null || p.asOf > m) ? p.asOf : m), null) };
 }
 
-const topSlices = (xs: Array<{ label: string; share: number | null }> | undefined, k: number, word: (s: string) => string) => (xs ?? []).filter((x) => x.share !== null).slice(0, k).map((x) => `${word(x.label)} ${pct(x.share!)}`).join(", ");
-
-/** Pure: a demographics row in words ("women 61%, men 38%; ages …"), or "" when it has nothing. */
-function demographicsWords(a: NonNullable<Doc<"accountInsights">["audience"]>): string {
-  const bits: string[] = [];
-  if (a.gender?.length) bits.push(topSlices(a.gender, 3, (s) => GENDER_WORDS[s] ?? s));
-  if (a.age?.length) bits.push(`ages ${topSlices([...a.age].sort((x, y) => (y.share ?? 0) - (x.share ?? 0)), 3, (s) => s)}`);
-  if (a.country?.length) bits.push(`top countries ${topSlices(a.country, 3, countryName)}`);
-  if (a.city?.length) bits.push(`top cities ${topSlices(a.city, 3, (s) => s)}`);
-  return bits.filter(Boolean).join("; ");
-}
-
 /** Pure given the rows. */
 export function accountFacts(
   platform: "tiktok" | "instagram",
   connected: boolean,
-  rows: { insights: Doc<"accountInsights"> | null; audience: Doc<"accountInsights"> | null; snaps: Doc<"followerSnapshots">[]; engaged?: Doc<"accountInsights"> | null; viewerCountries?: ViewerCountries | null },
+  rows: { snaps: Doc<"followerSnapshots">[]; viewerCountries?: ViewerCountries | null },
   now: number,
 ): AccountFacts {
   const P = PLATFORM_WORD[platform];
@@ -100,47 +88,11 @@ export function accountFacts(
     cannotKnow.push(`follower growth on ${P}: not enough days recorded yet`);
   }
 
-  if (platform === "instagram") {
-    const ins = rows.insights;
-    const m = ins?.status === "ok" ? ins.metrics ?? {} : {};
-    const parts: string[] = [];
-    if (m.reach !== undefined) parts.push(`reached ${n(m.reach)} accounts`);
-    if (m.views !== undefined) parts.push(`${n(m.views)} views`);
-    if (m.accountsEngaged !== undefined) parts.push(`${n(m.accountsEngaged)} accounts engaged`);
-    if (m.totalInteractions !== undefined) parts.push(`${n(m.totalInteractions)} interactions`);
-    if (m.profileLinkTaps !== undefined) parts.push(`${n(m.profileLinkTaps)} taps on the link in their profile`);
-    if (m.follows !== undefined) parts.push(`${n(m.follows)} follows`);
-    if (m.unfollows !== undefined) parts.push(`${n(m.unfollows)} unfollows`);
-    if (ins && parts.length) lines.push(`whole account, ${ins.fromDate ?? "last 30 days"} to ${ins.toDate ?? "now"}: ${parts.join(", ")} (connected, Instagram, ${age(ins.fetchedAt)}; Instagram runs up to 2 days behind)`);
-    if (ins?.reachDaily) {
-      const wow = weekOverWeek(ins.reachDaily);
-      if (wow) lines.push(`reach: ${n(wow.last)} this past week vs ${n(wow.prior)} the week before (connected, Instagram)`);
-    }
-    if (!ins || ins.status !== "ok") cannotKnow.push(ins?.status === "not_available" ? "Instagram's account numbers (reach, profile taps, follows): not available for this account" : "Instagram's account numbers (reach, profile taps, follows): not reported yet");
-    else if (m.profileLinkTaps === undefined) cannotKnow.push("taps on the link in their profile: Instagram didn't report it");
-
-    const aud = rows.audience;
-    if (aud?.status === "ok" && aud.audience) {
-      const said = demographicsWords(aud.audience);
-      if (said) lines.push(`who follows them: ${said} (connected, Instagram, ${age(aud.fetchedAt)}${aud.audienceBase ? `, ${n(aud.audienceBase)} followers counted` : ""})`);
-    } else {
-      cannotKnow.push(aud?.status === "too_few_followers" ? "who follows them on Instagram: Instagram only shares this from 100 followers" : aud?.status === "not_available" ? "who follows them on Instagram: not available for this account" : "who follows them on Instagram: not reported yet");
-    }
-    // A2: who ENGAGED this month, which can differ from who follows (a post reaching new people shows here first).
-    const eng = rows.engaged;
-    if (eng?.status === "ok" && eng.audience) {
-      const said = demographicsWords(eng.audience);
-      if (said) lines.push(`who engaged with them this month: ${said} (connected, Instagram, ${age(eng.fetchedAt)}${eng.audienceBase ? `, ${n(eng.audienceBase)} accounts counted` : ""})`);
-    } else if (eng) {
-      cannotKnow.push(eng.status === "too_few_followers" ? "who engaged with them on Instagram: Instagram only shares this from 100 followers" : eng.status === "not_available" ? "who engaged with them on Instagram: not available for this account" : "who engaged with them on Instagram: not reported yet");
-    }
-  } else {
-    cannotKnow.push("on TikTok, account-wide reach and who follows them (age, gender): TikTok doesn't give these for an account");
-    // A2: TikTok splits viewers by country per post; across their recent posts that is where their viewers are.
-    const vc = rows.viewerCountries;
-    if (vc) lines.push(`where their TikTok viewers are, across ${vc.posts} recent post${vc.posts === 1 ? "" : "s"} (${n(vc.views)} views): ${vc.countries.map((x) => `${countryName(x.code)} ${pct(x.share)}`).join(", ")} (connected, TikTok${vc.asOf ? `, ${age(vc.asOf)}` : ""})`);
-    else cannotKnow.push("where their TikTok viewers are: TikTok didn't report viewer countries for their recent posts");
-  }
+  cannotKnow.push("on TikTok, account-wide reach and who follows them (age, gender): TikTok doesn't give these for an account");
+  // A2: TikTok splits viewers by country per post; across their recent posts that is where their viewers are.
+  const vc = rows.viewerCountries;
+  if (vc) lines.push(`where their TikTok viewers are, across ${vc.posts} recent post${vc.posts === 1 ? "" : "s"} (${n(vc.views)} views): ${vc.countries.map((x) => `${countryName(x.code)} ${pct(x.share)}`).join(", ")} (connected, TikTok${vc.asOf ? `, ${age(vc.asOf)}` : ""})`);
+  else cannotKnow.push("where their TikTok viewers are: TikTok didn't report viewer countries for their recent posts");
   return { platform, connected, lines, cannotKnow };
 }
 
@@ -154,9 +106,6 @@ export async function accountFactsFor(ctx: Pick<QueryCtx, "db">, creatorId: Id<"
   const creator = (await ctx.db.get(creatorId)) as Doc<"creators"> | null;
   if (!creator) return [];
   const conn = (await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", creatorId).eq("provider", "zernio")).first()) as Doc<"connections"> | null;
-  const insights = (await ctx.db.query("accountInsights").withIndex("by_creator_kind", (q) => q.eq("creatorId", creatorId).eq("kind", "insights")).take(20)) as Doc<"accountInsights">[];
-  const audience = (await ctx.db.query("accountInsights").withIndex("by_creator_kind", (q) => q.eq("creatorId", creatorId).eq("kind", "audience")).take(20)) as Doc<"accountInsights">[];
-  const engaged = (await ctx.db.query("accountInsights").withIndex("by_creator_kind", (q) => q.eq("creatorId", creatorId).eq("kind", "engaged")).take(20)) as Doc<"accountInsights">[];
   const tiktokCountries = await tiktokViewerCountries(ctx, creatorId, now);
   const since = new Date(now - 95 * 86_400_000).toISOString().slice(0, 10);
   const snaps = (await ctx.db.query("followerSnapshots").withIndex("by_creator_day", (q) => q.eq("creatorId", creatorId).gte("day", since)).take(400)) as Doc<"followerSnapshots">[];
@@ -165,7 +114,7 @@ export async function accountFactsFor(ctx: Pick<QueryCtx, "db">, creatorId: Id<"
     const acct = (conn?.zernioAccounts ?? []).find((x) => x.platform === p);
     const connected = Boolean(conn && conn.status !== "disconnected" && acct && acct.canFetchAnalytics && !acct.needsReconnect);
     const byAcct = <T extends { accountId: string; platform: string }>(xs: T[]) => xs.filter((x) => x.platform === p && (!acct || x.accountId === acct.accountId));
-    return accountFacts(p, connected, { insights: byAcct(insights)[0] ?? null, audience: byAcct(audience)[0] ?? null, snaps: byAcct(snaps), engaged: byAcct(engaged)[0] ?? null, viewerCountries: p === "tiktok" ? tiktokCountries : null }, now);
+    return accountFacts(p, connected, { snaps: byAcct(snaps), viewerCountries: p === "tiktok" ? tiktokCountries : null }, now);
   });
 }
 
@@ -177,20 +126,14 @@ export async function tiktokViewerCountries(ctx: Pick<QueryCtx, "db">, creatorId
 
 // ------------------------------------------------------------------ the app
 
-export type CardStatus = "ok" | "not_connected" | "too_few_followers" | "not_reported" | "not_available";
-const cardStatus = (connected: boolean, row: Doc<"accountInsights"> | null): CardStatus =>
-  !connected ? "not_connected" : !row ? "not_reported" : row.status === "ok" ? "ok" : row.status;
-
-const APP_GENDER: Record<string, string> = { F: "Women", M: "Men", U: "Not specified" };
-
 /**
- * Pure: the account's growth chart, "From your profile" and "Who follows you" for the app.
- * Only stored numbers; a card with nothing carries its status so the app can say why in words.
+ * Pure: the account's growth chart for the app. Only stored numbers. `profile` and `audience` are
+ * always null (they were Instagram-only; TikTok gives neither for an account), kept so the app decodes.
  */
 export function appCards(
-  platform: "tiktok" | "instagram",
+  _platform: "tiktok" | "instagram",
   connected: boolean,
-  rows: { insights: Doc<"accountInsights"> | null; audience: Doc<"accountInsights"> | null; snaps: Doc<"followerSnapshots">[] },
+  rows: { snaps: Doc<"followerSnapshots">[] },
   now: number,
 ) {
   const since = new Date(now - 89 * 86_400_000).toISOString().slice(0, 10);
@@ -201,36 +144,5 @@ export function appCards(
   const growth = connected && days.length
     ? { days, flowReported, gained30d: flowReported ? month.reduce((s, d) => s + (d.gained ?? 0), 0) : null, lost30d: flowReported ? month.reduce((s, d) => s + (d.lost ?? 0), 0) : null }
     : null;
-
-  if (platform !== "instagram") return { growth, profile: null, audience: null };
-
-  const ins = rows.insights;
-  const m = ins?.status === "ok" ? ins.metrics ?? {} : {};
-  const num = (k: string) => (m[k] !== undefined ? m[k] : null);
-  const profile = {
-    status: cardStatus(connected, ins),
-    fromDate: ins?.status === "ok" ? ins.fromDate ?? null : null,
-    toDate: ins?.status === "ok" ? ins.toDate ?? null : null,
-    asOf: ins?.status === "ok" ? ins.fetchedAt : null,
-    profileLinkTaps: num("profileLinkTaps"),
-    follows: num("follows"),
-    unfollows: num("unfollows"),
-    reach: num("reach"),
-    accountsEngaged: num("accountsEngaged"),
-  };
-
-  const aud = rows.audience;
-  const a = aud?.status === "ok" ? aud.audience ?? {} : {};
-  const shares = (xs: Array<{ label: string; share: number | null }> | undefined, word: (s: string) => string, k: number) =>
-    (xs ?? []).filter((x): x is { label: string; share: number } => x.share !== null && x.share > 0).slice(0, k).map((x) => ({ label: word(x.label), share: x.share }));
-  const audience = {
-    status: cardStatus(connected, aud),
-    asOf: aud?.status === "ok" ? aud.fetchedAt : null,
-    followersCounted: aud?.status === "ok" ? aud.audienceBase ?? null : null,
-    gender: shares(a.gender, (s) => APP_GENDER[s] ?? s, 3),
-    age: shares(a.age, (s) => s, 8), // youngest first, as stored
-    countries: shares(a.country, countryName, 5),
-    cities: shares(a.city, (s) => s, 5),
-  };
-  return { growth, profile, audience };
+  return { growth, profile: null, audience: null };
 }

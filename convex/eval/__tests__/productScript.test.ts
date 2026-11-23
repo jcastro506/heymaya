@@ -64,7 +64,7 @@ describe("the plan (sibling coherence)", () => {
   it("replay spends nothing: a 1-credit ceiling and a zero estimate", () => {
     const o = resolveOpts({ replay: true, maxCredits: 600 });
     expect(o.maxCredits).toBe(1);
-    expect(estimateCredits([{ tiktok: "a" }, { instagram: "b" }], o)).toEqual({ perCreator: [0, 0], total: 0, needed: 0 });
+    expect(estimateCredits([{ tiktok: "a" }, { tiktok: "b" }], o)).toEqual({ perCreator: [0, 0], total: 0, needed: 0 });
     expect(() => resolveOpts({ maxCredits: 10 }), "a paid run still needs 50").toThrow();
   });
 

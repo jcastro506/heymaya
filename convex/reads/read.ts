@@ -7,7 +7,6 @@
  * bundled fixtures so development and tests spend nothing.
  */
 
-import { instagramOn } from "../config/platforms";
 import { internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { v } from "convex/values";
@@ -133,9 +132,8 @@ export function slimForCache(value: unknown): unknown {
   return out;
 }
 
-/** Pure: does this read touch Instagram (an Instagram-only kind, or a platform param of "instagram")? */
-export function isInstagramRead(kind: string, params: Record<string, unknown>): boolean {
-  if (["trending.reels", "search.reels", "search.hashtagPosts", "ig.popular", "suggestions.instagram", "account.highlights", "discover.profiles", "sound.reels"].includes(kind)) return true;
+/** Pure: does this read touch Instagram (a platform param of "instagram", or an Instagram url)? */
+export function isInstagramRead(_kind: string, params: Record<string, unknown>): boolean {
   if (params.platform === "instagram") return true;
   const url = typeof params.url === "string" ? params.url : "";
   return /instagram\.com/i.test(url);
@@ -154,7 +152,7 @@ export const read = internalAction({
     const specEntry = KINDS[k] as (typeof KINDS)[ReadKind];
     const normalized = (specEntry.normalize as unknown as (p: Record<string, unknown>) => Record<string, unknown>)(params ?? {});
     // TikTok only (config/platforms): no Instagram read leaves here. Callers are gated first; this is the net.
-    if (!instagramOn() && isInstagramRead(k, normalized)) throw new Error(`platform switched off: ${k}`);
+    if (isInstagramRead(k, normalized)) throw new Error(`TikTok only: ${k}`);
     const key = readKey(k, normalized);
     const now = Date.now();
     // Outage drill: an injected fault skips the cache (the vendor must be reached for it to fail) and

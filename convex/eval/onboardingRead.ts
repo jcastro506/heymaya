@@ -30,7 +30,7 @@ async function runCreators(ctx: { db: { query: (t: "creators") => unknown } }, r
 
 export const start = internalMutation({
   args: {
-    subjects: v.array(v.object({ tiktok: v.optional(v.string()), instagram: v.optional(v.string()), note: v.optional(v.string()) })),
+    subjects: v.array(v.object({ tiktok: v.optional(v.string()), note: v.optional(v.string()) })),
     watchCap: v.optional(v.number()),
     transcriptCap: v.optional(v.number()),
   },
@@ -42,10 +42,10 @@ export const start = internalMutation({
     const started = [];
     let estimatedCredits = 0;
     for (const [i, s] of a.subjects.entries()) {
-      const r = await startCreator(ctx, { subject: subjectFor(runId, i), email: `${runId}-${i}@eval.invalid`, handles: { tiktok: s.tiktok, instagram: s.instagram }, timezone: "America/New_York", ingestCaps: { watchCap, transcriptCap } });
-      const platforms = (s.tiktok ? 1 : 0) + (s.instagram ? 1 : 0);
+      const r = await startCreator(ctx, { subject: subjectFor(runId, i), email: `${runId}-${i}@eval.invalid`, handles: { tiktok: s.tiktok }, timezone: "America/New_York", ingestCaps: { watchCap, transcriptCap } });
+      const platforms = s.tiktok ? 1 : 0;
       estimatedCredits += platforms * 3 + transcriptCap + 10 * watchCap + 40; // + the favorites' candidate reads
-      started.push({ i, handles: [s.tiktok && `tt:@${s.tiktok}`, s.instagram && `ig:@${s.instagram}`].filter(Boolean).join(" ") + (s.note ? ` (${s.note})` : ""), ok: r.ok, ...(r.error ? { error: r.error } : {}) });
+      started.push({ i, handles: (s.tiktok ? `tt:@${s.tiktok}` : "") + (s.note ? ` (${s.note})` : ""), ok: r.ok, ...(r.error ? { error: r.error } : {}) });
     }
     return { runId, started, estimatedCredits };
   },

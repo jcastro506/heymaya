@@ -1,7 +1,7 @@
 /**
  * A1 part 2, the rows: the account-insights sync against a fake Zernio that answers with the
  * spec's shapes. Categories: sync writes + idempotency; budget/fail-closed (plan status, the
- * plan's account cap, broken accounts, under 100 followers never calls demographics); one
+ * plan's account cap, broken accounts); one
  * named failure per pass, never a throw; cross-tenant isolation (creator A never sees B's
  * audience, in her tool or in the app); what she cites is labelled and grounded.
  */
@@ -11,13 +11,11 @@ import schema from "../../schema";
 import { api, internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import spec from "../../integrations/zernio/fixtures.spec.json";
 import { readableAccounts } from "../insightsSync";
 import { DEFAULT_BUDGET, runTool, type ToolCallRecord } from "../../agent/tools";
 import type { ActionCtx } from "../../_generated/server";
 import type { Id } from "../../_generated/dataModel";
 
-const S = spec as unknown as Record<string, Record<string, unknown>>;
 const DAY = 86_400_000;
 const dayOf = (t: number) => new Date(t).toISOString().slice(0, 10);
 
@@ -47,20 +45,12 @@ function fakeZernio(route: Route) {
   }));
 }
 
-const specRoute = (followers = 8000): Route => (url) => {
+const specRoute = (): Route => (url) => {
   const p = url.pathname;
-  const metrics = url.searchParams.get("metrics") ?? "";
-  if (p.endsWith("/instagram/follower-history")) return { status: 200, body: history("instagram", followers) };
   if (p.endsWith("/tiktok/account-insights")) return { status: 200, body: history("tiktok", 2000) };
-  if (p.endsWith("/instagram/demographics")) return followers < 100 ? { status: 400, body: S.igDemographicsInsufficient400 } : { status: 200, body: S.igDemographics };
   // A2 reads answer as the live recording did (2026-10-01): no comments, one-day timelines.
   if (p === "/api/v1/inbox/comments") return { status: 200, body: { data: [], pagination: { hasMore: false } } };
   if (p === "/api/v1/analytics") return { status: 200, body: { posts: [] } };
-  if (p.endsWith("/instagram/account-insights")) {
-    if (url.searchParams.get("breakdown") === "follow_type") return { status: 200, body: S.igFollowsBreakdown };
-    if (url.searchParams.get("metricType") === "time_series") return { status: 200, body: { ...S.igInsightsTimeSeries, metrics: { reach: (S.igInsightsTimeSeries.metrics as Record<string, unknown>).reach } } };
-    if (metrics.includes("profile_links_taps")) return { status: 200, body: { ...S.igInsightsTotals, metrics: { ...(S.igInsightsTotals.metrics as object), profile_links_taps: { total: 37 } }, unavailableMetrics: undefined } };
-  }
   return { status: 404, body: { error: "Account not found" } };
 };
 

@@ -23,8 +23,7 @@ describe("numbersFor", () => {
     expect(n.headline).toMatchObject({ what: "reach", value: 8_000, basis: "connected", asOfHours: 1 });
     expect(n.multiple).toEqual({ value: 4, basis: "reach" });
     expect(n.lines.join(" ")).toMatch(/reached 8,000 people \(connected/);
-    expect(n.lines.join(" ")).toMatch(/watched 70%/);
-    expect(n.lines.join(" ")).toMatch(/20% left in the first 3 seconds/);
+    expect(n.lines.join(" "), "TikTok only: no Instagram-only read is cited").not.toMatch(/Instagram|Reels|Meta/);
     expect(n.lines.join(" "), "the public count is still there, labelled").toMatch(/9,000 views \(public count/);
     expect(n.derived?.diagnosis).toBe("held_them");
     expect(n.cannotKnow).toHaveLength(0);

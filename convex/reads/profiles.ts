@@ -1,6 +1,6 @@
 /**
- * Discovered profiles, normalized (2026-09-14, plan §27). The discovery, following and
- * Instagram profile-search reads used to return the vendor's raw payload: a fresh read handed
+ * Discovered profiles, normalized (2026-09-14, plan §27). The discovery, and following
+ * reads used to return the vendor's raw payload: a fresh read handed
  * callers a wrapper holding fields they never looked for, and the cache stripped the raw payload,
  * so no suggestion or belt lookup ever saw a profile. Field names come from the recorded vendor
  * responses in integrations/scrapeCreators/fixtures.spec.json.
@@ -57,19 +57,6 @@ export function tiktokFollowingProfiles(raw: unknown): DiscoveredProfile[] {
       isPrivate: false,
     };
   }).filter((p) => p.handle);
-}
-
-/** Instagram profiles for a keyword. Pure. */
-export function instagramSearchProfiles(raw: unknown): DiscoveredProfile[] {
-  return rows(raw, "profiles").map((p) => ({
-    platform: "instagram" as const,
-    handle: clean(str(p.username)),
-    displayName: str(p.full_name),
-    followerCount: num(p.follower_count),
-    avatarUrl: str(p.profile_pic_url),
-    bio: str(p.biography),
-    isPrivate: p.is_private === true,
-  })).filter((p) => p.handle);
 }
 
 /**

@@ -17,11 +17,6 @@ const PATHS = [
   "/v1/tiktok/search/users", "/v1/tiktok/search/hashtag", "/v1/tiktok/search/keyword", "/v1/tiktok/search/top",
   "/v1/tiktok/search/suggestions", "/v1/tiktok/get-trending-feed", "/v1/tiktok/creators/popular",
   "/v1/tiktok/song", "/v1/tiktok/song/videos", "/v1/tiktok/collection/videos",
-  "/v1/instagram/profile", "/v1/instagram/profile/post-count", "/v1/instagram/user/posts", "/v2/instagram/user/posts",
-  "/v1/instagram/user/reels", "/v1/instagram/post", "/v2/instagram/post/comments", "/v2/instagram/media/transcript",
-  "/v2/instagram/reels/search", "/v1/instagram/search", "/v1/instagram/search/popular", "/v1/instagram/search/profiles",
-  "/v1/instagram/search/hashtag", "/v1/instagram/reels/trending", "/v1/instagram/audio/reels",
-  "/v1/instagram/user/highlights", "/v1/instagram/user/highlight/detail",
   "/v1/find-social-profiles", "/v1/reddit/search", "/v1/credit-balance",
   "/v1/account/get-daily-usage-count", "/v1/account/get-most-used-routes",
 ];
