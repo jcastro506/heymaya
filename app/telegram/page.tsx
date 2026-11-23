@@ -94,7 +94,7 @@ export default function TelegramPage() {
         <section>
           <h2>Connected.</h2>
           <p className="small">
-            {progress?.dossier ? `She's read your posts. Her first message is on its way${progress?.channelKind === "imessage" ? " to your phone" : " to Telegram"}.` : `She's reading your posts now (${progress?.posts ?? 0} so far). Her first message lands ${progress?.channelKind === "imessage" ? "as a text" : "in Telegram"} in a few minutes.`}
+            {progress?.dossier ? `She's watched your posts. Her first message is on its way${progress?.channelKind === "imessage" ? " to your phone" : " to Telegram"}.` : `She's watching your posts now (${progress?.posts ?? 0} so far). Her first message lands ${progress?.channelKind === "imessage" ? "as a text" : "in Telegram"} in a few minutes.`}
           </p>
         </section>
       ) : link?.kind === "imessage" ? (

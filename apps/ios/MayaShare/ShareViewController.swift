@@ -85,7 +85,7 @@ struct ShareSheet: View {
           TextField("Add a note (optional)", text: $model.note, axis: .vertical)
             .lineLimit(1...3)
             .textFieldStyle(.roundedBorder)
-          Text("She'll text you her read in Messages.").font(.footnote).foregroundStyle(.secondary)
+          Text("She'll text you her take in Messages.").font(.footnote).foregroundStyle(.secondary)
         }
         if case .sending = model.phase { ProgressView("Sending…").frame(maxWidth: .infinity) }
         if case .sent(let later) = model.phase {

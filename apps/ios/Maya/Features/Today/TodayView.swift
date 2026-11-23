@@ -239,7 +239,7 @@ struct PostsSection: View {
       }
       .buttonStyle(.plain)
       if posts.isEmpty {
-        EmptyNote(text: reading ? "She's reading your posts now." : "No posts read yet.")
+        EmptyNote(text: reading ? "She's watching your posts now." : "No posts watched yet.")
       } else {
         if let normal = Self.normal(posts) {
           NavigationLink { AnalyticsView() } label: { chart(normal: normal) }.buttonStyle(.plain)
@@ -486,7 +486,7 @@ struct ReadingCard: View {
     if state.stage == "failed" {
       Card {
         VStack(alignment: .leading, spacing: 8) {
-          Text("We couldn't finish reading your posts").font(MayaFont.headline).foregroundStyle(Palette.ink)
+          Text("We couldn't finish watching your posts").font(MayaFont.headline).foregroundStyle(Palette.ink)
           Text("Maya can try again. Your account is still connected.").font(MayaFont.callout).foregroundStyle(Palette.muted)
           Button(retrying ? "Trying again…" : "Try again") {
             Task {
@@ -504,7 +504,7 @@ struct ReadingCard: View {
         HStack(alignment: .top, spacing: 12) {
           ProgressView().padding(.top, 2)
           VStack(alignment: .leading, spacing: 6) {
-            Text("She's reading your posts").font(MayaFont.headline).foregroundStyle(Palette.ink)
+            Text("She's watching your posts").font(MayaFont.headline).foregroundStyle(Palette.ink)
             Text(progressLine).font(MayaFont.callout).foregroundStyle(Palette.muted)
             if let last = state.lastWatched, !last.isEmpty {
               Text("Just watched: \u{201C}\(last)\u{201D}").font(MayaFont.caption).foregroundStyle(Palette.muted).lineLimit(2)

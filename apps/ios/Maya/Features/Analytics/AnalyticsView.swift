@@ -42,7 +42,7 @@ struct AnalyticsView: View {
 
     let posts = a.posts.filter { $0.platform == "tiktok" }
     if posts.isEmpty {
-      EmptyNote(text: "No posts read yet. They show up here after her next read of your account.")
+      EmptyNote(text: "No posts yet. They show up here after she next checks your account.")
     } else {
       VStack(alignment: .leading, spacing: 12) {
         SectionHeader(text: "Recent posts")

@@ -35,7 +35,7 @@ struct YouView: View {
   @ViewBuilder
   private func herRead(_ s: CreatorSettings) -> some View {
     VStack(alignment: .leading, spacing: 12) {
-      SectionHeader(text: "Her read on you")
+      SectionHeader(text: "Her take on you")
       if let k = s.knows {
         if let summary = k.summary {
           HStack(alignment: .top, spacing: 12) {
@@ -52,7 +52,7 @@ struct YouView: View {
         Label("Something off? Tell her in Messages and she'll fix it.", systemImage: "bubble.left")
           .font(MayaFont.caption).foregroundStyle(Palette.muted)
       } else {
-        EmptyNote(text: "She's still reading your posts. Her read on you lands here.")
+        EmptyNote(text: "She's still watching your posts. Her take on you lands here.")
       }
     }
   }

@@ -50,7 +50,7 @@ struct SettingsView: View {
           }
           .disabled(deleting)
         } footer: {
-          Text(deleteProblem ?? "Cancels your plan and deletes everything she has: your posts as she read them, every idea, every message, your calendar and your notes. This can't be undone.")
+          Text(deleteProblem ?? "Cancels your plan and deletes everything she has: your posts as she saw them, every idea, every message, your calendar and your notes. This can't be undone.")
         }
       }
     }
