@@ -55,7 +55,25 @@ describe("consolidate", () => {
     await t.mutation(internal.agent.consolidate.consolidateOne, { creatorId, now: now + 1 });
     const c = await t.run((ctx) => ctx.db.get(creatorId));
     const live = c!.notes.filter((n) => !n.tombstonedAt);
-    expect(live.map((n) => [n.text, n.kind])).toEqual([["lives in Denver now", "fact"]]);
-    expect(live[0].expiresHint).toBeUndefined();
+    // The move leaves what they said stays true; the trip, with no "after", is kept as something that happened.
+    expect(live.map((n) => [n.text, n.kind])).toEqual([["lives in Denver now", "fact"], ["Happened (by 2026-09-03): trip in june", "fact"]]);
+    expect(live.every((n) => n.expiresHint === undefined)).toBe(true);
+  });
+
+  it("a race with no \"after\" isn't forgotten on race day (horizon sim: the goal lost the week after)", async () => {
+    const t = convexTest(schema, modules);
+    const race = Date.UTC(2026, 9, 11, 12, 0);
+    const creatorId = await t.run((ctx) => seedCreator(ctx, "a", { timezone: "UTC", notes: [
+      { id: "race", text: "running the chicago marathon on oct 11", kind: "life", at: 1, expiresHint: race },
+      { id: "joke", text: "the burnt toast bit", kind: "bit", at: 1, expiresHint: race },
+      { id: "f", text: "sister films for them", kind: "fact", at: 1, expiresHint: race },
+    ] }));
+    await t.mutation(internal.agent.consolidate.consolidateOne, { creatorId, now: race + 7 * 86_400_000 });
+    const c = await t.run((ctx) => ctx.db.get(creatorId));
+    const live = c!.notes.filter((n) => !n.tombstonedAt).map((n) => n.text);
+    expect(live).toContain("Happened (by 2026-10-11): running the chicago marathon on oct 11");
+    expect(live).toContain("the burnt toast bit"); // a bit never expires
+    expect(live.some((x) => x.includes("sister films"))).toBe(false); // only a plan becomes a past one
+    expect(c!.notes.find((n) => n.text.startsWith("Happened"))?.id).toBe("race_after"); // so the idea brief carries it for six weeks
   });
 });
