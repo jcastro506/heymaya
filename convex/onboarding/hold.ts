@@ -18,8 +18,10 @@ export function nextMorning(now: number, timezone: string): number {
 }
 
 /** Pure: is her opening still waiting for an answer? Taps and replies count; a reaction or START doesn't. */
-export function openingUnanswered(msgs: Array<Pick<Doc<"messages">, "direction" | "kind" | "ts" | "deliveredAt">>, now: number): boolean {
-  const openings = msgs.filter((m) => m.direction === "out" && (m.kind === "first_read" || m.kind === "hello") && m.deliveredAt !== undefined && now - (m.deliveredAt ?? 0) < 48 * H);
+export function openingUnanswered(msgs: Array<Pick<Doc<"messages">, "direction" | "kind" | "ts" | "deliveredAt" | "awaitingAnswer">>, now: number): boolean {
+  // Only an opening that asked something waits (2026-11-23): the opening asks nothing now, and their week (the
+  // schedule) is the next thing she owes them, not something to hold until tomorrow.
+  const openings = msgs.filter((m) => m.direction === "out" && (m.kind === "first_read" || m.kind === "hello") && m.awaitingAnswer === true && m.deliveredAt !== undefined && now - (m.deliveredAt ?? 0) < 48 * H);
   if (!openings.length) return false;
   const at = Math.min(...openings.map((m) => m.deliveredAt!));
   return !msgs.some((m) => m.direction === "in" && m.kind !== "pairing" && m.kind !== "reaction" && m.ts > at);
