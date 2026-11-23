@@ -15,11 +15,14 @@ import type { Doc } from "../_generated/dataModel";
 import { resolveTelegramBotIdentity, sendTelegramMessage } from "../integrations/telegram/client";
 import { allRows } from "./schedule";
 import { isDrillCheck } from "../eval/faults";
+import { readableAccounts } from "../connections/insightsSync";
 
-export interface Findings { staleFacts?: string[]; scale?: { creators: number; pctOfReadLimit: number } | null; deadJobs: Array<{ id: string; kind: string; error: string }>; undelivered: Array<{ id: string; creatorId: string; ageMin: number; error: string }>; smokeFailed: Array<{ vendor: string; check: string }>; attention: Array<{ creatorId: string; provider: string; detail: string }> }
+export interface Findings { staleFacts?: string[]; staleConnected?: Array<{ creatorId: string; hours: number }>; scale?: { creators: number; pctOfReadLimit: number } | null; deadJobs: Array<{ id: string; kind: string; error: string }>; undelivered: Array<{ id: string; creatorId: string; ageMin: number; error: string }>; smokeFailed: Array<{ vendor: string; check: string }>; attention: Array<{ creatorId: string; provider: string; detail: string }> }
 
 export const READ_LIMIT_BYTES = 16 * 1024 * 1024; // Convex: data read per query or mutation
 export const SCALE_WARN_PCT = 40;
+/** A connected creator's numbers older than this are named in the daily alert. */
+export const STALE_CONNECTED_MS = 48 * 3_600_000;
 /** Pure: roughly what a full scan of these documents reads. */
 export function scanBytes(rows: unknown[]): number {
   let n = 0;
@@ -35,6 +38,7 @@ export function composeAlert(f: Findings, env: string): string | null {
   if (f.smokeFailed.length) lines.push(`🩺 smoke failed: ${f.smokeFailed.map((s) => `${s.vendor}/${s.check}`).join(", ")}`);
   if (f.attention.length) lines.push(`🔌 ${f.attention.length} connection${f.attention.length === 1 ? "" : "s"} need attention: ${f.attention.slice(0, 5).map((a) => `${a.provider} for creator ${a.creatorId.slice(-6)}: ${clip(a.detail, 60)}`).join("; ")}`);
   if (f.staleFacts?.length) lines.push(`📚 ${f.staleFacts.length} platform fact${f.staleFacts.length === 1 ? "" : "s"} older than 60 days (she hedges them; re-check and bump verifiedOn in convex/knowledge/platforms.ts): ${f.staleFacts.slice(0, 5).join(", ")}`);
+  if (f.staleConnected?.length) lines.push(`⏳ connected numbers not updating for ${f.staleConnected.length} creator${f.staleConnected.length === 1 ? "" : "s"}: ${f.staleConnected.slice(0, 5).map((x) => `${x.creatorId.slice(-6)} (${x.hours >= 48 ? `${Math.round(x.hours / 24)} days` : `${x.hours}h`})`).join(", ")}`);
   if (f.scale) lines.push(`📈 the creators table is ${f.scale.pctOfReadLimit}% of the per-query read limit (${f.scale.creators} creators). Every hourly job that scans it fails at 100%: do S0 #1 (schedule rows) now.`);
   if (!lines.length) return null;
   return `maya · ${env}\n${lines.join("\n")}`;
@@ -73,8 +77,20 @@ export const findings = internalQuery({
     }
     const conns = (await ctx.db.query("connections").collect()) as Doc<"connections">[];
     const attention = conns.filter((x) => (x.status === "attention" || x.status === "needs_reconnect") && x.updatedAt >= a.since).map((x) => ({ creatorId: x.creatorId, provider: x.provider, detail: x.detail ?? x.status }));
-    const staleFacts = new Date(a.now).getUTCHours() === 12 ? PLATFORM_FACTS.filter((x) => staleDays(x.verifiedOn, a.now) > 60).map((x) => x.id) : [];
-    return { staleFacts, scale, deadJobs, undelivered, smokeFailed, attention };
+    const noon = new Date(a.now).getUTCHours() === 12;
+    const staleFacts = noon ? PLATFORM_FACTS.filter((x) => staleDays(x.verifiedOn, a.now) > 60).map((x) => x.id) : [];
+    // Once a day: a connected creator whose numbers haven't come in for two days. Staging's Zernio feed stopped for
+    // seven weeks (2026-10-02 → 11-23) behind a smoke line that read like noise; this names who it costs.
+    const staleConnected: NonNullable<Findings["staleConnected"]> = [];
+    if (noon) for (const conn of conns) {
+      if (conn.provider !== "zernio" || conn.status !== "connected" || a.now - conn._creationTime < STALE_CONNECTED_MS) continue;
+      const creator = (await ctx.db.get(conn.creatorId)) as Doc<"creators"> | null;
+      if (!creator || !readableAccounts(conn, creator.plan).length) continue;
+      const rows = (await ctx.db.query("accountInsights").withIndex("by_creator_kind", (q) => q.eq("creatorId", conn.creatorId).eq("kind", "insights")).take(20)) as Doc<"accountInsights">[];
+      const last = Math.max(0, ...rows.map((r) => r.fetchedAt));
+      if (a.now - last >= STALE_CONNECTED_MS) staleConnected.push({ creatorId: conn.creatorId, hours: last ? Math.round((a.now - last) / 3_600_000) : Math.round((a.now - conn._creationTime) / 3_600_000) });
+    }
+    return { staleFacts, staleConnected, scale, deadJobs, undelivered, smokeFailed, attention };
   },
 });
 

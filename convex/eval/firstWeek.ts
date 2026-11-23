@@ -265,15 +265,47 @@ async function fwCreator(ctx: MutationCtx, creatorId: Id<"creators">): Promise<D
 
 // ------------------------------------------------------------------ mutations (all refuse anything but a sim creator)
 
+/**
+ * A connected sim (2026-11-23): the sims never touched Zernio, so a feed that stopped on staging for seven weeks
+ * went unnoticed. One sim can borrow a real creator's connected TikTok (the operator's own, on dev) and read it
+ * live through the same code real users hit. The source must be a real creator, connected, with a TikTok.
+ */
+async function connectedSource(ctx: { db: MutationCtx["db"] }, id: Id<"creators">): Promise<{ creator: Doc<"creators">; conn: Doc<"connections">; tiktok: NonNullable<Doc<"connections">["zernioAccounts"]> } | null> {
+  const creator = (await ctx.db.get(id)) as Doc<"creators"> | null;
+  if (!creator || isFirstWeekSubject(creator.clerkUserId) || /^eval/.test(creator.clerkUserId ?? "")) return null;
+  const conn = (await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", id).eq("provider", "zernio")).first()) as Doc<"connections"> | null;
+  const tiktok = (conn?.zernioAccounts ?? []).filter((x) => x.platform === "tiktok");
+  if (!conn || conn.status !== "connected" || !tiktok.length || !creator.handles?.tiktok) return null;
+  return { creator, conn, tiktok };
+}
+
+export const connectedHandle = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, a): Promise<string | null> => {
+    const creator = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
+    const conn = (await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).eq("provider", "zernio")).first()) as Doc<"connections"> | null;
+    if (!creator || /^eval/.test(creator.clerkUserId ?? "") || conn?.status !== "connected" || !(conn.zernioAccounts ?? []).some((x) => x.platform === "tiktok")) return null;
+    return creator.handles?.tiktok ?? null;
+  },
+});
+
 /** Screen 1 through checkout: the real start path, then a trial on the tier their handles need. */
 export const createOne = internalMutation({
-  args: { runId: v.string(), i: v.number(), handles: v.object({ tiktok: v.optional(v.string()) }), timezone: v.string(), watchCap: v.number(), transcriptCap: v.number(), replay: v.optional(v.boolean()) },
+  args: { runId: v.string(), i: v.number(), handles: v.object({ tiktok: v.optional(v.string()) }), timezone: v.string(), watchCap: v.number(), transcriptCap: v.number(), replay: v.optional(v.boolean()), connectedFrom: v.optional(v.id("creators")) },
   handler: async (ctx, a): Promise<{ ok: boolean; creatorId?: Id<"creators">; error?: string }> => {
     const subject = subjectFor(a.runId, a.i);
     if (!isFirstWeekSubject(subject)) throw new Error("not a first-week subject");
-    const r = await startCreator(ctx, { subject, email: `${subject.replace(/[^a-z0-9-]/gi, "-")}@eval.invalid`, handles: a.handles, timezone: a.timezone, ingestCaps: { watchCap: a.watchCap, transcriptCap: a.transcriptCap } });
+    const source = a.connectedFrom ? await connectedSource(ctx, a.connectedFrom) : null;
+    if (a.connectedFrom && !source) return { ok: false, error: "connectedFrom: not a real creator with a connected TikTok" };
+    const r = await startCreator(ctx, { subject, email: `${subject.replace(/[^a-z0-9-]/gi, "-")}@eval.invalid`, handles: a.handles, timezone: a.timezone, ingestCaps: { watchCap: a.watchCap, transcriptCap: a.transcriptCap }, ...(source ? { sharesHandleWith: source.creator._id } : {}) });
     if (!r.ok || !r.creatorId) return { ok: false, error: r.error ?? "signup refused" };
     const creatorId = r.creatorId as Id<"creators">;
+    // The borrowed connection: the same Zernio profile and TikTok account, read live, read only (Maya never posts).
+    if (source) {
+      const { _id, _creationTime, creatorId: _owner, ...rest } = source.conn;
+      void _id; void _creationTime; void _owner;
+      await ctx.db.insert("connections", { ...rest, creatorId, zernioAccounts: source.tiktok, updatedAt: Date.now() } as never);
+    }
     const c = await fwCreator(ctx, creatorId);
     // Replay is armed in the same transaction that queued the catalogue read, so no read of theirs can
     // reach the vendor first. A refusal undoes the signup (the mutation throws): never a paid run by accident.
@@ -490,11 +522,17 @@ export const preflight = internalQuery({
 });
 
 export const start = internalAction({
-  args: { handles: subjectsV, ...optsV },
+  // `connectedFrom`: a real creator with a connected TikTok; creator 0 borrows it (see connectedSource).
+  args: { handles: subjectsV, connectedFrom: v.optional(v.id("creators")), ...optsV },
   handler: async (ctx, a): Promise<{ runId: string; creators: Array<{ i: number; handles: string; timezone: string; creatorId?: string; error?: string }>; opts: Opts; credits: { balance: number | null; estimate: number; needed: number } }> => {
-    const { handles, ...rest } = a;
+    const { handles, connectedFrom, ...rest } = a;
     const opts = resolveOpts(rest);
     let subjects = handles?.length ? handles : DEFAULT_SUBJECTS;
+    if (connectedFrom) {
+      const h = await ctx.runQuery(internal.eval.firstWeek.connectedHandle, { creatorId: connectedFrom });
+      if (!h) throw new Error("connectedFrom: not a real creator with a connected TikTok");
+      subjects = [{ tiktok: h, note: "connected: borrows a real Zernio connection" }, ...subjects.filter((x) => x.tiktok?.replace(/^@/, "").toLowerCase() !== h.toLowerCase())];
+    }
     if (opts.replay) {
       // Only accounts whose onboarding reads are all in the cache; a named refusal otherwise.
       const cached = await ctx.runQuery(internal.eval.replay.candidates, { limit: 200 });
@@ -530,7 +568,7 @@ export const start = internalAction({
     for (const [i, s] of subjects.entries()) {
       const timezone = s.timezone ?? zones[i];
       const slot: CreatorSlot = { i, subject: subjectFor(runId, i), handles: { tiktok: s.tiktok }, timezone, note: s.note };
-      const r = await ctx.runMutation(internal.eval.firstWeek.createOne, { runId, i, handles: slot.handles, timezone, watchCap: opts.watchCap, transcriptCap: opts.transcriptCap, replay: opts.replay });
+      const r = await ctx.runMutation(internal.eval.firstWeek.createOne, { runId, i, handles: slot.handles, timezone, watchCap: opts.watchCap, transcriptCap: opts.transcriptCap, replay: opts.replay, ...(connectedFrom && i === 0 ? { connectedFrom } : {}) });
       if (r.ok && r.creatorId) slot.creatorId = r.creatorId;
       else slot.error = `signup refused: ${r.error}`;
       creators.push(slot);
