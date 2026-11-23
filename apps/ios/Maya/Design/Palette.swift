@@ -1,25 +1,22 @@
 import SwiftUI
 import UIKit
 
-/// Maya's colours, from the web brand (app/app/mission-control.css), with dark variants.
+/// Maya's colours, from the web brand (app/app/mission-control.css). One look, white and purple, in light and dark
+/// mode alike (operator, 2026-11-23): the app sets UIUserInterfaceStyle Light, and the widget uses these too.
 enum Palette {
-  static let ground = dynamic(light: 0xFCFBF8, dark: 0x17141F)
-  static let panel = dynamic(light: 0xFFFDFB, dark: 0x211C2C)
-  static let wash = dynamic(light: 0xF3EFF9, dark: 0x2A2338)
-  static let line = dynamic(light: 0xE4DFEA, dark: 0x3A3348)
-  static let ink = dynamic(light: 0x29233F, dark: 0xF1EDF7)
-  static let muted = dynamic(light: 0x756E84, dark: 0xA79FB5)
-  static let purple = dynamic(light: 0x7661B4, dark: 0xA894E6)
-  static let coral = dynamic(light: 0xFF795F, dark: 0xFF8D76)
-  static let ok = dynamic(light: 0x2F7D5B, dark: 0x6CC49A)
-  static let warn = dynamic(light: 0xB7791F, dark: 0xE7B45A)
-  static let err = dynamic(light: 0xC2453D, dark: 0xF07C73)
-  /// The flower's face is always the ink of the light theme, on either background.
+  static let ground = Color(hex: 0xFCFBF8)
+  static let panel = Color(hex: 0xFFFDFB)
+  static let wash = Color(hex: 0xF3EFF9)
+  static let line = Color(hex: 0xE4DFEA)
+  static let ink = Color(hex: 0x29233F)
+  static let muted = Color(hex: 0x756E84)
+  static let purple = Color(hex: 0x7661B4)
+  static let coral = Color(hex: 0xFF795F)
+  static let ok = Color(hex: 0x2F7D5B)
+  static let warn = Color(hex: 0xB7791F)
+  static let err = Color(hex: 0xC2453D)
+  /// The flower's face: the ink.
   static let face = Color(hex: 0x29233F)
-
-  private static func dynamic(light: UInt32, dark: UInt32) -> Color {
-    Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(hex: dark) : UIColor(hex: light) })
-  }
 }
 
 extension Color {

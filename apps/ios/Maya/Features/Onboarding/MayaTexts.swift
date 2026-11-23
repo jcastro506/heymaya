@@ -74,6 +74,11 @@ enum MayaExamples {
     "it's the reveal at the end. people watched it twice",
     "want another one built the same way?",
   ]
+  /// Meet: her real first reply when they text her (convex/onboarding/hello.ts: the greeting, then saveContactLine).
+  static func meet(name: String?) -> String {
+    let n = name.map { $0.trimmingCharacters(in: .whitespaces) }.flatMap { $0.isEmpty ? nil : " \($0)" } ?? ""
+    return "hey\(n)! it's Maya 👋 save this number, i'll text you when i find something worth making"
+  }
   static let nearby = [
     "you're in new york this week!",
     "the rockefeller tree just went up. go film it before the crowds get there",

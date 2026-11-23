@@ -338,20 +338,26 @@ private struct MeetStep: View {
   @State private var busy = false
   @State private var waiting = false
   @State private var problem: String?
+  @State private var sent = false
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
     StepFrame(step: .meet, kicker: "Meet Maya", title: "Maya lives in your text.", subtitle: "Text her like a friend. Say hey, tell her what you're working on, or ask for an idea.") {
       VStack(alignment: .leading, spacing: 14) {
+        // The moment they're about to have: their "hey" goes out, she types, her real first reply lands by name.
         HStack {
           Spacer(minLength: 36)
-          Text("Hey")
+          Text("hey")
             .font(MayaFont.body)
             .foregroundStyle(.white)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .background(Palette.purple, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
-        .accessibilityLabel("Example text message: Hey")
+        .opacity(sent ? 1 : 0)
+        .offset(y: sent ? 0 : 12)
+        .accessibilityLabel("Example text message from you: hey")
+        if sent { MayaTexts(messages: [MayaExamples.meet(name: model.progress?.firstName)]) }
         if waiting {
           HStack(spacing: 10) {
             ProgressView()
@@ -359,6 +365,11 @@ private struct MeetStep: View {
           }
         }
         Problem(text: problem)
+      }
+      .task {
+        if reduceMotion { sent = true; return }
+        try? await Task.sleep(for: .milliseconds(500))
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { sent = true }
       }
     } footer: {
       PrimaryButton(title: waiting ? "Open Messages again" : "Text Maya", busy: busy) {

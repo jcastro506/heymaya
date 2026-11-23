@@ -48,5 +48,7 @@
 	<string>Maya looks for markets, races and festivals near you and turns the good ones into ideas. She only ever sees your city.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
+	<key>UIUserInterfaceStyle</key>
+	<string>Light</string>
 </dict>
 </plist>
