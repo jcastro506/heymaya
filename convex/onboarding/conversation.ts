@@ -16,7 +16,9 @@ export function introBody(partnerships: boolean, readDone = false, hasAccount = 
   if (readDone) return [];
   // 2026-11-23: without their TikTok she can't read anything; "going through your posts now" was a false promise.
   if (!hasAccount) return [NEEDS_ACCOUNT_LINE];
-  return [`going through your posts now, give me a few minutes${partnerships ? ". i'll keep an eye out for brand deals too" : ""}`];
+  // 2026-11-23: no brand-deals line in the opening; a feature claim before she has shown them anything.
+  void partnerships;
+  return ["watching your posts now, give me a few minutes"];
 }
 
 /**

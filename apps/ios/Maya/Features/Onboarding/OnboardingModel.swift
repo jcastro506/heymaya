@@ -61,6 +61,10 @@ struct OnboardingProgress: Decodable, Equatable {
   /// From sign-in, or what they typed on the first screen.
   var firstName: String? = nil
   var nameConfirmed: Bool? = nil
+  /// The account (servers from 2026-11-23): the calendar screen is remembered per account, not per phone.
+  var account: String? = nil
+  /// A Google or iPhone calendar is already connected for this account: the screen has nothing to ask.
+  var calendarConnected: Bool? = nil
 }
 
 struct SocialStatus: Decodable, Equatable {
@@ -89,7 +93,18 @@ final class OnboardingModel {
 
   var connectSeen: Bool { didSet { if !preview { UserDefaults.standard.set(connectSeen, forKey: Self.key("connectSeen")) } } }
   var watchSeen: Bool { didSet { if !preview { UserDefaults.standard.set(watchSeen, forKey: Self.key("watchSeen")) } } }
-  var calendarSeen: Bool { didSet { if !preview { UserDefaults.standard.set(calendarSeen, forKey: Self.key("calendarSeen")) } } }
+  /// Answered for THIS account (2026-11-23: keyed by phone, a second account never got the calendar choice).
+  private var calendarAnswered = false
+  var calendarSeen: Bool {
+    get {
+      calendarAnswered || progress?.calendarConnected == true
+        || (progress?.account).map { UserDefaults.standard.bool(forKey: Self.key("calendarSeen.\($0)")) } ?? false
+    }
+    set {
+      calendarAnswered = newValue
+      if !preview, let account = progress?.account { UserDefaults.standard.set(newValue, forKey: Self.key("calendarSeen.\(account)")) }
+    }
+  }
   var nearbySeen: Bool { didSet { if !preview { UserDefaults.standard.set(nearbySeen, forKey: Self.key("nearbySeen")) } } }
 
   /// Debug only (`-MayaOnboarding plan|connect|watch|meet`): every screen with made-up data, no network,
@@ -100,8 +115,6 @@ final class OnboardingModel {
     self.preview = preview != nil
     connectSeen = UserDefaults.standard.bool(forKey: Self.key("connectSeen"))
     watchSeen = UserDefaults.standard.bool(forKey: Self.key("watchSeen"))
-    // Already answered the iPhone's prompt (say, a reinstall): don't ask again.
-    calendarSeen = UserDefaults.standard.bool(forKey: Self.key("calendarSeen")) || EKEventStore.authorizationStatus(for: .event) != .notDetermined
     nearbySeen = UserDefaults.standard.bool(forKey: Self.key("nearbySeen")) || Nearby.answered
     if let start = preview {
       connectSeen = ![.name, .plan, .connect].contains(start)

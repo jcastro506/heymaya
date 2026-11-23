@@ -48,7 +48,7 @@ describe("first contact", () => {
     const parts = hello(a)[0].body.split("\n---\n");
     expect(parts).toHaveLength(2);
     expect(parts[0]).toMatch(/maya.*save this number/i);
-    expect(parts[1]).toMatch(/going through your posts now/i);
+    expect(parts[1]).toMatch(/watching your posts now/i);
     const opening = rows.find((m) => m.creatorId === b && m.kind === "first_read")!.body.split("\n---\n");
     expect(opening[0], "greets first").toMatch(/maya/i);
     expect(opening[1]).toBe("the read");

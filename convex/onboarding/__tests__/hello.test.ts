@@ -60,7 +60,7 @@ describe("the greeting (pure)", () => {
     expect(parts).toHaveLength(2);
     expect(parts[0]).toBe(`hey Adina, it's Maya! so glad you're here ${saveContactLine()}`);
     expect(parts.slice(1)).toEqual(introBody(false));
-    expect(parts[1]).toMatch(/going through your posts now/);
+    expect(parts[1]).toMatch(/watching your posts now/);
     expect(parts.join(" ")).not.toMatch(/text me like you'd text a friend/);
     expect(parts.join(" ")).not.toContain("?");
     for (const p of parts) expect(p.length, p).toBeLessThan(200);

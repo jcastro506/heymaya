@@ -5,6 +5,7 @@
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>applinks:hey-maya.ai</string>
+		<string>applinks:staging.hey-maya.ai</string>
 	</array>
 	<key>com.apple.security.application-groups</key>
 	<array>

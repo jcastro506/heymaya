@@ -204,19 +204,47 @@ describe("buttons and the question agree (live 2026-09-06)", () => {
 
 import { firstReadSkill } from "../firstRead";
 
-describe("first contact proves she watched, brings one idea, asks one easy thing (2026-11-03)", () => {
-  it("every shape: the standout post with its numbers, one video this week, one no-thought question, no survey, no hedging", () => {
+describe("first contact: how she sees them, proved by their standout post, then a finished first post; no question (2026-11-23)", () => {
+  it("every shape: how she sees them as a correctable statement, the standout with its numbers, a finished idea with a word-for-word hook, no question, no hedging", () => {
     for (const [said, conv] of [[true, false], [false, false], [true, true]] as const) {
       const sk = firstReadSkill(said, conv);
       expect(sk).toMatch(/standout post/);
       expect(sk).toMatch(/copied exactly/);
-      expect(sk).toMatch(/One video they could film this week/);
-      expect(sk).toMatch(/Exactly one question/);
-      expect(sk).toMatch(/Never ask about their goal, their niche/);
+      expect(sk).toMatch(/How you see them, said as a statement, never a question/);
+      expect(sk).toMatch(/if that's not you, tell me/);
+      expect(sk).toMatch(/The first post to make, finished/);
+      expect(sk).toMatch(/word for word/);
+      expect(sk).toMatch(/No question anywhere/);
+      expect(sk).toMatch(/never a trait you weren't given/);
       expect(sk).toMatch(/hold me loosely/); // named as banned
       expect(sk).not.toMatch(/whatever's happening that week|keep their content calendar/);
     }
     expect(firstReadSkill(true)).toMatch(/No name, no introduction/);
     expect(firstReadSkill(false)).toMatch(/Say hi and your name/);
+  });
+});
+
+describe("the opening's idea lands in their app, linked (2026-11-23)", () => {
+  it("parses the idea from her text and refuses an empty one", async () => {
+    const { parseOpeningIdea, withIdeaLink } = await import("../firstRead");
+    expect(parseOpeningIdea('{"hook":"the guy on the same treadmill for two years","why":"real footage, one dry line","shoot":"3 shots, 10 sec"}')).toEqual({ hook: "the guy on the same treadmill for two years", why: "real footage, one dry line", shoot: "3 shots, 10 sec" });
+    expect(parseOpeningIdea('{"hook":""}')).toBeNull();
+    expect(parseOpeningIdea("not json")).toBeNull();
+    const t = withIdeaLink("how i see you\n---\nfirst one to make: …", "https://staging.hey-maya.ai/o/idea/abc");
+    expect(t.split("\n---\n")).toHaveLength(2);
+    expect(t.split("\n---\n")[1]).toMatch(/in your Maya app.*https:\/\/staging\.hey-maya\.ai\/o\/idea\/abc$/s);
+  });
+
+  it("day one's plan leads with it, and the plan text links the app and, without a calendar, how to connect one", async () => {
+    const { openingFirst, composeWeek } = await import("../../calendar/weekPlan");
+    const picked = [{ ideaId: "a" }, { ideaId: "open" }, { ideaId: null }];
+    expect(openingFirst(picked, [{ ideaId: "a" }, { ideaId: "open", opening: true }]).map((p) => p.ideaId)).toEqual(["open", "a", null]);
+    const slot = { day: 1, film: { start: Date.UTC(2026, 10, 26, 23), end: Date.UTC(2026, 10, 27, 0) }, edit: null, post: { at: Date.UTC(2026, 10, 27, 23), hour: 18, fromHistory: false }, ideaId: "open", hook: "the treadmill guy", experiment: false };
+    const none = composeWeek([slot], "America/New_York", false, "this week", undefined, true, { app: "https://x/app/today", calendar: "https://x/app/calendar" });
+    expect(none).toMatch(/connect your calendar there.*https:\/\/x\/app\/calendar/s);
+    expect(none).toMatch(/https:\/\/x\/app\/today/);
+    const has = composeWeek([slot], "America/New_York", false, "this week", undefined, true, { app: "https://x/app/today" });
+    expect(has).toMatch(/your week's in the app: https:\/\/x\/app\/today want them on your calendar\?/);
+    expect(composeWeek([slot], "America/New_York", false, "next week", undefined, false)).not.toMatch(/https?:/);
   });
 });

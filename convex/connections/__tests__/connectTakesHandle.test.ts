@@ -93,8 +93,8 @@ describe("her hello never promises a read she can't do", () => {
   it("without their TikTok she says what to do instead of 'going through your posts'", () => {
     const parts = helloParts("hey Kev! it's Maya 👋", false, false, false);
     expect(parts[1]).toBe(NEEDS_ACCOUNT_LINE);
-    expect(parts.join(" ")).not.toMatch(/going through your posts now/);
-    expect(helloParts("hey! it's Maya", false)[1]).toMatch(/going through your posts now/);
+    expect(parts.join(" ")).not.toMatch(/watching your posts now/);
+    expect(helloParts("hey! it's Maya", false)[1]).toMatch(/watching your posts now/);
   });
 });
 
