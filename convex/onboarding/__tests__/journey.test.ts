@@ -105,6 +105,8 @@ describe("a new person's journey", () => {
     await t.action(internal.onboarding.firstRead.run, { creatorId: me });
     await t.action(internal.onboarding.firstRead.run, { creatorId: me });
     expect((await outs(t, me)).filter((m) => m.kind === "first_read"), "the read once").toHaveLength(1);
+    const opening = (await t.run((ctx) => ctx.db.query("ideas").collect())).filter((i) => i.creatorId === me && (i.version as { from?: string }).from === "first_read");
+    expect(opening, "one opening idea: a second run saves nothing nobody was told about").toHaveLength(1);
   });
 
   it("START twice is one hello", async () => {

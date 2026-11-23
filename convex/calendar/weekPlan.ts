@@ -237,7 +237,7 @@ export const draft = internalAction({
     if (picked.filter((x) => !x.experiment).length < want && a.horizon === "first") {
       // Day one: the opening's idea leads (it's the newest sent), and the rest of the week is seeded from their own
       // posts (2026-11-23: with only the opening idea, the first week would have had one post).
-      const seeded = await ctx.runAction(internal.calendar.firstIdeas.seed, { creatorId: a.creatorId, n: want - picked.filter((x) => !x.experiment).length });
+      const seeded = await ctx.runAction(internal.calendar.firstIdeas.seed, { creatorId: a.creatorId, n: want - picked.filter((x) => !x.experiment).length, avoid: picked.filter((x) => !x.experiment).map((x) => x.hook) });
       if (seeded.seeded > 0) {
         const again = await ctx.runQuery(internal.calendar.weekPlan.inputsFor, { creatorId: a.creatorId, now });
         if (again) picked = pickIdeas(again.ideas, Math.max(1, Math.min(5, Math.round(again.postsPerWeek) || 1)), again.experiment);

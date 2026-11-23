@@ -161,6 +161,9 @@ export const run = internalAction({
       return { ok: true };
     }
 
+    // Once (sim, 2026-11-23): written when the watching finished, the read ran again at START and saved a second
+    // idea nobody was told about, which then led their week. Already written means done.
+    if (!args.dryRun && (await ctx.runQuery(internal.core.messages.exists, { creatorId: creator._id, dedupeKey: `first_read:${creator._id}` }))) return { ok: true, reason: "already written" };
     // Live 2026-09-06: she introduced herself twice, once at pairing and again in the read.
     // Written before they've texted START, it can only go out at pairing, where the greeting leads it
     // (core/pairing openWithRead): it never introduces her either (2026-11-03: twice in eleven seconds).
