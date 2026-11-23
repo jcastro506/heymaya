@@ -64,4 +64,28 @@ describe("ignoreRails is measurement-only", () => {
     const evalSrc = readFileSync(new URL("../../eval/run.ts", import.meta.url), "utf8");
     expect(evalSrc, "the suite must pass dryRun alongside it").toMatch(/dryRun: true, ignoreRails: true/);
   });
+
+  it("a paused or canceled creator's watch list costs nothing (dev spent ~200 credits a day on paused test creators)", async () => {
+    const t = convexTest(schema, modules);
+    const add = async (key: string, status: string) => {
+      const creatorId = await t.run((ctx) => seedCreator(ctx, key, {}));
+      await t.run(async (ctx) => {
+        const c = await ctx.db.get(creatorId);
+        await ctx.db.patch(creatorId, { plan: { ...c!.plan, status } } as never);
+        await ctx.db.insert("trackedAccounts", { creatorId, platform: "tiktok", handle: `h_${key}`, status: "active", addedBy: "creator", baselineN: 0, createdAt: Date.now() } as never);
+      });
+      return creatorId;
+    };
+    await add("live", "active");
+    await add("comp", "comped");
+    const paused = await add("p", "paused");
+    await add("gone", "canceled");
+    const onboarding = await add("new", "onboarding");
+    const handles = (r: Array<{ handle: string }>) => r.map((x) => x.handle).sort();
+    expect(handles(await t.query(internal.scout.sampler.distinctTracked, {}))).toEqual(["h_comp", "h_live"]);
+    // Their own same-day sample still runs while they're onboarding; a paused creator's never does by the fleet.
+    expect(handles(await t.query(internal.scout.sampler.distinctTracked, { creatorId: onboarding }))).toContain("h_new");
+    expect(handles(await t.query(internal.scout.sampler.distinctTracked, {}))).not.toContain("h_p");
+    void paused;
+  });
 });

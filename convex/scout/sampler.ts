@@ -57,14 +57,24 @@ interface PostIn {
 }
 
 /** Distinct (platform, handle) across every active tracked account, with who admires each. */
+/** Plans whose watched accounts are read: the ones she works for (onboarding reads its own first sample by creatorId). */
+export const SAMPLED_PLANS = new Set(["active", "trialing", "comped", "past_due"]);
+
 export const distinctTracked = internalQuery({
-  args: {},
-  handler: async (ctx): Promise<Array<{ platform: "tiktok" | "instagram"; handle: string; rows: Array<{ id: Id<"trackedAccounts">; creatorId: Id<"creators"> }> }>> => {
+  args: { creatorId: v.optional(v.id("creators")) },
+  handler: async (ctx, a): Promise<Array<{ platform: "tiktok" | "instagram"; handle: string; rows: Array<{ id: Id<"trackedAccounts">; creatorId: Id<"creators"> }> }>> => {
     const all = (await ctx.db.query("trackedAccounts").collect()) as Doc<"trackedAccounts">[];
+    // Only for someone she's working for (2026-11-23): dev spent ~200 credits a day reading the watch lists of
+    // paused test creators, and a canceled subscriber's list would be read forever the same way.
+    const live = new Map<Id<"creators">, boolean>();
+    for (const id of new Set(all.map((r) => r.creatorId))) {
+      const c = (await ctx.db.get(id)) as Doc<"creators"> | null;
+      live.set(id, Boolean(c && (SAMPLED_PLANS.has(c.plan.status) || (id === a.creatorId && c.plan.status !== "deleting"))));
+    }
     const map = new Map<string, { platform: "tiktok" | "instagram"; handle: string; rows: Array<{ id: Id<"trackedAccounts">; creatorId: Id<"creators"> }> }>();
     for (const r of all) {
       // Instagram off: not sampled, and not retired either (it comes back when the switch does).
-      if (r.status !== "active" || !platformOn(r.platform)) continue;
+      if (r.status !== "active" || !platformOn(r.platform) || !live.get(r.creatorId)) continue;
       const k = `${r.platform}:${r.handle}`;
       const e = map.get(k) ?? { platform: r.platform, handle: r.handle, rows: [] };
       e.rows.push({ id: r._id, creatorId: r.creatorId });
@@ -227,7 +237,7 @@ export const run = internalAction({
         return { accounts: all.length, signals: 0, failed: 0, gone: 0, batches: parts.length };
       }
     }
-    const accounts = args.batch ?? (await ctx.runQuery(internal.scout.sampler.distinctTracked, {})).filter((a) => !args.creatorId || a.rows.some((r) => r.creatorId === args.creatorId));
+    const accounts = args.batch ?? (await ctx.runQuery(internal.scout.sampler.distinctTracked, { creatorId: args.creatorId })).filter((a) => !args.creatorId || a.rows.some((r) => r.creatorId === args.creatorId));
     let signals = 0, failed = 0, gone = 0;
     let firstError = "";
     for (const acct of accounts) {
