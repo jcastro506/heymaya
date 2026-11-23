@@ -232,7 +232,7 @@ describe("the opening's idea lands in their app, linked (2026-11-23)", () => {
     expect(parseOpeningIdea("not json")).toBeNull();
     const t = withIdeaLink("how i see you\n---\nfirst one to make: …", "https://staging.hey-maya.ai/o/idea/abc");
     expect(t.split("\n---\n")).toHaveLength(2);
-    expect(t.split("\n---\n")[1]).toMatch(/in your Maya app.*https:\/\/staging\.hey-maya\.ai\/o\/idea\/abc$/s);
+    expect(t.split("\n---\n")[1]).toMatch(/in your Maya app[\s\S]*https:\/\/staging\.hey-maya\.ai\/o\/idea\/abc$/);
   });
 
   it("day one's plan leads with it, and the plan text links the app and, without a calendar, how to connect one", async () => {
@@ -241,7 +241,7 @@ describe("the opening's idea lands in their app, linked (2026-11-23)", () => {
     expect(openingFirst(picked, [{ ideaId: "a" }, { ideaId: "open", opening: true }]).map((p) => p.ideaId)).toEqual(["open", "a", null]);
     const slot = { day: 1, film: { start: Date.UTC(2026, 10, 26, 23), end: Date.UTC(2026, 10, 27, 0) }, edit: null, post: { at: Date.UTC(2026, 10, 27, 23), hour: 18, fromHistory: false }, ideaId: "open", hook: "the treadmill guy", experiment: false };
     const none = composeWeek([slot], "America/New_York", false, "this week", undefined, true, { app: "https://x/app/today", calendar: "https://x/app/calendar" });
-    expect(none).toMatch(/connect your calendar there.*https:\/\/x\/app\/calendar/s);
+    expect(none).toMatch(/connect your calendar there[\s\S]*https:\/\/x\/app\/calendar/);
     expect(none).toMatch(/https:\/\/x\/app\/today/);
     const has = composeWeek([slot], "America/New_York", false, "this week", undefined, true, { app: "https://x/app/today" });
     expect(has).toMatch(/your week's in the app: https:\/\/x\/app\/today want them on your calendar\?/);
