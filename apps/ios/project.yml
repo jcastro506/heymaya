@@ -71,6 +71,8 @@ targets:
           - CFBundleURLName: ai.heymaya.maya
             CFBundleURLSchemes: [maya]
         UILaunchScreen: {}
+        # One look, white and purple, whatever the phone's dark mode (operator, 2026-11-23).
+        UIUserInterfaceStyle: Light
         ITSAppUsesNonExemptEncryption: false
     entitlements:
       path: Maya/Maya.entitlements
@@ -109,6 +111,7 @@ targets:
       properties:
         MayaConvexURL: $(MAYA_CONVEX_URL)
         CFBundleDisplayName: Maya
+        UIUserInterfaceStyle: Light
         NSExtension:
           NSExtensionPointIdentifier: com.apple.share-services
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
@@ -142,6 +145,7 @@ targets:
       properties:
         MayaConvexURL: $(MAYA_CONVEX_URL)
         CFBundleDisplayName: Maya
+        UIUserInterfaceStyle: Light
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     entitlements:
