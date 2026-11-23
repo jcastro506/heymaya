@@ -111,6 +111,9 @@ export const send = internalAction({
     const text = r?.ok ? r.content.trim().replace(/^["“]|["”]$/g, "") : "";
     if (text && greetingOk(text, i.name)) { greeting = text; fromModel = true; }
     const res = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "imessage", body: helloParts(greeting, i.partnerships, false, i.hasAccount).join("\n---\n"), dedupeKey: `hello:${a.creatorId}`, proactive: true, kind: "hello", awaitingAnswer: false });
+    // They just texted START and are watching the screen: deliver now. Pairing's own drain ran before this
+    // hello existed, so it waited for the minute cron (2026-11-23: written in 18 seconds, delivered 51 later).
+    if (res.sent) await ctx.scheduler.runAfter(0, internal.core.scheduler.drainJobs, { kinds: ["deliver_message"] });
     return { sent: res.sent, reason: res.sent ? "sent" : res.held ?? "already said hello", greeting, fromModel };
   },
 });

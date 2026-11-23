@@ -84,6 +84,9 @@ describe("on rows", () => {
     const c = await paired(t, "h1", { firstName: "Adina" });
     vi.mocked(callModel).mockResolvedValueOnce({ ok: true, content: "hey Adina! it's maya 👋" } as Awaited<ReturnType<typeof callModel>>);
     expect(await t.action(internal.onboarding.hello.send, { creatorId: c })).toMatchObject({ sent: true, fromModel: true });
+    // Delivered now, not on the minute cron (2026-11-23: written in 18 seconds, sent 51 later).
+    const drains = await t.run(async (ctx) => (await ctx.db.system.query("_scheduled_functions").collect()).filter((f) => f.name.includes("drainJobs") && JSON.stringify(f.args).includes("deliver_message")));
+    expect(drains.length).toBeGreaterThanOrEqual(1);
     expect(await t.action(internal.onboarding.hello.send, { creatorId: c })).toMatchObject({ sent: false, reason: "already said hello" });
     const [row] = await hellos(t, c);
     expect(row.body.split("\n---\n")[0]).toMatch(/^Hey Adina! It's maya 👋 save this number/);

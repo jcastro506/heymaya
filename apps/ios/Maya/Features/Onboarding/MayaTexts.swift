@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Show, don't tell (operator, 2026-11-13): where a screen asks for something whose payoff isn't obvious (their
-/// account, their location), it shows what Maya would text them because of it. Only there: not every screen. Her bubbles arrive one after another with typing dots, like Messages.
+/// location), it shows what Maya would text them because of it. Only there: not every screen (2026-11-23: off
+/// Connect, it looked busy; on Meet it previews her real first reply). Her bubbles arrive one after another with typing dots, like Messages.
 /// Examples only: made-up posts and places, never a real creator's name.
 struct MayaTexts: View {
   let messages: [String]
@@ -69,11 +70,6 @@ private struct TypingDots: View {
 
 /// What she'd text, per screen. Kept out of the views so the copy test reads them. Her voice: lowercase, short.
 enum MayaExamples {
-  static let connect = [
-    "your thrifted cast iron video did 4× your usual views",
-    "it's the reveal at the end. people watched it twice",
-    "want another one built the same way?",
-  ]
   /// Meet: her real first reply when they text her (convex/onboarding/hello.ts: the greeting, then saveContactLine).
   static func meet(name: String?) -> String {
     let n = name.map { $0.trimmingCharacters(in: .whitespaces) }.flatMap { $0.isEmpty ? nil : " \($0)" } ?? ""
