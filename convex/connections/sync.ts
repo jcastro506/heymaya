@@ -230,6 +230,12 @@ async function accountOwners(ctx: Pick<ActionCtx, "runQuery">): Promise<Map<stri
   return map;
 }
 
+/** Pure: Zernio refused the delta cursor as too old (a 400 that says to re-bootstrap). */
+export function cursorExpired(e: unknown): boolean {
+  const m = e instanceof Error ? e.message : String(e);
+  return /\b400\b/.test(m) && /retention window|re-?bootstrap|cursor is (older|invalid|expired)/i.test(m);
+}
+
 /**
  * Fleet-wide: everything that changed since the cursor, in one stream. The first call
  * (no cursor) is a bootstrap of the feed's position and writes nothing.
@@ -244,7 +250,18 @@ export const delta = internalAction({
     let owners: Map<string, Id<"creators">> | null = null;
     try {
       for (;;) {
-        const res = await c.request<{ data?: Array<Record<string, unknown>>; nextCursor?: string; hasMore?: boolean }>("/api/v1/analytics/delta", { query: cur ? { cursor: cur } : {} });
+        let res: { data?: Array<Record<string, unknown>>; nextCursor?: string; hasMore?: boolean };
+        try {
+          res = await c.request<{ data?: Array<Record<string, unknown>>; nextCursor?: string; hasMore?: boolean }>("/api/v1/analytics/delta", { query: cur ? { cursor: cur } : {} });
+        } catch (e) {
+          // Staging, 2026-10-02 → 11-23: the cursor aged past Zernio's retention window and every hourly call was
+          // refused, so the feed stopped and the operator got the same alert each day. An expired cursor starts over.
+          if (!cur || !cursorExpired(e)) throw e;
+          cur = null;
+          await ctx.runMutation(internal.connections.sync.setCursor, { key: "zernio:analytics:delta", value: "" });
+          await ctx.runMutation(internal.connections.zernio.recordHealth, { check: "delta_rebootstrap", ok: true, detail: "cursor expired; started the feed over" });
+          continue;
+        }
         pages++;
         for (const item of res.data ?? []) {
           rows++;
