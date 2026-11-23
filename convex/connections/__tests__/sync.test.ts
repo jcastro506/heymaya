@@ -5,12 +5,12 @@
  * scraped Instagram id is the numeric pk while Zernio hands us the shortcode.
  */
 import { convexTest } from "convex-test";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import { seedCreator } from "../../../tests/lib/creatorRow";
-import { matchOwnPost, normalReach } from "../sync";
+import { matchOwnPost, normalReach, cursorExpired } from "../sync";
 import type { Connected } from "../analytics";
 
 const NOW = Date.UTC(2026, 8, 5, 12, 0);
@@ -135,5 +135,31 @@ describe("one post, one row, whoever sees it first (live 2026-09-05)", () => {
     expect(after[0].postId).toBe("3712345678901234567");
     expect(after[0].hashtags).toEqual(["tea", "matcha"]);
     expect(after[0].connected?.reach, "connected numbers survive the join").toBe(3);
+  });
+});
+
+describe("delta: an expired cursor starts the feed over (staging failed hourly from 2026-10-02)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it("knows the expired-cursor refusal and nothing else", () => {
+    expect(cursorExpired(new Error('Zernio 400 on https://zernio.com/api/v1/analytics/delta?cursor=x: {"error":"This cursor is older than the delta feed retention window. Re-bootstrap from GET /v1/analytics/delta"}'))).toBe(true);
+    expect(cursorExpired(new Error("Zernio 500 on https://zernio.com/api/v1/analytics/delta: oops"))).toBe(false);
+    expect(cursorExpired(new Error("Zernio 400 on x: bad platform"))).toBe(false);
+  });
+  it("clears the cursor, asks again without it, and saves the new one", async () => {
+    process.env.ZERNIO_API_KEY = "test_key_not_real";
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.connections.sync.setCursor, { key: "zernio:analytics:delta", value: "old" });
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: string) => {
+      urls.push(String(input));
+      if (String(input).includes("cursor=old")) return new Response(JSON.stringify({ error: "This cursor is older than the delta feed retention window. Re-bootstrap from GET /v1/analytics/delta" }), { status: 400 });
+      return new Response(JSON.stringify({ data: [], nextCursor: "fresh", hasMore: false }), { status: 200 });
+    }));
+    await t.action(internal.connections.sync.delta, {});
+    expect(urls).toHaveLength(2);
+    expect(urls[1]).not.toContain("cursor=");
+    expect(await t.query(internal.connections.sync.cursor, { key: "zernio:analytics:delta" })).toBe("fresh");
+    const health = await t.run((ctx) => ctx.db.query("vendorHealth").collect());
+    expect(health.map((h) => [h.check, h.ok])).toEqual([["delta_rebootstrap", true], ["delta", true]]);
   });
 });
