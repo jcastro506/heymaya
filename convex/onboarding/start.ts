@@ -256,7 +256,7 @@ export const setName = mutation({
 
 export const progress = query({
   args: {},
-  handler: async (ctx): Promise<{ state: "none" | "reading" | "read" | "paired"; posts: number; transcripts: number; dossier: boolean; paired: boolean; ingest: string | null; firstRead: string | null; timezone: string; quietHours: { start: string; end: string }; channelKind: "telegram" | "imessage"; phone: string | null; planStatus: string; tier: "solo" | "duo" | "partner" | null; firstName: string | null; nameConfirmed: boolean; instagramEnabled: boolean } | null> => {
+  handler: async (ctx): Promise<{ state: "none" | "reading" | "read" | "paired"; posts: number; transcripts: number; dossier: boolean; paired: boolean; ingest: string | null; firstRead: string | null; timezone: string; quietHours: { start: string; end: string }; channelKind: "telegram" | "imessage"; phone: string | null; planStatus: string; tier: "solo" | "duo" | "partner" | null; firstName: string | null; nameConfirmed: boolean; instagramEnabled: boolean; account: string; calendarConnected: boolean } | null> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
     const creator = (await ctx.db.query("creators").withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject)).first()) as Doc<"creators"> | null;
@@ -268,8 +268,12 @@ export const progress = query({
     const jobs = (await ctx.db.query("jobs").withIndex("by_creator", (q) => q.eq("creatorId", creator._id)).collect()) as Doc<"jobs">[];
     const ingest = jobs.filter((j) => j.kind === "ingest_catalogue").sort((x, y) => y.createdAt - x.createdAt)[0];
     const firstRead = jobs.filter((j) => j.kind === "first_read").sort((x, y) => y.createdAt - x.createdAt)[0];
+    // The calendar screen is per account (2026-11-23: a phone that had answered the iPhone's prompt for an
+    // earlier account skipped it, so a new account never got the Google-or-iPhone choice).
+    const google = await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", creator._id).eq("provider", "google_calendar")).first();
+    const calendarConnected = (google?.status === "connected") || creator.deviceCalendar?.status === "granted";
     // instagramEnabled stays false: app builds before 2026-11-13 show Instagram when the key is missing.
-    return { state: paired ? "paired" : dossier ? "read" : posts.length ? "reading" : "none", posts: posts.length, transcripts, dossier, paired, ingest: ingest?.status ?? null, firstRead: firstRead?.status ?? null, timezone: creator.timezone, quietHours: creator.quietHours, channelKind: creator.channel.kind ?? "imessage", phone: creator.phone ?? null, planStatus: creator.plan.status, tier: creator.plan.tier ?? null, firstName: creator.firstName ?? null, nameConfirmed: Boolean(creator.nameConfirmedAt), instagramEnabled: false };
+    return { state: paired ? "paired" : dossier ? "read" : posts.length ? "reading" : "none", posts: posts.length, transcripts, dossier, paired, ingest: ingest?.status ?? null, firstRead: firstRead?.status ?? null, timezone: creator.timezone, quietHours: creator.quietHours, channelKind: creator.channel.kind ?? "imessage", phone: creator.phone ?? null, planStatus: creator.plan.status, tier: creator.plan.tier ?? null, firstName: creator.firstName ?? null, nameConfirmed: Boolean(creator.nameConfirmedAt), instagramEnabled: false, account: String(creator._id), calendarConnected };
   },
 });
 

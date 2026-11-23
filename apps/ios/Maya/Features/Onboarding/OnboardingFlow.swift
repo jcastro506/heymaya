@@ -580,7 +580,7 @@ private struct DoneStep: View {
       Text("You're in.").font(MayaFont.display).foregroundStyle(Palette.ink)
       Text(paired
         ? "She's watching your posts now. Look out for her first text; everything she makes shows up here."
-        : "She's watching your posts now, and everything she makes shows up here. She'll start texting once you send her START.")
+        : "She's watching your posts now, and everything she makes shows up here. She'll start texting once you text her from the app.")
         .font(MayaFont.body).foregroundStyle(Palette.muted)
         .multilineTextAlignment(.center)
         .padding(.top, 10)

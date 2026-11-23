@@ -10,7 +10,8 @@ import { clip } from "../lib/clip";
 
 import { v } from "convex/values";
 import { internalAction, internalQuery } from "../_generated/server";
-import type { Doc } from "../_generated/dataModel";
+import { internalMutation } from "../lib/functions";
+import type { Doc, Id } from "../_generated/dataModel";
 import { internal } from "../_generated/api";
 import { callModel } from "../core/llm";
 import { REGISTRY } from "../agent/registry";
@@ -34,16 +35,21 @@ export const FIRST_SCOUT_DELAY_MS = READ_SETTLE_MS;
  * section at all (live 2026-09-06: telling the model to "skip" a section it was handed does not work).
  */
 export function firstReadSkill(saidHello: boolean, conversational = false): string {
-  const shape = `Shape, in this order, two or three short texts with a line containing only --- between them:
-1. Proof you watched: THE standout post you were given (not another one), named so they recognize it, with its numbers copied exactly as written there (never a multiple or figure of your own), and in a few words why it worked (the moment from the card or the transcript, never a detail you were not given). Real enthusiasm where you mean it.
-2. One video they could film this week, built from what made that post work: what it is, in one plain line, specific to them. Not a trend, not a list, not "post more".
-3. One easy question, last, on its own, that they can answer without thinking, like "got something in mind, or want me to pick one?". Never ask about their goal, their niche, what they want to be known for, or which direction to take.
-If you were given no standout post (too few posts to say), skip 1 and 2: name one specific thing you liked, then ask them to send the one they're proudest of so you can tell them what to make next.`;
-  const rules = `Hard rules: under 80 words. Every number copied exactly from the standout line; no other number, no decimals of your own. No compliment without a specific. Never hedge about how much you've seen ("hold me loosely", "only seen ten"), never describe what you do, no "basically". Exactly one question.`;
+  /**
+   * 2026-11-23 (operator): "how I see you" as a statement they can correct, then a finished first post, and no
+   * question: "want me to pick one?" handed the work back to someone who came because they can't decide. Code
+   * saves the idea in their app with a link, and their week (with times) follows as its own text.
+   */
+  const shape = `Shape, in this order, two short texts with a line containing only --- between them:
+1. How you see them, said as a statement, never a question: in one or two plain sentences, who they are on camera and what people stay for, taken ONLY from their dossier (persona, strengths) and what you watched, never a trait you weren't given. Then the proof: THE standout post you were given (not another one), named so they recognize it, with its numbers copied exactly as written there (never a multiple or figure of your own). End this text with a plain invitation to correct you, as a statement, like "if that's not you, tell me and i'll rethink everything".
+2. The first post to make, finished: what it is in one plain line, built from what made that post work; the hook written out word for word in quotes (the first thing they say or put on screen); the shots in a few words and about how long it runs. Specific to them, filmable this week with what they have. Not a trend, not a list, not "post more". Don't mention the app or a link: that's added for you.
+No question anywhere: never "want me to pick one?", "what do you think?" or "sound good?". Their week, with filming times, follows from you separately.
+If you were given no standout post (too few posts to say), skip the proof and the idea: name one specific thing you liked, then ask them to send the one they're proudest of so you can tell them what to make next (the one case with a question).`;
+  const rules = `Hard rules: under 90 words. Every number copied exactly from the standout line; no other number, no decimals of your own. No compliment without a specific. Never hedge about how much you've seen ("hold me loosely", "only seen ten"), never describe what you do, no "basically".`;
   if (conversational) return `first-read
-The opening conversation is already underway: they've been texting you while you read. Open as the natural next text ("ok, done going through your posts"), never as a fresh start. If they told you what they want, tie the read to it. Build on anything you already told them; never repeat or contradict it.
+The opening conversation is already underway: they've been texting you while you watched their posts. Open as the natural next text ("ok, done going through your posts"), never as a fresh start. If they told you what they want, tie the read to it. Build on anything you already told them; never repeat or contradict it.
 ${shape}
-If they asked you something you haven't answered, or a question of yours is still open, ask nothing: end on the idea.
+If they asked you something you haven't answered, answer it in one line first.
 ${rules}`;
   return `first-read
 When: once, the first real thing they read from you, right after "hey, it's Maya". It decides whether they feel seen or processed.
@@ -51,6 +57,52 @@ ${saidHello ? "No name, no introduction: the greeting already said it." : "Say h
 ${shape}
 ${rules}`;
 }
+
+/** Pulls the first post out of her read so it lands in their Ideas with a link (2026-11-23). Words from the message only. */
+export const OPENING_IDEA_SKILL = `opening-idea
+From the message below, the post idea it gives them (usually the last text). Output ONLY JSON: {"hook":"the words in quotes they say or put on screen, verbatim from the message; if there are none, the idea in one line, under 90 characters","why":"why THIS post should work, under 70 characters, from what the message says about the idea (never the line about who they are); empty if it doesn't say","shoot":"the shots and length, under 120 characters, from the message"}. Use only what the message says. If the message gives no idea, output {"hook":""}.`;
+
+/** Pure: the model's JSON, held to what a saved idea needs. Null when there's no idea in it. */
+export function parseOpeningIdea(raw: string): { hook: string; why: string; shoot: string } | null {
+  let j: Record<string, unknown> = {};
+  try { j = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? "{}"); } catch { return null; }
+  const hook = String(j.hook ?? "").trim().replace(/^["“]|["”]$/g, "").slice(0, 90);
+  if (hook.length < 6) return null;
+  return { hook, why: String(j.why ?? "").trim().slice(0, 140), shoot: String(j.shoot ?? "").trim().slice(0, 120) };
+}
+
+/** Pure: a text break the model wrote inline (" --- ", sim 2026-11-23) becomes a real one, or they'd see "---". */
+export function splitMarks(text: string): string {
+  return text.replace(/[ \t]*\n?[ \t]*(?<![-\w])---(?![-\w])[ \t]*\n?[ \t]*/g, "\n---\n").replace(/(\n---\n){2,}/g, "\n---\n").replace(/^\n---\n|\n---\n$/g, "");
+}
+
+/** Pure: the link line on her idea text. Her voice: lowercase, short. */
+export function withIdeaLink(text: string, url: string): string {
+  const parts = text.split(/\n---\n/);
+  const last = parts.pop() ?? "";
+  return [...parts, `${last.replace(/\s+$/, "")}\n\nit's in your Maya app with the shots: ${url}`].join("\n---\n");
+}
+
+/** The opening's idea, in their Ideas like any other (status sent), marked as hers from the first read. */
+export const saveOpeningIdea = internalMutation({
+  args: { creatorId: v.id("creators"), hook: v.string(), why: v.string(), shoot: v.string(), model: v.string() },
+  handler: async (ctx, a): Promise<Id<"ideas">> => {
+    const now = Date.now();
+    return await ctx.db.insert("ideas", {
+      creatorId: a.creatorId,
+      evidenceLinks: [],
+      fit: "yes",
+      fitWhy: a.why,
+      version: { hook: a.hook, why: a.why, evidencePostIds: [], from: "first_read" },
+      ...(a.shoot ? { shotList: a.shoot } : {}),
+      messageText: `${a.hook}${a.why ? ` — ${a.why}` : ""}`,
+      produced: { skillVersion: "first-read/2", model: a.model, thresholdsVersion: "n/a" },
+      sentAt: now,
+      status: "sent",
+      createdAt: now,
+    } as never);
+  },
+});
 
 /** The first-contact shape, for callers that only need the text. */
 export const FIRST_READ_SKILL = firstReadSkill(false);
@@ -99,7 +151,7 @@ export const run = internalAction({
       if (!helloSaid) await ctx.runMutation(internal.core.messages.send, {
         creatorId: creator._id,
         surface: creator.channel.kind ?? "imessage",
-        body: "reading your posts now. give me a few minutes and I'll tell you what I see.",
+        body: "watching your posts now. give me a few minutes and I'll tell you what I see.",
         dedupeKey: `first_read_pending:${creator._id}`,
         proactive: true,
         kind: "status",
@@ -109,6 +161,9 @@ export const run = internalAction({
       return { ok: true };
     }
 
+    // Once (sim, 2026-11-23): written when the watching finished, the read ran again at START and saved a second
+    // idea nobody was told about, which then led their week. Already written means done.
+    if (!args.dryRun && (await ctx.runQuery(internal.core.messages.exists, { creatorId: creator._id, dedupeKey: `first_read:${creator._id}` }))) return { ok: true, reason: "already written" };
     // Live 2026-09-06: she introduced herself twice, once at pairing and again in the read.
     // Written before they've texted START, it can only go out at pairing, where the greeting leads it
     // (core/pairing openWithRead): it never introduces her either (2026-11-03: twice in eleven seconds).
@@ -151,7 +206,7 @@ export const run = internalAction({
       apiKey: process.env.OPENROUTER_API_KEY ?? "",
     });
     if (!result.ok) return { ok: false, reason: result.reason };
-    let text: string = result.content.trim();
+    let text: string = splitMarks(result.content.trim());
     if (!text) return { ok: false, reason: "empty completion" };
 
     const d = creator.dossier as { voice?: unknown; persona?: unknown; works?: unknown } | undefined;
@@ -197,6 +252,22 @@ export const run = internalAction({
       }
     }
 
+    text = splitMarks(text); // rewrites too
+    // The first post she gives them lands in their Ideas, and her text links to it: the app introduced by the
+    // most useful thing in it (2026-11-23). Best effort: without a clean idea, the text goes as written.
+    if (!args.dryRun && best) {
+      try {
+        const got = await callModel(ctx, { creatorId: creator._id, purpose: "opening_idea", model: spec.primary, temperature: 0, maxTokens: 300, apiKey: process.env.OPENROUTER_API_KEY ?? "", messages: [{ role: "system", content: OPENING_IDEA_SKILL }, { role: "user", content: text }] });
+        const idea = got.ok ? parseOpeningIdea(got.content) : null;
+        const base = process.env.APP_URL;
+        if (idea && base) {
+          const ideaId = await ctx.runMutation(internal.onboarding.firstRead.saveOpeningIdea, { creatorId: creator._id, ...idea, model: spec.primary });
+          text = withIdeaLink(text, `${base.replace(/\/$/, "")}/o/idea/${ideaId}`);
+        }
+      } catch (e) {
+        console.error(`[first-read] opening idea not saved for ${creator._id}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
     if (args.dryRun) return { ok: true, text };
     await ctx.runMutation(internal.core.messages.send, {
       creatorId: creator._id,
@@ -223,7 +294,7 @@ export const run = internalAction({
       // Day one is a working day (plan 4f addendum): the rest of this week follows the read,
       // and the scout judges the roster it sampled during onboarding, after the read, not before.
       // The month first, then its first week, as one text (agent/monthPlan).
-      await ctx.scheduler.runAt(Date.now() + FIRST_PLAN_DELAY_MS, internal.agent.monthPlan.proposeThenWeek, { creatorId: creator._id });
+      await ctx.scheduler.runAt(Date.now() + FIRST_PLAN_DELAY_MS, internal.agent.monthPlan.proposeThenWeek, { creatorId: creator._id, weekOnly: true });
       await ctx.scheduler.runAt(Date.now() + FIRST_SCOUT_DELAY_MS, internal.scout.scout.run, { creatorId: creator._id });
     return { ok: true };
   },

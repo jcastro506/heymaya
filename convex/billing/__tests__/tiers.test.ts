@@ -98,11 +98,11 @@ describe("the tiers", () => {
     expect(converseSkillFor(true)).toContain(PARTNER_CAN_LINE);
     expect(converseSkillFor(false)).not.toContain(PARTNER_CAN_LINE);
     expect(converseSkillFor(false)).toContain("When: any message");
-    // Deals are named in her intro only for a plan that can act on them (§26).
-    expect(introBody(true).join(" ")).toMatch(/brand/);
+    // Her opening names no features, deals included (2026-11-23): deals come up when she finds one, on a plan that has them.
+    expect(introBody(true).join(" ")).not.toMatch(/brand|partnership/);
     expect(introBody(false).join(" ")).not.toMatch(/brand|partnership/);
     expect(helloFor(false)).not.toMatch(/brand/);
-    expect(helloFor(true)).toMatch(/brand deals/);
+    expect(helloFor(true)).not.toMatch(/brand deals/);
     expect(helloFor(false)).toMatch(/it's Maya|Maya here/);
   });
 

@@ -8,7 +8,7 @@
  * across a week with real gaps will place two of them at 3am.
  */
 
-import { atLocalHour, localHour, type PostTimeModel } from "./postTime";
+import { atLocalHour, AWAKE, DEFAULT_HOUR, localHour, type PostTimeModel } from "./postTime";
 
 export const PLAN = {
   minSlots: 1,
@@ -73,9 +73,14 @@ export function pickIdeas(ideas: IdeaLite[], slots: number, experiment: string |
   // An idea for something dated this week or next (a race, a market) can't wait for next week's plan (local sim,
   // 2026-11-13: a race nine days out lost its slot to undated ideas sent at the same moment). After saved ones, soonest first.
   const rank = (i: IdeaLite) => (i.status === "saved" ? 0 : i.due && ["hearted", "sent"].includes(i.status) ? 0.5 : i.status === "hearted" ? 1 : i.status === "sent" ? 2 : 9);
+  // One hook once (sim, 2026-11-23: day one's seeding wrote "Okay, I'm freaking out.." beside the opening's
+  // "Okay, I'm freaking out." and the week had it twice).
+  const seen = new Set<string>();
+  const sameHook = (h: string) => h.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   const pool = ideas.filter((i) => rank(i) < 9 && (i.skippedPlans ?? 0) < PLAN_SKIPS_MAX).sort((a, b) => rank(a) - rank(b) || (a.due && b.due ? a.due.localeCompare(b.due) : 0) || (b.savedAt ?? b.sentAt ?? 0) - (a.savedAt ?? a.sentAt ?? 0));
+  const unique = pool.filter((i) => { const k = sameHook(i.hook); if (seen.has(k)) return false; seen.add(k); return true; });
   const n = experiment ? Math.max(0, slots - 1) : slots;
-  const out: Array<{ ideaId: string | null; hook: string; why?: string; experiment: boolean }> = pool.slice(0, n).map((i) => ({ ideaId: i.ideaId, hook: i.hook, ...(i.why ? { why: i.why } : {}), experiment: false }));
+  const out: Array<{ ideaId: string | null; hook: string; why?: string; experiment: boolean }> = unique.slice(0, n).map((i) => ({ ideaId: i.ideaId, hook: i.hook, ...(i.why ? { why: i.why } : {}), experiment: false }));
   if (experiment) out.push({ ideaId: null, hook: experiment, experiment: true });
   return out;
 }
@@ -134,8 +139,10 @@ export function draftWeek(input: {
 }
 
 function nextPost(model: PostTimeModel, after: number, timeZone: string): Slot["post"] {
-  const candidates = model.hours.length ? model.hours.map((h) => h.hour) : [model.defaultHour];
-  const fromHistory = model.hours.length > 0;
+  // A person has to be up to post (sim, 2026-11-23: "post wed 3 am" on every line; the week plan skipped AWAKE).
+  const awake = model.hours.map((h) => h.hour).filter((h) => h >= AWAKE.from && h <= AWAKE.to);
+  const candidates = awake.length ? awake : [DEFAULT_HOUR];
+  const fromHistory = awake.length > 0;
   const nowHour = localHour(after, timeZone);
   for (const hour of candidates) if (hour > nowHour) return { at: atLocalHour(after, hour, timeZone), hour, fromHistory };
   return { at: atLocalHour(after + 86_400_000, candidates[0], timeZone), hour: candidates[0], fromHistory };

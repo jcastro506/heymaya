@@ -111,7 +111,7 @@ export default function TelegramPage() {
               {qr ? <img src={qr} alt="Scan to text Maya" className="qr self-start" /> : <p className="tiny muted">Making your code…</p>}
             </>
           )}
-          <p className="tiny muted">Or text <b>START {link.token}</b> to <b>{link.lineNumber}</b> from {progress?.phone ?? "your number"}.</p>
+          <p className="tiny muted">Or text <b>hey Maya! (code {link.token})</b> to <b>{link.lineNumber}</b> from {progress?.phone ?? "your number"}.</p>
           {tapped && !paired && <p className="tiny muted">Waiting for your text…</p>}
         </section>
       ) : (

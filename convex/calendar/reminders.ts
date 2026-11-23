@@ -122,7 +122,8 @@ export const fire = internalAction({
       // The post nudge needs to know they filmed: the film block's filmedAt, set by their yes or a clip.
       const film = await ctx.runQuery(internal.calendar.reminders.filmFor, { creatorId: creator._id, planKey: block.planKey ?? "", ideaId: block.ideaId ?? undefined });
       if (!film?.filmedAt) return { sent: false, reason: "no sign they filmed; no nudge" };
-      body = `${t} is your hour. go when it's ready.`;
+      // The loop's next step (2026-11-23): the draft. "finish this one" (captions and sounds for their clip) is one text away.
+      body = `${t} is your hour. send me the clip first if you want a caption and a sound for it.`;
     }
     // The check-in is THE open question: it supersedes whatever was open.
     if (awaitingAnswer) await ctx.runMutation(internal.core.messages.closeOpen, { creatorId: creator._id });

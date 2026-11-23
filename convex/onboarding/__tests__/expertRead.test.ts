@@ -60,8 +60,10 @@ describe("day one waits for their answer", () => {
   const H = 3_600_000;
   const NOW = at("2026-11-04");
   it("unanswered until they reply or tap; a reaction or START isn't an answer", () => {
-    const opening = { direction: "out" as const, kind: "first_read", ts: NOW - H, deliveredAt: NOW - H };
+    const opening = { direction: "out" as const, kind: "first_read", ts: NOW - H, deliveredAt: NOW - H, awaitingAnswer: true };
     expect(openingUnanswered([opening], NOW)).toBe(true);
+    // An opening that asked nothing has nothing to wait for (2026-11-23): their week follows the same day.
+    expect(openingUnanswered([{ ...opening, awaitingAnswer: false }], NOW)).toBe(false);
     expect(openingUnanswered([opening, { direction: "in" as const, kind: "reaction", ts: NOW - 30 * 60_000, deliveredAt: undefined }], NOW)).toBe(true);
     expect(openingUnanswered([opening, { direction: "in" as const, kind: "inbound", ts: NOW - 30 * 60_000, deliveredAt: undefined }], NOW)).toBe(false);
     expect(openingUnanswered([opening, { direction: "in" as const, kind: "button", ts: NOW - 30 * 60_000, deliveredAt: undefined }], NOW)).toBe(false);
@@ -74,7 +76,7 @@ describe("day one waits for their answer", () => {
   it("on the rows: waits while unanswered; goes once they've written", async () => {
     const t = convexTest(schema, modules);
     const c = await t.run((ctx) => seedCreator(ctx, "h1", { timezone: "UTC", channel: { paired: true, pairedAt: Date.now() - H, kind: "imessage" } }));
-    await t.run((ctx) => ctx.db.insert("messages", { creatorId: c, direction: "out", surface: "imessage", body: "hey", ts: Date.now() - 50 * 60_000, kind: "first_read", deliveredAt: Date.now() - 50 * 60_000 }));
+    await t.run((ctx) => ctx.db.insert("messages", { creatorId: c, direction: "out", surface: "imessage", body: "hey?", ts: Date.now() - 50 * 60_000, kind: "first_read", deliveredAt: Date.now() - 50 * 60_000, awaitingAnswer: true }));
     expect((await t.query(internal.onboarding.hold.openingWaits, { creatorId: c, now: Date.now() })).wait).toBe(true);
     await t.run((ctx) => ctx.db.insert("messages", { creatorId: c, direction: "in", surface: "imessage", body: "i don't want to be a food creator", ts: Date.now() - 40 * 60_000, kind: "inbound" }));
     expect((await t.query(internal.onboarding.hold.openingWaits, { creatorId: c, now: Date.now() })).wait).toBe(false);

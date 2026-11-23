@@ -78,7 +78,7 @@ targets:
     entitlements:
       path: Maya/Maya.entitlements
       properties:
-        com.apple.developer.associated-domains: ["applinks:hey-maya.ai"]
+        com.apple.developer.associated-domains: ["applinks:hey-maya.ai", "applinks:staging.hey-maya.ai"]
         com.apple.security.application-groups: ["group.ai.heymaya.maya"]
     dependencies:
       - target: MayaShare

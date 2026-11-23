@@ -88,7 +88,8 @@ export const write = internalMutation({
 });
 
 export const seed = internalAction({
-  args: { creatorId: v.id("creators"), n: v.number() },
+  // avoid: hooks already on the week (day one: the opening's idea). The rest must differ (sim, 2026-11-23: three slider recipes).
+  args: { creatorId: v.id("creators"), n: v.number(), avoid: v.optional(v.array(v.string())) },
   handler: async (ctx, a): Promise<{ seeded: number; reason?: string }> => {
     const g = await ctx.runQuery(internal.agent.context.gather, { creatorId: a.creatorId });
     if (!g) return { seeded: 0, reason: "creator not found" };
@@ -96,7 +97,7 @@ export const seed = internalAction({
     const spec = REGISTRY.writer;
     const r = await callModel(ctx, {
       creatorId: a.creatorId, purpose: "first_plan_ideas", model: spec.primary, temperature: 0.5, maxTokens: 900, timeoutMs: 40_000,
-      messages: [{ role: "system", content: prefix }, { role: "user", content: `Write ${Math.max(1, Math.min(5, a.n))} ideas. JSON only.` }],
+      messages: [{ role: "system", content: prefix }, { role: "user", content: `Write ${Math.max(1, Math.min(5, a.n))} ideas. JSON only.${a.avoid?.length ? ` Already on their week: ${a.avoid.map((h) => `"${h}"`).join("; ")}. Don't repeat those, and vary the rest: different topics, and not all the same format, while staying in what works for them.` : " Vary them: different topics, and not all the same format."}` }],
       apiKey: process.env.OPENROUTER_API_KEY ?? "",
     });
     if (!r.ok) return { seeded: 0, reason: r.reason };

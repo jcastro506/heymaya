@@ -55,7 +55,7 @@ export const today = query({
     const blocks = await liveBlocks(ctx, c._id, (await ctx.db.query("calendarBlocks").withIndex("by_creator", (q) => q.eq("creatorId", c._id).gte("start", now)).take(10)) as Doc<"calendarBlocks">[]);
     const block = blocks.find((b) => b.status === "confirmed" || b.status === "moved") ?? blocks.find((b) => b.status === "proposed") ?? null;
     const statusLine = !c.channel.paired
-      ? "Not connected to Messages yet. Text her START to finish."
+      ? "Not connected to Messages yet. Tap Text Maya in setup to finish."
       : !c.dossier
         ? `Watching your posts now (${posts.length} so far).`
         : `Watching ${active.length} account${active.length === 1 ? "" : "s"}.${lastSample ? ` Last look ${Math.round((now - lastSample) / 3_600_000)}h ago.` : ""}${running.length ? ` Working on ${running.length} thing${running.length === 1 ? "" : "s"}.` : ""}`;

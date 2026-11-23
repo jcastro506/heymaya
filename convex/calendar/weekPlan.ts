@@ -104,8 +104,12 @@ export const inputsFor = internalQuery({
         sentAt: i.sentAt ?? null,
         skippedPlans: skipped.get(String(i._id)) ?? 0,
         due: dueOf(i),
+        // The idea from her first texts (onboarding/firstRead saveOpeningIdea): it leads day one's plan.
+        opening: (i.version as { from?: string } | undefined)?.from === "first_read",
       })),
       experiment,
+      // A calendar she can read and write: Google, or their iPhone's (2026-11-23: the first plan says how to connect one).
+      calendarConnected: (await ctx.db.query("connections").withIndex("by_creator", (q) => q.eq("creatorId", a.creatorId).eq("provider", "google_calendar")).first())?.status === "connected" || creator.deviceCalendar?.status === "granted",
       alreadyPlanned: blocks.some((b) => b.planKey === planKeyFor(a.now, tz) && b.status !== "deleted"),
     };
   },
@@ -150,7 +154,16 @@ export function weekLabel(slots: Slot[], now: number, tz: string, restOfWeek: bo
   return daysOut <= (7 - weekday) % 7 ? "this week" : "next week";
 }
 
-export function composeWeek(slots: Slot[], tz: string, fromHistory: boolean, label = "next week", opener?: string, first = false): string {
+/** Pure: the opening's idea first, the rest in their order (its film day is the soonest one). */
+export function openingFirst<T extends { ideaId: string | null }>(picked: T[], ideas: Array<{ ideaId: string; opening?: boolean }>): T[] {
+  const opening = new Set(ideas.filter((i) => i.opening).map((i) => i.ideaId));
+  return [...picked.filter((p) => p.ideaId && opening.has(p.ideaId)), ...picked.filter((p) => !(p.ideaId && opening.has(p.ideaId)))];
+}
+
+/** The first plan's links (2026-11-23): where the week lives in the app, and how to connect a calendar if they haven't. */
+export interface WeekLinks { app?: string; calendar?: string }
+
+export function composeWeek(slots: Slot[], tz: string, fromHistory: boolean, label = "next week", opener?: string, first = false, links: WeekLinks = {}): string {
   const lines = slots.map((s) => {
     const day = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(s.film.start).toLowerCase();
     const t = (e: number) => new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(e).toLowerCase().replace(":00", "");
@@ -170,7 +183,9 @@ export function composeWeek(slots: Slot[], tz: string, fromHistory: boolean, lab
   return [
     ...(opener ? [opener] : []),
     `${label}, ${slots.length} post${slots.length === 1 ? "" : "s"}:\n${lines.join("\n")}`,
-    `${basis}${first ? ` ${APP_LINE}` : ""} want them on your calendar?`,
+    first && links.calendar
+      ? `${basis} it's all in your Maya app: ${links.app ?? links.calendar}\nconnect your calendar there and i'll fit these around your week: ${links.calendar}\nor want me to just book them?`
+      : `${basis}${first ? (links.app ? ` your week's in the app: ${links.app}` : ` ${APP_LINE}`) : ""} want them on your calendar?`,
   ].join("\n---\n");
 }
 
@@ -218,15 +233,18 @@ export const draft = internalAction({
       console.error(`[weekPlan] stock top-up failed for ${a.creatorId}: ${e instanceof Error ? e.message : String(e)}`);
     }
     let picked = pickIdeas(inpNow.ideas, Math.max(1, Math.min(5, Math.round(inpNow.postsPerWeek) || 1)), inpNow.experiment);
-    if (picked.length === 0 && a.horizon === "first") {
-      // Day one: nothing found yet, so the first plan is seeded from their own posts.
-      const seeded = await ctx.runAction(internal.calendar.firstIdeas.seed, { creatorId: a.creatorId, n: Math.max(1, Math.min(5, Math.round(inp.postsPerWeek) || 1)) });
+    const want = Math.max(1, Math.min(5, Math.round(inp.postsPerWeek) || 1));
+    if (picked.filter((x) => !x.experiment).length < want && a.horizon === "first") {
+      // Day one: the opening's idea leads (it's the newest sent), and the rest of the week is seeded from their own
+      // posts (2026-11-23: with only the opening idea, the first week would have had one post).
+      const seeded = await ctx.runAction(internal.calendar.firstIdeas.seed, { creatorId: a.creatorId, n: want - picked.filter((x) => !x.experiment).length, avoid: picked.filter((x) => !x.experiment).map((x) => x.hook) });
       if (seeded.seeded > 0) {
         const again = await ctx.runQuery(internal.calendar.weekPlan.inputsFor, { creatorId: a.creatorId, now });
         if (again) picked = pickIdeas(again.ideas, Math.max(1, Math.min(5, Math.round(again.postsPerWeek) || 1)), again.experiment);
       }
     }
     if (picked.length === 0) return { sent: false, reason: "nothing to plan with: no ideas and no experiment" };
+    if (a.horizon === "first") picked = openingFirst(picked, ((await ctx.runQuery(internal.calendar.weekPlan.inputsFor, { creatorId: a.creatorId, now })) ?? inpNow).ideas);
     // Day one is a working day: the first plan covers the rest of THIS week when at least
     // two days are left, otherwise next week, right now rather than on Sunday.
     const left = daysLeftInWeek(now, inp.timezone);
@@ -237,7 +255,9 @@ export const draft = internalAction({
     const planKey = planKeyFor(now, inp.timezone);
     const written = await ctx.runMutation(internal.calendar.weekPlan.write, { creatorId: a.creatorId, planKey, slots });
     if (written.duplicate) return { sent: false, reason: "this week is already planned" };
-    const body = composeWeek(slots, inp.timezone, inp.model.hours.length > 0, weekLabel(slots, now, inp.timezone, restOfWeek), a.opener, a.horizon === "first");
+    const base = (process.env.APP_URL ?? "").replace(/\/$/, "");
+    const links: WeekLinks = base ? { app: `${base}/app/today`, ...(inp.calendarConnected ? {} : { calendar: `${base}/app/calendar` }) } : {};
+    const body = composeWeek(slots, inp.timezone, slots.every((x) => x.post.fromHistory), weekLabel(slots, now, inp.timezone, restOfWeek), a.opener, a.horizon === "first", links);
     if (a.horizon === "first") await ctx.runMutation(internal.scout.firstWeek.markStep, { creatorId: a.creatorId, step: "first_plan" });
     // One question for the whole week: this IS the open question, and it supersedes any other.
     await ctx.runMutation(internal.core.messages.closeOpen, { creatorId: a.creatorId });
