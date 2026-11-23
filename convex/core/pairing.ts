@@ -69,8 +69,8 @@ async function openWithRead(ctx: MutationCtx, creator: Doc<"creators">, firstRea
 }
 
 /** Her intro where she can't write a greeting first (Telegram, or a read that already happened). Pure. */
-export function helloFor(partnerships: boolean, readDone = false, name: string | null = null, seed = "maya"): string {
-  return helloParts(fallbackGreeting(name, seed), partnerships, readDone).join("\n---\n");
+export function helloFor(partnerships: boolean, readDone = false, name: string | null = null, seed = "maya", hasAccount = true): string {
+  return helloParts(fallbackGreeting(name, seed), partnerships, readDone, hasAccount).join("\n---\n");
 }
 
 function mintToken(): string {
@@ -263,7 +263,7 @@ export const claimPairing = internalMutation({
     await ctx.db.patch(creator._id, { conversationalOnboardingAt: creator.conversationalOnboardingAt ?? now });
     if (!(await openWithRead(ctx, creator, firstRead, "telegram"))) await ctx.runMutation(internal.core.messages.send, firstRead
       ? { creatorId: creator._id, surface: "telegram", body: helloFor(partnershipsOpen(creator), true, cleanNamePart(creator.firstName), creator._id), dedupeKey: `hello:${creator._id}`, proactive: true, kind: "hello", awaitingAnswer: false }
-      : { creatorId: creator._id, surface: "telegram", body: helloFor(partnershipsOpen(creator), false, cleanNamePart(creator.firstName), creator._id), dedupeKey: `hello:${creator._id}`, proactive: true, kind: "hello", awaitingAnswer: false });
+      : { creatorId: creator._id, surface: "telegram", body: helloFor(partnershipsOpen(creator), false, cleanNamePart(creator.firstName), creator._id, Boolean(creator.handles?.tiktok)), dedupeKey: `hello:${creator._id}`, proactive: true, kind: "hello", awaitingAnswer: false });
     await redeliverFirstRead(ctx, firstRead);
     // Everything written while unpaired (the first read, at least) goes out now, not at the
     // next minute tick, and not behind whatever long job the drain is on.

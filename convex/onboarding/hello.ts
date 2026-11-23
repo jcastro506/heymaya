@@ -60,17 +60,17 @@ export function greetingWithSave(greeting: string): string {
   return `${greeting.trim()} ${saveContactLine()}`;
 }
 
-export function helloParts(greeting: string, partnerships: boolean, readDone = false): string[] {
-  return [greetingWithSave(greeting), ...introBody(partnerships, readDone)];
+export function helloParts(greeting: string, partnerships: boolean, readDone = false, hasAccount = true): string[] {
+  return [greetingWithSave(greeting), ...introBody(partnerships, readDone, hasAccount)];
 }
 
 export const inputs = internalQuery({
   args: { creatorId: v.id("creators") },
-  handler: async (ctx, a): Promise<{ name: string | null; partnerships: boolean; paired: boolean; sent: boolean } | null> => {
+  handler: async (ctx, a): Promise<{ name: string | null; partnerships: boolean; paired: boolean; sent: boolean; hasAccount: boolean } | null> => {
     const c = (await ctx.db.get(a.creatorId)) as Doc<"creators"> | null;
     if (!c) return null;
     const sent = await ctx.db.query("messages").withIndex("by_creator_and_dedupe", (q) => q.eq("creatorId", c._id).eq("dedupeKey", `hello:${c._id}`)).first();
-    return { name: cleanNamePart(c.firstName), partnerships: partnershipsOpen(c), paired: c.channel.paired === true, sent: Boolean(sent) };
+    return { name: cleanNamePart(c.firstName), partnerships: partnershipsOpen(c), paired: c.channel.paired === true, sent: Boolean(sent), hasAccount: Boolean(c.handles?.tiktok) };
   },
 });
 
@@ -110,7 +110,7 @@ export const send = internalAction({
     }
     const text = r?.ok ? r.content.trim().replace(/^["“]|["”]$/g, "") : "";
     if (text && greetingOk(text, i.name)) { greeting = text; fromModel = true; }
-    const res = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "imessage", body: helloParts(greeting, i.partnerships).join("\n---\n"), dedupeKey: `hello:${a.creatorId}`, proactive: true, kind: "hello", awaitingAnswer: false });
+    const res = await ctx.runMutation(internal.core.messages.send, { creatorId: a.creatorId, surface: "imessage", body: helloParts(greeting, i.partnerships, false, i.hasAccount).join("\n---\n"), dedupeKey: `hello:${a.creatorId}`, proactive: true, kind: "hello", awaitingAnswer: false });
     return { sent: res.sent, reason: res.sent ? "sent" : res.held ?? "already said hello", greeting, fromModel };
   },
 });
