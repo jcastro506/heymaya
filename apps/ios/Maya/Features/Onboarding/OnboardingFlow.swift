@@ -319,7 +319,6 @@ private struct ConnectStep: View {
         }
         .font(MayaFont.callout)
         .disabled(busy != nil)
-        MayaTexts(messages: MayaExamples.connect)
       }
     } footer: {
       PrimaryButton(title: ConnectWords.button(connected: account != nil), disabled: account == nil) {
