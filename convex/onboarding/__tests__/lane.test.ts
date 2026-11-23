@@ -262,3 +262,17 @@ describe("the opening reads right as one message (sim, 2026-11-23)", () => {
     expect(o[1]).toBe("People stay for the honest panic.");
   });
 });
+
+describe("a plan never has the same idea twice (sim, 2026-11-23)", () => {
+  it("near-identical hooks are one idea", async () => {
+    const { pickIdeas } = await import("../../calendar/planning");
+    const ideas = [
+      { ideaId: "a", hook: "Okay, I'm freaking out.", status: "sent", sentAt: 2 },
+      { ideaId: "b", hook: "Okay, I'm freaking out..", status: "sent", sentAt: 3 },
+      { ideaId: "c", hook: "Mile 1 vs mile 16", status: "sent", sentAt: 1 },
+    ];
+    const got = pickIdeas(ideas as never, 3, null).map((x) => x.ideaId);
+    expect(got).toHaveLength(2);
+    expect(got).toContain("c");
+  });
+});

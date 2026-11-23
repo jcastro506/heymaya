@@ -73,9 +73,14 @@ export function pickIdeas(ideas: IdeaLite[], slots: number, experiment: string |
   // An idea for something dated this week or next (a race, a market) can't wait for next week's plan (local sim,
   // 2026-11-13: a race nine days out lost its slot to undated ideas sent at the same moment). After saved ones, soonest first.
   const rank = (i: IdeaLite) => (i.status === "saved" ? 0 : i.due && ["hearted", "sent"].includes(i.status) ? 0.5 : i.status === "hearted" ? 1 : i.status === "sent" ? 2 : 9);
+  // One hook once (sim, 2026-11-23: day one's seeding wrote "Okay, I'm freaking out.." beside the opening's
+  // "Okay, I'm freaking out." and the week had it twice).
+  const seen = new Set<string>();
+  const sameHook = (h: string) => h.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   const pool = ideas.filter((i) => rank(i) < 9 && (i.skippedPlans ?? 0) < PLAN_SKIPS_MAX).sort((a, b) => rank(a) - rank(b) || (a.due && b.due ? a.due.localeCompare(b.due) : 0) || (b.savedAt ?? b.sentAt ?? 0) - (a.savedAt ?? a.sentAt ?? 0));
+  const unique = pool.filter((i) => { const k = sameHook(i.hook); if (seen.has(k)) return false; seen.add(k); return true; });
   const n = experiment ? Math.max(0, slots - 1) : slots;
-  const out: Array<{ ideaId: string | null; hook: string; why?: string; experiment: boolean }> = pool.slice(0, n).map((i) => ({ ideaId: i.ideaId, hook: i.hook, ...(i.why ? { why: i.why } : {}), experiment: false }));
+  const out: Array<{ ideaId: string | null; hook: string; why?: string; experiment: boolean }> = unique.slice(0, n).map((i) => ({ ideaId: i.ideaId, hook: i.hook, ...(i.why ? { why: i.why } : {}), experiment: false }));
   if (experiment) out.push({ ideaId: null, hook: experiment, experiment: true });
   return out;
 }
